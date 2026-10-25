@@ -74,6 +74,10 @@ type TerminalSettings struct {
 	LineHeight  float64 `json:"line_height"`
 	Scrollback  int     `json:"scrollback_bytes"`
 	OptionAsAlt bool    `json:"option_as_alt"`
+	// ThemeName pins a Ghostty theme by name (terminal.GhosttyTheme):
+	// both window kinds use it, as Ghostty's theme = <name> does. Empty
+	// follows the window's appearance with the gorex palettes.
+	ThemeName string `json:"theme_name"`
 	// Transparent leaves newly attached terminal views' background
 	// undrawn (MyGo terminal.Transparent, Ghostty background-opacity
 	// equivalent) and paints the pane card translucent, so the window's

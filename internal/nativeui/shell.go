@@ -165,6 +165,7 @@ type Shell struct {
 	settingsService            *app.SettingsService
 	settings                   settings.Settings
 	settingsFontDraft          string
+	settingsThemeDraft         string
 	settingsVoiceEndpointDraft string
 	settingsVoiceKeyDraft      string
 	settingsVoiceModelDraft    string
@@ -470,6 +471,7 @@ func WithSettings(service *app.SettingsService) ShellOption {
 			s.settingsService = service
 			s.settings = service.Current()
 			s.settingsFontDraft = s.settings.Terminal.FontFamily
+			s.settingsThemeDraft = terminalThemeDisplay(s.settings.Terminal.ThemeName)
 			// The saved appearance applies at AttachWindow (SetSource waits
 			// on the main loop, which does not exist before the window).
 			s.settingsGitPromptDraft = commitPromptPreference(s.settings.Workbench.CommitPrompt)
@@ -530,6 +532,7 @@ func NewShell(opts ...ShellOption) *Shell {
 	s.settingsService = app.NewSettingsService(settings.NewMemoryStore(settings.Default()))
 	s.settings = s.settingsService.Current()
 	s.settingsFontDraft = s.settings.Terminal.FontFamily
+	s.settingsThemeDraft = terminalThemeDisplay(s.settings.Terminal.ThemeName)
 	s.settingsGitPromptDraft = commitPromptPreference(s.settings.Workbench.CommitPrompt)
 	s.settingsPiBinaryDraft = s.settings.Workbench.PiExecutable
 	s.providers.integrations = agent.NewIntegrationHealthServiceWithRunner(herdr.RunCLI)
@@ -598,6 +601,7 @@ func (s *Shell) applySettings(mutate func(*settings.Settings) error) {
 	}
 	s.settings = updated
 	s.settingsFontDraft = updated.Terminal.FontFamily
+	s.settingsThemeDraft = terminalThemeDisplay(updated.Terminal.ThemeName)
 	if s.win != nil {
 		// SetSource marshals to the main thread and waits; headless tests
 		// have no main loop, so only apply with a window attached.

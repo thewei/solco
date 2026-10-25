@@ -1,6 +1,8 @@
 package nativeui
 
 import (
+	"log/slog"
+	"sync"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -268,10 +270,20 @@ func gorexTerminalThemes() (light, dark *terminal.Theme) {
 }
 
 // applyGorexTerminalTheme points one attach's options at the gorex
-// palettes. An explicit appearance pins one theme; the system default
-// lets the plugin follow the window's appearance, as Ghostty's
-// light:…,dark:… does.
-func applyGorexTerminalTheme(options *terminal.Options, appearance string) {
+// palettes, or at the pinned Ghostty theme when the user picked one.
+// An explicit appearance pins one palette; the system default lets the
+// plugin follow the window's appearance, as Ghostty's light:…,dark:… does.
+func applyGorexTerminalTheme(options *terminal.Options, appearance, themeName string) {
+	if themeName != "" {
+		th, err := terminal.GhosttyTheme(themeName)
+		if err != nil {
+			slog.Warn("terminal theme not found; using the gorex palettes", "theme", themeName, "error", err)
+		} else {
+			options.Theme = th
+			options.MinimumContrast = 1.3
+			return
+		}
+	}
 	light, dark := gorexTerminalThemes()
 	switch appearance {
 	case "light":
@@ -281,6 +293,40 @@ func applyGorexTerminalTheme(options *terminal.Options, appearance string) {
 	default:
 		options.Theme, options.DarkTheme = light, dark
 	}
+	// Ghostty's minimum-contrast: program-chosen colors that fall under
+	// this WCAG ratio against their cell's background (a dim gray on the
+	// light paper, say) are nudged apart just enough, keeping their hue.
+	// The gorex palettes themselves clear it; this guards the colors
+	// programs paint with themselves.
+	options.MinimumContrast = 1.3
+}
+
+// terminalThemeDefault names the follow-appearance gorex palettes in the
+// theme picker; the settings store keeps "".
+const terminalThemeDefault = "Default (follow window)"
+
+// terminalThemeDisplay maps a stored theme name to the picker's display
+// value: the picker needs a concrete string, the store keeps "".
+func terminalThemeDisplay(name string) string {
+	if name == "" {
+		return terminalThemeDefault
+	}
+	return name
+}
+
+// terminalThemeChoices caches the picker's options once: GhosttyThemes
+// reads the user's themes directory and sorts 300+ names, too much to
+// redo every frame the settings page builds.
+var (
+	terminalThemeChoicesOnce sync.Once
+	terminalThemeChoicesList []string
+)
+
+func terminalThemeChoices() []string {
+	terminalThemeChoicesOnce.Do(func() {
+		terminalThemeChoicesList = append([]string{terminalThemeDefault}, terminal.GhosttyThemes()...)
+	})
+	return terminalThemeChoicesList
 }
 
 // tildePath shortens an absolute path under the home directory to a ~

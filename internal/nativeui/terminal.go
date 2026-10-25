@@ -813,8 +813,8 @@ func (s *Shell) syncTerminals(projection herdr.Projection) error {
 		options.OnProgramStatus = func(body []byte) {
 			s.applyProgramStatus(geometry.pane.ID, body)
 		}
-		// The gorex palettes (2026-10-06): soft ink on the panes' paper.
-		applyGorexTerminalTheme(&options, s.settings.General.Appearance)
+		// The gorex palettes (2026-10-06), or the pinned Ghostty theme.
+		applyGorexTerminalTheme(&options, s.settings.General.Appearance, s.settings.Terminal.ThemeName)
 		// Prefer the app-owned pty Conn: it carries the real-terminal mouse
 		// semantics (F144) — Write routes reported SGR pointer events into
 		// routeAttachMouse. Without a local pty, fall back to the plugin's

@@ -7,7 +7,7 @@ proc_brands.go: 进程与工具/服务品牌标识解析器，将前台进程、
 brands.go: Agent 品牌位图资产与视觉标识解析器，将 live Agent 映射为全彩品牌 Logo 与 agentMarkForPane 窗格标识
 agent_visual.go: Agent 品牌矢量回退图标字典、窗格 Agent 绑定与状态指示点（statusDot）
 brands_test.go: Agent 品牌位图资产检索、Antigravity 及其它 Provider 标识与 agentProvider 回退回归
-gorex_style.go: 扁平视觉系统：卡片/配色、图标按钮度量（gorexIconBtn·Glyph 28/16 工具栏、gorexPaneBtn·Glyph 24/14 密集、gorexRowBtn·Glyph 20/12 悬停行内操作，三档为唯一尺寸来源）、gorexToggleFace 按钮的按下/悬停/「开」态唯一来源（图标开关与文字开关同一枚中性芯片；列表/树行的选中仍是 SidebarSelect）、gorexIconTab 等分一行的图标标签（侧栏视图标签条，与 gorexIconButton 共用 gorexIconFace 的脸）、gorexPulldown 图标+下拉箭头（标题栏 Actions）与 shortDir/samePath 路径处理；无渐变、无投影
+gorex_style.go: 扁平视觉系统（含终端 Ghostty 主题采纳：applyGorexTerminalTheme 按 ThemeName 固定 Ghostty 主题、否则按外观走 gorex 双配色，两种路径都带 MinimumContrast 1.3 对比度保障；terminalThemeChoices 缓存 picker 选项）：卡片/配色、图标按钮度量（gorexIconBtn·Glyph 28/16 工具栏、gorexPaneBtn·Glyph 24/14 密集、gorexRowBtn·Glyph 20/12 悬停行内操作，三档为唯一尺寸来源）、gorexToggleFace 按钮的按下/悬停/「开」态唯一来源（图标开关与文字开关同一枚中性芯片；列表/树行的选中仍是 SidebarSelect）、gorexIconTab 等分一行的图标标签（侧栏视图标签条，与 gorexIconButton 共用 gorexIconFace 的脸）、gorexPulldown 图标+下拉箭头（标题栏 Actions）与 shortDir/samePath 路径处理；无渐变、无投影
 terminal.go: 终端画布与 Gorex 窗格卡片渲染器，Pane 标题双击最大化/恢复、最大化 Tab 的窗格 Logo 数量角标（Tab 内面板数，无重叠堆叠画）、窗格标题取 Agent 名（Shardlane 生成的短名 <kind>-<6hex> 不当标题，回落到 Agent 品牌名）、标题原生拖动放置（跨窗格/跨 Tab 移动、拆分与交换）与 split 分隔条拖拽调宽高（解析为 Herdr pane.resize，双击回到 50/50；布局权威在 Herdr）；窗格头的目录文案不复述已有信息——标签已写出目录（titleSpellsOutDir，F168 去重对 shortDir 截断路径失效的修复）或单卡时标题栏第二行已是该窗格目录（paneCardCaption）都不再出第三份
 run_command_button.go: 窗格卡片头的项目命令运行控件：嗅探命令（package.json/Makefile/justfile + 手写 Script 合并）经 root 键缓存读盘外构建；Run 直跑最后使用命令、菜单全量列出（last-used 置顶）；忙碌（pane.process_info 扫描事实）非 Agent 窗格变 Stop（pane.send_text 写 ETX=Ctrl+C）；事务走 ShellReady 探测 + pane.send_text 字面写入（agent.send_keys 只认 Agent 目标，2026-10-13 隔离探针验证；headless 按 mutate 规则丢弃），无新 Herdr 方法
 run_command_button_test.go: 运行控件状态机回归（命令菜单内容、last-used 置顶、忙碌换 Stop、Agent 繁忙隐藏、无命令隐藏、headless 点击安全丢弃）与 computePaneBusy 纯函数、合并形状测试
@@ -139,6 +139,7 @@ branch_menu.go: 本地分支 Popover 可搜索/独立滚动/当前分支优先�
 git_workbench_actions_test.go: Git 本地操作条、Modal、Draft Guard、Merge/Revert Confirm 的 headless 回归
 ds_components.go: 通用卡片、pageTopInset（标题栏到页面首行的唯一顶部留白令牌）、settingsGroup/formRow 分组行（控件先于标签入树，保证焦点/朗读顺序）、groupLabel、iconTile 彩色图标块、compactButton/compactPrimaryButton 紧凑按钮层级（密集工具栏/行内操作的唯一字号来源，业务代码不再对 Button 内联 FontSize）、segmentedTrack/segmentFace（用 ui.SegmentedBase 搭图标/计数段时的唯一脸：官方 Segmented 的轨道与圆角，选中芯片浅色=页面色、深色=按下面；Sessions Agent 标签与 Git Split/Unified 共用）、工作区 Chat/Diff 轻量空状态组件（窄列时操作换行到消息下方，消息不被挤成单字列）
 unified_page_test.go: UI-007/UI-008 Settings/Git/Chat 跨页面基础回归与尺寸矩阵（headless；含窄窗口 clean 状态可读性）
+terminal_theme_test.go: Ghostty 主题采纳回归——固定主题替换双配色且不再随外观、未知主题回落 gorex 并保留对比度、默认不变、picker 选项含 Default 与 Ghostty 全量、display 映射
 pane_header_visuals_test.go: 窗格头部视觉解析、Agent 图标与名称解析、路径格式化、标签已写出目录/单卡不复述目录的去重及最大化 Tab 窗格计数单元测试
 chat_hooks.go: Shell 钩子层：挂载原生 apphook 进程内 IPC 服务与 spool 兼容层，直接接收并更新 Agent 状态与会话绑定，驱动 blocked 交互检测
 chat_hooks_test.go: 钩子事件解析、提示词检测、投影等价去重与原生 apphook 状态/会话更新回归

@@ -123,6 +123,17 @@ func settingSwitch(c *ui.Context, label string, on bool) (bool, bool) {
 	return value, changed
 }
 
+// settingCombobox is a labeled combobox preference: like settingSwitch,
+// it edits a draft and reports the new value with changed.
+func settingCombobox(c *ui.Context, label string, draft *string, choices []string) (string, bool) {
+	value := *draft
+	changed := ui.Combobox(c, &value, choices).Label(label).Changed()
+	if changed {
+		*draft = value
+	}
+	return value, changed
+}
+
 // settingText is a labeled text preference committed with Return; while it
 // is not being edited it mirrors the stored value.
 func (s *Shell) settingText(c *ui.Context, label, placeholder string, draft *string, stored string, password bool, commit func(v *settings.Settings, text string)) {
@@ -271,6 +282,18 @@ func (s *Shell) settingsTerminal(c *ui.Context) {
 			if transparent, changed := settingSwitch(c, "Transparent background", s.settings.Terminal.Transparent); changed {
 				s.applySettings(func(v *settings.Settings) error {
 					v.Terminal.Transparent = transparent
+					return nil
+				})
+			}
+		}),
+		row("Theme", "", func() {
+			if theme, changed := settingCombobox(c, "Theme", &s.settingsThemeDraft, terminalThemeChoices()); changed {
+				name := theme
+				if name == terminalThemeDefault {
+					name = ""
+				}
+				s.applySettings(func(v *settings.Settings) error {
+					v.Terminal.ThemeName = name
 					return nil
 				})
 			}
