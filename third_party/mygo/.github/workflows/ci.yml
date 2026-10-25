@@ -40,7 +40,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 xvfb xauth dbus-x11 libgl1-mesa-dri libglx-mesa0 libegl-mesa0
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 libayatana-appindicator3-1 xvfb xauth dbus-x11 libgl1-mesa-dri libglx-mesa0 libegl-mesa0
       - run: bun install --frozen-lockfile
       - name: Build the JavaScript packages
         run: bun run build
@@ -54,6 +54,9 @@ jobs:
             GOOS=$os go vet -tags mygo_noinspector ./...
           done
           GOOS=freebsd go build ./...
+          # 32-bit Windows and Linux have no backend, but compile.
+          GOOS=windows GOARCH=386 go build ./...
+          GOOS=linux GOARCH=386 go build ./...
           # Browsers run native UI; the CLI is for desktops.
           export GOOS=js GOARCH=wasm
           go build $(go list -f '{{if .GoFiles}}{{.ImportPath}}{{end}}' ./... | grep -v /cmd/mygo)

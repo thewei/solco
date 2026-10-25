@@ -114,8 +114,18 @@ type FlyoutOptions struct {
 	// the keyboard while it shows, Focusable or not, which makes it close
 	// as the user clicks elsewhere. Its content draws no background there
 	// (ui.Context.Vibrancy reports the material): elsewhere, where Popover
-	// changes nothing, it draws its own.
+	// changes nothing, it draws its own. A Tray's icon is highlighted while
+	// its popover shows, as a status item is while its menu does.
 	Popover bool
+	// Vibrancy puts a translucent, blurred material behind the flyout's
+	// content, as WindowOptions.Vibrancy does behind a window's: the
+	// content draws no background where the material shows
+	// (ui.Context.Vibrancy reports it). A Popover has its own.
+	Vibrancy Vibrancy
+	// CornerRadius rounds the flyout's corners on macOS, in DIPs: its
+	// material and content are cut to them, and its Shadow follows them.
+	// Windows 11 rounds flyouts as it rounds its menus; Linux does not.
+	CornerRadius int
 
 	// URL is loaded right after the flyout is created, as
 	// WindowOptions.URL.
@@ -158,6 +168,7 @@ func NewFlyout(opts FlyoutOptions) *Window {
 		Page:              opts.Page,
 		Content:           opts.Content,
 		Hidden:            opts.Hidden,
+		Vibrancy:          opts.Vibrancy,
 	}, nil, &flyoutOptions{fo, opts.Tray})
 }
 
@@ -180,6 +191,7 @@ func (o *FlyoutOptions) platform() (*platform.Flyout, error) {
 		Gap:       o.Gap,
 		Focusable: o.Focusable,
 		Popover:   o.Popover,
+		Radius:    o.CornerRadius,
 	}, nil
 }
 

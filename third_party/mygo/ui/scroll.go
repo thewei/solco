@@ -105,6 +105,7 @@ func (e *node) adoptScroll() bool {
 		return false
 	}
 	st.beginMove(e.c.rt.frame)
+	st.wheel = nil // the app takes over from the wheel
 	if t.X != float32(st.scrollX) {
 		st.scrollX = float64(t.X)
 	}
@@ -261,6 +262,7 @@ func reveal(e *node) {
 			sy := max(0, min(nearest(st.scrollY, cy, h, p.border[0], p.h-p.border[2]), my))
 			if sx != st.scrollX || sy != st.scrollY {
 				st.beginMove(frame)
+				st.wheel = nil // what comes into view takes over from the wheel
 				if p.list != nil {
 					// A List places its rows anew from there, building
 					// those it lacked, which moves the row holding the box.

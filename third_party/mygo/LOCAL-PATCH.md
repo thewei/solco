@@ -1,4 +1,4 @@
-# Local patch over mygo v0.5.5
+# Local patch over mygo v0.6.4
 
 Four deltas, re-applied by hand after every pin bump. They live outside
 Shardlane and stay as small as deletion allows.
@@ -54,8 +54,8 @@ Spotlight/Raycast. Regression: `TestSearchField` now types without a click.
 
 Sites: an unexported `node.focusTo` field in `ui/element.go`, a delegation
 branch in `node.Focus` after its nil/invalid-state guard in `ui/input.go`, one line in `field`
-(`ui/combobox.go`), and the `TestSearchField` regression in
-`ui/combobox_test.go`.
+(`ui/combobox.go`), and a `focusTo` declaration in the `other` field list of
+upstream's new `TestLayoutInputs` (`ui/layoutcache_test.go`, v0.6.x).
 
 ## Delta 3: multi-display tray flyout anchoring on macOS (2026-10-12)
 
@@ -79,31 +79,32 @@ dismissal cleanup in `internal/darwin/popover.go`; `trayAnchorWin` field in
 
 ## Upgrade path
 
-Rebased onto v0.5.5 on 2026-10-16 (the patch applied cleanly; the terminal
-option, field-focus delegation, multi-display tray anchoring and OSC 7501 are
-all still absent upstream — v0.5.x added `Options` of its own such as
-`OnPasteStatus`, but none of these four). The four deltas keep their size:
-terminal.go grows by the same 33 lines, view.go by 6, `ui/` by 12 in three
-files, `internal/darwin/` by 84 in three files, and the OSC 7501 scanner
-files copy over unchanged. When an upstream mygo release ships these fixes,
-delete the `replace github.com/egoist/mygo => ./third_party/mygo` directive in
-`go.mod`, bump the pin, and delete this checkout. Shardlane code already uses
-only the public option and needs no changes.
+Rebased onto v0.6.4 on 2026-10-25 via a three-way merge (ours = v0.5.5+delta,
+base = pristine v0.5.5, theirs = pristine v0.6.4). The four deltas keep their
+size: terminal.go +36, view.go +6, `ui/` 12 lines in three files, `internal/darwin/`
+84 lines in three files, and the OSC 7501 scanner files copy over unchanged.
+Two conflicts needed hand resolution:
+- `internal/darwin/menu.go` — upstream added the `tray.dark` field at the same
+  slot as our clickScreen/clickAnchor fields; both kept (dark first, then ours).
+- `internal/darwin/popover.go` — upstream rewrote `tray.pressed()` around
+  currentEvent window matching; ours' clickScreen anchor hit-test is kept in
+  front of the new body, so secondary-display clicks hit-test against the
+  recorded anchor rect before any primary-window logic.
+Upstream v0.6.x also added `TestLayoutInputs` (ui/layoutcache_test.go), which
+requires every node field to be declared; `focusTo` is declared in the `other`
+list (layout never reads it). One more environment note: upstream's
+`TestAssetCatalog`/`TestListBuildInputs` (cmd/mygo) fail in any proxy-zip
+extraction (they need the full repo shape), so they fail identically on
+pristine v0.6.4 — not a delta regression.
+When an upstream mygo release ships these fixes, delete the
+`replace github.com/egoist/mygo => ./third_party/mygo` directive in `go.mod`,
+bump the pin, and delete this checkout. Shardlane code already uses only the
+public option and needs no changes.
 
-Delta vs v0.5.5: an `Options` field + a 4-line guard in `view.pointerEvent`;
+Delta vs v0.6.4: an `Options` field + a 4-line guard in `view.pointerEvent`;
 an unexported `node.focusTo` field, a delegation branch after the nil-safe
 `hasState` guard in `node.Focus`, and one line in `field`; multi-display tray
 anchoring in `internal/darwin/{menu,popover,window}.go`; the OSC 7501 scanner
-file, an `Options` field, the `events` fields and the feed/fire hooks in
+files, an `Options` field, the `events` fields and the feed/fire hooks in
 `plugins/terminal`. Preserve the upstream
 `TestOptionalElementInput/nil` behavior when rebasing this patch.
-
-## Linux
-
-MyGo is cross-platform: `internal/linux/` is a first-class backend and
-`go tool mygo build --platform linux/amd64` packages a binary, a `.deb`, a
-`.tar.gz` and an `install.sh` without macOS. The two
-`runtime.GOOS != "darwin"` branches in `cmd/mygo/bundle.go` only skip icon
-compilation and code signing (warning, not failing). Shardlane compiles and
-runs on Linux under this fork; `internal/nativeui/pty_other.go` supplies the
-no-attach-pty fallback for the non-darwin build.

@@ -76,6 +76,10 @@ The terminal does what terminal apps do:
   cells, a double click words and a triple click lines, and dragging past
   the top or the bottom scrolls. Option (Alt elsewhere) drags a rectangle.
   While a program takes the mouse, as editors do, Shift selects.
+- **The pointer** is Ghostty's: the I-beam over a shell, the arrow while a
+  program takes the mouse (the I-beam again while Shift is held, as Shift
+  selects then), and the shape a program asks for with OSC 22 (`pointer`,
+  `crosshair`, `col-resize`…) until it takes or leaves the mouse again.
 - **Copy and paste** are Command+C and Command+V on macOS, which the Edit
   menu's roles also send, and Control+Shift+C and Control+Shift+V
   elsewhere, with Control+Insert and Shift+Insert, and on Windows
@@ -151,10 +155,33 @@ term, err := terminal.New(terminal.Options{
 - `Cursor` and `NoBlink` set the cursor, which programs may change.
 - `Scrollback` is about how many bytes of output to keep above the
   screen: 10 MB by default, none when negative.
+- `MinimumContrast` is the least contrast text has with its background,
+  as Ghostty's `minimum-contrast`: a WCAG ratio from 1 (none, the
+  default) to 21. Text with less, as a program's light gray on a light
+  theme, darkens or lightens as little as reaches it, keeping its hue.
+  `SetMinimumContrast` changes it in a running terminal.
 - `Transparent` leaves the background undrawn, as Ghostty's
   `background-opacity`, so that what is under the view shows through: the
   window's material, or an element's translucent background. Cells with a
   background color of their own still draw it.
+- `Padding` is the room around the grid, in DIPs across (`X`) and down
+  (`Y`), as Ghostty's `window-padding-x` and `window-padding-y`: 6 across
+  and 4 down by default, none when negative. `PaddingColor` is what it
+  shows, as Ghostty's `window-padding-color`: the background by default,
+  or with `terminal.PaddingExtend` the backgrounds of the cells nearest to
+  it, so that a full-screen program's colors reach the edges of the view
+  rather than stopping at the grid's. As Ghostty's `extend`, it extends
+  only rows whose every cell has a background of its own, so that a
+  prompt's highlights, or a program's tabs and boxes, keep to their cells;
+  `terminal.PaddingExtendAlways` extends every row's. Either way, a lone character in inverse video, as a program
+  draws its own cursor, keeps its background in its cell.
+
+  ```go
+  term, err := terminal.New(terminal.Options{
+  	Padding:      terminal.Padding{X: 14, Y: 8},
+  	PaddingColor: terminal.PaddingExtend,
+  })
+  ```
 - `OptionAsAlt` makes Option on macOS the Alt key of programs (Meta),
   instead of the key typing accented letters.
 - `CopyOnSelect: terminal.CopyOnSelectClipboard` copies the selection to
@@ -210,11 +237,35 @@ term, err := terminal.New(terminal.Options{
   	})
   },
   ```
+- `OnCopy` runs on the main thread after the terminal writes text to the
+  clipboard, with what made the copy: `CopyUser` (the copy keys, the
+  context menu, a secondary click that copies), `CopySelect`
+  (`CopyOnSelect`) or `CopyProgram` (OSC 52). An app may say so, as
+  Ghostty's `app-notifications = clipboard-copy` does with a toast:
+
+  ```go
+  OnCopy: func(text string, by terminal.CopySource) {
+  	if by != terminal.CopyProgram {
+  		showToast("Copied to clipboard")
+  	}
+  },
+  ```
+- `OnClear` sees the user's clear on the main thread, before the terminal
+  clears: `ClearScreen`, for `ActionClearScreen`'s keys and the context
+  menu's Clear. It reports whether it took the
+  clear, which then clears nothing here. A window showing a server's
+  terminal takes it, for the server's terminal to clear (see
+  [A server's terminal, shown elsewhere](#a-servers-terminal-shown-elsewhere)).
+  It is not asked on a full-screen program's screen.
 - `OnTitle`, `OnExit`, `OnBell` and `OnNotify` run on a goroutine of the
   terminal when the program sets the title, ends, rings the bell or asks
-  for a desktop notification. `Done` is closed once the program exited,
-  and `ExitCode` returns its code (-1 for a program that could not
-  start); the terminal then shows "[Process exited]".
+  for a desktop notification. They may run before the window that shows
+  the terminal exists, which `NewWindow` makes after `New`: callbacks
+  that use the window wait for it, as the terminal example's do (`<-ready`
+  before `win`, and `close(ready)` once `NewWindow` set `win`). `Done` is
+  closed once the program exited, and `ExitCode` returns its code (-1 for
+  a program that could not start); the terminal then shows "[Process
+  exited]".
 - `OpenLink` takes the links Command+click opens, on the main thread,
   and with it file paths printed as text too (`/abs/path`, `~/notes.md`,
   `./a.go`, `src/app.go:12:3`, `main.go:250`), as printed: a relative
@@ -318,8 +369,10 @@ on to the program, as if unbound: Control+C interrupts when nothing is
 selected. A performable copy also lets go of the selection, so that the
 key's next press interrupts. `ActionClearScreen` clears the scrollback and
 the screen above the cursor's line, which moves to the top with the
-shell's prompt, as Kitty's `clear_terminal to_cursor`; `ActionIgnore`
-takes the key and does nothing.
+shell's prompt, as Kitty's `clear_terminal to_cursor`, and the context
+menu's Clear does it too; `Terminal.ClearScreen` does the same from code,
+and `Terminal.ClearScrollback` clears the scrollback alone.
+`ActionIgnore` takes the key and does nothing.
 
 A key goes first to the app's shortcuts, then to `OnKey`, then to the
 keybinds, then to the program. The context menu shows the keys bound to
@@ -409,6 +462,37 @@ selection-foreground = #1e1e2e
 
 `SetTheme(theme, dark)` changes the themes of a running terminal.
 
+## Search
+
+`Search` searches the screen and the scrollback for text, as Ghostty's find
+does, with libghostty-vt's search: the matches are highlighted as they are
+found, a frame's share of the scrollback at a time, and follow the output
+that comes; the newest is selected, and shown. Matching is exact but for the
+case of ASCII letters. `SearchNext` selects the next match toward older
+output, up into the scrollback, and `SearchPrevious` toward newer output,
+both wrapping around and, unless the match shows, scrolling it to the
+middle of the view, clear of a find bar over an edge; `EndSearch`
+(or `Search("")`) ends the search. The terminal draws no find bar: the app
+draws one, and binds Ghostty's keys to these methods, Cmd+F, Cmd+G,
+Cmd+Shift+G and Escape on macOS. `OnSearch` tells it, on the main thread,
+how the search goes, for its "1 of 3":
+
+```go
+term, err := terminal.New(terminal.Options{
+	OnSearch: func(s terminal.SearchStatus) {
+		// s.Selected of s.Total matches of s.Text; s.Searching while more
+		// of the scrollback is to go through.
+		bar.status = fmt.Sprintf("%d of %d", s.Selected, s.Total)
+	},
+})
+```
+
+The theme's `Search` and `SearchText` color the matches and their text, and
+`SearchSelected` and `SearchSelectedText` the selected one, as Ghostty's
+`search-background`, `search-foreground`, `search-selected-background` and
+`search-selected-foreground`, which a theme file sets too: Ghostty's light
+amber and light orange under black text when zero.
+
 ## Methods
 
 The terminal's methods are safe from any goroutine:
@@ -424,6 +508,10 @@ The terminal's methods are safe from any goroutine:
   sequences.
 - `Title`, `Dir` (the directory the shell reported), `Size` (in cells) and
   `Text` (the screen and its scrollback) read the terminal.
+- `HoveredLink` returns the link Command (Control elsewhere) is held over
+  in the view, as `OpenLink` takes it, whether it is a file path, and the
+  rectangle of its cells relative to the view: read it after `View` to
+  show a preview of the link over the view.
 - `SetFont` and `SetTheme` change the font and the colors; `SetFont` also
   sets the size a zoom resets to, and drops the zoom.
 - `Resize` sets the size of a terminal no view shows, and `Snapshot`
@@ -446,6 +534,94 @@ term, err := terminal.New(terminal.Options{Conn: session})
 
 A terminal whose `Conn` never sends anything shows what the app writes
 with `Feed`, as a log with colors would.
+
+## A server's terminal, shown elsewhere
+
+A server that keeps sessions running, as a multiplexer does, keeps each
+session's terminal, which the program's output goes to, and windows show it
+from another process. A `Mirror` of the server's terminal frames what it
+shows: `Frame` returns VT sequences that bring a terminal showing the frames
+before to what the server's shows now. The window's terminal reads them from
+its `Conn` as if a program wrote them, and shows the server's screen and
+scrollback cell for cell, with its cursor and the modes that change what it
+sends (the cursor keys', the keyboard protocols', the mouse's, bracketed
+paste) and the colors programs set (OSC 4, 10, 11, 12), while it still selects, copies, opens links and composes as any
+terminal does. It never lays out a program's output itself, so it cannot
+come to show something else: a window fed the program's output from a
+snapshot of the server's screen can, as programs that redraw by moving the
+cursor relative to where it is show, as agents' interfaces do.
+
+```go
+// The server, one Mirror for each window, its first frame starting it over:
+m, err := term.NewMirror()
+frame, due := m.Frame() // after output; due: a synchronized update holds it
+```
+
+Frames draw rows where they are, and rows that scroll off pass through the
+window's screen in order, so that its scrollback is the server's; soft wraps
+stay soft. Each cell is drawn in its own style, so an empty cell stays empty
+after a colored one. A frame reads the terminal as a view does, taking its
+record of what changed: mirror a terminal no view shows, as a server's, with
+as many Mirrors as it has windows. A frame does not come while a program holds a synchronized update
+(mode 2026), up to a second: `Frame` then reports that one is due. The
+window's cursor takes its own `Cursor` and `NoBlink` while the program
+leaves the cursor's shape alone, and the program's when it sets one.
+
+The window's terminal sets `ResizeByConn`: its view only asks `Conn` for the
+size it fits, and the screen keeps its size until the window calls `Resize`,
+where the server's stream says the server resized, before the frames of the
+new size.
+
+```go
+term, err := terminal.New(terminal.Options{Conn: stream, ResizeByConn: true})
+// Where the server's stream says it resized to cols×rows:
+term.Resize(cols, rows)
+```
+
+The server's terminal answers the program's questions, so it needs what
+only the window knows. A `Conn` with `ResizePixels(cols, rows, cellWidth,
+cellHeight int) error` is told the size of the window's cells in pixels,
+and one with `UseTheme(theme *terminal.Theme) error` the window's colors;
+the server gives them to its terminal with `ResizePixels` and `UseTheme`.
+Programs asking the size in pixels, or taking the mouse in pixels (mode
+1016), then count in the window's cells, and those asking the colors (OSC
+4, 10, 11, 12) or whether they are dark get the window's. A program that
+asked (mode 2031) is told when they go from light to dark or back, as a
+terminal a view shows tells it when the window's appearance changes.
+
+```go
+// The server, where a window's stream says so:
+term.ResizePixels(cols, rows, cellWidth, cellHeight)
+term.UseTheme(theme)
+```
+
+The user's clears are the server's to make: cleared in the window alone,
+the server's next frames, drawn from a screen still full, would bring rows
+back in the wrong places. The window's `OnClear` takes them and asks the
+server, whose terminal clears; the next frame shows it.
+
+```go
+// The window:
+OnClear: func(c terminal.Clear) bool {
+	stream.Clear(c) // however the app asks its server
+	return true
+},
+// The server, asked:
+term.ClearScreen()
+```
+
+Programs' writes to the clipboard (OSC 52) go on with the frames, for the
+window's terminal to write with its own policy. With `ClipboardRead:
+terminal.ClipboardForward` on the server's terminal, programs' reads go on
+too, and the window's terminal answers them, asking the user as it would:
+the server's answers nothing. The server answers programs' other queries
+itself, as the terminal they write to.
+
+`History` returns the server's scrollback and screen down to the cursor as
+rows, without the cursor and the modes, for a terminal that takes a session
+over after its program ended, as after the server restarted: fed to it, the
+cursor is left under what it shows, for the next program to start below it
+rather than over it. A full-screen program's screen has none.
 
 ## The library
 

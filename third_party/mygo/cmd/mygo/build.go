@@ -87,6 +87,10 @@ WebAssembly, named by its content: a static site, to serve from anywhere.`)
 	if c.MacOS.Notarize != nil && !opts.skipNotarize && opts.sign == "-" {
 		return fmt.Errorf("notarization needs a Developer ID signing identity: set macos.signingIdentity or pass -sign")
 	}
+	if c.MacOS.ProvisioningProfile != "" && opts.sign == "-" && slices.ContainsFunc(splitList(*platforms), func(p string) bool { return strings.HasPrefix(p, "darwin/") }) {
+		// Before building anything, as codesign would.
+		return errProfileAdHoc
+	}
 
 	con.startBanner("build")
 	started := time.Now()
@@ -213,6 +217,7 @@ func buildPlatform(c *Config, goos, goarch string, opts buildOptions) ([]string,
 		// A GUI app, not a console one.
 		ldflags += " -H=windowsgui"
 	}
+	ldflags += extraLDFlags()
 	compile := func(arch, out string) error {
 		t := con.start("Compiling " + goos + "/" + arch)
 		err := func() error {
@@ -421,6 +426,16 @@ func productionTags(debug bool) []string {
 		}
 	}
 	return []string{"-tags", strings.Join(append(tags, inspectorTag), ",")}
+}
+
+// extraLDFlags returns the -ldflags of MYGO_LDFLAGS, which a build adds
+// after its own, so that its -X flags win: GOFLAGS cannot give any, as
+// the -ldflags of mygo build override those of GOFLAGS.
+func extraLDFlags() string {
+	if f := strings.TrimSpace(os.Getenv("MYGO_LDFLAGS")); f != "" {
+		return " " + f
+	}
+	return ""
 }
 
 // packageFlags are the -ldflags that link what mygo.json says about the app

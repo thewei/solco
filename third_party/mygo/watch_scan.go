@@ -83,8 +83,9 @@ var fileWatchUnknown atomic.Uint64
 func fileWatchEntryOf(info os.FileInfo) fileWatchEntry {
 	id, ok := fileWatchIdentity(StatIdentity(info))
 	if !ok {
-		id = fileWatchID{^uint64(0), fileWatchUnknown.Add(1)}
+		id = fileWatchID{volume: ^uint64(0), index: fileWatchUnknown.Add(1)}
 	}
+	id.typ = info.Mode().Type()
 	return fileWatchEntry{id: id, size: info.Size(), mtime: info.ModTime().UnixNano(), mode: info.Mode()}
 }
 
@@ -978,12 +979,21 @@ func (s *fileWatchScan) unenroll(p string) {
 // fileWatchDiff turns what an update changed into events: changed holds
 // what it looked at as it was before, entries what is now. An entry whose
 // identity moved to another path is a rename, when nothing else has that
-// identity.
+// identity; a file replaced at its path by another file is a write.
 func fileWatchDiff(changed map[string]fileWatchBefore, entries map[string]fileWatchEntry, writes map[string]bool) []FileEvent {
 	removed := make(map[string]fileWatchEntry)
 	created := make(map[string]fileWatchEntry)
+	// A file replaced at its path by another file, as editors and atomic
+	// saves replace it (a temporary file renamed over it), is written, as a
+	// watched file replaced is: not removed, then created, which would
+	// have an app close a document it still has.
+	replaced := make(map[string]bool)
 	for p, was := range changed {
 		now, ok := entries[p]
+		if was.ok && ok && was.entry.id != now.id && was.entry.mode.IsRegular() && now.mode.IsRegular() {
+			replaced[p] = true
+			continue
+		}
 		if was.ok && (!ok || was.entry.id != now.id) {
 			removed[p] = was.entry
 		}
@@ -1062,7 +1072,7 @@ func fileWatchDiff(changed map[string]fileWatchBefore, entries map[string]fileWa
 		if b, ok := created[p]; ok {
 			events = append(events, FileEvent{Op: FileCreate, Path: p, IsDir: b.isDir()})
 		}
-		if now, ok := entries[p]; was.ok && ok && !now.isDir() && was.entry.id == now.id && (writes[p] || fileWatchChanged(was.entry, now)) {
+		if now, ok := entries[p]; replaced[p] || was.ok && ok && !now.isDir() && was.entry.id == now.id && (writes[p] || fileWatchChanged(was.entry, now)) {
 			events = append(events, FileEvent{Op: FileWrite, Path: p})
 		}
 		if len(events) > 0 {
@@ -1078,8 +1088,14 @@ func fileWatchDiff(changed map[string]fileWatchBefore, entries map[string]fileWa
 }
 
 // fileWatchID is a file's identity as os.SameFile compares it (device and
-// inode; volume and file index on Windows), usable as a map key.
-type fileWatchID struct{ volume, index uint64 }
+// inode; volume and file index on Windows), usable as a map key, with its
+// type: a file never changes type, but a file system such as ext4 gives
+// a freed inode to the next file created, so that a directory removed and
+// a symlink created in its place can have the same inode.
+type fileWatchID struct {
+	volume, index uint64
+	typ           fs.FileMode
+}
 
 // fileWatchIDs counts the entries of an update's before and after by
 // identity, keeping the path of one, for pairing renames.

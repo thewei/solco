@@ -52,7 +52,12 @@ Roles do what users expect of standard items, with their usual label and
 shortcut, which `Label` and `Accelerator` override:
 
 - editing: `RoleUndo`, `RoleRedo`, `RoleCut`, `RoleCopy`, `RolePaste`,
-  `RoleDelete`, `RoleSelectAll`, and on macOS `RolePasteAndMatchStyle`;
+  `RoleDelete`, `RoleSelectAll`, and on macOS `RolePasteAndMatchStyle`.
+  Their keys go to the content first, as in a browser: in a page on
+  Windows, WebView2 cuts, copies and pastes with the page's own events and
+  every format of the clipboard, while choosing Paste from the menu types
+  the clipboard's text, as pages may not read the clipboard (as does an
+  edit role given a key the page has no use for, as Copy on Ctrl+Shift+C);
 - formatting: `RoleBold`, `RoleItalic`, `RoleUnderline`,
   `RoleStrikethrough`, `RoleAlignLeft`, `RoleAlignCenter` and
   `RoleAlignRight`, which format the selection of a [rich text
@@ -110,7 +115,9 @@ window its own, and windows have none by default, except in apps with
 removes the menu.
 
 On Windows, menu bars and menus follow the appearance, light or dark, as
-the title bar does (see [dark mode](frontend.md#dark-mode)).
+the title bar does (see [dark mode](frontend.md#dark-mode)). On Windows 11
+they look like the system's own menus, as File Explorer's: roomier items,
+highlights with rounded corners, and shortcuts in a fainter color.
 
 A window with `AutoHideMenuBar` keeps its menu bar out of sight, and the
 room for the page. Alt pressed alone, or F10, shows the bar with the
@@ -207,15 +214,60 @@ menu, clicks reach `OnClick`, and `OnRightClick` gets right-clicks. Change
 the tray with `SetIcon`, `SetMenu`, `SetToolTip` and, on macOS,
 `SetTitle`, the text next to the icon; `Destroy` removes it.
 
+An app may show several icons, as a menu bar app showing its measures each
+in an item of its own. On macOS a new icon goes left of those already
+there, and the user moves icons by dragging them with ⌘ held: give each an
+`ID`, unique among the app's icons, and it goes back where the user put it
+whenever it is made again, at the next launch or after `Destroy`. On
+Windows, where the user chooses which icons show on the taskbar rather
+than in its overflow, an icon with an `ID` keeps that choice, whatever
+order the app makes its icons in.
+
+A template icon follows the menu bar by itself. An icon in color, as one
+drawing each of its measures in its own color, draws its ink for the bar
+it shows on: `Tray.Dark` reports whether that bar is dark (the macOS menu
+bar, as the system's appearance or the wallpaper under it tints it, or the
+Windows taskbar), and `OnAppearanceChange` tells when it turns, to set the
+icon again:
+
+```go
+draw := func() { tray.SetIcon(meterIcon(tray.Dark()), false) }
+tray.OnAppearanceChange(draw)
+draw()
+```
+
 `Tray.PopUpMenu` opens the menu set with `SetMenu` programmatically. On
 macOS, AppKit places it below the status item and highlights its button
 while the menu is open. To show a menu only on right-click while keeping
 primary clicks available, set the menu in `OnRightClick`, call
 `PopUpMenu`, then clear it with `SetMenu(nil)` when the call returns.
 
+A tray icon does not keep the app running: the app quits when its last
+window closes ([Quitting](app.md#quitting)). To close a window to the
+tray, hide it instead, which keeps the window and the app. A quit, as the
+tray menu's `RoleQuit`, starts before the windows close, so `OnClose` can
+tell the closes it makes from the user's:
+
+```go
+var quitting bool // OnBeforeQuit and OnClose run on the main thread
+mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { quitting = true })
+
+win.OnClose(func(e *mygo.CloseEvent) {
+	if !quitting {
+		e.PreventDefault()
+		win.Hide()
+	}
+})
+// The icon's click, without a menu, or an item of its menu, brings it back.
+tray.OnClick(win.Show)
+```
+
 On Linux tray icons use AppIndicator, which needs
-`libayatana-appindicator3`: they show a menu and report no clicks, and
-`NewTray` returns an error without the library.
+`libayatana-appindicator3`: they show a menu, and an icon with an `OnClick`
+listener answers activation (with a release of the library that has the
+`activate` signal; older ones report no clicks), which GNOME's AppIndicator extension sends on
+a double click and which opens the menu on a single one after the double
+click time. `NewTray` returns an error without the library.
 
 Apps that live in the menu bar usually drop their Dock icon on macOS:
 

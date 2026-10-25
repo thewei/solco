@@ -212,7 +212,8 @@ to the configuration.
 ## mygo doctor
 
 Checks the development machine: Go, Bun and the webview of the platform,
-which projects with a web frontend need, and the tools of optional
+which projects with a web frontend need (on Linux GTK 3 too, and not
+WebKitGTK in a project whose `linux.webview` is `false`), and the tools of optional
 features: NSIS for Windows installers (which `mygo build` downloads on
 Windows), `signtool` or `osslsigncode` for signing Windows apps, `gh` for
 `-upload`, and Developer ID identities for signing macOS apps.
@@ -226,6 +227,7 @@ Prints the version of the CLI.
 | Variable | |
 |---|---|
 | `CGO_ENABLED` | `0` by default when unset or empty; set to `1` for app dependencies that need cgo, including in `mygo dev`, `mygo build` and `mygo generate` |
+| `MYGO_LDFLAGS` | more `-ldflags` for the builds of `mygo build`, after its own, such as `-X example.com/app/internal/crash.DSN=…` or `-buildid=`; split at spaces outside quotes, as `go build -ldflags` splits them |
 | `MYGO_INSPECTOR` | `1` keeps the [inspector of native UI](ui/inspector.md) in production builds of `mygo build`, which leave it out |
 | `MYGO_UPDATER_PRIVATE_KEY` | the secret key that signs updates, for `mygo build` |
 | `MYGO_WINDOWS_CERTIFICATE_PASSWORD` | the password of `windows.certificate`, for `mygo build` |

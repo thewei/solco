@@ -103,6 +103,14 @@ type WindowOptions struct {
 	// 32 on Windows, as Windows 11's own title bars, and the height of the
 	// desktop's header bars on Linux.
 	TitleBarHeight int
+	// HideWindowButtons hides the window controls of a window with a hidden
+	// title bar (TitleBarStyle), which keeps the rest of it: the shadow,
+	// the rounded corners and the resizing edges, the top one included,
+	// which a Frameless window lacks on Windows. The page or the view draws
+	// its own controls, anywhere, and calls Minimize, Maximize, Unmaximize
+	// and Close; the --mygo-titlebar-* CSS variables and
+	// ui.Context.TitleBar are then zero.
+	HideWindowButtons bool
 
 	DisableResize     bool
 	DisableMove       bool
@@ -463,6 +471,8 @@ func newWindow(opts WindowOptions, bg *background, native uintptr, flyout *flyou
 	}
 	if w.content != nil {
 		w.attachContent()
+	} else {
+		startContentRules(nw, opts.Page.ContentRules)
 	}
 
 	windows.Lock()
@@ -482,39 +492,44 @@ func newWindow(opts WindowOptions, bg *background, native uintptr, flyout *flyou
 func (w *Window) platformOptions(o *WindowOptions) *platform.WindowOptions {
 	po := o.Page
 	p := &platform.WindowOptions{
-		Title:          o.Title,
-		X:              o.X,
-		Y:              o.Y,
-		Width:          or(o.Width, 800),
-		Height:         or(o.Height, 600),
-		Center:         o.X == 0 && o.Y == 0,
-		UseContentSize: o.UseContentSize,
-		MinSize:        platform.Size{Width: o.MinWidth, Height: o.MinHeight},
-		MaxSize:        platform.Size{Width: o.MaxWidth, Height: o.MaxHeight},
-		Resizable:      !o.DisableResize,
-		Movable:        !o.DisableMove,
-		Minimizable:    !o.DisableMinimize,
-		Maximizable:    !o.DisableMaximize,
-		Closable:       !o.DisableClose,
-		Focusable:      true,
-		Fullscreenable: !o.DisableFullScreen,
-		AlwaysOnTop:    o.AlwaysOnTop,
-		FullScreen:     o.FullScreen,
-		Maximized:      o.Maximized,
-		SkipTaskbar:    o.SkipTaskbar,
-		AutoHideMenu:   o.AutoHideMenuBar,
-		HasShadow:      !o.DisableShadow,
-		Frameless:      o.Frameless,
-		Transparent:    o.Transparent,
-		TitleBarStyle:  string(o.TitleBarStyle),
-		TitleBarHeight: max(o.TitleBarHeight, 0),
-		Vibrancy:       string(o.Vibrancy),
-		Opacity:        o.Opacity,
-		Modal:          o.Modal,
-		UserAgent:      po.UserAgent,
-		Zoom:           po.ZoomFactor,
-		Schemes:        Protocol.schemes(),
-		Panel:          o.Panel,
+		Title:             o.Title,
+		X:                 o.X,
+		Y:                 o.Y,
+		Width:             or(o.Width, 800),
+		Height:            or(o.Height, 600),
+		Center:            o.X == 0 && o.Y == 0,
+		UseContentSize:    o.UseContentSize,
+		MinSize:           platform.Size{Width: o.MinWidth, Height: o.MinHeight},
+		MaxSize:           platform.Size{Width: o.MaxWidth, Height: o.MaxHeight},
+		Resizable:         !o.DisableResize,
+		Movable:           !o.DisableMove,
+		Minimizable:       !o.DisableMinimize,
+		Maximizable:       !o.DisableMaximize,
+		Closable:          !o.DisableClose,
+		Focusable:         true,
+		Fullscreenable:    !o.DisableFullScreen,
+		AlwaysOnTop:       o.AlwaysOnTop,
+		FullScreen:        o.FullScreen,
+		Maximized:         o.Maximized,
+		SkipTaskbar:       o.SkipTaskbar,
+		AutoHideMenu:      o.AutoHideMenuBar,
+		HasShadow:         !o.DisableShadow,
+		Frameless:         o.Frameless,
+		Transparent:       o.Transparent,
+		TitleBarStyle:     string(o.TitleBarStyle),
+		TitleBarHeight:    max(o.TitleBarHeight, 0),
+		HideWindowButtons: o.HideWindowButtons,
+		Vibrancy:          string(o.Vibrancy),
+		Opacity:           o.Opacity,
+		Modal:             o.Modal,
+		UserAgent:         po.UserAgent,
+		UserAgentSuffix:   strings.TrimSpace(po.UserAgentSuffix),
+		Zoom:              po.ZoomFactor,
+		// Tab reaches every control, as desktop apps do, unless the app
+		// asked for Safari's behavior.
+		TabFocusesLinks: !po.SafariTabFocus,
+		Schemes:         Protocol.schemes(),
+		Panel:           o.Panel,
 	}
 	if o.Panel {
 		p.Minimizable, p.Maximizable, p.Fullscreenable = false, false, false
@@ -1366,9 +1381,10 @@ func (e *EvalError) Error() string { return "mygo: javascript error: " + e.Messa
 // open, or nil to deny the request. Without a handler, http(s) URLs open in
 // the default browser and everything else is denied.
 //
-// On macOS the new page keeps its relation to the opener (window.opener).
-// On Linux it opens as an independent page, because WebKitGTK would share
-// the opener's script message routing with a related page.
+// On macOS and Windows the new page keeps its relation to the opener
+// (window.opener). On Linux it opens as an independent page, because
+// WebKitGTK would share the opener's script message routing with a
+// related page.
 func (p *Page) SetWindowOpenHandler(fn func(req WindowOpenRequest) *WindowOptions) {
 	p.w.mu.Lock()
 	p.w.openHandler = fn

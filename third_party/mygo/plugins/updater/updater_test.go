@@ -223,6 +223,44 @@ func TestInstallAndRelaunch(t *testing.T) {
 	}
 }
 
+// A window keeps the language it opened in; after the app's language
+// changes, the next window and the menu item take the new one.
+func TestLanguageChange(t *testing.T) {
+	h := newHarness(t, Options{})
+	proceed := make(chan struct{})
+	h.result = func(context.Context) (*release, error) {
+		return newRelease("2.0.0", func(ctx context.Context, progress func(int64, int64)) error {
+			<-proceed
+			return nil
+		}), nil
+	}
+	done := h.begin(true)
+	s := h.shown()
+	v := waitView(t, s, "A new version of")
+	s.Respond(v.Prompt, actionInstall, false)
+	waitView(t, s, "Downloading update…")
+	locale = func() string { return "zh-Hans" }
+	close(proceed)
+	v = waitView(t, s, "Ready to Relaunch")
+	if got := s.Texts(); got.Title != "Software Update" {
+		t.Errorf("texts of the open window: %+v", got)
+	}
+	s.Respond(v.Prompt, actionLater, false)
+	waitDone(t, done)
+
+	done = h.begin(true)
+	s = h.shown()
+	v = waitView(t, s, "可以重新启动了")
+	if got := s.Texts(); got.Title != "软件更新" {
+		t.Errorf("texts of the next window: %+v", got)
+	}
+	s.Respond(v.Prompt, actionLater, false)
+	waitDone(t, done)
+	if got := h.u.text().MenuItem; got != "检查更新…" {
+		t.Errorf("menu item %q", got)
+	}
+}
+
 func TestSkipVersion(t *testing.T) {
 	h := newHarness(t, Options{})
 	h.result = func(context.Context) (*release, error) { return newRelease("2.0.0", nil), nil }
@@ -495,6 +533,30 @@ func TestSchedule(t *testing.T) {
 	h.u.schedule()
 	if h.u.timer != nil {
 		t.Error("scheduled with automatic checks off")
+	}
+}
+
+func TestCheckAtLaunch(t *testing.T) {
+	h := newHarness(t, Options{})
+	defer func(w time.Duration) { firstCheckWait = w }(firstCheckWait)
+	firstCheckWait = time.Millisecond
+	// The last launch checked an hour ago; a version came out since.
+	h.u.update(func(s *state) { s.LastCheck = now().Add(-time.Hour) })
+	h.result = func(context.Context) (*release, error) { return newRelease("2.0.0", nil), nil }
+	h.u.running = true
+	h.u.schedule()
+	s := h.shown()
+	v := waitView(t, s, "A new version of")
+	s.Respond(v.Prompt, actionLater, false)
+	wait.Until(t, "the next check scheduled", func() bool {
+		h.u.mu.Lock()
+		defer h.u.mu.Unlock()
+		return h.u.session == nil && h.u.timer != nil
+	})
+	// Then an interval after it, not at once again.
+	time.Sleep(20 * time.Millisecond)
+	if n := h.checks.Load(); n != 1 {
+		t.Errorf("%d checks, want 1", n)
 	}
 }
 

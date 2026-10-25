@@ -71,6 +71,7 @@ go run ./examples/code-editor              # the code editor and the diff viewer
 go run ./examples/markdown-chat            # Markdown replies streaming in (ui/markdown)
 go run ./examples/notes                    # the rich text editor (ui/richtext), in a notes app
 go run ./examples/terminal                 # a terminal (downloads libghostty-vt once)
+go run ./examples/loading                  # loading.dev's 29 indicators (plugins/loading)
 go generate ./plugins/terminal             # build libghostty-vt for every platform (with Zig), write Ghostty's themes
 go generate ./internal/gpu/d3d11           # recompile the Direct3D shader (on Windows)
 go generate ./internal/gpu/metal           # recompile the Metal shader (on macOS, with Xcode)
@@ -79,6 +80,7 @@ go generate ./plugins/glass                # recompile the glass plugin's shader
 bun run --cwd website dev                  # the website, with docs/ at /docs (see website/README.md)
 bun scripts/bench.ts run [--e2e]           # benchmarks and app sizes, medians of 6 runs (CI: bench.yml, /benchmarks)
 go run ./internal/idlemem app...           # apps' memory once idle, with their webviews' processes
+go run ./internal/inputlatency             # native UI's input-to-screen latency on macOS (opens windows)
 ```
 
 Linux GUI tests cross-compile and run in a container with WebKitGTK and Xvfb;
@@ -108,7 +110,9 @@ Windows GUI tests need Windows with the WebView2 Runtime (a GitHub Actions
   pixels, compiled ahead of time by `go generate` on macOS and Windows.
   The game plugin is Go only too, what games need beyond what apps do,
   opt-in, kept out of core `ui`: a game loop and a camera for native UI,
-  and `plugins/game/gamepad`, which reads controllers.
+  and `plugins/game/gamepad`, which reads controllers. The loading plugin
+  is Go only too, loading.dev's indicators drawn with `ui.Painter` on
+  ui's public API: keep them as loading-dev draws them in a browser.
 - The `dist/` of npm packages is not committed: run `bun run build` after
   `bun install` (CI and releases do). Commit `internal/bridge/bridge.js`
   whenever its sources change, and keep the generated clients of examples

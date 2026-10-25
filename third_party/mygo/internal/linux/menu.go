@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/ebitengine/purego"
@@ -28,11 +30,16 @@ var (
 	menuOwners int
 	itemsByID  = map[int][]nativeItem{}
 	itemRoles  = map[int]string{}
+	// roleKeys are the shortcuts of items with a role, by accel group: the
+	// keyval, lower case, and the modifiers.
+	roleKeys = map[ptr]map[[2]uint32]bool{}
 
 	cbMenuActivate   ptr
 	cbMenuDeactivate ptr
+	cbTrayActivate   ptr
 
-	// Menu bars that hide (window.menuHides).
+	// Menu bars that hide (window.menuHides), and the keys of items with a
+	// role.
 	cbMenuKey, cbCanActivateAccel, cbMenuBarDeactivate ptr
 )
 
@@ -109,6 +116,16 @@ func initMenuCallbacks() {
 		if w == nil {
 			return false
 		}
+		// The shortcuts of items with a role are the content's keys too, as
+		// Ctrl+C, Edit › Copy's, which interrupts in a terminal: GTK would
+		// run its accelerators first, so the content gets them first, and
+		// GTK runs those it leaves. The app's own items go first, as on macOS.
+		if field[int32](event, 0) == 8 && w.surface != nil { // GDK_KEY_PRESS
+			k := [2]uint32{gdkKeyvalToLower(field[uint32](event, 28)), field[uint32](event, 24) & modifierMask}
+			if roleKeys[w.accel][k] && gtkWindowPropagateKeyEvent(w.win, event) {
+				return true
+			}
+		}
 		if !w.menuHides() || w.menubar == 0 || gtkWidgetGetVisible(w.menubar) {
 			w.altAlone = false
 			return false
@@ -140,6 +157,14 @@ func initMenuCallbacks() {
 	cbMenuBarDeactivate = purego.NewCallback(func(shell, data ptr) {
 		if w := theBackend.window(data); w != nil && w.menuHides() {
 			gtkWidgetHide(shell)
+		}
+	})
+	// A panel activates an icon it can tell a double click from: GNOME's
+	// AppIndicator extension sends AppIndicator::activate when its icon is
+	// double-clicked.
+	cbTrayActivate = purego.NewCallback(func(ind, x, y, data ptr) {
+		if t := theBackend.trays[int(data)]; t != nil && t.h != nil {
+			t.h.Clicked()
 		}
 	})
 }
@@ -198,6 +223,12 @@ func buildItem(it *platform.MenuItem, accel ptr, owner, windowID int) ptr {
 		if accel != 0 && it.Accelerator != "" {
 			if key, mods, ok := gtkAccelerator(it.Accelerator); ok {
 				gtkWidgetAddAccelerator(item, cs("activate"), accel, key, mods, 1) // GTK_ACCEL_VISIBLE
+				if it.Role != "" {
+					if roleKeys[accel] == nil {
+						roleKeys[accel] = map[[2]uint32]bool{}
+					}
+					roleKeys[accel][[2]uint32{gdkKeyvalToLower(key), mods}] = true
+				}
 			}
 		}
 	}
@@ -265,6 +296,9 @@ func gtkAccelerator(acc string) (uint32, uint32, bool) {
 	default:
 		r, _ := utf8.DecodeRuneInString(a.Key)
 		key = gdkUnicodeToKeyval(uint32(r))
+		if mods&1 != 0 && !unicode.IsLetter(r) {
+			key = shifted(key)
+		}
 	}
 	return key, mods, key != 0
 }
@@ -299,6 +333,7 @@ func (w *window) installMenu(m *platform.Menu) {
 		// Accelerators live in the group; start with a fresh one.
 		gtkWindowRemoveAccelGroup(w.win, w.accel)
 		gObjectUnref(w.accel)
+		delete(roleKeys, w.accel)
 		w.accel = gtkAccelGroupNew()
 		gtkWindowAddAccelGroup(w.win, w.accel)
 	}
@@ -428,15 +463,21 @@ func (b *Backend) PopupMenu(m *platform.Menu, pw platform.Window, pos *platform.
 }
 
 // Tray icons use AppIndicator (StatusNotifierItem), which shows a menu on
-// click; click events are not available.
+// a click. A panel can activate the icon, a double click on GNOME's
+// indicators, and the library reports that as the "activate" signal while
+// a handler is connected.
 type tray struct {
 	b       *Backend
+	h       platform.TrayHandler
 	id      int
 	ind     ptr
 	menu    ptr
 	owner   int
 	iconDir string
 	icons   int
+	// activate is the handler of the "activate" signal, 0 while the icon
+	// does not answer activation.
+	activate uint64
 }
 
 func (b *Backend) NewTray(h platform.TrayHandler) (platform.Tray, error) {
@@ -444,7 +485,7 @@ func (b *Backend) NewTray(h platform.TrayHandler) (platform.Tray, error) {
 		return nil, fmt.Errorf("mygo: tray icons need libayatana-appindicator3: %w", platform.ErrUnsupported)
 	}
 	b.nextTray++
-	t := &tray{b: b, id: b.nextTray}
+	t := &tray{b: b, h: h, id: b.nextTray}
 	name := fmt.Sprintf("mygo-%d-%d", os.Getpid(), t.id)
 	t.ind = appIndicatorNew(cs(name), cs("application-x-executable"), 0) // APPLICATION_STATUS
 	appIndicatorSetStatus(t.ind, 1)                                      // ACTIVE
@@ -473,6 +514,14 @@ func (t *tray) SetImage(png []byte, template bool) error {
 	return nil
 }
 
+// Dark reports false: AppIndicator tells nothing of the panel, whose
+// icon theme draws the icon in its own colors.
+func (t *tray) Dark() bool { return false }
+
+// SetID does nothing: the indicator's ID is given as it is made, and
+// panels place indicators themselves.
+func (t *tray) SetID(string) {}
+
 func (t *tray) SetTitle(title string) { appIndicatorSetLabel(t.ind, cs(title), cs(title)) }
 
 func (t *tray) SetToolTip(tip string) {
@@ -496,10 +545,45 @@ func (t *tray) SetMenu(m *platform.Menu) {
 func (t *tray) PopUpMenu(*platform.Menu) {}
 func (t *tray) Bounds() platform.Rect    { return platform.Rect{} }
 
+// SetActivatable connects or drops the indicator's activate handler, which
+// is also the answer a panel gets when it asks the icon whether it can be
+// activated at all: the Activate method of the StatusNotifierItem
+// interface fails with UNKNOWN_METHOD while no handler is connected. GNOME's
+// AppIndicator extension then opens the menu on every click; with a
+// handler it opens the menu on a single click after waiting for a second
+// one, and the second click arrives here as TrayHandler.Clicked, as on
+// Telegram's icon.
+func (t *tray) SetActivatable(on bool) {
+	if t.ind == 0 || on == (t.activate != 0) || !trayActivates() {
+		return
+	}
+	if !on {
+		gSignalHandlerDisconnect(t.ind, t.activate)
+		t.activate = 0
+		return
+	}
+	t.activate = connect(t.ind, "activate", cbTrayActivate, ptr(t.id))
+}
+
+// trayActivates tells whether the AppIndicator library has the
+// "activate" signal, which older libayatana-appindicator3 releases lack:
+// their icons answer no activation, whatever the app listens to. It is
+// asked once an indicator exists, which registers the type.
+var trayActivates = sync.OnceValue(func() bool {
+	var lookup func(name *byte, typ uintptr) uint32
+	var typeFromName func(name *byte) uintptr
+	if !bind(libGObject, &lookup, "g_signal_lookup") || !bind(libGObject, &typeFromName, "g_type_from_name") {
+		return false
+	}
+	typ := typeFromName(cs("AppIndicator"))
+	return typ != 0 && lookup(cs("activate"), typ) != 0
+})
+
 func (t *tray) Destroy() {
 	if t.ind == 0 {
 		return
 	}
+	t.SetActivatable(false)
 	appIndicatorSetStatus(t.ind, 0) // PASSIVE
 	gObjectUnref(t.ind)
 	t.ind = 0
@@ -508,4 +592,31 @@ func (t *tray) Destroy() {
 	if t.iconDir != "" {
 		_ = os.RemoveAll(t.iconDir)
 	}
+}
+
+// shifted returns the keyval that the key typing keyval types with Shift,
+// in the keyboard's layout: plus for equal on a US keyboard. GTK matches a
+// shortcut with Shift by what the key types, Shift consumed, so Alt+Shift+=
+// is Alt+Shift+plus to it. It returns keyval when no key types it.
+func shifted(keyval uint32) uint32 {
+	km := gdkKeymapGetForDisplay(gdkDisplayGetDefault())
+	var keys ptr
+	var n int32
+	if km == 0 || !gdkKeymapGetEntriesForKeyval(km, keyval, &keys, &n) || n == 0 {
+		return keyval
+	}
+	defer gFree(keys)
+	// GdkKeymapKey: keycode, group, level, each 4 bytes.
+	for i := range uintptr(n) {
+		code, group, level := field[uint32](keys, i*12), field[int32](keys, i*12+4), field[int32](keys, i*12+8)
+		if level != 0 {
+			continue
+		}
+		var sym, consumed uint32
+		var effGroup, outLevel int32
+		if gdkKeymapTranslateKeyboardState(km, code, 1, group, &sym, &effGroup, &outLevel, &consumed) && sym != 0 {
+			return sym
+		}
+	}
+	return keyval
 }

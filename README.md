@@ -7,8 +7,8 @@ Shardlane is the **client/product**. **Herdr remains the backend runtime** and o
 ## Requirements
 
 - macOS 13+
-- Go 1.27.1 — the module pins it; `GOTOOLCHAIN=auto` lets Go fetch that toolchain without changing your global install
-- no frontend toolchain is needed: the MyGo framework (v0.4.8 plus the F146/F147 `Options.LocalDragSelect`, WIX-021 field-focus and multi-display tray-anchor patches, see `third_party/mygo/LOCAL-PATCH.md`) is vendored in-repo via a `replace` directive until upstream ships all three fixes
+- Go 1.27.3 — the module pins it; `GOTOOLCHAIN=auto` lets Go fetch that toolchain without changing your global install
+- no frontend toolchain is needed: the MyGo framework (v0.6.4 plus the F146/F147 `Options.LocalDragSelect`, WIX-021 field-focus, multi-display tray-anchor and OSC 7501 program-status patches, see `third_party/mygo/LOCAL-PATCH.md`) is vendored in-repo via a `replace` directive until upstream ships all four fixes
 - `herdr` — if it is missing, Shardlane offers `wax install herdr`
 
 ## Development

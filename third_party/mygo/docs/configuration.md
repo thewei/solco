@@ -46,7 +46,7 @@ the fields of [the frontend](#development-and-the-frontend).
 | `identifier` | `com.mygo.` and the name's letters and digits, e.g. `com.mygo.myapp` | a reverse DNS name unique to the app, e.g. `com.example.myapp`; systems key preferences, permissions and registrations on it |
 | `version` | `0.1.0` | the version of the app, which `App.Version()` returns and updates compare |
 | `copyright` | | the copyright notice of the app, in its `Info.plist` (macOS) and file properties (Windows) |
-| `icon` | `resources/icon.png` when it exists | a square PNG, ideally 1024×1024 |
+| `icon` | `resources/icon.png` when it exists | a square PNG, ideally 1024×1024; its name with `-dev`, as `icon-dev.png`, beside it is the development app's, when it exists |
 | `main` | `.` | the Go package of the app, relative to the project |
 
 ## Development and the frontend
@@ -57,7 +57,7 @@ the fields of [the frontend](#development-and-the-frontend).
 | `devCommand` | | runs in the project directory while `mygo dev` runs, e.g. a Vite dev server; the app starts once `devUrl` answers |
 | `buildCommand` | | builds the frontend before `mygo build` compiles the app |
 | `frontendDist` | | the directory of the built frontend, which `mygo build` embeds into the app; `mygo dev` serves it from disk when there is no `devUrl` |
-| `bindings` | `frontend/src/mygo.ts` when there is a `frontend` directory, else `src/mygo.ts` when package.json is at the root, else `mygo.ts` when the configuration has a frontend (`devUrl`, `devCommand`, `buildCommand` or `frontendDist`); none for an app without one, such as one of [native UI](ui/README.md) | where `mygo generate` writes the TypeScript client |
+| `bindings` | `frontend/src/mygo.ts` when `frontend/package.json` depends on `mygo-runtime`, else `src/mygo.ts` when package.json at the root does, else `mygo.ts` when the configuration has a frontend (`devUrl`, `devCommand`, `buildCommand` or `frontendDist`); none for an app without one, such as one of [native UI](ui/README.md) | where `mygo generate` writes the TypeScript client |
 | `out` | `dist` | where `mygo build` writes the builds, one directory per platform |
 
 See [the frontend](frontend.md#how-pages-load) for how they fit together.
@@ -77,7 +77,7 @@ Each file association has:
 |---|---|
 | `ext` | the file name extensions, without dots: `["md", "markdown"]` |
 | `name` | what the files are: `"Markdown Document"` |
-| `mimeType` | their MIME type, by which Linux identifies files; without one the app defines `application/x-<app>-<ext>` |
+| `mimeType` | their MIME type, by which Linux identifies files; the app defines an unregistered one (`x-`), and without one `application/x-<app>-<ext>` |
 | `role` | `Editor` (the default) or `Viewer`, on macOS |
 
 ## i18n
@@ -114,6 +114,7 @@ Signed [auto-updates](updates.md). `publicKey` and one of `github` and
 | `minimumSystemVersion` | `12.0` | the oldest macOS the app runs on |
 | `signingIdentity` | `-`, ad hoc | the identity that signs the app and its disk image, e.g. `Developer ID Application: Jane Doe (TEAMID)` |
 | `entitlements` | | a property list of entitlements to sign the app with |
+| `provisioningProfile` | | a profile embedded as `Contents/embedded.provisionprofile` before signing; must match the app's identifier, entitlements and signing identity; cannot be used with ad-hoc signing. See [provisioning profiles](distribution.md#provisioning-profiles) |
 | `helperEntitlements` | | property lists of entitlements for code among the resources, by its path there, e.g. `{ "bin/server": "server.entitlements.plist" }`; other code keeps the entitlements it is signed with. See [helper executables](distribution.md#helper-executables) |
 | `infoPlist` | | keys added to the app's `Info.plist`, replacing MyGo's, e.g. `NSCameraUsageDescription` |
 | `dmgTitle` | `name` | the volume name of the disk image |
@@ -139,6 +140,7 @@ See [Windows](distribution.md#windows).
 | `comment` | | a short description, for the desktop entry and the package |
 | `categories` | `["Utility"]` | the categories of the desktop entry, which place it in application menus |
 | `depends` | | Debian packages the app needs besides GTK and WebKitGTK |
+| `webview` | `true` | `false` for an app that shows no web page, as one of native UI: the Debian package depends on GTK alone, and install.sh and `mygo doctor` do not ask for WebKitGTK |
 | `command` | none | a command that runs the app: `/usr/bin/<command>` from the Debian package, `~/.local/bin/<command>` from install.sh |
 
 See [Linux](distribution.md#linux).

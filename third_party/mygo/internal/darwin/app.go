@@ -38,8 +38,9 @@ type Backend struct {
 	notifyDelegate id
 	// notifyAnswered records that the user has answered whether the app
 	// may show notifications; notifyWaiting holds those shown meanwhile.
-	notifyAnswered bool
-	notifyWaiting  []waitingNotification
+	notifyAnswered  bool
+	notifyWaiting   []waitingNotification
+	notifyPreparing map[string]func()
 
 	stepping       int
 	quitAfterModal bool
@@ -97,6 +98,20 @@ func (b *Backend) Init(h platform.AppHandler, opts platform.AppOptions) error {
 	b.h = h
 	theBackend = b
 	registerClasses()
+
+	// AppKit's AutoFill heuristics watch every text input client for
+	// contact and password fields, in a helper process ("AutoFill (App)")
+	// and with sync calls that cost CPU and stall scrolling on macOS 26.
+	// MyGo draws its own text fields, which never take those suggestions.
+	// Ghostty, Zed and Chromium turn it off the same way. macOS 26 reads
+	// NSAutoFillHeuristicControllerEnabled; macOS 27 reads only
+	// NSAutoFillHeuristicsEnabled, and without it starts Safari's AutoFill
+	// helper as soon as a view takes text input.
+	no := nsBool(false)
+	send(send(class("NSUserDefaults"), "standardUserDefaults"), "registerDefaults:",
+		uintptr(send(class("NSDictionary"), "dictionaryWithObjects:forKeys:",
+			uintptr(nsArray(no, no)),
+			uintptr(nsArray(nsString("NSAutoFillHeuristicControllerEnabled"), nsString("NSAutoFillHeuristicsEnabled"))))))
 
 	b.app = send(class("NSApplication"), "sharedApplication")
 	send(b.app, "setActivationPolicy:", activationPolicy(opts.ActivationPolicy))
@@ -366,10 +381,12 @@ func (a appController) SetActivationPolicy(p string) {
 	}
 }
 
-func (a appController) Activate()      { send(a.b.app, "activateIgnoringOtherApps:", 1) }
-func (a appController) Hide()          { send(a.b.app, "hide:", 0) }
-func (a appController) Unhide()        { send(a.b.app, "unhide:", 0) }
-func (a appController) IsHidden() bool { return sendBool(a.b.app, "isHidden") }
+func (a appController) Activate()                               { send(a.b.app, "activateIgnoringOtherApps:", 1) }
+func (a appController) AllowForeground()                        {}
+func (a appController) WithActivationToken(_ string, fn func()) { fn() }
+func (a appController) Hide()                                   { send(a.b.app, "hide:", 0) }
+func (a appController) Unhide()                                 { send(a.b.app, "unhide:", 0) }
+func (a appController) IsHidden() bool                          { return sendBool(a.b.app, "isHidden") }
 
 func (a appController) SetBadge(label string) {
 	tile := send(a.b.app, "dockTile")

@@ -75,6 +75,11 @@ var startDir, _ = os.Getwd()
 func (a *Application) Relaunch() {
 	postMain(func() {
 		a.relaunch = true
+		// On Windows the app gives up the foreground as its windows close,
+		// and the app it starts after could not take it: its windows would
+		// open behind the one in front. It passes the right on while it
+		// still has it.
+		backend().App().AllowForeground()
 		if a.prepareQuit() {
 			backend().Quit()
 		} else {

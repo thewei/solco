@@ -3983,15 +3983,16 @@ func (_handle Element) Grow(f float32) Element {
 // HandleInput has fn take the element's input as it comes, on the main
 // thread, before the next frame is built: keys, text and edit commands
 // while the element has the keyboard focus, the pointer pressed on it,
-// moving over it or scrolling over it. fn reports whether it took the
+// moving over it, scrolling or pinching over it. fn reports whether it took the
 // event; one it leaves goes on as it would without fn, to shortcuts, Tab,
 // context menus and scroll containers. Keys that the window or an element
 // around the focus handles as a Shortcut go to the shortcut first. A frame
 // follows the events fn takes.
 //
 // It is for widgets that need every key as it is pressed, such as a
-// terminal; most widgets ask about their input as they are built instead
-// (Clicked, Shortcut, Dragged).
+// terminal, or the scrolling and pinching over them, such as a chart that
+// zooms and pans; most widgets ask about their input as they are built
+// instead (Clicked, Shortcut, Dragged).
 func (_handle Element) HandleInput(fn func(ev InputEvent) bool) Element {
 	_node := _handle.node()
 	if _node == nil {
@@ -4501,6 +4502,23 @@ func (_handle Element) MaxWidthPercent(p float32) Element {
 	return wrapElement(_node.MaxWidthPercent(p))
 }
 
+// MaximizeButton marks the element as the window's maximize button, which
+// the view draws in a window with a hidden title bar without the system's
+// (mygo.WindowOptions.HideWindowButtons): on Windows 11, holding the
+// pointer over it shows the snap layouts, as over the system's. It takes
+// the pointer as any element does, and the view maximizes the window when
+// it is clicked (mygo.Window.Maximize). The first such element of a frame
+// counts; elsewhere it does nothing.
+func (_handle Element) MaximizeButton() Element {
+	_node := _handle.node()
+	if _node == nil {
+		return Element{}
+	}
+	_ctx := _node.c
+	_ = _ctx
+	return wrapElement(_node.MaximizeButton())
+}
+
 // Menu makes the element a menu button: it opens a menu below it, which
 // build fills with items, as the pointer goes down on it, as a pop-up
 // button does, and for Enter, Space or Down while it has the focus. It
@@ -5000,6 +5018,27 @@ func (_handle Element) Row() Element {
 	_ctx := _node.c
 	_ = _ctx
 	return wrapElement(_node.Row())
+}
+
+// RowDoubleClicked reports, while a row of a List or a Table builds, that
+// the row was double-clicked since the last frame with the pointer over the
+// element: a cell sees its row's double click this way and leaves the click
+// to the row, which chooses, where DoubleClicked would take it.
+//
+//	ui.Table(c, &app.list, cols, len(app.rows), func(row, col int) {
+//		cell := ui.Box(c).FillWidth().Children(func() { ui.Text(c, app.rows[row][col]) })
+//		if cell.RowDoubleClicked() {
+//			app.edit(row, col)
+//		}
+//	})
+func (_handle Element) RowDoubleClicked() bool {
+	_node := _handle.node()
+	if _node == nil {
+		return false
+	}
+	_ctx := _node.c
+	_ = _ctx
+	return _node.RowDoubleClicked()
 }
 
 // RowSpan makes the element span n rows of its grid, or, for a negative n,

@@ -82,7 +82,7 @@ type renderer struct {
 func Render(dst *Image, s *scene.Scene) {
 	drawCanvases(s)
 	var r Renderer
-	r.d.draw(dst, s, image.Rect(0, 0, dst.W, dst.H), r.opBounds(s, nil))
+	r.d.draw(dst, s, image.Rect(0, 0, dst.W, dst.H), r.opBounds(s))
 }
 
 // A large area is drawn on several cores at once, in bands of bandRows
@@ -112,6 +112,9 @@ const (
 // (d.bd), then the effect and the operations up to the next. The area
 // holds the backdrops of the effects in it (Renderer.diff).
 func (d *drawer) draw(dst *Image, s *scene.Scene, area image.Rectangle, bounds []image.Rectangle) {
+	// Ops that only translate draw as those without transforms do, as on
+	// the GPU (gpu.Builder).
+	s = d.fold.Fold(s)
 	area = area.Intersect(image.Rect(0, 0, dst.W, dst.H))
 	d.blurred = d.blurImages(s, area, bounds)
 	defer func() { d.blurred = nil }()
@@ -130,7 +133,7 @@ func (d *drawer) draw(dst *Image, s *scene.Scene, area image.Rectangle, bounds [
 		d.drawOps(dst, s, area, bounds, from, i, px, b)
 		b = nil
 		if fx.Effect.Backdrop {
-			d.bd.read(dst, scene.BackdropOf(op.Transform.Bounds(op.Rect), fx.Blur, dst.W, dst.H))
+			d.bd.read(dst, s.BackdropOf(op.Transform.Bounds(op.Rect), fx.Blur, dst.W, dst.H))
 			d.bd.img.Transform = op.Transform
 			b = &d.bd.img
 		}

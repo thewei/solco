@@ -5,6 +5,7 @@ package linux
 import (
 	"fmt"
 	"sync"
+	"unsafe"
 
 	"github.com/ebitengine/purego"
 )
@@ -414,3 +415,79 @@ func TestHasRecentItem(path string) bool {
 
 // TestWindowTitle returns the title GTK gives a window.
 func TestWindowTitle(handle uintptr) string { return goStr(gtkWindowGetTitle(handle)) }
+
+// TestPinchSurface pinches a touchpad at (x, y), in DIPs, in a window
+// showing native UI, from 1 to scale: the begin, update and end events of
+// GDK's pinch, which only Wayland makes, go through GTK as its own do.
+func TestPinchSurface(handle uintptr, x, y, scale float64) bool {
+	w := windowByHandle(handle)
+	if w == nil || w.surface == nil {
+		return false
+	}
+	var eventNew func(typ int32) ptr
+	var doEvent func(event ptr)
+	var setDevice func(event, device ptr)
+	var display func() ptr
+	var seat func(display ptr) ptr
+	var pointer func(seat ptr) ptr
+	if !bind(libGDK, &eventNew, "gdk_event_new") || !bind(libGTK, &doEvent, "gtk_main_do_event") ||
+		!bind(libGDK, &setDevice, "gdk_event_set_device") || !bind(libGDK, &display, "gdk_display_get_default") ||
+		!bind(libGDK, &seat, "gdk_display_get_default_seat") || !bind(libGDK, &pointer, "gdk_seat_get_pointer") {
+		return false
+	}
+	device := pointer(seat(display()))
+	win := w.surface.eventWindow()
+	if win == 0 {
+		return false
+	}
+	// GdkEventTouchpadPinch: window 8, send_event 16, phase 17, n_fingers
+	// 18, x 24, y 32, scale 64.
+	for phase, at := range []float64{1, scale, scale} {
+		ev := eventNew(42) // GDK_TOUCHPAD_PINCH
+		base := *(*unsafe.Pointer)(unsafe.Pointer(&ev))
+		*(*ptr)(unsafe.Add(base, 8)) = gObjectRef(win)
+		*(*int8)(unsafe.Add(base, 16)) = 1
+		*(*int8)(unsafe.Add(base, 17)) = int8(phase) // begin, update, end
+		*(*int8)(unsafe.Add(base, 18)) = 2
+		*(*float64)(unsafe.Add(base, 24)) = x
+		*(*float64)(unsafe.Add(base, 32)) = y
+		*(*float64)(unsafe.Add(base, 64)) = at
+		setDevice(ev, device)
+		doEvent(ev)
+		gdkEventFree(ev)
+	}
+	return true
+}
+
+// TestTrayActivates tells whether the AppIndicator library can report
+// activation at all; call it after making a tray.
+func TestTrayActivates() bool { return trayActivates() }
+
+// TestActivateTray activates the tray icon made last, as a panel does when
+// its icon is double-clicked. It reports false when the icon answers no
+// activation: no click has anywhere to go.
+func TestActivateTray() bool {
+	var last *tray
+	for _, t := range theBackend.trays {
+		if last == nil || t.id > last.id {
+			last = t
+		}
+	}
+	if last == nil || last.activate == 0 {
+		return false
+	}
+	var lookup func(name *byte, typ uintptr) uint32
+	var typeFromName func(name *byte) uintptr
+	var emit func(instance ptr, signal, detail uint32, x, y int32)
+	if !bind(libGObject, &lookup, "g_signal_lookup") ||
+		!bind(libGObject, &typeFromName, "g_type_from_name") ||
+		!bind(libGObject, &emit, "g_signal_emit") {
+		return false
+	}
+	signal := lookup(cs("activate"), typeFromName(cs("AppIndicator")))
+	if signal == 0 {
+		return false
+	}
+	emit(last.ind, signal, 0, 0, 0)
+	return true
+}

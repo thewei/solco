@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -26,6 +27,9 @@ type Backend struct {
 	running bool
 
 	signaled atomic.Bool
+	// posted are the functions post runs on the main thread.
+	postedMu sync.Mutex
+	posted   []func()
 
 	windows map[uintptr]*window // by HWND
 	// languages are those SetLanguages told: the first is the language
@@ -70,6 +74,13 @@ type Backend struct {
 	// title bar (titlebar.go), captionFonts their glyphs by DPI.
 	captions     map[uintptr]*captionBar
 	captionFonts map[int]captionFont
+	// menuFonts are the fonts of the menu items MyGo draws by DPI, and
+	// menuBrushes the brushes of menus' backgrounds by color
+	// (menudraw.go).
+	menuFonts   map[int]menuFonts
+	menuBrushes map[uint32]uintptr
+	// menuHook hooks the main thread while menus show.
+	menuHook uintptr
 	// comp shows the controls of windows with a material behind them
 	// (compositor.go). compRetry is when to try making it again after
 	// compFails failures in a row, and composeAt when timerCompose draws
@@ -217,6 +228,24 @@ func (b *Backend) Signal() {
 	postMessage(b.appHwnd, wmAppDispatch, 0, 0)
 }
 
+// post runs fn on the main thread, for the backend's own goroutines.
+func (b *Backend) post(fn func()) {
+	b.postedMu.Lock()
+	b.posted = append(b.posted, fn)
+	b.postedMu.Unlock()
+	postMessage(b.appHwnd, wmAppRun, 0, 0)
+}
+
+func (b *Backend) runPosted() {
+	b.postedMu.Lock()
+	posted := b.posted
+	b.posted = nil
+	b.postedMu.Unlock()
+	for _, fn := range posted {
+		fn()
+	}
+}
+
 func (b *Backend) Step() {
 	procMsgWaitForMultipleObjectsEx.Call(0, 0, 500, qsAllInput, mwmoInputAvailable)
 	var m msg
@@ -326,6 +355,9 @@ func wndProc(hwnd, m, wp, lp uintptr) uintptr {
 
 // appMessage handles the messages of the application window.
 func (b *Backend) appMessage(m uint32, wp, lp uintptr) (uintptr, bool) {
+	if r, ok := b.menuItemMessage(b.appHwnd, m, wp, lp); ok {
+		return r, true
+	}
 	switch m {
 	case wmAppReady:
 		b.h.Ready()
@@ -336,11 +368,17 @@ func (b *Backend) appMessage(m uint32, wp, lp uintptr) (uintptr, bool) {
 		return 0, true
 	case wmAppWake:
 		return 0, true
+	case wmAppRun:
+		b.runPosted()
+		return 0, true
 	case wmAppCookieView:
 		b.closeCookieViewNow()
 		return 0, true
 	case wmAppTray:
 		b.trayMessage(uint32(wp), uint32(loword(lp)))
+		return 0, true
+	case wmAppTrayAdd:
+		b.addNewTrays()
 		return 0, true
 	case wmHotkey:
 		b.h.HotkeyPressed(int(wp))
@@ -349,10 +387,14 @@ func (b *Backend) appMessage(m uint32, wp, lp uintptr) (uintptr, bool) {
 		b.powerMessage(m, wp)
 		return 1, false // TRUE for power broadcasts, and default handling
 	case wmSettingChange:
+		if preferencesChanged(wp, lp) {
+			b.dropMenuFonts() // the size of text, or the menu font
+		}
 		switch {
 		case lp != 0 && wstr(lp) == settingImmersiveColorSet:
 			b.applyTheme()
 			b.h.ThemeChanged()
+			b.traysAppearance()
 		case lp != 0 && wstr(lp) == settingIntl:
 			// The display languages or the regional formats.
 			b.h.LocaleChanged()
@@ -385,7 +427,9 @@ func (b *Backend) appMessage(m uint32, wp, lp uintptr) (uintptr, bool) {
 	if m == b.taskbarCreated && m != 0 {
 		// Explorer restarted: the notification area forgot our icons.
 		for _, t := range b.trays {
-			t.add()
+			if t.added {
+				t.add()
+			}
 		}
 		return 0, true
 	}
@@ -435,12 +479,37 @@ type appController struct{ b *Backend }
 
 func (a appController) SetActivationPolicy(string) {}
 
+// AllowForeground passes the app's right to the foreground on to the next
+// process to ask (ASFW_ANY). Only the process in front has it to pass on,
+// so an app passes it before it closes its windows: a process it starts
+// once they closed could no longer take it from the app.
+func (a appController) AllowForeground() {
+	const asfwAny = ^uintptr(0)
+	procAllowSetForegroundWindow.Call(asfwAny)
+}
+
+func (a appController) WithActivationToken(_ string, fn func()) { fn() }
+
+// Activate brings the app forward as macOS does, with its windows in their
+// order: a window of the app already in front stays there, else the one
+// the user had last, the highest of them in the z-order, comes forward.
+// Flyouts that never take the keyboard bring nothing forward.
 func (a appController) Activate() {
-	for _, w := range a.b.windows {
-		if w.IsVisible() {
-			w.Focus()
-			return
+	if fg, _, _ := procGetForegroundWindow.Call(); a.b.windows[fg] != nil {
+		return
+	}
+	const gwHwndNext = 2
+	h, _, _ := procGetTopWindow.Call(0)
+	for ; h != 0; h, _, _ = procGetNextWindow.Call(h, gwHwndNext) {
+		w := a.b.windows[h]
+		if w == nil || !w.IsVisible() {
+			continue
 		}
+		if f := w.opts.Flyout; f != nil && !f.Focusable {
+			continue
+		}
+		w.Focus()
+		return
 	}
 }
 

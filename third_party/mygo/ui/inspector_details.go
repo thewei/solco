@@ -502,6 +502,8 @@ func cssAlign(a Align) string {
 		return "space-around"
 	case SpaceEvenly:
 		return "space-evenly"
+	case Baseline:
+		return "baseline"
 	}
 	return "auto"
 }

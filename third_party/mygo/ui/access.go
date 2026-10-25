@@ -468,7 +468,10 @@ func (rt *engine) accessDetails(e *node, n *platform.AccessNode) {
 func (rt *engine) accessibilityOn() {
 	if !rt.access {
 		rt.access = true
-		if rt.c.root == nil {
+		// None built yet, or one waiting for the window to show: the
+		// frame builds, out of sight too (the event is input), so that
+		// assistive technology reads what the window shows now.
+		if rt.c.root == nil || rt.held {
 			rt.requestFrame()
 		}
 	}
@@ -554,6 +557,12 @@ func (rt *engine) accessAction(ev platform.SurfaceEvent) {
 		}
 		rt.focusOn(s)
 		s.editor.queue = append(s.editor.queue, editEvent{kind: editCommand, text: "selectAll"}, editEvent{kind: editInsert, text: ev.Text})
+	case platform.AccessInsertText:
+		if s.editor == nil || s.flags&flagEditable == 0 || s.editor.readOnly {
+			return
+		}
+		rt.focusOn(s)
+		s.editor.queue = append(s.editor.queue, editEvent{kind: editInsert, text: ev.Text})
 	}
 	rt.requestFrame()
 }

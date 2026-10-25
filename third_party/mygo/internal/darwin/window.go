@@ -155,7 +155,7 @@ func (w *window) create() {
 		send(w.win, "setTitlebarAppearsTransparent:", 1)
 		send(w.win, "setTitleVisibility:", 1) // NSWindowTitleHidden
 	}
-	if o.Frameless {
+	if o.Frameless || hiddenTitleBar && o.HideWindowButtons {
 		for i := uintptr(0); i < 3; i++ {
 			send(send(w.win, "standardWindowButton:", i), "setHidden:", 1)
 		}
@@ -244,8 +244,31 @@ func (w *window) createFlyout() {
 		send(w.win, "setLevel:", nsPopUpMenuWindowLevel)
 	}
 	w.fillWindow(content)
+	w.roundFlyout()
 	w.register()
 	w.PlaceFlyout(w.flyout, w.flyoutSize)
+}
+
+// roundFlyout cuts a flyout's content view, and the material in it, to
+// the corners of Flyout.Radius: the window is clear, so its shadow, made
+// from what it draws, follows them.
+func (w *window) roundFlyout() {
+	if w.flyout.Radius <= 0 {
+		return
+	}
+	send(w.view, "setWantsLayer:", 1)
+	layer := send(w.view, "layer")
+	msgSetFloat(layer, sel("setCornerRadius:"), float64(w.flyout.Radius))
+	send(layer, "setCornerCurve:", uintptr(nsString("continuous")))
+	send(layer, "setMasksToBounds:", 1)
+	if w.effect != 0 {
+		send(w.effect, "setWantsLayer:", 1)
+		el := send(w.effect, "layer")
+		msgSetFloat(el, sel("setCornerRadius:"), float64(w.flyout.Radius))
+		send(el, "setCornerCurve:", uintptr(nsString("continuous")))
+		send(el, "setMasksToBounds:", 1)
+	}
+	send(w.win, "invalidateShadow")
 }
 
 // fillWindow gives a new window its look and its web view or surface.
@@ -346,6 +369,12 @@ func (w *window) createWebView(content NSRect) {
 	if respondsTo(prefs, "setElementFullscreenEnabled:") {
 		send(prefs, "setElementFullscreenEnabled:", 1)
 	}
+	// Tab reaches buttons, links and the other controls too, as it does in
+	// Chrome, Electron and WebView2, whatever the system's keyboard
+	// navigation setting, unless the app asked for Safari's behavior.
+	if respondsTo(prefs, "setTabFocusesLinks:") {
+		send(prefs, "setTabFocusesLinks:", boolArg(o.TabFocusesLinks))
+	}
 
 	// Every window gets its own content controller so messages, scripts and
 	// the bridge configuration never leak between windows.
@@ -353,6 +382,18 @@ func (w *window) createWebView(content NSRect) {
 	send(w.ucc, "addScriptMessageHandler:name:", uintptr(w.delegate), uintptr(nsString("mygo")))
 	w.addUserScripts(o.Zoom)
 	send(cfg, "setUserContentController:", uintptr(w.ucc))
+
+	// WebKit appends the application name to the user agent of the web view,
+	// and window.open() hands us the configuration of the window that opens
+	// it: the options of the new window decide, as they do on Linux and
+	// Windows, where a window never inherits a suffix.
+	var appName id
+	if o.UserAgentSuffix != "" {
+		appName = nsString(o.UserAgentSuffix)
+	}
+	if o.UserAgentSuffix != "" || o.Native != 0 {
+		send(cfg, "setApplicationNameForUserAgent:", uintptr(appName))
+	}
 
 	w.web = msgInitRectID(send(class("MyGoWebView"), "alloc"), sel("initWithFrame:configuration:"), NSRect{Size: content.Size}, cfg)
 	release(cfg)
@@ -370,7 +411,11 @@ func (w *window) createWebView(content NSRect) {
 		send(w.web, "setInspectable:", boolArg(o.DevTools))
 	}
 	if o.UserAgent != "" {
-		send(w.web, "setCustomUserAgent:", uintptr(nsString(o.UserAgent)))
+		ua := o.UserAgent
+		if o.UserAgentSuffix != "" {
+			ua += " " + o.UserAgentSuffix
+		}
+		send(w.web, "setCustomUserAgent:", uintptr(nsString(ua)))
 	}
 	if o.Zoom > 0 && o.Zoom != 1 {
 		msgSetFloat(w.web, sel("setPageZoom:"), o.Zoom)
@@ -608,6 +653,12 @@ func (b *Backend) watchOutsideClicks() {
 		var open []*window
 		for _, w := range b.byNSWindow {
 			if w.opts.Flyout != nil && w.popover == 0 && w.flyout.Focusable && !w.closed && sendBool(w.win, "isVisible") {
+				// A press on its tray icon is left to the icon's click,
+				// which toggles it, rather than closing it for the click
+				// to open it again.
+				if t, ok := w.flyout.Tray.(*tray); ok && t.pressed() {
+					continue
+				}
 				open = append(open, w)
 			}
 		}
@@ -921,9 +972,9 @@ func (w *window) hiddenTitleBar() bool {
 // TitleBar returns the room the traffic lights take, from the left edge to
 // the right edge of the zoom button, in the title bar, which is as tall as
 // the window's own or, with TrafficLightPosition, leaves as much room below
-// them as above. They hide in full screen.
+// them as above. They hide in full screen, and with HideWindowButtons.
 func (w *window) TitleBar() platform.TitleBar {
-	if !w.hiddenTitleBar() || w.closed || w.IsFullScreen() {
+	if !w.hiddenTitleBar() || w.closed || w.IsFullScreen() || w.opts.HideWindowButtons {
 		return platform.TitleBar{}
 	}
 	closeBtn := send(w.win, "standardWindowButton:", 0)
@@ -1130,8 +1181,13 @@ func (w *window) SetUserAgent(ua string) {
 	withPool(func() {
 		var s id
 		if ua != "" {
+			if suffix := w.opts.UserAgentSuffix; suffix != "" {
+				ua += " " + suffix
+			}
 			s = nsString(ua)
 		}
+		// An empty one restores the default user agent, which the
+		// configuration still appends its suffix to.
 		send(w.web, "setCustomUserAgent:", uintptr(s))
 	})
 }
