@@ -64,7 +64,7 @@ if [ "$(uname -s)" = Linux ]; then
   if [ "$dirty" -gt 0 ]; then
     echo "note: building with $dirty uncommitted file(s)"
   fi
-  GOTOOLCHAIN=go1.27.1 go tool mygo build
+  GOTOOLCHAIN=auto go tool mygo build
 
   step "3/7 verify the built artifacts"
   [ -x "$BUILD_OUT/shardlane" ] || die "build produced no executable at $BUILD_OUT/shardlane"
@@ -158,7 +158,7 @@ dirty="$(git status --porcelain | wc -l | tr -d ' ')"
 if [ "$dirty" -gt 0 ]; then
   echo "note: building with $dirty uncommitted file(s)"
 fi
-GOTOOLCHAIN=go1.27.1 go tool mygo build
+GOTOOLCHAIN=auto go tool mygo build
 [ -x "$SRC/Contents/MacOS/Shardlane" ] || die "build produced no executable at $SRC"
 
 step "3/7 verify the built bundle"
