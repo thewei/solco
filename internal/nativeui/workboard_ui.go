@@ -41,6 +41,7 @@ type workboardState struct {
 	newTask       newTaskDraft
 	newAutomation newAutomationDraft
 	delegate      delegateDraft
+	pick          pickDraft
 	settings      workboardSettingsState
 }
 

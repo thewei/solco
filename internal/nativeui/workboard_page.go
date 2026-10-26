@@ -170,7 +170,7 @@ func (s *Shell) workboardTaskActions(c *ui.Context, task workboard.Task, group w
 				s.startWorkboardAction(a, task)
 			}
 		}
-		if task.NeedsPick() && ui.Button(c, "Choose in Work Board").Clicked() {
+		if task.NeedsPick() && ui.Button(c, "Compare in Work Board").Clicked() {
 			s.openWorkBoard() // the attempts to pick from are not in the list rows
 		}
 		pinned := s.workboard.board.extras.pinnedTasks[task.ID]

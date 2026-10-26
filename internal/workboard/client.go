@@ -15,7 +15,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Detect 给出的 plugin_root、herdr.SocketPath（会话 socket）、`sh <root>/bin/run.sh <cmd> --json` 插件 CLI
- * [OUTPUT]: 对外提供 Client（List / Details 读；Approve / SendBack / Retry / Fix / Delegate / DelegateWith（`delegate <id> --<setting> V`，只作用于这个任务）/ Archive / Add 写）、ErrNotReady 与可注入的 Exec
+ * [OUTPUT]: 对外提供 Client（List / Details 读；Approve / SendBack / Retry / Fix / Delegate / DelegateWith（`delegate <id> --<setting> V`，只作用于这个任务）/ Pick（`pick <id> <letter>`）/ Archive / Add 写）、ErrNotReady 与可注入的 Exec
  * [POS]: 插件 CLI 的唯一调用点；读写命令都经此处。写入不自造语义：动词含义归插件，拒绝原文透传；Approve 在执行瞬间重读复核。以人类身份运行——剥掉 HERDR_PANE_ID 等 Agent 身份变量，避免从 Herdr pane 启动的 Shardlane 被插件当成 Agent 调用方
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -221,6 +221,20 @@ func (c *Client) DelegateWith(ctx context.Context, id string, with []SettingValu
 		args = append(args, "--"+w.Name, value)
 	}
 	_, err := c.exec(ctx, args...)
+	return err
+}
+
+// Pick keeps one of a task's several attempts (`pick <id> <letter>`); the
+// plugin closes the others' tabs and refuses a letter that did not pass.
+func (c *Client) Pick(ctx context.Context, id, letter string) error {
+	if err := checkID("pick", id); err != nil {
+		return err
+	}
+	letter = strings.TrimSpace(letter)
+	if len(letter) != 1 || !strings.ContainsAny(letter, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+		return errors.New("workboard: pick: invalid attempt")
+	}
+	_, err := c.exec(ctx, "pick", id, letter)
 	return err
 }
 

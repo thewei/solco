@@ -87,7 +87,7 @@ func TestPlanReadyOffersApprovePlanNotRetry(t *testing.T) {
 	if got := kinds(workboardActionsForTask(plan, workboard.GroupNeedsYou, nil)); got != "approve-plan,plan-back,stop,archive" {
 		t.Fatalf("plan actions = %q", got)
 	}
-	if got := kinds(workboardActionsForTask(pick, workboard.GroupNeedsYou, nil)); got != "stop,archive" {
+	if got := kinds(workboardActionsForTask(pick, workboard.GroupNeedsYou, nil)); got != "pick,stop,archive" {
 		t.Fatalf("pick actions = %q (no recovery verb fits an attempt pick)", got)
 	}
 	if got := kinds(workboardActionsForTask(byID["r/3"], workboard.GroupTodo, nil)); got != "delegate,delegate-with,archive" {
@@ -148,7 +148,7 @@ func TestTaskPageShowsPlanVerbsAndPickFallback(t *testing.T) {
 	}
 	s.openWorkboardTaskPage("r/2")
 	tt = ui.NewTester(s.workboardTaskPage, 900, 700)
-	if !tt.HasText("Choose in Work Board") || tt.HasText("Retry") {
+	if !tt.HasText("Pick…") || !tt.HasText("Compare in Work Board") || tt.HasText("Retry") {
 		t.Fatalf("pick page: %q", tt.Texts())
 	}
 }

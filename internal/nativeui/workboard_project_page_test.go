@@ -334,3 +334,73 @@ func TestProjectPageNewAutomationOpensFromTheGroupAndSubmits(t *testing.T) {
 		t.Fatal("submitting closes the dialog")
 	}
 }
+
+func pickShell(t *testing.T, ran *[]string, attempts string) (*Shell, workboard.Task) {
+	t.Helper()
+	s := writeShell(t, ran)
+	detail, err := workboard.ParseDetail(`{"attempts":` + attempts + `}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := workboard.Task{ID: "r/9", Title: "Pick me", Stage: "pick"}
+	s.workboard.board = workboardBoard{
+		tasks:   []workboard.Task{task},
+		details: map[string]workboardDetail{"r/9": {key: detailKey(task), detail: detail}},
+	}
+	return s, task
+}
+
+const pickAttempts = `[
+ {"letter":"A","agent":"claude","standing":"passed","stat":"+12 -3"},
+ {"letter":"B","agent":"codex","standing":"out","stat":""},
+ {"letter":"C","agent":"codex/gpt-6","standing":"passed","stat":"+40 -9"}]`
+
+func TestPickKeepsOnlyThePassedAttemptYouChoose(t *testing.T) {
+	var ran []string
+	s, task := pickShell(t, &ran, pickAttempts)
+	if got := kindsOf(workboardActionsForTask(task, workboard.GroupNeedsYou, nil)); got != "pick,stop,archive" {
+		t.Fatalf("a pick-stage task offers Pick first: %q", got)
+	}
+	s.startWorkboardAction(boardWrite{"Pick…", "pick"}, task)
+	tt := ui.NewTester(s.pickDialog, 900, 700)
+	for _, want := range []string{"Keep which attempt?", "A claude · +12 -3", "C codex/gpt-6 · +40 -9"} {
+		if !tt.HasText(want) {
+			t.Fatalf("dialog missing %q: %q", want, tt.Texts())
+		}
+	}
+	if tt.HasText("B codex") {
+		t.Fatalf("an attempt that did not pass cannot be kept: %q", tt.Texts())
+	}
+	if err := tt.Click("Keep"); err == nil && len(ran) != 0 {
+		t.Fatalf("nothing is chosen: Keep must not run (%q)", ran)
+	}
+	if err := tt.Click("C codex/gpt-6 · +40 -9"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Keep C"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ran, "|"); got != "pick r/9 C" {
+		t.Fatalf("ran = %q", got)
+	}
+	if s.workboard.pick.open {
+		t.Fatal("keeping closes the dialog")
+	}
+}
+
+func TestPickWithoutAPassedAttemptSaysSo(t *testing.T) {
+	var ran []string
+	s, task := pickShell(t, &ran, `[{"letter":"A","agent":"claude","standing":"works"}]`)
+	s.openWorkboardPick(task)
+	if s.workboard.pick.open || !strings.Contains(s.pendingToast, "No attempt of r/9") || len(ran) != 0 {
+		t.Fatalf("toast=%q open=%v ran=%q", s.pendingToast, s.workboard.pick.open, ran)
+	}
+}
+
+func kindsOf(actions []boardWrite) string {
+	var out []string
+	for _, a := range actions {
+		out = append(out, a.Kind)
+	}
+	return strings.Join(out, ",")
+}

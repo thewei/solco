@@ -553,8 +553,9 @@ earns the same treatment without its own dated decision.
 - **Native | Board view switch (2026-10-26, user-authorized).** `General.WorkboardView` (`board` default / `native`) is a segmented control atop Settings → Work Board, present only while the plugin gate is open. Board view: the three native page entries (`openWorkboardTaskPage`, `openWorkboardProjectPage`, `openWorkboardArchived`) open the plugin's own board Tab instead, so sidebar rows, the Header popover and the quick panel all act as status navigation into the TUI (the TUI cannot be pre-focused on a project; the plugin allows one board per machine). Native view keeps the pages for continued trial; releasing them is a change of the default.
 - **P4–P7 + Settings (2026-10-26, user-authorized).** *Correctness:* a plan-ready
   task (stage `plan`) offers Approve Plan… (re-listed, requires `plan` stage,
-  never `--anyway`) and Send Plan Back…; a `pick` task offers no recovery verb
-  (attempts are shown read-only, the pick is made in the plugin's board); a task
+  never `--anyway`) and Send Plan Back…; a `pick` task offers Pick…, not a
+  recovery verb (a dialog of the attempts that passed, nothing preselected; Keep X
+  runs `pick <id> <letter>`, the reviewer's comparison stays in the plugin's board); a task
   queued `after` others offers Start Now… (`delegate --now`). *Read parity:* row
   marks (agent, R#, PR#, Q#), the coordinator's latest `said`, and on the task
   page Plan, Review findings by severity and earlier rounds, Report (opens the
@@ -577,7 +578,7 @@ earns the same treatment without its own dated decision.
   validation and refusal text are the plugin's. Voice, Web UI, cross-machine and
   key settings are not shown. Every write goes through the single
   `workboardWrite` channel; Shardlane copies no option sets.
-- **Not included.** Attempt picking, cross-machine boards, voice/Web UI/keys,
+- **Not included.** Cross-machine boards, voice/Web UI/keys,
   plugin install/update, folding task workspaces under
   their repo in the Sidebar.
 

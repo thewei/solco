@@ -304,3 +304,22 @@ func TestDelegateWithAndTaskSettingsArgv(t *testing.T) {
 		t.Fatalf("refusals must reach no CLI call: %q", *calls)
 	}
 }
+
+func TestPickArgv(t *testing.T) {
+	ctx := context.Background()
+	c, calls := recording("")
+	if err := c.Pick(ctx, "r/9", " b "); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(*calls, "|"); got != "pick r/9 b" {
+		t.Fatalf("calls = %q", got)
+	}
+	for _, bad := range [][2]string{{"-x", "a"}, {"", "a"}, {"r/9", ""}, {"r/9", "ab"}, {"r/9", "-"}, {"r/9", "1"}} {
+		if c.Pick(ctx, bad[0], bad[1]) == nil {
+			t.Errorf("%v must be refused", bad)
+		}
+	}
+	if len(*calls) != 1 {
+		t.Fatalf("refusals must reach no CLI call: %q", *calls)
+	}
+}

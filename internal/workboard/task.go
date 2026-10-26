@@ -166,7 +166,7 @@ type Review struct {
 
 // Attempt is one of several parallel tries at a task (stage "pick" compares them).
 type Attempt struct {
-	Letter   string `json:"letter"`
+	Letter   string `json:"letter"` // upper case, as `details` writes it (A, B, …)
 	Agent    string `json:"agent"`
 	Standing string `json:"standing"` // passed | works | waits | needs | out
 	Stat     string `json:"stat"`

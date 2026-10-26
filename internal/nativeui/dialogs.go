@@ -127,6 +127,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 	s.newTaskDialog(c)
 	s.newAutomationDialog(c)
 	s.delegateDialog(c)
+	s.pickDialog(c)
 	if s.confirmOpen {
 		// Destructive confirms must not default-focus the destructive
 		// button: AlertDialog focuses and Enter-clicks its LAST button, so

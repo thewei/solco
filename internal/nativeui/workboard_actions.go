@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 internal/workboard 的 Client 写动词（Approve/SendBack/Retry/Fix/Delegate/Stop/Archive/ApprovePlan/DelegateNow/Tell）、workboardGo/newWorkboardClient 缝、Shell 的 openConfirm/openTextDialog/pendingToast、git.root
- * [OUTPUT]: workboardActionsFor（按分组给出可用写操作）、runWorkboardAction（确认后的唯一执行入口）、workboardActionsForTask（plan-ready: Approve Plan…/Send Plan Back…；pick: 无恢复动词；after 阶段: Start Now…）、submitWorkboardPlanBack；New Task 见 workboard_newtask.go
+ * [OUTPUT]: workboardActionsFor（按分组给出可用写操作）、runWorkboardAction（确认后的唯一执行入口）、workboardActionsForTask（plan-ready: Approve Plan…/Send Plan Back…；pick: Pick…（见 workboard_pick.go）而非恢复动词；after 阶段: Start Now…）、submitWorkboardPlanBack；New Task 见 workboard_newtask.go
  * [POS]: Tasks 页签的写入面；任务状态权威仍归插件，这里只把用户意图转成插件 CLI 动词、把插件的拒绝原文变成 toast、成功后强制刷新。Approve 必经 shared confirm，且在执行时由 Client 重读 list+details 复核仍是 Ready；Stop 与 Start Now 同样先 confirm；Approve Plan 同样先 confirm 且重读须仍在 plan 阶段（二者从不带 --anyway）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -78,7 +78,7 @@ func workboardActionsForTask(task workboard.Task, g workboard.Group, d *workboar
 			{"Stop", "stop"}, {"Archive", "archive"},
 		}
 	case task.NeedsPick():
-		return []boardWrite{{"Stop", "stop"}, {"Archive", "archive"}}
+		return []boardWrite{{"Pick…", "pick"}, {"Stop", "stop"}, {"Archive", "archive"}}
 	case task.Stage == "after":
 		// Queued behind other tasks: nothing runs yet, so there is no agent to
 		// stop or retry; it can be started anyway.
@@ -88,11 +88,15 @@ func workboardActionsForTask(task workboard.Task, g workboard.Group, d *workboar
 }
 
 // isPrimaryWrite marks the one verb that moves the task forward.
-func isPrimaryWrite(kind string) bool { return kind == "approve" || kind == "approve-plan" }
+func isPrimaryWrite(kind string) bool { return kind == "approve" || kind == "approve-plan" || kind == "pick" }
 
 // startWorkboardAction is a row menu choice: Approve, Approve Plan, Start Now
 // and Stop ask first, everything else runs at once.
 func (s *Shell) startWorkboardAction(a boardWrite, task workboard.Task) {
+	if a.Kind == "pick" {
+		s.openWorkboardPick(task)
+		return
+	}
 	if a.Kind == "delegate-with" {
 		s.openWorkboardDelegateWith(task)
 		return

@@ -65,6 +65,7 @@ workboard_manage_test.go: 管理动词 argv 与「先问后跑」、归档页分
 workboard_newtask.go: New Task 唯一入口模态（标题、描述、Task/Research only/Chat only 三选一、After、Start an agent now），取代只问标题的文本对话框；提交走 Client.AddTask，仓库根目录创建时提交瞬间仓库已变则拒绝，--after 等校验与拒绝全归插件
 workboard_automations.go: Project 页 Automations 组（名称、触发器、下次/关闭原因，Turn On·Off 立即写，Run…/Remove… 先确认）+ 组头 New Automation… 入口；没有自动化的 Project 仍画组头（仅创建按钮）
 workboard_settings.go: /settings/workboard 原生页（用户 2026-10-26 显式授权）——范围 Everywhere/Project/Project coordinator → 过滤 → 按名字前缀分组的设置行（布尔=开关，规格表命中=选择型控件见 workboard_settings_controls.go，其余=文本回车提交，own 行 Reset=unset），只画插件 `show --json` 在该范围返回的那份、拒绝原文透传；voice/Web UI/跨机器/快捷键类设置不收录；Settings 导航项仅插件门开时出现
+workboard_pick.go: stage=pick 任务的 Pick… 模态——只列 details 里 standing=passed 的 attempt、不默认选中，Keep X 即确认 → `pick <id> <letter>`（保留其一会关闭其余 attempt 的标签页）；审阅者的对比留在插件看板（任务页 Compare in Work Board）
 workboard_newautomation.go: New Automation 模态（名称、提示词、Schedule（插件自己的写法文本）| Event（钉住的事件下拉 + 全部项目 + 可选 --if）、Task/Research/Chat）→ `automations add`，语法与拒绝全归插件
 workboard_delegate.go: To do 任务的 Delegate with… 模态——读 `show <id> --json`，用设置页同一套选择型控件（worker.agent/effort/access、plan.approve、review.when、merge.by），只提交被改动的项（`delegate <id> --<setting> V`，只作用于该任务，不写任何范围设置）
 workboard_settings_controls.go: 设置行的取值控件——钉住规格表命中且当前值合规时用选择型（≤3 词分段/更多下拉；数量=NumberInput；时间/token=数字+单位分段，可 none；agent=程序下拉+模型可搜下拉；effort=兄弟 agent 的档位下拉），否则降级文本；数字输入失焦/回车才写、选择即写；写入期间保留所选值直到页面重读；`models --json` 异步读一次，读不到则相关行仍是文本
