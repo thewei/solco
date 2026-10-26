@@ -90,7 +90,7 @@ func TestPlanReadyOffersApprovePlanNotRetry(t *testing.T) {
 	if got := kinds(workboardActionsForTask(pick, workboard.GroupNeedsYou, nil)); got != "stop,archive" {
 		t.Fatalf("pick actions = %q (no recovery verb fits an attempt pick)", got)
 	}
-	if got := kinds(workboardActionsForTask(byID["r/3"], workboard.GroupTodo, nil)); got != "delegate,archive" {
+	if got := kinds(workboardActionsForTask(byID["r/3"], workboard.GroupTodo, nil)); got != "delegate,delegate-with,archive" {
 		t.Fatalf("a plain to-do keeps its group's actions: %q", got)
 	}
 }

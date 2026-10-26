@@ -280,7 +280,7 @@ func TestAfterStageOffersStartNowAfterAConfirm(t *testing.T) {
 	}
 }
 
-func TestProjectPageAutomationsManageNotCreate(t *testing.T) {
+func TestProjectPageAutomationsManage(t *testing.T) {
 	var ran []string
 	s := manageShell(t, &ran, `[]`)
 	s.openWorkboardProjectPage("r")
@@ -313,9 +313,9 @@ func TestProjectPageAutomationsManageNotCreate(t *testing.T) {
 	if got := strings.Join(ran, "|"); got != "automations run a1|automations remove a2" {
 		t.Fatalf("ran = %q", got)
 	}
-	// A Project with none draws no group.
+	// A Project with none still offers creation (and lists nothing).
 	s.workboard.board.extras.automations = nil
-	if tt = ui.NewTester(s.workboardProjectPage, 900, 900); tt.HasText("Automations") {
-		t.Fatalf("no automations, no group: %q", tt.Texts())
+	if tt = ui.NewTester(s.workboardProjectPage, 900, 900); !tt.HasText("New Automation…") || tt.HasText("Turn Off") {
+		t.Fatalf("no automations: only the create button: %q", tt.Texts())
 	}
 }

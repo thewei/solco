@@ -15,7 +15,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Detect 给出的 plugin_root、herdr.SocketPath（会话 socket）、`sh <root>/bin/run.sh <cmd> --json` 插件 CLI
- * [OUTPUT]: 对外提供 Client（List / Details 读；Approve / SendBack / Retry / Fix / Delegate / Archive / Add 写）、ErrNotReady 与可注入的 Exec
+ * [OUTPUT]: 对外提供 Client（List / Details 读；Approve / SendBack / Retry / Fix / Delegate / DelegateWith（`delegate <id> --<setting> V`，只作用于这个任务）/ Archive / Add 写）、ErrNotReady 与可注入的 Exec
  * [POS]: 插件 CLI 的唯一调用点；读写命令都经此处。写入不自造语义：动词含义归插件，拒绝原文透传；Approve 在执行瞬间重读复核。以人类身份运行——剥掉 HERDR_PANE_ID 等 Agent 身份变量，避免从 Herdr pane 启动的 Shardlane 被插件当成 Agent 调用方
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -197,6 +197,28 @@ func (c *Client) AddTask(ctx context.Context, t NewTask) error {
 	}
 	if t.Delegate {
 		args = append(args, "--delegate")
+	}
+	_, err := c.exec(ctx, args...)
+	return err
+}
+
+// SettingValue is one setting as `delegate --<name> VALUE` takes it.
+type SettingValue struct{ Name, Value string }
+
+// DelegateWith puts an agent on a task that waits, with work settings for this
+// task only (`delegate <id> --worker.effort high …`). The plugin refuses an
+// option it does not accept and then changes nothing on the task.
+func (c *Client) DelegateWith(ctx context.Context, id string, with []SettingValue) error {
+	if err := checkID("delegate", id); err != nil {
+		return err
+	}
+	args := []string{"delegate", id}
+	for _, w := range with {
+		value := strings.TrimSpace(w.Value)
+		if err := checkSettingName(w.Name); err != nil || value == "" || strings.HasPrefix(value, "-") {
+			return errors.New("workboard: delegate: invalid setting")
+		}
+		args = append(args, "--"+w.Name, value)
 	}
 	_, err := c.exec(ctx, args...)
 	return err

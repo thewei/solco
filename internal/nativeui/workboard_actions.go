@@ -53,7 +53,7 @@ func workboardActionsFor(g workboard.Group, d *workboard.Detail) []boardWrite {
 			out = append(out, boardWrite{"Send failure details", "fix"})
 		}
 	case workboard.GroupTodo:
-		out = append(out, boardWrite{"Delegate", "delegate"})
+		out = append(out, boardWrite{"Delegate", "delegate"}, boardWrite{"Delegate with…", "delegate-with"})
 	}
 	// A task whose agent still runs cannot be archived (the plugin says so):
 	// Stop is the way out. To do and Done have no running agent.
@@ -93,6 +93,10 @@ func isPrimaryWrite(kind string) bool { return kind == "approve" || kind == "app
 // startWorkboardAction is a row menu choice: Approve, Approve Plan, Start Now
 // and Stop ask first, everything else runs at once.
 func (s *Shell) startWorkboardAction(a boardWrite, task workboard.Task) {
+	if a.Kind == "delegate-with" {
+		s.openWorkboardDelegateWith(task)
+		return
+	}
 	if a.Kind == "approve" {
 		title := task.Title
 		if title == "" {

@@ -292,3 +292,52 @@ func TestSettingsWithoutModelsFallBackToText(t *testing.T) {
 		t.Fatalf("without the plugin's lists agent and effort stay text fields: %q", tt.Texts())
 	}
 }
+
+func TestDelegateWithSendsOnlyTheChoicesMade(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	task := workboard.Task{ID: "r/4", Title: "Later"}
+	s.openWorkboardDelegateWith(task)
+	d := s.workboard.delegate
+	if !d.open || d.loading || d.failed || len(d.view.Settings) == 0 {
+		t.Fatalf("the dialog must have read the task's settings: %+v", d)
+	}
+	if got := strings.Join(ran, "|"); !strings.Contains(got, "show r/4 --json") {
+		t.Fatalf("settings come from `show <id>`, ran %q", got)
+	}
+	ran = nil
+	tt := ui.NewTester(s.delegateDialog, 900, 900)
+	for _, want := range []string{"Delegate “Later”", "worker.agent", "worker.access", "full", "ask", "auto", "Delegate", "Cancel"} {
+		if !tt.HasText(want) {
+			t.Fatalf("dialog missing %q: %q", want, tt.Texts())
+		}
+	}
+	for _, not := range []string{"merge.method", "board.open", "limit.tokens"} {
+		if tt.HasText(not) {
+			t.Fatalf("dialog must offer only its own settings, got %q", not)
+		}
+	}
+	if err := tt.Click("auto"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Delegate"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ran, "|"); got != "delegate r/4 --worker.access auto" {
+		t.Fatalf("ran = %q: only the choice made goes to the plugin, no setting is written", got)
+	}
+	if s.workboard.delegate.open {
+		t.Fatal("delegating closes the dialog")
+	}
+}
+
+func TestDelegateWithNoChoiceIsPlainDelegate(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	s.openWorkboardDelegateWith(workboard.Task{ID: "r/4"})
+	ran = nil
+	s.submitDelegateWith()
+	if got := strings.Join(ran, "|"); got != "delegate r/4" {
+		t.Fatalf("ran = %q", got)
+	}
+}

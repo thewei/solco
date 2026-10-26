@@ -564,8 +564,13 @@ earns the same treatment without its own dated decision.
   work and the coordinator stop, automations turn off — counted confirms,
   Coordinator Restart/New/Stop, Autopilot On… with a token-cost confirm).
   *Creation/automations:* New Task dialog (title, description, Task/Research/Chat,
-  After, start now); Automations group on the Project page (on/off, Run… and
-  Remove… after confirm; creation stays "tell the coordinator"). *Settings:* a
+  After, start now; To do tasks also offer Delegate with… — the task's own
+  `show <id>` settings as the same choice controls, only changed ones sent as
+  `delegate <id> --<setting> V`); Automations group on the Project page (on/off,
+  Run… and Remove… after confirm; New Automation… → `automations add` with name,
+  prompt, Schedule text or Event + optional `--if`, parsing/refusal the plugin's).
+  The Project page has a Find field (⌘F) and its task list is a keyboard list
+  (↑↓/Home/End, ←/→ fold, Enter opens; no letter keys). *Settings:* a
   `/settings/workboard` section, only while the gate is open, scoped to
   Everywhere / a Project / a Project's coordinator, rendering exactly what
   `show --json` returns for that scope (switch for booleans, text otherwise);
@@ -573,7 +578,7 @@ earns the same treatment without its own dated decision.
   key settings are not shown. Every write goes through the single
   `workboardWrite` channel; Shardlane copies no option sets.
 - **Not included.** Attempt picking, cross-machine boards, voice/Web UI/keys,
-  automation creation, plugin install/update, folding task workspaces under
+  plugin install/update, folding task workspaces under
   their repo in the Sidebar.
 
 ### Multi-instance model (current — 2026-09-01 no-registry revision)

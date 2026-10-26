@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 workboardProjects（按 Project 分组）、workboard_actions 的 workboardWrite/openWorkboardAdd 机制、quickPanelTaskRow（共用任务行）、internal/workboard Client.CoordinatorTell/Tell/Add、route_header 的 routeHeaderSpec
  * [OUTPUT]: routeProject（/project 路由）、openWorkboardProjectPage（侧栏 Project 行的落点）、workboardProjectPage（页面内容）、projectRouteHeader、workboardMessageBox（页底消息框，Project 页发给 coordinator、任务页发给 agent）、openWorkboardAddIn/submitWorkboardAddIn（在该 Project 里 New Task）
- * [POS]: herdr-projects 一个 Project 的页面，布局沿用插件 TUI：筛选行（All / Needs you / Working / Ready / To do / Done，带计数）→ 按状态分组、标题可折叠的任务列表（Done 默认不展开，仅留 “↓ N done”）→ 页底消息框；一次一个 Project，名字存在 workboardProjectPage（路由不带参数，与 /task 同）；全部派生自 board 缓存，写入只走插件 CLI
+ * [POS]: herdr-projects 一个 Project 的页面，布局沿用插件 TUI：筛选行（All / Needs you / Working / Ready / To do / Done，带计数）→ 按状态分组、标题可折叠的任务列表（Done 默认不展开，仅留 “↓ N done”）→ 页底消息框；任务列表上方有官方 SearchField “Find tasks”（⌘F 聚焦；按标题/ID/消息/agent 过滤当前筛选；↓ 进列表），分组头与任务行是 listNav 一个焦点组（↑↓/Home/End 移动、←/→ 折叠分组、Enter 开任务页；不绑字母键，动作快捷键不加——与侧栏列表同一约定，需字母键走插件看板 Tab）；一次一个 Project，名字存在 workboardProjectPage（路由不带参数，与 /task 同）；全部派生自 board 缓存，写入只走插件 CLI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -42,6 +42,7 @@ type workboardProjectPage struct {
 	foldedBy map[workboard.Group]bool
 	draft    string
 	delegate bool
+	find     string // the Find field: narrows the chosen filter's tasks
 }
 
 // openWorkboardProjectPage opens the Project page from the sidebar.
@@ -88,6 +89,9 @@ func (s *Shell) projectRouteHeader() routeHeaderSpec {
 		}
 		if m.Item("Add and Delegate").Chosen() {
 			s.openWorkboardAddIn(name, true)
+		}
+		if name != workboardOtherProject && m.Item("New Automation…").Chosen() {
+			s.openWorkboardAutomation(name)
 		}
 		m.Separator()
 		s.boardProjectMenuItems(m, project)
@@ -229,34 +233,51 @@ func (s *Shell) projectFilterRow(c *ui.Context, project workboardProject) {
 	})
 }
 
-// projectGroups lists the chosen filter's groups under foldable headings.
+// projectGroups lists the chosen filter's groups under foldable headings,
+// narrowed by the Find field. The groups are one keyboard list (listNav): ↓
+// from the field enters it, ↑/↓/Home/End move the cursor, Enter opens a task
+// and ←/→ fold a heading.
 func (s *Shell) projectGroups(c *ui.Context, project workboardProject) {
 	page := &s.workboard.project
 	if page.foldedBy == nil {
 		page.foldedBy = map[workboard.Group]bool{}
 	}
-	groups := project.filterGroups(page.filter)
+	nav := &s.nav.boardTasks
+	field := ui.SearchField(c, &page.find).FillWidth().Label("Find tasks")
+	if c.Shortcut(ui.Cmd, ui.KeyF) {
+		field.Focus()
+	}
+	if field.Shortcut(0, ui.KeyDown) {
+		nav.enter(c)
+	}
+	needle := strings.ToLower(strings.TrimSpace(page.find))
+	groups := narrowGroups(project.filterGroups(page.filter), needle)
 	if len(groups) == 0 {
 		text := "No open tasks"
-		if page.filter != filterAll {
+		switch {
+		case needle != "":
+			text = "No matching tasks"
+		case page.filter != filterAll:
 			text = "Nothing here"
 		}
 		ui.Text(c, text).Padding(Spacing().M, 0).TextColor(c.Theme().TextMuted)
 	}
-	for _, group := range groups {
-		folded := page.foldedBy[group.Group]
-		if s.projectGroupHeader(c, group, folded).Clicked() {
-			page.foldedBy[group.Group] = !folded
+	s.navList(c, nav, false, ui.Column(c).FillWidth().Gap(Spacing().M), func() {
+		for _, group := range groups {
+			folded := page.foldedBy[group.Group]
+			if _, toggled := s.projectGroupHeader(c, group, folded, nav); toggled {
+				page.foldedBy[group.Group] = !folded
+			}
+			if folded {
+				continue
+			}
+			for _, task := range group.Tasks {
+				s.quickPanelTaskRowIn(c, task, group.Group, nav)
+			}
 		}
-		if folded {
-			continue
-		}
-		for _, task := range group.Tasks {
-			s.quickPanelTaskRow(c, task, group.Group)
-		}
-	}
+	})
 	// As in the TUI, finished work stays out of the list; one line counts it.
-	if page.filter == filterAll && len(project.Done) > 0 {
+	if page.filter == filterAll && needle == "" && len(project.Done) > 0 {
 		label := "↓ " + itoa(len(project.Done)) + " done"
 		if ui.Button(c, label).Clicked() {
 			page.filter = filterDone
@@ -264,15 +285,43 @@ func (s *Shell) projectGroups(c *ui.Context, project workboardProject) {
 	}
 }
 
+// narrowGroups keeps the tasks whose title, id, message or agent holds needle
+// (already lower-cased); a group left empty goes with them.
+func narrowGroups(groups []workboardGroup, needle string) []workboardGroup {
+	if needle == "" {
+		return groups
+	}
+	var out []workboardGroup
+	for _, group := range groups {
+		var kept []workboard.Task
+		for _, task := range group.Tasks {
+			for _, field := range []string{task.Title, task.ID, task.Msg, task.App} {
+				if strings.Contains(strings.ToLower(field), needle) {
+					kept = append(kept, task)
+					break
+				}
+			}
+		}
+		if len(kept) > 0 {
+			out = append(out, workboardGroup{Group: group.Group, Tasks: kept})
+		}
+	}
+	return out
+}
+
 // projectGroupHeader is one foldable status heading: chevron, state dot,
-// name and count.
-func (s *Shell) projectGroupHeader(c *ui.Context, group workboardGroup, folded bool) ui.Element {
+// name and count. toggled is a click or the keyboard's ←/→ on it.
+func (s *Shell) projectGroupHeader(c *ui.Context, group workboardGroup, folded bool, nav *listNav) (ui.Element, bool) {
 	t := c.Theme()
 	sp := Spacing()
 	row := ui.ButtonBase(c.Key("boardgroup:"+group.Group.Label())).FillWidth().Height(30).
 		Padding(0, sp.S).Radius(treeRowRadius).FocusRing(false).AlignItems(ui.Center).Gap(sp.S).
 		Label("Toggle " + group.Group.Label())
-	if row.Hovered() {
+	keyed := nav.row(c, row, navRow{Key: "group:" + group.Group.Label(), Section: true, Folder: true, Expanded: !folded})
+	switch {
+	case nav.showsCursor(row):
+		row.Background(designTokens(t.Dark).SidebarSelect)
+	case row.Hovered():
 		row.Background(t.SurfaceHover)
 	}
 	row.Children(func() {
@@ -284,7 +333,7 @@ func (s *Shell) projectGroupHeader(c *ui.Context, group workboardGroup, folded b
 		ui.Text(c, itoa(len(group.Tasks))).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine()
 		ui.Box(c).Grow(1) // keeps the heading flush left inside the full-width button
 	})
-	return row
+	return row, row.Clicked() || keyed
 }
 
 // workboardMessageBox is the page-foot box of the TUI: a draft, an optional

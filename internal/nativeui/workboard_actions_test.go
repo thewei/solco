@@ -57,7 +57,7 @@ func TestWorkboardActionsByGroup(t *testing.T) {
 	cases := map[workboard.Group]string{
 		workboard.GroupReady:    "approve,stop,archive",
 		workboard.GroupNeedsYou: "retry,review,fix,stop,archive",
-		workboard.GroupTodo:     "delegate,archive",
+		workboard.GroupTodo:     "delegate,delegate-with,archive",
 		workboard.GroupWorking:  "stop",
 		workboard.GroupDone:     "archive",
 	}

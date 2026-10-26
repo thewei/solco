@@ -239,3 +239,68 @@ func TestSettingsWritesRefuseShapesThatCouldBecomeOptions(t *testing.T) {
 		t.Fatalf("ran %q", *calls)
 	}
 }
+
+func TestAddAutomationArgv(t *testing.T) {
+	ctx := context.Background()
+	c, calls := recording("")
+	if err := c.AddAutomation(ctx, NewAutomation{Name: " Nightly ", Prompt: "Run the audit", Repo: "r", Schedule: "daily 03:00", Research: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.AddAutomation(ctx, NewAutomation{Name: "On merge", Prompt: "Tidy", When: "merged", EveryRepo: true, If: "branch = feature/*", Chat: true, Research: true}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"automations add Nightly --prompt Run the audit --schedule daily 03:00 --repo r --research",
+		"automations add On merge --prompt Tidy --when merged --every-repo --if branch = feature/* --chat",
+	}
+	if len(*calls) != 2 || (*calls)[0] != want[0] || (*calls)[1] != want[1] {
+		t.Fatalf("calls = %q, want %q", *calls, want)
+	}
+	for _, bad := range []NewAutomation{
+		{Prompt: "p", Schedule: "every 2h"},
+		{Name: "n", Schedule: "every 2h"},
+		{Name: "n", Prompt: "p"},
+		{Name: "n", Prompt: "p", Schedule: "every 2h", When: "merged"},
+		{Name: "n", Prompt: "p", Schedule: "every 2h", If: "title = x"},
+		{Name: "-n", Prompt: "p", Schedule: "every 2h"},
+		{Name: "n", Prompt: "-p", Schedule: "every 2h"},
+		{Name: "n", Prompt: "p", When: "merged", Repo: "--x"},
+	} {
+		if err := c.AddAutomation(ctx, bad); err == nil {
+			t.Errorf("%+v must be refused", bad)
+		}
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("a refused automation must reach no CLI call: %q", *calls)
+	}
+}
+
+func TestDelegateWithAndTaskSettingsArgv(t *testing.T) {
+	ctx := context.Background()
+	c, calls := recording(`{"settings":[{"name":"worker.agent","value":"claude"}]}`)
+	if err := c.DelegateWith(ctx, "r/4", []SettingValue{{"worker.agent", "codex/gpt-6"}, {"plan.approve", " you "}}); err != nil {
+		t.Fatal(err)
+	}
+	view, err := c.TaskSettings(ctx, "r/4")
+	if err != nil || len(view.Settings) != 1 {
+		t.Fatalf("view=%+v err=%v", view, err)
+	}
+	want := []string{"delegate r/4 --worker.agent codex/gpt-6 --plan.approve you", "show r/4 --json"}
+	if len(*calls) != 2 || (*calls)[0] != want[0] || (*calls)[1] != want[1] {
+		t.Fatalf("calls = %q, want %q", *calls, want)
+	}
+	for _, bad := range [][]SettingValue{{{"", "x"}}, {{"-worker.agent", "x"}}, {{"a b", "x"}}, {{"worker.agent", ""}}, {{"worker.agent", "--now"}}} {
+		if c.DelegateWith(ctx, "r/4", bad) == nil {
+			t.Errorf("%v must be refused", bad)
+		}
+	}
+	if c.DelegateWith(ctx, "-x", nil) == nil {
+		t.Error("an option-like id must be refused")
+	}
+	if _, err := c.TaskSettings(ctx, "--all"); err == nil {
+		t.Error("an option-like id must be refused")
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("refusals must reach no CLI call: %q", *calls)
+	}
+}

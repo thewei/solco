@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 workboard_tasks 的 workboardBoard/workboardGroups/projectForWorktree、quickPanelGroupHeader 与 agent 卡片同款行尺寸、statusDot/operationalState、openWorkboardTaskPage
  * [OUTPUT]: Shell.quickPanelTasks（Agent 活动浮层的 Tasks 页签：按 Needs you / Ready to approve / Working / To do 分组的只读列表）、quickPanelTasksHeight
- * [POS]: herdr-projects work board 在浮层里的唯一呈现；点击打开任务详情页（workboard_page.go，页内有 Open Project 进入已匹配的 Project）；行右键菜单与底部 New task 只发起意图，写入全部走 workboard_actions.go（Approve 经 shared confirm）
+ * [POS]: herdr-projects work board 在浮层里的唯一呈现；点击打开任务详情页（workboard_page.go，页内有 Open Project 进入已匹配的 Project）；quickPanelTaskRowIn 让 Project 页复用同一行并接入 listNav（弹层传 nil）；行右键菜单与底部 New task 只发起意图，写入全部走 workboard_actions.go（Approve 经 shared confirm）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -89,6 +89,12 @@ func (s *Shell) quickPanelTasks(c *ui.Context) {
 // quickPanelTaskRow is one task: the state dot, the title, and the id with the
 // plugin's status note beneath. A click opens the task's page.
 func (s *Shell) quickPanelTaskRow(c *ui.Context, task workboard.Task, group workboard.Group) {
+	s.quickPanelTaskRowIn(c, task, group, nil)
+}
+
+// quickPanelTaskRowIn is quickPanelTaskRow as one row of a keyboard list; a
+// nil nav is a plain row (the popover's).
+func (s *Shell) quickPanelTaskRowIn(c *ui.Context, task workboard.Task, group workboard.Group, nav *listNav) {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
 	title := task.Title
@@ -115,7 +121,11 @@ func (s *Shell) quickPanelTaskRow(c *ui.Context, task workboard.Task, group work
 			Gap(agentCardGap).
 			AlignItems(ui.Center).
 			Label(title)
-		if tint, ok := rowTint(tokens, false, row.Hovered()); ok {
+		nav.row(c, row, navRow{Key: "task:" + task.ID, Level: 1})
+		if nav != nil {
+			row.FocusRing(false) // the list's cursor face replaces the ring
+		}
+		if tint, ok := rowTint(tokens, nav.showsCursor(row), row.Hovered()); ok {
 			row.Background(tint)
 		}
 		row.Children(func() {

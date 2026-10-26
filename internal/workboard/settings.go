@@ -11,7 +11,7 @@ import (
 
 /**
  * [INPUT]: 依赖 client.go 的 Exec，插件 CLI 的 `show --json [--repo R | --project-coordinator R]`（{settings[{name,kind,value,from,place,own,note}],problems[]}，1.2.26 沙盒实测）与 `set <name> <value> [scope]` / `unset <name> [scope]`
- * [OUTPUT]: 对外提供 Setting（ValueText/IsBool）、SettingsView、Scope、Client.Settings/SetSetting/UnsetSetting
+ * [OUTPUT]: 对外提供 Setting（ValueText/IsBool）、SettingsView、Scope、Client.Settings/TaskSettings（`show <id> --json`）/SetSetting/UnsetSetting
  * [POS]: 插件设置的原生读写面（用户 2026-10-26 显式授权，越过 AGENTS.md「禁止插件 UI」条款，仅限本插件的设置）：设置的名字、取值范围、校验与「什么范围能设什么」全归插件——JSON 不带选项表，所以本包不复制任何取值集合，插件的拒绝原文透传；不同范围返回的设置集不同（everywhere 79 项含 board，--repo 42 项含 repo 类，--project-coordinator 22 项），UI 只画返回的那份；值以 `--` 开头一律拒绝，不让它被解析成选项
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -89,7 +89,20 @@ func (c *Client) Settings(ctx context.Context, scope Scope) (SettingsView, error
 	if err != nil {
 		return SettingsView{}, err
 	}
-	out, err := c.exec(ctx, append([]string{"show", "--json"}, extra...)...)
+	return c.readSettings(ctx, append([]string{"show", "--json"}, extra...))
+}
+
+// TaskSettings reads what one task runs on (`show <id> --json`): every
+// setting as it applies to that task, whatever place it comes from.
+func (c *Client) TaskSettings(ctx context.Context, id string) (SettingsView, error) {
+	if err := checkID("show", id); err != nil {
+		return SettingsView{}, err
+	}
+	return c.readSettings(ctx, []string{"show", id, "--json"})
+}
+
+func (c *Client) readSettings(ctx context.Context, args []string) (SettingsView, error) {
+	out, err := c.exec(ctx, args...)
 	if err != nil {
 		return SettingsView{}, err
 	}

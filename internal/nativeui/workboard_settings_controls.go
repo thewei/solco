@@ -22,10 +22,18 @@ import (
 // slash": the program's own default.
 const workboardDefaultModel = "Program default"
 
-// workboardSettingControl draws the value control of one setting.
+// workboardSettingControl draws the value control of one setting; a choice
+// writes it in the open scope.
 func (s *Shell) workboardSettingControl(key *ui.Context, setting workboard.Setting) {
+	s.workboardSettingControlWith(key, setting, s.workboard.settings.view.Settings,
+		func(value string) { s.setWorkboardSetting(setting.Name, value, false) })
+}
+
+// workboardSettingControlWith is workboardSettingControl for any home of the
+// value: set takes the choice, and siblings are the settings an effort level
+// reads its program from (the page's, or a dialog's with its own choices).
+func (s *Shell) workboardSettingControlWith(key *ui.Context, setting workboard.Setting, siblings []workboard.Setting, set func(string)) {
 	spec := workboard.SpecFor(setting.Name)
-	set := func(value string) { s.setWorkboardSetting(setting.Name, value, false) }
 	switch {
 	case setting.IsBool():
 		on, _ := setting.Value.(bool)
@@ -45,7 +53,7 @@ func (s *Shell) workboardSettingControl(key *ui.Context, setting workboard.Setti
 		return
 	case spec.Ty == workboard.TyAgent && s.workboardAgent(key, setting, spec, set):
 		return
-	case spec.Ty == workboard.TyEffort && s.workboardEffort(key, setting, set):
+	case spec.Ty == workboard.TyEffort && s.workboardEffort(key, setting, siblings, set):
 		return
 	}
 	s.workboardText(key, setting, set)
@@ -168,11 +176,11 @@ func (s *Shell) workboardAgent(key *ui.Context, setting workboard.Setting, spec 
 
 // workboardEffort is an effort level of the sibling agent setting's program
 // and model, or default; text when the plugin lists none for it.
-func (s *Shell) workboardEffort(key *ui.Context, setting workboard.Setting, set func(string)) bool {
+func (s *Shell) workboardEffort(key *ui.Context, setting workboard.Setting, siblings []workboard.Setting, set func(string)) bool {
 	st := &s.workboard.settings
 	role, _, _ := strings.Cut(setting.Name, ".")
 	var agent string
-	for _, other := range st.view.Settings {
+	for _, other := range siblings {
 		if other.Name == role+".agent" {
 			agent, _ = other.Value.(string)
 		}

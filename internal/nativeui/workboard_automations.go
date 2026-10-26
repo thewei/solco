@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 board 缓存 extras.automations（`automations --json`，整份清单一次读出）、runBoardManage/startBoardManage 的写与确认通道
  * [OUTPUT]: projectAutomations（Project 页的 Automations 组：名称、触发器、下次/关闭原因，On·Off / Run… / Remove…）、automationName、projectAutomationList
- * [POS]: 自动化管理面（P7）：只管理不创建——创建要 prompt/触发器/条件，对协调者说即可；Run 真起 Agent 耗 token，Remove 不可撤销，二者都先确认；没有自动化的 Project 不画这一组
+ * [POS]: 自动化管理面（P7）：管理（On·Off/Run/Remove）+ 组头 “New Automation…” 入口（创建见 workboard_newautomation.go）；Run 真起 Agent 耗 token，Remove 不可撤销，二者都先确认；没有自动化的 Project 仍画组头（只有创建按钮），“其他”伪 Project 无自动化时不画
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -59,13 +59,19 @@ func automationCaption(a workboard.Automation) string {
 // projectAutomations is the Project page's Automations group.
 func (s *Shell) projectAutomations(c *ui.Context, project workboardProject) {
 	list := s.projectAutomationList(project.Name)
-	if len(list) == 0 {
+	if len(list) == 0 && project.Name == workboardOtherProject {
 		return
 	}
 	t := c.Theme()
 	sp := Spacing()
 	ui.Column(c).FillWidth().Gap(sp.S).Padding(sp.M, 0, 0).Children(func() {
-		groupLabel(c, "Automations")
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+			groupLabel(c, "Automations")
+			ui.Box(c).Grow(1)
+			if project.Name != workboardOtherProject && ui.Button(c, "New Automation…").Clicked() {
+				s.openWorkboardAutomation(project.Name)
+			}
+		})
 		for _, a := range list {
 			a := a
 			caption := automationCaption(a)

@@ -31,15 +31,17 @@ const (
 
 // workboardState is the Shell's view of the herdr-projects plugin.
 type workboardState struct {
-	avail      workboard.Availability
-	lastDetect time.Time
-	detecting  bool
-	board      workboardBoard
-	page       workboardPage
-	project    workboardProjectPage
-	archived   workboardArchived
-	newTask    newTaskDraft
-	settings   workboardSettingsState
+	avail         workboard.Availability
+	lastDetect    time.Time
+	detecting     bool
+	board         workboardBoard
+	page          workboardPage
+	project       workboardProjectPage
+	archived      workboardArchived
+	newTask       newTaskDraft
+	newAutomation newAutomationDraft
+	delegate      delegateDraft
+	settings      workboardSettingsState
 }
 
 // workboardAvailable is the one gate every workboard surface and command

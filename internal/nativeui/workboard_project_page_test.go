@@ -198,3 +198,139 @@ func TestTaskPageMessagesTheAgentOnlyWhenOneRuns(t *testing.T) {
 		t.Fatalf("draft=%q toast=%q", s.workboard.page.draft, s.pendingToast)
 	}
 }
+
+// projectNavTester renders the Project page through the Shell's View, as the
+// keyboard lists need the per-View pass counter.
+func projectNavTester(t *testing.T) (*Shell, *ui.Tester) {
+	t.Helper()
+	var ran []string
+	s := projectPageShell(t, &ran)
+	tt := ui.NewTester(s.View, 1200, 800)
+	settleFrames(tt, 4)
+	return s, tt
+}
+
+func TestNarrowGroupsMatchesTitleIDMessageAndApp(t *testing.T) {
+	tasks, err := workboard.ParseTasks(`[
+ {"id":"r/1","title":"Alpha","state":"working","stage":"working","msg":"building Parser","app":"codex"},
+ {"id":"r/2","title":"Beta","state":"idle","stage":"todo"}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := []workboardGroup{{Group: workboard.GroupWorking, Tasks: tasks[:1]}, {Group: workboard.GroupTodo, Tasks: tasks[1:]}}
+	for needle, want := range map[string]int{"": 2, "alpha": 1, "r/2": 1, "parser": 1, "codex": 1, "zzz": 0} {
+		got := 0
+		for _, g := range narrowGroups(groups, needle) {
+			got += len(g.Tasks)
+		}
+		if got != want {
+			t.Errorf("needle %q: %d tasks, want %d", needle, got, want)
+		}
+	}
+}
+
+func TestProjectPageFindNarrowsAndSaysWhenNothingMatches(t *testing.T) {
+	s, tt := projectNavTester(t)
+	if err := tt.Click("Find tasks"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("busy")
+	settleFrames(tt, 2)
+	if s.workboard.project.find != "busy" || !tt.HasText("r/3") || tt.HasText("r/4") || tt.HasText("r/2 · which db?") {
+		t.Fatalf("find %q: %q", s.workboard.project.find, tt.Texts())
+	}
+	tt.Key(ui.Super, ui.KeyA)
+	tt.Type("zzz")
+	settleFrames(tt, 2)
+	if !tt.HasText("No matching tasks") {
+		t.Fatalf("an empty match must say so: %q", tt.Texts())
+	}
+}
+
+func TestProjectPageCmdFFocusesFind(t *testing.T) {
+	_, tt := projectNavTester(t)
+	tt.Key(ui.Cmd, ui.KeyF)
+	settleFrames(tt, 2)
+	if !tt.Focused("Find tasks") {
+		t.Fatal("⌘F must focus the Find field on the Project page")
+	}
+}
+
+func TestProjectPageKeyboardWalksTasksAndEnterOpens(t *testing.T) {
+	s, tt := projectNavTester(t)
+	// ↓ from the Find field enters the list on its first task.
+	tt.Key(ui.Cmd, ui.KeyF)
+	settleFrames(tt, 2)
+	pressKey(tt, 0, ui.KeyDown)
+	settleFrames(tt, 2)
+	wantCursor(t, tt, "Asks a question")
+	pressKey(tt, 0, ui.KeyDown)
+	wantCursor(t, tt, "Toggle Ready to approve")
+	pressKey(tt, 0, ui.KeyDown)
+	wantCursor(t, tt, "Finished work")
+	pressKey(tt, 0, ui.KeyEnd)
+	wantCursor(t, tt, "Later")
+	pressKey(tt, 0, ui.KeyHome)
+	wantCursor(t, tt, "Toggle Needs you")
+	pressKey(tt, 0, ui.KeyDown)
+	pressKey(tt, 0, ui.KeyEnter)
+	if s.router.Path() != routeTask {
+		t.Fatalf("Enter on a task must open its page, path = %q", s.router.Path())
+	}
+}
+
+func TestProjectPageArrowsFoldAHeading(t *testing.T) {
+	s, tt := projectNavTester(t)
+	if err := tt.Click("Toggle Working"); err != nil { // fold it, then walk back onto it
+		t.Fatal(err)
+	}
+	settleFrames(tt, 2)
+	if !s.workboard.project.foldedBy[workboard.GroupWorking] {
+		t.Fatal("control: click folds")
+	}
+	pressKey(tt, 0, ui.KeyRight) // the cursor is on the clicked heading: → unfolds
+	if s.workboard.project.foldedBy[workboard.GroupWorking] {
+		t.Fatal("→ on a folded heading must unfold it")
+	}
+	pressKey(tt, 0, ui.KeyLeft)
+	if !s.workboard.project.foldedBy[workboard.GroupWorking] {
+		t.Fatal("← on an open heading must fold it")
+	}
+}
+
+func TestProjectPageNewAutomationOpensFromTheGroupAndSubmits(t *testing.T) {
+	var ran []string
+	s := projectPageShell(t, &ran)
+	tt := ui.NewTester(s.workboardProjectPage, 900, 700)
+	if err := tt.Click("New Automation…"); err != nil {
+		t.Fatalf("the Automations group must offer creation even with none yet: %v (%q)", err, tt.Texts())
+	}
+	if d := s.workboard.newAutomation; !d.open || d.project != "r" || d.event != "added" {
+		t.Fatalf("draft = %+v", d)
+	}
+	s.workboard.newAutomation.name, s.workboard.newAutomation.prompt = "Nightly", "Audit"
+	if s.newAutomationReady() {
+		t.Fatal("a schedule trigger without a schedule is not ready")
+	}
+	s.workboard.newAutomation.schedule = "daily 03:00"
+	if !s.newAutomationReady() {
+		t.Fatal("name + prompt + schedule is ready")
+	}
+	s.submitNewAutomation()
+
+	s.openWorkboardAutomation("r")
+	d := &s.workboard.newAutomation
+	d.name, d.prompt, d.trigger, d.event, d.everyRepo, d.cond, d.kind = "Tidy", "Tidy up", automationOnEvent, "merged", true, "branch = x-*", newTaskResearch
+	if !s.newAutomationReady() {
+		t.Fatal("an event trigger needs no schedule")
+	}
+	s.submitNewAutomation()
+	want := "automations add Nightly --prompt Audit --schedule daily 03:00 --repo r|" +
+		"automations add Tidy --prompt Tidy up --when merged --every-repo --if branch = x-* --repo r --research"
+	if got := strings.Join(ran, "|"); got != want {
+		t.Fatalf("ran = %q, want %q", got, want)
+	}
+	if s.workboard.newAutomation.open {
+		t.Fatal("submitting closes the dialog")
+	}
+}

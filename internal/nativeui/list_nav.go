@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 侧栏列表/树这一帧画出的可见行（key、层级、折叠态）与 MyGo 的真焦点、Element.Shortcut、ScrollIntoView、FocusGroup
  * [OUTPUT]: listNav —— 侧栏列表与树唯一的键盘模型：真焦点就是光标；↓/↑ 移动，←/→ 折叠展开或进出层级，Home/End 首尾，Enter/Space 是行点击；没有 Vim 层（字母键不绑定）；进页时光标停在开场行但不亮，键盘用过它才亮（Tab 进入除外，MyGo 自带 FocusVisible）
- * [POS]: Files 树、Git 引用树、Hosts 列表（行经 sidebarTreeRow/sidebarSectionHeader 注册）与 Sessions 列表（项目卡头与会话行自行注册）共用；折叠、选择与动作仍归各列表——nav 只移动焦点，并把 →/← 翻译成该行的"点击"（Enter/Space 本来就是点击）
+ * [POS]: Project 任务列表（boardTasks，↓ 从 Find 框进入 enter）、Files 树、Git 引用树、Hosts 列表（行经 sidebarTreeRow/sidebarSectionHeader 注册）与 Sessions 列表（项目卡头与会话行自行注册）共用；折叠、选择与动作仍归各列表——nav 只移动焦点，并把 →/← 翻译成该行的"点击"（Enter/Space 本来就是点击）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -211,6 +211,18 @@ func (n *listNav) keys(c *ui.Context, e ui.Element, r navRow) (activate bool) {
 	return false
 }
 
+// enter puts the cursor on the first row that is not a bare header — ↓ from a
+// filter field above the list — and lets it wear its face at once.
+func (n *listNav) enter(c *ui.Context) {
+	for _, r := range n.prev {
+		if !r.Section {
+			n.want, n.shown = r.Key, true
+			c.AnimationFrame()
+			return
+		}
+	}
+}
+
 // index is the row's place in the last pass, -1 when it was not there.
 func (n *listNav) index(key string) int {
 	return slices.IndexFunc(n.prev, func(r navRow) bool { return r.Key == key })
@@ -254,7 +266,7 @@ func (n *listNav) to(c *ui.Context, key string) {
 
 // listNavs are the Shell's keyboard-driven sidebar lists.
 type listNavs struct {
-	files, gitRefs, hosts, sessions listNav
+	files, gitRefs, hosts, sessions, boardTasks listNav
 }
 
 // dialog is the Shell's report, on each change, of whether a dialog is up. A
@@ -264,7 +276,7 @@ type listNavs struct {
 // so a dialog opened from a row's menu does not end the keyboard's visit to
 // the tree.
 func (ns *listNavs) dialog(open bool, pass uint64) {
-	for _, n := range []*listNav{&ns.files, &ns.gitRefs, &ns.hosts, &ns.sessions} {
+	for _, n := range []*listNav{&ns.files, &ns.gitRefs, &ns.hosts, &ns.sessions, &ns.boardTasks} {
 		switch {
 		case open && n.seen+1 >= pass:
 			n.opener = n.cursor
