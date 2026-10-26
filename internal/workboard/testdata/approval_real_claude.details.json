@@ -1,0 +1,35 @@
+{
+  "task": {
+    "id": "repo/2",
+    "title": "Add hello file",
+    "stage": "approval",
+    "msg": "Approve to merge? 完成。",
+    "description": "Create a file named hello.txt containing the single word hi, and commit it. Do nothing else."
+  },
+  "failure": null,
+  "review": null,
+  "reviews": [],
+  "agent": "claude",
+  "handovers": [],
+  "research": false,
+  "chat": false,
+  "report": null,
+  "plan": null,
+  "pr": null,
+  "worktree": "/scratch/worktrees/repo/work-2-add-hello-file",
+  "branch": "work/2-add-hello-file",
+  "kept": null,
+  "stillRunning": null,
+  "inUse": null,
+  "limits": {
+    "time": {
+      "limit": "none"
+    },
+    "tokens": {
+      "limit": "none",
+      "used": 0,
+      "total": 0
+    }
+  },
+  "addedBy": "the human"
+}

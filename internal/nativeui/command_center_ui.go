@@ -133,6 +133,10 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 			Keywords: []string{"preferences", "appearance", "theme", "density", "language"}, Kind: commandcenter.TargetSetting, TargetID: "/settings/general", Available: true},
 		commandcenter.Action{ID: "app.hook-doctor", Title: "Set Up Agents", Section: "App",
 			Keywords: []string{"agents", "hooks", "integration", "install", "update", "claude", "antigravity"}, Kind: commandcenter.TargetRoute, TargetID: "/settings/providers", Available: true},
+		// The herdr-projects work board: derived from the plugin gate, so it
+		// exists only while the plugin is installed, enabled and supported.
+		commandcenter.Action{ID: "app.work-board", Title: "Open Work Board", Section: "App",
+			Keywords: []string{"projects", "tasks", "coordinator", "herdr-projects"}, Kind: commandcenter.TargetRoute, TargetID: "action:open-workboard", Available: s.workboardAvailable()},
 	)
 	return actions
 }
@@ -361,6 +365,8 @@ func (s *Shell) executeCommandCenterResult(result commandcenter.Result) {
 			s.goChanges()
 		case "action:open-files":
 			s.goFiles()
+		case "action:open-workboard":
+			s.openWorkBoard()
 		default:
 			if action.TargetID != "" {
 				s.router.Push(action.TargetID)

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "repo/2",
+    "state": "blocked",
+    "kind": "permission",
+    "app": "claude",
+    "title": "Add hello file",
+    "msg": "Approve to merge? 完成。",
+    "stage": "approval"
+  }
+]

@@ -140,6 +140,8 @@ type SessionSettings struct {
 	PinsOpen         bool     `json:"pins_open"`
 	ExpandedProjects []string `json:"expanded_projects,omitempty"`
 	ExpandedTabs     []string `json:"expanded_tabs,omitempty"`
+	TasksClosed      bool     `json:"tasks_closed,omitempty"`  // sidebar Projects fold, inverted: old sessions stay open
+	FoldedBoards     []string `json:"folded_boards,omitempty"` // Projects rows the user folded; the rest stay open
 	// SidebarWidth is the dragged left-sidebar width (0 = the default).
 	SidebarWidth int `json:"sidebar_width,omitempty"`
 	// Right panel cosmetics (Changes/Files/Services).

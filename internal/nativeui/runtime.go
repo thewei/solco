@@ -343,6 +343,10 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	// The floating Quick Panel shares this reconciled state but gets no
 	// input of its own while open; push the repaint to it.
 	s.invalidateQuickPanel()
+	// The Header aggregate and Project glyphs read the board even with the
+	// panel closed; the refresh throttles itself (and does nothing without
+	// the plugin).
+	s.refreshWorkboardTasks(false)
 	if s.router.Path() == routeWorkspace {
 		// Terminal attachments stay managed even while Diff/Commit is the
 		// visible surface (GWB-041/043): sync reconciles invalid ones, the

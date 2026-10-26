@@ -1,0 +1,35 @@
+{
+  "task": {
+    "id": "proj/1",
+    "title": "PR ready",
+    "stage": "approval",
+    "msg": "Approve to merge? Did v1. Pull request: https://github.com/o/r/pull/7",
+    "description": ""
+  },
+  "failure": null,
+  "review": null,
+  "reviews": [],
+  "agent": "claude",
+  "handovers": [],
+  "research": false,
+  "chat": false,
+  "report": null,
+  "plan": null,
+  "pr": "https://github.com/o/r/pull/7",
+  "worktree": "/scratch/worktrees/proj/work-1-pr-ready",
+  "branch": "work/1-pr-ready",
+  "kept": null,
+  "stillRunning": null,
+  "inUse": null,
+  "limits": {
+    "time": {
+      "limit": "none"
+    },
+    "tokens": {
+      "limit": "none",
+      "used": 0,
+      "total": 0
+    }
+  },
+  "addedBy": "the human"
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "proj/1",
+    "state": "blocked",
+    "kind": "permission",
+    "app": "claude",
+    "title": "CI fails for good",
+    "msg": "GitHub's checks failed: build. Send the details to the agent, or merge it anyway",
+    "stage": "approval",
+    "pr": "https://github.com/o/r/pull/7"
+  }
+]

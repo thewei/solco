@@ -1,0 +1,12 @@
+[
+  {
+    "id": "proj/1",
+    "state": "blocked",
+    "kind": "permission",
+    "app": "claude",
+    "title": "CI fails later",
+    "msg": "Local checks passed; pull request still blocked: Pull request checks failed. Wait for remote confirmation or send the details to the agent",
+    "stage": "approval",
+    "pr": "https://github.com/o/r/pull/7"
+  }
+]

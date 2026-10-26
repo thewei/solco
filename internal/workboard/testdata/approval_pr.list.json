@@ -1,0 +1,12 @@
+[
+  {
+    "id": "proj/1",
+    "state": "blocked",
+    "kind": "permission",
+    "app": "claude",
+    "title": "PR ready",
+    "msg": "Approve to merge? Did v1. Pull request: https://github.com/o/r/pull/7",
+    "stage": "approval",
+    "pr": "https://github.com/o/r/pull/7"
+  }
+]

@@ -27,5 +27,7 @@ scroll_contract_test.go: Herdr scroll 消息与状态协定
 herdr_test.go: Manager/协议基础回归（含 ErrProtocolTooOld 哨兵与 EnsureRunning 对旧存活服务器只 ping 一次、绝不二次拉起的回归）
 run_cli_test.go: RunCLI 经解析出的二进制执行、失败时带上 stderr 的回归；UpgradeRuntime 决策表（兼容交接不动 stop、旧服务器存活则 stop、命名 session 定域、无服务器不 stop、更新失败浮出 stderr）
 actions_test.go: Herdr 操作基础测试
+plugin.go: Herdr 插件 CLI 边界——PluginListJSON（`herdr plugin list --json`，插件能力门的唯一数据源）与 Manager.InvokePluginAction（本机 session 内运行一个已声明的插件 action，经 sessionEnv 定域，之后回读权威投影供调用方采纳 Herdr 落点焦点；远程机器实例拒绝、不重试）
+plugin_test.go: plugin list 的 argv、invoke 的 argv 形状与空 id 拒绝、远程实例在触达 CLI 之前即被拒绝的回归
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -1,0 +1,63 @@
+{
+  "task": {
+    "id": "proj/1",
+    "title": "Local ready",
+    "stage": "approval",
+    "msg": "Approve to merge? Review: Pass. Did v1.",
+    "description": ""
+  },
+  "failure": null,
+  "review": {
+    "meets": true,
+    "findings": [],
+    "left": 0,
+    "text": "Looks right. Nothing found.",
+    "checks": [],
+    "limitations": [],
+    "artifacts": [],
+    "at": 1792986497331,
+    "head": "0c790c42fb44f53c7b7b0abb6e6f154064e08b1b",
+    "gate": "major",
+    "pass": true,
+    "by": "codex"
+  },
+  "reviews": [
+    {
+      "round": 1,
+      "at": 1792986497354,
+      "by": "codex",
+      "meets": true,
+      "findings": [],
+      "gate": "major",
+      "pass": true,
+      "left": 0,
+      "text": "Looks right. Nothing found.",
+      "checks": [],
+      "limitations": [],
+      "head": "0c790c42fb44f53c7b7b0abb6e6f154064e08b1b"
+    }
+  ],
+  "agent": "claude",
+  "handovers": [],
+  "research": false,
+  "chat": false,
+  "report": null,
+  "plan": null,
+  "pr": null,
+  "worktree": "/scratch/worktrees/proj/work-1-local-ready",
+  "branch": "work/1-local-ready",
+  "kept": null,
+  "stillRunning": null,
+  "inUse": null,
+  "limits": {
+    "time": {
+      "limit": "none"
+    },
+    "tokens": {
+      "limit": "none",
+      "used": 0,
+      "total": 0
+    }
+  },
+  "addedBy": "the human"
+}

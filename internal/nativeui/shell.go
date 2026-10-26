@@ -66,6 +66,8 @@ type Shell struct {
 	projectsOpen         bool
 	agentsOpen           bool
 	pinsOpen             bool
+	tasksOpen            bool
+	foldedBoards         map[string]bool
 	// crumbOpen toggles the three breadcrumb switcher popovers
 	// (project / tab / pane); at most one is open at a time.
 	crumbOpen        [3]bool
@@ -221,6 +223,9 @@ type Shell struct {
 	commandCenterReveal       int
 	commandCenterQueryFocused bool
 	commandCenterIndexCache   *commandcenter.Index
+	// workboard is the herdr-projects plugin gate (workboard_ui.go): every
+	// workboard surface hides unless detection reports it Supported.
+	workboard workboardState
 	// rightPanel owns the Native Right Panel (Changes/Files/Services).
 	rightPanel rightPanelState
 
@@ -515,6 +520,8 @@ func NewShell(opts ...ShellOption) *Shell {
 		projectsOpen:     true,
 		agentsOpen:       true,
 		pinsOpen:         true,
+		tasksOpen:        true,
+		foldedBoards:     make(map[string]bool),
 		expandedProjects: make(map[string]bool),
 		expandedTabs:     make(map[string]bool),
 		loading:          true,
@@ -673,7 +680,14 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	// Window activation re-syncs Git: work done outside the app (editor,
 	// terminal, another tool) must reach the changes list without a manual
 	// refresh; the Refresh button stays as the explicit fallback.
-	win.OnFocus(func() { s.refreshGitOnActivation() })
+	win.OnFocus(func() {
+		s.refreshGitOnActivation()
+		s.detectWorkboard(false)
+		// A task added by the plugin's CLI/TUI raises no Herdr event: re-read
+		// the board on activation (throttled; a no-op while the gate is closed).
+		s.refreshWorkboardTasks(false)
+	})
+	s.detectWorkboard(true)
 	s.reloadInstances(true)
 	s.startHistoryScan()
 	s.startServiceScan()

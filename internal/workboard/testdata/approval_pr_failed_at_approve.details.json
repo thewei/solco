@@ -1,0 +1,50 @@
+{
+  "task": {
+    "id": "proj/1",
+    "title": "CI fails for good",
+    "stage": "approval",
+    "msg": "GitHub's checks failed: build. Send the details to the agent, or merge it anyway",
+    "description": ""
+  },
+  "failure": {
+    "stage": "pr",
+    "remote": true,
+    "remoteKind": "checks",
+    "head": "6ec2d0ab5ddb39f64f9d531228f6e411a09d3fa4",
+    "checks": [
+      "build"
+    ],
+    "why": "Checks failed on the pull request https://github.com/o/r/pull/7: build. Look at them (gh pr checks) and fix them on your branch.",
+    "title": "Pull request checks failed",
+    "detail": "Checks failed on the pull request https://github.com/o/r/pull/7: build. Look at them (gh pr checks) and fix them on your branch.\n\nPull request: https://github.com/o/r/pull/7\n\nbuild (failure):\nThe end of its log (https://github.com/o/r/actions/runs/11/job/22):\nrunning 3 tests\ntest parses_flags ... FAILED\nerror: 1 test failed",
+    "next": "Address this on your own branch and finish again. Local checks do not prove remote CI passed; wait for a fresh remote result.",
+    "agentCanFix": true,
+    "at": 1792986498532,
+    "sentAt": null
+  },
+  "review": null,
+  "reviews": [],
+  "agent": "claude",
+  "handovers": [],
+  "research": false,
+  "chat": false,
+  "report": null,
+  "plan": null,
+  "pr": "https://github.com/o/r/pull/7",
+  "worktree": "/scratch/worktrees/proj/work-1-ci-fails-for-good",
+  "branch": "work/1-ci-fails-for-good",
+  "kept": null,
+  "stillRunning": null,
+  "inUse": null,
+  "limits": {
+    "time": {
+      "limit": "none"
+    },
+    "tokens": {
+      "limit": "none",
+      "used": 0,
+      "total": 0
+    }
+  },
+  "addedBy": "the human"
+}

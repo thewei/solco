@@ -69,6 +69,7 @@ func (s *Shell) sidebar(c *ui.Context) {
 					s.pinnedItemsView(c)
 				})
 			}
+			s.projectsSection(c)
 			s.workspaceSection(c)
 			// The widget's own Surface fill is dropped (2026-10-06): the
 			// Agents/Workspace blocks sit on the window gradient like the

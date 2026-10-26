@@ -11,7 +11,7 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo 的 Flyout（Tray/Parent 锚定、Popover 系统材质、菜单式关闭与 Escape）、ui.Segmented、agent_card 共享卡片、agent_quick_panel 的分组与条目行
- * [OUTPUT]: 对外提供 Shell.QuickPanelView（Agents 按状态分组的列表 / Services）、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
+ * [OUTPUT]: 对外提供 Shell.QuickPanelView（Agents 按状态分组的列表 / Services / Tasks——仅 herdr-projects 门打开时）、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
  * [POS]: Agent 活动的唯一浮层：托盘/标题栏打开，一层到底——点击 Agent 直达其面板并收起浮层，没有第二层详情；同一 Flyout 生命周期，锚定/贴边/翻转/关闭归框架
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,6 +28,10 @@ import (
 
 // QuickPanelWidth is the §17.1 suggested panel width (360–420 DIP).
 const QuickPanelWidth = 400
+
+// quickPanelTasksTab is the Tasks tab's index; it exists only while the
+// herdr-projects plugin gate is open.
+const quickPanelTasksTab = 2
 
 // QuickPanelHeight caps the content-driven height; the rows scroll inside
 // beyond it. The flyout shrinks to fit a small work area on its own.
@@ -94,14 +98,25 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 	}
 	body.Children(func() {
 		ui.Row(c).FillWidth().Padding(sp.M, sp.M, sp.XS).Children(func() {
-			view := s.quickPanelTab
-			if ui.Segmented(c, &view, "Agents", "Services").FillWidth().Changed() {
+			view := s.quickPanelTabIndex()
+			labels := []string{"Agents", "Services"}
+			if s.workboardAvailable() {
+				labels = append(labels, "Tasks")
+			}
+			if ui.Segmented(c, &view, labels...).FillWidth().Changed() {
 				s.quickPanelTab = view
+				if view == quickPanelTasksTab {
+					s.refreshWorkboardTasks(true)
+				}
 				s.fitQuickPanel()
 			}
 		})
-		if s.quickPanelTab == 1 {
+		switch s.quickPanelTabIndex() {
+		case 1:
 			s.quickPanelServices(c)
+			return
+		case quickPanelTasksTab:
+			s.quickPanelTasks(c)
 			return
 		}
 		if s.offline {
@@ -134,6 +149,15 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 			})
 		})
 	})
+}
+
+// quickPanelTabIndex is the tab to show: the Tasks tab collapses back to
+// Agents the moment its plugin gate closes.
+func (s *Shell) quickPanelTabIndex() int {
+	if s.quickPanelTab == quickPanelTasksTab && !s.workboardAvailable() {
+		return 0
+	}
+	return s.quickPanelTab
 }
 
 // filterStatusEntries narrows the shared snapshot to the active tab-group
@@ -228,6 +252,9 @@ func (s *Shell) openQuickPanelFlyout(base mygo.FlyoutOptions) {
 	// The actionable rows' usage captions refresh right before showing,
 	// forced past the throttle.
 	s.refreshUsageProjection(true)
+	if s.quickPanelTabIndex() == quickPanelTasksTab {
+		s.refreshWorkboardTasks(true)
+	}
 	base.Width = QuickPanelWidth
 	base.Height = s.quickPanelContentHeight()
 	base.Focusable = true
@@ -271,8 +298,11 @@ func (s *Shell) invalidateQuickPanel() {
 // (§17.1): the fixed Services tab, or the Agents list's content-driven
 // height (the Reconnect row included while Herdr is unreachable).
 func (s *Shell) quickPanelContentHeight() int {
-	if s.quickPanelTab == 1 {
+	switch s.quickPanelTabIndex() {
+	case 1:
 		return QuickPanelHeight
+	case quickPanelTasksTab:
+		return s.quickPanelTasksHeight()
 	}
 	entries := s.filterStatusEntries(s.BuildStatusCenterSnapshot())
 	captions := 0

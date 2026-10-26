@@ -96,6 +96,8 @@ func (s *Shell) captureSession() settings.SessionSettings {
 		ProjectsOpen:      s.projectsOpen,
 		AgentsOpen:        s.agentsOpen,
 		PinsOpen:          s.pinsOpen,
+		TasksClosed:       !s.tasksOpen,
+		FoldedBoards:      sortedSetKeys(s.foldedBoards),
 		ExpandedProjects:  sortedSetKeys(s.expandedProjects),
 		ExpandedTabs:      sortedSetKeys(s.expandedTabs),
 		SidebarWidth:      int(s.sidebarW),
@@ -159,6 +161,10 @@ func (s *Shell) restoreSession() {
 	s.projectsOpen = session.ProjectsOpen
 	s.agentsOpen = session.AgentsOpen
 	s.pinsOpen = session.PinsOpen
+	s.tasksOpen = !session.TasksClosed
+	for _, name := range session.FoldedBoards {
+		s.foldedBoards[name] = true
+	}
 	for _, id := range session.ExpandedProjects {
 		s.expandedProjects[id] = true
 	}

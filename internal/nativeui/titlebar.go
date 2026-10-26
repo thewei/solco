@@ -356,12 +356,17 @@ func (s *Shell) titlebarActivity(c *ui.Context, k *gorexColors) {
 	var tone StatusTone
 	total := 0
 	if summary != nil {
+		// Work-board tasks that need the human fold into the same attention
+		// and review counts (one aggregation); tasks whose Agent is already
+		// listed are not counted twice.
+		taskAttention, taskReview := headerTaskCounts(s.actionableTasks(), summary.Entries)
+		attention, review := summary.NeedsAttention+taskAttention, summary.ReviewPending+taskReview
 		parts := make([]string, 0, 3)
-		if summary.NeedsAttention > 0 {
-			parts = append(parts, strconv.Itoa(summary.NeedsAttention)+" attention")
+		if attention > 0 {
+			parts = append(parts, strconv.Itoa(attention)+" attention")
 		}
-		if summary.ReviewPending > 0 {
-			parts = append(parts, strconv.Itoa(summary.ReviewPending)+" review")
+		if review > 0 {
+			parts = append(parts, strconv.Itoa(review)+" review")
 		}
 		if summary.Working > 0 {
 			parts = append(parts, strconv.Itoa(summary.Working)+" working")
@@ -370,14 +375,14 @@ func (s *Shell) titlebarActivity(c *ui.Context, k *gorexColors) {
 			label = strings.Join(parts, " · ")
 		}
 		switch {
-		case summary.NeedsAttention > 0:
+		case attention > 0:
 			tone = ToneAttention
-		case summary.ReviewPending > 0:
+		case review > 0:
 			tone = ToneSuccess
 		case summary.Working > 0:
 			tone = ToneWorking
 		}
-		total = summary.NeedsAttention + summary.ReviewPending + summary.Working
+		total = attention + review + summary.Working
 	}
 
 	var anchor ui.Element

@@ -70,6 +70,14 @@ func (s *Shell) settingsNav(c *ui.Context) {
 			s.router.Push(section.path)
 		}
 	}
+	// The plugin's own settings: present only while the plugin gate is open.
+	if s.workboardAvailable() {
+		section := workboardSettingsSection
+		selected := s.router.Path() == section.path
+		if navTileButton(c, section.icon, section.tone, section.label, selected).Clicked() && !selected {
+			s.router.Push(section.path)
+		}
+	}
 }
 
 // settingsPage is the one layout owner for Settings. The title bar names the
@@ -103,6 +111,9 @@ func (s *Shell) settingsLayout(c *ui.Context, r *ui.Route) {
 			case r.Match("/git"):
 				r.Title("Settings · Git")
 				settingsPage(c, func() { s.settingsGit(c) })
+			case r.Match("/workboard"):
+				r.Title("Settings · Work Board")
+				settingsPage(c, func() { s.settingsWorkboard(c) })
 			case r.Match("/diagnostics"):
 				r.Title("Settings · Diagnostics")
 				settingsPage(c, func() { s.settingsDiagnostics(c) })

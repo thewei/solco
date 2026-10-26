@@ -1,0 +1,26 @@
+[
+  {
+    "id": "proj/1",
+    "state": "blocked",
+    "kind": "permission",
+    "app": "claude",
+    "title": "Local ready",
+    "msg": "Approve to merge? Review: Pass. Did v1.",
+    "stage": "approval",
+    "review": {
+      "meets": true,
+      "findings": [],
+      "left": 0,
+      "text": "Looks right. Nothing found.",
+      "checks": [],
+      "limitations": [],
+      "artifacts": [],
+      "at": 1792986497331,
+      "head": "0c790c42fb44f53c7b7b0abb6e6f154064e08b1b",
+      "gate": "major",
+      "pass": true,
+      "by": "codex"
+    },
+    "reviewRound": 1
+  }
+]

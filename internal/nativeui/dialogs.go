@@ -124,6 +124,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 			}
 		})
 	}
+	s.newTaskDialog(c)
 	if s.confirmOpen {
 		// Destructive confirms must not default-focus the destructive
 		// button: AlertDialog focuses and Enter-clicks its LAST button, so
@@ -167,6 +168,8 @@ func (s *Shell) submitTextDialog(kind, target, value string) {
 		}
 	case "files-new-file", "files-new-dir", "files-rename":
 		s.runFilesMutation(kind, target, value)
+	case workboardPlanBackDialog:
+		s.submitWorkboardPlanBack(target, value)
 	}
 }
 
@@ -194,6 +197,19 @@ func (s *Shell) submitConfirm(kind, target string) {
 		s.deleteFromTrash(strings.Split(target, confirmIDSeparator))
 	case emptyTrashConfirm:
 		s.emptyTrash()
+	case workboardApproveConfirm:
+		s.runWorkboardAction("approve", target)
+	case workboardApprovePlanConfirm:
+		s.runWorkboardAction("approve-plan", target)
+	case workboardStartNowConfirm:
+		s.runWorkboardAction("start-now", target)
+	case workboardStopConfirm:
+		s.runWorkboardAction("stop", target)
+	case boardArchiveDoneConfirm, boardArchiveProjectConfirm, boardRestoreProjectConfirm,
+		boardClearConfirm, boardCoordinatorNewConfirm, boardAutopilotOnConfirm,
+		boardAutomationRunConfirm, boardAutomationRemoveConfirm:
+		op, _ := boardManageConfirmed(kind)
+		s.runBoardManage(op, target)
 	default:
 		s.runGitConfirm(kind, target)
 	}

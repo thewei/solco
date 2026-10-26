@@ -22,6 +22,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 	}
 	projects := orderedProjects(s.projection)
 	activity := buildSidebarActivity(s.projection, s.serviceIndex)
+	mergeTaskActivity(activity, s.actionableTasks())
 	for _, project := range projects {
 		project := project
 		selectedProject := project.ID == s.selectedProjectID

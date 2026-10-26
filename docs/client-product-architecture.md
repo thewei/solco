@@ -453,6 +453,128 @@ Detailed execution/audit documents:
 - `docs/mygo-native-0.10.0-git-workbench-primary-surface-plan.md`
 - `docs/prompts/mygo-native-0.10.0-git-workbench-primary-surface-implementation-prompt.md`
 
+### Approved Next (2026-10-26) — herdr-projects work board (the one plugin exception)
+
+Shardlane presents the task board of one specific Herdr plugin,
+[`herdr-projects`](https://github.com/eliasstravik/herdr-projects), natively.
+This is the single, named exception to the "no plugin UI" non-goal in §2: it is
+not a plugin host, marketplace or generic plugin surface, and no other plugin
+earns the same treatment without its own dated decision.
+
+- **Authority.** The plugin owns tasks, their review/merge state machine and
+  their store (`~/.herdr-projects`). Shardlane never stores tasks, never reads
+  or writes those files, never creates worktrees or merges, and never
+  reimplements the Coordinator or Watcher. It reads and acts only through the
+  plugin's own CLI (`sh <plugin_root>/bin/run.sh <command> --json`, the root
+  re-resolved on every detection) and Herdr's own plugin commands. The only
+  client-side state permitted is bounded "this exact revision was handled"
+  receipts, the same discipline as Activity. Every delegated task is an
+  ordinary Herdr worktree workspace with an ordinary Agent, so it already
+  appears as a Project/Agent; the plugin adds only the task layer above them.
+- **Capability gate (zero trace).** Detection is Herdr's own
+  `herdr plugin list --json`: the plugin must be installed, enabled, inside the
+  verified version window (`1.2.x`, an explicit range like the protocol range,
+  not open-ended) and declare the `open` action and `board` pane
+  (`internal/workboard.Detect`). Until it reports Supported — and always on a
+  remote machine instance, whose plugin set is not this Mac's — the palette
+  entry, Header/Project indicators, `/tasks` route and every poll or CLI call
+  are absent. There is no empty state and no install button. Detection runs at
+  startup and on window activation (30 s debounce), never while opening the
+  palette (the palette stays zero-IO).
+- **Phases (each independently mergeable).** (1) the palette's "Open Work
+  Board": the plugin's own `open` action (which keeps its one-board-per-machine
+  rule) followed by adopting the focus Herdr ends on — the sanctioned
+  user-initiated selection seam — so the board Tab renders in the native
+  Terminal; (2) a read-only Tasks tab in the Header Agent activity popover
+  (groups mapped onto the shared attention priority, deduplicated against
+  Agents, with a Header aggregate and Project-row glyphs); (3) a `/tasks`
+  destination reached only from the popover and the palette — detail plus
+  Approve (shared confirm; a merge cannot be undone), Send back/Retry, Stop (the plugin refuses Archive while an Agent runs), New task
+  and Archive. Conversation with a task's Agent or the Coordinator reuses the
+  existing Chat View and `agent.prompt`; review diffs open the task's Project
+  in Git. A task joins its Project through `details.worktree` against the Herdr
+  workspace's worktree path (`/tmp`, `/var`, `/etc` and their `/private` forms
+  count as the same path, found on the real machine); an unmatched task stays listed and opens the TUI
+  board instead of guessing from branch names.
+- **Group derivation (decided 2026-10-26).** `herdr-projects --json` does not
+  expose the plugin's own group or its `mergeFailed` / `syncBlocked` /
+  `prFailure` / `prState` flags, and Shardlane does not read the plugin's
+  files or depend on an upstream change. Groups are derived in Go
+  (`internal/workboard.GroupOf`) and every doubt falls toward "Needs you": a
+  task is "Ready to approve" only when stage is `approval`, state `blocked`,
+  kind `permission`, its status note still opens with the plugin's own
+  "Approve to merge?" (a failing pull request makes the plugin overwrite it,
+  which is how the hidden `prFailure` becomes visible), its `details` were
+  read, `details.failure` is empty and the review is not failed. The Approve click re-reads `details`
+  first and never passes `--anyway`, so the plugin's own checks remain the last
+  backstop. Support is pinned to plugin 1.2.x with contract tests built from
+  samples captured from the plugin's own test world (ready locally, ready with
+  a pull request, checks failed at Approve, checks failed while polled). Tasks tab rows carry only the last read (a cache, never an
+  authority), refreshed on panel open, tab switch, plugin-gate open and Herdr projection
+  events (3 s throttle while the Tasks tab is on screen, 15 s otherwise so the
+  Header aggregate and Project glyphs stay current) — there is no timer. Tasks
+  that need the human fold into the Header badge's existing attention/review
+  counts (one aggregation; a task whose Project already has an Agent in the
+  activity snapshot is not counted twice) and light the Project row's
+  icon-corner dot (Needs you outranks everything but attention; Ready only
+  fills an empty or idle dot).
+- **Writes (2026-10-26, phase 3a).** The Tasks tab writes only through the
+  plugin's own CLI verbs, as the human (no pane identity): `approve` (behind
+  the shared confirm; re-reads list + details at execution and runs only while
+  the task is still Ready; never `--anyway`), `review` / `retry` / `fix`
+  (send back), `delegate`, `stop`, `archive`, and `add [--repo <git root of the current
+  Project>] [--delegate]`. Actions live on the row's context menu and the
+  footer; the plugin decides what applies and its refusal text is shown as a
+  bounded toast. Shardlane keeps no task state of its own. A Tasks row opens the
+  task page (`/task`, one task at a time; the id lives in Shell state because
+  task ids contain `/`, and the route is never restored on relaunch): the
+  group's writes as prominent buttons (Approve the one primary action), an
+  Open Project button when `details.worktree` joins a Project, then status,
+  description, failure and review text as the plugin reported them, clipped.
+- **Sidebar Projects section (2026-10-26, Projects phase 1).** One more Phase 2 adds the `/project` page (the plugin TUI board in one Project: filter row with counts, foldable status groups, a bottom message box that talks to the Project's coordinator via `coordinator --project <name> tell`, and Project-scoped New Task via `add --repo`); the Task page gets the same box wired to `tell <id>`. Both boxes are write-only text relays — no client-owned chat or runtime. Phase 3 adds the plugin's own ★ pins (`list --pinned --json`, `pin`/`unpin` for tasks and Projects; pinned Projects lead the list and stay listed even without tasks) and each Project's coordinator status from `coordinator --project <repo> status --json` (state + Herdr pane; Open Coordinator selects that pane when this session shows it). Both are read through the plugin CLI only — no tab-name or private-store joins — and a failed extra read only leaves that extra out.
+  Sidebar section between Pin and Workspace, drawn only while the plugin gate
+  is open. Each row is a Project (repo) shown by its name, with a corner dot
+  for its most urgent open task and its open-task count; unfolded, its open
+  tasks sit beneath in the board's status order (needs you / ready to approve /
+  working / to do; Done stays in the plugin's board, a Project with only
+  finished work is still listed). Clicking a Project folds it, a task opens the
+  task page, the task right-click menu is the popover's, the header "+" and menu
+  offer New Task / Add and Delegate / Open Work Board. The Project list is
+  derived from the task ids of `list --json` — the plugin has no projects JSON,
+  and its `~/.herdr-projects/data/tasks/<repo>/` folders hold exactly that set;
+  Shardlane does not read or write the plugin's private store (any metadata it
+  needs lives in Shardlane's own settings). It reads the same cached board as
+  the popover — derived, never a registry; only folds persist (`tasks_closed`,
+  stored inverted, and `folded_boards`; both default to open).
+- **Project page, pins, coordinators (2026-10-26, shipped).** `/project` mirrors
+  the plugin TUI (filters, foldable groups, message box → `coordinator --project
+  R tell`, ★ pins, coordinator status/said/Open Coordinator); `/task` shows the
+  task's details.
+- **P4–P7 + Settings (2026-10-26, user-authorized).** *Correctness:* a plan-ready
+  task (stage `plan`) offers Approve Plan… (re-listed, requires `plan` stage,
+  never `--anyway`) and Send Plan Back…; a `pick` task offers no recovery verb
+  (attempts are shown read-only, the pick is made in the plugin's board); a task
+  queued `after` others offers Start Now… (`delegate --now`). *Read parity:* row
+  marks (agent, R#, PR#, Q#), the coordinator's latest `said`, and on the task
+  page Plan, Review findings by severity and earlier rounds, Report (opens the
+  served link or the file), limits, handovers, attempts, queue. *Management:*
+  `/archived` (restore, remove after confirm, Restore Project), Project menu
+  (Archive Done Tasks…, Archive Project… with its real consequences — running
+  work and the coordinator stop, automations turn off — counted confirms,
+  Coordinator Restart/New/Stop, Autopilot On… with a token-cost confirm).
+  *Creation/automations:* New Task dialog (title, description, Task/Research/Chat,
+  After, start now); Automations group on the Project page (on/off, Run… and
+  Remove… after confirm; creation stays "tell the coordinator"). *Settings:* a
+  `/settings/workboard` section, only while the gate is open, scoped to
+  Everywhere / a Project / a Project's coordinator, rendering exactly what
+  `show --json` returns for that scope (switch for booleans, text otherwise);
+  validation and refusal text are the plugin's. Voice, Web UI, cross-machine and
+  key settings are not shown. Every write goes through the single
+  `workboardWrite` channel; Shardlane copies no option sets.
+- **Not included.** Attempt picking, cross-machine boards, voice/Web UI/keys,
+  automation creation, plugin install/update, folding task workspaces under
+  their repo in the Sidebar.
+
 ### Multi-instance model (current — 2026-09-01 no-registry revision)
 
 A **Workspace is one live Herdr instance** (a named Herdr session). There is
@@ -499,7 +621,7 @@ V1 does not add:
 - a second pane-layout model independent of Herdr;
 - direct external-terminal orchestration for Herdr runtime sessions;
 - general-purpose browsing as a product surface;
-- plugin/marketplace UI;
+- plugin/marketplace UI (the single named exception is the `herdr-projects` work board, see §1 "Approved Next (2026-10-26)");
 - cloud accounts;
 - telemetry.
 
