@@ -49,7 +49,8 @@ git diff --cached --check
 - Native window contracts: ⌘W closes the focused Tab through the shared close-tab confirm — never the window; the native window title mirrors the current route via `Shell.syncWindowTitle` (Workspace stays the bare app name).
 - Logs are structured and size-bounded under MyGo `PathLogs` (2 MiB active + 3 backups by default). Never log terminal bytes/output, prompt or conversation bodies, credentials, auth headers, provider secrets, or environment dumps; log operation names, stable runtime IDs, errors, state counts, and timing.
 - Keep MyGo pinned exactly until an explicit framework upgrade is verified.
-- Still forbidden: a second Shardlane runtime implementation, a mode switch, Notes/Bookmarks/Annotation, plugin UI/marketplace (the `herdr-projects` work board above is the one named exception), cloud accounts, telemetry.
+- Product decision 2026-10-26 (view switch): Settings → Work Board carries a `Native | Board` switch (`General.WorkboardView`, default **Board**). Board: every Project/task row and native-page entry opens the plugin's own board Tab (`openWorkBoard`); Native: Shardlane's `/project`, `/task`, `/archived` pages, kept under trial until the user releases them by changing the default. The switch exists only while the plugin gate is open; both views read the plugin's CLI and never a second store.
+- Still forbidden: a second Shardlane runtime implementation, a mode switch (the `herdr-projects` Native | Board view switch above is the one named exception), Notes/Bookmarks/Annotation, plugin UI/marketplace (the `herdr-projects` work board above is the one named exception), cloud accounts, telemetry.
 
 ## Git safety
 

@@ -30,6 +30,11 @@ type workboardPage struct {
 
 // openWorkboardTaskPage opens the task page from the Tasks tab.
 func (s *Shell) openWorkboardTaskPage(id string) {
+	if s.workboardBoardMode() {
+		s.hideQuickPanel()
+		s.openWorkBoard()
+		return
+	}
 	s.hideQuickPanel()
 	page := workboardPage{id: id}
 	if d, ok := s.workboard.board.details[id]; ok {

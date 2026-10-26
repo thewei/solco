@@ -24,6 +24,7 @@ func projectsSectionShell(t *testing.T, opts ...ShellOption) *Shell {
 	t.Helper()
 	s := NewShell(opts...)
 	s.workboard.avail = workboard.Availability{Installed: true, Enabled: true, Version: "1.2.26", Root: "/plugin", Supported: true}
+	s.settings.General.WorkboardView = "native" // these tests exercise the native pages
 	s.loading = false
 	s.activeInstance = "default"
 	s.projection = herdr.Projection{Projects: []herdr.Project{{ID: "w1", Label: "herdr-client", CWD: "/work/app"}}}
@@ -167,5 +168,77 @@ func TestFoldedProjectHidesItsTasksInTheSidebar(t *testing.T) {
 	tt := ui.NewTester(s.View, 1200, 800)
 	if tt.HasText("Later work") || !tt.HasText("site") || !tt.HasText("Busy") {
 		t.Fatalf("a folded project keeps its row and drops its tasks, others stay: %q", tt.Texts())
+	}
+}
+
+func TestBoardIsTheDefaultViewAndEveryNativePageEntryOpensTheBoardTab(t *testing.T) {
+	s := projectsSectionShell(t)
+	s.settings.General.WorkboardView = "" // a fresh install
+	if !s.workboardBoardMode() {
+		t.Fatal("unset means the plugin's own board")
+	}
+	s.router.Push("/settings/workboard")
+	for name, open := range map[string]func(){
+		"task page":    func() { s.openWorkboardTaskPage("app/1") },
+		"project page": func() { s.openWorkboardProjectPage("app") },
+		"archived":     s.openWorkboardArchived,
+	} {
+		s.router.Push("/settings/workboard")
+		open()
+		if got := s.router.Path(); got != "/workspace" {
+			t.Fatalf("%s in Board view: path = %q, want the Terminal (the board Tab opens there)", name, got)
+		}
+	}
+	if s.workboard.page.id != "" || s.workboard.project.name != "" {
+		t.Fatalf("Board view must not prepare native pages: page=%q project=%q", s.workboard.page.id, s.workboard.project.name)
+	}
+	s.settings.General.WorkboardView = "native"
+	s.openWorkboardTaskPage("app/1")
+	if s.router.Path() != routeTask {
+		t.Fatalf("Native view opens the task page, got %q", s.router.Path())
+	}
+}
+
+func TestSettingsCarriesTheNativeBoardSwitch(t *testing.T) {
+	for _, tc := range []struct {
+		view  string
+		click string
+		want  string
+	}{{"", "Native", "native"}, {"native", "Board", "board"}} {
+		var ran []string
+		s := settingsShell(t, &ran, nil)
+		s.settings.General.WorkboardView = tc.view
+		ui.NewTester(s.settingsWorkboard, 900, 1400) // first read
+		tt := ui.NewTester(s.settingsWorkboard, 900, 1400)
+		for _, want := range []string{"View", "Work board", "Native", "Board"} {
+			if !tt.HasText(want) {
+				t.Fatalf("settings page missing %q: %q", want, tt.Texts())
+			}
+		}
+		if err := tt.Click(tc.click); err != nil {
+			t.Fatal(err)
+		}
+		if got := s.settings.General.WorkboardView; got != tc.want {
+			t.Fatalf("clicking %q: WorkboardView = %q, want %q", tc.click, got, tc.want)
+		}
+	}
+}
+
+func TestProjectsHeaderStaysFreeOfTheViewSwitch(t *testing.T) {
+	s := projectsSectionShell(t)
+	if tt := ui.NewTester(s.sidebar, 300, 600); !tt.HasText("Projects") || tt.HasText("Native") {
+		t.Fatalf("the switch lives in Settings, not the sidebar: %q", tt.Texts())
+	}
+}
+
+func TestGateClosedHidesTheViewSwitch(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	s.workboard.avail.Supported = false
+	if tt := ui.NewTester(s.settingsWorkboard, 900, 600); tt.HasText("Native") || !tt.HasText("The work board isn't available") {
+		t.Fatalf("gate closed, no trace: %q", tt.Texts())
+	}
+	if tt := ui.NewTester(s.sidebar, 300, 600); tt.HasText("Projects") {
+		t.Fatalf("gate closed, no Projects section: %q", tt.Texts())
 	}
 }

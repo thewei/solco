@@ -23,6 +23,9 @@ const (
 	OpenAction = "open"
 	// BoardPane is the plugin pane entrypoint the open action relies on.
 	BoardPane = "board"
+	// BoardPaneTitle is the title the manifest gives that pane: how the opened
+	// board is found in a Herdr projection (plugin panes carry no plugin id).
+	BoardPaneTitle = "Work board"
 
 	// The verified plugin line is 1.2.x. Like the Herdr protocol range this
 	// is an explicit window, not equality and not open-ended forward

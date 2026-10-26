@@ -43,6 +43,11 @@ type workboardArchived struct {
 
 // openWorkboardArchived opens the archived page and reads the list.
 func (s *Shell) openWorkboardArchived() {
+	if s.workboardBoardMode() {
+		s.hideQuickPanel()
+		s.openWorkBoard()
+		return
+	}
 	s.hideQuickPanel()
 	if s.router.Path() == routeArchived {
 		s.router.Replace(routeArchived)

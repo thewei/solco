@@ -47,3 +47,44 @@ func (m *Manager) InvokePluginAction(ctx context.Context, session, pluginID, act
 	}
 	return m.projectionReadyAt(socket)
 }
+
+// pluginPaneFocusArgs is the argv of focusing one plugin-owned pane.
+func pluginPaneFocusArgs(paneID string) []string {
+	return []string{"plugin", "pane", "focus", strings.TrimSpace(paneID)}
+}
+
+// pluginPaneToFocus finds the plugin pane the manifest titles `title` in a
+// projection and says whether it still needs the focus. Plugin panes carry no
+// plugin id in the snapshot, so the plugin's declared pane title is the key.
+func pluginPaneToFocus(p Projection, title string) (paneID string, needsFocus bool) {
+	for _, pane := range p.Panes {
+		if pane.Label == title && pane.ID != "" {
+			return pane.ID, pane.ID != p.FocusedPaneID
+		}
+	}
+	return "", false
+}
+
+// FocusPluginPane makes sure the plugin pane titled `title` has Herdr's focus
+// after a plugin action: an action invoked from outside a Herdr client (as
+// Shardlane does) opens its Tab but leaves the focus where it was. The focus
+// itself is Herdr's own `plugin pane focus`; `from` is the projection the
+// action returned. With no such pane, or when it is already focused, `from`
+// is returned unchanged.
+func (m *Manager) FocusPluginPane(ctx context.Context, session, title string, from Projection) (Projection, error) {
+	if err := guardLocalInstance(session, "focusing a plugin pane"); err != nil {
+		return Projection{}, err
+	}
+	paneID, needs := pluginPaneToFocus(from, title)
+	if !needs {
+		return from, nil
+	}
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return Projection{}, err
+	}
+	if _, err := runCLIEnv(ctx, pluginPaneFocusArgs(paneID), sessionEnv(ParseRef(session).Session)); err != nil {
+		return Projection{}, err
+	}
+	return m.projectionReadyAt(socket)
+}

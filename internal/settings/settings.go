@@ -51,10 +51,19 @@ type GeneralSettings struct {
 	// shows the truthful "preview off" states instead. Always persisted,
 	// same reason as WebViewChat.
 	WebViewFilesPreview bool `json:"webview_files_preview"`
+	// WorkboardView picks how the herdr-projects work board shows up when
+	// the plugin is installed: "board" (the default: Project/task rows open
+	// the plugin's own board Tab) or "native" (Shardlane's Project and task
+	// pages). User decision 2026-10-26; the native pages stay under trial.
+	WorkboardView string `json:"workboard_view,omitempty"`
 	// Opacity controls the transparency of the application window shell
 	// (0.50 to 1.00). An unset (0) or out-of-range value defaults to 1.00 (opaque).
 	Opacity float64 `json:"opacity,omitempty"`
 }
+
+// WorkboardNative reports the opt-in native work board pages; anything but
+// "native" (including unset) keeps the plugin's own board.
+func (g GeneralSettings) WorkboardNative() bool { return g.WorkboardView == "native" }
 
 // EffectiveOpacity returns the window shell opacity, clamped to [0.50, 1.00].
 // Unset or invalid values (<= 0 or > 1.00) safely default to 1.00 (fully opaque).

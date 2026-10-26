@@ -46,6 +46,11 @@ type workboardProjectPage struct {
 
 // openWorkboardProjectPage opens the Project page from the sidebar.
 func (s *Shell) openWorkboardProjectPage(name string) {
+	if s.workboardBoardMode() {
+		s.hideQuickPanel()
+		s.openWorkBoard()
+		return
+	}
 	s.hideQuickPanel()
 	if s.workboard.project.name != name {
 		s.workboard.project = workboardProjectPage{name: name, foldedBy: map[workboard.Group]bool{}}

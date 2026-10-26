@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 internal/workboard 的 settings.go（Settings/SetSetting/UnsetSetting/Scope）、workboardWrite 单一写通道、settingsGroup/row/settingSwitch 共享设置组件、board 缓存的 Project 名
  * [OUTPUT]: workboardSettingsSection（Settings 导航项，仅插件可用时出现）、Shell.settingsWorkboard（页面：范围选择 → 过滤 → 按前缀分组的设置行）、loadWorkboardSettings
- * [POS]: herdr-projects 设置的原生页（用户 2026-10-26 显式授权，越过 AGENTS.md「禁止插件 UI」，仅限本插件设置）：只画插件 `show --json` 在当前范围（Everywhere / 某 Project / 某 Project 的协调者）返回的那份设置——JSON 不带选项表：布尔用开关，钉住规格表（workboard.SpecFor）命中的用选择型控件（workboard_settings_controls.go），其余与值不合规者降级文本输入，取值校验与拒绝原文全归插件；跨机器/Web UI/语音/快捷键类设置不收录（产品范围已定不集成）；own 的行给 Reset（unset）
+ * [POS]: herdr-projects 设置的原生页（用户 2026-10-26 显式授权，越过 AGENTS.md「禁止插件 UI」，仅限本插件设置）：只画插件 `show --json` 在当前范围（Everywhere / 某 Project / 某 Project 的协调者）返回的那份设置——JSON 不带选项表：布尔用开关，钉住规格表（workboard.SpecFor）命中的用选择型控件（workboard_settings_controls.go），其余与值不合规者降级文本输入，取值校验与拒绝原文全归插件；跨机器/Web UI/语音/快捷键类设置不收录（产品范围已定不集成）；own 的行给 Reset（unset）；页顶 View 组承载 Native | Board 视图切换（General.WorkboardView，默认 Board）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -196,6 +196,17 @@ func (s *Shell) settingsWorkboard(c *ui.Context) {
 		st.modelsTried = true
 		s.loadWorkboardModels()
 	}
+
+	settingsGroup(c, "View",
+		row("Work board", "Board opens the plugin's own board Tab from every task and project row; Native keeps Shardlane's pages.", func() {
+			idx := 1
+			if s.settings.General.WorkboardNative() {
+				idx = 0
+			}
+			if ui.Segmented(c, &idx, "Native", "Board").Label("Work board view").Changed() {
+				s.setWorkboardView(idx == 0)
+			}
+		}))
 
 	scopeRows := []settingsRow{row("Applies to", "", func() {
 		choice := st.scope

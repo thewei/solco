@@ -102,3 +102,11 @@ func TestFileStoreIgnoresTheRetiredHiddenSessionsList(t *testing.T) {
 		t.Fatalf("the retired list was written back: %s", data)
 	}
 }
+
+func TestWorkboardViewDefaultsToTheBoardAndOnlyNativeOptsIn(t *testing.T) {
+	for view, want := range map[string]bool{"": false, "board": false, "native": true, "garbage": false} {
+		if got := (GeneralSettings{WorkboardView: view}).WorkboardNative(); got != want {
+			t.Errorf("WorkboardView %q: WorkboardNative = %v, want %v", view, got, want)
+		}
+	}
+}

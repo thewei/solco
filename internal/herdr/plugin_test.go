@@ -50,3 +50,43 @@ func TestInvokePluginActionRefusesRemoteInstances(t *testing.T) {
 		t.Fatal("a refused remote action must not reach the Herdr CLI")
 	}
 }
+
+func TestPluginPaneFocusTargetsTheManifestTitledPaneOnlyWhenUnfocused(t *testing.T) {
+	p := Projection{
+		FocusedPaneID: "w1:p2",
+		Panes: []Pane{
+			{ID: "w1:p2", Label: "Claude Code"},
+			{ID: "w1:p7", Label: "Work board"},
+		},
+	}
+	if id, needs := pluginPaneToFocus(p, "Work board"); id != "w1:p7" || !needs {
+		t.Fatalf("unfocused board: %q %v", id, needs)
+	}
+	p.FocusedPaneID = "w1:p7"
+	if id, needs := pluginPaneToFocus(p, "Work board"); id != "w1:p7" || needs {
+		t.Fatalf("already focused: %q %v", id, needs)
+	}
+	if id, needs := pluginPaneToFocus(p, "Nope"); id != "" || needs {
+		t.Fatalf("absent pane: %q %v", id, needs)
+	}
+	if got := pluginPaneFocusArgs(" w1:p7 "); !reflect.DeepEqual(got, []string{"plugin", "pane", "focus", "w1:p7"}) {
+		t.Fatalf("argv = %v", got)
+	}
+}
+
+func TestFocusPluginPaneLeavesAFocusedOrMissingBoardAloneAndRefusesRemotes(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "calls")
+	t.Setenv("PLUGIN_CALL_LOG", log)
+	fakeHerdr(t, `echo "$@" >> "$PLUGIN_CALL_LOG"`)
+	focused := Projection{FocusedPaneID: "w1:p7", Panes: []Pane{{ID: "w1:p7", Label: "Work board"}}}
+	got, err := (&Manager{}).FocusPluginPane(context.Background(), "default", "Work board", focused)
+	if err != nil || got.FocusedPaneID != "w1:p7" {
+		t.Fatalf("focused: %v %v", got.FocusedPaneID, err)
+	}
+	if _, statErr := os.Stat(log); statErr == nil {
+		t.Fatal("nothing to focus must not reach the Herdr CLI")
+	}
+	if _, err := (&Manager{}).FocusPluginPane(context.Background(), MachineInstanceKey("vm-1"), "Work board", Projection{}); err == nil {
+		t.Fatal("a remote machine is refused")
+	}
+}

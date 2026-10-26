@@ -550,6 +550,7 @@ earns the same treatment without its own dated decision.
   the plugin TUI (filters, foldable groups, message box → `coordinator --project
   R tell`, ★ pins, coordinator status/said/Open Coordinator); `/task` shows the
   task's details.
+- **Native | Board view switch (2026-10-26, user-authorized).** `General.WorkboardView` (`board` default / `native`) is a segmented control atop Settings → Work Board, present only while the plugin gate is open. Board view: the three native page entries (`openWorkboardTaskPage`, `openWorkboardProjectPage`, `openWorkboardArchived`) open the plugin's own board Tab instead, so sidebar rows, the Header popover and the quick panel all act as status navigation into the TUI (the TUI cannot be pre-focused on a project; the plugin allows one board per machine). Native view keeps the pages for continued trial; releasing them is a change of the default.
 - **P4–P7 + Settings (2026-10-26, user-authorized).** *Correctness:* a plan-ready
   task (stage `plan`) offers Approve Plan… (re-listed, requires `plan` stage,
   never `--anyway`) and Send Plan Back…; a `pick` task offers no recovery verb

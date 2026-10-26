@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 workboardProjects（按 Project 名分组）、treeRow/sidebarSection 共享树组件、workboardTaskMenu（与弹层同一份任务右键菜单）、workboardAvailable 门
- * [OUTPUT]: Shell.projectsSection（侧栏 Projects 区：插件可用才渲染；每个 Project 一行显示其名字，行下是它的开放任务；头部 “+” 与右键菜单发起 New Task / Add and Delegate / Open Work Board）
+ * [OUTPUT]: Shell.projectsSection（侧栏 Projects 区：插件可用才渲染；每个 Project 一行显示其名字，行下是它的开放任务；视图由 Settings → Work Board 的 Native | Board 切换（默认 Board：行点击一律开插件看板 Tab）；头部 “+” 与右键菜单发起 New Task / Add and Delegate / Open Work Board）
  * [POS]: herdr-projects 任务在侧栏的统一入口，夹在 Pin 与 Workspace 之间；只读缓存 s.workboard.board，写入仍全部走 workboard_actions.go；区折叠 tasksOpen 与单个 Project 的折叠 foldedBoards 随会话持久化（均默认展开）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

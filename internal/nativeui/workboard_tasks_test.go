@@ -15,6 +15,7 @@ import (
 func supportedWorkboardShell() *Shell {
 	s := NewShell()
 	s.workboard.avail = workboard.Availability{Installed: true, Enabled: true, Version: "1.2.26", Root: "/plugin", Supported: true}
+	s.settings.General.WorkboardView = "native" // these tests exercise the native pages
 	return s
 }
 

@@ -1,7 +1,7 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 internal/workboard 的能力门（Detect）、herdr.PluginListJSON / Manager.InvokePluginAction、Shell 的 mutateSelecting 与本机/远程判断
+ * [INPUT]: 依赖 internal/workboard 的能力门（Detect）、herdr.PluginListJSON / Manager.InvokePluginAction/FocusPluginPane、Shell 的 mutateSelecting 与本机/远程判断
  * [OUTPUT]: workboardState（探测结果、去抖与任务缓存 board）、detectWorkboard（异步探测）、workboardAvailable（唯一显示门）、openWorkBoard（命令面板 Open Work Board 的执行体）
  * [POS]: herdr-projects 插件在原生壳里的唯一入口层；插件未安装/未启用/版本越界/远程实例时本文件的一切出口都关闭，界面零痕迹；任务权威仍归插件，本层不存任务状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/herdr-client/internal/settings"
 	"github.com/wh-studio/herdr-client/internal/workboard"
 )
 
@@ -46,6 +47,23 @@ type workboardState struct {
 // instance never shows the board.
 func (s *Shell) workboardAvailable() bool {
 	return s.workboard.avail.Supported && !s.activeIsRemote()
+}
+
+// workboardBoardMode reports the default view: Project and task rows (and every
+// other way into a native board page) open the plugin's own board Tab. The
+// native pages are the opt-in "native" view (General.WorkboardView).
+func (s *Shell) workboardBoardMode() bool { return !s.settings.General.WorkboardNative() }
+
+// setWorkboardView persists the Native | Board choice (Settings → Work Board).
+func (s *Shell) setWorkboardView(native bool) {
+	view := "board"
+	if native {
+		view = "native"
+	}
+	s.applySettings(func(v *settings.Settings) error {
+		v.General.WorkboardView = view
+		return nil
+	})
 }
 
 // detectWorkboard re-checks the plugin in the background. force skips the
@@ -108,6 +126,12 @@ func (s *Shell) openWorkBoard() {
 	s.mutateSelecting(func() (herdr.Projection, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), workboardOpenTimeout)
 		defer cancel()
-		return s.runtime.InvokePluginAction(ctx, instance, workboard.PluginID, workboard.OpenAction)
+		opened, err := s.runtime.InvokePluginAction(ctx, instance, workboard.PluginID, workboard.OpenAction)
+		if err != nil {
+			return herdr.Projection{}, err
+		}
+		// The action opens the Tab but, invoked outside a Herdr client, leaves
+		// the focus behind: ask Herdr to focus the board pane.
+		return s.runtime.FocusPluginPane(ctx, instance, workboard.BoardPaneTitle, opened)
 	})
 }
