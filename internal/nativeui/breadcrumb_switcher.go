@@ -6,7 +6,7 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo/ui 的 Context/Theme/Popover, gorex_style, agent_visual, proc_brands, brands 的 agentProvider/agentMark 与 Herdr Pane layout 排序
- * [OUTPUT]: 对外提供 crumbSegment, Shell.breadcrumbSegments, Shell.breadcrumbSegmentsWithTheme, Shell.breadcrumbRow, crumbItemRow
+ * [OUTPUT]: 对外提供 crumbSegment, Shell.breadcrumbSegments, Shell.breadcrumbSegmentsWithTheme, Shell.breadcrumbRow, crumbItemRow, crumbPathTip（末级 crumb 的目录悬停弹层）
  * [POS]: nativeui 标题栏面包屑与快速切换弹层所有者，展示工作区/Tab/Pane层次并呈现 Agent 与进程品牌图标
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,6 +16,8 @@ import (
 // Projects, the selected Project's Tabs, the selected Tab's Panes — for
 // one-click switching, mirroring the Rust Solco behavior. Pane rows
 // carry the bound Agent's provider glyph with the state dot at its corner.
+// One line (2026-10-28): the selected Pane's directory, which used to sit
+// under the path as a second row, is the last crumb's hover popup.
 
 type crumbSegment struct {
 	label string
@@ -135,6 +137,11 @@ func (s *Shell) breadcrumbRow(c *ui.Context) {
 				})
 				trigger = b
 			})
+			if last {
+				if cwd := s.selectedTabCWD(); cwd != "" {
+					crumbPathTip(c, trigger, cwd)
+				}
+			}
 			if trigger.Clicked() {
 				// One popover at a time.
 				s.crumbOpen = [3]bool{}
@@ -145,6 +152,31 @@ func (s *Shell) breadcrumbRow(c *ui.Context) {
 			}
 		}
 		s.headerOverflow(c)
+	})
+}
+
+// crumbPathTip is the last crumb's hover popup: the working directory the
+// switcher path stands for, in full from ~, in the theme's tooltip face.
+// The pointer resting on the last crumb shows it; pressing the crumb —
+// the siblings popover — hides it again, as tooltips do.
+func crumbPathTip(c *ui.Context, anchor ui.Element, cwd string) {
+	t := c.Theme()
+	fill, text := t.Inverse, t.InverseText
+	if fill == ui.Transparent {
+		fill = t.Text
+	}
+	if text == ui.Transparent {
+		text = t.Background
+	}
+	ui.TooltipBase(c, anchor, func(tip ui.Element) {
+		tip.MaxWidth(520).Padding(5, 9).Radius(7).Background(fill).
+			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.2))
+		tip.Children(func() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Icon(c, iconFolder).Size(11, 11).TextColor(text)
+				ui.Text(c, tildePath(cwd)).FontSize(Typography().Caption).TextColor(text)
+			})
+		})
 	})
 }
 

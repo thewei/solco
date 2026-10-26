@@ -184,25 +184,3 @@ func (s *Shell) routeHeaderBlock(c *ui.Context, spec routeHeaderSpec) {
 		}
 	})
 }
-
-// headerDetailRow is the workspace breadcrumb's second row: a muted line (the
-// selected Pane's directory) behind a small glyph. With nothing to say it
-// keeps the row's height, so the crumbs above stay where they are.
-func headerDetailRow(c *ui.Context, glyph *ui.SVG, text, tooltip string) {
-	if text == "" {
-		ui.Box(c).Height(12).PassThrough()
-		return
-	}
-	if glyph == nil {
-		glyph = iconFolder
-	}
-	if tooltip == "" {
-		tooltip = text
-	}
-	t := c.Theme()
-	ui.Row(c).Height(12).MinWidth(0).Gap(4).AlignItems(ui.Center).Tooltip(tooltip).Children(func() {
-		ui.Icon(c, glyph).Size(9, 9).TextColor(t.TextMuted).Shrink(0)
-		ui.Text(c, text).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().
-			Ellipsis("…").Shrink(1).MinWidth(0)
-	})
-}
