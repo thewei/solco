@@ -125,10 +125,19 @@ func (s *Shell) openWorkBoard() {
 		return
 	}
 	instance := s.activeInstance
+	current := s.projection
 	s.showViewTerminal()
 	s.mutateSelecting(func() (herdr.Projection, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), workboardOpenTimeout)
 		defer cancel()
+		// A board already open is only focused: the plugin's `open` action
+		// invoked while its pane has the focus toggles away from it (to the
+		// linked task's agent), which made a second click land elsewhere.
+		if herdr.HasPluginPane(current, workboard.BoardPaneTitle) {
+			if focused, err := s.runtime.ForceFocusPluginPane(ctx, instance, workboard.BoardPaneTitle, current); err == nil {
+				return focused, nil
+			}
+		}
 		opened, err := s.runtime.InvokePluginAction(ctx, instance, workboard.PluginID, workboard.OpenAction)
 		if err != nil {
 			return herdr.Projection{}, err

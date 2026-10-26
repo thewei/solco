@@ -165,12 +165,23 @@ func (s *Shell) mutateWithSelection(adoptResult bool, fn func() (herdr.Projectio
 			s.loading = false
 			s.offline = false
 			s.status = ""
-			if adoptResult {
-				s.adoptRuntimeSelection(projection)
-			}
-			s.applyProjection(projection, true)
+			s.applyMutationResult(projection, adoptResult)
 		})
 	}()
+}
+
+// applyMutationResult lands a mutation's projection. An adopted selection is a
+// user-initiated jump, so its location is recorded like any other selection:
+// otherwise the workspace location keeps the previous pane's query and the
+// location mirror (syncSelectionLocation) drags the selection straight back.
+func (s *Shell) applyMutationResult(projection herdr.Projection, adopt bool) {
+	if adopt {
+		s.adoptRuntimeSelection(projection)
+	}
+	s.applyProjection(projection, true)
+	if adopt {
+		s.pushSelectionLocation()
+	}
 }
 
 func (s *Shell) updateError(generation uint64, err error) {

@@ -454,6 +454,20 @@ func (s *Shell) openProjectCoordinator(name string) {
 	s.selectPane(co.Pane)
 }
 
+// projectCoordinatorPane is the pane of the Project's running coordinator, when
+// this session has it open.
+func (s *Shell) projectCoordinatorPane(project workboardProject) (string, bool) {
+	return s.coordinatorPane(project.Coord)
+}
+
+// coordinatorPane is a coordinator's pane when it runs and this session has it.
+func (s *Shell) coordinatorPane(co workboard.Coordinator) (string, bool) {
+	if !co.Running() || paneByID(s.projection, co.Pane) == nil {
+		return "", false
+	}
+	return co.Pane, true
+}
+
 // coordinatorSaid shows the coordinator's latest message above the box that
 // answers it, clipped; the plugin's board has the whole conversation.
 func (s *Shell) coordinatorSaid(c *ui.Context, co workboard.Coordinator) {

@@ -65,6 +65,22 @@ func pluginPaneToFocus(p Projection, title string) (paneID string, needsFocus bo
 	return "", false
 }
 
+// HasPluginPane reports whether a projection already shows the plugin pane the
+// manifest titles `title`.
+func HasPluginPane(p Projection, title string) bool {
+	paneID, _ := pluginPaneToFocus(p, title)
+	return paneID != ""
+}
+
+// ForceFocusPluginPane is FocusPluginPane that always asks Herdr to focus the
+// pane: the projection's idea of the focus may be behind Herdr's (Shardlane
+// selects panes without moving Herdr's focus), and `plugin pane focus` on a
+// focused pane changes nothing.
+func (m *Manager) ForceFocusPluginPane(ctx context.Context, session, title string, from Projection) (Projection, error) {
+	from.FocusedPaneID = ""
+	return m.FocusPluginPane(ctx, session, title, from)
+}
+
 // FocusPluginPane makes sure the plugin pane titled `title` has Herdr's focus
 // after a plugin action: an action invoked from outside a Herdr client (as
 // Shardlane does) opens its Tab but leaves the focus where it was. The focus

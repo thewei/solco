@@ -90,3 +90,12 @@ func TestFocusPluginPaneLeavesAFocusedOrMissingBoardAloneAndRefusesRemotes(t *te
 		t.Fatal("a remote machine is refused")
 	}
 }
+
+// An open board is found by its title, so reopening it can focus the pane
+// instead of invoking the plugin's toggling `open` action.
+func TestHasPluginPaneFindsAnOpenBoard(t *testing.T) {
+	p := Projection{Panes: []Pane{{ID: "w1:p2", Label: "Claude Code"}, {ID: "w1:p7", Label: "Work board"}}}
+	if !HasPluginPane(p, "Work board") || HasPluginPane(p, "Nope") {
+		t.Fatal("HasPluginPane must follow the manifest title")
+	}
+}
