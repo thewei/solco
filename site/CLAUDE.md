@@ -13,7 +13,7 @@ the multi-backend matrix
 positioning badge, capability list, and outbound link), the native
 multi-workspace instance picker, the decoupled architecture pipeline
 diagram, and bento features; download links point at the
-Shardlane-macos-aarch64.zip GitHub Releases asset (hero button and nav).
+Solco-macos-aarch64.zip GitHub Releases asset (hero button and nav).
 Download anchors carry data-platform-download; an inline script rewrites
 them at load — macOS stays on the arm64 zip, every other platform (and
 x86 Macs when the browser exposes userAgentData) is sent to the GitHub
@@ -31,9 +31,9 @@ blur(16-24px) + a 1px white 12% line, used for nav/cards/product
 window/pipeline; hero gradient accent headline; no JS, no external
 requests; line count <= 800.
 assets/icon.png: 512px copy of the app icon, from
-assets/app-icon/shardlane-512.png, never hand-edited.
+assets/app-icon/solco-512.png, never hand-edited.
 assets/mark.svg: copy of the brand Option-D mark, from
-assets/app-icon/shardlane-d-dark.svg; nav and footer logo plus favicon.
+assets/app-icon/solco-d-dark.svg; nav and footer logo plus favicon.
 assets/herdr-logo.png: official Herdr logo, from
 herdr.dev/assets/logo.png (512px), used on the backend matrix cards.
 assets/tmux-logo.svg: official tmux logo, from tmux.app/favicon.svg

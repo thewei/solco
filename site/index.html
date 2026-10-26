@@ -4,8 +4,8 @@
   assets/herdr-logo.png, assets/tmux-logo.svg, assets/uu-logo.png, and
   assets/luvus-logo.png; scroll-reveal stagger depends on the AOS 2.3.4 CDN
   (the only external request); download links depend on the fixed GitHub
-  Releases asset names Shardlane-macos-aarch64(.zip|.sha256)
-  [OUTPUT]: the Shardlane landing page (beside downloads.html): deep-space aurora glassmorphism
+  Releases asset names Solco-macos-aarch64(.zip|.sha256)
+  [OUTPUT]: the Solco landing page (beside downloads.html): deep-space aurora glassmorphism
   (designs/site-deai Option D final) — sticky glass nav with a scrolled
   compact state, large hero + floating aurora blobs + glass
   nav/cards/product window, AOS scroll-reveal stagger across sections, with
@@ -22,8 +22,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script>document.documentElement.classList.remove('no-js');</script>
-  <title>Shardlane: a native multi-runtime workspace for coding agents</title>
-  <meta name="description" content="Shardlane is a GPU-accelerated macOS workspace for coding agents. Herdr, tmux, UU Remote and Luvus behind one neutral multiplexer seam — sessions stay authoritative on the backend, Shardlane just makes them beautiful.">
+  <title>Solco: a native multi-runtime workspace for coding agents</title>
+  <meta name="description" content="Solco is a GPU-accelerated macOS workspace for coding agents. Herdr, tmux, UU Remote and Luvus behind one neutral multiplexer seam — sessions stay authoritative on the backend, Solco just makes them beautiful.">
   <link rel="icon" type="image/svg+xml" href="assets/mark.svg">
   <link rel="alternate icon" type="image/png" href="assets/icon.png">
   <link rel="stylesheet" href="styles.css">
@@ -41,15 +41,15 @@
   <header class="nav">
     <a class="brand" href="./">
       <img src="assets/mark.svg" alt="" width="24" height="24">
-      <span>Shardlane</span>
+      <span>Solco</span>
     </a>
     <nav class="navlinks" aria-label="Site">
       <a href="#backends">Backends</a>
       <a href="#workspaces">Workspaces</a>
       <a href="#architecture">Architecture</a>
-      <a href="https://github.com/thewei/shardlane/tree/main/docs">Docs</a>
+      <a href="https://github.com/thewei/solco/tree/main/docs">Docs</a>
     </nav>
-    <a class="nav-dl" data-platform-download href="https://github.com/thewei/shardlane/releases/latest/download/Shardlane-macos-aarch64.zip">Download</a>
+    <a class="nav-dl" data-platform-download href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download</a>
   </header>
 
   <main id="main">
@@ -62,11 +62,11 @@
         <p class="sub rise d2">
           A GPU-accelerated native workspace for coding agents on macOS, Linux and Windows. Herdr, tmux, UU Remote and
           Luvus behind one neutral seam — sessions stay authoritative on the backend,
-          Shardlane just makes them beautiful.
+          Solco just makes them beautiful.
         </p>
         <div class="cta rise d3">
-          <a class="btn-primary" data-platform-download href="https://github.com/thewei/shardlane/releases/latest/download/Shardlane-macos-aarch64.zip">Download</a>
-          <a class="btn-ghost" href="https://github.com/thewei/shardlane">★ Star on GitHub</a>
+          <a class="btn-primary" data-platform-download href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download</a>
+          <a class="btn-ghost" href="https://github.com/thewei/solco">★ Star on GitHub</a>
           <a class="btn-ghost" href="downloads.html">All platforms</a>
         </div>
         <p class="runtime-note rise d4">
@@ -78,7 +78,7 @@
 
       <div class="mockup rise d2">
         <div class="shot-frame">
-          <img src="assets/app-light.png" alt="Shardlane with real Herdr, tmux and Luvus workspaces and live agents" width="2392" height="1986">
+          <img src="assets/app-light.png" alt="Solco with real Herdr, tmux and Luvus workspaces and live agents" width="2392" height="1986">
         </div>
       </div>
     </section>
@@ -90,7 +90,7 @@
         <h2>One client. Four engines. No second brain.</h2>
         <p class="sec-sub">
           Backends keep sovereignty over sessions, panes, scrollback and agent lifecycle.
-          Shardlane projects whichever engine you point it at — switch without losing state,
+          Solco projects whichever engine you point it at — switch without losing state,
           mix local and remote in one sidebar.
         </p>
       </header>
@@ -102,7 +102,7 @@
             <span class="brole brole-primary">Default runtime</span>
           </div>
           <h3><a href="https://herdr.dev">Herdr</a></h3>
-          <p class="bdesc">The agent-first multiplexer and Shardlane's primary authority. Owns workspaces, tabs, panes, scrollback and full agent lifecycle — with lossless context transfer between providers.</p>
+          <p class="bdesc">The agent-first multiplexer and Solco's primary authority. Owns workspaces, tabs, panes, scrollback and full agent lifecycle — with lossless context transfer between providers.</p>
           <ul class="bfeats">
             <li>Agent semantics, never PTY guesswork</li>
             <li>Context Transfer &amp; Live Handoff</li>
@@ -117,7 +117,7 @@
             <span class="brole">Industry standard</span>
           </div>
           <h3><a href="https://tmux.app">tmux</a></h3>
-          <p class="bdesc">The classic terminal multiplexer, projected into a native shell. Shardlane drives a real <code>tmux attach</code> child on a PTY — your existing servers and <code>.tmux.conf</code> keep working untouched.</p>
+          <p class="bdesc">The classic terminal multiplexer, projected into a native shell. Solco drives a real <code>tmux attach</code> child on a PTY — your existing servers and <code>.tmux.conf</code> keep working untouched.</p>
           <ul class="bfeats">
             <li>Zero-config adoption of live sessions</li>
             <li>Split / zoom / swap via native menu</li>
@@ -147,7 +147,7 @@
             <span class="brole brole-new">New · Agent mission control</span>
           </div>
           <h3><a href="https://github.com/RizRiyz/luvus">Luvus</a></h3>
-          <p class="bdesc">Mission control for AI coding agents. Worktree orchestration, per-agent token and cost awareness, and the Universal Harness Protocol (UHP&nbsp;1.0) — now a first-class Shardlane backend.</p>
+          <p class="bdesc">Mission control for AI coding agents. Worktree orchestration, per-agent token and cost awareness, and the Universal Harness Protocol (UHP&nbsp;1.0) — now a first-class Solco backend.</p>
           <ul class="bfeats">
             <li>UHP 1.0 semantic waits &amp; snapshots</li>
             <li>Agent fork with context intact</li>
@@ -173,7 +173,7 @@
       <div class="ws-diagram" role="img" aria-label="An instance picker listing workspaces across Herdr, Luvus, tmux and UU Remote" data-aos="fade-left" data-aos-delay="150">
         <div class="wsr">
           <p class="wsr-title">Instance picker</p>
-          <div class="wsr-row wsr-on"><i class="dot dot-herdr"></i>shardlane <span>herdr · 3 panes · 2 agents</span></div>
+          <div class="wsr-row wsr-on"><i class="dot dot-herdr"></i>solco <span>herdr · 3 panes · 2 agents</span></div>
           <div class="wsr-row"><i class="dot dot-luvus"></i>agent-fleet <span>luvus · orchestration</span></div>
           <div class="wsr-row"><i class="dot dot-tmux"></i>infra-cluster <span>tmux · 6 windows</span></div>
           <div class="wsr-row"><i class="dot dot-uu"></i>cloud-gpu-node <span>uu remote · training</span></div>
@@ -190,7 +190,7 @@
       </div>
       <div class="arch-pipe" role="img" aria-label="Pipeline from the native shell through the neutral multiplexer API to the four backends" data-aos="fade-up" data-aos-delay="100">
         <div class="pipe-layer pipe-ui">
-          <strong>Shardlane shell</strong>
+          <strong>Solco shell</strong>
           <span>GPUI · libghostty-vt · navigation, taste, zero runtime logic</span>
         </div>
         <div class="pipe-arrow" aria-hidden="true">↓&nbsp;&nbsp;MuxRegistry + capability flags</div>
@@ -206,7 +206,7 @@
           <div class="pipe-node pn-luvus"><i class="dot dot-luvus"></i>Luvus<br><span>UHP 1.0</span></div>
         </div>
       </div>
-      <p class="arch-fine" data-aos="fade-up" data-aos-delay="200">Consumers never branch on backend identity — differences flow through capability flags, so a backend without agents simply hides agent surfaces instead of faking them. <a href="https://github.com/thewei/shardlane/blob/main/docs/multiplexer-api.md">Read the API contract</a>.</p>
+      <p class="arch-fine" data-aos="fade-up" data-aos-delay="200">Consumers never branch on backend identity — differences flow through capability flags, so a backend without agents simply hides agent surfaces instead of faking them. <a href="https://github.com/thewei/solco/blob/main/docs/multiplexer-api.md">Read the API contract</a>.</p>
     </section>
 
     <!-- ============ FEATURES ============ -->
@@ -214,7 +214,7 @@
       <article class="tile t-a" data-aos="fade-up">
         <h3>Agents, first-class</h3>
         <p>Launch, watch, prompt, resume. Semantic operations over Herdr's protocol — never keystrokes into a PTY. Context Transfer moves a task between providers with its memory intact.</p>
-        <code>shardlane agent resume --session 4f2e</code>
+        <code>solco agent resume --session 4f2e</code>
       </article>
       <article class="tile t-b" data-aos="fade-up" data-aos-delay="100">
         <h3>Panes that survive restarts</h3>
@@ -236,7 +236,7 @@
       <article class="tile t-f" data-aos="fade-up" data-aos-delay="300">
         <h3>Free, and yours to inspect</h3>
         <p>GPLv3. The whole workspace is source you can read, build and change.</p>
-        <a class="btn-ghost" href="https://github.com/thewei/shardlane">Browse the source</a>
+        <a class="btn-ghost" href="https://github.com/thewei/solco">Browse the source</a>
       </article>
     </section>
 
@@ -244,11 +244,11 @@
 
   <footer class="foot">
     <div class="foot-row">
-      <p class="foot-brand"><img src="assets/mark.svg" alt="" width="20" height="20"> Shardlane is the client; the backends are the runtime.</p>
+      <p class="foot-brand"><img src="assets/mark.svg" alt="" width="20" height="20"> Solco is the client; the backends are the runtime.</p>
       <nav class="foot-links" aria-label="Footer">
-        <a href="https://github.com/thewei/shardlane">GitHub</a>
-        <a href="https://github.com/thewei/shardlane/tree/main/docs">Docs</a>
-        <a href="https://github.com/thewei/shardlane/releases">Releases</a>
+        <a href="https://github.com/thewei/solco">GitHub</a>
+        <a href="https://github.com/thewei/solco/tree/main/docs">Docs</a>
+        <a href="https://github.com/thewei/solco/releases">Releases</a>
         <a href="https://herdr.dev">Herdr</a>
         <a href="https://github.com/RizRiyz/luvus">Luvus</a>
       </nav>
@@ -278,12 +278,12 @@
       // Platform-aware download: one built archive per release platform.
       // Unknown platforms land on downloads.html instead of an archive they
       // cannot run. The static href (no-JS fallback) stays the arm64 zip.
-      var base = 'https://github.com/thewei/shardlane/releases/latest/download/';
+      var base = 'https://github.com/thewei/solco/releases/latest/download/';
       var map = {
-        'macos-arm64': base + 'Shardlane-macos-aarch64.zip',
-        'macos-x64': base + 'Shardlane-macos-x86_64.zip',
-        'linux-x64': base + 'Shardlane-linux-x86_64.tar.gz',
-        'windows-x64': base + 'Shardlane-windows-x86_64.zip'
+        'macos-arm64': base + 'Solco-macos-aarch64.zip',
+        'macos-x64': base + 'Solco-macos-x86_64.zip',
+        'linux-x64': base + 'Solco-linux-x86_64.tar.gz',
+        'windows-x64': base + 'Solco-windows-x86_64.zip'
       };
       var downloads = 'downloads.html';
       function apply(href) {

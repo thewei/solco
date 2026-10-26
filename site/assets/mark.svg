@@ -2,14 +2,14 @@
 <!--
  * [INPUT]: the Option-D portal / path / destination triptych composition;
  * dark-theme palette
- * [OUTPUT]: the Shardlane Option-D dark-theme SVG icon, embeddable standalone
+ * [OUTPUT]: the Solco Option-D dark-theme SVG icon, embeddable standalone
  * in the app
  * [POS]: the themed brand asset of assets/app-icon; does not change the
  * existing cargo-bundle PNG inputs
  * [PROTOCOL]: Update this header on change, then check CLAUDE.md.
  -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">Shardlane D — dark</title>
+  <title id="title">Solco D — dark</title>
   <desc id="desc">A rounded portal frame, a forward looped route, and an amber destination diamond on a midnight background.</desc>
 
   <defs>
