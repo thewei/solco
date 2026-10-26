@@ -24,18 +24,19 @@ func (s *Shell) projectsSection(c *ui.Context) {
 		return
 	}
 	projects := workboardProjects(s.workboard.board)
-	add := &treeRowAction{Label: "New Task", Glyph: iconPlus, Run: func() { s.openWorkboardAdd(false) }}
+	add := &treeRowAction{Label: "New Project…", Glyph: iconPlus, Run: s.openNewProject}
 	s.sidebarSection(c, sidebarSectionSpec{
 		Key: "section:projects", Title: "Projects", Count: len(projects), Action: add,
 		Menu: func(m *ui.Menu) {
 			if m.Item(add.Label).Chosen() {
 				add.Run()
 			}
+			m.Separator()
+			if m.Item("New Task").Chosen() {
+				s.openWorkboardAdd(false)
+			}
 			if m.Item("Add and Delegate").Chosen() {
 				s.openWorkboardAdd(true)
-			}
-			if m.Item("New Project…").Chosen() {
-				s.openNewProject()
 			}
 			m.Separator()
 			if m.Item("Show Archived Projects").Checked(s.workboard.showArchived).Chosen() {

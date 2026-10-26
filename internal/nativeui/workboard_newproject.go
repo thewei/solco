@@ -1,9 +1,9 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 mygo.Dialog.Open（系统文件夹选择器）、internal/workboard 的 Client.AddProject/Pin/CoordinatorControl、workboardWrite 单一写通道
- * [OUTPUT]: newProjectDraft、openNewProject（选文件夹 → 弹模态）、newProjectDialog（文件夹、第一个任务标题、立即启动协调者）、submitNewProject
- * [POS]: New Project 的唯一入口。插件没有“创建 Project”动词——Project 在某文件夹第一次加任务时登记（repos.json），所以对话框必须带第一个任务标题；登记后立刻 pin（任务清空后仍留在侧栏），可选启动协调者。不自建任何存储；归档沿用 Project 菜单的 Archive Project…，彻底删除插件没有 API，故不做
+ * [INPUT]: 依赖 mygo.Dialog.Open（系统文件夹选择器）、internal/workboard 的 Client.AddProject（无任务登记）/Pin/CoordinatorControl、workboardWrite 单一写通道
+ * [OUTPUT]: newProjectDraft、openNewProject（选文件夹 → 弹模态）、newProjectDialog（文件夹、立即启动协调者）、submitNewProject
+ * [POS]: New Project 的唯一入口（Projects 区标题的 “+”）。不要求第一个任务：先登记文件夹（插件无“创建 Project”动词，AddProject 借一条瞬时自动化登记），再 pin（无任务也留在侧栏），可选立即起协调者。不自建任何存储；归档沿用 Project 菜单的 Archive Project…，彻底删除插件没有 API，故不做
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -22,7 +22,6 @@ import (
 type newProjectDraft struct {
 	open        bool
 	folder      string
-	title       string
 	coordinator bool
 }
 
@@ -73,15 +72,14 @@ func (s *Shell) newProjectDialog(c *ui.Context) {
 				ui.Text(c, filepath.Base(d.folder)).FontSize(Typography().Body).SingleLine()
 				ui.Text(c, d.folder).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Tooltip(d.folder)
 			})
-			ui.TextInput(c, &d.title).Label("First task").Placeholder("What to do first").AutoFocus().FillWidth()
 			ui.Checkbox(c, &d.coordinator, "Start its coordinator now")
-			ui.Text(c, "The plugin adds a Project when its first task is added; the Project and its coordinator's conversation are kept until you archive it.").
+			ui.Text(c, "The folder becomes a Project with no task. It and its coordinator's conversation are kept until you archive it.").
 				FontSize(Typography().Caption).TextColor(t.TextMuted)
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
 				if ui.Button(c, "Cancel").Clicked() {
 					d.open = false
 				}
-				if ui.PrimaryButton(c, "Create").Clicked() && strings.TrimSpace(d.title) != "" {
+				if ui.PrimaryButton(c, "Create").Clicked() {
 					s.submitNewProject()
 				}
 			})
@@ -101,18 +99,11 @@ func (s *Shell) submitNewProject() {
 	slog.Info("work board write requested", "op", "new-project", "coordinator", d.coordinator)
 	toast := ""
 	s.workboardWrite("new-project", func(ctx context.Context) error {
-		name, err := client.AddProject(ctx, d.folder, d.title)
+		name, err := client.AddProject(ctx, d.folder)
 		if err != nil {
 			return err
 		}
-		label := name
-		if label == "" {
-			label = filepath.Base(d.folder)
-		}
-		toast = "Added project " + label
-		if name == "" {
-			return nil
-		}
+		toast = "Added project " + name
 		if err := client.Pin(ctx, name); err != nil {
 			toast += "; couldn't pin it: " + workboardFailureToast(err)
 			return nil

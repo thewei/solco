@@ -577,13 +577,14 @@ earns the same treatment without its own dated decision.
   Projects" (off by default, in-memory) adds a muted "Archived" group of Projects whose
   only tasks are archived (`list --archived`), each with Restore Project… (confirmed
   `restore --repo`) and a click that opens the Archived page.
-  *Creation/automations:* New Project… (Projects section menu: local folder
-  picker → first task title + "Start its coordinator now"; the plugin has no
-  create-Project verb — a folder becomes a Project when its first task is added,
-  so it runs `add <title> --repo <folder>`, reads the name back with `details`,
-  `pin`s it so it stays in the sidebar, optionally `coordinator restart`; there
-  is no plugin API to delete a Project's data, so Archive Project… is the only
-  removal and Shardlane never edits the plugin's data files); New Task dialog (title, description, Task/Research/Chat,
+  *Creation/automations:* New Project… (the Projects header "+" and its menu: local
+  folder picker → "Start its coordinator now"; no first task is required. The plugin
+  has no create-Project verb — a folder is named the first time something is added
+  there — so a merged-event automation is added in that folder, the Project's name
+  is read back from it, and it is removed at once; then `pin` keeps the Project in
+  the sidebar and `coordinator restart` optionally starts its coordinator. There is
+  no plugin API to delete a Project's data, so Archive Project… is the only removal
+  and Shardlane never edits the plugin's data files); New Task dialog (title, description, Task/Research/Chat,
   After, start now; To do tasks also offer Delegate with… — the task's own
   `show <id>` settings as the same choice controls, only changed ones sent as
   `delegate <id> --<setting> V`); Automations group on the Project page (on/off,

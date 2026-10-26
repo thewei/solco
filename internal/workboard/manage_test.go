@@ -2,6 +2,7 @@ package workboard
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -324,38 +325,73 @@ func TestPickArgv(t *testing.T) {
 	}
 }
 
-func TestAddProjectRegistersTheFolderAndReadsItsName(t *testing.T) {
+func TestAddProjectRegistersTheFolderWithoutATaskAndLeavesNoAutomation(t *testing.T) {
 	var calls []string
+	var name string
 	c := NewClientWithExec(func(_ context.Context, args ...string) (string, error) {
-		calls = append(calls, strings.Join(args, " "))
-		if args[0] == "add" {
-			return "PRJ-1: added\n", nil
+		calls = append(calls, strings.Join(args[:2], " "))
+		switch {
+		case args[1] == "add":
+			name = args[2]
+			if got := strings.Join(args[3:], " "); !strings.HasSuffix(got, "--when merged --repo /tmp/My.Proj") {
+				t.Fatalf("add argv = %q: only a merged task may fire it, in the picked folder", got)
+			}
+			return "", nil
+		case len(args) == 2:
+			return `[{"id":"` + name + `","name":"` + name + `","repo":"My.Proj"}]`, nil
 		}
-		return `{"task":{"id":"My.Proj/1"}}`, nil
+		if args[1] != "remove" || args[2] != name {
+			t.Fatalf("unexpected call %q", args)
+		}
+		return "", nil
 	})
-	name, err := c.AddProject(context.Background(), "/tmp/My.Proj", "First thing")
-	if err != nil || name != "My.Proj" {
-		t.Fatalf("name=%q err=%v", name, err)
+	got, err := c.AddProject(context.Background(), "/tmp/My.Proj")
+	if err != nil || got != "My.Proj" {
+		t.Fatalf("name=%q err=%v", got, err)
 	}
-	if got := strings.Join(calls, "|"); got != "add First thing --repo /tmp/My.Proj|details PRJ-1 --json" {
-		t.Fatalf("calls = %q", got)
-	}
-}
-
-func TestAddProjectAnswerWithoutAReferenceStillSucceeds(t *testing.T) {
-	c := NewClientWithExec(func(context.Context, ...string) (string, error) { return "added", nil })
-	if name, err := c.AddProject(context.Background(), "/tmp/p", "x"); err != nil || name != "" {
-		t.Fatalf("name=%q err=%v", name, err)
+	if !strings.HasPrefix(name, "shardlane-new-project-") || strings.Join(calls, "|") != "automations add|automations --json|automations remove" {
+		t.Fatalf("name=%q calls=%q", name, calls)
 	}
 }
 
-func TestAddProjectRefusesRelativeFoldersAndOptionLikeTitles(t *testing.T) {
+func TestAddProjectRemovesItsAutomationEvenWhenTheNameCannotBeRead(t *testing.T) {
+	removed := false
+	c := NewClientWithExec(func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case len(args) > 1 && args[1] == "remove":
+			removed = true
+		case len(args) == 2:
+			return `[]`, nil
+		}
+		return "", nil
+	})
+	if name, err := c.AddProject(context.Background(), "/tmp/p"); err == nil || name != "" {
+		t.Fatalf("name=%q err=%v: an unreadable name is an error", name, err)
+	}
+	if !removed {
+		t.Fatal("the registration automation must not stay")
+	}
+}
+
+func TestAddProjectWritesNothingWhenThePluginRefusesTheFolder(t *testing.T) {
+	c := NewClientWithExec(func(_ context.Context, args ...string) (string, error) {
+		if args[1] != "add" {
+			t.Fatalf("nothing but the refused add may run: %q", args)
+		}
+		return "", errors.New("No repo or folder")
+	})
+	if _, err := c.AddProject(context.Background(), "/nope"); err == nil {
+		t.Fatal("refusal must come back")
+	}
+}
+
+func TestAddProjectRefusesRelativeFolders(t *testing.T) {
 	c := NewClientWithExec(func(context.Context, ...string) (string, error) {
 		t.Fatal("no CLI call for bad input")
 		return "", nil
 	})
-	for _, in := range [][2]string{{"rel", "x"}, {"", "x"}, {"/p", ""}, {"/p", "-x"}} {
-		if _, err := c.AddProject(context.Background(), in[0], in[1]); err == nil {
+	for _, in := range []string{"rel", "", "-x"} {
+		if _, err := c.AddProject(context.Background(), in); err == nil {
 			t.Fatalf("%q must be refused", in)
 		}
 	}

@@ -9,25 +9,28 @@ import (
 	"github.com/wh-studio/herdr-client/internal/workboard"
 )
 
-// newProjectShell is a supported shell whose plugin answers `add` the way the
-// real one does ("KEY-n: added") and names the Project from `details`.
+// newProjectShell is a supported shell whose plugin registers a folder the way
+// the real one does: a merged-event automation that names the Project, removed
+// again at once.
 func newProjectShell(t *testing.T, ran *[]string, failCoordinator bool) *Shell {
 	t.Helper()
 	s := writeShell(t, ran)
 	newWorkboardClient = func(string, string) *workboard.Client {
+		var autoName string
 		return workboard.NewClientWithExec(func(_ context.Context, args ...string) (string, error) {
-			switch args[0] {
-			case "list", "automations", "autopilot":
+			switch {
+			case args[0] == "list":
 				return `[]`, nil
-			case "details":
-				*ran = append(*ran, strings.Join(args, " "))
-				return `{"task":{"id":"My.Proj/1"}}`, nil
+			case args[0] == "automations" && len(args) == 2:
+				return `[{"id":"` + autoName + `","name":"` + autoName + `","repo":"My.Proj"}]`, nil
+			}
+			if args[0] == "automations" && args[1] == "add" {
+				autoName = args[2]
+				*ran = append(*ran, "automations add … --repo "+args[len(args)-1])
+				return "", nil
 			}
 			*ran = append(*ran, strings.Join(args, " "))
-			switch {
-			case args[0] == "add":
-				return "PRJ-1: added\n", nil
-			case args[0] == "coordinator" && failCoordinator:
+			if args[0] == "coordinator" && failCoordinator {
 				return "", context.DeadlineExceeded
 			}
 			return "", nil
@@ -36,14 +39,18 @@ func newProjectShell(t *testing.T, ran *[]string, failCoordinator bool) *Shell {
 	return s
 }
 
-func TestNewProjectRegistersPinsAndStartsTheCoordinator(t *testing.T) {
+func TestNewProjectRegistersPinsAndStartsTheCoordinatorWithoutATask(t *testing.T) {
 	var ran []string
 	s := newProjectShell(t, &ran, false)
-	s.workboard.newProject = newProjectDraft{open: true, folder: "/tmp/My.Proj", title: "First thing", coordinator: true}
+	s.workboard.newProject = newProjectDraft{open: true, folder: "/tmp/My.Proj", coordinator: true}
 	s.submitNewProject()
-	want := "add First thing --repo /tmp/My.Proj|details PRJ-1 --json|pin My.Proj|coordinator --project My.Proj restart"
-	if got := strings.Join(ran, "|"); got != want {
-		t.Fatalf("ran = %q, want %q", got, want)
+	got := strings.TrimSuffix(strings.Join(ran, "|"), "|autopilot --json") // the refresh after a write
+	if strings.Contains(got, "|add ") || strings.HasPrefix(got, "add ") {
+		t.Fatalf("a Project starts with no task: %q", got)
+	}
+	if !strings.HasPrefix(got, "automations add … --repo /tmp/My.Proj|automations remove shardlane-new-project-") ||
+		!strings.HasSuffix(got, "|pin My.Proj|coordinator --project My.Proj restart") {
+		t.Fatalf("ran = %q", got)
 	}
 	if s.workboard.newProject.open || s.pendingToast != "Added project My.Proj" {
 		t.Fatalf("draft=%+v toast=%q", s.workboard.newProject, s.pendingToast)
@@ -53,9 +60,9 @@ func TestNewProjectRegistersPinsAndStartsTheCoordinator(t *testing.T) {
 func TestNewProjectWithoutCoordinatorStopsAfterThePin(t *testing.T) {
 	var ran []string
 	s := newProjectShell(t, &ran, false)
-	s.workboard.newProject = newProjectDraft{open: true, folder: "/tmp/My.Proj", title: "First thing"}
+	s.workboard.newProject = newProjectDraft{open: true, folder: "/tmp/My.Proj"}
 	s.submitNewProject()
-	if got := strings.Join(ran, "|"); strings.Contains(got, "coordinator") || !strings.HasSuffix(got, "pin My.Proj") {
+	if got := strings.TrimSuffix(strings.Join(ran, "|"), "|autopilot --json"); strings.Contains(got, "coordinator") || !strings.HasSuffix(got, "pin My.Proj") {
 		t.Fatalf("ran = %q", got)
 	}
 }
@@ -63,25 +70,20 @@ func TestNewProjectWithoutCoordinatorStopsAfterThePin(t *testing.T) {
 func TestNewProjectKeepsTheProjectWhenTheCoordinatorWillNotStart(t *testing.T) {
 	var ran []string
 	s := newProjectShell(t, &ran, true)
-	s.workboard.newProject = newProjectDraft{open: true, folder: "/tmp/My.Proj", title: "First thing", coordinator: true}
+	s.workboard.newProject = newProjectDraft{open: true, folder: "/tmp/My.Proj", coordinator: true}
 	s.submitNewProject()
 	if !strings.HasPrefix(s.pendingToast, "Added project My.Proj; its coordinator didn't start") {
 		t.Fatalf("toast = %q", s.pendingToast)
 	}
 }
 
-func TestNewProjectNeedsAFolderThePluginCanAddTo(t *testing.T) {
+func TestNewProjectNeedsAnAbsoluteFolder(t *testing.T) {
 	var ran []string
 	s := newProjectShell(t, &ran, false)
-	for _, d := range []newProjectDraft{
-		{folder: "relative/dir", title: "x"}, {folder: "/tmp/p", title: "-x"}, {folder: "/tmp/p", title: "  "},
-	} {
-		s.workboard.newProject = d
-		s.submitNewProject()
-		if len(ran) != 0 || s.pendingToast == "" {
-			t.Fatalf("draft %+v ran %q toast %q: must write nothing and say why", d, ran, s.pendingToast)
-		}
-		s.pendingToast = ""
+	s.workboard.newProject = newProjectDraft{folder: "relative/dir"}
+	s.submitNewProject()
+	if strings.Contains(strings.Join(ran, "|"), "automations") || s.pendingToast == "" {
+		t.Fatalf("ran %q toast %q: must write nothing and say why", ran, s.pendingToast)
 	}
 }
 
@@ -100,7 +102,7 @@ func TestNewProjectPicksTheFolderThenOpensTheDialog(t *testing.T) {
 	}
 }
 
-func TestNewProjectDialogShowsTheFolderAndTheFirstTask(t *testing.T) {
+func TestNewProjectDialogAsksForTheFolderOnly(t *testing.T) {
 	var ran []string
 	s := newProjectShell(t, &ran, false)
 	s.workboard.newProject = newProjectDraft{open: true, folder: "/tmp/My.Proj", coordinator: true}
@@ -110,7 +112,22 @@ func TestNewProjectDialogShowsTheFolderAndTheFirstTask(t *testing.T) {
 			t.Fatalf("dialog missing %q: %q", want, tt.Texts())
 		}
 	}
-	if err := tt.Click("Create"); err != nil || len(ran) != 0 {
-		t.Fatalf("an empty first task must not create anything: err=%v ran=%q", err, ran)
+	if tt.HasText("New Task") || tt.HasText("First task") {
+		t.Fatalf("a Project dialog must not ask for a task: %q", tt.Texts())
+	}
+}
+
+func TestProjectsSectionMenuLeadsWithNewProject(t *testing.T) {
+	s := projectsSectionShell(t)
+	tt := ui.NewTester(s.View, 1200, 800)
+	if !tt.HasText("Projects") {
+		t.Fatalf("section missing: %q", tt.Texts())
+	}
+	if err := tt.RightClick("Projects"); err != nil {
+		t.Fatal(err)
+	}
+	menu := strings.Join(tt.Menu(), "|")
+	if !strings.Contains(menu, "New Project…") || !strings.Contains(menu, "New Task") {
+		t.Fatalf("section menu = %q", menu)
 	}
 }
