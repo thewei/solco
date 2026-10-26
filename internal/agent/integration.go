@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/wh-studio/solco/internal/history"
+import "github.com/thewei/solco/internal/history"
 
 // IntegrationStrategy is the runtime integration strategy authority (INT-01),
 // ported from the audited Rust agent-integrations registry: Solco never

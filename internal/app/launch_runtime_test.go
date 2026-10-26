@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/history"
 )
 
 // fakeAppRuntime is a minimal agent.LaunchRuntime over scripted responses.

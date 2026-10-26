@@ -12,7 +12,7 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"github.com/wh-studio/solco/internal/commandcenter"
+	"github.com/thewei/solco/internal/commandcenter"
 )
 
 // menuLabels lists a submenu's labels, separators as "-".

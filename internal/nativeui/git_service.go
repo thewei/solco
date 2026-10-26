@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // gitService is the shell-side orchestration over internal/gitworkbench: it

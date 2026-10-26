@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/sshconfig"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/sshconfig"
 )
 
 func TestSSHCommandLine(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
-	"github.com/wh-studio/solco/internal/filesview"
+	"github.com/thewei/solco/internal/filesview"
 )
 
 // FilesPreviewTarget is the selection metadata the page hears through the

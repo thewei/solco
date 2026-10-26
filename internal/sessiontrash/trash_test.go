@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // fixture is one Trash over a fake home: real provider roots (Claude Code,

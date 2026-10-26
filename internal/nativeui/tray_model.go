@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wh-studio/solco/internal/agent"
+	"github.com/thewei/solco/internal/agent"
 )
 
 // TrayCounts are the status-center counts the menu bar projects (0.7

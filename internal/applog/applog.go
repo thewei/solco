@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wh-studio/solco/internal/legacy"
+	"github.com/thewei/solco/internal/legacy"
 )
 
 const (

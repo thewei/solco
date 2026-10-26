@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/codehl"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/codehl"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // The diff review surface, ported from egoist/godiff diffview.go, view.go

@@ -11,7 +11,7 @@ import (
 	"slices"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // gitGraphRow is one commit's slice of the graph. Before/After are the

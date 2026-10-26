@@ -9,8 +9,8 @@ package nativeui
 
 import (
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 // Per-provider marks for live Agents. Monochrome 24×24 paths that read at

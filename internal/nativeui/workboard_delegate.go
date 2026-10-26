@@ -12,8 +12,8 @@ import (
 	"log/slog"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 // delegateSettings are the settings the dialog offers, in its order.

@@ -3,7 +3,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 func TestProbeChipSwitch(t *testing.T) {

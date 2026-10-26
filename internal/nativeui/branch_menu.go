@@ -7,7 +7,7 @@ package nativeui
 import (
 	"strings"
 
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // matchingLocalBranches keeps the current branch visible first when

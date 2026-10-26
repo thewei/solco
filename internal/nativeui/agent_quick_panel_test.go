@@ -3,7 +3,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/solco/internal/agent"
+	"github.com/thewei/solco/internal/agent"
 )
 
 /**

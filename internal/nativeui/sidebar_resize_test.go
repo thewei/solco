@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/app"
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/settings"
 )
 
 func TestSidebarLimitsKeepContentUsable(t *testing.T) {

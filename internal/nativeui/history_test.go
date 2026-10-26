@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // codexFixtureRollout mirrors the audited rollout fixture used by the

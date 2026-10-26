@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // navSessions opens the Sessions page over the real-file fixture. Rows once

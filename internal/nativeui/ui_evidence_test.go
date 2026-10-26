@@ -19,10 +19,10 @@ import (
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/history"
-	"github.com/wh-studio/solco/internal/sshconfig"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/sshconfig"
 )
 
 // evidenceHistory seeds a catalog with a handful of Codex sessions so the

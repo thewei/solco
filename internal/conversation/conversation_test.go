@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/agent"
+	"github.com/thewei/solco/internal/agent"
 )
 
 func TestSessionFingerprintIsStableAndDistinct(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"github.com/wh-studio/solco/internal/applog"
+	"github.com/thewei/solco/internal/applog"
 )
 
 // LogViewerCap is the maximum number of recent log entries kept in memory (WIX-210).

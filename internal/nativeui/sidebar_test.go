@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // TestOnlySettingsKeepsABackFoot pins the unified inner-page chrome: every

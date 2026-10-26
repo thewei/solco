@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wh-studio/solco/internal/apphook"
-	"github.com/wh-studio/solco/internal/conversation"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/herdrhooks"
+	"github.com/thewei/solco/internal/apphook"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdrhooks"
 )
 
 /**

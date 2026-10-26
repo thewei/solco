@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 const pinnedR4 = `{"machine":null,"projects":["r","empty"],"tasks":[{"id":"r/4","state":"idle","title":"Later","msg":"","stage":"todo"}]}`

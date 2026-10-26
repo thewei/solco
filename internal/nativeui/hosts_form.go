@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/sshconfig"
+	"github.com/thewei/solco/internal/sshconfig"
 )
 
 // hostsFormState is the draft for one host block's managed directives. It

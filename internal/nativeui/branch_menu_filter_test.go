@@ -10,7 +10,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 func TestMatchingLocalBranchesCurrentFirst(t *testing.T) {

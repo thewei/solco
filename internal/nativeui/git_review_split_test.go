@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 func TestGitRefTreeGroupsSlashPathsAndFilters(t *testing.T) {

@@ -2,8 +2,8 @@ package nativeui
 
 import (
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/codehl"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/codehl"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // The diff review's colors, ported from egoist/godiff palette.go (commit

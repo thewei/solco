@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/gitworkbench"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // treeTestShell is a diff-mode shell whose reference lists give every tree

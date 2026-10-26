@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // ensureGitSnapshot applies a cached snapshot or starts a background refresh.

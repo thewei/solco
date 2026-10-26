@@ -10,8 +10,8 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 func TestBrandAssetNameAntigravity(t *testing.T) {

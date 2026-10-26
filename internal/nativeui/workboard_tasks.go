@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 const (

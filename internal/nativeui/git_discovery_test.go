@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // tempGitRepo creates a real Git repository with one commit.

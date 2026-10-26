@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 const integrationStatusFixture = `pi: current (v9) (/Users/demo/.pi/agent/extensions/herdr-agent-state.ts)

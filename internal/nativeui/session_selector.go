@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // sidebarSection is one collapsible block of the Workspace sidebar: the shared

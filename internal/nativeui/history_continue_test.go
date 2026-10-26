@@ -13,10 +13,10 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/app"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 // fakeContinuation records what Continue asks of Herdr. The engine never

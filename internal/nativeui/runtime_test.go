@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 func TestUpgradeableFailureClassification(t *testing.T) {

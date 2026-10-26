@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 // archivedRows are shaped like `list --archived --json` of 1.2.26

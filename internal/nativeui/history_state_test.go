@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // fakeHistoryView is a deterministic HistoryListView: every List call is

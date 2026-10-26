@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/commandcenter"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/commandcenter"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 /**

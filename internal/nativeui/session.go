@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/settings"
 )
 
 // The session snapshot (settings.Session) remembers the shell's navigation

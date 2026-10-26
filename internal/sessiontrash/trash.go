@@ -33,7 +33,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // BusyWindow is how recently a session file may have been written and still

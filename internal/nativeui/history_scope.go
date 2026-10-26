@@ -12,8 +12,8 @@ import (
 	"log/slog"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
-	"github.com/wh-studio/solco/internal/sessiontrash"
+	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/sessiontrash"
 )
 
 // historyProjectRoot is the folder of the project the sidebar header names:

@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/scripts"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/scripts"
 )
 
 // runControlTestShell seeds the split-header shell with both panes' cwd at

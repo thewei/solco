@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/settings"
 )
 
 // Sidebar Pins (2026-10-05 sidebar review): pinned Herdr Panes of the

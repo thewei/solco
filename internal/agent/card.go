@@ -3,7 +3,7 @@ package agent
 import (
 	"time"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // AgentCardModel is the one immutable, UI-independent model every Agent

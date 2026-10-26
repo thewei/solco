@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/conversation"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 // LaunchService binds the Agent-runtime transactions to the verified Herdr

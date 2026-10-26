@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 func cardForTest(key, title, status string, attention OperationalState, unread, review bool) AgentCardModel {

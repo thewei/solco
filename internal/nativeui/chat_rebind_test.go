@@ -3,9 +3,9 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/conversation"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // TestRebindWorkspaceChatSourcelessClearsStaleTranscript pins the bug where

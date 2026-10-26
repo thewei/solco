@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // sidebarProjectTitle names the sidebar head: the selected Herdr project,

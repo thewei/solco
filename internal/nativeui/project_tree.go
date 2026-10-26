@@ -11,7 +11,7 @@ import (
 	"sort"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 func (s *Shell) projectItems(c *ui.Context) {

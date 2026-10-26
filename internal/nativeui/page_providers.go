@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/agenthooks"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/agenthooks"
 )
 
 /**

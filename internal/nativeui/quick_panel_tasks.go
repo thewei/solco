@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 // groupOperationalState maps a board group onto the shared attention model,

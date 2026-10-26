@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // fakeLaunchRuntime is the uncertain-delivery harness (AGENT-06A): every

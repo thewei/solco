@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/apphook"
-	"github.com/wh-studio/solco/internal/conversation"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/apphook"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // The fixture is the real visible screen of a Claude Code AskUserQuestion

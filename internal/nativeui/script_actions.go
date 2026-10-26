@@ -10,7 +10,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
-	"github.com/wh-studio/solco/internal/scripts"
+	"github.com/thewei/solco/internal/scripts"
 )
 
 // scriptRunTimeout bounds one Herdr-backed script launch transaction.

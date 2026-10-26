@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 /**

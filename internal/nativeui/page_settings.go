@@ -8,9 +8,9 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/diagnostics"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/diagnostics"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/settings"
 )
 
 /**

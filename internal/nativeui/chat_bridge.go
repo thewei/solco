@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/wh-studio/solco/internal/conversation"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/history"
 )
 
 // Voice transcription defaults; both are overridable in Settings -> General.

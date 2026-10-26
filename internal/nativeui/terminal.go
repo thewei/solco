@@ -10,9 +10,9 @@ import (
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/settings"
 )
 
 /**

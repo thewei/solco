@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // AgentKey is the stable process-wide live Agent identity (0.5 §4):

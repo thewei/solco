@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 func TestResumeArgsMatchRustAuthority(t *testing.T) {

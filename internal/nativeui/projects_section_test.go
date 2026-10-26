@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/app"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/settings"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/settings"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 // projectsBoardList: app has a task that needs you and one ready to approve,

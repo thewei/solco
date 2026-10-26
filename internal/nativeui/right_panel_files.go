@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/filesview"
+	"github.com/thewei/solco/internal/filesview"
 )
 
 // filesToolView renders the Files tree from background directory snapshots

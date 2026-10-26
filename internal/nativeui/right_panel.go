@@ -11,8 +11,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
-	"github.com/wh-studio/solco/internal/filesview"
-	"github.com/wh-studio/solco/internal/preview"
+	"github.com/thewei/solco/internal/filesview"
+	"github.com/thewei/solco/internal/preview"
 	"sync"
 	"sync/atomic"
 )

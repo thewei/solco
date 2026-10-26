@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/sshconfig"
+	"github.com/thewei/solco/internal/sshconfig"
 )
 
 func groupTestEntry(alias, file, group string) sshconfig.Entry {

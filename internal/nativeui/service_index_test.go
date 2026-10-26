@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/services"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/services"
 )
 
 func fgInfo(pid int, name string) *herdr.PaneProcessInfo {

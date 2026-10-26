@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 // workboardOtherProject names tasks whose id carries no repo part.

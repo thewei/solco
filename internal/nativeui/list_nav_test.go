@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/filesview"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/filesview"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // pressKey presses one key and lets the frames its move needs run. A row has

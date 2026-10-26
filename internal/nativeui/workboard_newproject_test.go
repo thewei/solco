@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 // newProjectShell is a supported shell whose plugin registers a folder the way

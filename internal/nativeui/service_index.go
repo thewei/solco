@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/services"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/services"
 )
 
 // The service index answers one sidebar question: which Panes (and which of

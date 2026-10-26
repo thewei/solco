@@ -5,8 +5,8 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // TestTrayTitleTable pins the §17.3 status-first menu-bar title: actionable

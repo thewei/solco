@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/settings"
 )
 
 // TestAppearanceSettingsRoundTrip pins P19: Density & HighContrast

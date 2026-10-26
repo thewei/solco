@@ -10,7 +10,7 @@ package nativeui
 import (
 	"sort"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // treeNodeDrag is scoped to one Herdr instance and hierarchy node.

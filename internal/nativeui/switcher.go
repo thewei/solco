@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/agent"
+	"github.com/thewei/solco/internal/agent"
 )
 
 // handleMRUShortcuts implements the Agent MRU switcher (0.5 §13): Ctrl-Tab

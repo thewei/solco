@@ -18,8 +18,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
-	"github.com/wh-studio/solco/internal/sessiontrash"
+	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/sessiontrash"
 )
 
 // SessionTrashView is the slice of the Sessions Trash the shell consumes.

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/gitworkbench"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // gitSurfaceTestShell builds a shell bound to a repo context with a seeded

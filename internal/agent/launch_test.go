@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 func launchRequest(id string) StartAgentRequest {

@@ -7,7 +7,7 @@ package nativeui
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-import "github.com/wh-studio/solco/internal/sshconfig"
+import "github.com/thewei/solco/internal/sshconfig"
 
 // hostGroup is one section of the Hosts sidebar: a named run of config
 // entries under a collapsible header.

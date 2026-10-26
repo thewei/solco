@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 func usageMeta(model *string, tokens *int64) history.SessionMeta {

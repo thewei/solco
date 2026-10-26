@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 // Remote machine presentation state. Saved SSH machines are Herdr's own

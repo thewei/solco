@@ -17,8 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/sshconfig"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/sshconfig"
 )
 
 // hostsEditorMaxBytes bounds one editable config file. Real ssh configs are

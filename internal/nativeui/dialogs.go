@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 func (s *Shell) openTextDialog(kind, target, title, label, value string) {

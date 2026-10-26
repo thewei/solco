@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // bigRollout is a Codex rollout of n one-line user messages "message i".

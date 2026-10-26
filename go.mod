@@ -1,4 +1,4 @@
-module github.com/wh-studio/solco
+module github.com/thewei/solco
 
 go 1.27.3
 

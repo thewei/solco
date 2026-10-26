@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/settings"
 )
 
 // SettingsService loads client preferences once, serializes updates, and

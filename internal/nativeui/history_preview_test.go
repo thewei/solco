@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 const previewTestKey = "codex:22222222-aaaa-bbbb-cccc-000000000002"

@@ -3,7 +3,7 @@ package nativeui
 import (
 	"log/slog"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 /**

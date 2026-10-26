@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/codehl"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/codehl"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // Godiff-style review state, ported from egoist/godiff rows.go/window.go

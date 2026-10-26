@@ -3,9 +3,9 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/conversation"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/history"
 )
 
 // TestStatusCenterSnapshotPriorityOrder pins the §6 priority order:

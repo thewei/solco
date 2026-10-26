@@ -12,9 +12,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/settings"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/settings"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 const (

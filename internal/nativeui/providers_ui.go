@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/agenthooks"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/agenthooks"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 /**

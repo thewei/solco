@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 func TestCollectRuntimeEventBurstCoalescesUntilQuiet(t *testing.T) {

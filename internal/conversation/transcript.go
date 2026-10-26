@@ -1,7 +1,7 @@
 package conversation
 
 import (
-	"github.com/wh-studio/solco/internal/history"
+	"github.com/thewei/solco/internal/history"
 )
 
 // ItemsFromTranscript converts normalized history messages into the

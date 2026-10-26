@@ -4,7 +4,7 @@
 // Herdr remains the runtime authority.
 package agent
 
-import "github.com/wh-studio/solco/internal/history"
+import "github.com/thewei/solco/internal/history"
 
 // liveCapability mirrors the solco-history live registry authority.
 type liveCapability string

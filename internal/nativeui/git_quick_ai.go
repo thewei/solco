@@ -11,8 +11,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/wh-studio/solco/internal/agent"
-	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // User chose AI Commit in the explicit split-button menu. The review is

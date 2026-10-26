@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/solco/internal/commandcenter"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/workboard"
+	"github.com/thewei/solco/internal/commandcenter"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/workboard"
 )
 
 func workboardAction(t *testing.T, s *Shell) commandcenter.Action {

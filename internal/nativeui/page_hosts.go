@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/herdr"
-	"github.com/wh-studio/solco/internal/sshconfig"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/sshconfig"
 )
 
 // hostsPageState is session-only presentation state for the Hosts page. The

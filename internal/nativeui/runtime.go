@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 func (s *Shell) reloadInstances(autoOpen bool) {

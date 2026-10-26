@@ -5,8 +5,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/wh-studio/solco/internal/commandcenter"
-	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/thewei/solco/internal/commandcenter"
+	"github.com/thewei/solco/internal/herdr"
 )
 
 func TestSurfacePercent(t *testing.T) {

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/solco/internal/history"
-	"github.com/wh-studio/solco/internal/sessiontrash"
+	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/sessiontrash"
 )
 
 // newMultiAgentHistoryShell seeds a real catalog with three Providers: two Pi

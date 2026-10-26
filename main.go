@@ -19,13 +19,13 @@ import (
 	updaterNative "github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 
-	"github.com/wh-studio/solco/internal/app"
-	"github.com/wh-studio/solco/internal/applog"
-	"github.com/wh-studio/solco/internal/history"
-	"github.com/wh-studio/solco/internal/legacy"
-	"github.com/wh-studio/solco/internal/nativeui"
-	"github.com/wh-studio/solco/internal/sessiontrash"
-	"github.com/wh-studio/solco/internal/settings"
+	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/applog"
+	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/legacy"
+	"github.com/thewei/solco/internal/nativeui"
+	"github.com/thewei/solco/internal/sessiontrash"
+	"github.com/thewei/solco/internal/settings"
 )
 
 // followUpLedgerFileName mirrors app.LaunchService's durable ledger name.
