@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: Headless MyGo renderer with realistic local changes and commit ancestry
  * [OUTPUT]: Optional Git Local Changes and All Commits screenshots for layout inspection
- * [POS]: Visual QA only, enabled by SHARDLANE_GIT_LAYOUT_EVIDENCE
+ * [POS]: Visual QA only, enabled by SOLCO_GIT_LAYOUT_EVIDENCE
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -16,13 +16,13 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 func TestGitLayoutRenderEvidence(t *testing.T) {
-	dir := os.Getenv("SHARDLANE_GIT_LAYOUT_EVIDENCE")
+	dir := os.Getenv("SOLCO_GIT_LAYOUT_EVIDENCE")
 	if dir == "" {
-		t.Skip("set SHARDLANE_GIT_LAYOUT_EVIDENCE to render Git layout PNGs")
+		t.Skip("set SOLCO_GIT_LAYOUT_EVIDENCE to render Git layout PNGs")
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)

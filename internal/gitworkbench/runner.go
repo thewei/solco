@@ -1,4 +1,4 @@
-// Package gitworkbench owns Shardlane's local Git review model: one command
+// Package gitworkbench owns Solco's local Git review model: one command
 // runner, repository facts, working-tree change snapshots, a clean-room patch
 // parser, word diff, changed-file trees, commit transactions and branch
 // switching. It supersedes internal/gitintel as the single Git cache.

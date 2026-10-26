@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 // submitCommit runs the selected-file commit transaction in the background

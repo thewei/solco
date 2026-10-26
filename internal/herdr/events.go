@@ -38,7 +38,7 @@ func (s *EventStream) Close() {
 
 // SubscribeEvents follows the verified Herdr events.subscribe contract. Only
 // structural/runtime events are subscribed: Herdr global focus events are
-// intentionally excluded because Shardlane navigation is client-local. Pane-
+// intentionally excluded because Solco navigation is client-local. Pane-
 // scoped Agent status events are added for the materialized Pane set. Callers
 // recreate the stream after pane membership changes.
 func (m *Manager) SubscribeEvents(session string, paneIDs []string) (*EventStream, error) {
@@ -58,7 +58,7 @@ func (m *Manager) SubscribeEvents(session string, paneIDs []string) (*EventStrea
 	subscriptions := eventSubscriptions(paneIDs)
 
 	request, err := json.Marshal(map[string]any{
-		"id":     "shardlane-next-events",
+		"id":     "solco-next-events",
 		"method": "events.subscribe",
 		"params": map[string]any{"subscriptions": subscriptions},
 	})

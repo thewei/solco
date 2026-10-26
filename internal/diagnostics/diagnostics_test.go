@@ -33,8 +33,8 @@ func TestBuildSnapshotContainsPlatformFacts(t *testing.T) {
 
 	// The app version comes from the packaged bundle (mygo.json → App.Version);
 	// unpackaged test binaries report the "dev" fallback, never a stale copy.
-	if snap.ShardlaneVersion == "" || snap.ShardlaneVersion == "0.9.0" {
-		t.Fatalf("version = %q, want the bundle version or the dev fallback", snap.ShardlaneVersion)
+	if snap.SolcoVersion == "" || snap.SolcoVersion == "0.9.0" {
+		t.Fatalf("version = %q, want the bundle version or the dev fallback", snap.SolcoVersion)
 	}
 	if snap.MyGoVersion == "" {
 		t.Fatalf("MyGo version missing: %+v", snap)
@@ -46,7 +46,7 @@ func TestBuildSnapshotContainsPlatformFacts(t *testing.T) {
 		t.Fatalf("missing runtime facts: %+v", snap)
 	}
 	summary := FormatSnapshotSummary(snap)
-	if !strings.Contains(summary, "Shardlane v"+snap.ShardlaneVersion) || !strings.Contains(summary, "proto 22") {
+	if !strings.Contains(summary, "Solco v"+snap.SolcoVersion) || !strings.Contains(summary, "proto 22") {
 		t.Fatalf("summary formatting mismatch: %q", summary)
 	}
 }

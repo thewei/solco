@@ -3,7 +3,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // TestReconcileSurfaceScrollAdoptsAuthoritativeViewport pins the projection

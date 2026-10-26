@@ -14,7 +14,7 @@ import (
 // Breadcrumb switchers (2026-10-05 header review): every segment of the
 // title-bar path is a button that opens a popover listing its siblings —
 // Projects, the selected Project's Tabs, the selected Tab's Panes — for
-// one-click switching, mirroring the Rust Shardlane behavior. Pane rows
+// one-click switching, mirroring the Rust Solco behavior. Pane rows
 // carry the bound Agent's provider glyph with the state dot at its corner.
 
 type crumbSegment struct {

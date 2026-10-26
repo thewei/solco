@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 // gitMeta keeps the per-repository facts the sidebar Agent rows show

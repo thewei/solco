@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // sidebarSection is one collapsible block of the Workspace sidebar: the shared
@@ -150,7 +150,7 @@ func (s *Shell) sessionSelector(c *ui.Context) {
 				if m.Item("Forget Remote Machine…").Chosen() {
 					s.openConfirm("forget-machine", active.Machine.ID,
 						"Forget "+active.DisplayName+"?",
-						"This removes the saved SSH machine from Herdr. The remote session and its panes keep running on that device; Shardlane disconnects from it.")
+						"This removes the saved SSH machine from Herdr. The remote session and its panes keep running on that device; Solco disconnects from it.")
 				}
 			} else {
 				if m.Item("Rename Session…").Chosen() {

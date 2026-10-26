@@ -8,20 +8,20 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/agenthooks"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/agenthooks"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // TestRenderSmokeEvidence renders real Native UI frames for the 0.3.0
 // History/Settings smoke evidence. It is skipped unless
-// SHARDLANE_RENDER_SMOKE=<output-dir> is set, so normal test runs stay
+// SOLCO_RENDER_SMOKE=<output-dir> is set, so normal test runs stay
 // silent and no images are written.
 func TestRenderSmokeEvidence(t *testing.T) {
-	outDir := os.Getenv("SHARDLANE_RENDER_SMOKE")
+	outDir := os.Getenv("SOLCO_RENDER_SMOKE")
 	if outDir == "" {
-		t.Skip("set SHARDLANE_RENDER_SMOKE=<dir> to render smoke evidence frames")
+		t.Skip("set SOLCO_RENDER_SMOKE=<dir> to render smoke evidence frames")
 	}
 
 	home := t.TempDir()

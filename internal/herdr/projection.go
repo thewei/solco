@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// Project is Shardlane's projection of one Herdr runtime workspace inside the
+// Project is Solco's projection of one Herdr runtime workspace inside the
 // currently selected top-level Herdr instance.
 type Project struct {
 	ID          string `json:"id"`

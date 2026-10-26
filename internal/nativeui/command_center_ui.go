@@ -6,8 +6,8 @@ import (
 
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/commandcenter"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/commandcenter"
 )
 
 // Command Center (0.9 P1) over the shared Action Registry (0.9 P2): the

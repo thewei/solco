@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 func commitPromptPreference(value string) string {

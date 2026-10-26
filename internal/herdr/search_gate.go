@@ -2,7 +2,7 @@
 //
 // P15 Terminal Find Capability Gate (0.9 P15 / WIX-190..194):
 // Protocol audit conclusion: `pane.copy_search` exists in Herdr Protocol 22.
-// Shardlane strictly delegates terminal search to Herdr's semantic scrollback
+// Solco strictly delegates terminal search to Herdr's semantic scrollback
 // authority and never implements a client-side VT shadow index.
 package herdr
 

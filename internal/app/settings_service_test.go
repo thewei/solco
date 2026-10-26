@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 func TestSettingsServiceLoadFailureKeepsDefaults(t *testing.T) {

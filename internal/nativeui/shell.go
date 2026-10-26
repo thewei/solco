@@ -1,7 +1,7 @@
-// Package nativeui owns Shardlane's MyGo-native desktop presentation.
+// Package nativeui owns Solco's MyGo-native desktop presentation.
 //
 // [INPUT]: Herdr projections/actions and MyGo's native UI/Terminal toolkit.
-// [OUTPUT]: one native Shardlane window with Sidebar, Header, Pane layout and terminals.
+// [OUTPUT]: one native Solco window with Sidebar, Header, Pane layout and terminals.
 // [POS]: presentation adapter only; Herdr remains the sole runtime authority.
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 package nativeui
@@ -16,26 +16,26 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/agenthooks"
-	"github.com/wh-studio/herdr-client/internal/agentstatus"
-	"github.com/wh-studio/herdr-client/internal/app"
-	"github.com/wh-studio/herdr-client/internal/apphook"
-	"github.com/wh-studio/herdr-client/internal/commandcenter"
-	"github.com/wh-studio/herdr-client/internal/conversation"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/history"
-	"github.com/wh-studio/herdr-client/internal/scripts"
-	"github.com/wh-studio/herdr-client/internal/services"
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/agenthooks"
+	"github.com/wh-studio/solco/internal/agentstatus"
+	"github.com/wh-studio/solco/internal/app"
+	"github.com/wh-studio/solco/internal/apphook"
+	"github.com/wh-studio/solco/internal/commandcenter"
+	"github.com/wh-studio/solco/internal/conversation"
+	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/history"
+	"github.com/wh-studio/solco/internal/scripts"
+	"github.com/wh-studio/solco/internal/services"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 const (
 	sidebarWidth float32 = 252
 )
 
-// Shell is the native presentation state for one Shardlane window. Long-lived
+// Shell is the native presentation state for one Solco window. Long-lived
 // runtime facts are never authored here: projection is a disposable Herdr
 // snapshot and terminal surfaces are visibility-scoped attachments.
 type Shell struct {
@@ -769,7 +769,7 @@ func (s *Shell) View(c *ui.Context) {
 	s.navTrackDialogs()
 	s.releaseIdleHistoryChat()
 	highContrast.Store(s.settings.General.HighContrast)
-	theme := shardlaneTheme(s.resolvedDark(c.Theme().Dark))
+	theme := solcoTheme(s.resolvedDark(c.Theme().Dark))
 	c.SetTheme(theme)
 	// The window's sidebar material shows wherever the view draws no
 	// background; without one the root keeps the theme's canvas.

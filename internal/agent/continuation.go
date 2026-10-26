@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // Continuation strategy order matches the original Host exactly:

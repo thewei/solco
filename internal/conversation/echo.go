@@ -3,7 +3,7 @@ package conversation
 import (
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // PendingEcho is the temporary local User row shown right after a SentNow

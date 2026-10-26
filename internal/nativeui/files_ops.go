@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/filesview"
+	"github.com/wh-studio/solco/internal/filesview"
 )
 
 // filesNewFile opens the shared text dialog to create a file in dir (the

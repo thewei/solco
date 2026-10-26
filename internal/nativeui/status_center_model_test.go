@@ -3,9 +3,9 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/conversation"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/conversation"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // TestStatusCenterSnapshotPriorityOrder pins the §6 priority order:

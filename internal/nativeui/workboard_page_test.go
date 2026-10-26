@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 // pageShell opens the task page for one real contract sample (list row +

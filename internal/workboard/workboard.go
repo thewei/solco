@@ -1,8 +1,8 @@
-// Package workboard is Shardlane's seam to the herdr-projects Herdr plugin
+// Package workboard is Solco's seam to the herdr-projects Herdr plugin
 // (2026-10-26 decision: a native presentation of that one plugin's task
 // board; see docs/client-product-architecture.md §6).
 //
-// The plugin stays the task authority — Shardlane never stores tasks, reads
+// The plugin stays the task authority — Solco never stores tasks, reads
 // the plugin's files or reimplements its state machine. This package owns
 // only the capability gate: whether the plugin is installed, enabled and in
 // the verified version range. Every workboard surface is shown, and every

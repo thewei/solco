@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // IntegrationHealthState is the presentation-safe health vocabulary (INT-03).
@@ -130,7 +130,7 @@ func (s *IntegrationHealthService) Install(ctx context.Context, provider history
 }
 
 // reconcileProvider maps the strategy authority plus the observed CLI state
-// onto the presentation-safe health vocabulary (INT-06): Shardlane never
+// onto the presentation-safe health vocabulary (INT-06): Solco never
 // installs a parallel lifecycle hook beside Herdr official integration.
 func (s *IntegrationHealthService) reconcileProvider(provider history.AgentID, observed map[string]targetState) ProviderIntegrationHealth {
 	entry := IntegrationFor(provider)
@@ -147,7 +147,7 @@ func (s *IntegrationHealthService) reconcileProvider(provider history.AgentID, o
 		row.Detail = "Integration pending — nothing has been set up for this provider yet."
 		return row
 	case StrategyHerdrScreenOnly, StrategyHerdrScreenWithManagedSessionBridge:
-		// Lifecycle authority is the Herdr screen manifest; Shardlane never
+		// Lifecycle authority is the Herdr screen manifest; Solco never
 		// installs anything here.
 		row.State = HealthManagedByHerdr
 		row.Detail = "Managed by the Herdr screen manifest"

@@ -15,9 +15,9 @@ import (
 	"context"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/filesview"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/filesview"
+	"github.com/wh-studio/solco/internal/history"
 	"os"
 )
 

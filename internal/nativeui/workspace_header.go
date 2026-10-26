@@ -1,7 +1,7 @@
 package nativeui
 
 import (
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 // Identity and surface actions live in the title bar (breadcrumb + muted

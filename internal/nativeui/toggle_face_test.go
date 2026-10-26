@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/sessiontrash"
+	"github.com/wh-studio/solco/internal/sessiontrash"
 )
 
 /**

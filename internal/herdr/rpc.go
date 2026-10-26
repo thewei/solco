@@ -51,7 +51,7 @@ func callRPC(socketPath, method string, params any, mutating bool, result any) e
 	_ = conn.SetDeadline(time.Now().Add(rpcTimeout(method)))
 
 	request, err := json.Marshal(map[string]any{
-		"id":     "shardlane-next",
+		"id":     "solco-next",
 		"method": method,
 		"params": params,
 	})

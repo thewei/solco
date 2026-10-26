@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // terminalFindState drives the native Terminal find bar over the live

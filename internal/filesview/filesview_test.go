@@ -97,7 +97,7 @@ func TestReadPreviewTextAndBinary(t *testing.T) {
 	dir := t.TempDir()
 
 	textPath := filepath.Join(dir, "sample.txt")
-	textContent := "Hello, Shardlane!\nSecond line.\n"
+	textContent := "Hello, Solco!\nSecond line.\n"
 	if err := os.WriteFile(textPath, []byte(textContent), 0o600); err != nil {
 		t.Fatal(err)
 	}

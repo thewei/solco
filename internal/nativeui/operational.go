@@ -1,7 +1,7 @@
 package nativeui
 
 import (
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 // The operational attention model is owned by internal/agent (0.5+); the

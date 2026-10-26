@@ -41,7 +41,7 @@ func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 	)
 
 	return mygo.NewMenu([]*mygo.MenuItem{
-		{Label: "Shardlane", Submenu: appMenu},
+		{Label: "Solco", Submenu: appMenu},
 		{Label: "Go", Submenu: []*mygo.MenuItem{
 			do("Workspace", "CmdOrCtrl+1", s.ShowWorkspaceFromMenu),
 			do("Changes", "", s.ShowChangesFromMenu),

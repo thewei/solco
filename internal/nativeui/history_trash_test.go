@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/history"
-	"github.com/wh-studio/herdr-client/internal/sessiontrash"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/history"
+	"github.com/wh-studio/solco/internal/sessiontrash"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 func TestAppearanceMapping(t *testing.T) {
@@ -94,7 +94,7 @@ func TestSettingsGeneralPageUpdatesService(t *testing.T) {
 
 // The classic/rich chat switch is an escape hatch for an implementation
 // detail, so it lives under Diagnostics; General only holds preferences about
-// how Shardlane looks and behaves.
+// how Solco looks and behaves.
 func TestRichChatSwitchLivesInDiagnostics(t *testing.T) {
 	s := NewShell()
 	s.loading = false

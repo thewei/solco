@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 // TestAppearanceSettingsRoundTrip pins P19: Density & HighContrast
@@ -160,11 +160,11 @@ func TestIncreaseContrastStrengthensEveryPalette(t *testing.T) {
 		of    func(dark bool) float64
 	}{
 		{"theme secondary text", 7, func(dark bool) float64 {
-			th := shardlaneTheme(dark)
+			th := solcoTheme(dark)
 			return contrastRatio(th.TextMuted, th.Background)
 		}},
 		{"theme control outline", 3, func(dark bool) float64 {
-			th := shardlaneTheme(dark)
+			th := solcoTheme(dark)
 			return contrastRatio(th.Border, th.Background)
 		}},
 		{"token hairline", 0, func(dark bool) float64 {
@@ -188,19 +188,19 @@ func TestIncreaseContrastStrengthensEveryPalette(t *testing.T) {
 			return contrastRatio(k.cardBorder, k.cardPaper)
 		}},
 		{"diff secondary text", 4.5, func(dark bool) float64 {
-			pal := gdPaletteFor(shardlaneTheme(dark))
+			pal := gdPaletteFor(solcoTheme(dark))
 			return contrastRatio(pal.muted, pal.codeBg)
 		}},
 		{"diff line number", 4.5, func(dark bool) float64 {
-			pal := gdPaletteFor(shardlaneTheme(dark))
+			pal := gdPaletteFor(solcoTheme(dark))
 			return contrastRatio(pal.lineNumber, pal.codeBg)
 		}},
 		{"diff gap label", 4.5, func(dark bool) float64 {
-			pal := gdPaletteFor(shardlaneTheme(dark))
+			pal := gdPaletteFor(solcoTheme(dark))
 			return contrastRatio(pal.gapText, pal.gapBg)
 		}},
 		{"diff hairline", 0, func(dark bool) float64 {
-			pal := gdPaletteFor(shardlaneTheme(dark))
+			pal := gdPaletteFor(solcoTheme(dark))
 			return contrastRatio(pal.cardBorder, pal.codeBg)
 		}},
 	}
@@ -209,7 +209,7 @@ func TestIncreaseContrastStrengthensEveryPalette(t *testing.T) {
 		// palette is picked must still know which it is.
 		for _, on := range []bool{false, true} {
 			withHighContrast(t, on)
-			if gdPaletteFor(shardlaneTheme(dark)).dark != dark {
+			if gdPaletteFor(solcoTheme(dark)).dark != dark {
 				t.Errorf("dark=%v high contrast=%v: the diff palette misreports its scheme", dark, on)
 			}
 		}

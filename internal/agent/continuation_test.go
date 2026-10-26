@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 func TestResumeArgsMatchRustAuthority(t *testing.T) {

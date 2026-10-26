@@ -17,7 +17,7 @@ func TestEventSubscriptionsExcludeGlobalFocusChurn(t *testing.T) {
 		eventType, _ := subscription["type"].(string)
 		switch eventType {
 		case "workspace.focused", "tab.focused", "pane.focused":
-			t.Fatalf("global focus event must not drive Shardlane navigation: %q", eventType)
+			t.Fatalf("global focus event must not drive Solco navigation: %q", eventType)
 		}
 	}
 	foundAgentStatus := false
@@ -36,7 +36,7 @@ func TestSubscribeEventsReadsEventAfterAck(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket fixture")
 	}
-	home, err := os.MkdirTemp("/tmp", "shardlane-next-events-")
+	home, err := os.MkdirTemp("/tmp", "solco-next-events-")
 	if err != nil {
 		t.Fatal(err)
 	}

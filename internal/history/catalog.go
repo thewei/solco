@@ -15,7 +15,7 @@ import (
 // DescriptionMaxChars bounds the session description preview.
 const DescriptionMaxChars = 240
 
-// Catalog is Shardlane's in-memory index over read-only provider history. It
+// Catalog is Solco's in-memory index over read-only provider history. It
 // holds one metadata row per session (title, counts, project, a bounded
 // description line) and is rebuilt from the provider files by the Scanner —
 // nothing is persisted and no conversation content is kept: transcripts are

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 func (s *Shell) sidebar(c *ui.Context) {
@@ -78,7 +78,7 @@ func (s *Shell) sidebar(c *ui.Context) {
 			// flush under the band, while the sides and the foot keep the
 			// framework spacing.
 		}).Background(ui.Transparent).Padding(0, t.Space(2.5), t.Space(2.5)).
-			Grow(1).Label("Shardlane sidebar").Changed() {
+			Grow(1).Label("Solco sidebar").Changed() {
 			s.handleSidebarSelection(s.selected)
 		}
 

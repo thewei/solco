@@ -94,7 +94,7 @@ func TestInstallClaudeEndToEnd(t *testing.T) {
 	}
 
 	// Script landed executable with the current version marker.
-	script := filepath.Join(home, ".shardlane", "hooks", "shardlane-claude-hook.sh")
+	script := filepath.Join(home, ".solco", "hooks", "solco-claude-hook.sh")
 	data, err := os.ReadFile(script)
 	if err != nil {
 		t.Fatalf("script: %v", err)
@@ -117,7 +117,7 @@ func TestInstallClaudeEndToEnd(t *testing.T) {
 	hooks := settings["hooks"].(map[string]any)
 	for _, event := range claudeHookEvents {
 		entries := arrayOf(hooks[event])
-		if !wiringContains(entries, "shardlane-claude-hook.sh") {
+		if !wiringContains(entries, "solco-claude-hook.sh") {
 			t.Errorf("event %s not wired", event)
 		}
 	}
@@ -150,7 +150,7 @@ func TestInstallClaudeEndToEnd(t *testing.T) {
 	}
 
 	// Rolling backup exists beside the original.
-	if _, err := os.Stat(filepath.Join(settingsDir, "settings.json.shardlane-hook-backup")); err != nil {
+	if _, err := os.Stat(filepath.Join(settingsDir, "settings.json.solco-hook-backup")); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
 
@@ -199,12 +199,12 @@ func TestInstallAntigravityPreservesForeignGroups(t *testing.T) {
 
 	var config map[string]any
 	decode(t, path, &config)
-	group := config["shardlane-hook"].(map[string]any)
+	group := config["solco-hook"].(map[string]any)
 	if group["enabled"] != true {
-		t.Fatal("shardlane-hook group not enabled")
+		t.Fatal("solco-hook group not enabled")
 	}
 	for _, event := range antigravityHookEvents {
-		if !wiringContains(arrayOf(group[event]), "shardlane-antigravity-hook.sh") {
+		if !wiringContains(arrayOf(group[event]), "solco-antigravity-hook.sh") {
 			t.Errorf("event %s not wired", event)
 		}
 	}
@@ -250,12 +250,12 @@ func TestInstallCreatesMissingProviderConfigs(t *testing.T) {
 
 func TestInstallRefusesForeignScript(t *testing.T) {
 	home := newTestHome(t)
-	hooksDir := filepath.Join(home, ".shardlane", "hooks")
+	hooksDir := filepath.Join(home, ".solco", "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	foreign := "#!/bin/sh\n# mine, not shardlane\nexit 0\n"
-	script := filepath.Join(hooksDir, "shardlane-claude-hook.sh")
+	foreign := "#!/bin/sh\n# mine, not solco\nexit 0\n"
+	script := filepath.Join(hooksDir, "solco-claude-hook.sh")
 	if err := os.WriteFile(script, []byte(foreign), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -276,10 +276,10 @@ func TestStaleScriptDiagnosedAndUpdated(t *testing.T) {
 	if _, err := m.Install(ProviderClaude); err != nil {
 		t.Fatalf("initial Install: %v", err)
 	}
-	script := filepath.Join(home, ".shardlane", "hooks", "shardlane-claude-hook.sh")
+	script := filepath.Join(home, ".solco", "hooks", "solco-claude-hook.sh")
 	stale := strings.Replace(hookScriptTemplate,
-		"# SHARDLANE_HOOK_VERSION="+itoa(hookScriptVersion),
-		"# SHARDLANE_HOOK_VERSION="+itoa(hookScriptVersion-1), 1)
+		"# SOLCO_HOOK_VERSION="+itoa(hookScriptVersion),
+		"# SOLCO_HOOK_VERSION="+itoa(hookScriptVersion-1), 1)
 	if err := os.WriteFile(script, []byte(stale), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestHookScriptRelayParityWithHerdr(t *testing.T) {
 		"transcript_path",
 		"transcriptPath",
 		"session_start_source",
-		"# SHARDLANE_HOOK_VERSION=" + itoa(hookScriptVersion),
+		"# SOLCO_HOOK_VERSION=" + itoa(hookScriptVersion),
 	} {
 		if !strings.Contains(hookScriptTemplate, fragment) {
 			t.Fatalf("hook script template missing %q", fragment)
@@ -320,16 +320,16 @@ func TestHookScriptRelayParityWithHerdr(t *testing.T) {
 func TestWiringDetectionAcrossShapes(t *testing.T) {
 	nested := []any{map[string]any{
 		"matcher": "*",
-		"hooks":   []any{map[string]any{"type": "command", "command": "bash '/h/shardlane-claude-hook.sh' claude"}},
+		"hooks":   []any{map[string]any{"type": "command", "command": "bash '/h/solco-claude-hook.sh' claude"}},
 	}}
-	flat := []any{map[string]any{"type": "command", "command": "bash '/h/shardlane-antigravity-hook.sh' agy Stop"}}
-	if !wiringContains(nested, "shardlane-claude-hook.sh") {
+	flat := []any{map[string]any{"type": "command", "command": "bash '/h/solco-antigravity-hook.sh' agy Stop"}}
+	if !wiringContains(nested, "solco-claude-hook.sh") {
 		t.Fatal("nested shape not detected")
 	}
-	if !wiringContains(flat, "shardlane-antigravity-hook.sh") {
+	if !wiringContains(flat, "solco-antigravity-hook.sh") {
 		t.Fatal("flat shape not detected")
 	}
-	if wiringContains(flat, "shardlane-claude-hook.sh") {
+	if wiringContains(flat, "solco-claude-hook.sh") {
 		t.Fatal("wrong script matched")
 	}
 }
@@ -371,4 +371,99 @@ func numberInt(t *testing.T, value any) int64 {
 
 func itoa(v int) string {
 	return strconv.Itoa(v)
+}
+
+// A machine that ran the Shardlane build has its hook wired by the old script
+// name. Install replaces that wiring (no second hook firing), keeps every
+// foreign entry, and removes only an old script that carries our marker.
+func TestInstallReplacesTheShardlaneEraWiring(t *testing.T) {
+	home := newTestHome(t)
+	oldScript := filepath.Join(home, ".solco", "hooks", legacyClaudeScript)
+	if err := os.MkdirAll(filepath.Dir(oldScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldScript, []byte("#!/bin/sh\n# "+legacyScriptMarker+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyCmd := "bash '" + filepath.Join(home, ".shardlane", "hooks", legacyClaudeScript) + "' claude"
+	body := `{"theme":"dark","hooks":{
+  "Stop":[
+    {"matcher":"*","hooks":[{"type":"command","command":` + strconv.Quote(legacyCmd) + `}]},
+    {"matcher":"*","hooks":[{"type":"command","command":"echo foreign"}]}
+  ],
+  "SessionStart":[{"matcher":"*","hooks":[{"type":"command","command":` + strconv.Quote(legacyCmd) + `}]}]
+}}`
+	if err := os.WriteFile(settings, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManagerWithHome(home)
+	before := m.diagnoseProvider(ProviderClaude)
+	if !strings.Contains(before.Detail, "replaces the Shardlane-era hook") {
+		t.Fatalf("detail = %q, want the replacement noted", before.Detail)
+	}
+	if _, err := m.Install(ProviderClaude); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Contains(text, legacyClaudeScript) {
+		t.Fatalf("old wiring must be gone:\n%s", text)
+	}
+	if !strings.Contains(text, "echo foreign") || !strings.Contains(text, `"theme": "dark"`) {
+		t.Fatalf("foreign content must stay:\n%s", text)
+	}
+	if after := m.diagnoseProvider(ProviderClaude); after.State != StateOK {
+		t.Fatalf("after Install: %+v", after)
+	}
+	if _, err := os.Stat(oldScript); !os.IsNotExist(err) {
+		t.Fatal("the old script that carries our marker is removed")
+	}
+}
+
+func TestInstallKeepsAnOldScriptThatIsNotOurs(t *testing.T) {
+	home := newTestHome(t)
+	oldScript := filepath.Join(home, ".solco", "hooks", legacyClaudeScript)
+	if err := os.MkdirAll(filepath.Dir(oldScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldScript, []byte("#!/bin/sh\n# mine\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewManagerWithHome(home).Install(ProviderClaude); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(oldScript); err != nil {
+		t.Fatal("a foreign file at the old name is never touched")
+	}
+}
+
+func TestInstallDropsTheShardlaneOwnerGroupFromAntigravityHooks(t *testing.T) {
+	home := newTestHome(t)
+	path := filepath.Join(home, ".gemini", "config", "hooks.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"herdr":{"enabled":true},"`+legacyOwnerKey+`":{"enabled":true,"Stop":[{"type":"command","command":"bash x/`+legacyAntigravityScript+` agy Stop"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewManagerWithHome(home).Install(ProviderAntigravity); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	text := string(data)
+	if strings.Contains(text, legacyOwnerKey) || strings.Contains(text, legacyAntigravityScript) {
+		t.Fatalf("old owner group must be gone:\n%s", text)
+	}
+	if !strings.Contains(text, `"herdr"`) || !strings.Contains(text, antigravityOwnerKey) {
+		t.Fatalf("foreign group stays and ours is added:\n%s", text)
+	}
 }

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // fakeAppRuntime is a minimal agent.LaunchRuntime over scripted responses.

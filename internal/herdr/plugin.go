@@ -25,7 +25,7 @@ func pluginActionArgs(pluginID, actionID string) ([]string, error) {
 // InvokePluginAction runs one declared plugin action in a local session and
 // returns the authoritative projection after it, so the caller can adopt the
 // focus the action produced (for example the board Tab a plugin opened). The
-// action's effect belongs to the plugin and Herdr; Shardlane starts no process
+// action's effect belongs to the plugin and Herdr; Solco starts no process
 // of its own. Like every structural mutation it is never retried here.
 //
 // Plugins are installed on this machine, so a remote machine instance is
@@ -73,7 +73,7 @@ func HasPluginPane(p Projection, title string) bool {
 }
 
 // ForceFocusPluginPane is FocusPluginPane that always asks Herdr to focus the
-// pane: the projection's idea of the focus may be behind Herdr's (Shardlane
+// pane: the projection's idea of the focus may be behind Herdr's (Solco
 // selects panes without moving Herdr's focus), and `plugin pane focus` on a
 // focused pane changes nothing.
 func (m *Manager) ForceFocusPluginPane(ctx context.Context, session, title string, from Projection) (Projection, error) {
@@ -83,7 +83,7 @@ func (m *Manager) ForceFocusPluginPane(ctx context.Context, session, title strin
 
 // FocusPluginPane makes sure the plugin pane titled `title` has Herdr's focus
 // after a plugin action: an action invoked from outside a Herdr client (as
-// Shardlane does) opens its Tab but leaves the focus where it was. The focus
+// Solco does) opens its Tab but leaves the focus where it was. The focus
 // itself is Herdr's own `plugin pane focus`; `from` is the projection the
 // action returned. With no such pane, or when it is already focused, `from`
 // is returned unchanged.

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// CreateInstance mirrors the current Shardlane Workspace-creation semantics:
+// CreateInstance mirrors the current Solco Workspace-creation semantics:
 // derive a filesystem-safe unique Herdr session name, start that named session,
 // then persist the exact user-facing display name beside Herdr's own session data.
 func (m *Manager) CreateInstance(displayName string) (Instance, error) {

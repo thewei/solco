@@ -6,7 +6,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 /**

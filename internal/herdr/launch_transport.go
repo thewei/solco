@@ -75,7 +75,7 @@ func decodeTypedResult(raw json.RawMessage, wantType string, payload any) error 
 }
 
 // CreateTabWithoutFocus creates one Tab in an existing workspace. The
-// protocol default for `focus` is false and Shardlane never sends true:
+// protocol default for `focus` is false and Solco never sends true:
 // navigation stays client-local.
 func (m *Manager) CreateTabWithoutFocus(ctx context.Context, session, workspaceID, cwd string) (tabID, paneID string, err error) {
 	socket, err := m.reachableSocket(session)

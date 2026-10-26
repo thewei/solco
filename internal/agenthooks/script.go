@@ -3,7 +3,7 @@ package agenthooks
 /**
  * [INPUT]: 内嵌的通用 Agent hook 脚本（v6，v5 基础上补齐会话中继的可选字段）
  * [OUTPUT]: 对外提供 hookScriptTemplate、hookScriptMarker、hookScriptVersion
- * [POS]: agenthooks 的脚本供给源；install 原子写入 ~/.shardlane/hooks/ 下的 provider 副本
+ * [POS]: agenthooks 的脚本供给源；install 原子写入 ~/.solco/hooks/ 下的 provider 副本
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,20 +11,20 @@ package agenthooks
 // inside the template must match.
 const hookScriptVersion = 6
 
-// hookScriptMarker identifies files installed by Shardlane; foreign files
+// hookScriptMarker identifies files installed by Solco; foreign files
 // at our install paths are never overwritten.
-const hookScriptMarker = "installed by Shardlane"
+const hookScriptMarker = "installed by Solco"
 
 // hookScriptTemplate is the universal direct-connect hook script shared by
 // every provider copy. It reads stdin hook payloads, normalizes the event
-// into a status, then (1) reports to the Shardlane apphook socket when
+// into a status, then (1) reports to the Solco apphook socket when
 // HERDR_PANE_ID/TMUX_PANE identify a managed pane, (2) reports session
 // identity to Herdr's pane.report_agent_session, and (3) emits an OSC 1337
 // status escape for inline sniffing. It never logs content and fails open.
 const hookScriptTemplate = `#!/bin/sh
-# installed by Shardlane
-# managed by Shardlane; reinstalling or updating the hook overwrites this file.
-# SHARDLANE_HOOK_VERSION=6
+# installed by Solco
+# managed by Solco; reinstalling or updating the hook overwrites this file.
+# SOLCO_HOOK_VERSION=6
 
 set -eu
 
@@ -121,11 +121,11 @@ elif event_name in ("Stop", "stop", "session_idle"):
 elif event_name in ("SessionEnd", "session_end", "session_shutdown"):
     status = "released"
 
-# 1. Report to Shardlane local Unix socket if available (managed panes only)
+# 1. Report to Solco local Unix socket if available (managed panes only)
 if not (os.environ.get("HERDR_PANE_ID") or os.environ.get("TMUX_PANE")):
     sys.exit(0)
 
-sock_path = os.environ.get("SHARDLANE_SOCKET_PATH") or os.path.expanduser("~/.shardlane/run/agent-status.sock")
+sock_path = os.environ.get("SOLCO_SOCKET_PATH") or os.path.expanduser("~/.solco/run/agent-status.sock")
 if os.path.exists(sock_path):
     try:
         payload = {
@@ -149,7 +149,7 @@ if os.path.exists(sock_path):
         pass
 
 # 2. 会话身份接管（v3；v6 补齐字段）：载荷/父进程参数拿到会话 id 后，直接向
-# Herdr socket 报 pane.report_agent_session（source=shardlane，客户端上报
+# Herdr socket 报 pane.report_agent_session（source=solco，客户端上报
 # 语义）。Herdr 有了 typed session identity，Chat 入口链路即通；
 # herdr 官方 hook 组只在存在时兜底，不再是前置依赖。v6 起可选字段与
 # herdr 官方脚本同形状（transcript 路径 + SessionStart 来源），身份接管
@@ -159,7 +159,7 @@ if session_id and os.environ.get("HERDR_ENV") == "1" and os.environ.get("HERDR_P
         _seq = time.time_ns()
         _params = {
             "pane_id": os.environ["HERDR_PANE_ID"],
-            "source": "shardlane",
+            "source": "solco",
             "agent": agent,
             "seq": _seq,
             "agent_session_id": session_id,
@@ -175,7 +175,7 @@ if session_id and os.environ.get("HERDR_ENV") == "1" and os.environ.get("HERDR_P
             if isinstance(_start_source, str) and _start_source:
                 _params["session_start_source"] = _start_source
         _req = json.dumps({
-            "id": f"shardlane:{agent}:{_seq}",
+            "id": f"solco:{agent}:{_seq}",
             "method": "pane.report_agent_session",
             "params": _params,
         })

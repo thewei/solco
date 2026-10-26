@@ -84,9 +84,9 @@ func (d Diagnosis) ActionLabel() string {
 	}
 }
 
-// Manager provisions and diagnoses the Shardlane direct-connect agent
+// Manager provisions and diagnoses the Solco direct-connect agent
 // hooks. It writes exactly two kinds of files: our own scripts under
-// ~/.shardlane/hooks/ (never overwriting foreign files) and narrow,
+// ~/.solco/hooks/ (never overwriting foreign files) and narrow,
 // idempotent edits to each provider's hook wiring — everything else in
 // the provider configs is preserved byte-for-value with a rolling backup.
 type Manager struct {
@@ -113,12 +113,23 @@ func NewManagerWithHome(home string) *Manager {
 var claudeHookEvents = []string{"SessionStart", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"}
 
 // antigravityHookEvents is the proven wiring set for Antigravity CLI,
-// grouped under the "shardlane-hook" owner key of ~/.gemini/config/hooks.json.
+// grouped under the "solco-hook" owner key of ~/.gemini/config/hooks.json.
 var antigravityHookEvents = []string{"PreInvocation", "Stop"}
 
 // antigravityOwnerKey is the hooks.json group this package owns. Foreign
 // groups (herdr, orca-status, …) are never touched.
-const antigravityOwnerKey = "shardlane-hook"
+const antigravityOwnerKey = "solco-hook"
+
+// What the pre-rebrand (Shardlane) build wrote. Install replaces it: the old
+// wiring entries and owner group are dropped and the old script, when the
+// marker proves it was ours, is deleted. Until then the old wiring keeps
+// working through the ~/.shardlane link (internal/legacy).
+const (
+	legacyClaudeScript      = "shardlane-claude-hook.sh"
+	legacyAntigravityScript = "shardlane-antigravity-hook.sh"
+	legacyOwnerKey          = "shardlane-hook"
+	legacyScriptMarker      = "installed by Shardlane"
+)
 
 type providerSpec struct {
 	id         ProviderID
@@ -129,15 +140,15 @@ type providerSpec struct {
 func (m *Manager) spec(id ProviderID) (providerSpec, bool) {
 	switch id {
 	case ProviderClaude:
-		return providerSpec{id: id, scriptName: "shardlane-claude-hook.sh", events: claudeHookEvents}, true
+		return providerSpec{id: id, scriptName: "solco-claude-hook.sh", events: claudeHookEvents}, true
 	case ProviderAntigravity:
-		return providerSpec{id: id, scriptName: "shardlane-antigravity-hook.sh", events: antigravityHookEvents}, true
+		return providerSpec{id: id, scriptName: "solco-antigravity-hook.sh", events: antigravityHookEvents}, true
 	default:
 		return providerSpec{}, false
 	}
 }
 
-func (m *Manager) hooksDir() string { return filepath.Join(m.home, ".shardlane", "hooks") }
+func (m *Manager) hooksDir() string { return filepath.Join(m.home, ".solco", "hooks") }
 
 func (m *Manager) scriptPath(id ProviderID) string {
 	spec, ok := m.spec(id)
@@ -157,7 +168,7 @@ func (m *Manager) antigravityHooksPath() string {
 
 // socketPath mirrors apphook.DefaultSocketPath for diagnosis detail only.
 func (m *Manager) socketPath() string {
-	return filepath.Join(m.home, ".shardlane", "run", "agent-status.sock")
+	return filepath.Join(m.home, ".solco", "run", "agent-status.sock")
 }
 
 // Diagnose reconciles every supported provider's hook state, plus the
@@ -184,7 +195,7 @@ func (m *Manager) diagnoseProvider(id ProviderID) Diagnosis {
 		return row
 	case owned == foreignOwned:
 		row.State = StateError
-		row.Detail = fmt.Sprintf("%s exists but was not installed by Shardlane; refusing to touch it", path)
+		row.Detail = fmt.Sprintf("%s exists but was not installed by Solco; refusing to touch it", path)
 		return row
 	case version == 0:
 		row.State = StateNotInstalled
@@ -206,6 +217,9 @@ func (m *Manager) diagnoseProvider(id ProviderID) Diagnosis {
 		row.State = StateNotInstalled
 	}
 	row.Detail = m.describe(row)
+	if row.State != StateOK && m.hasLegacyWiring(id) {
+		row.Detail += "; Install replaces the Shardlane-era hook"
+	}
 	return row
 }
 
@@ -276,6 +290,7 @@ func (m *Manager) Install(id ProviderID) (Diagnosis, error) {
 			return Diagnosis{}, err
 		}
 	}
+	m.removeLegacyScript(id)
 	slog.Info("agent hooks provisioned", "provider", string(id), "script", m.scriptPath(id))
 	return m.diagnoseProvider(id), nil
 }
@@ -289,7 +304,7 @@ func (m *Manager) writeScript(id ProviderID) error {
 		return err
 	}
 	if owned == foreignOwned {
-		return fmt.Errorf("%s exists but was not installed by Shardlane; remove or rename it first", path)
+		return fmt.Errorf("%s exists but was not installed by Solco; remove or rename it first", path)
 	}
 	if owned == oursOwned && version == hookScriptVersion {
 		return nil
@@ -312,7 +327,7 @@ const (
 	foreignOwned
 )
 
-var versionRe = regexp.MustCompile(`(?m)^#\s*SHARDLANE_HOOK_VERSION=(\d+)\s*$`)
+var versionRe = regexp.MustCompile(`(?m)^#\s*SOLCO_HOOK_VERSION=(\d+)\s*$`)
 
 // readOwnedScript classifies the file at path and extracts its marker
 // version. owned=foreignOwned means a foreign file occupies our path.
@@ -343,8 +358,8 @@ func (m *Manager) wireClaude() error {
 	if err != nil {
 		return err
 	}
-	changed := false
 	hooks := objectOf(root["hooks"])
+	changed := pruneLegacyHooks(hooks, legacyClaudeScript)
 	command := fmt.Sprintf("bash %s claude", shellQuote(m.scriptPath(ProviderClaude)))
 	for _, event := range claudeHookEvents {
 		entries := arrayOf(hooks[event])
@@ -369,7 +384,7 @@ func (m *Manager) wireClaude() error {
 }
 
 // wireAntigravity idempotently adds our event commands under the
-// "shardlane-hook" owner key of ~/.gemini/config/hooks.json, preserving
+// "solco-hook" owner key of ~/.gemini/config/hooks.json, preserving
 // foreign owner groups (herdr, orca-status, …).
 func (m *Manager) wireAntigravity() error {
 	path := m.antigravityHooksPath()
@@ -379,6 +394,10 @@ func (m *Manager) wireAntigravity() error {
 	}
 	group := objectOf(root[antigravityOwnerKey])
 	changed := false
+	if _, ok := root[legacyOwnerKey]; ok {
+		delete(root, legacyOwnerKey)
+		changed = true
+	}
 	script := m.scriptPath(ProviderAntigravity)
 	for _, event := range antigravityHookEvents {
 		entries := arrayOf(group[event])
@@ -448,6 +467,97 @@ func wiringContains(entries []any, scriptName string) bool {
 	return false
 }
 
+// pruneLegacyHooks drops, from every event of a Claude-style hooks map, the
+// commands that run the pre-rebrand script (an entry left with no command is
+// dropped too; foreign entries are untouched). It reports whether it changed
+// anything.
+func pruneLegacyHooks(hooks map[string]any, script string) bool {
+	changed := false
+	for event, value := range hooks {
+		entries, ok := value.([]any)
+		if !ok {
+			continue
+		}
+		kept, dropped := dropWiring(entries, script)
+		if !dropped {
+			continue
+		}
+		changed = true
+		if len(kept) == 0 {
+			delete(hooks, event)
+		} else {
+			hooks[event] = kept
+		}
+	}
+	return changed
+}
+
+func dropWiring(entries []any, script string) (kept []any, dropped bool) {
+	for _, entry := range entries {
+		obj, ok := entry.(map[string]any)
+		if !ok {
+			kept = append(kept, entry)
+			continue
+		}
+		if command, ok := obj["command"].(string); ok && strings.Contains(command, script) {
+			dropped = true
+			continue
+		}
+		if nested, ok := obj["hooks"].([]any); ok {
+			rest, nestedDropped := dropWiring(nested, script)
+			if nestedDropped {
+				dropped = true
+				if len(rest) == 0 {
+					continue
+				}
+				obj["hooks"] = rest
+			}
+		}
+		kept = append(kept, entry)
+	}
+	return kept, dropped
+}
+
+// removeLegacyScript deletes the pre-rebrand script of a provider once the
+// new wiring replaced it, but only a file that carries our marker.
+func (m *Manager) removeLegacyScript(id ProviderID) {
+	name := legacyClaudeScript
+	if id == ProviderAntigravity {
+		name = legacyAntigravityScript
+	}
+	path := filepath.Join(m.hooksDir(), name)
+	if data, err := os.ReadFile(path); err == nil && strings.Contains(string(data), legacyScriptMarker) {
+		if err := os.Remove(path); err != nil {
+			slog.Warn("remove pre-rebrand hook script failed", "path", path, "error", err)
+		}
+	}
+}
+
+// hasLegacyWiring reports whether the provider config still runs the
+// pre-rebrand script.
+func (m *Manager) hasLegacyWiring(id ProviderID) bool {
+	switch id {
+	case ProviderClaude:
+		root, err := readJSONObject(m.claudeSettingsPath())
+		if err != nil {
+			return false
+		}
+		for _, value := range objectOf(root["hooks"]) {
+			if wiringContains(arrayOf(value), legacyClaudeScript) {
+				return true
+			}
+		}
+	case ProviderAntigravity:
+		root, err := readJSONObject(m.antigravityHooksPath())
+		if err != nil {
+			return false
+		}
+		_, ok := root[legacyOwnerKey]
+		return ok
+	}
+	return false
+}
+
 func shellQuote(path string) string {
 	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }
@@ -474,7 +584,7 @@ func readJSONObject(path string) (map[string]any, error) {
 // backup beside the original (before the first modification of this run).
 func backupAndWriteJSON(path string, root map[string]any) error {
 	if original, err := os.ReadFile(path); err == nil {
-		backup := path + ".shardlane-hook-backup"
+		backup := path + ".solco-hook-backup"
 		if err := atomicWrite(backup, original, 0o644); err != nil {
 			return fmt.Errorf("backup %s: %w", backup, err)
 		}
@@ -498,7 +608,7 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 			return fmt.Errorf("create %s: %w", dir, err)
 		}
 	}
-	tmp := path + ".tmp-shardlane"
+	tmp := path + ".tmp-solco"
 	if err := os.WriteFile(tmp, data, mode); err != nil {
 		return fmt.Errorf("write %s: %w", tmp, err)
 	}

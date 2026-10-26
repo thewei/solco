@@ -11,8 +11,8 @@ import (
 	"log/slog"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // headerOverflow is the Actions pull-down after the title-bar breadcrumb

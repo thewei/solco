@@ -114,7 +114,7 @@ func TestDecodeMachineStatesShapes(t *testing.T) {
 }
 
 func TestBridgeSocketPaths(t *testing.T) {
-	home, err := os.MkdirTemp("/tmp", "shardlane-bridge-paths-")
+	home, err := os.MkdirTemp("/tmp", "solco-bridge-paths-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestBridgeSocketPaths(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	got := bridgeSocketPath("deploy@workbox", "")
-	if want := filepath.Join(home, ".shardlane", "ssh-bridges", "deploy_workbox_default.sock"); got != want {
+	if want := filepath.Join(home, ".solco", "ssh-bridges", "deploy_workbox_default.sock"); got != want {
 		t.Fatalf("bridgeSocketPath = %q, want %q", got, want)
 	}
 	named := bridgeSocketPath("Deploy@WorkBox", "agents")

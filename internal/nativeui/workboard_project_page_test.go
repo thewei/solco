@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 // projectPageShell is a supported shell with the canned board loaded; every

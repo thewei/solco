@@ -3,7 +3,7 @@ package agent
 import (
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // AgentCardModel is the one immutable, UI-independent model every Agent

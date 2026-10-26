@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 /**

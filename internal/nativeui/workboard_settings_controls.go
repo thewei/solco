@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 // workboardDefaultModel is the model dropdown's entry for "no model after the

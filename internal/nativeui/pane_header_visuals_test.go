@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 /**
@@ -64,7 +64,7 @@ func TestPaneHeaderVisualsAgent(t *testing.T) {
 	}
 }
 
-// A name Shardlane generated for Herdr (pi-3fa91c, or the longer form older
+// A name Solco generated for Herdr (pi-3fa91c, or the longer form older
 // builds minted) is plumbing: the header shows the provider, a name someone
 // chose stays.
 func TestPaneHeaderVisualsHidesGeneratedAgentNames(t *testing.T) {

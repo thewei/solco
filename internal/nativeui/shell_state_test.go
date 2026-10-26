@@ -3,7 +3,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 func TestClassifyShellState(t *testing.T) {

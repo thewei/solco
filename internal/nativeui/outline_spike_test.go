@@ -6,7 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// DS-06 spike: evaluate official ui.Outline against the Shardlane
+// DS-06 spike: evaluate official ui.Outline against the Solco
 // Project→Tab→Pane tree requirements (client-local disclosure, selection,
 // status presentation, context menus). The spike stays in the tree to
 // record the parity evidence; the production decision is documented in the

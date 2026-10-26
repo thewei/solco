@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/apphook"
-	"github.com/wh-studio/herdr-client/internal/conversation"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/herdrhooks"
+	"github.com/wh-studio/solco/internal/apphook"
+	"github.com/wh-studio/solco/internal/conversation"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdrhooks"
 )
 
 /**
@@ -47,7 +47,7 @@ func (s *Shell) AttachHookServer() {
 }
 
 // AttachHookSpool starts the hook spool tailer (production only: the spool
-// exists when the Shardlane herdr plugin is linked). Hook events reconcile
+// exists when the Solco herdr plugin is linked). Hook events reconcile
 // the interaction lifecycle and republish the chat projection. The tailer
 // reads only NEW lines; agents already blocked at attach get a detection
 // pass here (restart mid-prompt) — the authoritative pass runs once the

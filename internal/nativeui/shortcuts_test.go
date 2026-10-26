@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 func TestShortcutRegistryCoversRequiredShellActions(t *testing.T) {

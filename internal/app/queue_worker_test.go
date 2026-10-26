@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/conversation"
+	"github.com/wh-studio/solco/internal/conversation"
 )
 
 // TestLaunchServiceFollowUpLedger pins the production queue ownership: the

@@ -1,7 +1,7 @@
 // detect.go sniffs project-defined commands from well-known project files
 // (package.json scripts, Makefile targets, justfile recipes). Detection is a
 // bounded, read-only local capability in the same class as the Files tree:
-// Shardlane only reads metadata and never executes anything itself — every
+// Solco only reads metadata and never executes anything itself — every
 // command still runs through the Herdr-owned pane paths.
 package scripts
 

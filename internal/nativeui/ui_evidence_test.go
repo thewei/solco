@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: Headless MyGo renderer, a synthetic multi-workspace projection (agents, split panes) and a seeded history catalog
  * [OUTPUT]: Optional dark/light PNGs of Workspace, Settings pages, History (all, one Agent tab, a session detail), Files, Hosts (seeded temp ssh config) and the Agent panel for visual review
- * [POS]: Visual QA only, enabled by SHARDLANE_UI_EVIDENCE; never touches a live Herdr session
+ * [POS]: Visual QA only, enabled by SOLCO_UI_EVIDENCE; never touches a live Herdr session
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -19,10 +19,10 @@ import (
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/history"
-	"github.com/wh-studio/herdr-client/internal/sshconfig"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/history"
+	"github.com/wh-studio/solco/internal/sshconfig"
 )
 
 // evidenceHistory seeds a catalog with a handful of Codex sessions so the
@@ -157,9 +157,9 @@ func paneByTerminal(p herdr.Projection, terminalID string) herdr.Pane {
 }
 
 func TestUIEvidence(t *testing.T) {
-	dir := os.Getenv("SHARDLANE_UI_EVIDENCE")
+	dir := os.Getenv("SOLCO_UI_EVIDENCE")
 	if dir == "" {
-		t.Skip("set SHARDLANE_UI_EVIDENCE to render UI review PNGs")
+		t.Skip("set SOLCO_UI_EVIDENCE to render UI review PNGs")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

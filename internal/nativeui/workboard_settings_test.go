@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 // settingsShow mirrors 1.2.26's `show --json` rows (kinds and shapes from the

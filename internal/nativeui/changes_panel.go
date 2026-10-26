@@ -2,7 +2,7 @@ package nativeui
 
 import (
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 // changesPanelState is the Changes tool's presentation state (filter,

@@ -26,7 +26,7 @@ var (
 	accentPressedDark  = ui.Oklch(0.5600, 0.1880, 255.2) // was #0070df
 )
 
-// DesignTokens are Shardlane's reusable presentation tokens. They deliberately
+// DesignTokens are Solco's reusable presentation tokens. They deliberately
 // stay close to macOS system surfaces and shadcn's neutral, low-contrast style.
 type DesignTokens struct {
 	// Sidebar is the opaque sidebar fill for windows that cannot show the
@@ -59,7 +59,7 @@ func (s *Shell) resolvedDark(systemDark bool) bool {
 	}
 }
 
-func shardlaneTheme(dark bool) *ui.Theme {
+func solcoTheme(dark bool) *ui.Theme {
 	if !dark {
 		t := *ui.LightTheme()
 		t.Background = ui.Hex("#f5f5f7")

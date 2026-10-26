@@ -113,7 +113,7 @@ func (s *Shell) currentRouteTitle() string {
 	case strings.HasPrefix(path, "/settings/"):
 		return "Settings"
 	default:
-		return "Shardlane"
+		return "Solco"
 	}
 }
 

@@ -63,7 +63,7 @@ func TestEmptyRootFailsEveryCall(t *testing.T) {
 }
 
 // The CLI runs with the session's socket and without any pane identity, even
-// when Shardlane itself was launched from a Herdr pane.
+// when Solco itself was launched from a Herdr pane.
 func TestCLIRunsAsTheHumanOnTheSessionSocket(t *testing.T) {
 	t.Setenv("HERDR_PANE_ID", "p_leaked")
 	t.Setenv("HERDR_PLUGIN_ID", "someone-else")

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 // newProjectShell is a supported shell whose plugin registers a folder the way
@@ -48,7 +48,7 @@ func TestNewProjectRegistersPinsAndStartsTheCoordinatorWithoutATask(t *testing.T
 	if strings.Contains(got, "|add ") || strings.HasPrefix(got, "add ") {
 		t.Fatalf("a Project starts with no task: %q", got)
 	}
-	if !strings.HasPrefix(got, "automations add … --repo /tmp/My.Proj|automations remove shardlane-new-project-") ||
+	if !strings.HasPrefix(got, "automations add … --repo /tmp/My.Proj|automations remove solco-new-project-") ||
 		!strings.HasSuffix(got, "|pin My.Proj|coordinator --project My.Proj restart") {
 		t.Fatalf("ran = %q", got)
 	}

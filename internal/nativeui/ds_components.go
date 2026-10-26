@@ -2,7 +2,7 @@ package nativeui
 
 import (
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // Design System v2 shared page primitives (DS-03). Every surface composes

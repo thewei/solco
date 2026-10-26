@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 // projectAutomationList is the Project's automations, by name.

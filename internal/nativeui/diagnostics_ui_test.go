@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // TestSettingsDiagnosticsSnapshotView pins P16: diagnostics section

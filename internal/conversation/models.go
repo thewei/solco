@@ -1,6 +1,6 @@
 package conversation
 
-import "github.com/wh-studio/herdr-client/internal/agent"
+import "github.com/wh-studio/solco/internal/agent"
 
 // ConversationSource distinguishes live sessions from history records.
 type ConversationSource string

@@ -1,4 +1,4 @@
-// Package settings owns Shardlane client preferences for the MyGo rewrite.
+// Package settings owns Solco client preferences for the MyGo rewrite.
 // It is UI- and platform-framework-independent.
 package settings
 
@@ -53,7 +53,7 @@ type GeneralSettings struct {
 	WebViewFilesPreview bool `json:"webview_files_preview"`
 	// WorkboardView picks how the herdr-projects work board shows up when
 	// the plugin is installed: "board" (the default: Project/task rows open
-	// the plugin's own board Tab) or "native" (Shardlane's Project and task
+	// the plugin's own board Tab) or "native" (Solco's Project and task
 	// pages). User decision 2026-10-26; the native pages stay under trial.
 	WorkboardView string `json:"workboard_view,omitempty"`
 	// Opacity controls the transparency of the application window shell

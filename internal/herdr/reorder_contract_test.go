@@ -22,7 +22,7 @@ func TestReorderActionsUseCanonicalHerdrMethods(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket fixture")
 	}
-	home, err := os.MkdirTemp("/tmp", "shardlane-drag-")
+	home, err := os.MkdirTemp("/tmp", "solco-drag-")
 	if err != nil {
 		t.Fatal(err)
 	}

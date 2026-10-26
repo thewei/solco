@@ -3,7 +3,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 /**

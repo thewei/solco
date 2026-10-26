@@ -107,7 +107,7 @@ func (c *WindowController) OpenPreviewWindow(targetURL string) (*mygo.Window, er
 	}
 
 	win := mygo.NewWindow(mygo.WindowOptions{
-		Title:  fmt.Sprintf("Shardlane Preview — %s", cleanURL),
+		Title:  fmt.Sprintf("Solco Preview — %s", cleanURL),
 		URL:    cleanURL,
 		Width:  960,
 		Height: 680,

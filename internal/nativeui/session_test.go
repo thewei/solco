@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/app"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/app"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 func TestPersistableRouteNormalization(t *testing.T) {
@@ -108,7 +108,7 @@ func TestRestoreSessionDropsRemovedRoutes(t *testing.T) {
 }
 
 // A launch that restores an inner page sets visibleRoute itself, so no route
-// change ever titled the window: Mission Control and ⌘Tab read "Shardlane"
+// change ever titled the window: Mission Control and ⌘Tab read "Solco"
 // over the Files page (found on the real device, 2026-10-14). The title now
 // follows the route from the first frame, and is only handed over when it
 // changes.
@@ -125,8 +125,8 @@ func TestRestoredRouteTitlesTheNativeWindow(t *testing.T) {
 
 	tester := ui.NewTester(s.View, 1100, 760)
 	tester.Frame()
-	if len(titles) != 1 || titles[0] != "Shardlane — Files" {
-		t.Fatalf("titles after the first frame = %q, want [Shardlane — Files]", titles)
+	if len(titles) != 1 || titles[0] != "Solco — Files" {
+		t.Fatalf("titles after the first frame = %q, want [Solco — Files]", titles)
 	}
 	tester.Frame()
 	if len(titles) != 1 {
@@ -136,7 +136,7 @@ func TestRestoredRouteTitlesTheNativeWindow(t *testing.T) {
 	tester.Frame()
 	s.router.Replace(routeWorkspace)
 	tester.Frame()
-	if want := []string{"Shardlane — Files", "Shardlane — Hosts", "Shardlane"}; len(titles) != 3 || titles[1] != want[1] || titles[2] != want[2] {
+	if want := []string{"Solco — Files", "Solco — Hosts", "Solco"}; len(titles) != 3 || titles[1] != want[1] || titles[2] != want[2] {
 		t.Fatalf("titles = %q, want %q (the workspace keeps the bare app name)", titles, want)
 	}
 }

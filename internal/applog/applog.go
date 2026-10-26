@@ -1,6 +1,6 @@
 // Package applog configures bounded structured application logging.
 //
-// [INPUT]: MyGo's per-app logs directory and SHARDLANE_LOG_LEVEL.
+// [INPUT]: MyGo's per-app logs directory and SOLCO_LOG_LEVEL.
 // [OUTPUT]: process-wide slog logger with size-bounded rotating JSON files.
 // [POS]: infrastructure only; no product/runtime state lives here.
 package applog
@@ -14,12 +14,14 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/wh-studio/solco/internal/legacy"
 )
 
 const (
 	DefaultMaxBytes = int64(2 * 1024 * 1024)
 	DefaultBackups  = 3
-	FileName        = "shardlane.log"
+	FileName        = "solco.log"
 )
 
 var (
@@ -44,7 +46,7 @@ func Setup(dir string) (string, error) {
 	}
 
 	level := &slog.LevelVar{}
-	level.Set(levelFromEnv(os.Getenv("SHARDLANE_LOG_LEVEL")))
+	level.Set(levelFromEnv(legacy.Env("LOG_LEVEL")))
 	handler := slog.NewJSONHandler(writer, &slog.HandlerOptions{
 		Level:     level,
 		AddSource: level.Level() == slog.LevelDebug,

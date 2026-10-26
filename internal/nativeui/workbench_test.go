@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 func workbenchTestShell(t *testing.T) *Shell {

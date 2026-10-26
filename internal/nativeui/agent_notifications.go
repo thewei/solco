@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // Desktop-notification identity for agent transitions (MyGo v0.2.15):
@@ -15,7 +15,7 @@ import (
 // Notification Center. The ID is presentation-only: it encodes the
 // Herdr-owned (instance, terminal) pair and carries no runtime truth.
 
-const agentNotificationIDPrefix = "shardlane-agent/"
+const agentNotificationIDPrefix = "solco-agent/"
 
 // agentNotificationID is the stable notification ID of one Agent pane.
 // It is pure text: MyGo hands it back verbatim, across runs.
@@ -26,7 +26,7 @@ func agentNotificationID(instanceID, terminalID string) string {
 // agentNotificationGroup groups one workspace's agent notifications in a
 // single Notification Center stack.
 func agentNotificationGroup(instanceID string) string {
-	return "shardlane-workspace/" + instanceID
+	return "solco-workspace/" + instanceID
 }
 
 // parseAgentNotificationID decodes an ID this app issued. Anything else —

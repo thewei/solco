@@ -1,4 +1,4 @@
-module github.com/wh-studio/herdr-client
+module github.com/wh-studio/solco
 
 go 1.27.3
 
@@ -12,7 +12,7 @@ tool github.com/egoist/mygo/cmd/mygo
 // input), multi-display tray flyout anchoring on macOS, and the OSC 7501
 // program-status scanner (Options.OnProgramStatus). Remove this replace,
 // bump the pin, and delete third_party/mygo once upstream ships all four
-// — Shardlane code needs no changes. See
+// — Solco code needs no changes. See
 // third_party/mygo/LOCAL-PATCH.md.
 replace github.com/egoist/mygo => ./third_party/mygo
 

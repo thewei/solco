@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 func (s *Shell) startWatcher(projection herdr.Projection) {

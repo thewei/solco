@@ -3,7 +3,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 /**
@@ -20,7 +20,7 @@ import (
 func TestBreadcrumbPaneSegmentListsTabPanes(t *testing.T) {
 	s := NewShell()
 	s.projection = herdr.Projection{
-		Projects: []herdr.Project{{ID: "w1", Label: "Shardlane", TabCount: 1}},
+		Projects: []herdr.Project{{ID: "w1", Label: "Solco", TabCount: 1}},
 		Tabs:     []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "main", PaneCount: 2}},
 		Panes: []herdr.Pane{
 			{ID: "p1", TerminalID: "term1", ProjectID: "w1", TabID: "t1", Label: "left"},

@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/conversation"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/conversation"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // TestQuickPanelHeightFor pins the content-driven height: the panel grows with
@@ -47,7 +47,7 @@ func TestQuickPanelHeightFor(t *testing.T) {
 // disconnection wins.
 func TestTrayToolTipSharesTheAttentionSegments(t *testing.T) {
 	counts := TrayCounts{Attention: 2, Review: 1, Working: 3}
-	if got := TrayToolTip(counts, true); got != "Shardlane — 2 need attention, 1 for review, 3 working" {
+	if got := TrayToolTip(counts, true); got != "Solco — 2 need attention, 1 for review, 3 working" {
 		t.Fatalf("tray tooltip = %q", got)
 	}
 }

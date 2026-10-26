@@ -15,7 +15,7 @@ import (
 // Saved SSH machines are Herdr's own remote-connection machinery: one profile
 // pins one device (SSH target) to one explicit remote Herdr session. This
 // file only drives the installed `herdr machine` CLI — profiles are stored in
-// Herdr's client state and are never mirrored into a Shardlane-side registry.
+// Herdr's client state and are never mirrored into a Solco-side registry.
 
 // Machine is one saved Herdr SSH machine profile. ID is Herdr's opaque
 // profile id and is the only handle this client ever targets (`--machine
@@ -126,7 +126,7 @@ func (m *Manager) runMachineCommand(command string, args ...string) error {
 // OpenMachineAddInTerminal hands `herdr machine add` to the user's terminal:
 // setup discovers remote sessions, may install/update the remote server, and
 // always asks before replacing anything, so Herdr documents it as an
-// interactive command ("non-interactive commands use default"). Shardlane
+// interactive command ("non-interactive commands use default"). Solco
 // opens Terminal.app running the exact command and reports back; the profile
 // list refreshes when the user reopens the Session menu.
 func (m *Manager) OpenMachineAddInTerminal(target string) error {
@@ -142,7 +142,7 @@ func (m *Manager) OpenMachineAddInTerminal(target string) error {
 		return fmt.Errorf("opening a terminal is only supported on macOS; run: %s machine add %s", cli, target)
 	}
 	script := fmt.Sprintf("#!/bin/zsh\nprintf 'Adding remote machine to Herdr...\\n\\n'\n%s machine add %s\nprintf '\\nSetup finished — you can close this window.\\n'\n", shellQuote(cli), shellQuote(target))
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("shardlane-machine-add-%d.command", os.Getpid()))
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("solco-machine-add-%d.command", os.Getpid()))
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		return fmt.Errorf("write machine add script: %w", err)
 	}

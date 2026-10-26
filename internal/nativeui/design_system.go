@@ -105,7 +105,7 @@ const (
 // StatusColor maps a semantic tone onto the active theme. It is the single
 // color authority for status presentation.
 func (t DesignTokens) StatusColor(tone StatusTone, dark bool) ui.Color {
-	theme := shardlaneTheme(dark)
+	theme := solcoTheme(dark)
 	switch tone {
 	case ToneInfo, ToneWorking:
 		return theme.Accent

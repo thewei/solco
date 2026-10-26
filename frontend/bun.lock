@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "shardlane-frontend",
+      "name": "solco-frontend",
       "dependencies": {
         "github-markdown-css": "^5.9.0",
         "mygo-runtime": "^0.6.4",

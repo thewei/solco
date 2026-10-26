@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/platform"
+	"github.com/wh-studio/solco/internal/platform"
 )
 
 // timeTime aliases time.Time for testable clock seams.

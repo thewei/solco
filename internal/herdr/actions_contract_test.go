@@ -15,7 +15,7 @@ func TestZoomPaneExplicitModesContract(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket fixture")
 	}
-	home, err := os.MkdirTemp("/tmp", "shardlane-zoom-")
+	home, err := os.MkdirTemp("/tmp", "solco-zoom-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestSplitPaneUsesVerifiedMutationThenSnapshot(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket fixture")
 	}
-	home, err := os.MkdirTemp("/tmp", "shardlane-actions-")
+	home, err := os.MkdirTemp("/tmp", "solco-actions-")
 	if err != nil {
 		t.Fatal(err)
 	}

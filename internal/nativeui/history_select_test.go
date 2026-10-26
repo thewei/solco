@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/history"
-	"github.com/wh-studio/herdr-client/internal/sessiontrash"
+	"github.com/wh-studio/solco/internal/history"
+	"github.com/wh-studio/solco/internal/sessiontrash"
 )
 
 // TestHistorySelectModeTicksRows pins the select flow: the toolbar toggle

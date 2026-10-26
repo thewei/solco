@@ -3,7 +3,7 @@ package nativeui
 import (
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 func TestAgentNotificationIDRoundTrip(t *testing.T) {
@@ -46,7 +46,7 @@ func TestParseAgentNotificationIDRejectsForeignShapes(t *testing.T) {
 }
 
 func TestAgentNotificationGroupPerWorkspace(t *testing.T) {
-	if got := agentNotificationGroup("w1"); got != "shardlane-workspace/w1" {
+	if got := agentNotificationGroup("w1"); got != "solco-workspace/w1" {
 		t.Fatalf("unexpected group %q", got)
 	}
 }

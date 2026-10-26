@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/sshconfig"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/sshconfig"
 )
 
 // hostsNav is the Hosts page's sidebar body: the config index above (under

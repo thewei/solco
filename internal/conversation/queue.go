@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 // QueueState is the follow-up queue lifecycle (0.6 §11.2). Blocked retains

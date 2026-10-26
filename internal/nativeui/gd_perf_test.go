@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 // gdPerfFile builds one modified file of `pairs` replaced lines (each a

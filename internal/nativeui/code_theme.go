@@ -10,7 +10,7 @@ package nativeui
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
-	"github.com/wh-studio/herdr-client/internal/codehl"
+	"github.com/wh-studio/solco/internal/codehl"
 )
 
 // codeEditorTheme dresses the framework's code editor in the review's

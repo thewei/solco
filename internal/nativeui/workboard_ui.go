@@ -12,9 +12,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/settings"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/settings"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 const (

@@ -1,4 +1,4 @@
-// Shardlane app + frontend configuration (N19 Phase 0). This file replaced
+// Solco app + frontend configuration (N19 Phase 0). This file replaced
 // mygo.json when the chat WebView frontend arrived: mygo.config.ts and
 // mygo.json configure the same project and are mutually exclusive, so the
 // packaging identity moved here next to the frontend keys. During
@@ -6,8 +6,8 @@
 // `go tool mygo build` embeds frontend/dist behind mygo://localhost, and
 // `mygo generate` writes the typed bridge client to frontend/src/mygo.ts.
 export default {
-  name: "Shardlane",
-  identifier: "com.whstudio.shardlane.next",
+  name: "Solco",
+  identifier: "com.whstudio.solco",
   version: "0.10.0",
   out: "build",
   icon: "resources/icon.png",
@@ -21,6 +21,6 @@ export default {
 
   macos: {
     minimumSystemVersion: "13.0",
-    infoPlist: { NSMicrophoneUsageDescription: "Shardlane uses the microphone for chat voice dictation." },
+    infoPlist: { NSMicrophoneUsageDescription: "Solco uses the microphone for chat voice dictation." },
   },
 };

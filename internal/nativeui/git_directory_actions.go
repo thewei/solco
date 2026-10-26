@@ -10,7 +10,7 @@ package nativeui
 import (
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 // gitDirectoryPaths never passes a broad directory to Git. It resolves only

@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/scripts"
-	"github.com/wh-studio/herdr-client/internal/services"
+	"github.com/wh-studio/solco/internal/scripts"
+	"github.com/wh-studio/solco/internal/services"
 )
 
 func (s *Shell) quickPanelServices(c *ui.Context) {

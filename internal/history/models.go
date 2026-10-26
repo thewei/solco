@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// Package history owns Shardlane's read-only coding-agent history domain.
+// Package history owns Solco's read-only coding-agent history domain.
 // It never mutates provider-owned history stores and never owns runtime state.
 package history
 

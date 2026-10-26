@@ -2,12 +2,12 @@ package nativeui
 
 import (
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/codehl"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/codehl"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 // The diff review's colors, ported from egoist/godiff palette.go (commit
-// 88b89e0) so Shardlane's Changes/Diff surface reads exactly like Godiff.
+// 88b89e0) so Solco's Changes/Diff surface reads exactly like Godiff.
 
 // gdPalette is the colors of the review, in the light or the dark: those
 // of codiff and of the diff renderer it uses.

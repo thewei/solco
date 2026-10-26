@@ -349,7 +349,7 @@ func TestAddProjectRegistersTheFolderWithoutATaskAndLeavesNoAutomation(t *testin
 	if err != nil || got != "My.Proj" {
 		t.Fatalf("name=%q err=%v", got, err)
 	}
-	if !strings.HasPrefix(name, "shardlane-new-project-") || strings.Join(calls, "|") != "automations add|automations --json|automations remove" {
+	if !strings.HasPrefix(name, "solco-new-project-") || strings.Join(calls, "|") != "automations add|automations --json|automations remove" {
 		t.Fatalf("name=%q calls=%q", name, calls)
 	}
 }

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // workbenchState is the Shell's 0.5 Agent workbench presentation state: the

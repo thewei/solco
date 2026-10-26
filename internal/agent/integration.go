@@ -1,15 +1,15 @@
 package agent
 
-import "github.com/wh-studio/herdr-client/internal/history"
+import "github.com/wh-studio/solco/internal/history"
 
 // IntegrationStrategy is the runtime integration strategy authority (INT-01),
-// ported from the audited Rust agent-integrations registry: Shardlane never
+// ported from the audited Rust agent-integrations registry: Solco never
 // installs a competing lifecycle hook beside Herdr official integration.
 type IntegrationStrategy string
 
 const (
 	// StrategyHerdrOfficial: Herdr's official integration is the sole runtime
-	// authority; Shardlane only keeps `herdr integration install <target>`
+	// authority; Solco only keeps `herdr integration install <target>`
 	// current.
 	StrategyHerdrOfficial IntegrationStrategy = "herdr-official"
 	// StrategyHerdrScreenOnly: lifecycle belongs to the Herdr screen manifest.
@@ -18,7 +18,7 @@ const (
 	// a provider-native session identity bridge only.
 	StrategyHerdrScreenWithManagedSessionBridge IntegrationStrategy = "herdr-screen-session-bridge"
 	// StrategyManagedLifecycleBridge: lifecycle stays with Herdr screen;
-	// Shardlane adds a provider-native session bridge only.
+	// Solco adds a provider-native session bridge only.
 	StrategyManagedLifecycleBridge IntegrationStrategy = "managed-lifecycle-bridge"
 	// StrategyDeferred: explicitly not claimed yet — never a degraded fallback.
 	StrategyDeferred IntegrationStrategy = "deferred"

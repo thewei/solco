@@ -18,9 +18,9 @@ func (s *Shell) syncWindowTitle() {
 	if s.setWindowTitle == nil {
 		return
 	}
-	title := "Shardlane"
-	if route := s.currentRouteTitle(); route != "" && route != "Workspace" && route != "Shardlane" {
-		title = fmt.Sprintf("%s — %s", "Shardlane", route)
+	title := "Solco"
+	if route := s.currentRouteTitle(); route != "" && route != "Workspace" && route != "Solco" {
+		title = fmt.Sprintf("%s — %s", "Solco", route)
 	}
 	if title == s.windowTitleShown {
 		return

@@ -1,4 +1,4 @@
-// Package sessiontrash is the Sessions Trash: the one place Shardlane moves a
+// Package sessiontrash is the Sessions Trash: the one place Solco moves a
 // provider's session file, and only ever into — and back out of — a folder it
 // owns. Deleting a session moves its .jsonl out of the provider's own history
 // root into <trash>/<entry>/ beside a tiny manifest; Put Back moves it to the
@@ -33,7 +33,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // BusyWindow is how recently a session file may have been written and still

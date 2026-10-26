@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/wh-studio/solco/internal/legacy"
 )
 
 /**
@@ -21,25 +23,25 @@ import (
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// DefaultSocketPath returns the primary Unix domain socket path for Shardlane agent status hooks.
+// DefaultSocketPath returns the primary Unix domain socket path for Solco agent status hooks.
 func DefaultSocketPath() string {
-	if path := strings.TrimSpace(os.Getenv("SHARDLANE_SOCKET_PATH")); path != "" {
+	if path := legacy.Env("SOCKET_PATH"); path != "" {
 		return path
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(os.TempDir(), "shardlane-agent-status.sock")
+		return filepath.Join(os.TempDir(), "solco-agent-status.sock")
 	}
-	return filepath.Join(home, ".shardlane", "run", "agent-status.sock")
+	return filepath.Join(home, ".solco", "run", "agent-status.sock")
 }
 
-// DefaultRuntimeSocketPath returns the convenience runtime socket path (~/.shardlane/runtime.sock).
+// DefaultRuntimeSocketPath returns the convenience runtime socket path (~/.solco/runtime.sock).
 func DefaultRuntimeSocketPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".shardlane", "runtime.sock")
+	return filepath.Join(home, ".solco", "runtime.sock")
 }
 
 // NormalizeStatus standardizes raw agent hook events and status keywords
@@ -92,7 +94,7 @@ func NewServer(socketPath string, handler Handler) *Server {
 	}
 }
 
-// SetSymlinkPath sets an optional symlink alias path (such as ~/.shardlane/runtime.sock).
+// SetSymlinkPath sets an optional symlink alias path (such as ~/.solco/runtime.sock).
 func (s *Server) SetSymlinkPath(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -289,7 +291,7 @@ func (s *Server) dispatchLine(line string, conn net.Conn) {
 		return
 	}
 
-	// 4. Direct Shardlane status object
+	// 4. Direct Solco status object
 	var direct directHookPayload
 	if err := json.Unmarshal([]byte(trimmed), &direct); err == nil && (direct.PaneID != "" || direct.HerdrPane != "" || direct.TmuxPane != "") {
 		paneID := direct.PaneID
@@ -326,7 +328,7 @@ func (s *Server) dispatchLine(line string, conn net.Conn) {
 				PaneID:         paneID,
 				Agent:          direct.Agent,
 				AgentSessionID: direct.SessionID,
-				Source:         "shardlane",
+				Source:         "solco",
 				Timestamp:      now,
 			})
 		}

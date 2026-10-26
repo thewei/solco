@@ -14,11 +14,11 @@ import (
 	"sync"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/history"
 )
 
-// Agent brand marks, carried over from the Rust Shardlane shell
+// Agent brand marks, carried over from the Rust Solco shell
 // (crates/herdr-gui/assets/brands): small full-color provider logos shown
 // wherever a live Agent appears. Unknown providers fall back to the
 // monochrome person glyph.

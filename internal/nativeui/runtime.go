@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 func (s *Shell) reloadInstances(autoOpen bool) {
@@ -246,7 +246,7 @@ func (s *Shell) herdrUpgradeTarget() (session string, local bool) {
 // downloads, verifies, and hands the running server to the new build live;
 // an old server that survives the handoff is stopped so the next start
 // brings up the upgraded binary. onSuccess runs on the UI thread once the
-// runtime can continue; Shardlane never restarts servers itself.
+// runtime can continue; Solco never restarts servers itself.
 func (s *Shell) beginHerdrUpgrade(onSuccess func()) {
 	if s.herdrUpdating || s.win == nil {
 		return
@@ -314,7 +314,7 @@ func (s *Shell) checkHerdrRuntime() {
 				slog.Warn("Herdr runtime probe failed", "error", err)
 				s.herdrProbe = nil
 				if errors.Is(err, herdr.ErrProtocolTooOld) {
-					s.herdrProbeErr = "This Herdr is older than Shardlane supports."
+					s.herdrProbeErr = "This Herdr is older than Solco supports."
 				} else {
 					s.herdrProbeErr = "Herdr is not reachable on this machine."
 				}

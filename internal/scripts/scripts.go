@@ -1,7 +1,7 @@
 // Package scripts owns user-defined project script definitions and atomic
-// persistence (0.9 P5 / WIX-070..085). Shardlane owns script metadata; Herdr
+// persistence (0.9 P5 / WIX-070..085). Solco owns script metadata; Herdr
 // owns all execution (Tab, Pane, PTY, process). Scripts never become
-// standalone os/exec children managed by Shardlane.
+// standalone os/exec children managed by Solco.
 package scripts
 
 import (

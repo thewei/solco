@@ -1,4 +1,4 @@
-// Package herdrhooks tails the hook spool the Shardlane herdr plugin
+// Package herdrhooks tails the hook spool the Solco herdr plugin
 // appends to: our own hook layer on top of Herdr's plugin event hooks
 // (N19). Herdr runs the plugin's forwarder per declared event; the
 // forwarder appends "NAME\tJSON" lines to the spool file, and the app
@@ -14,13 +14,13 @@ import (
 )
 
 // DefaultSpoolPath is the spool the plugin forwarder writes when
-// SHARDLANE_HOOK_SPOOL is unset.
+// SOLCO_HOOK_SPOOL is unset.
 func DefaultSpoolPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".shardlane", "hooks", "events.jsonl")
+	return filepath.Join(home, ".solco", "hooks", "events.jsonl")
 }
 
 // Event is one forwarded hook event.

@@ -4,9 +4,9 @@
 // Herdr remains the runtime authority.
 package agent
 
-import "github.com/wh-studio/herdr-client/internal/history"
+import "github.com/wh-studio/solco/internal/history"
 
-// liveCapability mirrors the shardlane-history live registry authority.
+// liveCapability mirrors the solco-history live registry authority.
 type liveCapability string
 
 const (
@@ -29,7 +29,7 @@ type providerRegistryEntry struct {
 	exposure exposure
 }
 
-// providerRegistry is ported from the shardlane-history PROVIDERS authority.
+// providerRegistry is ported from the solco-history PROVIDERS authority.
 // Unknown providers fail closed as hidden rather than being guessed.
 var providerRegistry = map[history.AgentID]providerRegistryEntry{
 	history.AgentClaudeCode:  {liveAppendLog, exposureStable},

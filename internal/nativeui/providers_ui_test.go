@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/agenthooks"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/agenthooks"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // TestProvidersPageHookLeadsIntegrationFallsBack pins the single-mechanism
@@ -102,12 +102,12 @@ func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
 	if shell.providers.actionRunning {
 		t.Fatal("hook action still marked in flight after reconciliation")
 	}
-	script := filepath.Join(home, ".shardlane", "hooks", "shardlane-claude-hook.sh")
+	script := filepath.Join(home, ".solco", "hooks", "solco-claude-hook.sh")
 	if _, err := os.Stat(script); err != nil {
 		t.Fatalf("hook script not installed: %v", err)
 	}
 	wiring, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
-	if err != nil || !strings.Contains(string(wiring), "shardlane-claude-hook.sh") {
+	if err != nil || !strings.Contains(string(wiring), "solco-claude-hook.sh") {
 		t.Fatalf("claude settings not wired (err=%v)", err)
 	}
 	if !tester.HasText("Claude Code status hook is current") {

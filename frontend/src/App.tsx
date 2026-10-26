@@ -688,7 +688,7 @@ function isFreeTextOption(option: string): boolean {
 }
 
 function draftKey(conversationId: string): string {
-  return `shardlane:chat-draft:${conversationId}`;
+  return `solco:chat-draft:${conversationId}`;
 }
 
 // TurnBoundary contains one turn's render failures: a bad turn renders as

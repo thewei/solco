@@ -19,7 +19,7 @@ func TestScrollPaneUsesVerifiedMutationWithoutSnapshot(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket fixture")
 	}
-	home, err := os.MkdirTemp("/tmp", "shardlane-scroll-")
+	home, err := os.MkdirTemp("/tmp", "solco-scroll-")
 	if err != nil {
 		t.Fatal(err)
 	}

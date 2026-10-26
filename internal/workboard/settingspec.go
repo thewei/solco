@@ -28,7 +28,7 @@ const (
 	TyEffort    // an effort level of the sibling agent setting, or default
 )
 
-// Spec is what Shardlane pins about one setting of plugin 1.2.x.
+// Spec is what Solco pins about one setting of plugin 1.2.x.
 type Spec struct {
 	Ty     Ty
 	Values []string // TyChoice

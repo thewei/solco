@@ -136,7 +136,7 @@ func (r *Runner) revalidate(ctx context.Context, root string, pre CommitPrefligh
 	}
 	if r.MergeInProgress(ctx, root) {
 		return &Error{Class: ErrMergeInProgess, OpClass: OpMutate, Op: "commit",
-			err: errors.New("a merge/revert/cherry-pick is in progress; resolve it outside Shardlane first")}
+			err: errors.New("a merge/revert/cherry-pick is in progress; resolve it outside Solco first")}
 	}
 	return nil
 }

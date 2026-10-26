@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // §17.2 usage secondary line: the quick-panel/status rows render a cached

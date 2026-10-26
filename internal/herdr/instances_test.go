@@ -21,7 +21,7 @@ func TestSlugifyInstanceNameMatchesWorkspacePolicy(t *testing.T) {
 }
 
 func TestWriteDisplayNameUsesSessionMetadata(t *testing.T) {
-	home, err := os.MkdirTemp("/tmp", "shardlane-instance-meta-")
+	home, err := os.MkdirTemp("/tmp", "solco-instance-meta-")
 	if err != nil {
 		t.Fatal(err)
 	}

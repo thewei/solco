@@ -1,7 +1,7 @@
 package nativeui
 
 import (
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 // workbenchFilterLabels are the agent activity panel's status tab group

@@ -11,7 +11,7 @@ import (
 	"unsafe"
 )
 
-// openPty allocates a macOS pseudo-terminal pair. Shardlane is a macOS
+// openPty allocates a macOS pseudo-terminal pair. Solco is a macOS
 // product; the terminal plugin's own pty is internal, so the attach
 // transport grows the minimal darwin implementation it needs.
 func openPty(cols, rows uint16) (*os.File, string, error) {

@@ -31,13 +31,13 @@ func TestCaptureStderrRoutesFd2IntoFile(t *testing.T) {
 	// via the os.Stderr variable would measure the wrong layer, because
 	// under `go test -json` (test2json) the testing framework re-wraps
 	// os.Stderr onto fd 1 for the JSON stream while fd 2 stays redirected.
-	if _, err := syscall.Write(2, []byte("SHARDLANE_STDERR_MARKER\n")); err != nil {
+	if _, err := syscall.Write(2, []byte("SOLCO_STDERR_MARKER\n")); err != nil {
 		t.Fatalf("write to stderr fd: %v", err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		data, readErr := os.ReadFile(path)
-		if readErr == nil && strings.Contains(string(data), "SHARDLANE_STDERR_MARKER") {
+		if readErr == nil && strings.Contains(string(data), "SOLCO_STDERR_MARKER") {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -54,13 +54,13 @@ func TestCaptureStderrRoutesFd2IntoFile(t *testing.T) {
 				errText += fmt.Sprintf("stat(file): dev=%d ino=%d size=%d; stderr.Fd()=%d", fileStat.Dev, fileStat.Ino, fileStat.Size, os.Stderr.Fd())
 			}
 			if probe, probeErr := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644); probeErr == nil {
-				if _, err := probe.WriteString("SHARDLANE_PROBE_DIRECT\n"); err != nil {
+				if _, err := probe.WriteString("SOLCO_PROBE_DIRECT\n"); err != nil {
 					errText += "; probe write: " + err.Error()
 				}
 				_ = probe.Close()
 				if data, err := os.ReadFile(path); err != nil {
 					errText += "; probe read: " + err.Error()
-				} else if strings.Contains(string(data), "SHARDLANE_PROBE_DIRECT") {
+				} else if strings.Contains(string(data), "SOLCO_PROBE_DIRECT") {
 					errText += "; probe: visible"
 				} else {
 					errText += "; probe: invisible"

@@ -5,8 +5,8 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // TestTrayTitleTable pins the §17.3 status-first menu-bar title: actionable
@@ -38,12 +38,12 @@ func TestTrayToolTipTable(t *testing.T) {
 		connected bool
 		want      string
 	}{
-		{TrayCounts{}, true, "Shardlane — Ready"},
-		{TrayCounts{Attention: 2, Review: 1, Working: 3}, true, "Shardlane — 2 need attention, 1 for review, 3 working"},
-		{TrayCounts{Working: 2}, true, "Shardlane — 2 working"},
-		{TrayCounts{Attention: 1}, true, "Shardlane — 1 needs attention"},
-		{TrayCounts{Attention: 5, Review: 5, Working: 5}, false, "Shardlane — Herdr disconnected"},
-		{TrayCounts{}, false, "Shardlane — Herdr disconnected"},
+		{TrayCounts{}, true, "Solco — Ready"},
+		{TrayCounts{Attention: 2, Review: 1, Working: 3}, true, "Solco — 2 need attention, 1 for review, 3 working"},
+		{TrayCounts{Working: 2}, true, "Solco — 2 working"},
+		{TrayCounts{Attention: 1}, true, "Solco — 1 needs attention"},
+		{TrayCounts{Attention: 5, Review: 5, Working: 5}, false, "Solco — Herdr disconnected"},
+		{TrayCounts{}, false, "Solco — Herdr disconnected"},
 	}
 	for _, tc := range cases {
 		if got := TrayToolTip(tc.counts, tc.connected); got != tc.want {
@@ -138,7 +138,7 @@ func TestStatusTrayAppliesOnlyOnFingerprintChange(t *testing.T) {
 	}}
 
 	tray.apply(base, true)
-	if platform.titles[0] != "⚠ 2  ✓ 1  ⚡ 3" || platform.tips[0] != "Shardlane — 2 need attention, 1 for review, 3 working" {
+	if platform.titles[0] != "⚠ 2  ✓ 1  ⚡ 3" || platform.tips[0] != "Solco — 2 need attention, 1 for review, 3 working" {
 		t.Fatalf("first apply = %q / %q", platform.titles, platform.tips)
 	}
 	first := platform.calls()
@@ -164,13 +164,13 @@ func TestStatusTrayAppliesOnlyOnFingerprintChange(t *testing.T) {
 		trayEntry("t2", "p2", "Ranger", "other", agent.PhaseWorking, agent.OpWorking, false, false, false),
 	}}
 	tray.apply(cleared, true)
-	if platform.titles[1] != "⚠ 2  ⚡ 3" || platform.tips[1] != "Shardlane — 2 need attention, 3 working" {
+	if platform.titles[1] != "⚠ 2  ⚡ 3" || platform.tips[1] != "Solco — 2 need attention, 3 working" {
 		t.Fatalf("second apply = %q / %q", platform.titles, platform.tips)
 	}
 
 	// Disconnection: rebuild with the disconnected wording.
 	tray.apply(cleared, false)
-	if platform.tips[2] != "Shardlane — Herdr disconnected" {
+	if platform.tips[2] != "Solco — Herdr disconnected" {
 		t.Fatalf("disconnect tooltip = %q", platform.tips[2])
 	}
 }
@@ -197,7 +197,7 @@ func TestUpdateTrayProjectsShellSnapshot(t *testing.T) {
 	// Herdr unavailability re-words the tooltip.
 	shell.offline = true
 	shell.updateTray()
-	if platform.tips[1] != "Shardlane — Herdr disconnected" {
+	if platform.tips[1] != "Solco — Herdr disconnected" {
 		t.Fatalf("offline tooltip = %q", platform.tips[1])
 	}
 

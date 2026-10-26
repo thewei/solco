@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/apphook"
-	"github.com/wh-studio/herdr-client/internal/conversation"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/apphook"
+	"github.com/wh-studio/solco/internal/conversation"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // The fixture is the real visible screen of a Claude Code AskUserQuestion
@@ -15,7 +15,7 @@ const askUserQuestionScreen = `❯ hi
 
   Thought for 14s, ran 1 shell command
 
-⏺ Hi! I'm ready to help with Shardlane (herdr-client). What would you like to work on?
+⏺ Hi! I'm ready to help with Solco (herdr-client). What would you like to work on?
 
 ✻ Baked for 17s · done 1:43 PM
 
@@ -27,7 +27,7 @@ const askUserQuestionScreen = `❯ hi
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ←  ☐ 演示问题  ☐ 主题演示  ✔ Submit  →
 
-这是一个演示：你想让我接下来关注 Shardlane 的哪个部分？
+这是一个演示：你想让我接下来关注 Solco 的哪个部分？
 
 ❯ 1. nativeui 界面层
      MyGo Native UI 展示层：面板、标签页、交互状态等
@@ -267,7 +267,7 @@ func TestHandleAppHookSessionUpdatesSessionIdentity(t *testing.T) {
 		Agent:            "agy",
 		AgentSessionID:   "conv-uuid-999",
 		AgentSessionPath: "/tmp/transcript.jsonl",
-		Source:           "shardlane",
+		Source:           "solco",
 	})
 
 	agent := shell.projection.Agents[0]

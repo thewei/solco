@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-// Shardlane is the macOS client; other platforms have no attach pty and
+// Solco is the macOS client; other platforms have no attach pty and
 // the terminal falls back to the plugin's own unfiltered spawn.
 func openPty(cols, rows uint16) (*os.File, string, error) {
 	return nil, "", errors.New("attach pty unsupported on this platform")

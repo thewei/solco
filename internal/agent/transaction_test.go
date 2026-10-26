@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // fakeLaunchRuntime is the uncertain-delivery harness (AGENT-06A): every
@@ -209,7 +209,7 @@ func TestTransactionShellNeverReadyIsItsOwnFailure(t *testing.T) {
 	}
 }
 
-// Names Shardlane hands to Herdr show up in Herdr's own UI, so they stay
+// Names Solco hands to Herdr show up in Herdr's own UI, so they stay
 // short and readable: the kind plus six hex digits of the operation id, the
 // same for the same operation and different across operations.
 func TestGeneratedAgentNamesAreShortAndStable(t *testing.T) {
@@ -228,7 +228,7 @@ func TestGeneratedAgentNamesAreShortAndStable(t *testing.T) {
 	}
 }
 
-// A name Shardlane generated carries no meaning for the person reading a pane
+// A name Solco generated carries no meaning for the person reading a pane
 // header; one they or Herdr chose does.
 func TestIsGeneratedAgentName(t *testing.T) {
 	for _, tc := range []struct {

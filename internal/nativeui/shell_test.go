@@ -5,8 +5,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/wh-studio/herdr-client/internal/commandcenter"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/commandcenter"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 func TestSurfacePercent(t *testing.T) {
@@ -71,7 +71,7 @@ func TestNativeShellSkeleton(t *testing.T) {
 		Protocol:         22,
 		FocusedProjectID: "w1",
 		FocusedTabID:     "t1",
-		Projects:         []herdr.Project{{ID: "w1", Label: "Shardlane", TabCount: 1}},
+		Projects:         []herdr.Project{{ID: "w1", Label: "Solco", TabCount: 1}},
 		Tabs:             []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "main", PaneCount: 1}},
 	}
 	s.selectedProjectID = "w1"
@@ -79,7 +79,7 @@ func TestNativeShellSkeleton(t *testing.T) {
 	s.selected = "tab:t1"
 
 	tester := ui.NewTester(s.View, 1200, 800)
-	for _, text := range []string{"Shardlane", "Changes view", "History view", "Agents", "Workspace", "Default", "main", "Settings"} {
+	for _, text := range []string{"Solco", "Changes view", "History view", "Agents", "Workspace", "Default", "main", "Settings"} {
 		if !tester.HasText(text) {
 			t.Fatalf("native shell missing %q; texts=%q", text, tester.Texts())
 		}
@@ -240,7 +240,7 @@ func TestSettingsUsesNestedRoute(t *testing.T) {
 	}
 }
 
-func TestRouteShortcutsMatchCurrentShardlaneDefaults(t *testing.T) {
+func TestRouteShortcutsMatchCurrentSolcoDefaults(t *testing.T) {
 	s := NewShell()
 	s.loading = false
 	tester := ui.NewTester(s.View, 1200, 800)

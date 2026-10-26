@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/workboard"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/workboard"
 )
 
 // workboardSettingsSection is the Settings navigation entry; it exists only
@@ -198,7 +198,7 @@ func (s *Shell) settingsWorkboard(c *ui.Context) {
 	}
 
 	settingsGroup(c, "View",
-		row("Work board", "Board opens the plugin's own board Tab from every task and project row; Native keeps Shardlane's pages.", func() {
+		row("Work board", "Board opens the plugin's own board Tab from every task and project row; Native keeps Solco's pages.", func() {
 			idx := 1
 			if s.settings.General.WorkboardNative() {
 				idx = 0

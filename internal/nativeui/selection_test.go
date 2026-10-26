@@ -6,8 +6,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"github.com/wh-studio/herdr-client/internal/commandcenter"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/commandcenter"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 func TestLocalSelectionIgnoresExternalHerdrFocusChurn(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 // StartAgentRequest is the launch intent DTO (AGENT-02): explicit targets and

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 // TrayCounts are the status-center counts the menu bar projects (0.7
@@ -47,18 +47,18 @@ func TrayTitle(counts TrayCounts) string {
 }
 
 // TrayToolTip renders the §17.4 summary wording shared with the titlebar:
-// "Shardlane — 2 need attention, 1 for review, 3 working", "Shardlane —
-// Ready", or "Shardlane — Herdr disconnected". It reads the one shared
+// "Solco — 2 need attention, 1 for review, 3 working", "Solco —
+// Ready", or "Solco — Herdr disconnected". It reads the one shared
 // segment source with the quick-panel header (§17.4).
 func TrayToolTip(counts TrayCounts, connected bool) string {
 	if !connected {
-		return "Shardlane — Herdr disconnected"
+		return "Solco — Herdr disconnected"
 	}
 	segments := attentionSegments(counts, "for review")
 	if len(segments) == 0 {
-		return "Shardlane — Ready"
+		return "Solco — Ready"
 	}
-	return "Shardlane — " + strings.Join(segments, ", ")
+	return "Solco — " + strings.Join(segments, ", ")
 }
 
 // TrayFingerprint captures exactly the snapshot state the tray may react to

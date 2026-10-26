@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 const integrationStatusFixture = `pi: current (v9) (/Users/demo/.pi/agent/extensions/herdr-agent-state.ts)
@@ -120,7 +120,7 @@ func TestInstallGatesByStrategy(t *testing.T) {
 		t.Fatal("deferred provider must not be installable")
 	}
 	if err := service.Install(context.Background(), history.AgentGemini); err == nil {
-		t.Fatal("screen-managed provider must not be installable by Shardlane")
+		t.Fatal("screen-managed provider must not be installable by Solco")
 	}
 }
 

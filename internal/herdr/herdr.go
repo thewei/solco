@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/wh-studio/solco/internal/legacy"
 )
 
 const (
@@ -40,7 +42,7 @@ var nestedTUIEnvKeys = []string{
 	"HERDR_SOCKET_PATH",
 }
 
-// Instance is one Herdr session. In Shardlane's multi-instance model an
+// Instance is one Herdr session. In Solco's multi-instance model an
 // instance is a top-level Workspace; projects/tabs/panes remain Herdr-owned.
 // Machine instances are remote: one saved SSH machine profile pins the
 // instance to that profile's explicit remote Herdr session, and Name is the
@@ -167,7 +169,7 @@ func (m *Manager) EnsureRunning(session string) error {
 
 // TerminalAttachCommand builds the native MyGo terminal child command for one
 // Herdr-owned pane terminal. It uses Herdr's supported direct-attach client so
-// Shardlane renders no Herdr shell chrome and owns no PTY/process runtime.
+// Solco renders no Herdr shell chrome and owns no PTY/process runtime.
 // Remote instances attach through their SSH bridge's local endpoint.
 func (m *Manager) TerminalAttachCommand(session, terminalID string) ([]string, error) {
 	session = strings.TrimSpace(session)
@@ -194,14 +196,15 @@ func terminalAttachArgs(cli, socketPath, configPath, terminalID string) []string
 	for _, key := range nestedTUIEnvKeys {
 		args = append(args, "-u", key)
 	}
-	shardlaneSock := strings.TrimSpace(os.Getenv("SHARDLANE_SOCKET_PATH"))
-	if shardlaneSock == "" {
+	solcoSock := legacy.Env("SOCKET_PATH")
+	if solcoSock == "" {
 		if home, err := os.UserHomeDir(); err == nil {
-			shardlaneSock = filepath.Join(home, ".shardlane", "run", "agent-status.sock")
+			solcoSock = filepath.Join(home, ".solco", "run", "agent-status.sock")
 		}
 	}
-	if shardlaneSock != "" {
-		args = append(args, "SHARDLANE_SOCKET_PATH="+shardlaneSock)
+	if solcoSock != "" {
+		// The pre-rebrand name too: hook scripts the old name installed read it.
+		args = append(args, "SOLCO_SOCKET_PATH="+solcoSock, "SHARDLANE_SOCKET_PATH="+solcoSock)
 	}
 	return append(args,
 		"HERDR_SOCKET_PATH="+socketPath,
@@ -290,7 +293,7 @@ var ErrProtocolTooOld = errors.New("incompatible Herdr protocol")
 // ErrUpdateNotWritable marks Herdr's own updater failing because its
 // install directory is not writable by the current user — a system-location
 // install (for example /usr/bin). Only the user can supply the missing
-// permissions; Shardlane never escalates from a GUI process.
+// permissions; Solco never escalates from a GUI process.
 var ErrUpdateNotWritable = errors.New("herdr update cannot write the install directory")
 
 // UpdateAsRootCommand is the terminal command that supplies the missing
@@ -301,7 +304,7 @@ const UpdateAsRootCommand = "sudo herdr update --handoff"
 // RunAuthorizedUpdate runs the very same updater through the OS's own
 // authorization mechanism, so a system-location install is upgraded in
 // place after the user grants the permission in the platform's dialog
-// (polkit on Linux, administrator prompt on macOS). Shardlane never sees
+// (polkit on Linux, administrator prompt on macOS). Solco never sees
 // or holds credentials. Platforms without a supported mechanism return an
 // error and the caller falls back to the manual command.
 func RunAuthorizedUpdate(ctx context.Context) error {
@@ -386,7 +389,7 @@ func runtimeEnv(session string) []string {
 }
 
 // ErrCLINotFound reports that no Herdr CLI could be located.
-var ErrCLINotFound = errors.New("herdr CLI not found; install Herdr before starting Shardlane")
+var ErrCLINotFound = errors.New("herdr CLI not found; install Herdr before starting Solco")
 
 // RunCLI runs one Herdr CLI command and returns its stdout. It finds the
 // binary the way every other call here does, so an app launched from Finder

@@ -9,7 +9,7 @@ package nativeui
 
 import (
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // bootstrapPage is intentionally not the regular workspace empty state.
@@ -28,7 +28,7 @@ func (s *Shell) bootstrapPage(c *ui.Context) {
 			ui.Text(c, s.errText).FontSize(Typography().Body).TextColor(t.TextMuted).MaxWidth(560)
 		}
 		if s.herdrUpgradeable {
-			ui.Text(c, "This Herdr is older than Shardlane supports. Update it; Shardlane reconnects on its own.").FontSize(Typography().Body).TextColor(t.TextMuted).MaxWidth(560)
+			ui.Text(c, "This Herdr is older than Solco supports. Update it; Solco reconnects on its own.").FontSize(Typography().Body).TextColor(t.TextMuted).MaxWidth(560)
 			if s.herdrUpdating {
 				ui.Spinner(c).Size(27, 27)
 				ui.Text(c, "Updating Herdr…").FontSize(Typography().Section).FontWeight(WeightSemibold).TextColor(t.Text)

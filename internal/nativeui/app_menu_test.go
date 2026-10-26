@@ -12,7 +12,7 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"github.com/wh-studio/herdr-client/internal/commandcenter"
+	"github.com/wh-studio/solco/internal/commandcenter"
 )
 
 // menuLabels lists a submenu's labels, separators as "-".
@@ -59,11 +59,11 @@ func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 	for _, it := range menu.Items() {
 		bar = append(bar, it.Label)
 	}
-	if want := []string{"Shardlane", "Go", "Edit", "Window"}; !slices.Equal(bar, want) {
+	if want := []string{"Solco", "Go", "Edit", "Window"}; !slices.Equal(bar, want) {
 		t.Fatalf("menu bar = %q, want %q", bar, want)
 	}
 
-	appMenu := menuNamed(t, menu, "Shardlane").Submenu
+	appMenu := menuNamed(t, menu, "Solco").Submenu
 	labels := menuLabels(appMenu)
 	// About, Hide and Quit carry the app's name: match by prefix.
 	wantApp := []string{"About ", "Check for Updates…", "-", "Settings…", "-", "Hide ", "Hide Others", "Show All", "-", "Quit "}
@@ -94,7 +94,7 @@ func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 	}
 
 	seen := map[string]string{}
-	for _, name := range []string{"Shardlane", "Go"} {
+	for _, name := range []string{"Solco", "Go"} {
 		for _, it := range menuNamed(t, menu, name).Submenu {
 			if it.Type == mygo.MenuItemSeparator {
 				continue

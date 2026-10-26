@@ -46,7 +46,7 @@ func (m *Manager) ensureBridge(machine Machine) (string, error) {
 	bridges.mu.Lock()
 	defer bridges.mu.Unlock()
 	if bridges.closing {
-		return "", fmt.Errorf("Shardlane is shutting down")
+		return "", fmt.Errorf("Solco is shutting down")
 	}
 	if bridge, ok := bridges.byID[machine.ID]; ok {
 		if _, err := ping(bridge.socket); err == nil {
@@ -172,7 +172,7 @@ func bridgeDir() string {
 	if err != nil || home == "" {
 		home = "."
 	}
-	return filepath.Join(home, ".shardlane", "ssh-bridges")
+	return filepath.Join(home, ".solco", "ssh-bridges")
 }
 
 func bridgeSlug(target, session string) string {

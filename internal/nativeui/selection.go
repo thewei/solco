@@ -11,7 +11,7 @@ import (
 	"log/slog"
 	"net/url"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // reconcileLocalSelection preserves this window's semantic selection across

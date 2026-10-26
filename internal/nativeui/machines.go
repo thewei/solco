@@ -4,13 +4,13 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // Remote machine presentation state. Saved SSH machines are Herdr's own
 // remote-connection machinery; this file only renders them in the Session
 // selector and drives herdr's sanctioned management commands. The profile
-// list lives in Herdr's client state — never a Shardlane-side registry.
+// list lives in Herdr's client state — never a Solco-side registry.
 
 const machineStatusRetryWindow = 30 * time.Second
 

@@ -14,7 +14,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
-	"github.com/wh-studio/herdr-client/internal/filesview"
+	"github.com/wh-studio/solco/internal/filesview"
 )
 
 // openFilePreview records the tree selection and routes it through the

@@ -1,5 +1,5 @@
 // lastused.go persists the command a project ran last through the pane
-// header's run control. Shardlane-owned cosmetics in the same class as the
+// header's run control. Solco-owned cosmetics in the same class as the
 // script definitions store: atomic JSON under the user-data directory, no
 // runtime facts.
 package scripts

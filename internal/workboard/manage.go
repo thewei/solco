@@ -114,7 +114,7 @@ func (c *Client) AddProject(ctx context.Context, folder string) (string, error) 
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return "", err
 	}
-	name := "shardlane-new-project-" + hex.EncodeToString(nonce[:])
+	name := "solco-new-project-" + hex.EncodeToString(nonce[:])
 	if err := c.AddAutomation(ctx, NewAutomation{Name: name, Prompt: "Registers this folder as a Project; removed right away.", Repo: folder, When: "merged"}); err != nil {
 		return "", err
 	}

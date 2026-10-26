@@ -17,11 +17,11 @@ func TestUnpackagedRunTakesTheFixedDevName(t *testing.T) {
 	}
 	t.Cleanup(func() { mygo.App.SetName("") })
 
-	if got := mygo.App.Name(); got == "Shardlane-dev" {
+	if got := mygo.App.Name(); got == "Solco-dev" {
 		t.Fatalf("Name() = %q before naming the run; the check below would prove nothing", got)
 	}
 	nameUnpackagedRun()
-	if got := mygo.App.Name(); got != "Shardlane-dev" {
-		t.Fatalf("Name() = %q, want Shardlane-dev", got)
+	if got := mygo.App.Name(); got != "Solco-dev" {
+		t.Fatalf("Name() = %q, want Solco-dev", got)
 	}
 }

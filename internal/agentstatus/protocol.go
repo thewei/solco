@@ -68,7 +68,7 @@ func (r Report) Transient() bool {
 	return r.State == StateWorking || r.State == StateBlocked
 }
 
-// StatusWord maps the state onto Shardlane's agent status vocabulary, the
+// StatusWord maps the state onto Solco's agent status vocabulary, the
 // strings apphook.NormalizeStatus already produces, so both status sources
 // feed one projection field.
 func (r Report) StatusWord() string {

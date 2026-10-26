@@ -9,7 +9,7 @@ import (
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/herdr"
+	"github.com/wh-studio/solco/internal/herdr"
 )
 
 // scriptPipe is a terminal.Conn playing the daemon side of an attach:

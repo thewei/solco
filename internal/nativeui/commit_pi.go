@@ -12,8 +12,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 func (s *Shell) startPiCommitSuggestion() {

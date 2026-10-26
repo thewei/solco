@@ -46,7 +46,7 @@ func SaveFile(path, content string) error {
 
 	// Stage in the target's directory so the final rename stays on one
 	// filesystem, then flip it in place.
-	tmp, err := os.CreateTemp(filepath.Dir(target), ".shardlane-ssh-config-*")
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".solco-ssh-config-*")
 	if err != nil {
 		return fmt.Errorf("stage temp file: %w", err)
 	}

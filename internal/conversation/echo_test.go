@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 func echoRows() []history.TranscriptMessage {

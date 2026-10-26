@@ -1,4 +1,4 @@
-// Shardlane (next) — MyGo Native UI application entrypoint.
+// Solco (next) — MyGo Native UI application entrypoint.
 //
 // main is deliberately thin: it wires process-level services (bounded
 // logs, persisted settings, the read-only history catalog, the durable
@@ -19,12 +19,13 @@ import (
 	updaterNative "github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 
-	"github.com/wh-studio/herdr-client/internal/app"
-	"github.com/wh-studio/herdr-client/internal/applog"
-	"github.com/wh-studio/herdr-client/internal/history"
-	"github.com/wh-studio/herdr-client/internal/nativeui"
-	"github.com/wh-studio/herdr-client/internal/sessiontrash"
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/app"
+	"github.com/wh-studio/solco/internal/applog"
+	"github.com/wh-studio/solco/internal/history"
+	"github.com/wh-studio/solco/internal/legacy"
+	"github.com/wh-studio/solco/internal/nativeui"
+	"github.com/wh-studio/solco/internal/sessiontrash"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 // followUpLedgerFileName mirrors app.LaunchService's durable ledger name.
@@ -32,7 +33,7 @@ const followUpLedgerFileName = "follow-up-ledger.json"
 
 // devAppName is the one name every unpackaged run takes, which keeps its
 // data and logs apart from the installed app's.
-const devAppName = "Shardlane-dev"
+const devAppName = "Solco-dev"
 
 // nameUnpackagedRun gives an unpackaged run (go run, or the temporary binary
 // that `mygo build` and `mygo dev` start to write the TypeScript client) a
@@ -62,12 +63,21 @@ func main() {
 	// it becomes live the moment signed releases are published (Gate E5).
 	mygo.Use(updaterNative.Plugin)
 
+	// The Shardlane-era files move to the Solco names before anything reads
+	// them (internal/legacy).
+	if !generating {
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			legacy.MigrateHome(homeDir)
+		}
+	}
 	userDataDir, err := mygo.App.Path(mygo.PathUserData)
 	if err != nil {
 		slog.Error("resolve user data dir", "error", err)
 		os.Exit(1)
 	}
+	legacy.MigrateAppDir(userDataDir)
 	logsDir := mustLogsDir()
+	legacy.MigrateAppDir(logsDir)
 	if _, err := applog.Setup(logsDir); err != nil {
 		slog.Error("setup application logging", "error", err)
 	} else if stop, err := applog.CaptureStderr(logsDir); err != nil {
@@ -137,7 +147,7 @@ func main() {
 	mygo.App.WhenReady(func() {
 		slog.Info("application ready", "log_path", applog.Path())
 		opts := mygo.WindowOptions{
-			Title:  "Shardlane",
+			Title:  "Solco",
 			Width:  1280,
 			Height: 820,
 			// Sidebar (250) + a usable content column + a closed right
@@ -192,7 +202,7 @@ func main() {
 		// binding may fail outside packaged macOS runs; the tray click is
 		// then simply absent, and the titlebar agent button stays the
 		// in-window anchor for the quick-panel flyout.
-		if tray, err := mygo.NewTray(mygo.TrayOptions{Title: "Shardlane"}); err != nil {
+		if tray, err := mygo.NewTray(mygo.TrayOptions{Title: "Solco"}); err != nil {
 			slog.Warn("attach status tray failed", "error", err)
 		} else {
 			shell.AttachTray(tray)
@@ -217,7 +227,7 @@ func main() {
 	}
 }
 
-// mustLogsDir resolves the platform log directory (~/Library/Logs/Shardlane
+// mustLogsDir resolves the platform log directory (~/Library/Logs/Solco
 // on macOS). Unrecoverable failures fall back next to the user data dir.
 func mustLogsDir() string {
 	dir, err := mygo.App.Path(mygo.PathLogs)

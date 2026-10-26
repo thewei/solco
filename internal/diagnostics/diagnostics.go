@@ -16,7 +16,7 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"github.com/wh-studio/herdr-client/internal/applog"
+	"github.com/wh-studio/solco/internal/applog"
 )
 
 // LogViewerCap is the maximum number of recent log entries kept in memory (WIX-210).
@@ -24,7 +24,7 @@ const LogViewerCap = 5000
 
 // Snapshot captures safe system, runtime, and integration facts for troubleshooting.
 type Snapshot struct {
-	ShardlaneVersion  string            `json:"shardlane_version"`
+	SolcoVersion      string            `json:"solco_version"`
 	GoVersion         string            `json:"go_version"`
 	MyGoVersion       string            `json:"mygo_version"`
 	OS                string            `json:"os"`
@@ -96,7 +96,7 @@ func BuildSnapshot(herdrVersion string, herdrProtocol uint32, activeInstance str
 	}
 
 	return Snapshot{
-		ShardlaneVersion:  version,
+		SolcoVersion:      version,
 		GoVersion:         runtime.Version(),
 		MyGoVersion:       mygo.Version,
 		OS:                runtime.GOOS,
@@ -218,6 +218,6 @@ func BuildExportArchive(snapshot Snapshot, logs []LogEntry, home string) (string
 
 // FormatSnapshotSummary creates a brief human-readable diagnostics overview.
 func FormatSnapshotSummary(s Snapshot) string {
-	return fmt.Sprintf("Shardlane v%s (%s/%s) | Go %s | MyGo %s | Herdr proto %d",
-		s.ShardlaneVersion, s.OS, s.Arch, s.GoVersion, s.MyGoVersion, s.HerdrProtocol)
+	return fmt.Sprintf("Solco v%s (%s/%s) | Go %s | MyGo %s | Herdr proto %d",
+		s.SolcoVersion, s.OS, s.Arch, s.GoVersion, s.MyGoVersion, s.HerdrProtocol)
 }

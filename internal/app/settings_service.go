@@ -1,4 +1,4 @@
-// Package app coordinates Shardlane's UI-independent application services.
+// Package app coordinates Solco's UI-independent application services.
 // Services own product semantics; presentation consumes them and Herdr stays
 // the sole runtime authority.
 package app
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 // SettingsService loads client preferences once, serializes updates, and

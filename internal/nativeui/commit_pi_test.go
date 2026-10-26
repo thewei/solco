@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wh-studio/herdr-client/internal/agent"
+	"github.com/wh-studio/solco/internal/agent"
 )
 
 func piTestShell(t *testing.T) *Shell {

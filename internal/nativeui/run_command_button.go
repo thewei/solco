@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/scripts"
+	"github.com/wh-studio/solco/internal/scripts"
 )
 
 // The pane header's run control turns project-defined commands

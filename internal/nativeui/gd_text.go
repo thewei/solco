@@ -10,8 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/codehl"
-	"github.com/wh-studio/herdr-client/internal/gitworkbench"
+	"github.com/wh-studio/solco/internal/codehl"
+	"github.com/wh-studio/solco/internal/gitworkbench"
 )
 
 // Text styling helpers of the Godiff-style review, ported from egoist/godiff

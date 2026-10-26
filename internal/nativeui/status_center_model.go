@@ -1,8 +1,8 @@
 package nativeui
 
 import (
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/conversation"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/conversation"
 )
 
 // StatusCenterEntry is one row of the Status Center (0.7 §5): an Agent or

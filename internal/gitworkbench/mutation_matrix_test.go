@@ -50,7 +50,7 @@ func TestCommitSelectedTrackedFile(t *testing.T) {
 
 func TestCommitUnrelatedStagedWorkPreserved(t *testing.T) {
 	// Critical invariant (plan §22.4): unrelated already-staged work stays
-	// staged and outside the Shardlane-selected commit.
+	// staged and outside the Solco-selected commit.
 	root, r := tempRepo(t)
 	ctx := context.Background()
 	writeRepoFile(t, root, "selected.txt", "selected new content\n")

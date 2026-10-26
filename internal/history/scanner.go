@@ -20,7 +20,7 @@ const maxScanWorkers = 4
 // visible list fills in batches instead of landing all at once at the end.
 const scanBatchSize = 100
 
-// SourceRoot is one provider-owned data root the scanner observes. Shardlane
+// SourceRoot is one provider-owned data root the scanner observes. Solco
 // never writes to it.
 type SourceRoot struct {
 	Agent     AgentID

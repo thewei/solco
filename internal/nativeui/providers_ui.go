@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/agent"
-	"github.com/wh-studio/herdr-client/internal/agenthooks"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/agent"
+	"github.com/wh-studio/solco/internal/agenthooks"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 /**
@@ -21,7 +21,7 @@ import (
  */
 
 // providerFacet names one health facet of a provider card: the Herdr
-// runtime integration, or the Shardlane direct status hook.
+// runtime integration, or the Solco direct status hook.
 type providerFacet int
 
 const (

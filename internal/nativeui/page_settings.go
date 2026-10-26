@@ -8,9 +8,9 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/wh-studio/herdr-client/internal/diagnostics"
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/settings"
+	"github.com/wh-studio/solco/internal/diagnostics"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/settings"
 )
 
 /**
@@ -393,7 +393,7 @@ func (s *Shell) settingsDiagnostics(c *ui.Context) {
 	snap := diagnostics.BuildSnapshot(s.projection.Version, s.projection.Protocol, s.activeInstance, home)
 
 	settingsGroup(c, "About",
-		row("Shardlane", "", func() { valueText(c, snap.ShardlaneVersion) }),
+		row("Solco", "", func() { valueText(c, snap.SolcoVersion) }),
 		row("System", "", func() { valueText(c, fmt.Sprintf("%s · %s", systemName(snap.OS), snap.Arch)) }),
 		row("Herdr", "", func() { s.herdrRuntimeRow(c, snap.HerdrVersion) }),
 		row("Session", "", func() { valueText(c, fallbackText(snap.ActiveInstance, "none")) }),

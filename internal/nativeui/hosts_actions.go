@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 internal/sshconfig（索引/原子写回/ssh -G 求值）、herdr Manager（CreateTab/ShellReady/SendAgentKeys 启动事务）、Shell 投影与路由
  * [OUTPUT]: hosts 页动作：ensureHostsIndex/refreshHostsIndex、connectHost/launchSSH、openHostEditor/saveHostEditor、toggle/loadHostEffective、registerHostMachine、sshCommandLine
- * [POS]: 连接复用脚本启动事务原语（Tab/Pane/PTY 归 Herdr，Shardlane 只等 shell 并送入命令行）；保存走 sshconfig 原子写；日志只记操作名、运行时 ID 与计数
+ * [POS]: 连接复用脚本启动事务原语（Tab/Pane/PTY 归 Herdr，Solco 只等 shell 并送入命令行）；保存走 sshconfig 原子写；日志只记操作名、运行时 ID 与计数
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -17,8 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wh-studio/herdr-client/internal/herdr"
-	"github.com/wh-studio/herdr-client/internal/sshconfig"
+	"github.com/wh-studio/solco/internal/herdr"
+	"github.com/wh-studio/solco/internal/sshconfig"
 )
 
 // hostsEditorMaxBytes bounds one editable config file. Real ssh configs are

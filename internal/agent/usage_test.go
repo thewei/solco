@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/wh-studio/herdr-client/internal/history"
+	"github.com/wh-studio/solco/internal/history"
 )
 
 func usageMeta(model *string, tokens *int64) history.SessionMeta {

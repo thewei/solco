@@ -325,7 +325,7 @@ func shellGatedStart(ctx context.Context, runtime LaunchRuntime, paneID string, 
 const herdrAgentMaxName = 32
 
 // generatedNameDigits is how many hex digits of the operation id follow the
-// kind in a name Shardlane hands to Herdr.
+// kind in a name Solco hands to Herdr.
 const generatedNameDigits = 6
 
 // herdrAgentName builds the name handed to agent.start. Herdr accepts
@@ -343,7 +343,7 @@ func herdrAgentName(kind, operationID string) string {
 	return name
 }
 
-// IsGeneratedAgentName reports whether name is one Shardlane minted for an
+// IsGeneratedAgentName reports whether name is one Solco minted for an
 // agent of this Herdr kind: kind-<6 hex>, or the longer kind-continue-<id> /
 // kind-transfer-<id> older builds used. Such a name is plumbing, so the UI
 // shows the provider instead; a name a person or Herdr chose is left alone.
