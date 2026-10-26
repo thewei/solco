@@ -49,6 +49,7 @@ type workboardProjectPage struct {
 func (s *Shell) openWorkboardProjectPage(name string) {
 	if s.workboardBoardMode() {
 		s.hideQuickPanel()
+		s.workboard.boardFor = name
 		s.openWorkBoard()
 		return
 	}

@@ -100,6 +100,9 @@ func TestProjectMenuOffersManagementWithTheRightVerbs(t *testing.T) {
 			t.Fatalf("menu %q offers %q", menu, bad)
 		}
 	}
+	if !strings.Contains(menu, "Start Coordinator") {
+		t.Fatalf("a stopped coordinator can be started from the menu: %q", menu)
+	}
 	_, menu = projectMenu(t, s, workboardProject{Name: workboardOtherProject})
 	if menu != "" {
 		t.Fatalf("the catch-all Project has no management: %q", menu)
@@ -154,6 +157,7 @@ func TestUnconfirmedVerbsAndTheirToasts(t *testing.T) {
 	s := manageShell(t, &ran, `[]`)
 	for op, want := range map[string][2]string{
 		"coordinator-restart": {"coordinator --project r restart", "Restarting r's coordinator"},
+		"coordinator-start":   {"coordinator --project r restart", "Starting r's coordinator"},
 		"coordinator-stop":    {"coordinator --project r stop", "Stopped r's coordinator"},
 		"autopilot-off":       {"autopilot off --project r", "Autopilot off for r"},
 	} {

@@ -2,6 +2,7 @@ package nativeui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -407,5 +408,52 @@ func TestAdoptedMutationSelectionSurvivesTheLocationMirror(t *testing.T) {
 	}
 	if s.selectedPaneID != "board" {
 		t.Fatalf("selected pane = %q, want the adopted board pane", s.selectedPaneID)
+	}
+}
+
+// The sidebar rows say where a click goes: a task with an agent here wears the
+// agent's mark and tip, the Project that opened the Work board stays current
+// while the board shows, and every row has a tooltip.
+func TestProjectAndTaskRowsAnnounceTheirDestination(t *testing.T) {
+	s := projectsSectionShell(t)
+	s.settings.General.WorkboardView = "board"
+	s.workboard.board.details["app/3"] = workboardDetail{key: "k", detail: workboard.Detail{Worktree: "/wt/app-3", Agent: "claude"}}
+	s.projection = herdr.Projection{
+		Tabs: []herdr.Tab{{ID: "t1"}, {ID: "tb"}},
+		Panes: []herdr.Pane{
+			{ID: "agent", TabID: "t1", CWD: "/wt/app-3", Agent: "claude"},
+			{ID: "board", TabID: "tb", Label: workboard.BoardPaneTitle},
+		},
+	}
+	if got := s.projectRowTip(workboardProject{Name: "app"}, false); got != "app: open the Work board" {
+		t.Fatalf("board-view tip = %q", got)
+	}
+	if got := s.projectRowTip(workboardProject{Name: "app"}, true); got != "app: open its coordinator" {
+		t.Fatalf("coordinator tip = %q", got)
+	}
+	s.settings.General.WorkboardView = "native"
+	if got := s.projectRowTip(workboardProject{Name: "app"}, false); got != "app: open its tasks" {
+		t.Fatalf("native tip = %q", got)
+	}
+
+	row := boardRow{Task: workboard.Task{ID: "app/3", Title: "Busy", Msg: "  working   on\tit "}, Group: workboard.GroupWorking}
+	tip := taskRowTip(row, true)
+	if !strings.HasPrefix(tip, "Busy · ") || !strings.Contains(tip, "working on it") || !strings.HasSuffix(tip, "Click: open its agent") {
+		t.Fatalf("task tip = %q", tip)
+	}
+	if got := taskRowTip(row, false); !strings.HasSuffix(got, "Click: open the task") {
+		t.Fatalf("no-agent tip = %q", got)
+	}
+
+	// Board view: the Project row that opened the board is current while it shows.
+	s.router.Push(routeWorkspace)
+	s.selectedPaneID = "board"
+	s.workboard.boardFor = "app"
+	if !s.boardPaneSelected() {
+		t.Fatal("the board pane is selected")
+	}
+	s.selectedPaneID = "agent"
+	if s.boardPaneSelected() {
+		t.Fatal("an agent pane is not the board")
 	}
 }

@@ -485,7 +485,15 @@ earns the same treatment without its own dated decision.
   Board": the plugin's own `open` action (which keeps its one-board-per-machine
   rule) followed by adopting the focus Herdr ends on — the sanctioned
   user-initiated selection seam — so the board Tab renders in the native
-  Terminal; (2) a read-only Tasks tab in the Header Agent activity popover
+  Terminal (an already-open board is only focused with `plugin pane focus`:
+  invoking `open` while the board pane has Herdr's focus toggles away to the
+  linked task's agent; and the adopted landing is written into the workspace
+  location, or the location mirror drags the selection back). The plugin's own
+  "Shown cut off: a remote view holds this pane at …" line inside the board
+  is its documented size notice for a `herdr terminal attach` viewer beside
+  Herdr's own window (plugin docs/board-size.md), not a Shardlane fault; the
+  client has no sanctioned way to change it — an upstream recognition of the
+  native viewer would; (2) a read-only Tasks tab in the Header Agent activity popover
   (groups mapped onto the shared attention priority, deduplicated against
   Agents, with a Header aggregate and Project-row glyphs); (3) a `/tasks`
   destination reached only from the popover and the palette — detail plus

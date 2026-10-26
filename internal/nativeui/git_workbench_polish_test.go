@@ -72,7 +72,9 @@ func hoverFaceOf(tt *ui.Tester, label string) (edgeFilled, cornerBare bool) {
 		return false, false
 	}
 	at := func() (edge, corner [4]uint8) {
-		settleFrames(tt, 2) // hover takes a pass to be seen, a second to be painted
+		tt.Frame() // hover takes a pass to be seen, a second (and the clock) to be painted
+		tt.Advance(300 * time.Millisecond)
+		tt.Frame()
 		return pixelAt(tt, int(rect.X)+2, int(rect.Y+rect.H/2)), pixelAt(tt, int(rect.X)+2, int(rect.Y)+2)
 	}
 	tt.Move(1, 1)

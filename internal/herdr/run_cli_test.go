@@ -157,6 +157,7 @@ func TestUpgradeRuntimeLeavesTheOldProtocolBehind(t *testing.T) {
 	// authorization (pkexec on Linux) and finishes the very same updater
 	// in place when it is granted.
 	t.Run("escalates through the authorizer when not writable", func(t *testing.T) {
+		requirePkexecPlatform(t)
 		fakeHerdr(t, recordScript+"\n"+`echo "update failed: install directory not writable: /usr/bin (Permission denied (os error 13)). Try running with appropriate permissions." >&2; exit 1`)
 		bin := t.TempDir()
 		if err := os.WriteFile(filepath.Join(bin, "pkexec"), []byte("#!/bin/sh\necho \"$@\" >> \"$UPGRADE_LOG\"\n"), 0o755); err != nil {
@@ -175,6 +176,7 @@ func TestUpgradeRuntimeLeavesTheOldProtocolBehind(t *testing.T) {
 	})
 
 	t.Run("dismissed authorization falls back to the way out", func(t *testing.T) {
+		requirePkexecPlatform(t)
 		fakeHerdr(t, recordScript+"\n"+`echo "update failed: install directory not writable: /usr/bin (Permission denied (os error 13)). Try running with appropriate permissions." >&2; exit 1`)
 		bin := t.TempDir()
 		if err := os.WriteFile(filepath.Join(bin, "pkexec"), []byte("#!/bin/sh\necho \"$@\" >> \"$UPGRADE_LOG\"\necho \"dismissed\" >&2\nexit 1\n"), 0o755); err != nil {
@@ -188,4 +190,14 @@ func TestUpgradeRuntimeLeavesTheOldProtocolBehind(t *testing.T) {
 			t.Fatalf("err = %v, want typed ErrUpdateNotWritable after a dismissed dialog", err)
 		}
 	})
+}
+
+// requirePkexecPlatform skips the escalation tests off Linux: they fake
+// pkexec, while macOS authorizes through osascript — which would raise a real
+// administrator prompt on the developer's machine.
+func requirePkexecPlatform(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("the authorizer is faked as pkexec; other platforms would raise a real prompt")
+	}
 }

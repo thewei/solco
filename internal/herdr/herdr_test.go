@@ -86,10 +86,15 @@ func servePings(t *testing.T, path, version string, protocol int) *atomic.Int32 
 }
 
 // shortHome returns a HOME whose path is short enough for unix socket binds
-// (t.TempDir nests under the test name and exceeds the socket length limit).
+// (t.TempDir nests under the test name and exceeds the socket length limit,
+// and macOS's own $TMPDIR is already ~50 bytes of a 104-byte sun_path).
 func shortHome(t *testing.T) string {
 	t.Helper()
-	home, err := os.MkdirTemp("", "herdr-home")
+	base := ""
+	if _, err := os.Stat("/tmp"); err == nil {
+		base = "/tmp"
+	}
+	home, err := os.MkdirTemp(base, "herdr-home")
 	if err != nil {
 		t.Fatal(err)
 	}

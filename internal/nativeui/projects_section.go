@@ -10,6 +10,7 @@ package nativeui
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wh-studio/herdr-client/internal/herdr"
@@ -73,6 +74,9 @@ func (s *Shell) projectsItems(c *ui.Context, projects []workboardProject) {
 		// row leads: its pane. The tasks stay a menu item (Open Tasks) away.
 		coordPane, hasCoord := s.projectCoordinatorPane(project)
 		onCoord := hasCoord && s.router.Path() == routeWorkspace && s.selectedPaneID == coordPane
+		// With no coordinator the row opens the Work board Tab (board view);
+		// the Project that opened it stays the current place while it shows.
+		onBoard := s.workboard.boardFor == project.Name && s.boardPaneSelected()
 		mark := visualMark{svg: iconFolder}
 		if project.Pinned {
 			mark = visualMark{svg: iconPin}
@@ -82,18 +86,19 @@ func (s *Shell) projectsItems(c *ui.Context, projects []workboardProject) {
 			Key:        "board:" + project.Name,
 			Expandable: project.Open > 0,
 			Expanded:   !folded,
-			Selected:   onPage || onCoord,
+			Selected:   onPage || onCoord || onBoard,
 			Mark:       mark,
 			Label:      project.Name,
 			Dot:        project.Dot(),
 			Count:      project.Open,
 		})
+		row.Tooltip(s.projectRowTip(project, hasCoord))
 		if row.Clicked() {
 			// As in the Workspace tree: the first click opens the Project (its
 			// coordinator when one runs, else its page), a click on the Project
 			// already open folds or unfolds it.
 			switch {
-			case (onPage || onCoord) && project.Open > 0:
+			case (onPage || onCoord || onBoard) && project.Open > 0:
 				s.foldedBoards[project.Name] = !folded
 			default:
 				delete(s.foldedBoards, project.Name)
@@ -153,16 +158,24 @@ func (s *Shell) projectTaskRow(c *ui.Context, r boardRow, last bool) {
 		title = r.Task.ID
 	}
 	pane, hasPane := s.taskAgentPane(r.Task.ID)
+	// A task with an agent here wears that agent's mark: the click goes to it.
+	mark := visualMark{svg: iconTask}
+	if hasPane {
+		if agentMark, ok := s.agentMarkForPane(pane, c.Theme().Dark); ok {
+			mark = agentMark
+		}
+	}
 	row := treeRow(c, treeRowSpec{
 		Height:   s.sidebarRowHeight(),
 		Key:      "boardtask:" + r.Task.ID,
 		Depth:    1,
 		Last:     last,
 		Selected: hasPane && s.router.Path() == routeWorkspace && s.selectedPaneID == pane,
-		Mark:     visualMark{svg: iconTask},
+		Mark:     mark,
 		Label:    title,
 		Dot:      groupOperationalState(r.Group),
 	})
+	row.Tooltip(taskRowTip(r, hasPane))
 	if row.Clicked() {
 		if hasPane {
 			s.openPane(pane)
@@ -250,4 +263,47 @@ func (s *Shell) openProjectRow(name string) {
 			s.openWorkboardProjectPage(name)
 		})
 	})
+}
+
+// boardPaneSelected reports the workspace showing the plugin's Work board pane.
+func (s *Shell) boardPaneSelected() bool {
+	if s.router.Path() != routeWorkspace {
+		return false
+	}
+	pane := paneByID(s.projection, s.selectedPaneID)
+	return pane != nil && pane.Label == workboard.BoardPaneTitle
+}
+
+// projectRowTip says where the Project row's click goes (as the cache knows).
+func (s *Shell) projectRowTip(project workboardProject, hasCoord bool) string {
+	switch {
+	case hasCoord:
+		return project.Name + ": open its coordinator"
+	case s.workboardBoardMode():
+		return project.Name + ": open the Work board"
+	default:
+		return project.Name + ": open its tasks"
+	}
+}
+
+// taskRowTip is the task's title, its group and the plugin's status note
+// (whitespace collapsed, bounded), then where the click goes.
+func taskRowTip(r boardRow, hasPane bool) string {
+	title := r.Task.Title
+	if title == "" {
+		title = r.Task.ID
+	}
+	lines := []string{title + " · " + r.Group.Label()}
+	if note := strings.Join(strings.Fields(r.Task.Msg), " "); note != "" {
+		if runes := []rune(note); len(runes) > 140 {
+			note = string(runes[:140]) + "…"
+		}
+		lines = append(lines, note)
+	}
+	if hasPane {
+		lines = append(lines, "Click: open its agent")
+	} else {
+		lines = append(lines, "Click: open the task")
+	}
+	return strings.Join(lines, "\n")
 }

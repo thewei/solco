@@ -138,15 +138,16 @@ func TestHistoryDetailSwitchRebindsAndLeaveReleases(t *testing.T) {
 		t.Fatalf("the switch did not replace the transcript; texts=%q", tester.Texts())
 	}
 
-	// The outgoing page keeps building through the exit animation (it runs
-	// on the real clock); the binding drops on the first frames after it.
+	// The outgoing page keeps building through the exit animation (on the
+	// Tester's clock, which only Advance moves); the binding drops on the
+	// first frames after it.
 	shell.router.Replace(routeHistory)
 	tester.Frame()
 	if !shell.chatReadOnly {
 		t.Fatal("the transcript vanished while the page was still sliding out")
 	}
-	for deadline := time.Now().Add(3 * time.Second); shell.chatReadOnly && time.Now().Before(deadline); {
-		time.Sleep(50 * time.Millisecond)
+	for i := 0; i < 60 && shell.chatReadOnly; i++ {
+		tester.Advance(50 * time.Millisecond)
 		tester.Frame()
 	}
 	if shell.chatReadOnly || shell.chatConversationID != "" || len(shell.chatTurns) != 0 || shell.chatSession != nil {

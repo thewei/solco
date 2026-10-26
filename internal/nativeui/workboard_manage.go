@@ -197,6 +197,8 @@ func (s *Shell) boardManageItems(m *ui.Menu, project workboardProject) {
 		if m.Item("Stop Coordinator").Chosen() {
 			s.runBoardManage("coordinator-stop", project.Name)
 		}
+	} else if m.Item("Start Coordinator").Chosen() {
+		s.runBoardManage("coordinator-start", project.Name)
 	}
 	if s.workboard.board.extras.autopilot[project.Name] {
 		if m.Item("Turn Autopilot Off").Chosen() {
@@ -268,6 +270,9 @@ func (s *Shell) runBoardManage(op, target string) {
 		case "restore-project":
 			toast = "Restored " + target
 			return client.RestoreProject(ctx, target)
+		case "coordinator-start":
+			toast = "Starting " + target + "'s coordinator"
+			return client.CoordinatorControl(ctx, target, "restart") // plugin: "start its program again"
 		case "coordinator-restart":
 			toast = "Restarting " + target + "'s coordinator"
 			return client.CoordinatorControl(ctx, target, "restart")
