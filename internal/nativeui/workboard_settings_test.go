@@ -16,12 +16,30 @@ const settingsShow = `{"settings":[
  {"name":"worker.agent","kind":"work","value":"claude","from":"built in","place":"builtin","own":false,"note":""},
  {"name":"worker.fast","kind":"work","value":true,"from":"you","place":"you","own":true,"note":"does nothing: claude has no fast mode"},
  {"name":"merge.method","kind":"work","value":"squash","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"board.open","kind":"board","value":"tab","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"worker.access","kind":"work","value":"full","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"worker.effort","kind":"work","value":"default","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"reviewer.agent","kind":"work","value":"codex/gpt-6-sol","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"coordinator.agent","kind":"coordinator","value":"none","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"coordinator.effort","kind":"coordinator","value":"default","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"check.timeout","kind":"work","value":"15m","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"limit.tokens","kind":"work","value":"none","from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"review.rounds","kind":"work","value":3,"from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"attempts.by","kind":"work","value":1,"from":"built in","place":"builtin","own":false,"note":""},
+ {"name":"plan.approve","kind":"work","value":"sideways","from":"built in","place":"builtin","own":false,"note":""},
  {"name":"board.theme","kind":"board","value":"auto","from":"built in","place":"builtin","own":false,"note":""},
  {"name":"board.webUi","kind":"board","value":false,"from":"built in","place":"builtin","own":false,"note":""},
  {"name":"board.keys","kind":"board","value":"x","from":"built in","place":"builtin","own":false,"note":""},
  {"name":"board.machines","kind":"board","value":"none","from":"built in","place":"builtin","own":false,"note":""},
  {"name":"voice.calls","kind":"board","value":false,"from":"built in","place":"builtin","own":false,"note":""}
 ],"problems":[]}`
+
+// settingsModels mirrors `models --json`: codex has a model with its own effort list.
+const settingsModels = `[
+ {"agent":"claude","models":["default","opus"],"efforts":{"levels":["low","high"],"by":{}}},
+ {"agent":"codex","models":["gpt-6-sol","gpt-6-luna"],"efforts":{"levels":["low","high","ultra"],"by":{"gpt-6-sol":["low","ultra"]}}},
+ {"agent":"agy","models":null,"efforts":{"levels":[],"by":{}}}
+]`
 
 func settingsShell(t *testing.T, ran *[]string, setErr error) *Shell {
 	t.Helper()
@@ -38,6 +56,9 @@ func settingsShell(t *testing.T, ran *[]string, setErr error) *Shell {
 				return `[]`, nil
 			case args[0] == "coordinator" && args[len(args)-2] == "status":
 				return `{"state":"none"}`, nil
+			case args[0] == "models":
+				*ran = append(*ran, strings.Join(args, " "))
+				return settingsModels, nil
 			case args[0] == "show":
 				*ran = append(*ran, strings.Join(args, " "))
 				return settingsShow, nil
@@ -81,8 +102,8 @@ func TestSettingsPageShowsWhatThePluginReturnsGroupedAndFiltered(t *testing.T) {
 	var ran []string
 	s := settingsShell(t, &ran, nil)
 	tt := ui.NewTester(s.settingsWorkboard, 900, 1400)
-	if got := strings.Join(ran, "|"); got != "show --json" {
-		t.Fatalf("reads = %q: one show for the open scope", got)
+	if got := strings.Join(ran, "|"); got != "show --json|models --json" {
+		t.Fatalf("reads = %q: one show for the open scope, one models for the choice lists", got)
 	}
 	tt = ui.NewTester(s.settingsWorkboard, 900, 1400)
 	for _, want := range []string{"Scope", "Everywhere", "Worker", "worker.agent", "worker.fast", "Merge", "merge.method", "Board", "board.theme",
@@ -158,5 +179,116 @@ func TestSettingsPageSurvivesAFailedRead(t *testing.T) {
 	}
 	if persistableRoute("/settings/workboard") != "/settings/workboard" {
 		t.Fatal("a settings section is a stable route")
+	}
+}
+
+// press clicks a control on the settings page and returns the plugin calls it made.
+func pressSetting(t *testing.T, s *Shell, ran *[]string, label string) string {
+	t.Helper()
+	tt := ui.NewTester(s.settingsWorkboard, 900, 2600)
+	tt = ui.NewTester(s.settingsWorkboard, 900, 2600)
+	*ran = nil
+	if err := tt.Click(label); err != nil {
+		t.Fatalf("click %q: %v (%q)", label, err, tt.Texts())
+	}
+	var writes []string
+	for _, call := range *ran {
+		if strings.HasPrefix(call, "set ") || strings.HasPrefix(call, "unset ") {
+			writes = append(writes, call)
+		}
+	}
+	return strings.Join(writes, "|")
+}
+
+func TestSettingsChoicesAreSelectedNotTyped(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	ui.NewTester(s.settingsWorkboard, 900, 2600)
+	tt := ui.NewTester(s.settingsWorkboard, 900, 2600)
+	for _, want := range []string{"squash", "merge", "rebase", "tab", "popup", "full", "ask", "auto", "none", "s", "m", "h"} {
+		if !tt.HasText(want) {
+			t.Fatalf("a choice control must show %q: %q", want, tt.Texts())
+		}
+	}
+	if got := pressSetting(t, s, &ran, "rebase"); got != "set merge.method rebase" {
+		t.Fatalf("picking a method writes it once: %q", got)
+	}
+	if got := pressSetting(t, s, &ran, "popup"); got != "set board.open popup" {
+		t.Fatalf("board.open: %q", got)
+	}
+	if got := pressSetting(t, s, &ran, "ask"); got != "set worker.access ask" {
+		t.Fatalf("access: %q", got)
+	}
+}
+
+func TestSettingsAmountsPickTheirUnit(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	// check.timeout 15m: switching the unit keeps the number; limit.tokens none: k/m/none.
+	tt := ui.NewTester(s.settingsWorkboard, 900, 2600)
+	tt = ui.NewTester(s.settingsWorkboard, 900, 2600)
+	if !tt.HasText("k") {
+		t.Fatalf("tokens offer k and m: %q", tt.Texts())
+	}
+	if got := pressSetting(t, s, &ran, "h"); got != "set check.timeout 15h" {
+		t.Fatalf("time unit: %q", got)
+	}
+}
+
+func TestSettingsAgentAndEffortComeFromModels(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	ui.NewTester(s.settingsWorkboard, 900, 2600)
+	tt := ui.NewTester(s.settingsWorkboard, 900, 2600)
+	// Programs and models are drop-downs; a program the plugin lists no models for, or
+	// "none", has no model control; efforts are drop-downs of the sibling agent's levels.
+	for _, want := range []string{"worker.agent program", "worker.agent model", "reviewer.agent program", "reviewer.agent model", "coordinator.agent program", "claude", "codex", "default"} {
+		if !tt.HasText(want) {
+			t.Fatalf("agent controls missing %q: %q", want, tt.Texts())
+		}
+	}
+	if tt.HasText("coordinator.agent model") {
+		t.Fatalf("a none agent has no model: %q", tt.Texts())
+	}
+}
+
+// groupTexts returns what the page shows from a group's title up to the next title.
+func groupTexts(texts []string, title string) []string {
+	for i, text := range texts {
+		if text == title {
+			return texts[i+1:]
+		}
+	}
+	return nil
+}
+
+func TestSettingsUnknownOrDriftedValuesStayText(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	ui.NewTester(s.settingsWorkboard, 900, 2600)
+	tt := ui.NewTester(s.settingsWorkboard, 900, 2600)
+	// attempts.by is a count-or-list the table leaves alone; plan.approve's "sideways" is a word
+	// the table does not know: each row keeps its label, a text field's label and the note, no
+	// choice labels in between.
+	rest := groupTexts(tt.Texts(), "Attempts")
+	want := []string{"attempts.by", "attempts.by", "built in", "Plan", "plan.approve", "plan.approve", "built in"}
+	if len(rest) != len(want) {
+		t.Fatalf("drifted rows: %q", rest)
+	}
+	for i := range want {
+		if rest[i] != want[i] {
+			t.Fatalf("drifted rows: %q", rest)
+		}
+	}
+}
+
+func TestSettingsWithoutModelsFallBackToText(t *testing.T) {
+	var ran []string
+	s := settingsShell(t, &ran, nil)
+	s.workboard.settings.modelsTried = true // the models read never happened
+	ui.NewTester(s.settingsWorkboard, 900, 2600)
+	tt := ui.NewTester(s.settingsWorkboard, 900, 2600)
+	if tt.HasText("worker.agent program") || tt.HasText("reviewer.agent model") || tt.HasText("default") {
+		t.Fatalf("without the plugin's lists agent and effort stay text fields: %q", tt.Texts())
 	}
 }

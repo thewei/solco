@@ -1,0 +1,716 @@
+{
+  "settings": [
+    {
+      "name": "worker.agent",
+      "kind": "work",
+      "value": "claude",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "worker.effort",
+      "kind": "work",
+      "value": "default",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "worker.fast",
+      "kind": "work",
+      "value": false,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "worker.access",
+      "kind": "work",
+      "value": "full",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "worker.instructions",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "worker.fallback",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "reviewer.agent",
+      "kind": "work",
+      "value": "codex",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "reviewer.effort",
+      "kind": "work",
+      "value": "default",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "reviewer.fast",
+      "kind": "work",
+      "value": false,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "reviewer.access",
+      "kind": "work",
+      "value": "full",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "reviewer.instructions",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "reviewer.fallback",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "coordinator.agent",
+      "kind": "coordinator",
+      "value": "claude",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "coordinator.effort",
+      "kind": "coordinator",
+      "value": "default",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "coordinator.fast",
+      "kind": "coordinator",
+      "value": false,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "coordinator.access",
+      "kind": "coordinator",
+      "value": "full",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "coordinator.instructions",
+      "kind": "coordinator",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.every",
+      "kind": "coordinator",
+      "value": "6h",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.gap",
+      "kind": "coordinator",
+      "value": "10m",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.wakesPerDay",
+      "kind": "coordinator",
+      "value": 24,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.when",
+      "kind": "coordinator",
+      "value": "done stuck added",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.hours",
+      "kind": "coordinator",
+      "value": "any",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.tasksPerDay",
+      "kind": "coordinator",
+      "value": 5,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.tasksAtOnce",
+      "kind": "coordinator",
+      "value": 2,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.mayChange",
+      "kind": "coordinator",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.scope",
+      "kind": "coordinator",
+      "value": "own",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.approve",
+      "kind": "coordinator",
+      "value": "no",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.switchOthers",
+      "kind": "coordinator",
+      "value": "no",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.releases",
+      "kind": "coordinator",
+      "value": "no",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.retries",
+      "kind": "coordinator",
+      "value": 1,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.startAtOnce",
+      "kind": "coordinator",
+      "value": "yes",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.needsYouAfter",
+      "kind": "coordinator",
+      "value": 3,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "autopilot.repoFileWaits",
+      "kind": "coordinator",
+      "value": "yes",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "watcher.agent",
+      "kind": "board",
+      "value": "claude/claude-haiku-5-5",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "watcher.every",
+      "kind": "board",
+      "value": "60s",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "research.only",
+      "kind": "work",
+      "value": false,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "chat.only",
+      "kind": "work",
+      "value": false,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "workspace.from",
+      "kind": "work",
+      "value": "main",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "workspace.branch",
+      "kind": "work",
+      "value": "work/{n}-{slug}",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "workspace.setup",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "workspace.include",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "workspace.teardown",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "workspace.cleanup",
+      "kind": "work",
+      "value": true,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "attempts.by",
+      "kind": "work",
+      "value": 1,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "attempts.pick",
+      "kind": "work",
+      "value": "you",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "plan.approve",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "plan.agent",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "check.command",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "check.again",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "check.timeout",
+      "kind": "work",
+      "value": "15m",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "review.when",
+      "kind": "work",
+      "value": "repos",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "review.mustFix",
+      "kind": "work",
+      "value": "major",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "review.rounds",
+      "kind": "work",
+      "value": 3,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "review.timeout",
+      "kind": "work",
+      "value": "20m",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "review.afterChat",
+      "kind": "work",
+      "value": "60s",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "review.evidence",
+      "kind": "work",
+      "value": true,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "limit.time",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "limit.tokens",
+      "kind": "work",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "merge.by",
+      "kind": "work",
+      "value": "you",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "merge.method",
+      "kind": "work",
+      "value": "squash",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "merge.pr",
+      "kind": "work",
+      "value": true,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "merge.pushTimeout",
+      "kind": "work",
+      "value": "2m",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "merge.checks",
+      "kind": "work",
+      "value": "github",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "merge.sync",
+      "kind": "work",
+      "value": "always",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.agents",
+      "kind": "board",
+      "value": 4,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.diskFree",
+      "kind": "board",
+      "value": 5,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.oldBuilds",
+      "kind": "board",
+      "value": 7,
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.machines",
+      "kind": "board",
+      "value": "auto",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.open",
+      "kind": "board",
+      "value": "tab",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.notify",
+      "kind": "board",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.keys",
+      "kind": "board",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.keyStyle",
+      "kind": "board",
+      "value": "auto",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.webUi",
+      "kind": "board",
+      "value": "auto",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "voice.calls",
+      "kind": "board",
+      "value": "on",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "voice.language",
+      "kind": "board",
+      "value": "auto",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "voice.voice",
+      "kind": "board",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "voice.llm",
+      "kind": "board",
+      "value": "none",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "voice.helper",
+      "kind": "board",
+      "value": "auto",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    },
+    {
+      "name": "board.theme",
+      "kind": "board",
+      "value": "herdr",
+      "from": "built in",
+      "place": "builtin",
+      "own": false,
+      "note": ""
+    }
+  ],
+  "problems": []
+}

@@ -64,7 +64,8 @@ workboard_manage.go: 管理面 P6（2026-10-26）——/archived 页（按 Proje
 workboard_manage_test.go: 管理动词 argv 与「先问后跑」、归档页分组/Restore/Remove/Restore Project、菜单项随状态出现、autopilot 来自 list、New Task 对话框带齐选项、after 阶段 Start Now…、Project 页自动化管理（Run…/Remove… 先确认）
 workboard_newtask.go: New Task 唯一入口模态（标题、描述、Task/Research only/Chat only 三选一、After、Start an agent now），取代只问标题的文本对话框；提交走 Client.AddTask，仓库根目录创建时提交瞬间仓库已变则拒绝，--after 等校验与拒绝全归插件
 workboard_automations.go: Project 页 Automations 组（名称、触发器、下次/关闭原因，Turn On·Off 立即写，Run…/Remove… 先确认）——只管理不创建；没有自动化的 Project 不画这一组
-workboard_settings.go: /settings/workboard 原生页（用户 2026-10-26 显式授权）——范围 Everywhere/Project/Project coordinator → 过滤 → 按名字前缀分组的设置行（布尔=开关，其余=文本回车提交，own 行 Reset=unset），只画插件 `show --json` 在该范围返回的那份、拒绝原文透传；voice/Web UI/跨机器/快捷键类设置不收录；Settings 导航项仅插件门开时出现
+workboard_settings.go: /settings/workboard 原生页（用户 2026-10-26 显式授权）——范围 Everywhere/Project/Project coordinator → 过滤 → 按名字前缀分组的设置行（布尔=开关，规格表命中=选择型控件见 workboard_settings_controls.go，其余=文本回车提交，own 行 Reset=unset），只画插件 `show --json` 在该范围返回的那份、拒绝原文透传；voice/Web UI/跨机器/快捷键类设置不收录；Settings 导航项仅插件门开时出现
+workboard_settings_controls.go: 设置行的取值控件——钉住规格表命中且当前值合规时用选择型（≤3 词分段/更多下拉；数量=NumberInput；时间/token=数字+单位分段，可 none；agent=程序下拉+模型可搜下拉；effort=兄弟 agent 的档位下拉），否则降级文本；数字输入失焦/回车才写、选择即写；写入期间保留所选值直到页面重读；`models --json` 异步读一次，读不到则相关行仍是文本
 workboard_settings_test.go: 导航项随门显隐、分组/过滤/隐藏集、各范围写入 argv 与重读、拒绝原文进 toast、读失败态
 workboard_plan_test.go: plan-ready 的 Approve Plan…/Send Plan Back…（先问后跑，re-list 守卫）、pick 不给错动词、任务页分节（Plan/Review/Report/Limits/Handovers/Attempts）、行标记与协调者 said
 workboard_ui_test.go: 门控回归——调色板条目随插件门显隐（未探测/各 Reason 隐藏、Supported 本机显示且可检索）、远程实例隐藏、过期条目执行时重验且不发起变更、探测去抖与在途不翻倍、后一次不可读结果会重新关门
