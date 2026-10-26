@@ -10,7 +10,7 @@ import (
 
 /**
  * [INPUT]: 依赖 client.go 的 Exec 与 act/checkID，插件 CLI 的 archive/restore/clear（任务与 --repo 整个 Project）、`archive --done --repo`、`list --archived --json`、`coordinator --project R restart|new|stop`、`autopilot [--json]` / `autopilot on|off --project R`
- * [OUTPUT]: 对外提供 Client.Archived/Restore/Clear（归档视图）、ArchiveDone/ArchiveProject/RestoreProject（按 Project 整批）、CoordinatorControl（restart|new|stop）、Autopilots/SetAutopilot
+ * [OUTPUT]: 对外提供 Client.AddProject（`add <title> --repo <folder>` 登记文件夹为 Project，回读插件起的名字）、Client.Archived/Restore/Clear（归档视图）、ArchiveDone/ArchiveProject/RestoreProject（按 Project 整批）、CoordinatorControl（restart|new|stop）、Autopilots/SetAutopilot
  * [POS]: 管理面（P6）：每个动词的含义与拒绝都归插件（archive --repo 会停掉在跑的 Agent、协调者并关闭其自动化；clear 永久移除任务记录），本包只做参数守卫与形状解析，确认文案由调用方写；从不带 --anyway/--takeover，不开 autopilot 的 goal/设置通道
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -94,6 +94,47 @@ func (c *Client) CoordinatorControl(ctx context.Context, project, verb string) e
 	}
 	_, err := c.exec(ctx, "coordinator", "--project", project, verb)
 	return err
+}
+
+// AddProject registers a folder as a Project the only way the plugin has: it
+// names a folder the first time a task is added there (`add <title> --repo
+// <folder>`). It returns the name the plugin gave the Project, or "" when the
+// plugin's answer does not say (the task was still added).
+func (c *Client) AddProject(ctx context.Context, folder, title string) (string, error) {
+	folder, title = strings.TrimSpace(folder), strings.TrimSpace(title)
+	if !strings.HasPrefix(folder, "/") || title == "" || strings.HasPrefix(title, "-") {
+		return "", errors.New("workboard: add: invalid folder or title")
+	}
+	out, err := c.exec(ctx, "add", title, "--repo", folder)
+	if err != nil {
+		return "", err
+	}
+	ref := ""
+	for _, line := range strings.Split(out, "\n") {
+		if head, tail, ok := strings.Cut(strings.TrimSpace(line), ": "); ok && tail == "added" && head != "" && !strings.ContainsAny(head, " \t") {
+			ref = head
+			break
+		}
+	}
+	if ref == "" || strings.HasPrefix(ref, "-") {
+		return "", nil
+	}
+	raw, err := c.exec(ctx, "details", ref, "--json")
+	if err != nil {
+		return "", nil
+	}
+	var env struct {
+		Task struct {
+			ID string `json:"id"`
+		} `json:"task"`
+	}
+	if json.Unmarshal([]byte(raw), &env) != nil {
+		return "", nil
+	}
+	if i := strings.LastIndex(env.Task.ID, "/"); i > 0 {
+		return env.Task.ID[:i], nil
+	}
+	return "", nil
 }
 
 // Autopilots reads which coordinators have autopilot on, keyed by Project

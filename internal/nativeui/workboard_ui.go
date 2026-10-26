@@ -41,6 +41,7 @@ type workboardState struct {
 	boardFor      string
 	archived      workboardArchived
 	newTask       newTaskDraft
+	newProject    newProjectDraft
 	newAutomation newAutomationDraft
 	delegate      delegateDraft
 	pick          pickDraft

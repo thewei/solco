@@ -34,6 +34,9 @@ func (s *Shell) projectsSection(c *ui.Context) {
 			if m.Item("Add and Delegate").Chosen() {
 				s.openWorkboardAdd(true)
 			}
+			if m.Item("New Project…").Chosen() {
+				s.openNewProject()
+			}
 			m.Separator()
 			if m.Item("Archived Tasks").Chosen() {
 				s.openWorkboardArchived()

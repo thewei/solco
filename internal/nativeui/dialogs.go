@@ -125,6 +125,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 		})
 	}
 	s.newTaskDialog(c)
+	s.newProjectDialog(c)
 	s.newAutomationDialog(c)
 	s.delegateDialog(c)
 	s.pickDialog(c)

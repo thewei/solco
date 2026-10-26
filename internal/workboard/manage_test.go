@@ -323,3 +323,40 @@ func TestPickArgv(t *testing.T) {
 		t.Fatalf("refusals must reach no CLI call: %q", *calls)
 	}
 }
+
+func TestAddProjectRegistersTheFolderAndReadsItsName(t *testing.T) {
+	var calls []string
+	c := NewClientWithExec(func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if args[0] == "add" {
+			return "PRJ-1: added\n", nil
+		}
+		return `{"task":{"id":"My.Proj/1"}}`, nil
+	})
+	name, err := c.AddProject(context.Background(), "/tmp/My.Proj", "First thing")
+	if err != nil || name != "My.Proj" {
+		t.Fatalf("name=%q err=%v", name, err)
+	}
+	if got := strings.Join(calls, "|"); got != "add First thing --repo /tmp/My.Proj|details PRJ-1 --json" {
+		t.Fatalf("calls = %q", got)
+	}
+}
+
+func TestAddProjectAnswerWithoutAReferenceStillSucceeds(t *testing.T) {
+	c := NewClientWithExec(func(context.Context, ...string) (string, error) { return "added", nil })
+	if name, err := c.AddProject(context.Background(), "/tmp/p", "x"); err != nil || name != "" {
+		t.Fatalf("name=%q err=%v", name, err)
+	}
+}
+
+func TestAddProjectRefusesRelativeFoldersAndOptionLikeTitles(t *testing.T) {
+	c := NewClientWithExec(func(context.Context, ...string) (string, error) {
+		t.Fatal("no CLI call for bad input")
+		return "", nil
+	})
+	for _, in := range [][2]string{{"rel", "x"}, {"", "x"}, {"/p", ""}, {"/p", "-x"}} {
+		if _, err := c.AddProject(context.Background(), in[0], in[1]); err == nil {
+			t.Fatalf("%q must be refused", in)
+		}
+	}
+}

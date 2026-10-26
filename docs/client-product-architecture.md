@@ -572,7 +572,13 @@ earns the same treatment without its own dated decision.
   (Archive Done Tasks…, Archive Project… with its real consequences — running
   work and the coordinator stop, automations turn off — counted confirms,
   Coordinator Restart/New/Stop, Autopilot On… with a token-cost confirm).
-  *Creation/automations:* New Task dialog (title, description, Task/Research/Chat,
+  *Creation/automations:* New Project… (Projects section menu: local folder
+  picker → first task title + "Start its coordinator now"; the plugin has no
+  create-Project verb — a folder becomes a Project when its first task is added,
+  so it runs `add <title> --repo <folder>`, reads the name back with `details`,
+  `pin`s it so it stays in the sidebar, optionally `coordinator restart`; there
+  is no plugin API to delete a Project's data, so Archive Project… is the only
+  removal and Shardlane never edits the plugin's data files); New Task dialog (title, description, Task/Research/Chat,
   After, start now; To do tasks also offer Delegate with… — the task's own
   `show <id>` settings as the same choice controls, only changed ones sent as
   `delegate <id> --<setting> V`); Automations group on the Project page (on/off,
