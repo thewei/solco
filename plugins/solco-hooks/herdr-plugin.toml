@@ -2,7 +2,7 @@
 # interaction dock, real-time agent state). Herdr runs the forwarder for
 # each declared event with HERDR_PLUGIN_EVENT_JSON carrying the payload;
 # the forwarder appends it to the spool file the Solco app tails.
-# Link it once: herdr plugin link --path plugins/solco-hooks
+# Link it once: herdr plugin link <repo>/plugins/solco-hooks
 id = "com.whstudio.solco.hooks"
 name = "Solco hooks"
 version = "0.1.0"
