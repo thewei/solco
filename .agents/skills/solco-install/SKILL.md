@@ -1,9 +1,9 @@
 ---
-name: shardlane-install
-description: "Build the newest Shardlane.app from the herdr-client working tree and replace the copy the user runs day to day in ~/Applications, restarting the running instance. Use whenever the user says 编译最新app / 覆盖安装 / 更新我正在用的 Shardlane / build and install the latest app / deploy the newest build / 给我装上最新版 — i.e. they want the code that is on disk right now running in their real app, not left in build/ output."
+name: solco-install
+description: "Build the newest Solco.app from the herdr-client working tree and replace the copy the user runs day to day in ~/Applications, restarting the running instance. Use whenever the user says 编译最新app / 覆盖安装 / 更新我正在用的 Solco / build and install the latest app / deploy the newest build / 给我装上最新版 — i.e. they want the code that is on disk right now running in their real app, not left in build/ output."
 ---
 
-# Shardlane Install
+# Solco Install
 
 One script performs the whole verified flow — vet, build, artifact checks,
 graceful restart, replace, relaunch, liveness — with each stage gating the
@@ -15,8 +15,8 @@ The script is **platform-aware** (2026-10-16, per user): it branches on
 
 ## macOS (`Darwin`)
 
-Builds and replaces the `Shardlane.app` bundle (default target
-`~/Applications/Shardlane.app`, override `SHARDLANE_INSTALL_DST`). Stages, in
+Builds and replaces the `Solco.app` bundle (default target
+`~/Applications/Solco.app`, override `SOLCO_INSTALL_DST`). Stages, in
 order (each prints `==> N/7`):
 
 1. **vet** — `go tool mygo vet .`; a broken tree stops before any build.
@@ -32,7 +32,7 @@ order (each prints `==> N/7`):
    AppleScript quit, up to 10 s grace, then SIGTERM. If it still will not
    die the script **aborts** — by design there is no SIGKILL, which would
    skip the app's session save.
-6. **replace** — `rm -rf` + `ditto` from `build/darwin-arm64/Shardlane.app`,
+6. **replace** — `rm -rf` + `ditto` from `build/darwin-arm64/Solco.app`,
    lint again on the installed copy.
 7. **launch and verify** — `open`, then a two-stage liveness check so a
    crash-on-launch is caught, not reported as success.
@@ -43,8 +43,8 @@ Builds the user-local Linux app and installs it through the **installer that
 `go tool mygo build` generates** (`build/linux-amd64/install.sh`) — the
 framework's installer owns staging, whole-directory replacement and the
 applications-menu entry; this script only gates and drives it. Target:
-`~/.local/shardlane.app` + `~/.local/share/applications/shardlane.desktop`
-(override the app dir with `SHARDLANE_INSTALL_APP_DIR`; no root needed).
+`~/.local/solco.app` + `~/.local/share/applications/solco.desktop`
+(override the app dir with `SOLCO_INSTALL_APP_DIR`; no root needed).
 
 1. **vet** — same gate as macOS.
 2. **build** — same `go tool mygo build`; announces the dirty-file count.
@@ -59,7 +59,7 @@ applications-menu entry; this script only gates and drives it. Target:
    repo's own products, never user-authored state, so they are replaced too.
 6. **install** — runs the generated installer; then verifies the executable
    and the desktop entry landed.
-7. **launch and verify** — `gtk-launch shardlane` when a Wayland/X display
+7. **launch and verify** — `gtk-launch solco` when a Wayland/X display
    is reachable, then a two-stage liveness check; without a display session
    it reports the install and points at the applications menu.
 
@@ -69,12 +69,12 @@ installer warns when it is missing.
 ## Run
 
 ```sh
-bash .agents/skills/shardlane-install/scripts/install.sh
+bash .agents/skills/solco-install/scripts/install.sh
 ```
 
 ## Reading the result
 
-- `done: Shardlane <id|version> installed at <path> and running (pid N)` —
+- `done: Solco <id|version> installed at <path> and running (pid N)` —
   report success with the pid and the dirty-file count from stage 2. On a
   Linux box without a display session the done line says the app was
   installed and names the applications menu instead.

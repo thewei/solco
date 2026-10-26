@@ -1,7 +1,7 @@
 /build/
 /dist/
 /.config/
-/.shardlane/
+/.solco/
 /.claude/
 /.mygo/
 .DS_Store

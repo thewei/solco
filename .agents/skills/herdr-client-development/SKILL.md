@@ -1,11 +1,11 @@
 ---
-name: shardlane-development
-description: Use when developing, debugging, reviewing, packaging, or handing off the Shardlane macOS client (Go + MyGo Native UI) — the Herdr runtime/protocol boundary, native Terminal attach, pane layout projection, Agent conversation/history semantics, Git Workbench, or release validation. Enforces Shardlane client identity, Herdr runtime authority, mature-API-first implementation, Native-UI-only presentation, visible-only attachments, one canonical shell, bounded logging, and documentation truth alignment.
+name: solco-development
+description: Use when developing, debugging, reviewing, packaging, or handing off the Solco macOS client (Go + MyGo Native UI) — the Herdr runtime/protocol boundary, native Terminal attach, pane layout projection, Agent conversation/history semantics, Git Workbench, or release validation. Enforces Solco client identity, Herdr runtime authority, mature-API-first implementation, Native-UI-only presentation, visible-only attachments, one canonical shell, bounded logging, and documentation truth alignment.
 ---
 
-# Shardlane Development
+# Solco Development
 
-Use this skill for engineering work in the Shardlane repository (Go 1.27.1 + MyGo Native UI; Herdr is the runtime authority). The Rust/GPUI implementation is not on this branch.
+Use this skill for engineering work in the Solco repository (Go 1.27.1 + MyGo Native UI; Herdr is the runtime authority). The Rust/GPUI implementation is not on this branch.
 
 The skill controls process. Architectural truth lives in `docs/client-product-architecture.md`; do not duplicate or override it here.
 
@@ -31,10 +31,10 @@ Preserve user/staged changes. Do not reset, stage, commit, or push unless the us
 
 Keep the names and ownership distinct:
 
-- **Shardlane** is the application, product, shell, package, bundle, release artifact, and user-facing brand.
-- **Project** is the Shardlane product concept backed by one Herdr runtime workspace.
+- **Solco** is the application, product, shell, package, bundle, release artifact, and user-facing brand.
+- **Project** is the Solco product concept backed by one Herdr runtime workspace.
 - **Herdr** is the actual backend/runtime. Genuine Herdr API, protocol, CLI, socket, `Workspace` runtime type, `workspace_id`, `workspace.*` methods, errors, and integration names stay Herdr.
-- Never use a Herdr runtime workspace as though it were a Shardlane Workspace; map it through the Project projection boundary. Never rename a real Herdr backend concept merely to make a branding search cleaner. Never present the client itself as Herdr.
+- Never use a Herdr runtime workspace as though it were a Solco Workspace; map it through the Project projection boundary. Never rename a real Herdr backend concept merely to make a branding search cleaner. Never present the client itself as Herdr.
 
 ## Mature-semantics-first ladder
 
@@ -43,7 +43,7 @@ Before hand-writing a capability, search the owner ladder in this order:
 1. Herdr API;
 2. MyGo Native UI components and official plugins (Terminal/Ghostty included);
 3. a proven compatible implementation pattern;
-4. custom Shardlane code.
+4. custom Solco code.
 
 If custom code is necessary, record the concrete reason: missing API, ownership conflict, or measured performance limitation.
 
@@ -95,7 +95,7 @@ git diff --check
 git diff --cached --check
 ```
 
-For packaging changes also: build the `.app`, verify `Shardlane.app` exists under `build/darwin-arm64/`, verify the executable runs, lint `Info.plist`, and perform available signing/structural verification. Packaging identity lives in `mygo.config.ts` (app + frontend keys, since the N19 chat WebView frontend).
+For packaging changes also: build the `.app`, verify `Solco.app` exists under `build/darwin-arm64/`, verify the executable runs, lint `Info.plist`, and perform available signing/structural verification. Packaging identity lives in `mygo.config.ts` (app + frontend keys, since the N19 chat WebView frontend).
 
 Real-app UI acceptance (only-the-real-app questions: picker contents, multi-Pane input/resize, rendering) drives a real app run through the Computer Use tools with mandatory isolation — temporary `HOME` + dedicated `HERDR_SOCKET_PATH`, never the user's live instance — and asserts Herdr/protocol ground truth over pixels alone, recording PASS/FAIL evidence per scenario. The Rust-era acceptance harness scripts were removed with the Rust implementation; rebuild the harness entrypoints against the Go app before the next acceptance session.
 
@@ -104,7 +104,7 @@ Real-app UI acceptance (only-the-real-app questions: picker contents, multi-Pane
 Before handoff or commit:
 
 - [ ] intended diff only; no user changes reset/staged accidentally;
-- [ ] Shardlane is the client identity in product surfaces; Herdr remains factually named at the backend boundary;
+- [ ] Solco is the client identity in product surfaces; Herdr remains factually named at the backend boundary;
 - [ ] one canonical shell path remains; no second runtime/PTY/layout owner introduced;
 - [ ] all static gates pass; relevant runtime smoke done; manual-only acceptance explicitly listed;
 - [ ] canonical architecture matches code; required third-party notices preserved;

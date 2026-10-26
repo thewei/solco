@@ -1,12 +1,12 @@
 {
   "evals": [
     {
-      "prompt": "Rename internal/herdr, the HerdrClient bindings, and the herdr CLI references to Shardlane as well, so the whole repository no longer searches for Herdr.",
-      "expected_output": "Distinguish brand from backend fact: Shardlane is the client brand; genuine backend concepts such as internal/herdr, the Herdr daemon, and the Herdr protocol keep the Herdr name — no incorrect renames done just for branding search results."
+      "prompt": "Rename internal/herdr, the HerdrClient bindings, and the herdr CLI references to Solco as well, so the whole repository no longer searches for Herdr.",
+      "expected_output": "Distinguish brand from backend fact: Solco is the client brand; genuine backend concepts such as internal/herdr, the Herdr daemon, and the Herdr protocol keep the Herdr name — no incorrect renames done just for branding search results."
     },
     {
       "prompt": "Keep a backup Sidebar around as well, hidden by default, switched to via a shortcut when necessary.",
-      "expected_output": "Refuse a second Sidebar/hidden backup implementation; Shardlane keeps exactly one canonical shell and iterates within the same ownership seam in internal/nativeui."
+      "expected_output": "Refuse a second Sidebar/hidden backup implementation; Solco keeps exactly one canonical shell and iterates within the same ownership seam in internal/nativeui."
     },
     {
       "prompt": "Every time the terminal emits output, re-fetch the full Herdr snapshot to keep the UI fresh.",

@@ -1,25 +1,25 @@
 ---
-name: shardlane-ui-polish
-description: Use when polishing or unifying the Shardlane MyGo client's UI/UX — removing "AI flavor" (self-explaining copy, leaked internals, gradients, heavy icons, per-row buttons), unifying page Headers / back navigation / refresh / highlight colors / icon buttons / spacing / radius / dividers / motion across pages, adding or restyling a page or shared component, or when the user says 界面不统一 / 去 AI 味 / 重复按钮 / Header 不一样 / 高亮色不一致. Holds the design rulebook (tokens, title-bar model, one-refresh and two-class highlight rules, copy conventions), anti-pattern scan commands, regression guards, and the audit → fix → evidence → gate loop. Real-device driving quirks and the F-ledger live in shardlane-ui-audit; deploying lives in shardlane-install.
+name: solco-ui-polish
+description: Use when polishing or unifying the Solco MyGo client's UI/UX — removing "AI flavor" (self-explaining copy, leaked internals, gradients, heavy icons, per-row buttons), unifying page Headers / back navigation / refresh / highlight colors / icon buttons / spacing / radius / dividers / motion across pages, adding or restyling a page or shared component, or when the user says 界面不统一 / 去 AI 味 / 重复按钮 / Header 不一样 / 高亮色不一致. Holds the design rulebook (tokens, title-bar model, one-refresh and two-class highlight rules, copy conventions), anti-pattern scan commands, regression guards, and the audit → fix → evidence → gate loop. Real-device driving quirks and the F-ledger live in solco-ui-audit; deploying lives in solco-install.
 ---
 
-# Shardlane UI 打磨：统一界面 · 去 AI 味
+# Solco UI 打磨：统一界面 · 去 AI 味
 
 一句话：**一个概念只有一个入口、一处标题、一种外观；系统惯例优先于新点子。**
 每条规则都挂着守卫测试或 `rg` 扫描——没有可验证手段的规则不写进来。
 
 ## 先读 / 分工
 
-1. `AGENTS.md`（owner 阶梯：Herdr API → MyGo 原生 → 成熟做法 → 自写；Shardlane 只做呈现）。
+1. `AGENTS.md`（owner 阶梯：Herdr API → MyGo 原生 → 成熟做法 → 自写；Solco 只做呈现）。
 2. 视觉单一来源：`internal/nativeui/design_system.go`（token）、`gorex_style.go`（图标按钮/开关脸/卡）、`ds_components.go`（页面原语）、`route_header.go` + `titlebar.go`（标题栏）。
-3. 设备驱动坑、F 台账、并发协议 → `shardlane-ui-audit`；覆盖安装 → `shardlane-install`。本技能只管「规则 + 打磨循环」。
+3. 设备驱动坑、F 台账、并发协议 → `solco-ui-audit`；覆盖安装 → `solco-install`。本技能只管「规则 + 打磨循环」。
 
 ## 五条统一不变量（违反任一条即缺陷）
 
 | # | 不变量 | 唯一实现 | 守卫 |
 |---|---|---|---|
 | 1 | **标题只在标题栏，且是一行大字**：Changes/Sessions/Files/Hosts/Settings/Inspector 的标题 = 标题栏里一行 `Title`(20) 加粗；子页前缀灰色父级（`Settings ›`、`Sessions ›`，会话详情的父级可点回列表）；页面动作紧随其后；**没有 crumb 胶囊、没有第二行上下文**——路径/配置路径放标题悬停提示（`titleTip`），会话事实（项目 · Agent · 模型）同行灰字。只有 Terminal/Chat 是面包屑 + cwd 双行。页面只画内容，从 `pageTopInset()`（12）起；侧栏不回声标题 | `routeHeader()`/`routeHeaderBlock`/`headerActions`（Terminal/Chat 走 `breadcrumbRow` + cwd 行）；`titlebarHeight` 全路由同一 42 下限、标题同字号同行 → 进出内页标题不跳；内页侧栏列表由 `sidebarInnerNav` 统一内缩，子导航不再二次 `Padding`（Hosts 曾因此低 14、窄 9） | `unified_header_test.go`（含 `TestInnerTitlesAreOneLargeRow`、`TestInnerSidebarsShareOneInset`） |
-| 2 | **进出内页同一套路**：进入 = **侧栏顶部五个等宽图标视图标签**（Terminal/Changes/Sessions/Files/Hosts，每条路由同一位置；再点亮着的非 Terminal 页回 Terminal，Sessions 内页先回列表）；退出 = **同一条标签条里的 Terminal 标签**，不再另设页脚返回——**唯一例外是 Settings**（它不是视图标签的目的地，页脚保留一个 `Back`，tooltip 写去向 Terminal）；页内不再放第二个返回；⌘W 只关 Tab；窗口标题 = `Shardlane — <路由>` | `sidebarViewTabs`/`gorexIconTab`、`showViewHistory/Files/Hosts`、`sidebarBackRow`、`syncWindowTitle` | `navigation_semantics_test.go`、`TestSidebarViewTabs*`、`TestSessionBarLeadsBackToTheList` |
+| 2 | **进出内页同一套路**：进入 = **侧栏顶部五个等宽图标视图标签**（Terminal/Changes/Sessions/Files/Hosts，每条路由同一位置；再点亮着的非 Terminal 页回 Terminal，Sessions 内页先回列表）；退出 = **同一条标签条里的 Terminal 标签**，不再另设页脚返回——**唯一例外是 Settings**（它不是视图标签的目的地，页脚保留一个 `Back`，tooltip 写去向 Terminal）；页内不再放第二个返回；⌘W 只关 Tab；窗口标题 = `Solco — <路由>` | `sidebarViewTabs`/`gorexIconTab`、`showViewHistory/Files/Hosts`、`sidebarBackRow`、`syncWindowTitle` | `navigation_semantics_test.go`、`TestSidebarViewTabs*`、`TestSessionBarLeadsBackToTheList` |
 | 3 | **同类动作每个上下文只有一个**：Refresh 是图标按钮、不是导航行；同一目的地只有一个名字（Files/Sessions/Hosts，菜单/⌘K/tooltip/窗口标题一致）；信息只出现一次（窗格卡头不复述标题栏已有的 cwd） | Git/Files/Sessions 侧栏项目头图标（`sidebarProjectHeader`，三页共用一个头）；Hosts 侧栏列表头图标；Agents 设置工具条图标；`paneCardCaption`/`titleSpellsOutDir` | `TestEachRouteHasOneRefreshAndItIsAnIcon`、`TestProjectSidebarsShareOneHead`、`pane_header_visuals_test.go` |
 | 4 | **高亮只有两类，各一种脸**：*按钮*处于开（开关/视图工具/模式）= 中性芯片；*行*被选中（导航/树/列表/Agent 卡）= `SidebarSelect`。业务代码不再自涂 Accent 底 | `gorexToggleFace(b,k,on)`（按下 `k.pressed` / 悬停 `k.hover` / 开 `k.tabActive`）；行走 `rowTint`；"当前分支/当前引用"是状态标记（accent 字 + 0.11 底），不是选中 | `toggle_face_test.go` |
 | 5 | **同一组件同一尺寸**：图标按钮只有两档——工具栏 28/16（`gorexIconBtn/Glyph`）、密集 24/14（`gorexPaneBtn/Glyph`），全走 `gorexIconButton`（等分一行的标签条走同脸的 `gorexIconTab`；Git 工作台的 `gdIconButton`/`gdPulldown` 是它与 `gorexPulldown` 的薄壳，只多一个 `.Focusable()` Tab 停靠点）；文字按钮只有 regular（默认）与 `compactButton`/`compactPrimaryButton`（Micro 10），**业务代码不在 Button 上内联字号**；互斥视图一律 `ui.Segmented`（含 Git 下半区 Commit/Changes/File Tree）——段里要放图标/计数时用 `ui.SegmentedBase` + `ds_components.go` 的 `segmentedTrack/segmentFace`（Sessions Agent 标签、Git Split/Unified），脸只在那一处定义，选中芯片浅色=页面色（凸起）、深色=按下面，与官方一致（`segmented_face_test.go`）；"…" 文本按钮一律换图标按钮/`gorexPulldown`；空态 `emptyState`/`workspaceEmptyBanner`、加载 `loadingState`、提示 `inlineNotice`、分组 `settingsGroup/formRow`、内页列宽 `contentColumn(760 表单 / 1040 列表)` | 见左 | `copy_style_test.go`（空态标题）、`button_tier_test.go`（Button 无内联字号）、`TestGitIconButtonsWearTheSharedFace`、`TestGitCommitReviewViewsAreASegmentedControl` + 下方扫描 |
@@ -67,7 +67,7 @@ description: Use when polishing or unifying the Shardlane MyGo client's UI/UX �
 2. **改一处**：在 `design_system.go` / `gorex_style.go` / `ds_components.go` 改，不在业务组件 inline 覆盖。
 3. **同步清理**：清掉业务侧同类 inline override；孤儿 helper（如 2026-10-14 删掉的旧 `iconButton`）随手删并更新 README/L2。
 4. **全项目扫同类**，再钉测试。
-5. **颜色只有四个来源**：框架 `ui.Theme`（`shardlaneTheme`）、`DesignTokens`、`gorexColors`（窗格卡）、`gdPalette`（Diff 评审）。改色或新增调色板，必须同时给出「Increase contrast」变体并加进 `TestIncreaseContrastStrengthensEveryPalette` 的读数表——该设置曾只移动 0.25% 的像素（几条发丝线），因为 54 处 `designTokens(dark)` 读不到设置、两张调色板和框架主题完全不知道它；现在 `highContrast` 由 `Shell.View` 每帧发布，四个来源都读它。
+5. **颜色只有四个来源**：框架 `ui.Theme`（`solcoTheme`）、`DesignTokens`、`gorexColors`（窗格卡）、`gdPalette`（Diff 评审）。改色或新增调色板，必须同时给出「Increase contrast」变体并加进 `TestIncreaseContrastStrengthensEveryPalette` 的读数表——该设置曾只移动 0.25% 的像素（几条发丝线），因为 54 处 `designTokens(dark)` 读不到设置、两张调色板和框架主题完全不知道它；现在 `highContrast` 由 `Shell.View` 每帧发布，四个来源都读它。
 
 ```sh
 cd internal/nativeui
@@ -83,7 +83,7 @@ rg -n 'Padding\(14, 9, 9\)' --glob '!*_test.go' .                      # 侧栏�
 
 ## 打磨循环（一边测，一边修，一边沉淀）
 
-1. **基线**：改动前先出 headless 证据 `SHARDLANE_UI_EVIDENCE=/tmp/x/before GOTOOLCHAIN=auto go test ./internal/nativeui -run 'TestUIEvidence$' -count=1`（深/浅各 12 页：Workspace、Settings 各分组、Sessions、详情、Files、Agent 面板、Hosts）；用户正在用的 App 只做被动观察（cua-driver 后台 AX/截图，边界见 `shardlane-ui-audit`）。
+1. **基线**：改动前先出 headless 证据 `SOLCO_UI_EVIDENCE=/tmp/x/before GOTOOLCHAIN=auto go test ./internal/nativeui -run 'TestUIEvidence$' -count=1`（深/浅各 12 页：Workspace、Settings 各分组、Sessions、详情、Files、Agent 面板、Hosts）；用户正在用的 App 只做被动观察（cua-driver 后台 AX/截图，边界见 `solco-ui-audit`）。
 2. **收集问题**，分四类：重复（入口/标题/刷新/路径回声）、不一致（同组件两种脸/尺寸/文案）、AI 味（自圆其说/泄漏/装饰）、断路（死按钮/无 Tooltip 截断）。每条记 `文件:行`。
 3. **修**：先判规则归属（五条不变量或 token），改唯一实现，不堆页面特例。需求有歧义（例如"把终端标题移进 Header"）→ 按保守解读做信息去重，并列出备选交给用户，不擅自删结构。
 4. **钉**：每个修复一条回归测试 + **变异检查**（`cp` 备份 → 改回旧实现 → 测试必须红 → 从备份还原并复核）。像素断言用 `pixelAt`/`rgbDiff`（`sidebar_tree_test.go`），布局断言用 `Tester.Find` 矩形（按钮文字的矩形是字，不是按钮；比对齐线而不是高度）；路由动画用真实时钟，测试用 `settleFrames`。**`Tester.HasText` 是子串匹配**：页面会打印路径，`t.TempDir()` 路径带测试名（`…NoConnect` 的测试就"出现"了 Connect）——否定断言一律用精确 `Find`（`onScreen`），种子目录用 `os.MkdirTemp`；`applyOnUI` 在 headless 下默认丢弃，需要落地就设 `uiApplyOverride` 队列。**顺序/可见性断言以渲染为准，不以注册表为准**：⌘P 面板一个区按字母序列出，`buildCommandCenterActions()` 的顺序不是界面顺序（曾据注册表钉过一条"面板与 Go 菜单同序"的测试，渲染一张图才发现与界面不符）——写顺序断言前先渲一张图看。
@@ -94,12 +94,12 @@ rg -n 'Padding\(14, 9, 9\)' --glob '!*_test.go' .                      # 侧栏�
    GOTOOLCHAIN=auto go vet ./... && GOTOOLCHAIN=auto go tool mygo vet .
    GOTOOLCHAIN=auto go test -race -count=1 ./internal/gitworkbench ./internal/nativeui
    (cd frontend && bun run typecheck)          # 动过 WebView 前端时
-   GOTOOLCHAIN=auto go tool mygo build && plutil -lint build/darwin-arm64/Shardlane.app/Contents/Info.plist
-   codesign --verify --deep --strict build/darwin-arm64/Shardlane.app
+   GOTOOLCHAIN=auto go tool mygo build && plutil -lint build/darwin-arm64/Solco.app/Contents/Info.plist
+   codesign --verify --deep --strict build/darwin-arm64/Solco.app
    gofmt -l <本次改动的 go 文件>   # 既有漂移（gorex_style.go、pane_header_buttons_test.go）不顺手重排
    git diff --check && git diff --cached --check
    ```
-7. **部署与复核**：`bash .agents/skills/shardlane-install/scripts/install.sh`（优雅重启，用户已长期授权）；复核只做被动 AX/截图，逐项对照 before。
+7. **部署与复核**：`bash .agents/skills/solco-install/scripts/install.sh`（优雅重启，用户已长期授权）；复核只做被动 AX/截图，逐项对照 before。
 8. **回写**：规则与锚点更新到本文件「已落地」，结构变化更新 `internal/nativeui/CLAUDE.md`（L2）与新文件 L3 头。
 
 ## 已落地（2026-10-14 第三轮：Git 页密度对齐 sidebar + 动态刷新）
@@ -138,7 +138,7 @@ rg -n 'Padding\(14, 9, 9\)' --glob '!*_test.go' .                      # 侧栏�
 - 代码着色只剩一个引擎（2026-10-14 第二轮）：Git 评审的分词从 Chroma 换成 MyGo `ui/editor` 的分词器（`internal/codehl.Lines`），`go.mod` 少 `chroma/v2` + `regexp2/v2`、`go.sum` 少 5 个模块；Files 代码视图本来就用这套分词器，两处经同一张表 `codehl.KindClasses`（token 种类 → 评审调色板类）上色，`TestReviewAndFilesPaintACharacterTheSameColor` 逐字符比对（含跨行块注释状态）。**不用 `editor.DiffView` 替换 `gd_*` 的结论**：DiffView 要先为每个文件建 Buffer，`FitContent` 无法跨文件虚拟化，而评审"一行一行"的虚拟化才是大 diff 的契约（`TestGdPerfBaseline`：58 k 行首帧约 32 ms）；`HunkActions` 的 Revert/Keep 是缓冲区语义，不是 Git 暂存区；暂存栅栏、Viewed、大 diff 占位等约 3600 行都得重写。**代价**：103,960 个跟踪文件里 Chroma 着色的 88,466 个有 2,537 个（约 2.9%，多为 `.hbs/.po/.mo/.feature/.txt/.env/.dart/gradle`）MyGo 不着色，反向多着色 1,140 个；运算符/标点与 Files 一样是普通色，用户自定义类型名不再单独品红（`ClassName` 类随引擎一起删）。
 - 桌面动作交还 MyGo（2026-10-14 第二轮）：复制走 `mygo.Clipboard`，Finder 定位走 `mygo.Shell.ShowItemInFolder`，打开网页走 `mygo.Shell.OpenExternal`，`internal/platform` 只剩 `OpenFile`（`open -t` 要的是「文本编辑器」，框架的 `OpenPath` 是「该类型的默认应用」，不等价）。**真缺陷**：原来 26 处复制都 `exec pbcopy`，而 Finder/Dock 启动的 App 只有 `__CF_USER_TEXT_ENCODING=…:0x0`（MacRoman）、没有 `LANG`，pbcopy 把 `/Users/me/项目/测试.txt` 写成 `/Users/me/È°πÁõÆ/ÊµãËØï.txt`——中文路径、提交说明、会话恢复命令一律乱码（草稿 pasteboard `-pboard ruler` 复现）。守卫：`TestNoClipboardToolIsSpawned` 扫全部生产代码；`TestMain` 把桌面调用默认置空（框架调用要等主循环，测试里会挂住，也不该碰开发者的剪贴板）。实机验证（`cua-driver` 后台）：Git diff 里中文行（含 `—`）右键 Copy Line，剪贴板读回逐字节一致；验证前后备份/还原了用户剪贴板。
 - 启动器同名同目的地（2026-10-14 第二轮审计，实机读 AX 菜单栏发现）：侧栏四个视图标签搬家后，**Changes 在 ⌘P 和 Go 菜单里根本没有入口**（只有侧栏图标能到）；Go 菜单的 Files 还是旧"右栏开关"的接缝（`ToggleRightPanelFromMenu`，选一次进、再选一次出，与同菜单的 Sessions/Hosts 不一致）；Settings 摆在自定义 Go 菜单里而不是应用菜单；自定义应用菜单丢了系统标准的 Hide/Hide Others/Show All（⌘H 无效）。现在：菜单栏搬进 `app_menu.go`（`Shell.MenuBar`，main.go 只挂上），应用菜单是系统惯例（About、Check for Updates…、**Settings… ⌘,**、Hide ⌘H/Hide Others/Show All、Quit），Go 菜单按侧栏标签顺序列 Workspace/Changes/Sessions/Files/Hosts；⌘P 补 `Changes` 与 `Workspace`（面板原先没有不靠选 Pane 的回 Terminal 路径；面板一个区内按字母序列出——空查询截图为证——所以面板只钉名字，顺序只钉 Go 菜单与侧栏标签）；Files/Changes 在菜单与面板里走「去往」形态 `goFiles/goChanges`——**点名已打开的页面保持不动，只有侧栏标签才是切换**。同轮实机再抓一个同类缺陷：**Go ▸ Workspace（⌘1）在 Changes/Chat 表面上是死的**——它只是 `router.Push(/workspace)`，而 Changes 与 Chat 本就是 `/workspace` 的表面，同路由的 Push 被去重，按了没有任何反应（实机 `invoke_menu` 后台复现：Changes 上选 Workspace，截图仍是 Changes）。现在走 `ShowWorkspaceFromMenu` = `showViewTerminal`：与 Back 同落点、幂等。守卫：`TestMenuBarFollowsTheMacConventions`、`TestLaunchersAgreeOnViewDestinations`（表驱动，侧栏标签数变了会逼你补）、`TestNamingTheCurrentViewKeepsIt`、`TestWorkspaceLandsTheTerminalFromAnySurface`（面板与菜单各从 Changes/Chat/Files 等表面按两遍）。**没有加 ⌘2–⌘5**：快捷键分配是产品决定，见下方待办。
-- 窗口标题随**状态**而非随**跳转**（2026-10-14 第二轮审计，实机发现）：`restoreSession` 在窗口挂上之前就把可见路由设成了上次的内页，"路由变化时同步标题"的钩子永远不触发——恢复到 `/files` 的启动窗口一直叫 `Shardlane`。现在 `syncWindowTitle` 每帧由 `syncRouteVisibility` 调用，经 `windowTitleShown` 去重只在变化时碰窗口，窗口句柄收成 `setWindowTitle` 接缝（测试换成记录器）：`TestRestoredRouteTitlesTheNativeWindow`。
+- 窗口标题随**状态**而非随**跳转**（2026-10-14 第二轮审计，实机发现）：`restoreSession` 在窗口挂上之前就把可见路由设成了上次的内页，"路由变化时同步标题"的钩子永远不触发——恢复到 `/files` 的启动窗口一直叫 `Solco`。现在 `syncWindowTitle` 每帧由 `syncRouteVisibility` 调用，经 `windowTitleShown` 去重只在变化时碰窗口，窗口句柄收成 `setWindowTitle` 接缝（测试换成记录器）：`TestRestoredRouteTitlesTheNativeWindow`。
 
 ## 已知例外与待办（下一轮从这里接）
 

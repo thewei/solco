@@ -33,7 +33,7 @@ jobs:
 
       - name: Verify app bundle
         run: |
-          APP="build/darwin-arm64/Shardlane.app"
-          test -x "$APP/Contents/MacOS/Shardlane"
+          APP="build/darwin-arm64/Solco.app"
+          test -x "$APP/Contents/MacOS/Solco"
           test -f "$APP/Contents/Info.plist"
           plutil -lint "$APP/Contents/Info.plist"

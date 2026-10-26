@@ -14,4 +14,4 @@
 
 - [ ] `GOTOOLCHAIN=auto go test ./...`
 - [ ] `GOTOOLCHAIN=auto go tool mygo build`
-- [ ] Packaging changes: `Shardlane.app` built and structurally verified
+- [ ] Packaging changes: `Solco.app` built and structurally verified

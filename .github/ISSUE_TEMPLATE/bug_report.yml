@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Shardlane is broken or behaves incorrectly.
+description: Something in Solco is broken or behaves incorrectly.
 labels: ["bug"]
 body:
   - type: markdown
@@ -25,13 +25,13 @@ body:
     id: herdr-version
     attributes:
       label: Herdr version
-      description: Output of `herdr --version` (Shardlane is the client; Herdr is the runtime it hosts).
+      description: Output of `herdr --version` (Solco is the client; Herdr is the runtime it hosts).
     validations:
       required: true
   - type: input
-    id: shardlane-version
+    id: solco-version
     attributes:
-      label: Shardlane version / commit
+      label: Solco version / commit
       placeholder: "e.g. release v0.1.x or a commit hash"
     validations:
       required: true
@@ -40,5 +40,5 @@ body:
     attributes:
       label: Logs or trace output
       description: |
-        Console output, and for terminal rendering/latency issues the trace from `/tmp/shardlane-lag.log`.
+        Console output, and for terminal rendering/latency issues the trace from `/tmp/solco-lag.log`.
         Attach files instead of pasting large dumps.

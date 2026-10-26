@@ -1,9 +1,9 @@
 ---
-name: shardlane-ui-audit
-description: Use when auditing the Shardlane MyGo client real-app UX/UI with a Computer Use driver — finding interface inconsistencies, ambiguities, and broken affordances; verifying findings against code/Herdr truth; fixing and re-verifying on device; or continuing the F-numbered findings ledger in docs/ui-computer-use-findings-2026-10-06.md. Covers the device-driving quirks (coordinates, chords, popups, own-pane safety), the fix conventions (single-sourced actions, tooltips, plurals, HIG ellipsis, user-language copy), and the concurrent-batch protocol. Not for backend-only acceptance.
+name: solco-ui-audit
+description: Use when auditing the Solco MyGo client real-app UX/UI with a Computer Use driver — finding interface inconsistencies, ambiguities, and broken affordances; verifying findings against code/Herdr truth; fixing and re-verifying on device; or continuing the F-numbered findings ledger in docs/ui-computer-use-findings-2026-10-06.md. Covers the device-driving quirks (coordinates, chords, popups, own-pane safety), the fix conventions (single-sourced actions, tooltips, plurals, HIG ellipsis, user-language copy), and the concurrent-batch protocol. Not for backend-only acceptance.
 ---
 
-# Shardlane UI 审计与修复（CUA 实机驱动）
+# Solco UI 审计与修复（CUA 实机驱动）
 
 一条「实机巡检 → 代码验证 → 修复 → 重建 → 实机复核 → 台账回写」的完整循环。
 它只产出用户可见行为的结论；运行时真值仍以 Herdr CLI / 日志 / 代码为准，截图永不作为唯一证据。
@@ -27,11 +27,11 @@ description: Use when auditing the Shardlane MyGo client real-app UX/UI with a C
 ```sh
 git status --porcelain            # 识别并行批次的工作；有 UU/DU 先停下读「并发协议」
 GOTOOLCHAIN=auto go build ./...   # 树必须先可编译（仓库根）
-md5 -q /Users/wilson/Applications/Shardlane.app/Contents/MacOS/Shardlane \
-  build/darwin-arm64/Shardlane.app/Contents/MacOS/Shardlane   # 运行实例是否=当前代码
+md5 -q /Users/wilson/Applications/Solco.app/Contents/MacOS/Solco \
+  build/darwin-arm64/Solco.app/Contents/MacOS/Solco   # 运行实例是否=当前代码
 ```
 
-CUA 绑定：`cua.getApp("Shardlane")`（bundle `com.whstudio.shardlane.next`）。首次绑定返回完整 AX 树。
+CUA 绑定：`cua.getApp("Solco")`（bundle `com.whstudio.solco`）。首次绑定返回完整 AX 树。
 
 ## 实机驱动坑清单（2026-10-06 实测，违反即浪费一轮）
 
@@ -81,7 +81,7 @@ rg -n "SingleLine\(\)" internal/nativeui/*.go | grep -v _test
 rg -n 'openTextDialog|openConfirm' internal/nativeui/dialogs.go
 ```
 
-- 每个 finding 必须有**代码证据**（文件:行）或**后端真值**（`herdr pane read`、`~/Library/Logs/Shardlane/shardlane.log`），二者至少其一；纯截图观察标「待验证」。
+- 每个 finding 必须有**代码证据**（文件:行）或**后端真值**（`herdr pane read`、`~/Library/Logs/Solco/solco.log`），二者至少其一；纯截图观察标「待验证」。
 - 数据不可得 ≠ bug：先查接口是否透传（例：Services 端口行无进程名是 ObserveForRoot 只返回 []uint16，属 API 扩展项，不是渲染 bug）。
 - 假问题同样记录「已排查排除」，防止下轮重复调查。
 
@@ -100,10 +100,10 @@ rg -n 'openTextDialog|openConfirm' internal/nativeui/dialogs.go
 ```sh
 GOTOOLCHAIN=auto go test ./...        # 全绿才继续；预先存在的失败先在干净 HEAD 复现定性
 GOTOOLCHAIN=auto go tool mygo build
-cp build/darwin-arm64/Shardlane.app/Contents/MacOS/Shardlane \
-   /Users/wilson/Applications/Shardlane.app/Contents/MacOS/Shardlane
-osascript -e 'quit app "Shardlane"'       # 若 -128 悬挂（F133），kill -TERM 后 kill -9 回收
-open /Users/wilson/Applications/Shardlane.app
+cp build/darwin-arm64/Solco.app/Contents/MacOS/Solco \
+   /Users/wilson/Applications/Solco.app/Contents/MacOS/Solco
+osascript -e 'quit app "Solco"'       # 若 -128 悬挂（F133），kill -TERM 后 kill -9 回收
+open /Users/wilson/Applications/Solco.app
 ```
 
 重启安全：会话/pane/PTY 全在 Herdr 侧，审计会话自身无损。复核用「一个修复一条设备证据」收口（AX 抓取或截图），写进台账处置列。
