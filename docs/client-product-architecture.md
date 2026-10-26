@@ -572,6 +572,11 @@ earns the same treatment without its own dated decision.
   (Archive Done Tasks…, Archive Project… with its real consequences — running
   work and the coordinator stop, automations turn off — counted confirms,
   Coordinator Restart/New/Stop, Autopilot On… with a token-cost confirm).
+  *Hidden Projects:* the sidebar lists Projects that have open tasks or are pinned (the
+  plugin has no list-all-Projects verb); the Projects section menu's "Show Archived
+  Projects" (off by default, in-memory) adds a muted "Archived" group of Projects whose
+  only tasks are archived (`list --archived`), each with Restore Project… (confirmed
+  `restore --repo`) and a click that opens the Archived page.
   *Creation/automations:* New Project… (Projects section menu: local folder
   picker → first task title + "Start its coordinator now"; the plugin has no
   create-Project verb — a folder becomes a Project when its first task is added,

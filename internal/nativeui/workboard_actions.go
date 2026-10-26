@@ -226,6 +226,9 @@ func (s *Shell) workboardWrite(op string, run func(ctx context.Context) error, o
 				onOK()
 			}
 			s.refreshWorkboardTasks(true)
+			if s.workboard.showArchived {
+				s.loadWorkboardArchived()
+			}
 			if s.router.Path() == routeTask {
 				s.loadWorkboardPage()
 			}

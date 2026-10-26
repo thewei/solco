@@ -457,3 +457,49 @@ func TestProjectAndTaskRowsAnnounceTheirDestination(t *testing.T) {
 		t.Fatal("an agent pane is not the board")
 	}
 }
+
+func TestArchivedProjectsStayHiddenUntilTheSectionToggleIsOn(t *testing.T) {
+	s := projectsSectionShell(t)
+	tasks, err := workboard.ParseTasks(`[
+ {"id":"old/1","title":"Solco Development","state":"idle","stage":"stopped","msg":"Stopped"},
+ {"id":"app/9","title":"Old app work","state":"idle","stage":"done","msg":""}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.workboard.archived = workboardArchived{tasks: tasks, loaded: true}
+	tt := ui.NewTester(s.View, 1200, 800)
+	if tt.HasText("old") || tt.HasText("Archived") {
+		t.Fatalf("an archived Project must not show by default: %q", tt.Texts())
+	}
+
+	s.workboard.showArchived = true
+	tt.Frame()
+	if !tt.HasText("Archived") || !tt.HasText("old") {
+		t.Fatalf("toggle on must list the archived-only Project: %q", tt.Texts())
+	}
+	if n := strings.Count(strings.Join(tt.Texts(), "|"), "app"); n == 0 {
+		t.Fatal("live Projects stay listed")
+	}
+	// "app" has live tasks, so its archived task does not add a second row.
+	if got := len(archivedOnlyNames(s)); got != 1 {
+		t.Fatalf("archived-only = %d, want just old", got)
+	}
+
+	if err := tt.RightClick("old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Restore Project…"); err != nil {
+		t.Fatal(err)
+	}
+	if s.confirmKind != boardRestoreProjectConfirm || s.confirmTarget != "old" {
+		t.Fatalf("Restore must ask first: kind=%q target=%q", s.confirmKind, s.confirmTarget)
+	}
+}
+
+func archivedOnlyNames(s *Shell) []string {
+	var out []string
+	for _, g := range s.archivedOnlyProjects(workboardProjects(s.workboard.board)) {
+		out = append(out, g.Name)
+	}
+	return out
+}

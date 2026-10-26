@@ -38,6 +38,12 @@ func (s *Shell) projectsSection(c *ui.Context) {
 				s.openNewProject()
 			}
 			m.Separator()
+			if m.Item("Show Archived Projects").Checked(s.workboard.showArchived).Chosen() {
+				s.workboard.showArchived = !s.workboard.showArchived
+				if s.workboard.showArchived {
+					s.loadWorkboardArchived()
+				}
+			}
 			if m.Item("Archived Tasks").Chosen() {
 				s.openWorkboardArchived()
 			}
@@ -63,7 +69,8 @@ func (s *Shell) projectsItems(c *ui.Context, projects []workboardProject) {
 			}
 		})
 	}
-	if len(projects) == 0 {
+	archived := s.archivedOnlyProjects(projects)
+	if len(projects) == 0 && len(archived) == 0 {
 		if !board.failed && !board.loadedAt.IsZero() {
 			ui.Text(c, "No projects yet").Padding(Spacing().M, Spacing().L).TextColor(c.Theme().TextMuted)
 		}
@@ -142,6 +149,59 @@ func (s *Shell) projectsItems(c *ui.Context, projects []workboardProject) {
 		for i, r := range rows {
 			s.projectTaskRow(c, r, i == len(rows)-1)
 		}
+	}
+	s.archivedProjectRows(c, archived)
+}
+
+// archivedOnlyProjects are the Projects that have archived tasks and nothing
+// live on the board (no open task, not pinned): hidden unless the section's
+// "Show Archived Projects" is on.
+func (s *Shell) archivedOnlyProjects(live []workboardProject) []archivedGroup {
+	if !s.workboard.showArchived {
+		return nil
+	}
+	shown := map[string]bool{}
+	for _, p := range live {
+		shown[p.Name] = true
+	}
+	var out []archivedGroup
+	for _, g := range archivedGroups(s.workboard.archived.tasks) {
+		if g.Name != workboardOtherProject && !shown[g.Name] {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// archivedProjectRows lists those Projects under a muted "Archived" caption.
+// A click opens the Archived page (its tasks, each restorable); the menu's
+// Restore Project brings the whole Project back after a confirm.
+func (s *Shell) archivedProjectRows(c *ui.Context, archived []archivedGroup) {
+	if len(archived) == 0 {
+		return
+	}
+	ui.Text(c, "Archived").FontSize(Typography().Caption).Padding(Spacing().M, Spacing().L, Spacing().XS).TextColor(c.Theme().TextMuted)
+	for _, g := range archived {
+		g := g
+		row := treeRow(c, treeRowSpec{
+			Height: s.sidebarRowHeight(),
+			Key:    "board-archived:" + g.Name,
+			Mark:   visualMark{svg: iconFolder},
+			Label:  g.Name,
+			Count:  len(g.Tasks),
+		})
+		row.Tooltip(g.Name + ": archived — open its tasks, or right-click to restore it")
+		if row.Clicked() {
+			s.openWorkboardArchived()
+		}
+		row.ContextMenu(func(m *ui.Menu) {
+			if m.Item("Restore Project…").Chosen() {
+				s.startBoardManage(boardRestoreProjectConfirm, g.Name, len(g.Tasks))
+			}
+			if m.Item("Archived Tasks").Chosen() {
+				s.openWorkboardArchived()
+			}
+		})
 	}
 }
 

@@ -38,10 +38,14 @@ type workboardState struct {
 	page       workboardPage
 	project    workboardProjectPage
 	// boardFor is the Project whose row last opened the Work board Tab.
-	boardFor      string
-	archived      workboardArchived
-	newTask       newTaskDraft
-	newProject    newProjectDraft
+	boardFor   string
+	archived   workboardArchived
+	newTask    newTaskDraft
+	newProject newProjectDraft
+	// showArchived lists Projects that only have archived tasks in the
+	// sidebar (Restore Project brings one back); off by default so a Project
+	// the user archived on purpose stays out of the way.
+	showArchived  bool
 	newAutomation newAutomationDraft
 	delegate      delegateDraft
 	pick          pickDraft
