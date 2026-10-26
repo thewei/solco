@@ -26,7 +26,7 @@ description: Use when auditing the Shardlane MyGo client real-app UX/UI with a C
 
 ```sh
 git status --porcelain            # 识别并行批次的工作；有 UU/DU 先停下读「并发协议」
-GOTOOLCHAIN=go1.27.1 go build ./...   # 树必须先可编译（仓库根）
+GOTOOLCHAIN=auto go build ./...   # 树必须先可编译（仓库根）
 md5 -q /Users/wilson/Applications/Shardlane.app/Contents/MacOS/Shardlane \
   build/darwin-arm64/Shardlane.app/Contents/MacOS/Shardlane   # 运行实例是否=当前代码
 ```
@@ -98,8 +98,8 @@ rg -n 'openTextDialog|openConfirm' internal/nativeui/dialogs.go
 ## 重建 → 部署 → 实机复核
 
 ```sh
-GOTOOLCHAIN=go1.27.1 go test ./...        # 全绿才继续；预先存在的失败先在干净 HEAD 复现定性
-GOTOOLCHAIN=go1.27.1 go tool mygo build
+GOTOOLCHAIN=auto go test ./...        # 全绿才继续；预先存在的失败先在干净 HEAD 复现定性
+GOTOOLCHAIN=auto go tool mygo build
 cp build/darwin-arm64/Shardlane.app/Contents/MacOS/Shardlane \
    /Users/wilson/Applications/Shardlane.app/Contents/MacOS/Shardlane
 osascript -e 'quit app "Shardlane"'       # 若 -128 悬挂（F133），kill -TERM 后 kill -9 回收

@@ -83,18 +83,18 @@ rg -n 'Padding\(14, 9, 9\)' --glob '!*_test.go' .                      # 侧栏�
 
 ## 打磨循环（一边测，一边修，一边沉淀）
 
-1. **基线**：改动前先出 headless 证据 `SHARDLANE_UI_EVIDENCE=/tmp/x/before GOTOOLCHAIN=go1.27.1 go test ./internal/nativeui -run 'TestUIEvidence$' -count=1`（深/浅各 12 页：Workspace、Settings 各分组、Sessions、详情、Files、Agent 面板、Hosts）；用户正在用的 App 只做被动观察（cua-driver 后台 AX/截图，边界见 `shardlane-ui-audit`）。
+1. **基线**：改动前先出 headless 证据 `SHARDLANE_UI_EVIDENCE=/tmp/x/before GOTOOLCHAIN=auto go test ./internal/nativeui -run 'TestUIEvidence$' -count=1`（深/浅各 12 页：Workspace、Settings 各分组、Sessions、详情、Files、Agent 面板、Hosts）；用户正在用的 App 只做被动观察（cua-driver 后台 AX/截图，边界见 `shardlane-ui-audit`）。
 2. **收集问题**，分四类：重复（入口/标题/刷新/路径回声）、不一致（同组件两种脸/尺寸/文案）、AI 味（自圆其说/泄漏/装饰）、断路（死按钮/无 Tooltip 截断）。每条记 `文件:行`。
 3. **修**：先判规则归属（五条不变量或 token），改唯一实现，不堆页面特例。需求有歧义（例如"把终端标题移进 Header"）→ 按保守解读做信息去重，并列出备选交给用户，不擅自删结构。
 4. **钉**：每个修复一条回归测试 + **变异检查**（`cp` 备份 → 改回旧实现 → 测试必须红 → 从备份还原并复核）。像素断言用 `pixelAt`/`rgbDiff`（`sidebar_tree_test.go`），布局断言用 `Tester.Find` 矩形（按钮文字的矩形是字，不是按钮；比对齐线而不是高度）；路由动画用真实时钟，测试用 `settleFrames`。**`Tester.HasText` 是子串匹配**：页面会打印路径，`t.TempDir()` 路径带测试名（`…NoConnect` 的测试就"出现"了 Connect）——否定断言一律用精确 `Find`（`onScreen`），种子目录用 `os.MkdirTemp`；`applyOnUI` 在 headless 下默认丢弃，需要落地就设 `uiApplyOverride` 队列。**顺序/可见性断言以渲染为准，不以注册表为准**：⌘P 面板一个区按字母序列出，`buildCommandCenterActions()` 的顺序不是界面顺序（曾据注册表钉过一条"面板与 Go 菜单同序"的测试，渲染一张图才发现与界面不符）——写顺序断言前先渲一张图看。
 5. **证据**：重出 after 图并排对比（`Read` 看 PNG），再看一次浅色与深色。
 6. **门禁**（全部实跑）：
    ```sh
-   GOTOOLCHAIN=go1.27.1 go test ./... -count=1
-   GOTOOLCHAIN=go1.27.1 go vet ./... && GOTOOLCHAIN=auto go tool mygo vet .
-   GOTOOLCHAIN=go1.27.1 go test -race -count=1 ./internal/gitworkbench ./internal/nativeui
+   GOTOOLCHAIN=auto go test ./... -count=1
+   GOTOOLCHAIN=auto go vet ./... && GOTOOLCHAIN=auto go tool mygo vet .
+   GOTOOLCHAIN=auto go test -race -count=1 ./internal/gitworkbench ./internal/nativeui
    (cd frontend && bun run typecheck)          # 动过 WebView 前端时
-   GOTOOLCHAIN=go1.27.1 go tool mygo build && plutil -lint build/darwin-arm64/Shardlane.app/Contents/Info.plist
+   GOTOOLCHAIN=auto go tool mygo build && plutil -lint build/darwin-arm64/Shardlane.app/Contents/Info.plist
    codesign --verify --deep --strict build/darwin-arm64/Shardlane.app
    gofmt -l <本次改动的 go 文件>   # 既有漂移（gorex_style.go、pane_header_buttons_test.go）不顺手重排
    git diff --check && git diff --cached --check

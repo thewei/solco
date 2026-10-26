@@ -23,8 +23,8 @@ Architecture ownership lives only in `docs/client-product-architecture.md`; ad-h
 
 ```sh
 GOTOOLCHAIN=auto go tool mygo dev         # run the app
-GOTOOLCHAIN=go1.27.1 go test ./...
-GOTOOLCHAIN=go1.27.1 go tool mygo build   # builds build/darwin-arm64/Shardlane.app
+GOTOOLCHAIN=auto go test ./...
+GOTOOLCHAIN=auto go tool mygo build   # builds build/darwin-arm64/Shardlane.app
 git diff --check
 git diff --cached --check
 ```

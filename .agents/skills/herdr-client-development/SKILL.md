@@ -89,8 +89,8 @@ Application logs are structured and size-bounded (`internal/applog`, MyGo `PathL
 Normal gate:
 
 ```sh
-GOTOOLCHAIN=go1.27.1 go test ./...
-GOTOOLCHAIN=go1.27.1 go tool mygo build
+GOTOOLCHAIN=auto go test ./...
+GOTOOLCHAIN=auto go tool mygo build
 git diff --check
 git diff --cached --check
 ```

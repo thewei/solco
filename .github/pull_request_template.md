@@ -12,6 +12,6 @@
 
 <!-- The gates below are required; check what you ran. -->
 
-- [ ] `GOTOOLCHAIN=go1.27.1 go test ./...`
-- [ ] `GOTOOLCHAIN=go1.27.1 go tool mygo build`
+- [ ] `GOTOOLCHAIN=auto go test ./...`
+- [ ] `GOTOOLCHAIN=auto go tool mygo build`
 - [ ] Packaging changes: `Shardlane.app` built and structurally verified

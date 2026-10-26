@@ -23,8 +23,8 @@ GOTOOLCHAIN=auto go tool mygo dev
 Every change must pass before review:
 
 ```sh
-GOTOOLCHAIN=go1.27.1 go test ./...
-GOTOOLCHAIN=go1.27.1 go tool mygo build
+GOTOOLCHAIN=auto go test ./...
+GOTOOLCHAIN=auto go tool mygo build
 git diff --check
 git diff --cached --check
 ```
