@@ -1,15 +1,15 @@
-# Shardlane MyGo 0.10.0 — Git Workbench & Unified Primary Surface Plan
+# Solco MyGo 0.10.0 — Git Workbench & Unified Primary Surface Plan
 
 Status: **planned post-0.9 corrective + product iteration**
 Target: `0.10.0`
 Depends on: current 0.9 implementation tree, not merely the 0.9 plan
 Architecture authority: `docs/client-product-architecture.md`
 Execution rules: `docs/mygo-native-execution-rules.md`
-Reference / reality audit: `docs/reference-godiff-shardlane-0.10-audit.md`
+Reference / reality audit: `docs/reference-godiff-solco-0.10-audit.md`
 
 ## 1. Version goal
 
-0.10 replaces Lazygit with a native Shardlane Git workflow and introduces one explicit owner for the center workspace content.
+0.10 replaces Lazygit with a native Solco Git workflow and introduces one explicit owner for the center workspace content.
 
 Goal:
 
@@ -27,7 +27,7 @@ The release has two equally important responsibilities:
 Target shell:
 
 ```text
-Shardlane Window
+Solco Window
 │
 ├─ Left Sidebar
 │  ├─ compact top actions
@@ -81,7 +81,7 @@ Therefore:
 
 ```text
 0.10 UI/data contracts = Godiff-inspired
-0.10 implementation = Shardlane-owned clean-room packages
+0.10 implementation = Solco-owned clean-room packages
 ```
 
 Future upstream public package + compatible license may be integrated behind the same service interfaces.
@@ -227,7 +227,7 @@ If measurements show hidden attachments are too expensive, optimize after profil
 
 ## 8. Workspace Header v2
 
-Godiff-inspired, Shardlane-owned.
+Godiff-inspired, Solco-owned.
 
 ### 8.1 Layout
 
@@ -283,7 +283,7 @@ Both remain aligned to the MyGo titlebar/traffic-light geometry.
 
 ## 9. Left Sidebar visual refresh
 
-Use Godiff's compact tree visual grammar as inspiration while preserving Shardlane hierarchy and structure lines.
+Use Godiff's compact tree visual grammar as inspiration while preserving Solco hierarchy and structure lines.
 
 ### 9.1 Row anatomy
 
@@ -308,7 +308,7 @@ Do not hard-code one height outside Design System density tokens.
 ### 9.2 Keep structure lines
 
 Godiff file tree does not need semantic ancestry lines.
-Shardlane does.
+Solco does.
 
 Retain Project → Tab → Pane vertical/branch lines and integrate them cleanly into the new compact row geometry.
 
@@ -432,7 +432,7 @@ Recommended package split:
 next/internal/gitworkbench/
 ├─ repository.go       // repo root, branch, status signature
 ├─ changes.go          // working-tree snapshot
-├─ patch.go            // Shardlane-owned patch parser
+├─ patch.go            // Solco-owned patch parser
 ├─ worddiff.go         // word ranges
 ├─ highlight.go        // Chroma adapter
 ├─ tree.go             // changed-file tree
@@ -480,7 +480,7 @@ Rules:
 - mutation commands run only after explicit user intent and use separate timeouts/policies from quick reads;
 - structured errors keep argv operation class but never secrets.
 
-Do not copy Godiff's helper implementation; implement and test Shardlane's own runner.
+Do not copy Godiff's helper implementation; implement and test Solco's own runner.
 
 ## 14. Working-tree diff source
 
@@ -520,7 +520,7 @@ Also define a whole-snapshot memory budget in implementation preflight; a reposi
 
 ## 16. Patch model
 
-Clean-room Shardlane model:
+Clean-room Solco model:
 
 ```go
 type Hunk struct {
@@ -615,7 +615,7 @@ Generated / Binary tags
 
 Both are release-blocking.
 
-Persist user's preferred layout in Shardlane settings.
+Persist user's preferred layout in Solco settings.
 
 ### 19.4 Unchanged regions
 
@@ -748,7 +748,7 @@ Design the Git transaction and tests around:
 - hooks/signing failures surface exact recoverable errors;
 - no `git reset --hard`, no force mutation.
 
-The implementation may adapt the **behavioral idea** of Godiff's pathspec commit, but must pin Shardlane's own index-preservation fixtures before shipping.
+The implementation may adapt the **behavioral idea** of Godiff's pathspec commit, but must pin Solco's own index-preservation fixtures before shipping.
 
 ### 22.5 Message
 
@@ -815,7 +815,7 @@ Do not implement delete/rename/remote tracking management in the first slice unl
 
 Switching a branch can change files underneath running terminals/dev servers.
 
-Shardlane does not own those processes and must not restart them automatically.
+Solco does not own those processes and must not restart them automatically.
 
 If active Scripts/Services are known for the same repo, the confirmation may say:
 

@@ -1,7 +1,7 @@
 # gitworkbench/
 > L2 | 父级: ../../CLAUDE.md
 
-Git workbench 是 Shardlane 的本地 Git 域服务：Runner 负责仓库读取与受控变更，nativeui 只能消费快照及显式执行操作。本模块不持有 Herdr Workspace/Pane 权威，也不提供展示组件。
+Git workbench 是 Solco 的本地 Git 域服务：Runner 负责仓库读取与受控变更，nativeui 只能消费快照及显式执行操作。本模块不持有 Herdr Workspace/Pane 权威，也不提供展示组件。
 
 成员清单
 - `branches.go`：读取本地分支、只读远程跟踪引用，校验并安全切换/创建本地分支。

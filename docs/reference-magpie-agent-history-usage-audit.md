@@ -1,4 +1,4 @@
-# Reference Audit — yetone/magpie for Shardlane
+# Reference Audit — yetone/magpie for Solco
 
 Status: **architecture/reference audit**
 Audit date: 2026-10-05
@@ -7,7 +7,7 @@ Reference commit inspected: `b96d55f` (2026-10-05 10:08 +08:00)
 
 ## 1. Why this project is relevant
 
-Magpie is not the same product as Shardlane, but it overlaps with several product surfaces we need:
+Magpie is not the same product as Solco, but it overlaps with several product surfaces we need:
 
 - macOS menu-bar quick access;
 - Agent/provider/model inventory;
@@ -30,9 +30,9 @@ history management
 quick-panel presentation
 ```
 
-Shardlane must preserve its own runtime architecture:
+Solco must preserve its own runtime architecture:
 
-> Herdr remains the sole runtime authority. Shardlane may borrow Magpie's management, accounting and presentation patterns, but must not become a second Agent runtime or silently insert a mandatory model gateway.
+> Herdr remains the sole runtime authority. Solco may borrow Magpie's management, accounting and presentation patterns, but must not become a second Agent runtime or silently insert a mandatory model gateway.
 
 ## 2. Source areas inspected
 
@@ -85,11 +85,11 @@ positioned below the tray icon
 
 The panel size is fitted to content and repositioned relative to the tray.
 
-### Shardlane adoption
+### Solco adoption
 
 Adopt the interaction model, not the WebView implementation.
 
-MyGo 0.2.7 already provides the primitives Shardlane needs:
+MyGo 0.2.7 already provides the primitives Solco needs:
 
 ```text
 NewTray
@@ -103,7 +103,7 @@ Window.OnBlur
 Window.SetBounds / SetPosition
 ```
 
-Therefore Shardlane should build its Status Quick Panel as a **MyGo Native UI window**, positioned from `Tray.Bounds()`.
+Therefore Solco should build its Status Quick Panel as a **MyGo Native UI window**, positioned from `Tray.Bounds()`.
 
 Do not add a WebView quick panel.
 
@@ -126,9 +126,9 @@ The latest session's folder is opened initially.
 
 Filtering applies before grouping, so a search only shows groups containing matching sessions.
 
-### Shardlane adoption
+### Solco adoption
 
-Shardlane already has:
+Solco already has:
 
 ```text
 SessionMeta.ProjectPath
@@ -137,7 +137,7 @@ project_key
 sessions_project_key index
 ```
 
-Use the canonical Shardlane `project_key` as grouping identity, not raw path string equality.
+Use the canonical Solco `project_key` as grouping identity, not raw path string equality.
 
 Suggested hierarchy:
 
@@ -199,9 +199,9 @@ Magpie only allows deletion for providers whose complete session source set it u
 
 Database-backed or otherwise unsafe providers stay read-only.
 
-### Shardlane architecture consequence
+### Solco architecture consequence
 
-Shardlane's current History package has a deliberate contract:
+Solco's current History package has a deliberate contract:
 
 > provider-owned history is read-only.
 
@@ -224,9 +224,9 @@ A provider adapter may expose Delete only if it can enumerate **all files/direct
 
 Unknown/incomplete providers remain read-only.
 
-## 6. Proposed Shardlane Trash model
+## 6. Proposed Solco Trash model
 
-Use a Shardlane-owned location under user data:
+Use a Solco-owned location under user data:
 
 ```text
 <trash-root>/history/<provider>/<trash-key>/
@@ -289,7 +289,7 @@ Do not overwrite a new provider session that appeared at the same original path.
 
 ### Purge
 
-Permanent deletion only acts inside the Shardlane-owned trash root.
+Permanent deletion only acts inside the Solco-owned trash root.
 
 Never let a purge request accept arbitrary filesystem paths.
 
@@ -332,9 +332,9 @@ Time period
 
 Session stats additionally group by project/folder and day.
 
-## 8. What Shardlane should adopt from Usage
+## 8. What Solco should adopt from Usage
 
-Shardlane should add a provider-neutral Usage domain, but it must record **source/confidence** because we do not necessarily proxy every model request.
+Solco should add a provider-neutral Usage domain, but it must record **source/confidence** because we do not necessarily proxy every model request.
 
 Suggested model:
 
@@ -376,7 +376,7 @@ type SessionUsage struct {
 
 ### Initial source priority
 
-For Shardlane:
+For Solco:
 
 ```text
 provider/session reported usage
@@ -459,7 +459,7 @@ Useful fields include:
 - stale/as-of metadata;
 - error.
 
-### Shardlane adoption
+### Solco adoption
 
 Add an optional provider capability:
 
@@ -506,14 +506,14 @@ It therefore has authoritative per-request accounting and can:
 - translate compatible APIs;
 - record exact request-level usage.
 
-### What Shardlane should NOT adopt now
+### What Solco should NOT adopt now
 
-Do not make Shardlane's desktop client a mandatory proxy for all Agent model traffic.
+Do not make Solco's desktop client a mandatory proxy for all Agent model traffic.
 
 Do not:
 
-- move vendor credentials into Shardlane as a prerequisite for running Agents;
-- make Agent startup depend on a Shardlane gateway;
+- move vendor credentials into Solco as a prerequisite for running Agents;
+- make Agent startup depend on a Solco gateway;
 - override Herdr/provider runtime ownership;
 - implement model routing groups inside the UI layer;
 - claim exact request cost when we only have partial session-derived usage.
@@ -536,7 +536,7 @@ These can later support an optional Gateway/Proxy module without coupling the co
 
 ## 12. Provider health / Agent Inspector
 
-Magpie's provider/gateway model suggests a richer Agent Inspector for Shardlane.
+Magpie's provider/gateway model suggests a richer Agent Inspector for Solco.
 
 The Inspector should combine independent facts:
 
@@ -670,9 +670,9 @@ Empty Trash
 
 ## 14. Privacy and accounting rules
 
-Do not copy Magpie's ability to log bodies unless Shardlane explicitly creates such a feature later.
+Do not copy Magpie's ability to log bodies unless Solco explicitly creates such a feature later.
 
-Default Shardlane Usage records must not persist:
+Default Solco Usage records must not persist:
 
 - prompts;
 - assistant text;
@@ -687,10 +687,10 @@ Provider keys/accounts must use safe stable IDs/display names and must never per
 
 ## 15. Adopt / adapt / reject matrix
 
-| Magpie concept | Shardlane decision | Reason |
+| Magpie concept | Solco decision | Reason |
 |---|---|---|
 | Tray click → floating quick panel | **ADOPT** | strong macOS workflow; implement Native MyGo window |
-| Session grouping by CWD | **ADAPT** | use Shardlane normalized project_key |
+| Session grouping by CWD | **ADAPT** | use Solco normalized project_key |
 | Search-before-grouping | **ADOPT** | predictable History behavior |
 | Trash + restore | **ADOPT with capability gate** | safe only when complete source set is known |
 | Delete active-session guard | **ADOPT** | prevents provider-store corruption |
@@ -705,7 +705,7 @@ Provider keys/accounts must use safe stable IDs/display names and must never per
 | Routing groups/model failover | **DEFER** | not required for Herdr client migration |
 | Request/response body capture | **REJECT by default** | privacy and product scope |
 | Gateway caller-key limits | **REFERENCE ONLY** | useful later for Remote/Team gateway, not Agent runtime |
-| Per-request exact usage when gateway-observed | **OPTIONAL FUTURE** | only authoritative when Shardlane actually observes request |
+| Per-request exact usage when gateway-observed | **OPTIONAL FUTURE** | only authoritative when Solco actually observes request |
 
 ## 16. Roadmap impact
 
@@ -750,9 +750,9 @@ When Magpie behavior conflicts with:
 ```text
 docs/client-product-architecture.md
 Herdr runtime authority
-Shardlane local-navigation semantics
+Solco local-navigation semantics
 privacy/logging rules
 provider-source safety
 ```
 
-Shardlane's architecture wins.
+Solco's architecture wins.

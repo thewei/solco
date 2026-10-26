@@ -6,7 +6,7 @@ spoken-dialogue AI. Note: `moshi.app` does not resolve; the product demo is
 **moshi.chat** and the client source lives in
 [`kyutai-labs/moshi`](https://github.com/kyutai-labs/moshi) under `client/`
 (MIT, audited via public sources on 2026-10-11). Same Godiff rule applies:
-**UI/behavior reference only; no code import** into Shardlane.
+**UI/behavior reference only; no code import** into Solco.
 
 ## 1. What moshi's client actually is (verified from source)
 
@@ -40,7 +40,7 @@ dialogs below the fold:
 
 ## 3. What is genuinely worth borrowing
 
-Ranked by value to Shardlane's Chat (frontend/src/App.tsx + chat_bridge.go).
+Ranked by value to Solco's Chat (frontend/src/App.tsx + chat_bridge.go).
 All are **client-local** — none need Herdr protocol changes.
 
 1. **Dictation level meter (live mic visualization).** We already have

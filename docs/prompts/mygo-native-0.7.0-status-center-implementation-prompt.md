@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.7.0 Status Center Implementation Prompt
+# Solco MyGo 0.7.0 Status Center Implementation Prompt
 
-Continue the Shardlane MyGo migration after 0.6 Native Conversation & Chat is complete.
+Continue the Solco MyGo migration after 0.6 Native Conversation & Chat is complete.
 
 Repository:
 
@@ -56,7 +56,7 @@ Do not create two independent status engines.
 - No new polling loop.
 - No render-time RPC/filesystem/provider work.
 - No global Herdr focus RPC for quick navigation.
-- Navigation remains local Shardlane routing.
+- Navigation remains local Solco routing.
 - Opening/visiting an Agent clears unread only; it does not clear ReviewPending.
 - Agent Usage is a secondary dimension and must never drive operational attention priority.
 - Missing/partial usage must remain unknown/partial, never be rendered as zero.
@@ -267,7 +267,7 @@ New Agent
 History
 Search
 Settings
-Show Shardlane
+Show Solco
 Quit
 ```
 

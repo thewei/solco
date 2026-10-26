@@ -1,11 +1,11 @@
-# Shardlane Remote Client Architecture
+# Solco Remote Client Architecture
 
 Status: **As-built semantic Conversation/History slice + shared Herdr TUI source landed; live/native acceptance in progress**
 Baseline: 2026-08-22
 Architecture source of truth: `client-product-architecture.md`
 Implementation sequencing and acceptance gates live in the internal engineering archive (not published).
 
-This document defines the approved remote/mobile direction for Shardlane. The
+This document defines the approved remote/mobile direction for Solco. The
 semantic Conversation/History Host and Remote API v2 slice is now present and
 covered by golden fixtures; pairing, relay infrastructure, and native remote
 TUI remain future work or explicitly gated below.
@@ -69,12 +69,12 @@ or ANSI output.
 
 ## 1. Goal
 
-Shardlane must support a mobile client, initially React Native, that can connect to a Shardlane instance running on a Mac and operate the same Projects, Agents, Tasks, Tabs, Panes, Terminal sessions, and History without turning the mobile app into a second runtime or a remote-desktop clone.
+Solco must support a mobile client, initially React Native, that can connect to a Solco instance running on a Mac and operate the same Projects, Agents, Tasks, Tabs, Panes, Terminal sessions, and History without turning the mobile app into a second runtime or a remote-desktop clone.
 
 The primary mobile use case is:
 
-1. connect to a Mac running Shardlane;
-2. choose a Shardlane Workspace and Project;
+1. connect to a Mac running Solco;
+2. choose a Solco Workspace and Project;
 3. inspect active Agents and their state;
 4. send semantic prompts to an Agent and continue development work;
 5. open the capability-gated Host-owned shared Herdr TUI (global focus/resize
@@ -82,7 +82,7 @@ The primary mobile use case is:
 6. run or inspect Tasks;
 7. reconnect after network/background interruption without disturbing the Mac desktop view.
 
-Remote access must work on a local network and, later, over the public internet through NAT/CGNAT/firewalls without requiring Shardlane to expose the Herdr Unix socket or invent a second terminal runtime.
+Remote access must work on a local network and, later, over the public internet through NAT/CGNAT/firewalls without requiring Solco to expose the Herdr Unix socket or invent a second terminal runtime.
 
 ## 2. Architectural boundary
 
@@ -91,7 +91,7 @@ The target model is:
 ```text
                          ┌────────────────── macOS GPUI Client
                          │
-Herdr Runtime ← Shardlane Host/Core
+Herdr Runtime ← Solco Host/Core
                          │
                          └────────────────── Remote API / Protocol
                                                 │
@@ -105,8 +105,8 @@ Herdr Runtime ← Shardlane Host/Core
 Ownership remains unchanged:
 
 - **Herdr** is the only runtime authority for runtime workspaces, Tabs, Panes, layouts, terminal sessions, Agents, scrollback, PTYs, and process lifecycle.
-- **Shardlane Host/Core** owns Shardlane Workspace configuration, Project projection, Task semantic definitions, History projection/indexing, remote-device authorization, transport-independent application services, and remote-client DTO/event projection.
-- **macOS GPUI** and **React Native mobile** are clients of the same Shardlane application-service boundary. Neither owns runtime state.
+- **Solco Host/Core** owns Solco Workspace configuration, Project projection, Task semantic definitions, History projection/indexing, remote-device authorization, transport-independent application services, and remote-client DTO/event projection.
+- **macOS GPUI** and **React Native mobile** are clients of the same Solco application-service boundary. Neither owns runtime state.
 
 A remote client must never call the Herdr Unix socket directly.
 
@@ -119,7 +119,7 @@ The mobile app must not:
 - send synthetic clicks to GPUI;
 - depend on desktop Sidebar state;
 - depend on a desktop Dialog being open;
-- call `ShardlaneApp` presentation methods as a service layer;
+- call `SolcoApp` presentation methods as a service layer;
 - treat the currently focused Herdr Pane as an implicit target;
 - mirror a desktop split layout as the primary mobile Terminal UI.
 
@@ -127,11 +127,11 @@ Instead, both desktop and mobile issue explicit intents to a shared Host/Core se
 
 ```text
 macOS GPUI ─┐
-            ├─> Shardlane Application Services ─> Herdr / Shardlane-owned stores
+            ├─> Solco Application Services ─> Herdr / Solco-owned stores
 Remote API ─┘
 ```
 
-This requires extracting orchestration that is currently coupled to `ShardlaneApp`, especially New Agent, Task lifecycle, Workspace membership operations, and History continuation.
+This requires extracting orchestration that is currently coupled to `SolcoApp`, especially New Agent, Task lifecycle, Workspace membership operations, and History continuation.
 
 ## 4. Client-local navigation
 
@@ -171,7 +171,7 @@ POST /api/herdr/call
 
 That would make the mobile contract a network-exposed copy of the Herdr ABI.
 
-The remote contract must describe Shardlane product semantics and map internally to Herdr APIs.
+The remote contract must describe Solco product semantics and map internally to Herdr APIs.
 
 Examples:
 
@@ -205,14 +205,14 @@ The installed Herdr 0.8.2 protocol schema was verified on 2026-08-22 to expose a
 - `pane.send_keys`
 - `pane.read`
 
-Shardlane should add typed wrappers for the relevant Agent APIs before implementing mobile remote control.
+Solco should add typed wrappers for the relevant Agent APIs before implementing mobile remote control.
 
 Preferred command path:
 
 ```text
 Mobile Prompt Composer
     ↓
-Shardlane AgentService.prompt(...)
+Solco AgentService.prompt(...)
     ↓
 Herdr agent.prompt
 ```
@@ -273,7 +273,7 @@ remain compatibility-only while clients migrate.
 - Host identity and version;
 - Remote API version/capabilities;
 - authorized-device/session metadata;
-- Shardlane Workspaces;
+- Solco Workspaces;
 - Project summaries;
 - active Agent summaries;
 - Task summaries;
@@ -309,7 +309,7 @@ Events should contain stable IDs and enough change metadata to avoid unrelated f
 
 ## 9. Connection/transport options
 
-The Shardlane protocol must not be coupled to one network transport. `Transport` is a replaceable connection layer below the application contract.
+The Solco protocol must not be coupled to one network transport. `Transport` is a replaceable connection layer below the application contract.
 
 ### 9.1 Local LAN HTTPS/WSS
 
@@ -318,10 +318,10 @@ The Shardlane protocol must not be coupled to one network transport. `Transport`
 Flow:
 
 ```text
-Mobile ──HTTPS/WSS──> Mac Shardlane Host
+Mobile ──HTTPS/WSS──> Mac Solco Host
 ```
 
-Discovery can use Bonjour/mDNS; authorization still uses Shardlane pairing/device credentials.
+Discovery can use Bonjour/mDNS; authorization still uses Solco pairing/device credentials.
 
 Advantages:
 
@@ -345,7 +345,7 @@ Limits:
 Flow:
 
 ```text
-Mobile ──SSH tunnel──> Mac localhost:Shardlane-API
+Mobile ──SSH tunnel──> Mac localhost:Solco-API
 ```
 
 Advantages:
@@ -367,15 +367,15 @@ Limits:
 
 **Use:** preferred early public-internet remote path for development, dogfood, and private beta.
 
-Current Tailscale behavior is a strong fit for Shardlane's topology: devices try direct UDP peer-to-peer connectivity through NAT traversal; if direct connectivity fails they can fall back to peer relay and then DERP relay, while traffic remains WireGuard-encrypted. Stable tailnet addresses also avoid DDNS/router configuration.
+Current Tailscale behavior is a strong fit for Solco's topology: devices try direct UDP peer-to-peer connectivity through NAT traversal; if direct connectivity fails they can fall back to peer relay and then DERP relay, while traffic remains WireGuard-encrypted. Stable tailnet addresses also avoid DDNS/router configuration.
 
 Advantages:
 
-- works across most NAT/CGNAT/firewall situations without opening a public Shardlane port;
+- works across most NAT/CGNAT/firewall situations without opening a public Solco port;
 - usually reaches a direct peer-to-peer path;
 - automatic relay fallback;
 - stable private addressing;
-- Shardlane still runs its normal HTTP/WebSocket application API above the overlay network.
+- Solco still runs its normal HTTP/WebSocket application API above the overlay network.
 
 Limits:
 
@@ -383,7 +383,7 @@ Limits:
 - unsuitable as the permanent default consumer onboarding experience;
 - third-party account/product dependency if made mandatory.
 
-**Decision:** preferred Phase-1 public remote transport for internal/private beta; never make Shardlane domain semantics depend on Tailscale.
+**Decision:** preferred Phase-1 public remote transport for internal/private beta; never make Solco domain semantics depend on Tailscale.
 
 References:
 
@@ -420,14 +420,14 @@ Advantages:
 - no inbound firewall configuration;
 - operationally simple for web/API traffic.
 
-Limits for Shardlane core product:
+Limits for Solco core product:
 
 - external account/vendor dependency;
 - public/private access policy must be configured correctly;
-- product identity, pairing, relay authorization, and mobile lifecycle still need Shardlane semantics;
+- product identity, pairing, relay authorization, and mobile lifecycle still need Solco semantics;
 - using a generic tunnel as the permanent core would push product control into third-party infrastructure.
 
-**Decision:** acceptable as a development/advanced integration, not the canonical Shardlane remote architecture.
+**Decision:** acceptable as a development/advanced integration, not the canonical Solco remote architecture.
 
 Reference: https://developers.cloudflare.com/tunnel/
 
@@ -447,7 +447,7 @@ Limits:
 - signaling service is still required;
 - TURN capacity/operations are still required for hard networks;
 - React Native/native mobile integration is materially more complex than normal HTTPS/WebSocket;
-- SDP/ICE lifecycle adds complexity that Shardlane's command/query/event protocol does not currently need.
+- SDP/ICE lifecycle adds complexity that Solco's command/query/event protocol does not currently need.
 
 **Decision:** not V1. Reconsider only if direct-path latency or peer-to-peer transport becomes a measured bottleneck.
 
@@ -470,22 +470,22 @@ Limits:
 
 - QUIC alone does not solve peer discovery, NAT traversal, CGNAT reachability, authentication, or relay;
 - UDP may be blocked and still needs a fallback strategy;
-- adds implementation complexity before Shardlane has measured HTTP/WebSocket limits.
+- adds implementation complexity before Solco has measured HTTP/WebSocket limits.
 
 **Decision:** not a connectivity solution by itself. Keep it as a future transport optimization for direct or relay paths after profiling.
 
 Reference: https://www.rfc-editor.org/rfc/rfc9000.html
 
-### 9.8 Shardlane-owned outbound Relay
+### 9.8 Solco-owned outbound Relay
 
 **Use:** long-term default public-internet product connection.
 
 Target topology:
 
 ```text
-Mac Shardlane Host ──outbound encrypted session──┐
-                                                 ├─ Shardlane Relay
-Mobile Shardlane Client ──outbound session───────┘
+Mac Solco Host ──outbound encrypted session──┐
+                                                 ├─ Solco Relay
+Mobile Solco Client ──outbound session───────┘
 ```
 
 Neither endpoint requires an inbound public port. The relay resolves device discovery/reachability and carries traffic only for explicitly paired/authorized endpoints.
@@ -497,7 +497,7 @@ Local direct if available
     ↓
 Internet direct/optimized peer path if available
     ↓
-Shardlane Relay fallback
+Solco Relay fallback
 ```
 
 V1 Relay does not need to implement direct P2P upgrade. A relay-first version is operationally simpler; direct path negotiation can be added only when latency/cost measurements justify it.
@@ -540,22 +540,22 @@ Limits:
 | Local MVP | LAN HTTPS/WSS + pairing | same-network product path |
 | Public private beta | Tailscale overlay + HTTPS/WSS | preferred early remote path |
 | Advanced fallback | SSH port forwarding | developer/manual recovery path |
-| Product public remote | Shardlane outbound Relay | default remote user experience |
+| Product public remote | Solco outbound Relay | default remote user experience |
 | Optimization only | WebRTC/QUIC/direct-upgrade | add after evidence |
 
 This sequence lets remote functionality ship without waiting for cloud infrastructure while preserving the final architecture.
 
 ## 11. Pairing and device identity
 
-Transport encryption is not sufficient as Shardlane authorization.
+Transport encryption is not sufficient as Solco authorization.
 
-Every remote path must authenticate a Shardlane device/session identity.
+Every remote path must authenticate a Solco device/session identity.
 
 Initial pairing model:
 
 1. user enables Remote Access on Mac;
 2. Mac creates a short-lived one-time pairing session;
-3. Shardlane shows a QR code or equivalent transfer containing only bootstrap metadata required for secure pairing;
+3. Solco shows a QR code or equivalent transfer containing only bootstrap metadata required for secure pairing;
 4. mobile verifies the Host identity and establishes a durable device credential;
 5. mobile stores its credential in iOS Keychain / Android Keystore;
 6. Mac stores only the minimum durable authorization record required to recognize/revoke the device;
@@ -647,9 +647,9 @@ History remains paginated/windowed and read-only, following the existing page-ad
 Remote support must preserve all current architecture invariants:
 
 - Herdr remains the sole runtime authority.
-- Shardlane Workspace remains client-owned configuration above Projects.
+- Solco Workspace remains client-owned configuration above Projects.
 - Project remains a projection of a Herdr runtime Workspace, not a duplicated runtime record.
-- Task semantic definitions remain Shardlane-owned until Herdr exposes protocol-native Tasks; Task execution remains Herdr-owned.
+- Task semantic definitions remain Solco-owned until Herdr exposes protocol-native Tasks; Task execution remains Herdr-owned.
 - History external sources remain read-only.
 - client projections are disposable and rebuilt after reconnect.
 - transport/relay servers never become owners of Project/Agent/Task runtime state.
@@ -673,13 +673,13 @@ Do not implement in the first remote/mobile release:
 
 Approved direction:
 
-1. build a **Shardlane Host/Core** boundary before building mobile UI;
-2. expose a **Shardlane product API**, never the raw Herdr protocol;
+1. build a **Solco Host/Core** boundary before building mobile UI;
+2. expose a **Solco product API**, never the raw Herdr protocol;
 3. make **Agent semantic APIs** the primary mobile control path;
 4. make client navigation independent and explicit-ID based;
 5. use **LAN HTTPS/WSS** for local connection;
 6. use **Tailscale overlay** as the preferred early public-remote path for dogfood/private beta;
 7. retain **SSH port forwarding** as a developer/advanced fallback;
-8. build a **Shardlane-owned outbound Relay** as the long-term default public-internet path;
+8. build a **Solco-owned outbound Relay** as the long-term default public-internet path;
 9. treat WebRTC/QUIC as optional later transport optimizations, not prerequisites;
 10. keep all connection-specific logic below a transport boundary so changing the network path never rewrites Workspace/Project/Agent/Task semantics.

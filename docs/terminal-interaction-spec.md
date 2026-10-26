@@ -19,7 +19,7 @@ elements; each visible Pane runs Herdr's supported
 `terminal attach <terminal_id>` client. Herdr's own full-shell Sidebar/Tab
 chrome is therefore absent and `TuiChromeProjection` is not migrated. Terminal
 input/IME/selection/mouse semantics come from MyGo/Ghostty/Herdr rather than a
-Shardlane VT implementation. Hidden Tabs keep no attachment fleet and automatic
+Solco VT implementation. Hidden Tabs keep no attachment fleet and automatic
 attach never uses `--takeover`. The current Rust implementation remains
 canonical until native focus/IME/resize/multi-Pane/performance parity is verified.
 
@@ -34,7 +34,7 @@ Embedded/TUI mode switch.
 1. Terminal semantics beat decorative gestures.
 2. Herdr owns runtime/session/layout/process state and the running `herdr`
    client owns the whole terminal UI (its sidebar, tab bar, pane layout,
-   history and search included). Shardlane never reimplements those.
+   history and search included). Solco never reimplements those.
 3. libghostty-vt owns terminal-emulator semantics (VT state, key/mouse/paste/
    focus encoding, semantic selection) for the hosted model.
 4. GPUI owns native input/render plumbing; gpui-component owns standard
@@ -95,7 +95,7 @@ Implemented and covered by automated tests/code-level validation:
 
 Remaining protocol-level limitations (documented, not worked around):
 
-1. the hosted TUI's screen buffer is Herdr's own UI surface — Shardlane does
+1. the hosted TUI's screen buffer is Herdr's own UI surface — Solco does
    not search or scroll it as if it were scrollback; in-TUI history/search
    are used through the TUI itself;
 2. `pane.read(source=recent)` is not exposed to the hosted path at all (it
@@ -177,7 +177,7 @@ a preference.
 
 ## 9. Scrolling and wheel
 
-- the hosted TUI owns its own scrolling; Shardlane keeps **no** local
+- the hosted TUI owns its own scrolling; Solco keeps **no** local
   viewport, scrollbar, or history window;
 - precision wheel/trackpad deltas accumulate into whole rows with a persistent
   pixel residual (no dead zone, no one-packet-per-event flood) and are encoded
@@ -228,7 +228,7 @@ write VT sequences. Cursor geometry uses the shared measured cell size.
 The hosted terminal surface has exactly one right-click owner: the Herdr TUI
 itself (2026-09-18). Right press/motion/release are encoded straight to the
 hosted PTY like every other button, so the TUI's own context menu opens;
-Shardlane registers no native terminal menu on the hosted surface. Clipboard
+Solco registers no native terminal menu on the hosted surface. Clipboard
 and Pane operations (Copy/Paste/Select All, Rename, Move, Swap, Split, Zoom,
 Process Info, Close) remain available through keyboard shortcuts and the
 Sidebar Pane rows, which use the same Herdr action layer as main-menu
@@ -241,12 +241,12 @@ Settings, Edit actions, terminal font actions, view/help actions).
 
 ## 15. Window and appearance
 
-Native traffic lights; component TitleBar; semantic Shardlane chrome colors. Settings exposes
+Native traffic lights; component TitleBar; semantic Solco chrome colors. Settings exposes
 one unified theme choice, not independent App/Terminal pickers: the 17 `ThemePreset` entries each
-pair a Shardlane App scheme with an exact Herdr 0.8.2 built-in theme (for example One Light →
+pair a Solco App scheme with an exact Herdr 0.8.2 built-in theme (for example One Light →
 `appearance=light`, App One family, Herdr `one-light`). Hosted Terminal colors are read from the
-actual Herdr/Ghostty frame; Shardlane has no named Terminal palette and never calls a host-side
-palette setter. A Shardlane-owned Herdr server is reloaded after the merged runtime config changes;
+actual Herdr/Ghostty frame; Solco has no named Terminal palette and never calls a host-side
+palette setter. A Solco-owned Herdr server is reloaded after the merged runtime config changes;
 a pre-existing external/user server is never reloaded or mutated. Window opacity remains native;
 Sidebar/right-panel and window resize drive one compensated PTY+model resize.
 

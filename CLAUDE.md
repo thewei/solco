@@ -1,4 +1,4 @@
-# Shardlane — native macOS workspace for coding agents (Go / MyGo Native UI)
+# Solco — native macOS workspace for coding agents (Go / MyGo Native UI)
 
 Current implementation: Go 1.27.3 + MyGo Native UI (pinned v0.6.4, patched fork vendored under `third_party/mygo`) + official MyGo Terminal/Ghostty; Herdr remains the runtime authority. The previous Rust/GPUI implementation lives only on `rewrite/mygo`/`main`.
 
@@ -22,7 +22,7 @@ docs/mygo-native-migration-roadmap.md - active migration roadmap and task order
 .github/workflows/pages.yml - GitHub Pages deployment for site/
 </config>
 
-Product rule: **Shardlane is the client and brand. Herdr is the backend/runtime.** Shardlane must not introduce a second Workspace registry, pane runtime, terminal authority, or process lifecycle owner. Herdr remains authoritative for workspaces, tabs, panes, layouts, agents, scrollback, persistence, terminal sessions, and process lifecycle. Shardlane owns native macOS presentation, local interaction state/preferences, and the read-only Agent-history browsing/index layer (plus its user-initiated, reversible Sessions Trash).
+Product rule: **Solco is the client and brand. Herdr is the backend/runtime.** Solco must not introduce a second Workspace registry, pane runtime, terminal authority, or process lifecycle owner. Herdr remains authoritative for workspaces, tabs, panes, layouts, agents, scrollback, persistence, terminal sessions, and process lifecycle. Solco owns native macOS presentation, local interaction state/preferences, and the read-only Agent-history browsing/index layer (plus its user-initiated, reversible Sessions Trash).
 
 Implementation rule: do not hand-roll capabilities while mature owners exist. Search in order: Herdr API → MyGo native components/official plugins → a proven compatible implementation → custom code. Missing runtime APIs are fixed at the Herdr boundary rather than bypassed with a parallel terminal/process path.
 

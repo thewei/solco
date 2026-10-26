@@ -1,7 +1,7 @@
 # internal/history/
 > L2 | 父级: ../../CLAUDE.md
 
-History 是 Shardlane 的只读 Provider 会话目录；扫描 Provider 原生文件，Catalog 是纯内存的列表行索引（标题/计数/项目/≤240 字描述行），**永不保存会话正文**：没有转录缓存、没有消息全文索引、没有数据库，阅读一律由 `HistoryService.Open` 现读原始会话文件。不会承接 Herdr 的 Agent/PTY 生命周期，也不会修改来源历史文件。调用方向为 `nativeui → HistoryService → Catalog / Scanner`，同层解析器不能反向依赖 UI。Sessions 的删除（移入回收站/放回/永久删除）由同级 `internal/sessiontrash` 搬动文件，本包仍只读：只提供 `Forget`（文件被搬走后立即摘除行与路径占用）与 `SummarizeSource`（从单个来源文件读回一行列表摘要，供回收站列表）。
+History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件，Catalog 是纯内存的列表行索引（标题/计数/项目/≤240 字描述行），**永不保存会话正文**：没有转录缓存、没有消息全文索引、没有数据库，阅读一律由 `HistoryService.Open` 现读原始会话文件。不会承接 Herdr 的 Agent/PTY 生命周期，也不会修改来源历史文件。调用方向为 `nativeui → HistoryService → Catalog / Scanner`，同层解析器不能反向依赖 UI。Sessions 的删除（移入回收站/放回/永久删除）由同级 `internal/sessiontrash` 搬动文件，本包仍只读：只提供 `Forget`（文件被搬走后立即摘除行与路径占用）与 `SummarizeSource`（从单个来源文件读回一行列表摘要，供回收站列表）。
 
 成员清单
 

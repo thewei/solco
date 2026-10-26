@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.8.0 History, Usage & Agent Inspector Implementation Prompt
+# Solco MyGo 0.8.0 History, Usage & Agent Inspector Implementation Prompt
 
-Continue the Shardlane MyGo migration after 0.7 Status Center is complete.
+Continue the Solco MyGo migration after 0.7 Status Center is complete.
 
 Repository:
 
@@ -28,9 +28,9 @@ Also inspect the current `internal/history`, `internal/agent`, IntegrationHealth
 
 Implement **0.8 History Management, Usage & Agent Inspector**.
 
-Borrow useful product patterns from Magpie, but preserve Shardlane's canonical architecture.
+Borrow useful product patterns from Magpie, but preserve Solco's canonical architecture.
 
-Herdr remains runtime authority. Shardlane must not become a mandatory model gateway.
+Herdr remains runtime authority. Solco must not become a mandatory model gateway.
 
 ## P0 — grouped History
 
@@ -86,7 +86,7 @@ Database-backed/unknown providers remain read-only.
 
 ## P2 — Trash transaction
 
-Use Shardlane-owned versioned Trash manifests under app user data.
+Use Solco-owned versioned Trash manifests under app user data.
 
 Delete transaction must:
 
@@ -165,7 +165,7 @@ Never turn unknown into zero.
 
 ## P5 — usage collectors
 
-Start with session/provider formats Shardlane already parses.
+Start with session/provider formats Solco already parses.
 
 Claude and Codex are required first.
 
@@ -199,7 +199,7 @@ Model
 Today / 7d / 30d / All
 ```
 
-Use a Shardlane-owned SQLite index/cache, not render-time transcript scans.
+Use a Solco-owned SQLite index/cache, not render-time transcript scans.
 
 ## P8 — cost
 
@@ -341,7 +341,7 @@ auth header
 environment dump
 ```
 
-Trash/Purge paths must be canonical and confined to the Shardlane trash root.
+Trash/Purge paths must be canonical and confined to the Solco trash root.
 
 Provider source mutation happens only through the explicit HistoryManagementService transaction.
 
@@ -408,7 +408,7 @@ Also prove:
 - no unsupported provider can be deleted;
 - no live Agent session can be deleted;
 - no restore overwrites existing provider data;
-- no purge can escape Shardlane trash root;
+- no purge can escape Solco trash root;
 - no Usage body/content logging exists;
 - no mandatory model gateway was introduced;
 - no global Herdr focus/runtime authority regression exists;

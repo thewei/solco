@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.5.0 — Agent Workbench & Lifecycle Plan
+# Solco MyGo 0.5.0 — Agent Workbench & Lifecycle Plan
 
 Status: **planned post-0.4 release**
 Target: `0.5.0`
@@ -13,7 +13,7 @@ Planning review: **reviewed 2026-10-05 against the post-0.4.0 tree** — authori
 
 Goal:
 
-> Turn live Herdr Agents into first-class Shardlane work objects with one lifecycle model,
+> Turn live Herdr Agents into first-class Solco work objects with one lifecycle model,
 > one card model, one process/window directory projection, review/attention markers,
 > fast Agent switching, safe Continue/Resume flow, and truthful dynamic actions.
 
@@ -40,16 +40,16 @@ The 0.5 implementation must refer back to these existing Rust product semantics 
 | Original authority | Behavior to preserve |
 |---|---|
 | `crates/herdr-gui/src/status.rs` | raw Agent status → attention mapping; transition classifier; review semantics |
-| `crates/shardlane-host/src/attention.rs` | completion attention dedupe/suppression policy where authoritative completion facts exist |
+| `crates/solco-host/src/attention.rs` | completion attention dedupe/suppression policy where authoritative completion facts exist |
 | `crates/herdr-gui/src/agent_panel.rs` | process-wide Agent directory, overview filters, actionable sorting, Mark reviewed |
 | `crates/herdr-gui/src/agent_switcher.rs` | Ctrl-Tab MRU Agent switcher, max 10, release-to-commit, Esc cancel |
 | `crates/herdr-gui/src/sidebar/pane_rows.rs` | provider mark + Pane/Agent role + compact runtime status |
 | `crates/herdr-gui/src/status_bar.rs` | blocked/review/working summary; no token/usage badge in primary Agent status chrome |
 | `crates/herdr-gui/src/shell_navigation.rs` | unread/review marker lifecycle; status patch reconciliation; explicit review ack |
-| `crates/shardlane-host/src/conversation_queue.rs` | single Agent sendability classifier and fail-closed prompt disposition |
-| `crates/shardlane-host/src/agent_service.rs` | high-level Agent query/read/wait/semantic prompt service boundary |
-| `crates/shardlane-host/src/history_continuation.rs` | Continue planner: AlreadyLive → NativeResume → ContextTransfer → NeedsProjectSelection → Unsupported |
-| `crates/shardlane-host/src/live_handoff.rs` | live handoff safety/failure semantics; execution deferred to 0.6 unless prerequisites are complete |
+| `crates/solco-host/src/conversation_queue.rs` | single Agent sendability classifier and fail-closed prompt disposition |
+| `crates/solco-host/src/agent_service.rs` | high-level Agent query/read/wait/semantic prompt service boundary |
+| `crates/solco-host/src/history_continuation.rs` | Continue planner: AlreadyLive → NativeResume → ContextTransfer → NeedsProjectSelection → Unsupported |
+| `crates/solco-host/src/live_handoff.rs` | live handoff safety/failure semantics; execution deferred to 0.6 unless prerequisites are complete |
 | `crates/herdr-gui/src/agent_ui/activity.rs` | semantic tool-activity classification shared by History/Chat; do not infer activity from terminal output |
 | `crates/herdr-gui/src/main.rs` | meaningful Agent notification transition rules |
 
@@ -451,7 +451,7 @@ Scope for 0.5:
 - mouse hover changes highlighted row;
 - click commits;
 - vanished Agent fails closed/cancels;
-- commit uses local Shardlane navigation, never Herdr global focus RPC.
+- commit uses local Solco navigation, never Herdr global focus RPC.
 
 ## 14. Review / unread lifecycle
 

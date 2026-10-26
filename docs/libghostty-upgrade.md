@@ -1,4 +1,4 @@
-# libghostty Upgrade Guide (Shardlane Perspective)
+# libghostty Upgrade Guide (Solco Perspective)
 
 > Conclusion first: **we can upgrade, but upgrading our library does not unlock the kitty clipboard**. That door is on the Herdr server side.
 > This document = upgrade decision framework + operational runbook. Pin metadata lives in `vendor/ghostty-vt/PIN.md`.
@@ -6,7 +6,7 @@
 ## 1. What we vendored
 
 `vendor/ghostty-vt/lib/libghostty-vt.a`: a pure VT library extracted from the ghostty
-upstream (ghostling/libghostty-rs extraction line), statically linked into the shardlane
+upstream (ghostling/libghostty-rs extraction line), statically linked into the solco
 binary. 162 `ghostty_*` C-ABI symbols; the 21 `extern "C"` declarations in `ghostty.rs`
 treat the **binary as the ABI authority** (signatures derived by disassembly + pinned by
 behavioral regression tests). The current snapshot sits between Ghostty 1.3.1 and 1.4
@@ -21,7 +21,7 @@ data plane**:
 app inside the pane (Claude Code) → PTY → [ghostty embedded in the herdr server: emulator owner]
                                             ↓ consumes OSC 52 / kitty clipboard query
                                             ↓ (today: dropped; verified not forwarded, never reaches a clipboard)
-Shardlane ← rendered byte stream forwarded by the herdr controller → our vendored library (mirror parser)
+Solco ← rendered byte stream forwarded by the herdr controller → our vendored library (mirror parser)
 ```
 
 The clipboard protocol is a bidirectional handshake: the app sends a query, and the

@@ -1,7 +1,7 @@
 # internal/sessiontrash/
 > L2 | 父级: ../../CLAUDE.md
 
-Sessions 回收站：Shardlane 搬动 Provider 会话文件的**唯一**位置，且只往返于自己拥有的回收站目录（`<userDataDir>/SessionTrash/<id>/`）。删除 = 把会话 `.jsonl` 从 Provider 自己的历史根目录搬进 `<id>/`，旁边一份只含 `{version, agent, original, deleted_at_ms}` 的清单（**不含任何会话内容**）；放回 = 搬回精确的原路径且从不覆盖；永久删除/清空只删除回收站里合法 id 的条目目录，从不碰别的。回收站列表的标题/项目/计数在读取时经 `history.SummarizeSource` 从被搬走的文件现读，磁盘上不存在第二份由会话派生的文字。无 UI、无 Herdr 依赖；`internal/history` 保持只读，本包拥有文件操作，history 拥有"会话是什么"。
+Sessions 回收站：Solco 搬动 Provider 会话文件的**唯一**位置，且只往返于自己拥有的回收站目录（`<userDataDir>/SessionTrash/<id>/`）。删除 = 把会话 `.jsonl` 从 Provider 自己的历史根目录搬进 `<id>/`，旁边一份只含 `{version, agent, original, deleted_at_ms}` 的清单（**不含任何会话内容**）；放回 = 搬回精确的原路径且从不覆盖；永久删除/清空只删除回收站里合法 id 的条目目录，从不碰别的。回收站列表的标题/项目/计数在读取时经 `history.SummarizeSource` 从被搬走的文件现读，磁盘上不存在第二份由会话派生的文字。无 UI、无 Herdr 依赖；`internal/history` 保持只读，本包拥有文件操作，history 拥有"会话是什么"。
 
 成员清单
 

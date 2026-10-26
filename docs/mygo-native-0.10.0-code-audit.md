@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.10.0 — Code Audit
+# Solco MyGo 0.10.0 — Code Audit
 
 Status: **FAILED closure / remediation required**
 Audit date: 2026-10-05
@@ -11,7 +11,7 @@ This audit is source-level and runtime-contract oriented. Passing package tests/
 
 0.10 has substantial implementation, but **does not currently meet release closure**.
 
-The most important finding is that the packaged application entrypoint is wrong: `next/main.go` is a terminal right-click debug harness, not the Shardlane Native application. `go tool mygo build` therefore succeeds while packaging the wrong program.
+The most important finding is that the packaged application entrypoint is wrong: `next/main.go` is a terminal right-click debug harness, not the Solco Native application. `go tool mygo build` therefore succeeds while packaging the wrong program.
 
 Several Git Workbench paths also contain correctness bugs that unit tests do not cover, including initial repository binding, cross-operation generation cancellation, stale commit fences, UI-thread Git IO and snapshot truncation.
 
@@ -68,12 +68,12 @@ Tray / Quick Panel
 WithUserDataDir
 ```
 
-`go tool mygo build` still succeeds and creates `Shardlane 0.10.0.dmg`, but binary strings contain the debug-harness markers (`herdr TUI started`, `view sent to TUI on right click`).
+`go tool mygo build` still succeeds and creates `Solco 0.10.0.dmg`, but binary strings contain the debug-harness markers (`herdr TUI started`, `view sent to TUI on right click`).
 
 **Impact**
 
 - package success is a false-positive;
-- the DMG does not prove the actual Shardlane UI can launch;
+- the DMG does not prove the actual Solco UI can launch;
 - every production-only integration currently lacks a real composition root.
 
 **Fix**
@@ -82,7 +82,7 @@ Restore a real application composition root. Move the terminal mouse experiment 
 
 **Verify**
 
-- packaged app launches the Shardlane Native window;
+- packaged app launches the Solco Native window;
 - layer-0 window exists;
 - Sidebar/WorkspaceHeader/Terminal render;
 - binary no longer contains debug harness output strings as reachable app behavior;
@@ -729,7 +729,7 @@ F4 remove import pins/custom stdlib replacements
 Do not declare 0.10 complete until all of the following hold:
 
 ```text
-real Shardlane app is the packaged main binary
+real Solco app is the packaged main binary
 go test ./... passes repeatedly
 go test -race ./... passes
 go vet ./... passes

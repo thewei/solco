@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.3.0 — Native History & Preferences Plan
+# Solco MyGo 0.3.0 — Native History & Preferences Plan
 
 Status: **Approved-next proposal**
 Target version: `0.3.0`
@@ -158,7 +158,7 @@ Rules:
 
 ### 4.2 History catalog
 
-Use SQLite as a disposable Shardlane-owned derived index/cache.
+Use SQLite as a disposable Solco-owned derived index/cache.
 
 Recommended Go driver: a cross-platform, non-CGo driver unless measured build/runtime constraints justify another choice.
 

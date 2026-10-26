@@ -1,12 +1,12 @@
 # UI Acceptance Testing (Multiplexer / Hosted Surfaces)
 
-Status: **Current** — engineering practice for driving the real Shardlane app
+Status: **Current** — engineering practice for driving the real Solco app
 through scripted UI interactions with ground-truth assertions.
 
 ## 1. When to use this
 
 The no-GUI capability inventory/unit tests and the mux contract kit
-(`shardlane-host/src/mux/kit.rs`) prove the seams. Some acceptance questions
+(`solco-host/src/mux/kit.rs`) prove the seams. Some acceptance questions
 only the real app can answer: does the picker list a backend's instances, does
 the hosted terminal render a bound instance, does a synthetic window resize
 follow through to the runtime grid? This doc
@@ -20,7 +20,7 @@ There are two UI drivers and their risk boundaries are intentionally different:
 | Driver | Use | Input scope | Required evidence |
 | --- | --- | --- | --- |
 | **Computer Use (default)** | ordinary UI navigation, AX inspection, menu/form actions | app-targeted `mcp__node_repl__js` + `@oai/sky`; no repository-generated global events | `driver=computer-use` in `evidence.jsonl` plus Herdr/tmux truth |
-| **Native fallback** | real key-repeat/trackpad timing or renderer samples Sky cannot express | global CGEvent/System Events; can move the pointer and steal focus | explicit `SHARDLANE_UI_DRIVER=native SHARDLANE_ALLOW_GLOBAL_INPUT=1`; add capture authorization only for shared-display video/screenshots |
+| **Native fallback** | real key-repeat/trackpad timing or renderer samples Sky cannot express | global CGEvent/System Events; can move the pointer and steal focus | explicit `SOLCO_UI_DRIVER=native SOLCO_ALLOW_GLOBAL_INPUT=1`; add capture authorization only for shared-display video/screenshots |
 
 The public Sky API does not expose a queryable “virtual cursor/virtual display” flag.
 Treat it as an app-scoped action channel, not as proof of headless display isolation.
@@ -146,14 +146,14 @@ surfaces without coupling them to `mux-acceptance.sh` internals.
 
 ## 2. The three primitives
 
-### 2.1 Automation seam: `SHARDLANE_BIND_INSTANCE`
+### 2.1 Automation seam: `SOLCO_BIND_INSTANCE`
 
 Startup binds the first window to an explicit instance key with **zero UI
 interaction**:
 
 ```sh
-SHARDLANE_BIND_INSTANCE=tmux:default target/debug/shardlane   # tmux backend
-SHARDLANE_BIND_INSTANCE=default target/debug/shardlane        # Herdr session
+SOLCO_BIND_INSTANCE=tmux:default target/debug/solco   # tmux backend
+SOLCO_BIND_INSTANCE=default target/debug/solco        # Herdr session
 ```
 
 Keys follow the picker jump-key convention: a Herdr session name, or
@@ -171,9 +171,9 @@ swiftc -O -o target/debug/evpost scripts/keyrepeat-evpost.swift
 ```
 
 ```sh
-SHARDLANE_UI_DRIVER=native SHARDLANE_ALLOW_GLOBAL_INPUT=1 target/debug/evpost click  <x_pt> <y_pt>       # left click (move → down → up)
-SHARDLANE_UI_DRIVER=native SHARDLANE_ALLOW_GLOBAL_INPUT=1 target/debug/evpost rclick <x_pt> <y_pt>       # right click (context menus)
-SHARDLANE_UI_DRIVER=native SHARDLANE_ALLOW_GLOBAL_INPUT=1 target/debug/evpost key    <keycode> <count> <interval_us>
+SOLCO_UI_DRIVER=native SOLCO_ALLOW_GLOBAL_INPUT=1 target/debug/evpost click  <x_pt> <y_pt>       # left click (move → down → up)
+SOLCO_UI_DRIVER=native SOLCO_ALLOW_GLOBAL_INPUT=1 target/debug/evpost rclick <x_pt> <y_pt>       # right click (context menus)
+SOLCO_UI_DRIVER=native SOLCO_ALLOW_GLOBAL_INPUT=1 target/debug/evpost key    <keycode> <count> <interval_us>
 target/debug/evpost bounds <pid>               # "x y w h" of the app's main window
 ```
 
@@ -186,7 +186,7 @@ target/debug/vocr --pid <app_pid> <x_pt> <y_pt> <w_pt> <h_pt>
 ```
 
 Only the PID-scoped form is allowed by default. An unscoped `vocr` call reads
-the shared display and requires `SHARDLANE_ALLOW_GLOBAL_CAPTURE=1`.
+the shared display and requires `SOLCO_ALLOW_GLOBAL_CAPTURE=1`.
 
 The returned bounding box makes menu interaction deterministic without a hardcoded
 row pitch: right-click, OCR the target window, find the row whose text contains the
@@ -211,7 +211,7 @@ Every UI action must be paired with a backend-side observable:
 | Projects projected | lag log `bind.ok ws=N tabs=N panes=N` |
 | picker aggregation | lag log `mux.instances total=…` (one line per refresh) |
 
-The lag log (`SHARDLANE_LAG_LOG_PATH`) carries `bind.ok` / `bind.err` /
+The lag log (`SOLCO_LAG_LOG_PATH`) carries `bind.ok` / `bind.err` /
 `bind.connected` / `mux.instances` diagnostics emitted by the bind flow —
 read it before touching the UI at all; most bind failures are diagnosable
 without a single click.
@@ -222,7 +222,7 @@ A UI smoke is only isolated when **socket routing and persisted state** are
 both isolated — a unique `HERDR_SOCKET_PATH` **and** a temporary `HOME` for
 the app, the Herdr server, and every CLI probe
 (`scripts/terminal-native-smoke.sh` is the reference). The mux harness also
-uses a dedicated `SHARDLANE_TMUX_SOCKET`; it never talks to the user's default
+uses a dedicated `SOLCO_TMUX_SOCKET`; it never talks to the user's default
 tmux server. Always tear down only the PIDs and paths recorded in its
 `manifest.env` (`tmux kill-server`, kill the Herdr server, then remove the
 runtime directory). Keep the runtime with `--keep` on failure.
@@ -237,9 +237,9 @@ manually changing the same target app, so do not touch that one test window.
 
 Native fallback is different: CGEvent/System Events go to the frontmost app,
 move the user's pointer, and can consume user keystrokes. It is allowed only
-with `SHARDLANE_UI_DRIVER=native SHARDLANE_ALLOW_GLOBAL_INPUT=1`, in one
+with `SOLCO_UI_DRIVER=native SOLCO_ALLOW_GLOBAL_INPUT=1`, in one
 blocking process with no concurrent user interaction. Shared-display
-screenshots/video additionally require `SHARDLANE_ALLOW_GLOBAL_CAPTURE=1`.
+screenshots/video additionally require `SOLCO_ALLOW_GLOBAL_CAPTURE=1`.
 Re-assert frontmost and
 wait for `evpost bounds <pid>` before every phase; OCR of an occluded region
 reads whichever window covers it, which can masquerade as an app bug.
@@ -257,14 +257,14 @@ scripts/verify.sh ui
 scripts/mux-acceptance.sh --driver computer-use --prepare --keep
 
 # Explicit real-device fallback: may move the user's pointer and steal focus.
-SHARDLANE_UI_DRIVER=native SHARDLANE_ALLOW_GLOBAL_INPUT=1 \
+SOLCO_UI_DRIVER=native SOLCO_ALLOW_GLOBAL_INPUT=1 \
   scripts/mux-acceptance.sh --driver native
 ```
 
 Without `--prepare`, Computer Use mode exits before launching anything; this
 prevents a shell-only Agent from silently falling back to global events. The
 prepare mode runs isolated runtime → bind, then prints a manifest and waits
-for the Agent to drive the app (bounded by `SHARDLANE_ACCEPTANCE_TIMEOUT_SEC`,
+for the Agent to drive the app (bounded by `SOLCO_ACCEPTANCE_TIMEOUT_SEC`,
 default 900 seconds). The Agent writes a `PASS`/`FAIL` marker when done; the
 shell records cleanup and summarizes `evidence.jsonl`.
 
@@ -286,7 +286,7 @@ diagnostic fallback.
 ## 5. Pitfalls learned (do not re-learn them)
 
 1. **Same bundle id, two processes** — the dev binary and any packaged copy
-   both identify as `dev.shardlane.app`; the second process's window does not
+   both identify as `dev.solco.app`; the second process's window does not
    come on screen. Kill the old instance before launching.
 2. **fmt drifts your edit anchors** — when patching with string replacement,
    run the replacement *after* `cargo fmt`, or match on short stable tokens;
@@ -315,9 +315,9 @@ diagnostic fallback.
 
 1. Start from `scripts/mux-acceptance.sh`: copy the phase skeleton (setup →
    bind → act → assert → next).
-2. Prefer a new `SHARDLANE_*` env seam over clicks for anything that is setup
-   rather than the behavior under test (precedent: `SHARDLANE_LAG_LOG_PATH`,
-   `SHARDLANE_BIND_INSTANCE`).
+2. Prefer a new `SOLCO_*` env seam over clicks for anything that is setup
+   rather than the behavior under test (precedent: `SOLCO_LAG_LOG_PATH`,
+   `SOLCO_BIND_INSTANCE`).
 3. Assert on the backend-side observable (§2.3); use screenshots only to
    debug failures, never as the assertion.
 4. Bound every wait with a poll loop and a hard iteration cap; leave the

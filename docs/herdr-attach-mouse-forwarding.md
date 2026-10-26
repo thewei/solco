@@ -9,7 +9,7 @@
 
 ## 1. 背景
 
-Shardlane MyGo 客户端的可见 Pane 全部经 `herdr terminal attach <terminal_id>` 承载。
+Solco MyGo 客户端的可见 Pane 全部经 `herdr terminal attach <terminal_id>` 承载。
 MyGo 终端视图自带的拖选/右键/滚轮语义被客户端的 `mouseModeFilter` + 滚轮接管子层
 （`next/internal/nativeui/mousemode_filter.go`、`terminal.go` paneCard）主动禁用，原因是
 attach 通道**输入方向丢弃鼠标字节**（下探针）。副作用是视图收不到任何指针事件 →

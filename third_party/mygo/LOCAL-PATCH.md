@@ -1,7 +1,7 @@
 # Local patch over mygo v0.6.4
 
 Four deltas, re-applied by hand after every pin bump. They live outside
-Shardlane and stay as small as deletion allows.
+Solco and stay as small as deletion allows.
 
 ## Delta 4: terminal OSC 7501 program status (2026-10-15)
 
@@ -16,7 +16,7 @@ state and kind lists; without it, support is never claimed. Pairs,
 records, lifetime and merge policy live in the embedding app
 (herdr-client `internal/agentstatus`), which owns the protocol semantics.
 
-Reason: Shardlane agent panes — Claude Code 2.1.295+ emits native status
+Reason: Solco agent panes — Claude Code 2.1.295+ emits native status
 reports (working/blocked/done/idle/error) that must reach the pane header
 without hooks; agents without the protocol keep the hook fallback.
 
@@ -31,7 +31,7 @@ primary-button drag and the right click stay local to the view (text
 selection, context menu) even when the program takes the mouse; the wheel
 keeps reporting to the program.
 
-Reason: Shardlane F146/F147 — scrollback-backed panes (shells, agy) need
+Reason: Solco F146/F147 — scrollback-backed panes (shells, agy) need
 plain-drag selection and a right-click menu while the daemon's attach
 renderer force-enables mouse tracking. Alt-screen agent TUIs (pi) keep the
 option unset and report everything.
@@ -48,7 +48,7 @@ reaches the editor, which alone takes text — before, `AutoFocus` focused
 the wrapper row, where typing, the caret and IME did nothing (the runtime
 delivers text only to the focused element's editor).
 
-Reason: Shardlane command palette (WIX-021) — the palette's `SearchField`
+Reason: Solco command palette (WIX-021) — the palette's `SearchField`
 must take the keyboard the frame the dialog opens, keyboard-first like
 Spotlight/Raycast. Regression: `TestSearchField` now types without a click.
 
@@ -68,7 +68,7 @@ and `w.popoverAnchor` binds an auxiliary transparent anchor window on that displ
 so that the native `NSPopover` (or `PlaceFlyout`) renders directly on the operated
 screen without jumping to the primary display and stealing focus.
 
-Reason: Shardlane multi-monitor workflow — clicking the status tray while working
+Reason: Solco multi-monitor workflow — clicking the status tray while working
 in an editor on a secondary monitor must display the quick panel on that monitor
 rather than dragging the window and cursor focus over to the main screen.
 
@@ -98,7 +98,7 @@ extraction (they need the full repo shape), so they fail identically on
 pristine v0.6.4 — not a delta regression.
 When an upstream mygo release ships these fixes, delete the
 `replace github.com/egoist/mygo => ./third_party/mygo` directive in `go.mod`,
-bump the pin, and delete this checkout. Shardlane code already uses only the
+bump the pin, and delete this checkout. Solco code already uses only the
 public option and needs no changes.
 
 Delta vs v0.6.4: an `Options` field + a 4-line guard in `view.pointerEvent`;

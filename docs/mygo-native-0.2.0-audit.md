@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.2.0 — Code & Package Audit
+# Solco MyGo 0.2.0 — Code & Package Audit
 
 Status: **audited test build**
 Audit date: 2026-10-05
@@ -16,8 +16,8 @@ The current implementation meets the intended architecture for the migrated shel
 - No React/Vite/WebView/xterm dependency exists in `next/`.
 - History and Chat remain Native-UI-only by policy; no private WebView embedding was introduced.
 - Herdr remains the runtime/PTY/layout/process authority.
-- visible terminals use Herdr `terminal attach <terminal_id>`; Shardlane owns no PTY.
-- Shardlane Project/Tab/Pane navigation is client-local and no longer emits `workspace.focus`, `tab.focus`, or `pane.focus`.
+- visible terminals use Herdr `terminal attach <terminal_id>`; Solco owns no PTY.
+- Solco Project/Tab/Pane navigation is client-local and no longer emits `workspace.focus`, `tab.focus`, or `pane.focus`.
 - Herdr global focus events are intentionally not subscribed as shell-navigation drivers.
 - terminal geometry is derived from Herdr authoritative layouts for the locally selected Tab.
 - event bursts use quiet-window + bounded max-latency reconciliation.
@@ -67,7 +67,7 @@ Corrected model:
 
 ```text
 Herdr snapshot focused_*     = bootstrap/fallback fact only
-Shardlane selected*          = this window's semantic selection
+Solco selected*          = this window's semantic selection
 Herdr session layouts        = authoritative geometry/topology
 ```
 
@@ -148,8 +148,8 @@ GOTOOLCHAIN=go1.27.1 go tool mygo build
 Result: PASS.
 
 Artifacts:
-- `next/build/darwin-arm64/Shardlane.app` — about 14.4 MB
-- `next/build/darwin-arm64/Shardlane 0.2.0.dmg` — about 5.6 MB
+- `next/build/darwin-arm64/Solco.app` — about 14.4 MB
+- `next/build/darwin-arm64/Solco 0.2.0.dmg` — about 5.6 MB
 
 ### Isolated real `.app` launch smoke
 
@@ -171,13 +171,13 @@ Result: PASS.
 Primary local test package:
 
 ```text
-/Users/wilson/Downloads/Shardlane-0.2.0-mygo-arm64.dmg
+/Users/wilson/Downloads/Solco-0.2.0-mygo-arm64.dmg
 ```
 
 Build-tree copy:
 
 ```text
-next/build/darwin-arm64/Shardlane 0.2.0.dmg
+next/build/darwin-arm64/Solco 0.2.0.dmg
 ```
 
 SHA-256:
@@ -188,7 +188,7 @@ SHA-256:
 
 Bundle:
 - version: `0.2.0`
-- identifier: `com.whstudio.shardlane.next`
+- identifier: `com.whstudio.solco`
 - target: macOS arm64
 - minimum macOS: 13.0
 - signature: ad-hoc test signature
@@ -202,7 +202,7 @@ Focus manual testing on the implemented slice:
 2. Workspace switch/create/rename/delete;
 3. Sidebar Project/Tab/Pane hierarchy;
 4. expand multiple Projects without focus stealing;
-5. switch Projects/Tabs/Panes and confirm only this Shardlane window changes;
+5. switch Projects/Tabs/Panes and confirm only this Solco window changes;
 6. Search → open Project/Tab/Pane/Agent;
 7. native terminal typing, resize, scrollback, copy/paste;
 8. multi-Pane split and resize;

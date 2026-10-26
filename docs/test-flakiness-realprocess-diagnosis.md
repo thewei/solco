@@ -13,7 +13,7 @@
 1. 裸 socket 订阅（python）同一隔离 server：tab.create 后 tab_created/
    pane_created/layout_updated 正常推送——herdr 0.9.1 的事件名称与线格式
    （{"event":"tab_created","data":{...}}，下划线事件名 + 点号订阅词表）与
-   shardlane-host 的 HerdrEvent 解析、refreshes_navigation_projection 完全兼容。
+   solco-host 的 HerdrEvent 解析、refreshes_navigation_projection 完全兼容。
 2. 插桩 remote 事件 hub：subscribe 成功（收到 ack + health_changed(true)），
    snapshot 正确指向隔离实例，但 rx 永远收不到事件；hub 的两个 reader 线程
    直到测试结束 server 被 kill 才 EOF——连接一直健康，纯粹没有数据。

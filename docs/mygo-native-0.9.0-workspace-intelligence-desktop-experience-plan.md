@@ -1,11 +1,11 @@
-# Shardlane MyGo 0.9.0 — Workspace Intelligence & Desktop Experience Plan
+# Solco MyGo 0.9.0 — Workspace Intelligence & Desktop Experience Plan
 
 Status: **planned large post-0.8 release**
 Target: `0.9.0`
 Depends on: 0.8 History Management, Usage & Agent Inspector complete
 Architecture authority: `docs/client-product-architecture.md`
 Execution rules: `docs/mygo-native-execution-rules.md`
-Reference audit: `docs/reference-magpie-herdr-gpui-shardlane-0.9-audit.md`
+Reference audit: `docs/reference-magpie-herdr-gpui-solco-0.9-audit.md`
 
 ## 1. Version goal
 
@@ -13,7 +13,7 @@ Reference audit: `docs/reference-magpie-herdr-gpui-shardlane-0.9-audit.md`
 
 Goal:
 
-> Turn Shardlane from a client that can operate Agents into the daily development workspace around those Agents: find anything instantly, understand the active Project, inspect files/services/Git, open local previews, react through native desktop affordances, diagnose problems, and update the app without leaving the product.
+> Turn Solco from a client that can operate Agents into the daily development workspace around those Agents: find anything instantly, understand the active Project, inspect files/services/Git, open local previews, react through native desktop affordances, diagnose problems, and update the app without leaving the product.
 
 This is a large version by **scope and user experience**, but it is intentionally still `0.9.0`, not `1.0`.
 
@@ -114,7 +114,7 @@ A missing optional capability must produce an explicit unavailable state, not bl
 
 ## 5. Reference authorities
 
-### Original Shardlane / Rust behavior
+### Original Solco / Rust behavior
 
 Use these as product-parity references:
 
@@ -156,7 +156,7 @@ Use for:
 - menu-bar-first compact workflows;
 - update/release-note polish.
 
-Do not import Magpie's gateway ownership into Shardlane core.
+Do not import Magpie's gateway ownership into Solco core.
 
 ## 6. Architecture
 
@@ -195,7 +195,7 @@ Script execution panes/processes
 worktree lifecycle when exposed by Herdr
 ```
 
-Shardlane owns:
+Solco owns:
 
 ```text
 Command catalog/presentation
@@ -606,7 +606,7 @@ Do not classify from arbitrary terminal output.
 
 ### 13.5 Stop
 
-Stop is shown only where Shardlane owns the Script lifecycle transaction and can identify its exact runtime process/Pane safely.
+Stop is shown only where Solco owns the Script lifecycle transaction and can identify its exact runtime process/Pane safely.
 
 ## 14. Services projection
 
@@ -640,7 +640,7 @@ Port            → Preview
 
 ## 15. Port intelligence
 
-Reuse old Shardlane's bounded ownership model rather than scanning every process globally without context.
+Reuse old Solco's bounded ownership model rather than scanning every process globally without context.
 
 Preferred inputs:
 
@@ -1191,7 +1191,7 @@ It must not:
 
 ## 33. High contrast
 
-High contrast raises the minimum contrast of Shardlane semantic UI colors:
+High contrast raises the minimum contrast of Solco semantic UI colors:
 
 - status glyphs;
 - pills;
@@ -1217,7 +1217,7 @@ type TaskPreset struct {
 
 ### 34.2 Store
 
-Shardlane-owned, versioned, atomic, small.
+Solco-owned, versioned, atomic, small.
 
 ### 34.3 New Task UX
 
@@ -1640,7 +1640,7 @@ Do not combine unrelated surfaces into one patch.
 | WIX-154 | PR readiness presentation | render smoke |
 | WIX-155 | Open on GitHub | URL action test |
 | WIX-156 | unavailable auth never degrades Git | negative test |
-| WIX-157 | prove Shardlane stores no gh token | source/security audit |
+| WIX-157 | prove Solco stores no gh token | source/security audit |
 
 ### G3 — optional worktree gate
 
@@ -1880,7 +1880,7 @@ Do full visual/real-app verification only after feature workstreams are substant
 
 21. localhost target opens project-scoped Preview Window.
 22. external link leaves to system browser.
-23. Preview cannot call privileged Shardlane bindings.
+23. Preview cannot call privileged Solco bindings.
 24. Preview disappears/retargets when Project no longer exists.
 
 ### Git / PR
@@ -1890,7 +1890,7 @@ Do full visual/real-app verification only after feature workstreams are substant
 27. no Git command occurs from render.
 28. authenticated `gh` shows PR readiness when adapter is available.
 29. missing/unauthenticated `gh` simply hides/degrades PR enrichment.
-30. Shardlane stores no GitHub token.
+30. Solco stores no GitHub token.
 
 ### Desktop attention
 

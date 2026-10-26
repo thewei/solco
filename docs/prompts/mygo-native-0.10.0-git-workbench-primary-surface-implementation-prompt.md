@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.10.0 Git Workbench & Unified Primary Surface — Implementation Prompt
+# Solco MyGo 0.10.0 Git Workbench & Unified Primary Surface — Implementation Prompt
 
-Continue Shardlane after the current 0.9 implementation pass.
+Continue Solco after the current 0.9 implementation pass.
 
 Repository:
 
@@ -23,7 +23,7 @@ Preserve all user/parallel-agent changes. Do not reset, stage, commit or push un
 6. `docs/terminal-interaction-spec.md`
 7. `docs/mygo-native-execution-rules.md`
 8. `docs/mygo-native-migration-roadmap.md`
-9. `docs/reference-godiff-shardlane-0.10-audit.md`
+9. `docs/reference-godiff-solco-0.10-audit.md`
 10. `docs/mygo-native-0.10.0-git-workbench-primary-surface-plan.md`
 11. `docs/mygo-native-0.9.0-closure-audit.md` — historical evidence only; see its post-audit correction note
 12. `next/CLAUDE.md`
@@ -68,18 +68,18 @@ Current Godiff facts that matter:
 - app module is `github.com/egoist/godiff`;
 - app is `package main`;
 - core packages are under `internal/diff`, `internal/git`, `internal/highlight`;
-- Shardlane cannot import those `internal/*` packages from another module;
+- Solco cannot import those `internal/*` packages from another module;
 - the audited root did not contain an explicit LICENSE/COPYING/NOTICE file.
 
 Therefore:
 
-> **Do not copy or vendor Godiff internal source into Shardlane.**
+> **Do not copy or vendor Godiff internal source into Solco.**
 
-Implement Shardlane-owned clean-room models/services using Godiff only as a UX/behavior reference. If upstream later exposes a public licensed package, it may be adapted behind the same interfaces.
+Implement Solco-owned clean-room models/services using Godiff only as a UX/behavior reference. If upstream later exposes a public licensed package, it may be adapted behind the same interfaces.
 
 ## Mission
 
-Implement **Shardlane 0.10.0 — Git Workbench & Unified Primary Surface**.
+Implement **Solco 0.10.0 — Git Workbench & Unified Primary Surface**.
 
 The target experience is:
 
@@ -312,7 +312,7 @@ branch identity
 commit progress/result
 ```
 
-The visual structure may use Godiff's compact chips/icon buttons, but stays inside Shardlane Design System tokens.
+The visual structure may use Godiff's compact chips/icon buttons, but stays inside Solco Design System tokens.
 
 ## Phase 5 — refresh canonical left Sidebar
 
@@ -451,7 +451,7 @@ Handle odd filenames safely.
 
 ## Phase 9 — clean-room patch parser and word diff
 
-Implement Shardlane-owned parser.
+Implement Solco-owned parser.
 
 Support:
 
@@ -597,7 +597,7 @@ Never silently commit against a stale review snapshot.
 
 ### Critical index-preservation invariant
 
-> Unrelated already-staged work must remain staged and must not enter the Shardlane-selected commit.
+> Unrelated already-staged work must remain staged and must not enter the Solco-selected commit.
 
 Build real Git fixtures proving:
 
@@ -654,7 +654,7 @@ branch compare from merge-base
 ```
 
 Do not let optional history block Terminal/Diff/Commit/Branch/Commit core.
-Do not create a second Shardlane History product.
+Do not create a second Solco History product.
 
 ## Phase 17 — Files inherited correction
 

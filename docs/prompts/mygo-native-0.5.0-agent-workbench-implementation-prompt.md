@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.5.0 Agent Workbench Implementation Prompt
+# Solco MyGo 0.5.0 Agent Workbench Implementation Prompt
 
-Continue the Shardlane MyGo migration after **0.4 Operational Closure & UI System** is complete.
+Continue the Solco MyGo migration after **0.4 Operational Closure & UI System** is complete.
 
 Repository:
 
@@ -25,16 +25,16 @@ Do not reset, stage, commit, or push unless explicitly requested.
 Then inspect the original Rust behavior authorities named in the 0.5 plan, especially:
 
 - `crates/herdr-gui/src/status.rs`
-- `crates/shardlane-host/src/attention.rs`
+- `crates/solco-host/src/attention.rs`
 - `crates/herdr-gui/src/agent_panel.rs`
 - `crates/herdr-gui/src/agent_switcher.rs`
 - `crates/herdr-gui/src/sidebar/pane_rows.rs`
 - `crates/herdr-gui/src/status_bar.rs`
 - `crates/herdr-gui/src/shell_navigation.rs`
-- `crates/shardlane-host/src/conversation_queue.rs`
-- `crates/shardlane-host/src/agent_service.rs`
-- `crates/shardlane-host/src/history_continuation.rs`
-- `crates/shardlane-host/src/live_handoff.rs`
+- `crates/solco-host/src/conversation_queue.rs`
+- `crates/solco-host/src/agent_service.rs`
+- `crates/solco-host/src/history_continuation.rs`
+- `crates/solco-host/src/live_handoff.rs`
 - `crates/herdr-gui/src/agent_ui/activity.rs`
 
 Port product semantics, not GPUI mechanics.

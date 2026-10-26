@@ -1,18 +1,18 @@
 <!--
 [INPUT]: Cargo.toml bundle metadata, cargo-bundle, assets/app-icon, scripts/, and optional herdr-mobile/dist
-[OUTPUT]: The single operational manual for Shardlane macOS packaging/install/run/debug
+[OUTPUT]: The single operational manual for Solco macOS packaging/install/run/debug
 (one-command release, packaged-app CLI discovery, Mobile Web/Remote port configuration)
 [POS]: Release and cross-repo development runbook under docs/; does not change client/runtime ownership
 -->
 
-# Shardlane Mac App: Packaging, Installation, and Mobile Web Development Loop
+# Solco Mac App: Packaging, Installation, and Mobile Web Development Loop
 
 Status: **Current / verified 2026-08-29 (Universal 2 orchestration; target build pending toolchain download)**
 
 This document answers only two practical questions: how to get a genuinely installable
-`Shardlane.app`, and how to develop and troubleshoot the Mac native shell and the built-in
+`Solco.app`, and how to develop and troubleshoot the Mac native shell and the built-in
 Mobile Web with the shortest loop. The product boundary is still governed by
-`client-product-architecture.md`: Shardlane is the Mac client/brand, Herdr is the sole
+`client-product-architecture.md`: Solco is the Mac client/brand, Herdr is the sole
 runtime authority, and Mobile Web is the Web build target of the same Mobile client.
 
 ## 1. Single packaging configuration
@@ -22,13 +22,13 @@ configuration is `[package.metadata.bundle]` in the repo-root `Cargo.toml`:
 
 | Setting | Current value | What it produces |
 | --- | --- | --- |
-| `name` | `Shardlane` | `.app` name, menu/release identity |
-| `identifier` | `dev.shardlane.app` | `CFBundleIdentifier` |
-| `icon` | `assets/app-icon/shardlane-{16,32,128,256,512}{,@2x}.png` | cargo-bundle composes `Contents/Resources/Shardlane.icns` |
+| `name` | `Solco` | `.app` name, menu/release identity |
+| `identifier` | `dev.solco.app` | `CFBundleIdentifier` |
+| `icon` | `assets/app-icon/solco-{16,32,128,256,512}{,@2x}.png` | cargo-bundle composes `Contents/Resources/Solco.icns` |
 | `version` | inherited from `[package] version` | `CFBundleShortVersionString`/release version |
 
 Do not write another copy of the app name, Bundle ID, or icon path inside scripts.
-`crepus.toml` owns the dev target (`shardlane`) only, not the release identity.
+`crepus.toml` owns the dev target (`solco`) only, not the release identity.
 
 The icon sources are a set of text-free, alpha-bearing multi-resolution PNGs; the
 filenames keep `@2x` so `cargo-bundle 0.11.0` emits a full ICNS with Retina icon
@@ -46,8 +46,8 @@ scripts/release-macos.sh
 One command runs: static gates (fmt/clippy/test; `--skip-tests` to skip) → Mobile Web
 static bundle readiness (auto `pnpm install + export:web` when `dist/` is missing;
 `--build-web` forces a rebuild) → Universal 2 release `.app` (arm64+x86_64) packaging,
-signing, structural verification, and install into `${SHARDLANE_INSTALL_ROOT:-~/Applications}`
-(`--no-install` to skip) → `dist/Shardlane-macos-universal2.zip` + SHA-256 (`--no-archive`
+signing, structural verification, and install into `${SOLCO_INSTALL_ROOT:-~/Applications}`
+(`--no-install` to skip) → `dist/Solco-macos-universal2.zip` + SHA-256 (`--no-archive`
 to skip). Other options: `--sign IDENTITY`, `--mobile-root PATH`, `--without-web`,
 `--arm64` (explicitly use the single-architecture fallback).
 
@@ -68,19 +68,19 @@ cargo install cargo-bundle --version 0.11.0 --locked
 
 A `.app` launched from Finder/Dock only inherits launchd's system PATH
 (`/usr/bin:/bin:/usr/sbin:/sbin`), which excludes `~/.local/bin` (herdr installed via wax),
-`~/.cargo/bin` (wax itself), and other user directories. Shardlane resolves CLIs through
-`shardlane-host`'s `resolve_user_cli`/`herdr_cli_path`: process PATH → login-shell PATH
+`~/.cargo/bin` (wax itself), and other user directories. Solco resolves CLIs through
+`solco-host`'s `resolve_user_cli`/`herdr_cli_path`: process PATH → login-shell PATH
 (`zsh -lic`, cached in-process) → user-level bin directories as fallback, so the packaged
 app can launch/connect Herdr even when double-clicked. If the startup self-check reports
-`herdr: NOT FOUND` (see `/tmp/shardlane-lag.log`), first confirm in a terminal that
+`herdr: NOT FOUND` (see `/tmp/solco-lag.log`), first confirm in a terminal that
 `command -v herdr` resolves, then restart the app.
 
 For packaged-app verification, simulate a Finder launch with a minimal environment:
 
 ```sh
 env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-  ~/Applications/Shardlane.app/Contents/MacOS/shardlane &
-grep -a "herdr:" /tmp/shardlane-lag.log | head -1
+  ~/Applications/Solco.app/Contents/MacOS/solco &
+grep -a "herdr:" /tmp/solco-lag.log | head -1
 ```
 
 ### 2.3 Step-by-step packaging commands
@@ -103,8 +103,8 @@ scripts/package-macos.sh \
   --install
 ```
 
-`--install` is an explicit action; the script only replaces `Shardlane.app` under
-`SHARDLANE_INSTALL_ROOT` (default `~/Applications`) and never touches other apps.
+`--install` is an explicit action; the script only replaces `Solco.app` under
+`SOLCO_INSTALL_ROOT` (default `~/Applications`) and never touches other apps.
 Without Developer ID credentials the script uses ad-hoc signing, suitable for local runs
 and structural verification; with credentials, pass them in:
 
@@ -121,8 +121,8 @@ The script reports success only after the following gates:
    after the merge completes**;
 4. Recursively checks every Mach-O inside the bundle (Universal 2 must contain both
    `arm64` and `x86_64`);
-5. Checks `Contents/MacOS/shardlane` is executable;
-6. Checks `CFBundleIdentifier = dev.shardlane.app` and a valid `Info.plist`;
+5. Checks `Contents/MacOS/solco` is executable;
+6. Checks `CFBundleIdentifier = dev.solco.app` and a valid `Info.plist`;
 7. Checks the `.icns` was generated;
 8. `codesign --verify --deep --strict` with the ad-hoc/specified identity;
 9. If `--with-mobile-web` is enabled, checks `Contents/Resources/mobile-web/index.html` exists.
@@ -130,10 +130,10 @@ The script reports success only after the following gates:
 Artifact locations:
 
 ```text
-target/debug/bundle/osx/Shardlane.app
-target/release/bundle/osx/Shardlane.app
-target/<target-triple>/release/bundle/osx/Shardlane.app
-target/aarch64-apple-darwin/release/bundle/osx/Shardlane.app  # final Universal 2 bundle
+target/debug/bundle/osx/Solco.app
+target/release/bundle/osx/Solco.app
+target/<target-triple>/release/bundle/osx/Solco.app
+target/aarch64-apple-darwin/release/bundle/osx/Solco.app  # final Universal 2 bundle
 ```
 
 Real signing, notarization, Gatekeeper, and installation on external machines after
@@ -146,12 +146,12 @@ The Remote API and Mobile Web share one listening port (serving `/api/v1` and th
 Web together, same-origin, no CORS). Default `8757`; when multiple apps/services conflict
 on the same Mac, change the port directly in **Settings → Mobile → Port** (1024–65535;
 Enter submits, restarts the listener, and persists `remote.port` in
-`~/.shardlane/config.json`). Port semantics:
+`~/.solco/config.json`). Port semantics:
 
 - `RemoteConfig::default()` and serde-missing fields → `DEFAULT_REMOTE_PORT` (8757);
 - an explicit `0` in the config file is normalized to 8757 at load time (the server
   bind layer's `0=ephemeral` is for explicit test construction only);
-- tests/CI isolation override via the `SHARDLANE_REMOTE_PORT` environment variable
+- tests/CI isolation override via the `SOLCO_REMOTE_PORT` environment variable
   (spawned copies only, never persisted).
 
 When listening fails (port occupied), the Mobile page's Listener row shows a failure
@@ -166,7 +166,7 @@ verified `.app`:
 
 ```sh
 scripts/archive-macos.sh \
-  --app target/aarch64-apple-darwin/release/bundle/osx/Shardlane.app \
+  --app target/aarch64-apple-darwin/release/bundle/osx/Solco.app \
   --output-dir dist \
   --architecture universal2
 ```
@@ -174,15 +174,15 @@ scripts/archive-macos.sh \
 Output:
 
 ```text
-dist/Shardlane-macos-universal2.zip
-dist/Shardlane-macos-universal2.zip.sha256
+dist/Solco-macos-universal2.zip
+dist/Solco-macos-universal2.zip.sha256
 ```
 
 Verify from inside `dist/`:
 
 ```sh
 cd dist
-shasum -a 256 -c Shardlane-macos-universal2.zip.sha256
+shasum -a 256 -c Solco-macos-universal2.zip.sha256
 ```
 
 `.github/workflows/release.yml` runs the same archive script on `v*` tags and uploads
@@ -196,7 +196,7 @@ private key (`.p12`).
 must never start Herdr/PTY on the Web side:
 
 ```text
-Shardlane.app
+Solco.app
 └── Contents/Resources/mobile-web/   ← herdr-mobile/dist (static files)
     ├── index.html
     ├── _expo/
@@ -206,16 +206,16 @@ Shardlane.app
 `scripts/bundle-web.sh` is the only cross-repo copy entry point:
 
 ```sh
-# Development: copy into target/mobile-web and print SHARDLANE_WEB_BUNDLE
+# Development: copy into target/mobile-web and print SOLCO_WEB_BUNDLE
 scripts/bundle-web.sh ../herdr-mobile
 
 # Packaging: copy into the already-built app's Resources/mobile-web
-scripts/bundle-web.sh ../herdr-mobile --app target/release/bundle/osx/Shardlane.app
+scripts/bundle-web.sh ../herdr-mobile --app target/release/bundle/osx/Solco.app
 ```
 
 `web_bundle_path()` resolves in this order:
 
-1. `SHARDLANE_WEB_BUNDLE` (development override);
+1. `SOLCO_WEB_BUNDLE` (development override);
 2. the packaged `Contents/Resources/mobile-web`;
 3. with no static bundle, the Web surface is not mounted.
 
@@ -228,11 +228,11 @@ Never write tokens into the Web bundle, localStorage, or plain logs.
 ### A. Mac native shell / GPUI
 
 ```sh
-SDKROOT="$(xcrun --show-sdk-path)" crepus dev --bin shardlane
+SDKROOT="$(xcrun --show-sdk-path)" crepus dev --bin solco
 ```
 
 Verify windows, Sidebar, Settings, Terminal, and the Remote toggle here first. For native
-issues, check `/tmp/shardlane-lag.log` first; record panics, native crashes, hangs, and
+issues, check `/tmp/solco-lag.log` first; record panics, native crashes, hangs, and
 clean exits separately — do not conflate the four with "Web white screen".
 
 ### B. Mobile Web UI hot reload
@@ -253,7 +253,7 @@ do not hand-write another proxy or business service.
 
 ### C. Real Mac Host + Web integration
 
-1. Start A; enable Remote Access in Shardlane Settings → Mobile/Remote.
+1. Start A; enable Remote Access in Solco Settings → Mobile/Remote.
 2. Verify the Host first:
 
    ```sh
@@ -267,8 +267,8 @@ do not hand-write another proxy or business service.
    ```sh
    cd ../herdr-mobile && pnpm export:web
    cd ../herdr-client && scripts/bundle-web.sh ../herdr-mobile
-   SHARDLANE_WEB_BUNDLE="$PWD/target/mobile-web" \
-     SDKROOT="$(xcrun --show-sdk-path)" crepus dev --bin shardlane
+   SOLCO_WEB_BUNDLE="$PWD/target/mobile-web" \
+     SDKROOT="$(xcrun --show-sdk-path)" crepus dev --bin solco
    ```
 
 4. Open the Host-served Web or the `prox` same-origin address at phone width in a
@@ -289,11 +289,11 @@ export path errors, CORS/auth errors, Remote DTO errors, and Herdr runtime error
 | Symptom | First checkpoint | Do not |
 | --- | --- | --- |
 | `.app` double-click shows no icon / stale icon | `Contents/Resources/*.icns`, `CFBundleIconFile`, Finder cache | Manually copying the icon into the bundle and forgetting Cargo metadata |
-| Web 404/blank | `dist/index.html`, `SHARDLANE_WEB_BUNDLE`, `Contents/Resources/mobile-web` | Writing another Web server inside the Mac app |
+| Web 404/blank | `dist/index.html`, `SOLCO_WEB_BUNDLE`, `Contents/Resources/mobile-web` | Writing another Web server inside the Mac app |
 | `401/403` | whether the token only travels via Authorization/WS subprotocol, whether Remote is enabled | Putting the token in URL query, localStorage, or logs |
 | Browser CORS | development Origin allowlist; production prefers Host same-origin | Opening up `*` arbitrarily |
 | API returns data but the UI does not refresh | bootstrap/queries, event bridge, polling fallback | Letting the Web own Herdr/PTY state itself |
-| Mac-side latency/hang | `/tmp/shardlane-lag.log`, Herdr socket, visible-pane projection | Triggering a full `visible_state()` per output byte |
+| Mac-side latency/hang | `/tmp/solco-lag.log`, Herdr socket, visible-pane projection | Triggering a full `visible_state()` per output byte |
 
 Minimal acceptance order for cross-repo changes:
 
@@ -322,7 +322,7 @@ state cannot serve as a product baseline.
 - Mobile Web is only an Agent-first Host client; Terminal is an advanced fallback and
   must not take over the Mac's terminal controller.
 - The static Web artifact is a packaging-time input; business logic belongs to
-  `herdr-mobile`, serving/auth belongs to Shardlane Remote.
+  `herdr-mobile`, serving/auth belongs to Solco Remote.
 - Any new configuration goes to the existing Cargo/package or Mobile configuration
   owner first; never build a second manifest for a name or icon.
 - Use mature APIs and existing verification scripts before adding custom native/web bridges.

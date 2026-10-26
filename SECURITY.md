@@ -10,13 +10,13 @@ Include what you can of the usual details: affected component, reproduction step
 
 In scope:
 
-- the Shardlane macOS client (`shardlane` binary, `shardlane-host` application services, `shardlane-remote` Host Remote API server: pairing, access tokens, bind modes, SSH socket bridging);
-- the vendored artifacts Shardlane builds and ships: `libghostty-vt` and the patched `vendor/gpui` tree;
-- the packaged `Shardlane.app` bundle and its release archives.
+- the Solco macOS client (`solco` binary, `solco-host` application services, `solco-remote` Host Remote API server: pairing, access tokens, bind modes, SSH socket bridging);
+- the vendored artifacts Solco builds and ships: `libghostty-vt` and the patched `vendor/gpui` tree;
+- the packaged `Solco.app` bundle and its release archives.
 
 Out of scope:
 
-- the **Herdr runtime itself** — Shardlane's backend is a separate project; report Herdr issues to its own maintainers;
+- the **Herdr runtime itself** — Solco's backend is a separate project; report Herdr issues to its own maintainers;
 - external coding-agent CLIs and providers that run inside Herdr;
 - issues that require a non-default, explicitly insecure local configuration.
 

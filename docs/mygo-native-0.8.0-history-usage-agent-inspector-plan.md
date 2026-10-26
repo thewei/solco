@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.8.0 — History Management, Usage & Agent Inspector Plan
+# Solco MyGo 0.8.0 — History Management, Usage & Agent Inspector Plan
 
 Status: **planned post-0.7 release**
 Target: `0.8.0`
@@ -16,7 +16,7 @@ Goal:
 > expose trustworthy Agent/Session/Project usage, and provide one Agent Inspector combining
 > runtime, integration, model, usage, quota and session identity without changing Herdr ownership.
 
-0.8 borrows heavily from the product ideas observed in `yetone/magpie`, but it does **not** make Shardlane a mandatory model gateway.
+0.8 borrows heavily from the product ideas observed in `yetone/magpie`, but it does **not** make Solco a mandatory model gateway.
 
 ## 2. Scope
 
@@ -62,7 +62,7 @@ internal/gui/trayusage.go
 internal/gateway/*
 ```
 
-Adopt observable management/accounting behavior where it fits Shardlane. Do not copy its Wails/WebView mechanics or gateway ownership model.
+Adopt observable management/accounting behavior where it fits Solco. Do not copy its Wails/WebView mechanics or gateway ownership model.
 
 ## 4. Architecture
 
@@ -108,7 +108,7 @@ Rules:
 
 ## 5. History grouped by Project
 
-Shardlane already owns normalized `project_key`, `project_name`, and a SQLite index on `project_key`.
+Solco already owns normalized `project_key`, `project_name`, and a SQLite index on `project_key`.
 
 ### 5.1 Group identity
 
@@ -295,7 +295,7 @@ No stale mutation.
 
 ## 10. Trash layout
 
-Use a Shardlane-owned root under application user data.
+Use a Solco-owned root under application user data.
 
 ```text
 trash/history/<provider>/<trash-key>/
@@ -356,7 +356,7 @@ Cross-volume moves need an explicitly tested safe copy/verify/remove path; do no
 
 ```text
 load TrashManifest by key
-→ verify key resolves inside Shardlane trash root
+→ verify key resolves inside Solco trash root
 → verify stored items exist
 → check original path collisions
 → restore all items
@@ -397,7 +397,7 @@ Both require explicit destructive confirmation.
 
 Initial default:
 
-> Shardlane never auto-purges History Trash.
+> Solco never auto-purges History Trash.
 
 A retention policy can be a later opt-in setting.
 
@@ -513,7 +513,7 @@ If a provider integration exposes quota/account usage safely, normalize through 
 
 ### Future optional gateway source
 
-If Shardlane later gains an optional gateway/proxy module, it may contribute `GatewayObserved` records through the same UsageService.
+If Solco later gains an optional gateway/proxy module, it may contribute `GatewayObserved` records through the same UsageService.
 
 The 0.8 domain must not require this source.
 
@@ -540,7 +540,7 @@ Today
 All
 ```
 
-Do not read/parse transcripts on every aggregate query. Usage observations belong in a derived Shardlane-owned catalog/index.
+Do not read/parse transcripts on every aggregate query. Usage observations belong in a derived Solco-owned catalog/index.
 
 ## 19. Usage storage
 
@@ -595,12 +595,12 @@ Initial safe rule:
 
 ## 21. Cost model
 
-Cost is an estimate unless Shardlane has authoritative billing information.
+Cost is an estimate unless Solco has authoritative billing information.
 
 Suggested price precedence:
 
 ```text
-explicit Shardlane provider/model override
+explicit Solco provider/model override
 → provider catalog tariff
 → known model catalog tariff
 → unknown/unpriced
@@ -840,7 +840,7 @@ Health/latency
 Request identity
 ```
 
-But Shardlane 0.8 does not implement:
+But Solco 0.8 does not implement:
 
 ```text
 mandatory proxy
@@ -1061,13 +1061,13 @@ Do not log transcript content.
 4. Project group shows accurate session count/latest activity.
 5. Session usage shows known model/tokens without parsing during render.
 6. Read-only provider sessions have no Delete action.
-7. Trashable inactive session moves to Shardlane Trash and disappears from normal History.
+7. Trashable inactive session moves to Solco Trash and disappears from normal History.
 8. Live Agent session cannot be deleted.
 9. Recently written source cannot be deleted.
 10. Partial move failure restores the original source set.
 11. Restore returns all source items to original paths.
 12. Restore refuses path collision.
-13. Delete Forever removes only inside the Shardlane trash root.
+13. Delete Forever removes only inside the Solco trash root.
 14. Empty Trash requires confirmation.
 15. No Trash action accepts an arbitrary user path from UI.
 16. Usage Today/7d/30d/All aggregates correctly.
@@ -1111,7 +1111,7 @@ Do not log transcript content.
 - [ ] Native Usage page works;
 - [ ] Agent Inspector works;
 - [ ] 0.7 Status Center consumes the authoritative UsageService;
-- [ ] Shardlane is not turned into a mandatory model gateway;
+- [ ] Solco is not turned into a mandatory model gateway;
 - [ ] provider credentials are not stored in usage records;
 - [ ] no transcript bodies are stored in usage records;
 - [ ] full tests/security checks/build pass.
@@ -1132,7 +1132,7 @@ Sidebar density / high contrast
 New Task Presets
 ```
 
-Reference audit: `docs/reference-magpie-herdr-gpui-shardlane-0.9-audit.md`.
+Reference audit: `docs/reference-magpie-herdr-gpui-solco-0.9-audit.md`.
 Plan: `docs/mygo-native-0.9.0-workspace-intelligence-desktop-experience-plan.md`.
 Prompt: `docs/prompts/mygo-native-0.9.0-workspace-intelligence-desktop-experience-implementation-prompt.md`.
 

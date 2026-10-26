@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.4.0 — Operational Closure & UI System Plan
+# Solco MyGo 0.4.0 — Operational Closure & UI System Plan
 
 Status: **proposed next implementation release**
 Target: `0.4.0`
@@ -395,7 +395,7 @@ HerdrManaged
 Unsupported
 ```
 
-But map them through the newer strategy authority; never install a parallel Shardlane lifecycle hook when Herdr official integration is the authority.
+But map them through the newer strategy authority; never install a parallel Solco lifecycle hook when Herdr official integration is the authority.
 
 ### INT-07 — audit cadence
 

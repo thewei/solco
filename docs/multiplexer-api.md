@@ -14,10 +14,10 @@ path opens the `tmux attach` child through `open_shared_session`).
 the Herdr bind path are click-verified in the running app; the final tmux
 row → attach click-through could not be completed by desktop automation (the
 unbundled/scratch app lacks a stable bundle identity and synthetic clicks are
-unreliable next to the user's live Shardlane instance), so it is handed over
+unreliable next to the user's live Solco instance), so it is handed over
 as the manual checklist:
 
-1. launch the isolated acceptance runtime (`/tmp/shardlane-mux-accept.sh`,
+1. launch the isolated acceptance runtime (`/tmp/solco-mux-accept.sh`,
    isolated HOME + dedicated Herdr socket + a throwaway `demo-proj` tmux
    server; Ctrl-C tears everything down) or against your real runtimes;
 2. in the instance picker click the `tmux:default` row — the hosted terminal
@@ -35,7 +35,7 @@ proper `.app` bundle and rejects stale same-bundle-id instances before launch;
 the isolated bind, the hosted `tmux attach` surface, and the chrome projection
 are click-verified against the throwaway `demo-proj` server. Two acceptance-
 blocking defects were found and fixed in that run: the
-`SHARDLANE_TMUX_SOCKET` isolated-testing seam was ignored by the Default bind
+`SOLCO_TMUX_SOCKET` isolated-testing seam was ignored by the Default bind
 and instance probe (the acceptance app silently attached to the user's real
 tmux server), and the focused-pane projection picked the first window's pane
 (`pane_active` is window-scoped), whose never-resized geometry fed the GUI
@@ -93,11 +93,11 @@ app pid, heartbeat it, and re-check liveness before asserting any negative
 
 ## 1. Current facts and approved direction
 
-**Current.** `crates/shardlane-host/src/herdr.rs` defines `HerdrClient`, the only
+**Current.** `crates/solco-host/src/herdr.rs` defines `HerdrClient`, the only
 runtime-boundary implementation: a sync socket-RPC client (~60 public methods) plus
 session/TUI/CLI helper functions. The macOS shell holds it concretely
-(`ShardlaneApp.client: Option<HerdrClient>`, roughly 110 call sites across the shell
-impl modules); `shardlane-remote` constructs it per request (`connect_herdr_for`) behind
+(`SolcoApp.client: Option<HerdrClient>`, roughly 110 call sites across the shell
+impl modules); `solco-remote` constructs it per request (`connect_herdr_for`) behind
 the `?instance=<session>` seam. What GUI and Remote actually consume is narrower than
 the RPC list: the `HerdrState`/navigation/tab-surface snapshots, the `HerdrEvent` stream
 (global + pane-scoped), structural Workspace/Tab/Pane operations, one per-instance
@@ -105,7 +105,7 @@ hosted-TUI VT byte stream (`HerdrTuiSession`: subscribe / send_bytes / resize / 
 and pane history reads.
 
 **Approved Next.** Introduce a backend-neutral **Multiplexer API** in a new
-`shardlane-host` `mux` module. Herdr is adapter #1, wrapping `HerdrClient` unchanged.
+`solco-host` `mux` module. Herdr is adapter #1, wrapping `HerdrClient` unchanged.
 **tmux is adapter #2 and is in scope for this effort as a capability-degraded MVP**
 (terminal multiplexing only; see §10, Phase 5). The macOS shell and every Remote route
 migrate to consume the seam. The Herdr wire contract and the Remote v2 API shapes do
@@ -164,7 +164,7 @@ Enforcement:
 
 1. this catalog is normative: a UI capability without a catalog entry fails review;
 2. code-level closure: after P2 (Remote) and P3 (GUI), concrete `HerdrClient` /
-   `shardlane_host::herdr::*` references are allowed only in a reviewed whitelist
+   `solco_host::herdr::*` references are allowed only in a reviewed whitelist
    (adapter file, Herdr-protocol escape hatches);
 3. wire preservation: golden fixtures pass with zero updates through P2–P4;
    `UPDATE_FIXTURES=1` must never be needed for the migration.
@@ -172,7 +172,7 @@ Enforcement:
 ## 5. Module layout (approved target)
 
 ```text
-crates/shardlane-host/src/mux/
+crates/solco-host/src/mux/
 ├── mod.rs        # neutral contract: traits, MuxCapabilities, InstanceRef, ID newtypes
 ├── registry.rs   # MuxRegistry: backend id → Arc<dyn Multiplexer>; sole assembly point
 ├── kit.rs        # adapter contract test suite (§9); every backend must pass it
@@ -209,7 +209,7 @@ shape; exact Rust signatures are fixed in Phase 1.
 | mux API | Herdr base | Consumers |
 |---|---|---|
 | `list_instances()` (id, display name, status) | `list_sessions` + `read_session_display_name` | GUI instance picker / sidebar; mobile instances screen |
-| `rename_instance(display_name)` | `write_session_display_name` (store stays Shardlane-owned) | GUI rename; `/api/v2/instances/{id}/rename` |
+| `rename_instance(display_name)` | `write_session_display_name` (store stays Solco-owned) | GUI rename; `/api/v2/instances/{id}/rename` |
 | `stop_instance()` / `delete_instance()` | `stop_session` / `delete_session` | GUI; tmux maps to kill-session / kill-server |
 | `open_instance(InstanceRef) -> Arc<dyn MultiplexerConnection>` | `bootstrap_for_session` / `connect_to` (SSH bridge) / `connect` | window bind; `/api/v2/instances/{id}/bootstrap` |
 
@@ -279,7 +279,7 @@ returns `None` and the corresponding Settings cards degrade (hidden).
 Scripts/Services (launch/observe/control/discovery over Domain 5 primitives),
 Conversations (prompt/queue/continue/delegate), History catalog/search/paging
 (backend-independent by construction — reads provider files, not the mux), ProjectIndex
-bootstrap. These already live UI-independent in `shardlane-host` and are already
+bootstrap. These already live UI-independent in `solco-host` and are already
 exposed by Remote; this effort does not generalize them. Entry points reject
 non-Herdr backends via capability flags.
 
@@ -350,7 +350,7 @@ advertise `MuxCapabilities` at registration; `/api/v2/hello` is driven from it.
    - concurrency: a connection handle is usable from two threads concurrently
      (Send + Sync);
    - registry contract: `open_instance` returns the backend the registry routed to.
-2. **Golden fixtures** (`UPDATE_FIXTURES=1 cargo test -p shardlane-remote --test
+2. **Golden fixtures** (`UPDATE_FIXTURES=1 cargo test -p solco-remote --test
    golden_fixtures` is the regeneration path — NOT to be run during P2–P4): the
    unchanged-fixture run is the wire-preservation proof for every Remote v2 route.
 3. **Mobile Zod mirror** (`herdr-mobile/src/contracts/host.ts`): untouched; `pnpm
@@ -372,7 +372,7 @@ advertise `MuxCapabilities` at registration; `/api/v2/hello` is driven from it.
 | Sidebar Project/Tab/Pane projection and navigation | existing GUI tests + kit snapshots + manual smoke |
 | Tab strip ops (create/rename/move/close/drag) | GUI seam unit tests + manual |
 | Pane ops incl. right-click menu (Rename/Move/Swap/Split/Zoom/Process Info/Close) | GUI seam unit tests + manual checklist |
-| Terminal input/IME/paste/mouse/focus quality | `crepus dev` smoke + `/tmp/shardlane-lag.log` inspection; keyrepeat/scroll A/B scripts not required (byte path untouched) unless smoke shows an anomaly |
+| Terminal input/IME/paste/mouse/focus quality | `crepus dev` smoke + `/tmp/solco-lag.log` inspection; keyrepeat/scroll A/B scripts not required (byte path untouched) unless smoke shows an anomaly |
 | Reconnect (kill server → overlay → restart → recovery) | existing tests + manual |
 | Instance list / rename / open / SSH-bridge probe | existing tests + manual |
 | Scripts / Services lifecycle | existing tests + one manual script run |
@@ -393,7 +393,7 @@ git diff --check
 git diff --cached --check
 ```
 
-Phase 2 adds the unchanged-fixture run; Phases 3–4 add `crepus dev --bin shardlane`
+Phase 2 adds the unchanged-fixture run; Phases 3–4 add `crepus dev --bin solco`
 smoke + lag-log inspection; Phase 5 adds the tmux kit run and a manual tmux-instance
 smoke. Work on uncommitted trees is forbidden: the currently open shell changes are
 committed or stashed before Phase 1 starts.
@@ -403,8 +403,8 @@ committed or stashed before Phase 1 starts.
 | Phase | Content | Merge criteria | Effort |
 |---|---|---|---|
 | P1 | `mux/{mod,registry,kit,herdr}.rs`: traits + full catalog + `HerdrClient`/`HerdrBackend`/`HerdrTuiSession` impls; kit red→green; zero consumer migration | gates green; no GUI/Remote behavior change | 2–3 d |
-| P2 | `shardlane-remote` onto the seam (`connect_herdr_for` → registry, handlers over `&dyn MultiplexerConnection`, protocol gate via escape hatch; `hello` capabilities from registry) | gates + fixtures unchanged | 1–2 d |
-| P3a | GUI navigation/render: `ShardlaneApp.client` → `Arc<dyn MultiplexerConnection>`, bind sites via registry, `shell_navigation`/`shell_render`/`sidebar` | gates + smoke + lag log | 1–2 d |
+| P2 | `solco-remote` onto the seam (`connect_herdr_for` → registry, handlers over `&dyn MultiplexerConnection`, protocol gate via escape hatch; `hello` capabilities from registry) | gates + fixtures unchanged | 1–2 d |
+| P3a | GUI navigation/render: `SolcoApp.client` → `Arc<dyn MultiplexerConnection>`, bind sites via registry, `shell_navigation`/`shell_render`/`sidebar` | gates + smoke + lag log | 1–2 d |
 | P3b | GUI structural ops: `shell_panes`/`rename`/`shell_tabs`/`shell_input` | gates + smoke | 1–2 d |
 | P3c | GUI long tail: `scripts/*`, `new_agent/*`, `shell_projects`, `ssh_bridge`, `herdr_tui`, `chat/*`, `history/resume`, `settings_view`; closure grep (whitelist only) | gates + smoke + right-click menu checklist | 1–2 d |
 | P4 | Stream seam: `TuiManagerRegistry` behind `MultiplexerStream`; `herdr_tui` broadcast driven by capabilities | gates + terminal smoke | 1–2 d |
@@ -425,4 +425,4 @@ present on the dev machine (other machines need tmux installed).
 - Documentation truth: when P5 lands a second runtime, the canonical "Herdr is the
   sole runtime authority" wording is amended then — not by this approval. P1 also
   updates the ownership-router lines in `AGENTS.md` and the development skill
-  (Herdr wrappers now live in `shardlane-host`; `mux` owns the neutral seam).
+  (Herdr wrappers now live in `solco-host`; `mux` owns the neutral seam).

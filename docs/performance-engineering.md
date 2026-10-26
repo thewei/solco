@@ -1,4 +1,4 @@
-# Shardlane Performance Engineering
+# Solco Performance Engineering
 
 Status: **active engineering contract**
 
@@ -8,7 +8,7 @@ Terminal execution guide: `docs/terminal-interaction-spec.md` (current terminal 
 
 ## 1. Goal
 
-Shardlane performance work must reduce measured user-visible latency or bounded background cost without weakening terminal correctness, Herdr runtime ownership, history fidelity, or recoverability.
+Solco performance work must reduce measured user-visible latency or bounded background cost without weakening terminal correctness, Herdr runtime ownership, history fidelity, or recoverability.
 
 Do not accept “feels faster” as evidence. Every performance change should leave at least one of:
 
@@ -120,7 +120,7 @@ Performance logging is asynchronous and bounded.
 - writer thread owns file IO;
 - every line includes process PID and sequence number.
 
-Do not synchronously `open → write → flush` `/tmp/shardlane-lag.log` for every runtime call. Do not use unbounded logging in hot loops.
+Do not synchronously `open → write → flush` `/tmp/solco-lag.log` for every runtime call. Do not use unbounded logging in hot loops.
 
 ### 2.8 Repeating animations require a lifecycle reason
 
@@ -141,11 +141,11 @@ Do not poll an already asynchronous/runtime event source on a fixed short timer 
 
 The Herdr subscription reader now forwards decoded events through `async-channel`. The GPUI event task awaits the channel indefinitely when there is no pending startup/debounce/reconciliation deadline. An ~80 ms timer is created only while startup completion, navigation quiet-window reconciliation, or Agent reconciliation still needs a deadline check. Runtime events race that temporary timer and win immediately.
 
-The isolated release smoke verified that creating a second Workspace after Shardlane had already become idle still triggered one bounded `workspace.list + tab.list` reconciliation, while stable CPU remained ~0.6%. Preserve this event-driven behavior; do not reintroduce unconditional 80 ms polling.
+The isolated release smoke verified that creating a second Workspace after Solco had already become idle still triggered one bounded `workspace.list + tab.list` reconciliation, while stable CPU remained ~0.6%. Preserve this event-driven behavior; do not reintroduce unconditional 80 ms polling.
 
 ## 3. History performance contract
 
-History is a read-only projection over the external Agent session files. Shardlane stores no conversation content (2026-10-12): the catalog is an in-memory list-row index rebuilt from the provider files, and every transcript read goes to the original file.
+History is a read-only projection over the external Agent session files. Solco stores no conversation content (2026-10-12): the catalog is an in-memory list-row index rebuilt from the provider files, and every transcript read goes to the original file.
 
 ### Current strategy
 
@@ -209,11 +209,11 @@ Keep:
 
 Current local explicit Ghostty changed-frame smoke at 120×40 is approximately 1.5–1.8 ms/frame on the development Mac. A 2026-08-29 real hosted-PTY 100 Hz repeat-input diagnostic initially measured changed-frame extraction at **p50 5.72 ms / p95 9.24 ms** because one changed cell caused a second full-viewport text/color FFI extraction after the RAW-signature scan. Converting the signature result into an exact changed-row plan reduced the same test to about **p50 1.16–1.31 ms / p95 1.96–2.52 ms**; 119/121 sampled changed frames took the `partial changed_rows=1` path. Keep the full-extract fallback for OSC-8/global-color/unsupported-signature cases. Treat all numbers as local regression baselines, not cross-machine SLAs.
 
-The 2026-08-31 real-device repeat-input investigation decomposed the hosted path instead of attributing the delay to Ghostty. Replaying the legacy shared-viewer `try_recv + sleep(16ms)` loop produced **p50 17.78 ms / p95 18.98 ms / max 19.73 ms** from published output to the viewer queue; the event-driven `broadcast::Receiver::blocking_recv` path measured **p50 ≤0.1 ms / p95 ≤0.2 ms** in a clean run (the final rerun under desktop load was **p50 0.03 ms / p95 2.12 ms / max 5.63 ms**, still below the one-tick gate). In an isolated Shardlane app (temporary `HOME` and `HERDR_SOCKET_PATH`), UI enqueue was typically **2–36 µs**, Host writer queue **8–41 µs**, PTY read-to-forward **5–83 µs**, and VT drain **15–34 µs**. After separating the raw frame from the Herdr chrome projection, unchanged repeats took roughly **0.5 ms** for RAW signatures plus **0.16–0.20 ms** frame application; a one-row change took roughly **0.6–1.1 ms** extraction plus **2.4–3.4 ms** presentation. When OSC-8 forces a conservative full extract, the same pass now immediately reseeds RAW signatures (about **88–100 µs** in the isolated trace), so the next repaint takes the fast path instead of a duplicate full extraction. The trace is opt-in (`SHARDLANE_TERMINAL_TRACE=1`) and records lengths/ids/timings only, never text.
+The 2026-08-31 real-device repeat-input investigation decomposed the hosted path instead of attributing the delay to Ghostty. Replaying the legacy shared-viewer `try_recv + sleep(16ms)` loop produced **p50 17.78 ms / p95 18.98 ms / max 19.73 ms** from published output to the viewer queue; the event-driven `broadcast::Receiver::blocking_recv` path measured **p50 ≤0.1 ms / p95 ≤0.2 ms** in a clean run (the final rerun under desktop load was **p50 0.03 ms / p95 2.12 ms / max 5.63 ms**, still below the one-tick gate). In an isolated Solco app (temporary `HOME` and `HERDR_SOCKET_PATH`), UI enqueue was typically **2–36 µs**, Host writer queue **8–41 µs**, PTY read-to-forward **5–83 µs**, and VT drain **15–34 µs**. After separating the raw frame from the Herdr chrome projection, unchanged repeats took roughly **0.5 ms** for RAW signatures plus **0.16–0.20 ms** frame application; a one-row change took roughly **0.6–1.1 ms** extraction plus **2.4–3.4 ms** presentation. When OSC-8 forces a conservative full extract, the same pass now immediately reseeds RAW signatures (about **88–100 µs** in the isolated trace), so the next repaint takes the fast path instead of a duplicate full extraction. The trace is opt-in (`SOLCO_TERMINAL_TRACE=1`) and records lengths/ids/timings only, never text.
 
-The same run showed occasional **0–20 ms** wake-to-main-thread variance (`poll.wake_signal` → `poll.wake`) while the GPUI foreground executor and display refresh were scheduled; this is scheduling jitter after the transport fix, not a second fixed terminal gate. The direct PTY 100 Hz smoke remains in the low-millisecond range (latest post-fix rerun: **p50 0.71 ms / p95 4.37 ms / max 5.84 ms**; prior runs measured p50 0.64 ms / p95 2.43–3.84 ms / max 5.06–6.19 ms), so treat it as a local regression baseline rather than an SLA. Ghostty's visual A/B could not be automated from this environment (the Computer Use connector rejected the Ghostty app; temporary wrappers did open standalone Herdr TUI windows, but not a synchronized same-state timing harness), so these numbers are a Shardlane/PTY baseline, not a claim about Ghostty's Metal renderer. Manual trackpad momentum, true IME candidate composition, and a visible Ghostty-vs-Shardlane screen comparison remain operator checks.
+The same run showed occasional **0–20 ms** wake-to-main-thread variance (`poll.wake_signal` → `poll.wake`) while the GPUI foreground executor and display refresh were scheduled; this is scheduling jitter after the transport fix, not a second fixed terminal gate. The direct PTY 100 Hz smoke remains in the low-millisecond range (latest post-fix rerun: **p50 0.71 ms / p95 4.37 ms / max 5.84 ms**; prior runs measured p50 0.64 ms / p95 2.43–3.84 ms / max 5.06–6.19 ms), so treat it as a local regression baseline rather than an SLA. Ghostty's visual A/B could not be automated from this environment (the Computer Use connector rejected the Ghostty app; temporary wrappers did open standalone Herdr TUI windows, but not a synchronized same-state timing harness), so these numbers are a Solco/PTY baseline, not a claim about Ghostty's Metal renderer. Manual trackpad momentum, true IME candidate composition, and a visible Ghostty-vs-Solco screen comparison remain operator checks.
 
-The repeat-input burst check then isolated a second, independent loss mechanism at the Host seam. A real `herdr` TUI child accepted only **792/2,000** one-byte packets with the old `sync_channel(128)` (1,208 `Backpressure` errors), even though each packet was valid; the bounded replacement queue admitted **2,000/2,000** in **1.76–3.09 ms** across the native reruns (the latest post-fix rerun: **2.04 ms**). Adjacent compatible packets are merged in order, paste/focus packets remain hard boundaries, and a 1 MiB byte budget still fails closed for pathological backlogs. The ignored regression is `shared_tui::tests::shared_tui_burst_input_backpressure_smoke`; the repeatable macOS setup is `scripts/terminal-native-smoke.sh --build`, which isolates `HOME`, `HERDR_SOCKET_PATH`, and `SHARDLANE_LAG_LOG_PATH` and prints the matching Ghostty A/B command. This fixes dropped key-repeat/scroll input; it does not claim a synchronized Ghostty renderer benchmark.
+The repeat-input burst check then isolated a second, independent loss mechanism at the Host seam. A real `herdr` TUI child accepted only **792/2,000** one-byte packets with the old `sync_channel(128)` (1,208 `Backpressure` errors), even though each packet was valid; the bounded replacement queue admitted **2,000/2,000** in **1.76–3.09 ms** across the native reruns (the latest post-fix rerun: **2.04 ms**). Adjacent compatible packets are merged in order, paste/focus packets remain hard boundaries, and a 1 MiB byte budget still fails closed for pathological backlogs. The ignored regression is `shared_tui::tests::shared_tui_burst_input_backpressure_smoke`; the repeatable macOS setup is `scripts/terminal-native-smoke.sh --build`, which isolates `HOME`, `HERDR_SOCKET_PATH`, and `SOLCO_LAG_LOG_PATH` and prints the matching Ghostty A/B command. This fixes dropped key-repeat/scroll input; it does not claim a synchronized Ghostty renderer benchmark.
 
 GPUI presentation follows the same row boundary. A direct 120×40 terminal-line element construction smoke measured about **1.39 ms** for rebuilding all 40 rows versus **52.8 µs** for one retained changed row. `TerminalPane` therefore owns cached `TerminalRowPane` entities: ordinary repeat-key echo should notify only the changed content row plus any old/new cursor row; cursor blink/style changes must not invalidate rows without a cursor. Theme/font/selection changes intentionally invalidate the affected/all rows.
 
@@ -245,7 +245,7 @@ git diff --cached --check
 
 ### Step 2 — reproduce with decomposed logging
 
-Use `/tmp/shardlane-lag.log`. Every new diagnostics line must be bounded and useful for deciding ownership or work.
+Use `/tmp/solco-lag.log`. Every new diagnostics line must be bounded and useful for deciding ownership or work.
 
 For multi-instance tests, filter by PID and isolate both `HERDR_SOCKET_PATH` and the config/state root. The current TUI-only client no longer owns per-Pane `--takeover` controllers; do not use historical controller-disconnect measurements as the hosted-TUI production baseline.
 
@@ -319,9 +319,9 @@ Release idle ~0.6% CPU in the latest isolated event-driven smoke
 
 The current normal surface is one hosted `herdr` child/PTY, not per-Pane controller attach/preload. Historical per-Pane `pane.read`/controller timings are archived evidence only and must not guide current hot-path work.
 
-Herdr 0.8.2 renders Sidebar/tab chrome on the server. A native A/B showed that letting the server render chrome and cropping it in Shardlane cost about **1.2–1.8 ms/frame** in the projection/cloning path; when a fresh Shardlane-started server and child both use the merged runtime config with Sidebar/tab chrome removed at source, the same projection seam was effectively **0–1 µs** and `projected=false`. The 2026-09-18 ruling deleted the crop seam; the second 2026-09-19 revision resurrected it as the sanctioned answer to Herdr 0.9.1's missing always-hide key (`TuiChromeProjection`, `TerminalFrame::project_rect`, chrome probes, and the compensated-grid resize are back). Cost containment is unchanged in kind: single-Tab windows need no crop (the startup migration keeps `ui.hide_tab_bar_when_single_tab = true`), the projection runs once per applied frame with Arc-cloned raw baselines, and `stage=frame.apply` traces again carry `projected=` so regressions are visible. The raw frame remains the plan/signature baseline; the projected frame is the painted grid.
+Herdr 0.8.2 renders Sidebar/tab chrome on the server. A native A/B showed that letting the server render chrome and cropping it in Solco cost about **1.2–1.8 ms/frame** in the projection/cloning path; when a fresh Solco-started server and child both use the merged runtime config with Sidebar/tab chrome removed at source, the same projection seam was effectively **0–1 µs** and `projected=false`. The 2026-09-18 ruling deleted the crop seam; the second 2026-09-19 revision resurrected it as the sanctioned answer to Herdr 0.9.1's missing always-hide key (`TuiChromeProjection`, `TerminalFrame::project_rect`, chrome probes, and the compensated-grid resize are back). Cost containment is unchanged in kind: single-Tab windows need no crop (the startup migration keeps `ui.hide_tab_bar_when_single_tab = true`), the projection runs once per applied frame with Arc-cloned raw baselines, and `stage=frame.apply` traces again carry `projected=` so regressions are visible. The raw frame remains the plan/signature baseline; the projected frame is the painted grid.
 
-Every Shardlane path that may need to start/restart Herdr (startup, manual Refresh reconnect, event reconnect, New Project reconnect) must pass the same validated derived config path. A Settings presentation change first prepares that merged config off the UI thread; if the current client bootstrap itself started the server with the supplied path, it reloads that server before restarting the child. Pre-existing/user-owned servers remain read-only.
+Every Solco path that may need to start/restart Herdr (startup, manual Refresh reconnect, event reconnect, New Project reconnect) must pass the same validated derived config path. A Settings presentation change first prepares that merged config off the UI thread; if the current client bootstrap itself started the server with the supplied path, it reloads that server before restarting the child. Pre-existing/user-owned servers remain read-only.
 
 ### History
 

@@ -1,7 +1,7 @@
 # UI Computer-Use Findings — 2026-10-06
 
-用 Computer Use MCP（`agent.computerUse`，AX 优先 + 坐标兜底）实机操作 Shardlane
-`next/` MyGo 客户端（build/darwin-arm64/Shardlane.app，commit-detail 工作树），
+用 Computer Use MCP（`agent.computerUse`，AX 优先 + 坐标兜底）实机操作 Solco
+`next/` MyGo 客户端（build/darwin-arm64/Solco.app，commit-detail 工作树），
 逐界面巡检发现的问题清单。运行时真值以 Herdr CLI / 应用日志核对，不以截图为唯一证据。
 
 被测实例：pid 98103（用户 04:52 启动的 `open` 实例 + 我方复测实例，同 binary）。
@@ -11,7 +11,7 @@
 
 | # | 严重度 | 界面 | 问题 | 修复 |
 |---|--------|------|------|------|
-| F1 | P1 | 进程级 | 两次进程消失均无任何日志/崩溃报告（一次为 04:52 前的僵尸实例自行退出；一次为 76708 在 Changes→commit 详情→返回→切 Terminal 后消失，无 `native shell closing`，无 .ips）。Go panic 的 stderr 直接进 /dev/null，事后完全不可诊断。 | `applog` 增加 bounded stderr tee：panic/原生崩溃栈落入 shardlane.log（2MiB 轮转上限内）。 |
+| F1 | P1 | 进程级 | 两次进程消失均无任何日志/崩溃报告（一次为 04:52 前的僵尸实例自行退出；一次为 76708 在 Changes→commit 详情→返回→切 Terminal 后消失，无 `native shell closing`，无 .ips）。Go panic 的 stderr 直接进 /dev/null，事后完全不可诊断。 | `applog` 增加 bounded stderr tee：panic/原生崩溃栈落入 solco.log（2MiB 轮转上限内）。 |
 | F2 | P1 | Command Center | 「Settings — Appearance」目标 `/settings/appearance` 不存在 → 设置页渲染 "Unknown settings section" 死页（无导航高亮、无内容）。 | 目标改为 `/settings/general`；settings 布局对未知 section 回落 General，不再出现死页。 |
 | F3 | P1 | Changes → commit 详情 | 头部 "Back to Local Changes" 按钮为整行宽度，AX bounds 与提交标题/meta 文本完全重叠（z 冲突），标题上半被裁剪。 | 提交详情头部重排：标题/meta 一行，Back 按钮独立右上角，不再覆盖文本。 |
 | F4 | P2 | Changes 面板 repo bar | 分支/Tags/Stashes/Worktrees chips 行溢出 250px 面板：`Worktrees 1` chip 右缘越过分隔线被截断（AX bounds x190..272 > 250）。 | chips 收缩 + 省略号，行不再溢出面板。 |
@@ -20,7 +20,7 @@
 | F7 | P2 | Right Panel | Files 标签：文件树完全不渲染且无任何空态/错误提示；Services 标签：整个内容区空白；Changes 标签（无变更时）无 "no changes" 提示。 | 三个标签补齐空态文案；Files 空树给出项目/cwd 上下文提示。 |
 | F8 | P2 | Sidebar | 切到 Changes 界面后侧栏顶部工具（New Task / Search / History / Right Panel 开关）整排消失，只剩 Right Panel 开关——导航入口全部不可达（只能靠快捷键）。 | 工具行在所有界面/路由保持可见。 |
 | F9 | P3 | Search → 工作区 | 点击搜索结果导航后，侧栏 Workspace 区块一度只剩标题（观察一次，未复现；代码中 `projectsOpen` 无其他 false 写入者，疑似投影刷新瞬间）。记录待验证轮观察，未盲改。 | 无（待观察） |
-| F10 | P2 | Settings → Diagnostics | 版本串硬编码：显示 "Shardlane 0.9.0 / MyGo 0.2.7"，实际 mygo.json 为 0.10.0、go.mod 为 MyGo 0.2.9。 | 版本改为构建信息推导（debug.ReadBuildInfo），应用版本单一来源。 |
+| F10 | P2 | Settings → Diagnostics | 版本串硬编码：显示 "Solco 0.9.0 / MyGo 0.2.7"，实际 mygo.json 为 0.10.0、go.mod 为 MyGo 0.2.9。 | 版本改为构建信息推导（debug.ReadBuildInfo），应用版本单一来源。 |
 
 ## 观察 / 记录在案（不在本轮修）
 
@@ -33,15 +33,15 @@
 
 ## 验证基线
 
-- 输入链路：终端 paste `echo SHARDLANE_UITEST_MARKER` + Return → 终端回显 + `herdr pane read` 可见，链路健康。
+- 输入链路：终端 paste `echo SOLCO_UITEST_MARKER` + Return → 终端回显 + `herdr pane read` 可见，链路健康。
 - 简单界面切换（Changes↔Terminal）、搜索过滤、命令中心过滤/执行、设置页各 section、会话切换器菜单均工作正常。
 - 本轮未复现 F1 的 panic 本身；F1 的价值是让下一次（若发生）可诊断。
 
 ## 修复验证（2026-10-06 重建后实机复核）
 
-重建 `go tool mygo build`（Shardlane 0.10.0）后逐项 Computer Use 复核：
+重建 `go tool mygo build`（Solco 0.10.0）后逐项 Computer Use 复核：
 
-- F1 ✅ `~/Library/Logs/Shardlane/shardlane.log.stderr` 已创建（捕获生效）；单元测试覆盖 fd2 路由与超限轮转。
+- F1 ✅ `~/Library/Logs/Solco/solco.log.stderr` 已创建（捕获生效）；单元测试覆盖 fd2 路由与超限轮转。
 - F2 ✅ 命令中心「Settings — Appearance」落到 Settings General 页，无 Unknown section 死页。
 - F3 ✅ 提交详情头部单行卡片：标题省略号截断、hash 与 Back 按钮右侧独立，无重叠无裁剪。
 - F4 ✅ repo bar chips 收敛（dev / Tag… / Stash… / Worktr…），不再越过面板边缘。
@@ -49,7 +49,7 @@
 - F6 ✅ Right Panel 标签条固定面板顶部。
 - F7 ✅ Files 标签渲染完整文件树；Services 显示 Scripts 空态 + 真实监听端口（:5189 Open Preview）；Changes 显示 "No changed files" + Total 页脚。
 - F8 ✅ Changes 界面侧栏第一行保留 New Task/Search/History/Right Panel 工具，repo bar 移至其下独立一行。
-- F10 ✅ Diagnostics 显示 "Shardlane 0.10.0 (Go go1.27.1 / MyGo 0.2.9)"。
+- F10 ✅ Diagnostics 显示 "Solco 0.10.0 (Go go1.27.1 / MyGo 0.2.9)"。
 
 回归门禁：`go test ./...` 全绿（含更新后的 `TestSidebarSplitPanesAndRepoBar`——旧断言固定"diff 界面必须隐藏应用动作"，已按 F8 新契约更新为"应用动作在所有界面保持可见"）；`go tool mygo build` 成功；`git diff --check` / `git diff --cached --check` 干净。
 
@@ -58,7 +58,7 @@
 # Round 2 — 用户/PM 双视角系统巡检（目标 100+ 项）
 
 编号从 F11 续编。方法：Computer Use 实机操作 + herdr/日志后端真值 + 代码核对；
-对照物：Moshi.app（本机运行中）与原 Rust Shardlane（docs/reference-godiff-shardlane-0.10-audit.md 的差距矩阵）。
+对照物：Moshi.app（本机运行中）与原 Rust Solco（docs/reference-godiff-solco-0.10-audit.md 的差距矩阵）。
 
 ## 台账（滚动追加）
 
@@ -66,11 +66,11 @@
 |---|------|--------|------|-----------|------|
 | F11 | PM | P2 | 快捷键 | settings.json 的 `shortcuts` 字段被持久化但无任何消费者——实际绑定硬编码在 `defaultShortcutBindings`，用户改配置不生效（代码核实 ShortcutSettings 无读取方）。 | ✅ 已修：`shortcutBindings()` 以持久化设置为权威、解析失败按项回退默认；含回归测试。 |
 | F12 | 用户 | P3 | 标题栏 | 面包屑下的 cwd 路径行截断（如 `/Users/wilson/Workspaces/wh-studio/mcp-f…`）且无 tooltip，完整路径不可得。 | ✅ 已修：路径行加 Tooltip(cwd)。 |
-| F13 | PM | P2 | 菜单栏 | 菜单栏只有 Shardlane/Edit/Window：New Task/Search/History/Settings 等核心命令在菜单栏完全不可发现（MyGo MenuItem 支持 Click+Accelerator，纯遗漏）。 | ✅ 已修：新增 Go 菜单（8 项命令 + 加速器；toggle 项不带加速器避免与 ⌥⌘B 双触发）。 |
+| F13 | PM | P2 | 菜单栏 | 菜单栏只有 Solco/Edit/Window：New Task/Search/History/Settings 等核心命令在菜单栏完全不可发现（MyGo MenuItem 支持 Click+Accelerator，纯遗漏）。 | ✅ 已修：新增 Go 菜单（8 项命令 + 加速器；toggle 项不带加速器避免与 ⌥⌘B 双触发）。 |
 | F14 | PM | P3 | 文案 | 同一开关两套名字：标题栏 "Show Tools/Hide Tools" vs 侧栏 "Show Right Panel/Hide Right Panel"，读起来像两个功能。 | ✅ 已修：统一为 Show/Hide Right Panel，并补 ⌥⌘B tooltip。 |
 | F15 | 用户 | P3 | History | 打开 History 页第一行即呈蓝色选中态（ListState.Selected 初始为 0），用户并未选择；误导"当前有会话被打开"。 | ✅ 已修：列表加载后 `listSelected = -1`。 |
 | F16 | PM | P3 | 命令中心 | "Settings — Appearance" 与 "Settings — General" 两条目指向同一目标 `/settings/general`，重复命令。 | ✅ 已修：合并为单条 "Settings"。 |
-| F17 | 用户 | P3 | 标题栏 | 非 workspace 路由（Chat/Agents/Status Center/History by Project/Inspector）标题栏一律显示 "Shardlane"，页面身份丢失。 | ✅ 已修：currentRouteTitle 覆盖全部路由。 |
+| F17 | 用户 | P3 | 标题栏 | 非 workspace 路由（Chat/Agents/Status Center/History by Project/Inspector）标题栏一律显示 "Solco"，页面身份丢失。 | ✅ 已修：currentRouteTitle 覆盖全部路由。 |
 | F18 | 用户 | — | 终端 | 窗格右键菜单（Pin/Split Right/Split Down/Zoom/Rename/Close/Paste）实机验证可正常弹出；菜单为独立弹窗，窗口级截图不可见（测量备注，非 bug）。 | 无需修 |
 | F19 | 用户 | P1 | 终端 | ⌘F 终端查找条从未出现：`terminalFindBar` 是孤儿函数，无任何渲染路径调用，⌘F 只置 `terminalFind.open`（两次实机复现 + 代码核实）。 | ✅ 已修：挂载到 workspacePage Terminal 分支；重建后 ⌘F 出现查找条、搜索对活动窗格执行（活动窗格竞态正确显示 "pane content changed" 错误条）。 |
 | F20 | 用户 | P3 | 终端 | 滚轮回滚无法用合成事件验证：窗口在副显示器时合成滚轮对终端与 List 均无效（event 策略同样），herdr 后端视口未变说明事件未到达应用——测量环境限制，需真机触控板验证；挂起待真机。 | 挂起（记录在案） |
@@ -82,11 +82,11 @@
 | F26 | 用户 | P1 | Commit | 提交界面的 Subject 输入框高度为 0px（AX bounds [1003,0]）——不可见、不可点，用户无法看出在哪里输入主题（AX setValue 仍可写入，提交链路本身通，git log 已验证）。 | ✅ 已修：固定 Height(30) 替换 Column 内的 Grow(1)。 |
 | F27 | PM | P3 | Commit | Subject/Description 输入框均无 AX 标签（title 为空），读屏/自动化不可达；Filter files 有标签，同类输入不一致。 | 记录（a11y 批次） |
 | F28 | PM | P2 | 对比 Moshi | i18n 缺失：Rust 版有 rust-i18n 五语言包（en/ja/ko/zh-CN/zh-TW），Moshi 全中文界面；next/ 全部英文硬编码——本轮量化：仅 nativeui 的 ui.Text/Label/Placeholder 可见文案即 96+ 处（67+24+5），另有 Textf/格式化文案未计。 | 记录（P2，i18n 迁移专项，差距已量化） |
-| F29 | PM | P3 | 对比 Moshi | Moshi 在内容区保留 Tab 条（活动 tab 高亮），Shardlane 0.10 按架构决策将 Tab 收敛到侧栏——记录为有意分歧，不回退。 | 有意分歧 |
-| F30 | PM | P3 | 对比 Moshi | Moshi 标题栏常显 "已连接" 连接状态；Shardlane 仅在异常时显示 Reconnect/活动 chip，健康连接状态不可见。 | 记录（P3） |
-| F31 | PM | P3 | 对比 Moshi | Moshi 侧栏角标显示 ⌘K 提示命令面板；Shardlane 命令中心（⌘⇧P）无任何窗口内可见入口提示（现已入 Go 菜单）。 | 部分（菜单已补） |
-| F32 | PM | — | 对比 Moshi | 项目行分支+脏标记两者都有（Shardlane: ✎branch + diffstat；Moshi: ✎branch ✻）；侧栏底部会话/机器切换两者等价。 | 无差距 |
-| F33 | PM | — | 对比 Moshi | 可访问性：Moshi（Tauri/WebView）AX 树为 0 元素，Shardlane（MyGo）暴露完整 AX 树——Shardlane 显著占优。 | 优势记录 |
+| F29 | PM | P3 | 对比 Moshi | Moshi 在内容区保留 Tab 条（活动 tab 高亮），Solco 0.10 按架构决策将 Tab 收敛到侧栏——记录为有意分歧，不回退。 | 有意分歧 |
+| F30 | PM | P3 | 对比 Moshi | Moshi 标题栏常显 "已连接" 连接状态；Solco 仅在异常时显示 Reconnect/活动 chip，健康连接状态不可见。 | 记录（P3） |
+| F31 | PM | P3 | 对比 Moshi | Moshi 侧栏角标显示 ⌘K 提示命令面板；Solco 命令中心（⌘⇧P）无任何窗口内可见入口提示（现已入 Go 菜单）。 | 部分（菜单已补） |
+| F32 | PM | — | 对比 Moshi | 项目行分支+脏标记两者都有（Solco: ✎branch + diffstat；Moshi: ✎branch ✻）；侧栏底部会话/机器切换两者等价。 | 无差距 |
+| F33 | PM | — | 对比 Moshi | 可访问性：Moshi（Tauri/WebView）AX 树为 0 元素，Solco（MyGo）暴露完整 AX 树——Solco 显著占优。 | 优势记录 |
 | F34 | 用户 | P2 | 终端 | 终端配色未接入 Herdr 主题（Rust 版按架构规则以 Herdr theme.* 为唯一配色权威并种子 OSC 10/11；MyGo terminal.Options 支持 Theme/DarkTheme 但应用未设置，主题调色板内建于 herdr 二进制、客户端不可得）。 | 记录（协议缺口，需 Herdr 边界提供调色板导出） |
 | F35 | PM | P3 | History | 会话卡片行仅暴露 AXScrollToVisible，无 AXPress——读屏/自动化无法激活行（ui.List 行级 AX 缺口，Round1 观测证实）。 | 记录（框架缺口） |
 | F36 | 用户 | P3 | Diff | 折叠 hunk 行的 "Expand all" 与折叠区首行预览同排，预览文本在窄面板下硬裁剪无省略号。 | 记录（P3 打磨） |
@@ -122,13 +122,13 @@
 > 台账现共 **53 项**。F48（查询保留）随 F53 页面删除自然失效归档；本轮新增修复：F27/F44（AX 标签）、F53（统一搜索重构）。
 | F54 | 用户 | P1 | History Detail | 多行消息文本溢出卡片、跨卡片重叠（transcript 消息 Text 在 Column 内误用 `.Grow(1)` 致高度塌缩，与 F26 同类陷阱；键盘 Down 导航打开详情后实机确认）。 | ✅ 已修：去掉 Grow 用自然高度；重开同一会话复核无溢出。 |
 | F55 | PM | P3 | 终端查找 | 终端查找条 SearchField 无 AX 标签（其余 SearchField 均有）。 | ✅ 已修：Label("Terminal find query")。 |
-| F56 | 用户 | — | 测量备注 | ① gd 键盘 **已真机判定通过（本轮）**：Alt+Z wordwrap 长行由裁剪变换行、j/k 两次选区跳到下一文件首个 hunk 且视图跟随；② 托盘 Quick Panel 无法经 CUA 测试（NSStatusItem 不在窗口列表，全局点击需 SHARDLANE_ALLOW_GLOBAL_INPUT 授权）；③ transcript 滚动受合成滚轮副显示器限制（同 F20）；④ ⌘1（Go 菜单加速器）合成投递偶发丢失（两幕间一次成功一次未达），真机待复核。 | ①已验证；②③④挂起/备注 |
+| F56 | 用户 | — | 测量备注 | ① gd 键盘 **已真机判定通过（本轮）**：Alt+Z wordwrap 长行由裁剪变换行、j/k 两次选区跳到下一文件首个 hunk 且视图跟随；② 托盘 Quick Panel 无法经 CUA 测试（NSStatusItem 不在窗口列表，全局点击需 SOLCO_ALLOW_GLOBAL_INPUT 授权）；③ transcript 滚动受合成滚轮副显示器限制（同 F20）；④ ⌘1（Go 菜单加速器）合成投递偶发丢失（两幕间一次成功一次未达），真机待复核。 | ①已验证；②③④挂起/备注 |
 
 > 台账现共 **56 项**（F1–F56）。累计修复并实机复核 **27 项**。
 | F57 | PM | P2 | Agents | 工作台页默认落在 Attention 过滤器：有活跃 agent 时首屏仍显示 "No agents match / 0 agents"（实机：Pi idle 存在，Attention 下 0，切 All 才见 1 agents + Chat/Open Agent 按钮）。根因：bucket 枚举零值恰为 NeedsAttention，零值过滤态=Attention。 | ✅ 已修：NewShell 显式 `workbench.filterAll = true`；重建后首屏 All 直接显示 Pi 卡片 ✓ |
 | F58 | 用户 | P2 | Chat | Agent 卡的 Chat 按钮对无可解析会话身份的 agent（Pi idle）点击后落在 "No conversation selected" 空态——按钮过度承诺。实机从 Agents→Pi→Chat 复现。 | ✅ 已修：live/history 两路绑定皆不可用时降级到该 agent 的 Terminal 并 toast 提示（含回归测试 TestOpenChatWithoutBindableSourceDegradesToTerminal）；实机复核：Pi 卡 Chat → 工作区终端 + toast "No chat source for this agent yet — opened its Terminal." ✓ |
 | F60 | 用户 | P2 | 状态反馈 | `s.status` 仅在"无终端 attached"空态分支渲染（workspace.go:48）——正常情况下全应用 **38 处**状态写入（脚本启动、预览不可用、pane 已消失、聊天降级提示等）全部不可见。本轮 F58 降级提示已改走 pendingToast；其余 37 处待统一迁移。 | 部分（新增路径走 toast；存量 37 处记录待迁移） |
-| F61 | PM | P3 | 对比 Moshi | Moshi 项目 tab 行内嵌 "+" 直达新建 tab；Shardlane 的 "New Tab" 藏在面包屑 More actions 菜单（header_overflow.go，功能存在、入口深一级）。 | 记录（P3 可发现性） |
+| F61 | PM | P3 | 对比 Moshi | Moshi 项目 tab 行内嵌 "+" 直达新建 tab；Solco 的 "New Tab" 藏在面包屑 More actions 菜单（header_overflow.go，功能存在、入口深一级）。 | 记录（P3 可发现性） |
 | F59 | PM | P3 | a11y | AX 标签批次扫尾：分支创建输入框、New Task 提示词 TextArea、设置字体族输入框均无 AX 标签（grep 全量定位，加此前 F27/F44/F55 共 6 处）。 | ✅ 已修：全部补 .Label()（本轮 3 处） |
 
 > 台账现共 **100 项**（F1–F100）🎯。累计修复并复核 **49 项**（F99/F100 本轮修复+实机复核；F96 数据缺口、F97/F98 文案与标记记录）。Round 12 达成 100+：Chat 深度（F94/F95/F100）、确认框家族（F69/F79）、i18n 量化（F28/F86）、Update/删除守卫（F91/F92）等批次收尾（F69 确认框安全修复重建待最终复核；F70 Moshi 三轮测量受限）（F64/F65 本轮新增；F28 完成 i18n 差距量化：nativeui 可见文案 96+ 处 vs Rust 版五语言包）（F60/F37 本轮修复，设备复核因用户正活跃使用应用而以下轮启动替换构建方式交付）。
@@ -205,7 +205,7 @@
 | F101 | P1 | Agents/Status Center | Go 菜单与 ⌘K 各有 "Status Center"+"Agents" 两个入口，指向两个不同路由（/status-center、/agents）渲染同一概念：标题/副标题/行按钮集全不同（推荐动作单按钮 vs Chat+Open Agent），却共享 workbench filter 状态 | ✅ 本会话：/agents 变为 Status Center 别名（router.go），菜单与 ⌘K 去重；TestWorkbenchAgentsRouteFilters 重写钉住新契约 |
 | F102 | P2 | History | 会话卡标题与 preview 同源重复（均取首条用户消息前缀），同前缀会话整屏不可分辨 | ✅ 并行批次：historyRowDescription 前缀去重；实机复核单行 |
 | F103 | P1 | 窗口/快捷键 | ⌘W 绑定 Close Window（MyGo RoleWindowMenu 默认项）——Tab 中心的应用按 ⌘W 关掉整个窗口，且应用内无任何关 Tab 快捷键 | ✅ 本会话：Go 菜单新增 "Close Tab ⌘W"（走 close-tab 确认通道），Window 菜单改为 Minimize/Zoom 无 Close；实机验证确认框弹出且 Cancel 默认聚焦 |
-| F104 | P2 | 窗口 | 原生窗口标题恒为 "Shardlane"，路由变化不同步——Mission Control/⌘Tab 无页面身份（F17 只修了 in-titlebar 文本） | ✅ 本会话：syncRouteVisibility → win.SetTitle；实机验证 "Shardlane — History"/"— Status Center"，Workspace 路由保持裸名 |
+| F104 | P2 | 窗口 | 原生窗口标题恒为 "Solco"，路由变化不同步——Mission Control/⌘Tab 无页面身份（F17 只修了 in-titlebar 文本） | ✅ 本会话：syncRouteVisibility → win.SetTitle；实机验证 "Solco — History"/"— Status Center"，Workspace 路由保持裸名 |
 | F105 | P2 | 终端查找条 | 空查询即显示 "no matches"——尚未搜索就给出否定结论 | ✅ 本会话：空查询/未完成搜索不显示计数；实机验证 |
 | F106 | P2 | 终端查找条 | 活跃窗格搜索报内部错误直出 "Search unavailable: Herdr pane.copy_search: pane content changed"，且无重试（F21 遗留） | ✅ 本会话：友好文案 + 700ms 一次自动重试；实机验证流式窗格显示 "The pane is still outputting — wait a moment, then search again." |
 | F107 | P2 | New Task | 副标题泄漏内部实现 "the transaction is idempotent by operation id" | ✅ 并行批次：重写为用户语言 |
@@ -240,13 +240,13 @@
 | F129 | P3 | 全局 | tooltip 白底黑字为 MyGo 默认样式，与深色主题反差大 | 记录（框架） |
 | F131 | P3 | diff 视图 | AX 树洪泛：整文件内容作为 settable text 节点逐行暴露（SVG 单行 2KB 全量入 AX），读屏/自动化不可用且树巨大 | 记录（框架 a11y 缺口） |
 | F132 | P3 | 窗口 | 窗口最小尺寸 F40 已修但本轮回归未复测 resize（CUA 无窗口 resize 手段） | 挂起 |
-| F133 | P1→待诊断 | 进程级 | **优雅退出悬挂**：`quit app "Shardlane"` 后日志写入 "native shell closing"、窗口已收但进程不退（osascript -128，需 kill -9 回收；76289 旧二进制复现，log show 留证）。新增 TestCaptureStderrRoutesFd2IntoFile 在干净 HEAD 即失败（本环境），两批改动之外 | 记录：退出悬挂需独立诊断；stderr 测试失败预先存在 |
+| F133 | P1→待诊断 | 进程级 | **优雅退出悬挂**：`quit app "Solco"` 后日志写入 "native shell closing"、窗口已收但进程不退（osascript -128，需 kill -9 回收；76289 旧二进制复现，log show 留证）。新增 TestCaptureStderrRoutesFd2IntoFile 在干净 HEAD 即失败（本环境），两批改动之外 | 记录：退出悬挂需独立诊断；stderr 测试失败预先存在 |
 | F135 | P3 | Changes | 主表面=Changes 时右面板 Changes 标签重复同一数据（双 Total/Commit 页脚同屏） | 记录（设计冗余） |
 | F137 | P3 | diff | 右面板展开时主 diff 文件头/内容截断加剧（无最小宽度保护） | 记录 |
 | F138 | P3 | diff | 单行大文件（SVG）diff 单行截断不可读（主流 diff 工具同行为） | 记录 |
 | F139 | P3 | History Detail | "Preview truncated — full text stays in the source." 无就地展开路径（有 Load earlier/later 但该卡无 expand） | 记录 |
 | F142 | P2 | 标题栏 | My Annotation A1：workspace 路由标题栏行高 = bar.Height+14=60，内容居中于 30pt，而红绿灯中心在 bar.Height/2≈23pt（MyGo 将灯放置在 btnHeight+2×TrafficLightPosition.Y 高的带内居中）——图标/面包屑明显偏下约 7pt，且栏下多出 14pt 死带。代码证据：titlebar.go `max(bar.Height+14, 42)` | ✅ 本会话：行高封顶在 bar.Height（`titlebarHeight`：workspace max(bar.Height,42)、其余 max(bar.Height,34)），内容与灯带同一中心线；实机截图复核图标与红绿灯同线、死带消失（TestTitlebarHeightTracksTrafficLightBand 钉住） |
-| F143 | P2 | 工作区 Pane 头 | My Annotation A2 两半：① 单 Pane Tab 点 Zoom 无效果——实机探针证实 Herdr 对单 Pane 返回 reason=single_pane 且画面不动（scratch 会话 pane.zoom live probe）；② 拆分后悬停非激活 Pane 的头部按钮浮现但点击无反应。分层取证：headless 点击投递到非激活 pane 头部按钮 ✓（TestPaneHeaderButtonsRespondOnUnfocusedPane，选中态同步翻转）；Go 适配器显式传 pane_id/target_pane_id ✓；scratch 会话实机 `pane zoom --pane <非激活>` 返回 changed=true+focus_changed=true ✓——三层全绿，注解所击二进制（20:35）早于当前 HEAD（372a632 18:18），疑为旧版行为 | ①✅ 本会话：zoomPaneAction 单 Pane 语义改为工作区最大化——两侧栏收起（rail 均开→全收，均收→全开），拆分 Tab 仍走 Herdr zoom（TestZoomActionSinglePaneMaximizesWorkspace 钉住；实机 CUA 点 Zoom 验证侧栏收起/恢复）；②✅ 已修（2026-10-06 晚用户实测通过）：shared pane action 的 slog.Info 点击路径日志保留在 shardlane.log（action=split/zoom/zoom-rails/close-confirm + pane_id），后续回归可继续用它定位；用户确认拆分面板下非激活 Pane 头部按钮点击生效 |
+| F143 | P2 | 工作区 Pane 头 | My Annotation A2 两半：① 单 Pane Tab 点 Zoom 无效果——实机探针证实 Herdr 对单 Pane 返回 reason=single_pane 且画面不动（scratch 会话 pane.zoom live probe）；② 拆分后悬停非激活 Pane 的头部按钮浮现但点击无反应。分层取证：headless 点击投递到非激活 pane 头部按钮 ✓（TestPaneHeaderButtonsRespondOnUnfocusedPane，选中态同步翻转）；Go 适配器显式传 pane_id/target_pane_id ✓；scratch 会话实机 `pane zoom --pane <非激活>` 返回 changed=true+focus_changed=true ✓——三层全绿，注解所击二进制（20:35）早于当前 HEAD（372a632 18:18），疑为旧版行为 | ①✅ 本会话：zoomPaneAction 单 Pane 语义改为工作区最大化——两侧栏收起（rail 均开→全收，均收→全开），拆分 Tab 仍走 Herdr zoom（TestZoomActionSinglePaneMaximizesWorkspace 钉住；实机 CUA 点 Zoom 验证侧栏收起/恢复）；②✅ 已修（2026-10-06 晚用户实测通过）：shared pane action 的 slog.Info 点击路径日志保留在 solco.log（action=split/zoom/zoom-rails/close-confirm + pane_id），后续回归可继续用它定位；用户确认拆分面板下非激活 Pane 头部按钮点击生效 |
 | F144 | P1→✅ 已修（真终端语义） | Terminal | My Annotation A3：终端内拖选文字无反应。根因已定（代码证据）：pane 卡在 terminal.View 上盖了一个 HandleInput 子层接管 InputScroll，而 MyGo ui.engine.handler() 只把指针/滚轮事件投递给命中链**最内层** inputFn——子层对 pointer 返回 false 后事件不落回 terminal 视图，拖选永远收不到 pointerDown。用户拍板：客户端修，不改 herdr；探针证实参照系=真终端（herdr TUI 自身开 1000/1002/1003+1006 且滚轮/点击即响应；TUI 不做自己的选区，其他终端的选中靠 Shift/Option+拖选惯例） | ✅ 本会话：**真终端语义改造**（用户选定方案）——①退役 mouseModeFilter 全套（tracking 下发合法化）；②拆除滚轮接管子层（F144 根因消失，视图收复全部指针事件）；③新增 attach_mouse.go：sgrMouseSplitter（Write 侧 SGR 事件流式分离）+ routeAttachMouse + attachConn.onMouse 接线；④交互契约同其他终端：滚轮=权威视口 ✓、点击=聚焦 ✓、**Shift+拖选=本地选区+⌘C**、右键=程序事件（Pane 菜单改挂卡片头部右键/侧栏行/标题栏⋯）。已部署+运行时真值验收（w44:pA 滚轮上/下 offset 离底→归 0，全程 Herdr 权威）。herdr 侧规格保留为未来对齐项（docs/herdr-attach-mouse-forwarding.md） |
 | F145 | P2→✅ 已修 | Terminal（agy 滚轮） | F144 首轮后用户复测：**agy 进去无法滚动**（其他终端的 herdr 里正常）。现场真值：w44:pA agent='agy' 且 **max_offset_from_bottom 82→288**——agy 是 scrollback-backed CLI（非 alt-screen），其历史就在 herdr 视口里；scratch 探针证实 herdr TUI 对滚轮**从不透传进 pane**（tracking ON/OFF 两 case 的 dd 均收到 0 字节），它只滚自己的视口。而路由旧规则信 agent 标签：agy 被归为 agent → 滚轮走 send_text 发 SGR → agy 不收鼠标 → 永远滚不动（F144 前的 sendAgentWheel 同病；pi 能滚是因为它是真 alt-screen+鼠标 TUI，max=0） | ✅ 本会话：滚轮分流改信 **herdr 自己的 scroll 真值**而非 agent 标签——`max_offset_from_bottom > 0`（有历史可滚：shell、agy）→ 权重视口 pane.scroll；`= 0`（真 alt-screen agent TUI：pi）→ send_text 原样。TestRouteAttachMouseScrollbackTUIWinsTheViewport 钉住；用户实测确认滚动恢复 |
 | F146 | P2→✅ 已修 | Terminal（右键菜单） | F144 真终端语义的已知代价：daemon 强制 tracking 后，视图把右键上报（daemon 丢弃）→ 终端 body 右键无菜单（Pane 菜单仍在头部右键/侧栏行/⋯）。用户复测报告菜单消失 | ✅ 本会话：随 F147 的 mygo `LocalDragSelect` 开关一并解决——scrollback pane 右键回落本地，视图自带 Copy/Paste/Select All 菜单恢复（TestLocalDragSelectKeepsDragsAndMenuLocal 钉住）；Pane 结构菜单仍在头部右键/侧栏行/⋯（单一来源不变） |
@@ -271,7 +271,7 @@
 - 部署：替换二进制 → graceful quit（F133 悬挂按协议 kill 回收）→ open，md5 双向一致；实机 CUA（app-scoped）验证 F142 标题栏对齐与 F143① 侧栏收起/恢复（各一条 AX/截图证据）。
 - 探针：scratch herdr 会话 ui-audit-probe（split → 非激活 pane zoom live probe）用后即 `session stop` 删除，用户 default 实例零触碰。
 - 并发：并行批次（Chat surface / panel_motion / right_panel）同期写入 shell.go、titlebar.go（surfaceTabs Chat 项）等；本会话改动与其无区冲突，共存验证于最终树。
-- F143② 复核工具已入二进制：pane 共享动作的 slog.Info 点击路径日志（shardlane.log）。
+- F143② 复核工具已入二进制：pane 共享动作的 slog.Info 点击路径日志（solco.log）。
 
 ---
 
@@ -309,7 +309,7 @@
 
 | # | 严重度 | 界面 | 问题（现象+证据） | 处置 |
 |---|--------|------|------------------|------|
-| F165 | P2 | Sessions/History | History 页已在 UI 层改名 Sessions（page_history.go:46,58、router.go:52/63/87/95、窗口标题实机 "Shardlane — Sessions"）但三个入口仍叫 History：Go 菜单（main.go:215）、⌘K（command_center_ui.go:113）、标题栏 tooltip（titlebar.go:208）；且 /history/{id} 路由标题仍 "History Detail"（router.go:58，实机证实）——菜单说 History、落地页说 Sessions | 记录（P2：入口与页面名对齐） |
+| F165 | P2 | Sessions/History | History 页已在 UI 层改名 Sessions（page_history.go:46,58、router.go:52/63/87/95、窗口标题实机 "Solco — Sessions"）但三个入口仍叫 History：Go 菜单（main.go:215）、⌘K（command_center_ui.go:113）、标题栏 tooltip（titlebar.go:208）；且 /history/{id} 路由标题仍 "History Detail"（router.go:58，实机证实）——菜单说 History、落地页说 Sessions | 记录（P2：入口与页面名对齐） |
 | F166 | P3 | Sessions | 会话标题/预览泄漏原始 skill XML：首条消息以 `<skill name="think" location="...">` 开头的会话，列表标题、内联预览正文、详情页头部三处原样裸露 XML 标记（实机三处截图证实）——标题提取可剥壳 | 记录 |
 | F167 | P3 | History Detail | 详情页用户消息不渲染 markdown：`##`/`**`/表格管道符全部裸露（实机截图证实），Chat 页同内容走 react-markdown 渲染——双标准 | ✅ 已取消（用户裁定 2026-10-13）：从未立项原生 markdown 渲染器，详情保持 verbatim 是有意行为；Chat 走 WebView 渲染属介质差异，不构成双标准缺陷 |
 | F168 | P3 | Workspace pane 头 | shell pane 头同一路径显示两遍各截一半：title=surface.label（host:cwd 全称，terminal.go:564）+ detail=shortDir(cwd)（:567）——实机 "wilson@Wilson-MacBook-Pro:~/Wo… --/Wo…" 双截断 | 记录（title 已含 cwd 时抑制 detail） |
@@ -341,7 +341,7 @@
 - settings.Shortcuts 已被 shortcutBindings() 消费（shortcuts.go:40/129，F11 修复健在）；s.status 71 处写有 shell.go:729 toast 消费者（F62 修复健在）。
 - ChatBridge 11 方法经 frontend/src/App.tsx 全部调用；herdr Manager 45 方法全部有调用方；路由表除已知 F73 外全有入口；nativeui 空 handler 扫描 0 命中；TODO/stub 扫描仅类型化状态与平台边界。
 - 破坏性动作确认覆盖完整（close-tab/pane/project、delete session/workspace、files-delete、discard、drop-stash、delete branch/tag、revert、undo-commit 全走 openConfirm）。
-- 近期提交接线验证全部闭环：a5ce17a Run 控件（入口→scripts.Detect→SendPaneText→状态反馈+last-used 持久化）、FILES-08 markdown 预览（frontend/dist 已嵌、桥接三方法+事件、实机渲染 ✓）、HOSTS-02（表单→sshconfig 原子写→Connect 链路，实机 ✓）、shardlane-install 脚本路径与产物一致。
+- 近期提交接线验证全部闭环：a5ce17a Run 控件（入口→scripts.Detect→SendPaneText→状态反馈+last-used 持久化）、FILES-08 markdown 预览（frontend/dist 已嵌、桥接三方法+事件、实机渲染 ✓）、HOSTS-02（表单→sshconfig 原子写→Connect 链路，实机 ✓）、solco-install 脚本路径与产物一致。
 - 9d4ecf5 侧栏边框贴齐修复实机放大复核 ✓（边线即内容列起点，无 sidebar 色溢出）。
 
 ## Round 8 验证基线
@@ -375,7 +375,7 @@
 
 | # | 严重度 | 界面 | 问题（现象+证据） | 处置 |
 |---|--------|------|------------------|------|
-| F180 | P2 | 窗口标题 | 恢复到内页的启动窗口标题恒为 "Shardlane"：`restoreSession` 在窗口挂上之前就设好可见路由，"路由变化时同步标题"的钩子永不触发（实机：启动即在 /files，标题仍是裸名） | ✅ bdba7cb：`syncWindowTitle` 每帧由 `syncRouteVisibility` 调用 + `windowTitleShown` 去重 + `setWindowTitle` 接缝；实机重启后 "Shardlane — Files" / "— Sessions" |
+| F180 | P2 | 窗口标题 | 恢复到内页的启动窗口标题恒为 "Solco"：`restoreSession` 在窗口挂上之前就设好可见路由，"路由变化时同步标题"的钩子永不触发（实机：启动即在 /files，标题仍是裸名） | ✅ bdba7cb：`syncWindowTitle` 每帧由 `syncRouteVisibility` 调用 + `windowTitleShown` 去重 + `setWindowTitle` 接缝；实机重启后 "Solco — Files" / "— Sessions" |
 | F181 | P1 | 复制 | 26 处复制都 `exec pbcopy`；Finder/Dock 启动的 App 无 `LANG`（MacRoman），中文路径/提交说明/恢复命令一律乱码（草稿 pasteboard 复现） | ✅ d67c8ea：复制/定位/打开改走 `mygo.Clipboard`/`mygo.Shell`；实机 Git diff 中文行 Copy Line 读回逐字节一致 |
 | F182 | P2 | 菜单栏/⌘K | 视图标签搬进侧栏后：Changes 在 ⌘K 与 Go 菜单无入口；Go 菜单 Files 仍是旧右栏开关接缝（选一次进、再选一次出，与同菜单 Sessions/Hosts 不一致）；Settings 摆在自定义 Go 菜单；应用菜单缺 Hide/Hide Others/Show All（⌘H 无效）——实机 AX 菜单转储 | ✅ dde5dca：菜单栏收进 `app_menu.go`（`Shell.MenuBar`）；应用菜单走系统惯例（Settings… ⌘,、Hide ⌘H…）；Files/Changes 走「去往」形态（点名已打开页面保持不动）；⌘K 补 Changes；三类测试 + 10 个变异体全杀；实机 Go ▸ Files 连选两次仍在 Files |
 | F183 | P2 | Go ▸ Workspace | ⌘1/Go ▸ Workspace 在 Changes/Chat 表面上无反应：它只是 `router.Push(/workspace)`，而这两个本就是 /workspace 的表面，同路由 Push 被去重（实机 `invoke_menu` 复现：Changes 上选 Workspace，截图仍是 Changes） | ✅ f83f613：走 `showViewTerminal`（与 Back 同落点、幂等）；实机 Changes→Workspace 落 Terminal，再选保持 |
@@ -407,7 +407,7 @@
 | F209 | P3 | 组件统一 | 勾选框两张脸：Sessions 多选的标记是线描 `iconTask`/`iconSquare` 图标（选中为强调色描边），提交文件列表里官方 `ui.Checkbox` 是实心强调色盒子 + 白色对勾 | ✅ `selectionMark` 改画官方的盒子与对勾（16×16、圆角 4、选中强调色填充 + 2px 对勾、未选中 1px 弱边框；不用官方控件本体：它会吞点击、给每行加 Tab 停靠点）；`TestSelectionMarkWearsTheCheckboxFace` 与官方逐像素比，四个变异（填充色/边框色/对勾宽度/圆角）均 KILLED；明暗渲染核对 |
 | F210 | P3 | 组件统一 | 单行输入框高度三个手敲数字：Commit 主题输入框行内编辑区 28、Commit 弹窗 30，描述输入框 26 | ✅ 一律 `Controls().RegularHeight`（28）；`TestFieldHeightComesFromTheTiers` 拦 `ui.TextInput` 调用链上的数字高度，两个变异（弹窗 30、编辑区 26）均 KILLED；明暗渲染核对编辑区两框等高 |
 | F211 | P2 | 文案 | 数量与名词不一致：Commit 旁与 Local Changes 头的 `"%d files"`、文件夹 Stage/Unstage 的 `(N files)` 提示把数字和复数焊死——只改一个文件就是 "1 files"；冲突提示写 `file(s)`；折叠行写 "1 unmodified lines" 且无千分位 | ✅ 文件数一律 `pluralFiles`（并简化为 `itoa(n) + " file" + pluralS(n)`），折叠行走 `gdLines(n, "unmodified")`，冲突提示改 "N files with conflicts. Resolve and stage, then refresh."；`TestFileCountIsPluralisedByTheHelper`（扫字符串字面量，四个变异均 KILLED）+ `TestChangesCountAgreesWithItsNumber`（渲染单文件，三个变异均 KILLED） |
-| F212 | P1 | 无障碍 | 设置 → General → **Increase contrast 几乎无效**：整页只变 0.25% 像素（几条发丝线）。`designTokens(dark)` 54 处调用读不到设置（只有 10 处走 `s.tokens`），框架 Theme 的 `TextMuted`/`Border`（控件描边、占位符、次要文字）、窗格卡 `gorexColors` 与 diff 评审 `gdPalette` 完全不知道它 | ✅ `highContrast`（进程级，`Shell.View` 每帧发布）；`shardlaneTheme` 加强 `Border`/`TextMuted`，`designTokens` 读它，`gorexColorsOf`/`gdPaletteFor` 各给高对比变体（卡片发丝线 0.35、次要文字/图标/行号/折叠标签更深或更亮），`gdPalette` 增 `dark` 字段取代 `pal == &gdDarkPalette` 的指针判断（变体指针不同会让高亮缓存键错位）；`TestIncreaseContrastStrengthensEveryPalette`（11 项读数逐项更强且达 WCAG 7/4.5/3:1，含 `dark` 字段）、`TestIncreaseContrastIsPublishedEveryFrame`、`TestIncreaseContrastChangesTheRenderedPage`（≥1%，修复后 1.3–1.9%）；8 个变异均 KILLED；明暗渲染核对 Git/Settings/Sessions |
+| F212 | P1 | 无障碍 | 设置 → General → **Increase contrast 几乎无效**：整页只变 0.25% 像素（几条发丝线）。`designTokens(dark)` 54 处调用读不到设置（只有 10 处走 `s.tokens`），框架 Theme 的 `TextMuted`/`Border`（控件描边、占位符、次要文字）、窗格卡 `gorexColors` 与 diff 评审 `gdPalette` 完全不知道它 | ✅ `highContrast`（进程级，`Shell.View` 每帧发布）；`solcoTheme` 加强 `Border`/`TextMuted`，`designTokens` 读它，`gorexColorsOf`/`gdPaletteFor` 各给高对比变体（卡片发丝线 0.35、次要文字/图标/行号/折叠标签更深或更亮），`gdPalette` 增 `dark` 字段取代 `pal == &gdDarkPalette` 的指针判断（变体指针不同会让高亮缓存键错位）；`TestIncreaseContrastStrengthensEveryPalette`（11 项读数逐项更强且达 WCAG 7/4.5/3:1，含 `dark` 字段）、`TestIncreaseContrastIsPublishedEveryFrame`、`TestIncreaseContrastChangesTheRenderedPage`（≥1%，修复后 1.3–1.9%）；8 个变异均 KILLED；明暗渲染核对 Git/Settings/Sessions |
 | F213 | P2 | 导航 | 栏顶标签条只有四个视图标签：回 Terminal 要找页脚 Back 或"再点亮着的标签"；Changes 的图标是"对勾文档"，与 Git 毫无关系，看着像坏了 | ✅ 标签条最左补 Terminal（五个等宽标签），Changes 换 `iconGit`（三节点分叉图，区别于分支 chip 的 `iconBranch`）；`TestSidebarViewTabs*` 钉标签数与顺序，`TestLaunchersAgreeOnViewDestinations` 把 Terminal 标签与 Go ▸ Workspace 对上 |
 | F214 | P2 | 导航 | 内页页脚的 Back 与栏顶标签重复：进内页靠标签、退出却要去页脚找；Git 视图同理（页脚只有 Back） | ✅ 页脚 Back 只留给 Settings（不是视图标签的目的地），Sessions/Files/Hosts/Changes 一律经 Terminal 标签离开；`TestOnlySettingsKeepsABackFoot`、`TestDiffSidebarHasNoFootAndTheTerminalTabReturns`、`TestEveryInnerPageLeavesByTheTerminalTab` |
 | F215 | P2 | 组件统一 | Git/Files 侧栏顶部是项目头（项目、分支 pull-down、刷新），Sessions 只有一行 "All sessions"：同类"跟着项目走"的页面三种头；Sessions 工具条还另有一个 Refresh，与侧栏刷新重复 | ✅ Sessions 也戴同一个头（`sidebarProjectHeader`，位置由 `TestProjectSidebarsShareOneHead` 钉死三页一致），头下两行范围行 This project（默认，项目文件夹含子文件夹）/ All sessions（各带计数，方向键可达）；工具条 Refresh 删除，刷新只剩侧栏头里一个；切分支不影响列表（会话属于文件夹） |

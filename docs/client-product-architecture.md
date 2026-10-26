@@ -1,4 +1,4 @@
-# Shardlane Architecture — Canonical Source of Truth
+# Solco Architecture — Canonical Source of Truth
 
 Status: **Canonical / as-built + approved-next architecture**
 Baseline: 2026-08-25
@@ -6,15 +6,15 @@ Runtime baseline: Herdr 0.8.x. Current transitional code still accepts socket pr
 Current shipped UI baseline: GPUI 0.2.2, gpui-component 0.5.1 + gpui-component-assets 0.5.1
 Current migration UI baseline (pin advanced 2026-10-25): MyGo v0.6.4 Native UI with four documented local compatibility deltas re-applied (F146/F147 `LocalDragSelect`, WIX-021 " + "field focus delegation, multi-display tray flyout anchoring, OSC 7501 `OnProgramStatus` — all still absent upstream), Go 1.27.3, and the official MyGo Terminal/Ghostty surface in this repository (the former `next/` module, now the repository root); this path gates on Herdr 0.9.3 / socket protocol 22 for the audited snapshot/direct-attach capabilities. Upstream v0.5.x additions are adopted only when a task takes them: the Flyout API backs the Header/tray quick panel, and the product decision of 2026-10-11 (below) adopts the official `ui.WebView` for Chat presentation with a bound-service bridge.
 
-This file is the single architectural source of truth for Shardlane. Other documents may define interaction details, execution order, progress evidence, or handoff context, but they must not redefine ownership.
+This file is the single architectural source of truth for Solco. Other documents may define interaction details, execution order, progress evidence, or handoff context, but they must not redefine ownership.
 
 ## 1. Product identity
 
-**Shardlane is the product, application, and client brand.**
+**Solco is the product, application, and client brand.**
 
-**Herdr is the backend/runtime used by Shardlane.** Herdr remains authoritative for:
+**Herdr is the backend/runtime used by Solco.** Herdr remains authoritative for:
 
-- runtime workspaces, which Shardlane presents to users as **Projects**;
+- runtime workspaces, which Solco presents to users as **Projects**;
 - tabs;
 - panes and pane layouts;
 - terminal sessions and scrollback;
@@ -24,31 +24,31 @@ This file is the single architectural source of truth for Shardlane. Other docum
 
 Herdr technical names are not branding leftovers. Real Herdr APIs, protocol methods, CLI commands, runtime types, errors, socket paths, and integration modules must continue to use the Herdr name when they describe the backend factually.
 
-Shardlane owns:
+Solco owns:
 
-- the product view of **Workspaces**: one Workspace is one live Herdr instance (a named session) enumerated from `herdr session list` — there is no Shardlane-side workspace registry, only per-session display-name overrides;
-- Project organization inside an instance, derived live from Herdr runtime state through `build_project_index` — Shardlane persists no project-to-workspace assignment;
+- the product view of **Workspaces**: one Workspace is one live Herdr instance (a named session) enumerated from `herdr session list` — there is no Solco-side workspace registry, only per-session display-name overrides;
+- Project organization inside an instance, derived live from Herdr runtime state through `build_project_index` — Solco persists no project-to-workspace assignment;
 - native macOS presentation and navigation;
 - transient pointer/selection/IME/menu state;
 - local appearance and interaction preferences;
 - the client-side view/projection cache;
 - read-only browsing/indexing of external coding-agent conversation history;
-- an in-memory, disposable session index (list-row metadata only) over that read-only history — Shardlane stores no conversation content;
+- an in-memory, disposable session index (list-row metadata only) over that read-only history — Solco stores no conversation content;
 - Script semantic definitions and UI projection while the Herdr protocol has no protocol-native Script resource. Script Tabs/Panes/PTYs/processes remain Herdr-owned.
 
-Shardlane must never become a second runtime authority.
+Solco must never become a second runtime authority.
 
-**Approved Next — Agent Provider integration coverage.** Every Provider already present in `shardlane-history::AgentId::ALL` must also have an explicit Herdr runtime-integration strategy. Shardlane may provision Herdr's official Agent integrations and may install narrow provider-native hooks/plugins for capability gaps, but those adapters must report lifecycle/session identity back into Herdr (`pane.report_agent`, `pane.report_agent_session`, `pane.release_agent`) rather than maintaining a parallel client-side Agent-status monitor. When Herdr intentionally keeps lifecycle authority on screen-manifest detection, Shardlane must not override it with an incomplete custom lifecycle source. The per-Provider coverage matrix is maintained in the internal engineering archive (not published with this repository).
+**Approved Next — Agent Provider integration coverage.** Every Provider already present in `solco-history::AgentId::ALL` must also have an explicit Herdr runtime-integration strategy. Solco may provision Herdr's official Agent integrations and may install narrow provider-native hooks/plugins for capability gaps, but those adapters must report lifecycle/session identity back into Herdr (`pane.report_agent`, `pane.report_agent_session`, `pane.release_agent`) rather than maintaining a parallel client-side Agent-status monitor. When Herdr intentionally keeps lifecycle authority on screen-manifest detection, Solco must not override it with an incomplete custom lifecycle source. The per-Provider coverage matrix is maintained in the internal engineering archive (not published with this repository).
 
-**Decision (2026-10-12) — Hook-led provider status; Herdr integration demoted to fallback.** For every Provider covered by Shardlane's direct status hook (today Claude Code and Antigravity CLI), that one Shardlane-provisioned hook is the single lead mechanism: it feeds live status to the app's own socket and relays session identity into Herdr (`pane.report_agent_session`) with the same optional fields (`agent_session_path`, `session_start_source`) Herdr's official integration scripts send, so Herdr's session/lifecycle authority is preserved and herdr's script group is no longer a prerequisite — only a fallback. The Agents settings page (formerly Providers) lists each Provider as one row: the status hook is the lead row; the Herdr integration renders as an attached, muted fallback row while the hook is healthy (no repair action), and its Install/Update action only surfaces while the hook cannot serve. Providers without a status hook keep Herdr's integration as their only mechanism until a hook covers them. This lane demotion does not move lifecycle authority: the hook reports into Herdr, it never replaces Herdr's tracking.
+**Decision (2026-10-12) — Hook-led provider status; Herdr integration demoted to fallback.** For every Provider covered by Solco's direct status hook (today Claude Code and Antigravity CLI), that one Solco-provisioned hook is the single lead mechanism: it feeds live status to the app's own socket and relays session identity into Herdr (`pane.report_agent_session`) with the same optional fields (`agent_session_path`, `session_start_source`) Herdr's official integration scripts send, so Herdr's session/lifecycle authority is preserved and herdr's script group is no longer a prerequisite — only a fallback. The Agents settings page (formerly Providers) lists each Provider as one row: the status hook is the lead row; the Herdr integration renders as an attached, muted fallback row while the hook is healthy (no repair action), and its Install/Update action only surfaces while the hook cannot serve. Providers without a status hook keep Herdr's integration as their only mechanism until a hook covers them. This lane demotion does not move lifecycle authority: the hook reports into Herdr, it never replaces Herdr's tracking.
 
 **Decision (2026-10-15) — OSC 7501 program status leads where the Agent speaks it; the hook lane demotes to fallback per pane.** Claude Code 2.1.295+ emits the Program Status Protocol (OSC 7501, spec rev 0.4). The vendored MyGo terminal grows a fourth local delta (`plugins/terminal/osc7501.go`: a framing-only scanner beside libghostty-vt, which ignores the sequence as an unknown OSC): with `Options.OnProgramStatus` set, the terminal answers the protocol's feature-detection query `OSC 7501 ; ? ST` with the full fixed state/kind lists, and each report body lands in `internal/agentstatus` — the one owner of pairs/records/lifetime parsing (replace-whole records, `clear` subtrees, 256-record LRU, app inheritance, transient drop at process exit) and of the per-pane arbitration: a native report always wins while its record set is mid-flight (working/blocked), a hook event takes the pane back once no transient record stands or the protocol stream has been silent past `oscAuthority` (2 minutes, so a crashed native agent cannot suppress hooks forever), and `released` mirrors process exit. Presentation reads the same projection `AgentStatus` field as before, so the pane dot, Agent cards and blocked-interaction detection work unchanged. Two boundaries stay fixed: session identity remains hook-only (OSC 7501 carries none, so the hook scripts stay installed for every Provider regardless of protocol support), and Herdr remains untouched — no new method, no pane-runtime change, the hook lane keeps its socket and its OSC 1337 emission. Agents without protocol support (older CLIs, Aider, pi) never see a behavior change: their hook flow is the lead path exactly as on 2026-10-12.
 
-**Implemented (2026-08-30) — Agent-first semantic service convergence.** Desktop, Remote and Mobile converged on one UI-independent Host application path for normal Agent/Conversation semantics. `AgentRuntime` remains the low-level Herdr SPI; product-level Agent launch, Conversation query/prompt, safe queued working follow-up, History continuation and Context Transfer/Handoff belong to `shardlane-host`. Normal semantic Agent operations use Herdr Agent APIs rather than PTY command/prompt typing. History continuation plans one of `AlreadyLive`, exact same-Provider `NativeResume`, or lossless `ContextTransfer`; different-Provider continuation and Live Handoff reuse the same transfer engine, and presentation-bounded/truncated transcript Markdown is never a silent transfer fallback. Raw Terminal input remains an explicitly separate terminal-only capability. Host semantic mutations return exact identities without implicitly moving another client's UI; Desktop applies its existing `FocusIntent` only after success. Landing evidence: `HostConversationService` (query/prompt/continue), `run_agent_launch` (canonical launch transaction), `ConversationSessionManager` (one subscribed live session owner), `ConversationFollowUpQueue` (safe `Send after turn`), `run_context_transfer` + `TransferArtifactStore` (lossless transfer), `plan_history_continuation` (AlreadyLive → NativeResume → ContextTransfer), `run_live_handoff`, `provider_product_capabilities`, and `AgentSessionInsight`; the PTY-typed launch/resume, the 12K Markdown continuation fork, and the GUI/Remote Continue transaction mirrors are deleted. Verification levels for M1–M9 are recorded in the internal engineering archive.
+**Implemented (2026-08-30) — Agent-first semantic service convergence.** Desktop, Remote and Mobile converged on one UI-independent Host application path for normal Agent/Conversation semantics. `AgentRuntime` remains the low-level Herdr SPI; product-level Agent launch, Conversation query/prompt, safe queued working follow-up, History continuation and Context Transfer/Handoff belong to `solco-host`. Normal semantic Agent operations use Herdr Agent APIs rather than PTY command/prompt typing. History continuation plans one of `AlreadyLive`, exact same-Provider `NativeResume`, or lossless `ContextTransfer`; different-Provider continuation and Live Handoff reuse the same transfer engine, and presentation-bounded/truncated transcript Markdown is never a silent transfer fallback. Raw Terminal input remains an explicitly separate terminal-only capability. Host semantic mutations return exact identities without implicitly moving another client's UI; Desktop applies its existing `FocusIntent` only after success. Landing evidence: `HostConversationService` (query/prompt/continue), `run_agent_launch` (canonical launch transaction), `ConversationSessionManager` (one subscribed live session owner), `ConversationFollowUpQueue` (safe `Send after turn`), `run_context_transfer` + `TransferArtifactStore` (lossless transfer), `plan_history_continuation` (AlreadyLive → NativeResume → ContextTransfer), `run_live_handoff`, `provider_product_capabilities`, and `AgentSessionInsight`; the PTY-typed launch/resume, the 12K Markdown continuation fork, and the GUI/Remote Continue transaction mirrors are deleted. Verification levels for M1–M9 are recorded in the internal engineering archive.
 
 **Done 2026-08-27 — product pruning.** Notes, Bookmarks, and Annotation have been deleted outright: modules, routes, actions, config writers, assets, feature-only tests, and the annotation-only native capture/image dependencies (objc2-core-foundation/core-graphics/image-io/screen-capture-kit) are gone from the codebase. Existing user-created files/packages are not destructively erased by startup migration. Browser/right panel, Activity, Scripts/Services, Shortcuts, History, New Agent, Remote/Mobile, and Workspace/Project organization remain retained capabilities unless a later product decision explicitly changes them.
 
-**Approved Next (2026-08-30) — Same-Session / Dual-Surface Chat interactions.** Terminal View and Chat View are two product surfaces over the **same Herdr-owned live Agent session**. The native Provider CLI/TUI remains running inside Herdr. Conversation read projection combines the existing read-only transcript/live decoder, narrow Provider hook/plugin/extension events, and Herdr's exact Agent/session/lifecycle state. Ordinary Chat Composer messages continue through the canonical Host Conversation transaction and Herdr `agent.prompt`; a question/approval that belongs to the current in-flight turn is a separate Host-owned `ConversationInteraction` and may be resolved only through an exact Provider hook/plugin response bridge. `blocked` must never be answered by converting the choice into a generic prompt or guessed PTY keys. Companion Shardlane hooks/plugins must coexist with Herdr integrations and must not steal lifecycle authority from Herdr. Provider-native App Server/RPC/native server transports are optional only after a measured **Same-Session Gate** proves one Agent core/session, single-writer ownership, retained native TUI, safe fallback, and acceptable performance. **ACP is explicitly frozen as of 2026-08-30: no ACP dependency, adapter, client/server/proxy, capability field, Host DTO, feature flag, or preparatory runtime code may be added until a later explicit product decision unfreezes it. Passing the Same-Session Gate does not itself authorize ACP work.** The decision/evidence/execution set for this direction is maintained in the internal engineering archive (not published).
+**Approved Next (2026-08-30) — Same-Session / Dual-Surface Chat interactions.** Terminal View and Chat View are two product surfaces over the **same Herdr-owned live Agent session**. The native Provider CLI/TUI remains running inside Herdr. Conversation read projection combines the existing read-only transcript/live decoder, narrow Provider hook/plugin/extension events, and Herdr's exact Agent/session/lifecycle state. Ordinary Chat Composer messages continue through the canonical Host Conversation transaction and Herdr `agent.prompt`; a question/approval that belongs to the current in-flight turn is a separate Host-owned `ConversationInteraction` and may be resolved only through an exact Provider hook/plugin response bridge. `blocked` must never be answered by converting the choice into a generic prompt or guessed PTY keys. Companion Solco hooks/plugins must coexist with Herdr integrations and must not steal lifecycle authority from Herdr. Provider-native App Server/RPC/native server transports are optional only after a measured **Same-Session Gate** proves one Agent core/session, single-writer ownership, retained native TUI, safe fallback, and acceptable performance. **ACP is explicitly frozen as of 2026-08-30: no ACP dependency, adapter, client/server/proxy, capability field, Host DTO, feature flag, or preparatory runtime code may be added until a later explicit product decision unfreezes it. Passing the Same-Session Gate does not itself authorize ACP work.** The decision/evidence/execution set for this direction is maintained in the internal engineering archive (not published).
 
 ### Approved Next (2026-10-04) — MyGo Native UI shell + native Terminal migration
 
@@ -96,7 +96,7 @@ MyGo Native UI
   live terminals during hover.
 - Each visible native Terminal uses Herdr's supported
   `terminal attach <terminal_id>` client. Herdr owns the PTY, process,
-  scrollback, terminal identity, resize semantics and persistence; Shardlane
+  scrollback, terminal identity, resize semantics and persistence; Solco
   owns only visibility-scoped presentation attachments and product navigation.
   Hidden Tabs keep no direct-attach fleet. Automatic direct attach never uses
   `--takeover`.
@@ -190,8 +190,8 @@ MyGo Native UI
     Presentation only: no new runtime path, no Herdr method, and the tree
     data, folding and file operations keep their owners.
 - Daily development of the new desktop path must not require compiling the
-  Rust GUI. Current `shardlane-host`, `shardlane-history` and
-  `shardlane-remote` remain compatibility/parity references until each domain
+  Rust GUI. Current `solco-host`, `solco-history` and
+  `solco-remote` remain compatibility/parity references until each domain
   is deliberately ported and its existing contracts are preserved.
 - The Remote/Mobile `/api/v2` wire contract and golden fixtures remain the
   compatibility authority while the Host implementation moves from Rust to
@@ -204,14 +204,14 @@ MyGo Native UI
 
 **Terminal cutover gates.** Direct Pane attach resolves the old full-TUI chrome
 problem without porting `TuiChromeProjection`: the native surfaces display the
-Herdr-owned Pane terminals directly, while Shardlane renders Sidebar/Tab/Pane
+Herdr-owned Pane terminals directly, while Solco renders Sidebar/Tab/Pane
 product chrome with MyGo widgets. Before default-client cutover, real hardware
 must still verify multi-Pane resize, focus transfer, IME/CJK candidates,
 selection/copy/paste, mouse protocols, fullscreen, rapid Tab/Pane switching and
 performance. The rewrite must not introduce a client-owned PTY/process/layout
 authority, VT parser, scrollback authority, or pixel-crop compensation.
 
-- Native presentation uses reusable Shardlane design tokens/components rather
+- Native presentation uses reusable Solco design tokens/components rather
   than page-local styling: macOS-like vibrancy and neutral surfaces, compact
   shadcn-like controls, reusable SVG icon buttons, and native-painted Project →
   Tab → Pane hierarchy guides. Presentation files are split by shell area/page
@@ -247,7 +247,7 @@ Desktop lifecycle
 
 Normative boundaries for this milestone:
 
-- The **Command Center** is a Shardlane presentation/application-service
+- The **Command Center** is a Solco presentation/application-service
   catalog over already-derived Projects, Tabs, Panes, Agents, recent History,
   Services and app actions. It is not another search index and must perform no
   Herdr RPC, filesystem scan, Git/network command or transcript parse when it
@@ -256,7 +256,7 @@ Normative boundaries for this milestone:
   Project does not gain a second client-owned cwd. Files were read-only in
   this milestone (amended 2026-10-13: bounded explicit file operations and
   the WebView preview — see the 2026-10-13 Files decision above);
-  Script definitions remain Shardlane-owned only while Herdr lacks a
+  Script definitions remain Solco-owned only while Herdr lacks a
   native Script resource, while Script Tabs/Panes/processes remain Herdr-owned.
 - Lazygit retains the existing bounded auxiliary-tool exception: at most one
   auxiliary tool process/PTY per window, visibility/project scoped, never a
@@ -271,7 +271,7 @@ Normative boundaries for this milestone:
 - Local Git status is a client-side read projection cached off the render path.
   Optional GitHub PR enrichment is read-only first and must reuse an approved
   authentication source (initially an already-authenticated official `gh` CLI
-  is acceptable); Shardlane does not store a new GitHub token merely to show
+  is acceptable); Solco does not store a new GitHub token merely to show
   PR state. Worktree mutations remain Herdr-owned and are exposed only after a
   verified runtime API is pinned.
 - Desktop notification/Dock/menu-bar presentation consumes the existing Agent
@@ -288,23 +288,23 @@ Normative boundaries for this milestone:
   line-for-line port of the Rust platform installer. Signing secrets stay
   outside the repository and development/unconfigured builds degrade to an
   explicit unavailable state.
-- Shardlane keeps one canonical Sidebar. 0.9 may add density and high-contrast
+- Solco keeps one canonical Sidebar. 0.9 may add density and high-contrast
   preferences, but it must not add titlebar Tabs or alternate navigation
   ownership. Magpie-style provider/model Profiles are adapted only as
-  Shardlane-owned New Task Presets over fields the canonical launch contract
+  Solco-owned New Task Presets over fields the canonical launch contract
   actually owns; provider keys/config/model routing remain outside that
   feature.
 
 Detailed execution and reference comparison live in
 `docs/mygo-native-0.9.0-workspace-intelligence-desktop-experience-plan.md` and
-`docs/reference-magpie-herdr-gpui-shardlane-0.9-audit.md`.
+`docs/reference-magpie-herdr-gpui-solco-0.9-audit.md`.
 
 ### Approved Next (2026-10-05) — 0.10 Git Workbench & Unified Primary Surface
 
 0.10 supersedes the **MyGo-target Lazygit exception** from the 0.9 plan. The
 legacy Rust implementation may remain useful as migration evidence, but the
 new Native target does not ship or maintain Lazygit. Git review becomes a
-first-class Shardlane Native capability instead.
+first-class Solco Native capability instead.
 
 The `/workspace` center has exactly one local presentation owner:
 
@@ -391,9 +391,9 @@ Normative 0.10 boundaries:
   may use `git switch -c` after validation.
 - `egoist/godiff` is a UI/behavior reference only under the audited 2026-10-05
   snapshot. Its relevant implementation packages are `internal/*` and the
-  audited repository had no explicit root license file, so Shardlane does not
+  audited repository had no explicit root license file, so Solco does not
   copy/vendor/import that internal source. The client uses clean-room
-  Shardlane-owned models/services and independently licensed dependencies.
+  Solco-owned models/services and independently licensed dependencies.
 - The 0.10 preflight must reconcile 0.9 integration gaps before declaring
   closure: Files render-time IO, Script persistence/real execution, real
   Services ports, Preview ownership, File Drop wiring, Terminal Find UI,
@@ -432,7 +432,7 @@ symlink-following atomic writes; the page never parses, stores or logs
 config contents or private keys. Saved Herdr machines stay Herdr-owned
 profiles (internal/herdr machine CLI state) rendered read-only with
 registration going through the existing interactive `herdr machine add`
-flow; they are never mirrored into a Shardlane-side registry. Structured
+flow; they are never mirrored into a Solco-side registry. Structured
 editing (HOSTS-02, 2026-10-13) is a bounded single-host form — the alias
 plus HostName/User/Port/ProxyJump — offered only to single-literal Host
 blocks: a save is a single-block directed rewrite in which comments,
@@ -444,25 +444,25 @@ support Match blocks), and the raw editor remains the full-fidelity
 editing path beside it. Host grouping (2026-10-14) is read-only and owned
 by the config file itself: the sidebar groups hosts by the comment markers
 SSH Config Editor writes (`#SCE_GROUP:<id>:::<name>`, `#SCEGroup <id>`) and
-by `Include` file, with collapse state kept in memory only — Shardlane
+by `Include` file, with collapse state kept in memory only — Solco
 never writes the markers and keeps no group registry of its own.
 
 Detailed execution/audit documents:
 
-- `docs/reference-godiff-shardlane-0.10-audit.md`
+- `docs/reference-godiff-solco-0.10-audit.md`
 - `docs/mygo-native-0.10.0-git-workbench-primary-surface-plan.md`
 - `docs/prompts/mygo-native-0.10.0-git-workbench-primary-surface-implementation-prompt.md`
 
 ### Approved Next (2026-10-26) — herdr-projects work board (the one plugin exception)
 
-Shardlane presents the task board of one specific Herdr plugin,
+Solco presents the task board of one specific Herdr plugin,
 [`herdr-projects`](https://github.com/eliasstravik/herdr-projects), natively.
 This is the single, named exception to the "no plugin UI" non-goal in §2: it is
 not a plugin host, marketplace or generic plugin surface, and no other plugin
 earns the same treatment without its own dated decision.
 
 - **Authority.** The plugin owns tasks, their review/merge state machine and
-  their store (`~/.herdr-projects`). Shardlane never stores tasks, never reads
+  their store (`~/.herdr-projects`). Solco never stores tasks, never reads
   or writes those files, never creates worktrees or merges, and never
   reimplements the Coordinator or Watcher. It reads and acts only through the
   plugin's own CLI (`sh <plugin_root>/bin/run.sh <command> --json`, the root
@@ -491,7 +491,7 @@ earns the same treatment without its own dated decision.
   location, or the location mirror drags the selection back). The plugin's own
   "Shown cut off: a remote view holds this pane at …" line inside the board
   is its documented size notice for a `herdr terminal attach` viewer beside
-  Herdr's own window (plugin docs/board-size.md), not a Shardlane fault; the
+  Herdr's own window (plugin docs/board-size.md), not a Solco fault; the
   client has no sanctioned way to change it — an upstream recognition of the
   native viewer would; (2) a read-only Tasks tab in the Header Agent activity popover
   (groups mapped onto the shared attention priority, deduplicated against
@@ -506,7 +506,7 @@ earns the same treatment without its own dated decision.
   board instead of guessing from branch names.
 - **Group derivation (decided 2026-10-26).** `herdr-projects --json` does not
   expose the plugin's own group or its `mergeFailed` / `syncBlocked` /
-  `prFailure` / `prState` flags, and Shardlane does not read the plugin's
+  `prFailure` / `prState` flags, and Solco does not read the plugin's
   files or depend on an upstream change. Groups are derived in Go
   (`internal/workboard.GroupOf`) and every doubt falls toward "Needs you": a
   task is "Ready to approve" only when stage is `approval`, state `blocked`,
@@ -533,7 +533,7 @@ earns the same treatment without its own dated decision.
   (send back), `delegate`, `stop`, `archive`, and `add [--repo <git root of the current
   Project>] [--delegate]`. Actions live on the row's context menu and the
   footer; the plugin decides what applies and its refusal text is shown as a
-  bounded toast. Shardlane keeps no task state of its own. A Tasks row opens the
+  bounded toast. Solco keeps no task state of its own. A Tasks row opens the
   task page (`/task`, one task at a time; the id lives in Shell state because
   task ids contain `/`, and the route is never restored on relaunch): the
   group's writes as prominent buttons (Approve the one primary action), an
@@ -550,8 +550,8 @@ earns the same treatment without its own dated decision.
   offer New Task / Add and Delegate / Open Work Board. The Project list is
   derived from the task ids of `list --json` — the plugin has no projects JSON,
   and its `~/.herdr-projects/data/tasks/<repo>/` folders hold exactly that set;
-  Shardlane does not read or write the plugin's private store (any metadata it
-  needs lives in Shardlane's own settings). It reads the same cached board as
+  Solco does not read or write the plugin's private store (any metadata it
+  needs lives in Solco's own settings). It reads the same cached board as
   the popover — derived, never a registry; only folds persist (`tasks_closed`,
   stored inverted, and `folded_boards`; both default to open).
 - **Project page, pins, coordinators (2026-10-26, shipped).** `/project` mirrors
@@ -584,7 +584,7 @@ earns the same treatment without its own dated decision.
   is read back from it, and it is removed at once; then `pin` keeps the Project in
   the sidebar and `coordinator restart` optionally starts its coordinator. There is
   no plugin API to delete a Project's data, so Archive Project… is the only removal
-  and Shardlane never edits the plugin's data files); New Task dialog (title, description, Task/Research/Chat,
+  and Solco never edits the plugin's data files); New Task dialog (title, description, Task/Research/Chat,
   After, start now; To do tasks also offer Delegate with… — the task's own
   `show <id>` settings as the same choice controls, only changed ones sent as
   `delegate <id> --<setting> V`); Automations group on the Project page (on/off,
@@ -597,7 +597,7 @@ earns the same treatment without its own dated decision.
   `show --json` returns for that scope (switch for booleans, text otherwise);
   validation and refusal text are the plugin's. Voice, Web UI, cross-machine and
   key settings are not shown. Every write goes through the single
-  `workboardWrite` channel; Shardlane copies no option sets.
+  `workboardWrite` channel; Solco copies no option sets.
 - **Not included.** Cross-machine boards, voice/Web UI/keys,
   plugin install/update, folding task workspaces under
   their repo in the Sidebar.
@@ -605,8 +605,8 @@ earns the same treatment without its own dated decision.
 ### Multi-instance model (current — 2026-09-01 no-registry revision)
 
 A **Workspace is one live Herdr instance** (a named Herdr session). There is
-no Shardlane-side workspace registry: instances are enumerated live from
-`herdr session list` (`shardlane_host::herdr::list_sessions`), and Herdr own
+no Solco-side workspace registry: instances are enumerated live from
+`herdr session list` (`solco_host::herdr::list_sessions`), and Herdr own
 persistence (`session.json`) restores workspaces, tabs, and per-Tab cwd
 across server restarts.
 
@@ -615,7 +615,7 @@ across server restarts.
   (`bind_instance` / `open_or_jump_project` in `main.rs`); switching
   Workspaces rebinds the window or jumps to that Workspace existing window.
 
-- Shardlane persists only cosmetics and window bookkeeping: per-session
+- Solco persists only cosmetics and window bookkeeping: per-session
   display-name overrides (stored as `workspace.json` inside Herdr's own
   session directory so the name travels with the session), the machine list
   (`settings.devices`, local-seeded; SSH socket bridging lives in
@@ -627,7 +627,7 @@ across server restarts.
   instances are created, stopped, and deleted through the Herdr session CLI,
   never behind it. Project paths resolve exclusively through
   `build_project_index` (`workspace_model.rs` feeding
-  `shardlane_host::project_index`).
+  `solco_host::project_index`).
 
 - The legacy client-side Workspace grouping machinery — the
   `config.workspaces` registry, `project_path_overrides`, the dormant-project
@@ -661,7 +661,7 @@ norms, and one-click hand-off to the system default browser for anything
 outside the local preview scope. PTY/process/agent authority never moves
 into it.
 
-If a runtime capability is missing from the Herdr protocol, the preferred fix is to extend Herdr rather than bypass it inside Shardlane.
+If a runtime capability is missing from the Herdr protocol, the preferred fix is to extend Herdr rather than bypass it inside Solco.
 
 ## 3. Layer model
 
@@ -672,16 +672,16 @@ Implementation decisions follow this ownership ladder:
 3. **gpui-component 0.5.1 + gpui-component-assets 0.5.1** — standard native desktop components, interaction behavior, and the matching default `IconName` asset bundle.
 4. **GPUI 0.2.2** — lower-level native window/input/render primitives when the component library has no suitable owner.
 5. **Proven compatible implementation pattern** — evidence only; never a permanent product identity or alternate architecture.
-6. **Custom Shardlane code** — only when the earlier layers cannot own the capability cleanly.
+6. **Custom Solco code** — only when the earlier layers cannot own the capability cleanly.
 
 Custom code must have a concrete reason to exist: missing API, incompatible ABI, ownership conflict, or measured limitation.
 
 ## 4. Workspace and Project model
 
-Shardlane projects one window onto one Herdr instance without duplicating runtime authority:
+Solco projects one window onto one Herdr instance without duplicating runtime authority:
 
 ```text
-Shardlane window
+Solco window
   └─ Workspace = one live Herdr instance (named session)
       └─ Project ← projection of one Herdr runtime workspace
           ├─ Tab
@@ -693,22 +693,22 @@ Shardlane window
 
 A **Workspace** is the product view of one Herdr instance. Identity, order,
 tabs, panes, process lifecycle, and persistence belong to the runtime;
-Shardlane adds only a per-session display-name override. Workspaces are
+Solco adds only a per-session display-name override. Workspaces are
 enumerated live (there is no client-side registry), and exactly one Workspace
 is bound per window; switching rebinds the window or jumps to the existing
 window for that instance.
 
-A **Project** is the user-facing projection of a Herdr runtime workspace. Herdr real `Workspace` type, `workspace_id`, `workspace.*` protocol methods, and runtime events remain technically named Workspace at the integration boundary. Shardlane code above that boundary uses Project terminology whenever it describes the product/domain concept. `ProjectIndex` is a disposable derived index that correlates runtime workspace identity, project path, Tabs, Panes, Agents, and Scripts; it is not a second source of truth.
+A **Project** is the user-facing projection of a Herdr runtime workspace. Herdr real `Workspace` type, `workspace_id`, `workspace.*` protocol methods, and runtime events remain technically named Workspace at the integration boundary. Solco code above that boundary uses Project terminology whenever it describes the product/domain concept. `ProjectIndex` is a disposable derived index that correlates runtime workspace identity, project path, Tabs, Panes, Agents, and Scripts; it is not a second source of truth.
 Current projection policy:
 
 - all Herdr runtime workspaces are projected as lightweight **Project** Sidebar/search metadata;
 - all Tab metadata is projected globally so any manually expanded Project can show its Tabs without changing runtime focus;
-- Shardlane owns its ephemeral selected Project/Tab after startup; Herdr global focus is only an initialization/fallback signal and must not steal the current client view while the selected objects still exist;
-- Herdr focus events are therefore not subscribed as shell-navigation drivers; navigation selection is fully client-owned: Project/Tab/Pane selection and directional pane navigation update the local projection only and never emit Herdr `workspace.focus`/`tab.focus`/`pane.focus`/`pane.focus_direction`; the one sanctioned navigation-seam exception is a `pane.zoom` layout mutation (2026-10-13 zoom-follow decision): a navigation jump onto a Pane of an already maximized Tab moves the maximization to that Pane (`pane.zoom` mode `on`), selecting the Tab itself steps the maximized Pane down so the whole split shows (mode `off`), and navigation never zooms a Tab that is not already maximized; `pane.updated` focus facts patch Agent/Pane metadata but never flip the client selection; structural layout results/events keep geometry/zoom facts while preserving the local selection, falling back to Herdr's focused Pane only when the local selection no longer exists. Herdr-side focus churn (including an explicit shared-TUI action switching Tabs/Panes) must not implicitly rewrite Shardlane's semantic navigation;
+- Solco owns its ephemeral selected Project/Tab after startup; Herdr global focus is only an initialization/fallback signal and must not steal the current client view while the selected objects still exist;
+- Herdr focus events are therefore not subscribed as shell-navigation drivers; navigation selection is fully client-owned: Project/Tab/Pane selection and directional pane navigation update the local projection only and never emit Herdr `workspace.focus`/`tab.focus`/`pane.focus`/`pane.focus_direction`; the one sanctioned navigation-seam exception is a `pane.zoom` layout mutation (2026-10-13 zoom-follow decision): a navigation jump onto a Pane of an already maximized Tab moves the maximization to that Pane (`pane.zoom` mode `on`), selecting the Tab itself steps the maximized Pane down so the whole split shows (mode `off`), and navigation never zooms a Tab that is not already maximized; `pane.updated` focus facts patch Agent/Pane metadata but never flip the client selection; structural layout results/events keep geometry/zoom facts while preserving the local selection, falling back to Herdr's focused Pane only when the local selection no longer exists. Herdr-side focus churn (including an explicit shared-TUI action switching Tabs/Panes) must not implicitly rewrite Solco's semantic navigation;
 - global navigation reconciliation refreshes only Project/Tab metadata;
 - pane create/close/exit/move events refresh the visible Tab surface only when they affect the currently selected Project; unrelated Project pane churn must not touch the current terminal surface;
 - layout events carry their own snapshot and update only the selected Tab when applicable;
-- structural commands consume authoritative Herdr return payloads/events directly when those already contain the created/moved/focused Pane, Tab, runtime Workspace, or layout; Shardlane fetches only metadata that is genuinely absent rather than following every mutation with `visible_state()`;
+- structural commands consume authoritative Herdr return payloads/events directly when those already contain the created/moved/focused Pane, Tab, runtime Workspace, or layout; Solco fetches only metadata that is genuinely absent rather than following every mutation with `visible_state()`;
 - `visible_state()` remains appropriate for bootstrap, explicit manual refresh, and exceptional recovery, not as the default completion path for high-frequency Pane/Tab/Project actions;
 - global Agent state is projected independently for navigation and status; protocol-19 `pane.updated` payloads patch known Agent/Pane status metadata directly and list-wide `agent.list` remains a fallback only when the event cannot identify an existing Agent projection;
 - high-frequency terminal output does not rebuild the entire shell projection;
@@ -719,7 +719,7 @@ Current projection policy:
 
 The expensive terminal/render path must remain visibility-scoped.
 
-Replaceable client background work follows owner lifetime. When a GPUI job becomes obsolete because the user selected another object or left the surface, Shardlane keeps its job handle and drops it to cancel the obsolete work. `.detach()` is reserved for work that intentionally outlives the initiating UI state.
+Replaceable client background work follows owner lifetime. When a GPUI job becomes obsolete because the user selected another object or left the surface, Solco keeps its job handle and drops it to cancel the obsolete work. `.detach()` is reserved for work that intentionally outlives the initiating UI state.
 
 ## 5. Terminal architecture
 
@@ -734,7 +734,7 @@ interaction acceptance remains a cutover gate as described above. The current Ru
 shipped path until parity is verified, and a Web-terminal fallback is not the
 normal desktop Terminal.
 
-**Current — Herdr TUI is the sole normal terminal surface.** This means the hosted Herdr TUI is the sole **normal Terminal implementation/surface**; it is not a claim that no other Agent *presentation* may exist. An approved-next semantic Chat View (see §6) renders the same Herdr-owned Agent session without becoming a second terminal implementation. Landed 2026-08-27, with the bounded auxiliary-tool (Lazygit) exception landed 2026-08-29: Shardlane keeps its retained native UI/UX and product features while deleting the direct Embedded per-Pane terminal controller/render path. The normal work surface owns exactly one **primary** `herdr` TUI process behind one local PTY, one private Ghostty terminal-emulator model, and one GPUI presentation/input bridge. While a visible Right Panel is explicitly on Lazygit, Shardlane may own **at most one ephemeral auxiliary tool process/PTY** with its own private Ghostty model and session state; it is bound to the active Project's resolved Git root, is stopped on hide/close/Project switch, never occupies Herdr's global terminal slot, and never creates a per-Project process fleet. A detected Lazygit older than the certified minimum may still use the stable CLI startup arguments, but receives no Shardlane overlay and is visibly marked “update recommended”; missing CLI remains a blocking native state. Native Sidebar/Search/History/New Agent/Activity/notification navigation converges on one Herdr focus-intent seam; native secondary surfaces may cover/block terminal input without tearing down the primary host. Remote clients retain independent navigation and move the Mac TUI only through an explicit cross-client action. The cutover raises the minimum fully supported Herdr socket protocol to 20 because native shell → TUI focus relies on protocol-20 `workspace.focus`/`tab.focus`/`pane.focus`/`agent.focus`; older servers receive an explicit upgrade state, never an Embedded fallback. `TerminalSurfaceMode`, per-Pane `terminal session control --takeover`, `PaneTerminalSlot`/`pane_terminals`, Embedded native pane layout rendering, deep-history reseed/scrollbar/controller branches, and mode-switch recovery are deleted. `portable-pty`, Ghostty models, IME, selection/copy/paste, mouse/trackpad encoding, terminal appearance, and host restart/failure UX remain private hosted-surface infrastructure; only the primary host participates in Herdr runtime focus. Hosted-TUI right-click is owned by the Herdr TUI itself (2026-09-18): every mouse button — Right included — is encoded straight to the hosted PTY, so Herdr's own TUI context menu is the only right-click menu; Shardlane registers no native terminal context menu and never withholds Right press/motion. Clipboard and Pane operations that the deleted native menu used to mirror remain available through the Sidebar Pane rows, keyboard shortcuts, and the TUI's own menu.
+**Current — Herdr TUI is the sole normal terminal surface.** This means the hosted Herdr TUI is the sole **normal Terminal implementation/surface**; it is not a claim that no other Agent *presentation* may exist. An approved-next semantic Chat View (see §6) renders the same Herdr-owned Agent session without becoming a second terminal implementation. Landed 2026-08-27, with the bounded auxiliary-tool (Lazygit) exception landed 2026-08-29: Solco keeps its retained native UI/UX and product features while deleting the direct Embedded per-Pane terminal controller/render path. The normal work surface owns exactly one **primary** `herdr` TUI process behind one local PTY, one private Ghostty terminal-emulator model, and one GPUI presentation/input bridge. While a visible Right Panel is explicitly on Lazygit, Solco may own **at most one ephemeral auxiliary tool process/PTY** with its own private Ghostty model and session state; it is bound to the active Project's resolved Git root, is stopped on hide/close/Project switch, never occupies Herdr's global terminal slot, and never creates a per-Project process fleet. A detected Lazygit older than the certified minimum may still use the stable CLI startup arguments, but receives no Solco overlay and is visibly marked “update recommended”; missing CLI remains a blocking native state. Native Sidebar/Search/History/New Agent/Activity/notification navigation converges on one Herdr focus-intent seam; native secondary surfaces may cover/block terminal input without tearing down the primary host. Remote clients retain independent navigation and move the Mac TUI only through an explicit cross-client action. The cutover raises the minimum fully supported Herdr socket protocol to 20 because native shell → TUI focus relies on protocol-20 `workspace.focus`/`tab.focus`/`pane.focus`/`agent.focus`; older servers receive an explicit upgrade state, never an Embedded fallback. `TerminalSurfaceMode`, per-Pane `terminal session control --takeover`, `PaneTerminalSlot`/`pane_terminals`, Embedded native pane layout rendering, deep-history reseed/scrollbar/controller branches, and mode-switch recovery are deleted. `portable-pty`, Ghostty models, IME, selection/copy/paste, mouse/trackpad encoding, terminal appearance, and host restart/failure UX remain private hosted-surface infrastructure; only the primary host participates in Herdr runtime focus. Hosted-TUI right-click is owned by the Herdr TUI itself (2026-09-18): every mouse button — Right included — is encoded straight to the hosted PTY, so Herdr's own TUI context menu is the only right-click menu; Solco registers no native terminal context menu and never withholds Right press/motion. Clipboard and Pane operations that the deleted native menu used to mirror remain available through the Sidebar Pane rows, keyboard shortcuts, and the TUI's own menu.
 
 Terminal ownership is split deliberately in the current transitional implementation:
 
@@ -766,20 +766,20 @@ Window/pane resize follows a hold-frame contract: the local Ghostty model reflow
 
 ## 6. Native shell architecture
 
-Shardlane has one canonical native shell and one canonical Sidebar.
+Solco has one canonical native shell and one canonical Sidebar.
 
-**Approved Next — Activity and operational status.** Activity is a global Shardlane presentation over the existing global Herdr Agent index plus Shardlane Script/Service runtime projections. It is not scoped to the active Shardlane Workspace and it must not create a second Herdr event subscription, polling loop, terminal controller, or durable runtime-state database. The existing reconciled Herdr event stream remains authoritative. Shardlane may persist only bounded user-handling receipts such as “this exact completion revision was reviewed”. Operational status is modeled on two axes: runtime lifecycle and user attention. The shared attention priority is `NeedsAttention > Working > ReadyForReview > Idle > Resolved`; blocked Agents and failed Services therefore outrank working items because they require user action. The title-bar Activity control, Project rows, Agent/Pane rows, and collapsed Agents/Services headers must consume one shared aggregation/status-glyph implementation instead of separately interpreting raw strings. The Activity control lives beside the title-bar Sidebar toggle and may activate a Sidebar Activity route that replaces the normal Projects/Agents/Services body without introducing an alternate Sidebar.
+**Approved Next — Activity and operational status.** Activity is a global Solco presentation over the existing global Herdr Agent index plus Solco Script/Service runtime projections. It is not scoped to the active Solco Workspace and it must not create a second Herdr event subscription, polling loop, terminal controller, or durable runtime-state database. The existing reconciled Herdr event stream remains authoritative. Solco may persist only bounded user-handling receipts such as “this exact completion revision was reviewed”. Operational status is modeled on two axes: runtime lifecycle and user attention. The shared attention priority is `NeedsAttention > Working > ReadyForReview > Idle > Resolved`; blocked Agents and failed Services therefore outrank working items because they require user action. The title-bar Activity control, Project rows, Agent/Pane rows, and collapsed Agents/Services headers must consume one shared aggregation/status-glyph implementation instead of separately interpreting raw strings. The Activity control lives beside the title-bar Sidebar toggle and may activate a Sidebar Activity route that replaces the normal Projects/Agents/Services body without introducing an alternate Sidebar.
 
-**Removed 2026-08-27 — Project Notes and Bookmarks.** Both product branches were deleted by the TUI-only convergence: modules, sidebar/header entries, actions, shortcut entries, config fields, bundled note-editor web assets, and their tests are gone. Shardlane must not reintroduce them. Previously created user files on disk are not destructively erased; cleanup of old local data remains a separate explicit user action if ever needed. The right-panel local web preview (Browser) is unaffected.
+**Removed 2026-08-27 — Project Notes and Bookmarks.** Both product branches were deleted by the TUI-only convergence: modules, sidebar/header entries, actions, shortcut entries, config fields, bundled note-editor web assets, and their tests are gone. Solco must not reintroduce them. Previously created user files on disk are not destructively erased; cleanup of old local data remains a separate explicit user action if ever needed. The right-panel local web preview (Browser) is unaffected.
 
-**Current — Browser Profiles (retained).** The built-in macOS browser remains a native WKWebView surface whose identity is explicit Browser Sessions created with a Browser Profile configuration. Shardlane-owned Browser Profiles use WebKit website data stores for cookie/cache/site-data isolation; Shardlane must not read or copy external browser credential/cookie databases.
+**Current — Browser Profiles (retained).** The built-in macOS browser remains a native WKWebView surface whose identity is explicit Browser Sessions created with a Browser Profile configuration. Solco-owned Browser Profiles use WebKit website data stores for cookie/cache/site-data isolation; Solco must not read or copy external browser credential/cookie databases.
 
 **Removed 2026-08-27 — Annotation.** The DOM-annotation bridge and the Notate-style global ScreenCaptureKit capture/mark/export domain were deleted by the TUI-only convergence, including the bundled `annotation-bridge` asset, the Screen Recording Info.plist usage description, and the annotation-only `objc2-image-io`/`objc2-screen-capture-kit`/`objc2-core-graphics`/`objc2-core-foundation` dependencies. Do not reintroduce them; Browser keeps its WKWebView infrastructure untouched.
 
 **Approved Next — Shortcut Registry.** Application shortcuts have one registry that owns stable command ID, platform default/user binding, scope, conflict semantics and Terminal-consumption policy. macOS keeps Cmd defaults while future Linux/Windows profiles map the same Action IDs to Ctrl; explicit user overrides remain unchanged. Tooltips/menu labels consume the resolved registry binding. Terminal input must not depend on a second manually maintained list of global shortcuts to decide which keystrokes to swallow. Text inputs, Terminal, Browser and other focused surfaces receive explicit scopes; only commands allowed in the active scope may preempt the focused surface. The hosted TUI and the observer derive their swallow decisions from this one resolved registry — never from a second hand-maintained chord list.
 
 
-**Approved Next — Agent Chat semantic view and shared Agent UI.** The hosted Herdr TUI remains the sole Terminal implementation while an alternate **Chat View** presents the same Herdr-owned Agent session as a provider-neutral semantic work timeline following the ChatGPT process contract (2026-09-06): assistant text — narration between tool calls and the final answer alike — is never folded and is the visible progress report; thinking consolidates into one collapsible block per turn — labeled Thought-for-Xs from transcript timestamps, streaming its tail live and auto-collapsing once the turn starts talking; tool activity renders as compact per-call chip rows with only a running spinner or failure mark, and consecutive runs (two or more calls, possibly spanning messages) auto-compact into one expandable group; the live Working indicator is anti-flicker-delayed so instant completions never flash it; a failed run marks the timeline with a Stopped row (Codex contract: the partial scene stays visible); a response footer (copy/time) closes each settled turn. The Chat View is a semantic sidecar projection, not a runtime: Claude Code, Codex, and Pi CLI processes continue to run only inside the Herdr TUI; Chat never launches a second provider process, never parses TUI/ANSI screen text for semantics, and never becomes a second conversation authority. The live semantic source is the provider's own persisted session file, decoded incrementally by a dedicated live-decoder seam in `shardlane-history` (`live/`) that reuses the existing Claude/Codex/Pi adapter interpretation rules; exact `(provider, native session id)` correlation comes from Herdr `AgentSessionInfo.value` matched through the existing History resume-identity rules, never from cwd/mtime guessing. Ordinary prompts are submitted only through the Herdr `agent.prompt` seam in verified sendable states; blocked/unsupported interactions explicitly fall back to Terminal. Agent status (working/blocked/idle/done) remains Herdr-authoritative and may render a Working state before the provider file appends. Agent-facing presentation primitives are owned by one shared `agent_ui` module (`AgentComposer` extracted from New Agent, shared conversation/activity/Markdown presentation): New Agent, History Detail, and Chat consume the same Composer and conversation visual language while keeping separate lifecycles — New Agent owns launch configuration, History owns its read-only catalog/paging/cache/search/Continue semantics, Chat owns its live source binding, incremental tail, generation guards, follow-tail, and prompt interaction. This direction adapts proven author-owned presentation work for transcript process presentation, work/activity presentation, incremental Markdown, streaming performance discipline, and composer polish; adapted portions are author-owned code intentionally relicensed for Shardlane, not GPL-derived third-party imports, and any genuinely third-party material (e.g. Lucide) keeps its required notice in `THIRD_PARTY_NOTICES.md`. No provider daemon/runtime, input engine, or menu system from that earlier work is part of this direction. Treat remaining stages as in-progress rather than landed.
+**Approved Next — Agent Chat semantic view and shared Agent UI.** The hosted Herdr TUI remains the sole Terminal implementation while an alternate **Chat View** presents the same Herdr-owned Agent session as a provider-neutral semantic work timeline following the ChatGPT process contract (2026-09-06): assistant text — narration between tool calls and the final answer alike — is never folded and is the visible progress report; thinking consolidates into one collapsible block per turn — labeled Thought-for-Xs from transcript timestamps, streaming its tail live and auto-collapsing once the turn starts talking; tool activity renders as compact per-call chip rows with only a running spinner or failure mark, and consecutive runs (two or more calls, possibly spanning messages) auto-compact into one expandable group; the live Working indicator is anti-flicker-delayed so instant completions never flash it; a failed run marks the timeline with a Stopped row (Codex contract: the partial scene stays visible); a response footer (copy/time) closes each settled turn. The Chat View is a semantic sidecar projection, not a runtime: Claude Code, Codex, and Pi CLI processes continue to run only inside the Herdr TUI; Chat never launches a second provider process, never parses TUI/ANSI screen text for semantics, and never becomes a second conversation authority. The live semantic source is the provider's own persisted session file, decoded incrementally by a dedicated live-decoder seam in `solco-history` (`live/`) that reuses the existing Claude/Codex/Pi adapter interpretation rules; exact `(provider, native session id)` correlation comes from Herdr `AgentSessionInfo.value` matched through the existing History resume-identity rules, never from cwd/mtime guessing. Ordinary prompts are submitted only through the Herdr `agent.prompt` seam in verified sendable states; blocked/unsupported interactions explicitly fall back to Terminal. Agent status (working/blocked/idle/done) remains Herdr-authoritative and may render a Working state before the provider file appends. Agent-facing presentation primitives are owned by one shared `agent_ui` module (`AgentComposer` extracted from New Agent, shared conversation/activity/Markdown presentation): New Agent, History Detail, and Chat consume the same Composer and conversation visual language while keeping separate lifecycles — New Agent owns launch configuration, History owns its read-only catalog/paging/cache/search/Continue semantics, Chat owns its live source binding, incremental tail, generation guards, follow-tail, and prompt interaction. This direction adapts proven author-owned presentation work for transcript process presentation, work/activity presentation, incremental Markdown, streaming performance discipline, and composer polish; adapted portions are author-owned code intentionally relicensed for Solco, not GPL-derived third-party imports, and any genuinely third-party material (e.g. Lucide) keeps its required notice in `THIRD_PARTY_NOTICES.md`. No provider daemon/runtime, input engine, or menu system from that earlier work is part of this direction. Treat remaining stages as in-progress rather than landed.
 The shell uses gpui-component/GPUI for:
 
 - root/window structure;
@@ -791,27 +791,27 @@ The shell uses gpui-component/GPUI for:
 - settings controls;
 - native focus and pointer behavior.
 
-Global navigation Search, Project picker, and Tab picker share one root-owned searchable-list overlay. Entry points must not duplicate picker implementations or rely on title-bar-specific hit-testing behavior. The overlay owns picker focus/lifetime, is rendered above the canonical shell, and uses the searchable input itself as the primary visual anchor rather than duplicating a second internal title bar. Its width/height adapt to the host window while retaining bounded desktop caps; result rows consume the List's actual available width (`w_full`) instead of a guessed picker pixel width, and every List item uses one fixed height because gpui-component List requires uniform row height. List-native empty states explain unmatched queries, keyboard hints use lightweight keycap affordances, and clicking the backdrop closes the picker while clicks inside the palette stop propagation. Global Search treats Workspace and Project as distinct scopes: `#workspace` / `workspace:` target Shardlane-owned Workspace contexts, while `#project` / `project:` target Projects; `#script` includes both durable Scripts and read-only detected services. Unique hash-prefixes complete semantically (`#pro` → `#project`, `#work` → `#workspace`) and surface the canonical completion in result metadata, while ambiguous prefixes such as `#p` remain literal rather than being guessed. A Workspace search scope expands to the Project paths owned by that Workspace before History metadata search runs off the UI thread after a short debounce. Runtime Project paths resolve from the best available authoritative Herdr projection (`Workspace.cwd`, then Pane cwd, then Agent cwd) because Herdr 0.8.x runtime workspace metadata may omit cwd. Project and Tab pickers never query History.
+Global navigation Search, Project picker, and Tab picker share one root-owned searchable-list overlay. Entry points must not duplicate picker implementations or rely on title-bar-specific hit-testing behavior. The overlay owns picker focus/lifetime, is rendered above the canonical shell, and uses the searchable input itself as the primary visual anchor rather than duplicating a second internal title bar. Its width/height adapt to the host window while retaining bounded desktop caps; result rows consume the List's actual available width (`w_full`) instead of a guessed picker pixel width, and every List item uses one fixed height because gpui-component List requires uniform row height. List-native empty states explain unmatched queries, keyboard hints use lightweight keycap affordances, and clicking the backdrop closes the picker while clicks inside the palette stop propagation. Global Search treats Workspace and Project as distinct scopes: `#workspace` / `workspace:` target Solco-owned Workspace contexts, while `#project` / `project:` target Projects; `#script` includes both durable Scripts and read-only detected services. Unique hash-prefixes complete semantically (`#pro` → `#project`, `#work` → `#workspace`) and surface the canonical completion in result metadata, while ambiguous prefixes such as `#p` remain literal rather than being guessed. A Workspace search scope expands to the Project paths owned by that Workspace before History metadata search runs off the UI thread after a short debounce. Runtime Project paths resolve from the best available authoritative Herdr projection (`Workspace.cwd`, then Pane cwd, then Agent cwd) because Herdr 0.8.x runtime workspace metadata may omit cwd. Project and Tab pickers never query History.
 
 Application typography is semantic and centralized in `theme.rs`: app title, section title, list title, body, description, metadata, and decorative text. Fixed application UI must use those tokens rather than introducing page-local pixel font sizes. Terminal glyph size remains a separate user-configurable terminal setting and does not inherit fixed application typography.
 
 The native Header is visually continuous with the shell instead of being a third chrome surface. While the Sidebar is visible, the Header segment above it uses exactly the Sidebar surface color and has no visible bottom divider; from the authoritative Sidebar width boundary to the right edge, the Header uses the content background and may keep one subtle bottom divider. The Sidebar toggle lives at the trailing edge of the left Header segment, while Workspace/Tab breadcrumbs start in the content segment. Collapsing or auto-collapsing the Sidebar converts the full Header to the content surface. Header operational state is contextual rather than permanent: a shared pure `OperationalSummary` derives blocked/working Agent counts and failed/active Script counts from the existing in-memory projections. Blocked/failed attention may remain visible regardless of Sidebar state; ordinary working/active state is only a Header fallback when the Sidebar is hidden, so the Header does not duplicate an already-visible Sidebar. Operational indicators are actions: with a visible Sidebar they reveal the corresponding section, while auto-collapsed layouts jump directly to the highest-priority projected Agent/Script. Healthy Herdr connection state occupies no persistent chrome; offline state is an explicit reconnect action. Auto-collapsed layouts must not render a dead Sidebar-toggle affordance; they expose compact Search/History Header fallbacks instead. This summary is presentation-only and is the future source for the macOS status item as well.
 
-There is no alternate/reference-branded Sidebar mode. The global `History` entry remains a permanent library surface for every indexed Conversation, including projects that are not currently represented by a Herdr Workspace, but it is a compact icon action beside the global Search field rather than a full-height Sidebar row. History owns its own Refresh action; the Sidebar does not duplicate History refresh/reconnect chrome. Workspaces are the primary Sidebar hierarchy: the `Workspaces` and `Agents` section headers remain fixed while their item regions scroll independently, and each section can be collapsed without changing Herdr runtime state. `New Workspace` and `New Script` are trailing `+` actions on their respective section headers, not navigation rows; each button must stop event propagation so creation never toggles the section disclosure. Expanded empty sections render concise semantic empty states instead of blank space. Collapsed Agent/Script headers may expose attention/activity aggregates only when that section is hidden, and the Script list uses a viewport-relative bounded maximum height so it cannot consume the Workspaces/Agents area on short windows. Each Workspace is a folder-like disclosure node; any manually expanded Workspace renders its projected live Tabs/Panes and then matching read-only historical Conversations directly as Workspace-level secondary rows rather than behind another History disclosure. A multi-Pane Tab projects its Pane children from Herdr `pane.list`/`pane.layout`; rows follow authoritative spatial layout order, focused/zoomed state comes from the live Tab surface, and preload/in-flight state is presentation-only. Historical rows are ordered by conversation update time, query only the currently requested bounded metadata window, reveal 10 sessions initially and 10 more per explicit request, and open the canonical History surface in detail-only mode. The History transcript is a single-column, full-width chronological timeline rather than left/right chat bubbles. On wide windows the History library may present conversation list and detail side by side; below the compact-width threshold it becomes list-first navigation and opens the selected detail full-width with an explicit Back action. Hidden compact-layout detail must not be constructed when only the list is visible. The top-level `History` entry is the complete-library entry point and shows the History list plus detail; entering from a projected historical item or global conversation search hides the library list, and only the top-level History entry switches the surface back to list+detail library mode. Live Tabs/Panes remain ahead of historical rows because protocol 19 exposes Agent `revision`/`state_change_seq` but no wall-clock activity timestamp comparable with History `updated_at`; Shardlane must not invent a cross-domain time ordering. When Herdr exposes a live Agent with the same stable native session identity, the Workspace projection hides the historical duplicate and the live Tab/Pane becomes the visible item; this is projection deduplication only and never deletes the History catalog record. History matching uses canonical project paths and remains Shardlane presentation state, not Herdr runtime state. Tabs and History rows that carry a known Agent use that Agent's brand mark. Agent rows expose Herdr Agent status, and a Workspace may surface an aggregate working/blocked indicator when a child Agent needs attention. Sidebar state is limited to width, collapsed state, per-Workspace disclosure/history reveal count, section disclosure, and navigation state.
+There is no alternate/reference-branded Sidebar mode. The global `History` entry remains a permanent library surface for every indexed Conversation, including projects that are not currently represented by a Herdr Workspace, but it is a compact icon action beside the global Search field rather than a full-height Sidebar row. History owns its own Refresh action; the Sidebar does not duplicate History refresh/reconnect chrome. Workspaces are the primary Sidebar hierarchy: the `Workspaces` and `Agents` section headers remain fixed while their item regions scroll independently, and each section can be collapsed without changing Herdr runtime state. `New Workspace` and `New Script` are trailing `+` actions on their respective section headers, not navigation rows; each button must stop event propagation so creation never toggles the section disclosure. Expanded empty sections render concise semantic empty states instead of blank space. Collapsed Agent/Script headers may expose attention/activity aggregates only when that section is hidden, and the Script list uses a viewport-relative bounded maximum height so it cannot consume the Workspaces/Agents area on short windows. Each Workspace is a folder-like disclosure node; any manually expanded Workspace renders its projected live Tabs/Panes and then matching read-only historical Conversations directly as Workspace-level secondary rows rather than behind another History disclosure. A multi-Pane Tab projects its Pane children from Herdr `pane.list`/`pane.layout`; rows follow authoritative spatial layout order, focused/zoomed state comes from the live Tab surface, and preload/in-flight state is presentation-only. Historical rows are ordered by conversation update time, query only the currently requested bounded metadata window, reveal 10 sessions initially and 10 more per explicit request, and open the canonical History surface in detail-only mode. The History transcript is a single-column, full-width chronological timeline rather than left/right chat bubbles. On wide windows the History library may present conversation list and detail side by side; below the compact-width threshold it becomes list-first navigation and opens the selected detail full-width with an explicit Back action. Hidden compact-layout detail must not be constructed when only the list is visible. The top-level `History` entry is the complete-library entry point and shows the History list plus detail; entering from a projected historical item or global conversation search hides the library list, and only the top-level History entry switches the surface back to list+detail library mode. Live Tabs/Panes remain ahead of historical rows because protocol 19 exposes Agent `revision`/`state_change_seq` but no wall-clock activity timestamp comparable with History `updated_at`; Solco must not invent a cross-domain time ordering. When Herdr exposes a live Agent with the same stable native session identity, the Workspace projection hides the historical duplicate and the live Tab/Pane becomes the visible item; this is projection deduplication only and never deletes the History catalog record. History matching uses canonical project paths and remains Solco presentation state, not Herdr runtime state. Tabs and History rows that carry a known Agent use that Agent's brand mark. Agent rows expose Herdr Agent status, and a Workspace may surface an aggregate working/blocked indicator when a child Agent needs attention. Sidebar state is limited to width, collapsed state, per-Workspace disclosure/history reveal count, section disclosure, and navigation state.
 
-When both `Workspaces` and `Agents` are expanded, gpui-component owns the vertical resize interaction between them. Shardlane persists only the preferred Workspaces section height and clamps it against the current window height so Agents retains a usable minimum region on smaller displays; section size is presentation state, not Herdr runtime state.
+When both `Workspaces` and `Agents` are expanded, gpui-component owns the vertical resize interaction between them. Solco persists only the preferred Workspaces section height and clamps it against the current window height so Agents retains a usable minimum region on smaller displays; section size is presentation state, not Herdr runtime state.
 
-Visual details may evolve, but they must evolve inside the single Shardlane Sidebar ownership seam rather than by adding a second implementation.
+Visual details may evolve, but they must evolve inside the single Solco Sidebar ownership seam rather than by adding a second implementation.
 
-**Current (2026-09-19 second revision) — client-owned Tab actions, always-cropped TUI chrome.** Tab placement is not configurable. The canonical Sidebar renders the per-Project Tab subtree plus an explicit "新增 Tab" row (creation through `tab.create`), with Rename/Close/drag reorder on the Tab rows (`tab.move`/`tab.rename`/`tab.close`; `tab.moved` stays the correction channel); the Header breadcrumb's Tab layer adds a hover-revealed "…" menu whose Rename/Close items route through the same `tab.rename`/`tab.close` channels — no second action implementation exists. The hosted Herdr TUI's own chrome (Tab bar, and any other chrome margins `pane.layout.area` reports) is cropped away in every window: Shardlane resurrected the client-side chrome-crop projection (`TuiChromeProjection`). The Ghostty model keeps the RAW TUI grid while presentation paints only the Pane rectangle; every consumer that crosses the crop boundary is compensated through the projection — painted frames (`set_terminal_frame`), mouse SGR coordinates (`terminal_mouse_geometry_for`), word/line selections and semantic copy (visible→raw cell mapping), and the PTY resize (`tui_raw_terminal_size` compensated-grid winsize). Geometry probes are event-driven from layout surfaces plus a bounded 60ms fallback after attach/focus/activation; the probe is crop-only on navigation and a guarded re-impose on activation (the stale-probe race signature — an unchanged pane rect against a grown adopted grid — is rejected). Belt-and-suspenders: startup still normalizes Herdr `ui.hide_tab_bar_when_single_tab` to `true` (one-shot `migrations.tui_tab_bar_hidden`), so a single-Tab window needs no crop. Herdr 0.9.1 has no always-hide key (`show_tab_bar = rows > 1 && !(hide && tab_count == 1)`); the crop is the sanctioned product answer and an upstream `ui.hide_tab_bar` key remains welcome. The former `terminal.tab_bar_placement` selector (`sidebar`/`native`/`herdr-tui`) and the native content-area Tab strip (`shell_tabs.rs`) stay deleted — the Sidebar tree and breadcrumb menu own Tab actions and are never a second runtime or navigation implementation; Herdr's Tab order and lifecycle stay authoritative.
+**Current (2026-09-19 second revision) — client-owned Tab actions, always-cropped TUI chrome.** Tab placement is not configurable. The canonical Sidebar renders the per-Project Tab subtree plus an explicit "新增 Tab" row (creation through `tab.create`), with Rename/Close/drag reorder on the Tab rows (`tab.move`/`tab.rename`/`tab.close`; `tab.moved` stays the correction channel); the Header breadcrumb's Tab layer adds a hover-revealed "…" menu whose Rename/Close items route through the same `tab.rename`/`tab.close` channels — no second action implementation exists. The hosted Herdr TUI's own chrome (Tab bar, and any other chrome margins `pane.layout.area` reports) is cropped away in every window: Solco resurrected the client-side chrome-crop projection (`TuiChromeProjection`). The Ghostty model keeps the RAW TUI grid while presentation paints only the Pane rectangle; every consumer that crosses the crop boundary is compensated through the projection — painted frames (`set_terminal_frame`), mouse SGR coordinates (`terminal_mouse_geometry_for`), word/line selections and semantic copy (visible→raw cell mapping), and the PTY resize (`tui_raw_terminal_size` compensated-grid winsize). Geometry probes are event-driven from layout surfaces plus a bounded 60ms fallback after attach/focus/activation; the probe is crop-only on navigation and a guarded re-impose on activation (the stale-probe race signature — an unchanged pane rect against a grown adopted grid — is rejected). Belt-and-suspenders: startup still normalizes Herdr `ui.hide_tab_bar_when_single_tab` to `true` (one-shot `migrations.tui_tab_bar_hidden`), so a single-Tab window needs no crop. Herdr 0.9.1 has no always-hide key (`show_tab_bar = rows > 1 && !(hide && tab_count == 1)`); the crop is the sanctioned product answer and an upstream `ui.hide_tab_bar` key remains welcome. The former `terminal.tab_bar_placement` selector (`sidebar`/`native`/`herdr-tui`) and the native content-area Tab strip (`shell_tabs.rs`) stay deleted — the Sidebar tree and breadcrumb menu own Tab actions and are never a second runtime or navigation implementation; Herdr's Tab order and lifecycle stay authoritative.
 
-On macOS, Shardlane intentionally uses GPUI 0.2.2's default `MetalRenderer`. The `crepuscularity-gpui` feature named `macos` is not a generic macOS-support switch: it enables GPUI's alternate `macos-blade` renderer, and Shardlane has no product capability that requires that renderer. Keep the renderer choice explicit in `Cargo.toml` and verify it with Cargo's feature graph when changing GPUI/Crepuscularity dependencies.
+On macOS, Solco intentionally uses GPUI 0.2.2's default `MetalRenderer`. The `crepuscularity-gpui` feature named `macos` is not a generic macOS-support switch: it enables GPUI's alternate `macos-blade` renderer, and Solco has no product capability that requires that renderer. Keep the renderer choice explicit in `Cargo.toml` and verify it with Cargo's feature graph when changing GPUI/Crepuscularity dependencies.
 
-GPUI 0.2.2 still predates Zed's screen-change fix `46eb9e5` / PR #38269. Shardlane must not compensate by manually invoking AppKit lifecycle callbacks such as `viewDidChangeBackingProperties` from GPUI bounds observers: that crosses GPUI's renderer ownership boundary and was observed to terminate the native app immediately after a display transition. Prefer the default renderer baseline now, and remove this dependency limitation by upgrading to a GPUI release that contains the upstream fix when such a crates.io release is available.
+GPUI 0.2.2 still predates Zed's screen-change fix `46eb9e5` / PR #38269. Solco must not compensate by manually invoking AppKit lifecycle callbacks such as `viewDidChangeBackingProperties` from GPUI bounds observers: that crosses GPUI's renderer ownership boundary and was observed to terminate the native app immediately after a display transition. Prefer the default renderer baseline now, and remove this dependency limitation by upgrading to a GPUI release that contains the upstream fix when such a crates.io release is available.
 
 ## 7. Agent history boundary
 
-`shardlane-history` is a read-only, UI-independent history core.
+`solco-history` is a read-only, UI-independent history core.
 
 It owns:
 
@@ -831,7 +831,7 @@ It does not own:
 - Herdr runtime execution;
 - external Agent database/file mutation (the user-initiated Sessions Trash is the one exception, owned by the separate `internal/sessiontrash`).
 
-Host Agent CLI validation remains in the Shardlane host integration layer. Continue/resume execution must transition through Herdr.
+Host Agent CLI validation remains in the Solco host integration layer. Continue/resume execution must transition through Herdr.
 
 History source choices are user-owned `ApplicationConfig` data, not catalog state. A
 `HistorySourcePolicy` is projected into one `HistoryAdapterRoster` generation; scanner,
@@ -843,7 +843,7 @@ files or creates a second runtime authority.
 
 History presentation bounds how many variable-height transcript messages it constructs at once, and replaceable source/open work is cancelled when selection changes.
 
-**Original-source reads (2026-10-12).** Shardlane persists no conversation content: there is no transcript cache, no message-body index and no catalog database. The History catalog is an in-memory index — per session a title, counts, project, model/token facts and one bounded (≤240 characters) description line — rebuilt from the provider files by the scanner at launch and on explicit refresh, with `(mtime, size)` as the change signal and an unobserved file dropping its row. Opening a conversation parses the original session file on demand and cuts one bounded window (`WindowLimit` = 60 messages) from it, so the window always shows what the provider file holds now; presentation state keeps at most the accumulated pages it has paged in, never a whole transcript. Metadata loading never implicitly parses a transcript; parsing starts only when the user opens a conversation. The scanner and the open path share the same read-only adapters (Claude Code / Codex / Pi), which never mutate external Agent history stores. Message-body search is deliberately not offered — it needs either a stored copy or a scan of every file; metadata search covers title, project, path, native id and Provider. Measured on the reference machine (316 MB across 460 session files): a full cold scan parses in ≈2.3 s on one worker and ≈0.7 s on the shipped pool of at most four (rows are committed in listing order, so the outcome equals a sequential scan), and the largest file (44 MB) opens in ≈0.1 s, so no derived transcript store is needed. In the running app the scan ends ≈1.4–2.4 s after the window appears, while startup work shares the machine; until rows land, an empty list reads as loading, never as an empty library. Rows also land progressively (2026-10-13): the scanner commits and reports its work in batches of ≈100 indexed sources (plus one tail report), the shell reloads the visible list per batch on the window lane, and a list with rows plus a still-running round shows an `Updating…` hint — so catalogs of thousands of single-session files are browsable after the first batch instead of holding the loading state until the whole round ends; the interactive page stays the bounded latest-100 view, and Provider tab totals climb batch by batch to the catalog total. The `history.sqlite3` (+WAL/SHM) catalog earlier builds kept is deleted at launch by `history.RemoveLegacyCatalog`. History metadata refresh is stale-while-revalidate: an already rendered project/history projection remains visible while the background refresh runs, and Sidebar entities are notified only when visible metadata actually changes. A same-project refresh must never clear cached rows merely to show a loading state.
+**Original-source reads (2026-10-12).** Solco persists no conversation content: there is no transcript cache, no message-body index and no catalog database. The History catalog is an in-memory index — per session a title, counts, project, model/token facts and one bounded (≤240 characters) description line — rebuilt from the provider files by the scanner at launch and on explicit refresh, with `(mtime, size)` as the change signal and an unobserved file dropping its row. Opening a conversation parses the original session file on demand and cuts one bounded window (`WindowLimit` = 60 messages) from it, so the window always shows what the provider file holds now; presentation state keeps at most the accumulated pages it has paged in, never a whole transcript. Metadata loading never implicitly parses a transcript; parsing starts only when the user opens a conversation. The scanner and the open path share the same read-only adapters (Claude Code / Codex / Pi), which never mutate external Agent history stores. Message-body search is deliberately not offered — it needs either a stored copy or a scan of every file; metadata search covers title, project, path, native id and Provider. Measured on the reference machine (316 MB across 460 session files): a full cold scan parses in ≈2.3 s on one worker and ≈0.7 s on the shipped pool of at most four (rows are committed in listing order, so the outcome equals a sequential scan), and the largest file (44 MB) opens in ≈0.1 s, so no derived transcript store is needed. In the running app the scan ends ≈1.4–2.4 s after the window appears, while startup work shares the machine; until rows land, an empty list reads as loading, never as an empty library. Rows also land progressively (2026-10-13): the scanner commits and reports its work in batches of ≈100 indexed sources (plus one tail report), the shell reloads the visible list per batch on the window lane, and a list with rows plus a still-running round shows an `Updating…` hint — so catalogs of thousands of single-session files are browsable after the first batch instead of holding the loading state until the whole round ends; the interactive page stays the bounded latest-100 view, and Provider tab totals climb batch by batch to the catalog total. The `history.sqlite3` (+WAL/SHM) catalog earlier builds kept is deleted at launch by `history.RemoveLegacyCatalog`. History metadata refresh is stale-while-revalidate: an already rendered project/history projection remains visible while the background refresh runs, and Sidebar entities are notified only when visible metadata actually changes. A same-project refresh must never clear cached rows merely to show a loading state.
 
 **Sessions surface (2026-10-12).** The Sessions list groups sessions into project cards (only the latest project is open by default), and a row unfolds an inline excerpt of its newest messages — a bounded Tail read of the original file, never a stored copy. Select turns rows and project headers into checkboxes for a batch Move to Trash (see the delete decision below). A session opens at `/history/{id}` in the shared Chat view, bound read-only and detached from every pane (no composer, no live tail; newest messages first, Earlier messages pages upward); the binding is released once the page stops building, so reopening always reads the file again and no pane or inspector can inherit the transcript. Continue / Continue in → another Agent is the one place History reaches the runtime: the read-only planner (`PlanHistoryContinuation`) runs first; a session that is already running just shows its pane; otherwise the shared confirm dialog states what will start, and only on Confirm does the existing launch transaction create a tab through Herdr — same-Agent native resume, or another Agent handed the session's newest messages as bounded context — after which the new pane is selected. Failures map to one short line per class and a pane the engine already created is shown, never retried into a duplicate.
 
@@ -855,15 +855,15 @@ History session metadata keeps both the source/display fact `project_path` and a
 
 ## 8. Persistence
 
-Shardlane local application data lives under `~/.shardlane/`. Code refers to this ownership root as `app_data_dir`; it contains configuration, Shardlane-owned semantic data, and disposable client indexes/caches rather than only settings.
+Solco local application data lives under `~/.solco/`. Code refers to this ownership root as `app_data_dir`; it contains configuration, Solco-owned semantic data, and disposable client indexes/caches rather than only settings.
 
-`~/.shardlane/config.json` is the configuration-domain SSOT. Local configuration may contain only client-owned preferences such as:
+`~/.solco/config.json` is the configuration-domain SSOT. Local configuration may contain only client-owned preferences such as:
 
 - global appearance policy (`system | light | dark`) and application color scheme;
 - sidebar width/collapse state;
 - Project/Agent/Service disclosure state;
 - per-session Workspace display-name overrides, the machine/device list, and the open-window snapshot used for launch restore;
-- terminal font/render preferences (terminal colors derive from the user Herdr config.toml theme: Shardlane seeds and reports only theme-derived colors and has no Terminal palette of its own);
+- terminal font/render preferences (terminal colors derive from the user Herdr config.toml theme: Solco seeds and reports only theme-derived colors and has no Terminal palette of its own);
 - copy-on-select and Agent system-notification preference;
 - Browser/right panel preferences;
 - small global defaults that do not belong to a Project asset;
@@ -875,35 +875,35 @@ Shardlane local application data lives under `~/.shardlane/`. Code refers to thi
   pin semantics belong to Tab owner Herdr; stale keys in old configs are
   ignored by serde and disappear on the next canonical save).
 
-**File-first durable-data rule.** Shardlane-owned user data should remain reconstructible from human-inspectable files. The existing Workspace/Sidebar state already satisfies this rule because it lives in `config.json`; do not split it into extra files without a concrete ownership/write-conflict reason. Larger independent domains use separate files/directories where ownership demands it: Browser Profile metadata may use `browser-profiles.json`, and Shortcut overrides may use `shortcuts.json`. (The former Notes/Bookmarks/Annotation file stores were removed with those product branches on 2026-08-27.) All aggregate writes are revision-guarded and atomic; external edits are validated before replacing the last-known-good in-memory projection. Runtime/search indexes may be in-memory or disposable caches and must always rebuild from the user files. A database may exist for a domain-specific **derived index/cache**, but it must not become the source of truth for Workspace/Sidebar assets; History keeps none since 2026-10-12 (its catalog is in-memory and rebuilt from the provider files).
+**File-first durable-data rule.** Solco-owned user data should remain reconstructible from human-inspectable files. The existing Workspace/Sidebar state already satisfies this rule because it lives in `config.json`; do not split it into extra files without a concrete ownership/write-conflict reason. Larger independent domains use separate files/directories where ownership demands it: Browser Profile metadata may use `browser-profiles.json`, and Shortcut overrides may use `shortcuts.json`. (The former Notes/Bookmarks/Annotation file stores were removed with those product branches on 2026-08-27.) All aggregate writes are revision-guarded and atomic; external edits are validated before replacing the last-known-good in-memory projection. Runtime/search indexes may be in-memory or disposable caches and must always rebuild from the user files. A database may exist for a domain-specific **derived index/cache**, but it must not become the source of truth for Workspace/Sidebar assets; History keeps none since 2026-10-12 (its catalog is in-memory and rebuilt from the provider files).
 
-Script definitions currently live in `~/.shardlane/scripts.json` (migrated once from `tasks.json` on load) as a documented protocol-gap bridge. `ScriptDefinition` contains only current durable Shardlane semantics (`id`, stable `project_path`, name, icon, optional keybinding, multiline command, `one_shot`, `close_on_complete`, optional `last_run_at_ms`, optional `pinned_tab_label`). Declared Script kinds/tags/descriptions were deleted on 2026-09-19: the Services surface membership is behavioral (`!one_shot`), not a declared category. The product is unreleased: do not add legacy `workspace_path`, Script `cwd`, fallback identity chains, aliases, or migrations. `ScriptRecord` may additionally persist the minimum Herdr correlation needed for recovery (`workspace_id`, `tab_id`, `pane_id`); those IDs are disposable runtime correlation only and must never override a mismatching `project_path`. `ScriptRuntimeProjection` contains status, PID, listening ports, startup timestamp, and transient error; it is explicitly not serialized and is rebuilt from Herdr/process observation after load. Runtime-only changes must not rewrite `scripts.json`. When Herdr gains protocol-native Script identity/lifecycle, migrate this semantic persistence to Herdr rather than preserving a parallel Script authority.
+Script definitions currently live in `~/.solco/scripts.json` (migrated once from `tasks.json` on load) as a documented protocol-gap bridge. `ScriptDefinition` contains only current durable Solco semantics (`id`, stable `project_path`, name, icon, optional keybinding, multiline command, `one_shot`, `close_on_complete`, optional `last_run_at_ms`, optional `pinned_tab_label`). Declared Script kinds/tags/descriptions were deleted on 2026-09-19: the Services surface membership is behavioral (`!one_shot`), not a declared category. The product is unreleased: do not add legacy `workspace_path`, Script `cwd`, fallback identity chains, aliases, or migrations. `ScriptRecord` may additionally persist the minimum Herdr correlation needed for recovery (`workspace_id`, `tab_id`, `pane_id`); those IDs are disposable runtime correlation only and must never override a mismatching `project_path`. `ScriptRuntimeProjection` contains status, PID, listening ports, startup timestamp, and transient error; it is explicitly not serialized and is rebuilt from Herdr/process observation after load. Runtime-only changes must not rewrite `scripts.json`. When Herdr gains protocol-native Script identity/lifecycle, migrate this semantic persistence to Herdr rather than preserving a parallel Script authority.
 
 **Pinned-Tab placement (2026-09-19).** `pinned_tab_label` anchors a Script to one Tab by **label** (the only Herdr-owned semantic Tab identity; `tab_id` stays a fast-path correlation). At run time the resolution order is: live correlated tab in the Script workspace → label match in that workspace → auto-create the tab (`tab.create` + best-effort `rename_tab`; `CreateTab` carries no label, a recorded protocol gap). Before splitting into an existing pinned tab, the launch performs a best-effort occupancy check over the same Herdr primitives the monitor uses (`pane.process_info` foreground-beyond-shell + live Agents whose `tab_id` matches); an occupied tab is a **refusal**: no pane is created or closed, and the Script reports `Stopped` + `last_error` (never `Failed`; script errors never flip the global connection status). Auto placement keeps the historical behavior (split into the focused/first pane of the Project workspace). There is no reservation or lock: the check-then-split race is the same one every multiplexer has.
 
-Local feature storage is separated by ownership rather than accumulated into `config.json`: bounded Activity acknowledgement receipts live in a dedicated local state file. Browser cookies/cache/site data remain WebKit-managed inside the selected `WKWebsiteDataStore`, not Shardlane JSON. The former Notes/Bookmark/Annotation stores (`projects/<key>/notes/`, bookmark overlays, `~/.shardlane/annotations/`) are no longer read or written — the product branches were removed 2026-08-27, and pre-existing user files on disk are left untouched rather than erased by startup.
+Local feature storage is separated by ownership rather than accumulated into `config.json`: bounded Activity acknowledgement receipts live in a dedicated local state file. Browser cookies/cache/site data remain WebKit-managed inside the selected `WKWebsiteDataStore`, not Solco JSON. The former Notes/Bookmark/Annotation stores (`projects/<key>/notes/`, bookmark overlays, `~/.solco/annotations/`) are no longer read or written — the product branches were removed 2026-08-27, and pre-existing user files on disk are left untouched rather than erased by startup.
 
-Runtime workspace/tab/pane/process state belongs to Herdr and must not be mirrored as a competing durable model. On macOS, whole-window opacity, always-on-top, and forced Light/Dark appearance are applied through one narrow native-window adapter at GPUI's raw AppKit handle boundary; `System` clears the explicit `NSAppearance` so AppKit follows macOS, while `Light`/`Dark` use the generated objc2 AppKit Aqua/DarkAqua bindings. Agent system notifications use a separate narrow UserNotifications adapter and may call `UNUserNotificationCenter` only when `NSBundle.mainBundle.bundleIdentifier` is the packaged Shardlane identifier `dev.shardlane.app`; raw `crepus dev` / `target/debug/shardlane` processes have no registered application bundle and therefore treat system notification presentation/authorization as a no-op. Individual Shardlane surfaces remain opaque and consume semantic component theme tokens rather than independently simulating whole-window appearance. AppKit lifecycle/render callbacks remain GPUI-owned.
+Runtime workspace/tab/pane/process state belongs to Herdr and must not be mirrored as a competing durable model. On macOS, whole-window opacity, always-on-top, and forced Light/Dark appearance are applied through one narrow native-window adapter at GPUI's raw AppKit handle boundary; `System` clears the explicit `NSAppearance` so AppKit follows macOS, while `Light`/`Dark` use the generated objc2 AppKit Aqua/DarkAqua bindings. Agent system notifications use a separate narrow UserNotifications adapter and may call `UNUserNotificationCenter` only when `NSBundle.mainBundle.bundleIdentifier` is the packaged Solco identifier `dev.solco.app`; raw `crepus dev` / `target/debug/solco` processes have no registered application bundle and therefore treat system notification presentation/authorization as a no-op. Individual Solco surfaces remain opaque and consume semantic component theme tokens rather than independently simulating whole-window appearance. AppKit lifecycle/render callbacks remain GPUI-owned.
 
-A future macOS menu-bar status item is an approved native presentation surface, not a new runtime/state owner. Implement it in a narrow AppKit adapter using generated objc2 AppKit bindings (`NSStatusBar`/`NSStatusItem`/`NSStatusBarButton`, `NSMenu`/`NSMenuItem`, `NSImage`, and `NSApplication`) and feed it from the same `OperationalSummary` plus bounded Workspace detail already used by the main window. The menu is operational rather than archival: Agent attention/working state is the primary content, Workspaces and active/failed Scripts are bounded secondary sections or submenus, and History remains in the application. Agent/Workspace/Script menu actions must activate Shardlane and reuse existing focus/navigation routes rather than creating a parallel navigation path. Keep the menu bounded with `Show All…` fallbacks, use a stable template status icon instead of continuous animation, and represent changing state in menu content or a minimal attention affordance so idle CPU remains effectively zero.
+A future macOS menu-bar status item is an approved native presentation surface, not a new runtime/state owner. Implement it in a narrow AppKit adapter using generated objc2 AppKit bindings (`NSStatusBar`/`NSStatusItem`/`NSStatusBarButton`, `NSMenu`/`NSMenuItem`, `NSImage`, and `NSApplication`) and feed it from the same `OperationalSummary` plus bounded Workspace detail already used by the main window. The menu is operational rather than archival: Agent attention/working state is the primary content, Workspaces and active/failed Scripts are bounded secondary sections or submenus, and History remains in the application. Agent/Workspace/Script menu actions must activate Solco and reuse existing focus/navigation routes rather than creating a parallel navigation path. Keep the menu bounded with `Show All…` fallbacks, use a stable template status icon instead of continuous animation, and represent changing state in menu content or a minimal attention affordance so idle CPU remains effectively zero.
 
-Shardlane should not add a permanent full-width bottom status bar by default. It permanently costs Terminal rows and would duplicate Workspace/Tab breadcrumbs, Sidebar Agent/Script state, and contextual Header operational indicators. If an in-app bottom status surface is introduced, it must be a contextual status shelf that is absent in the normal steady state and appears only for actionable app-wide conditions such as reconnecting/offline state, a failed background operation, or attention that would otherwise be hidden with the Sidebar collapsed. It must not become another location for persistent navigation metadata.
+Solco should not add a permanent full-width bottom status bar by default. It permanently costs Terminal rows and would duplicate Workspace/Tab breadcrumbs, Sidebar Agent/Script state, and contextual Header operational indicators. If an in-app bottom status surface is introduced, it must be a contextual status shelf that is absent in the normal steady state and appears only for actionable app-wide conditions such as reconnecting/offline state, a failed background operation, or attention that would otherwise be hidden with the Sidebar collapsed. It must not become another location for persistent navigation metadata.
 
 ## 9. Packaging and identity
 
 Canonical application identity:
 
-- product/app name: **Shardlane**;
-- Cargo package: `shardlane`;
-- binary: `shardlane`;
-- macOS bundle: `Shardlane.app`;
-- bundle identifier: `dev.shardlane.app`;
-- history crate package: `shardlane-history`.
+- product/app name: **Solco**;
+- Cargo package: `solco`;
+- binary: `solco`;
+- macOS bundle: `Solco.app`;
+- bundle identifier: `dev.solco.app`;
+- history crate package: `solco-history`.
 
 The single packaging configuration is `[package.metadata.bundle]` in the root
 `Cargo.toml`. It owns the user-facing bundle name, reverse-DNS identifier,
 version inheritance, and app icon source (`assets/app-icon/`). `cargo-bundle`
-converts the icon source into `Contents/Resources/Shardlane.icns` and writes
+converts the icon source into `Contents/Resources/Solco.icns` and writes
 the matching `CFBundleIconFile` entry; scripts must not duplicate these values.
 
 `scripts/package-macos.sh` is the reproducible local/release orchestration
@@ -914,7 +914,7 @@ bundle Mach-O members, and only then signs the final app. The Mobile Web
 `dist/` directory is a cross-repository packaging input rather than a Cargo
 resource: `scripts/bundle-web.sh` copies it to
 `Contents/Resources/mobile-web/` after the app bundle exists. At runtime,
-`web_bundle_path()` prefers `SHARDLANE_WEB_BUNDLE` for development and then
+`web_bundle_path()` prefers `SOLCO_WEB_BUNDLE` for development and then
 the packaged Resources path; the Remote server serves that static directory
 alongside `/api/v1` without moving runtime ownership into Web code.
 
@@ -922,16 +922,16 @@ alongside `/api/v1` without moving runtime ownership into Web code.
 it verifies the already-signed `.app`, rechecks Universal 2 members when the
 `universal2` label is requested, derives the archive name from the bundle name,
 and writes a basename-only SHA-256 manifest. The `v*` GitHub Release workflow
-uses this entrypoint to publish one `Shardlane-macos-universal2.zip` artifact
+uses this entrypoint to publish one `Solco-macos-universal2.zip` artifact
 with ad-hoc signing until Developer ID and notarization credentials exist.
 
-Release artifacts use the Shardlane name only.
+Release artifacts use the Solco name only.
 
 Project-level license metadata has been removed. Required third-party notices remain isolated in `THIRD_PARTY_NOTICES.md` and in source/assets where upstream licenses require retention.
 
 ## 10. Herdr protocol gaps
 
-A protocol gap is a capability Shardlane cannot implement authoritatively without new Herdr support.
+A protocol gap is a capability Solco cannot implement authoritatively without new Herdr support.
 
 Known gaps remain backend facts, not branding concerns. Herdr protocol 20 still exposes `tab.move(tab_id, insert_index)` for authoritative in-Workspace ordering without a destination Workspace, so cross-Workspace Tab drag must remain unsupported until Herdr adds that ownership transfer primitive.
 
@@ -949,16 +949,16 @@ can be safely merged without violating ordering.
 
 History continuation does not require a second runtime: the current flow can create/focus Herdr workspace/tab/pane state and send the resume command through Herdr.
 
-Scripts likewise require no second runtime. For a materialized Project, Shardlane prefers the focused/first Herdr Pane and uses `pane.split` to create a dedicated Script Pane inside the existing Project Tab; only when no suitable Project Pane exists may it create a fallback Tab. It waits for the Script Pane shell to become ready, sends the command through Herdr, observes runtime state with `pane.process_info`, and Stop/Restart/Delete/one-shot completion close only the Script Pane. The shell PID itself is not a running Script process; runtime status is derived from non-shell foreground processes. Stable Script ownership is always resolved from `project_path`, with Herdr IDs treated only as verified correlation. Listening-port discovery is a read-only macOS projection over Herdr-owned foreground PIDs. The Sidebar **Services** section contains persisted `service` Scripts plus ordinary Herdr Panes projected as read-only detected Services when their foreground process owns a listening TCP port. Detected Services are never persisted, started, stopped, restarted, or deleted by Shardlane; selecting one only focuses its Herdr Project/Tab/Pane. Service disclosure is presentation-only and does not trigger probing. Discovery is scoped to Projects in the active Shardlane Workspace, bounded to a finite Project/Pane set, refreshes independently on a slow ~10-second cadence or relevant wake, excludes panes already correlated to durable Scripts, and batches listening-port inspection into one `lsof` invocation for candidate PIDs. Managed Script health keeps its separate ~1.5-second cadence only while materialized Scripts exist. Global Activity may aggregate all durable Script runtime projections and all already-discovered Services, but it must not automatically widen unmanaged Service discovery from the active Shardlane Workspace to every Workspace. Any wider discovery policy requires an explicit bounded sweep budget, slower inactive-Workspace cadence, and measured CPU/wakeup evidence first. A detached/background server that is not represented by Herdr `pane.process_info` foreground processes is outside this projection. The missing backend capability is stable protocol-native Script identity/lifecycle (a Herdr-side script lifecycle surface or equivalent), not PTY/process execution.
+Scripts likewise require no second runtime. For a materialized Project, Solco prefers the focused/first Herdr Pane and uses `pane.split` to create a dedicated Script Pane inside the existing Project Tab; only when no suitable Project Pane exists may it create a fallback Tab. It waits for the Script Pane shell to become ready, sends the command through Herdr, observes runtime state with `pane.process_info`, and Stop/Restart/Delete/one-shot completion close only the Script Pane. The shell PID itself is not a running Script process; runtime status is derived from non-shell foreground processes. Stable Script ownership is always resolved from `project_path`, with Herdr IDs treated only as verified correlation. Listening-port discovery is a read-only macOS projection over Herdr-owned foreground PIDs. The Sidebar **Services** section contains persisted `service` Scripts plus ordinary Herdr Panes projected as read-only detected Services when their foreground process owns a listening TCP port. Detected Services are never persisted, started, stopped, restarted, or deleted by Solco; selecting one only focuses its Herdr Project/Tab/Pane. Service disclosure is presentation-only and does not trigger probing. Discovery is scoped to Projects in the active Solco Workspace, bounded to a finite Project/Pane set, refreshes independently on a slow ~10-second cadence or relevant wake, excludes panes already correlated to durable Scripts, and batches listening-port inspection into one `lsof` invocation for candidate PIDs. Managed Script health keeps its separate ~1.5-second cadence only while materialized Scripts exist. Global Activity may aggregate all durable Script runtime projections and all already-discovered Services, but it must not automatically widen unmanaged Service discovery from the active Solco Workspace to every Workspace. Any wider discovery policy requires an explicit bounded sweep budget, slower inactive-Workspace cadence, and measured CPU/wakeup evidence first. A detached/background server that is not represented by Herdr `pane.process_info` foreground processes is outside this projection. The missing backend capability is stable protocol-native Script identity/lifecycle (a Herdr-side script lifecycle surface or equivalent), not PTY/process execution.
 
 ## 11. Remote Host and mobile clients
 
 Remote/mobile support is an **Approved Next** presentation and transport
 extension with a **Current** loopback/local-network semantic Conversation
-foundation. The UI-independent `shardlane-host` crate owns opaque client IDs,
+foundation. The UI-independent `solco-host` crate owns opaque client IDs,
 bounded Live/History DTOs, provider-neutral normalization, the shared
 Continue transaction seam, narrow service interfaces, and the Agent runtime
-SPI; `shardlane-remote` implements the authenticated HTTP/WebSocket adapter
+SPI; `solco-remote` implements the authenticated HTTP/WebSocket adapter
 over the existing Herdr boundary. Remote API v2 exposes Conversation list,
 bounded window/detail, prompt, History search, and Host-owned Continue; v1
 control/history routes remain compatibility-only. The Mac Settings → Mobile
@@ -969,11 +969,11 @@ app when `dist/` is embedded. Public Relay/cloud infrastructure and
 production-grade public TLS remain future work. Runtime ownership is
 unchanged.
 
-Shardlane is evolving from one native GUI client into a Mac **Host/Core + clients** architecture. The former shipped desktop was GPUI; the approved Go desktop replaces that presentation with MyGo Native UI + native Terminal while preserving the same Host/Core ownership:
+Solco is evolving from one native GUI client into a Mac **Host/Core + clients** architecture. The former shipped desktop was GPUI; the approved Go desktop replaces that presentation with MyGo Native UI + native Terminal while preserving the same Host/Core ownership:
 
 ```text
                          ┌─ current macOS GPUI client
-Herdr Runtime ← Shardlane Host/Core
+Herdr Runtime ← Solco Host/Core
                          ├─ approved MyGo Native UI desktop client
                          └─ Remote API / Protocol ← mobile/other clients
 ```
@@ -1001,7 +1001,7 @@ The application contract is transport-independent. Approved connection sequence 
 2. authenticated TLS LAN direct connection for normal same-network use;
 3. Tailscale/WireGuard overlay as the preferred early public-remote path for dogfood/private beta;
 4. SSH port forwarding as developer/advanced fallback rather than the default product connection;
-5. a Shardlane-owned outbound Relay as the long-term default public-internet path behind NAT/CGNAT;
+5. a Solco-owned outbound Relay as the long-term default public-internet path behind NAT/CGNAT;
 6. WebRTC/QUIC/direct-path optimization only after measurements justify the complexity.
 
 Transport/Relay infrastructure is never a Workspace/Project/Agent/Script runtime authority. Remote client state is disposable and recovers through a bounded Host bootstrap after reconnect. Reliable background push is deferred to the future Relay/cloud phase and must not force cloud dependencies into the initial Host API.
@@ -1029,13 +1029,13 @@ git diff --check
 git diff --cached --check
 ```
 
-Packaging work must additionally build and structurally verify `Shardlane.app`.
+Packaging work must additionally build and structurally verify `Solco.app`.
 
 ## 13. Definition of architectural correctness
 
 A change is architecturally correct when all are true:
 
-- Shardlane remains the client/product identity;
+- Solco remains the client/product identity;
 - Herdr remains the sole backend/runtime authority;
 - real Herdr technical names remain accurate rather than being cosmetically renamed;
 - terminal semantics live in Ghostty when Ghostty provides them;
@@ -1047,11 +1047,11 @@ A change is architecturally correct when all are true:
 - custom code has a documented reason to exist;
 - unstable external ABI assumptions have targeted verification;
 - workspace CI exercises all packages;
-- macOS bundle identity is Shardlane-only;
+- macOS bundle identity is Solco-only;
 - remote clients, transports, and Relay infrastructure never become a second runtime authority;
 - semantic remote operations use explicit targets and do not implicitly steal another client's navigation/focus; an explicit shared TUI action may mutate Herdr's global focus/resize and is disclosed;
 - documentation and code describe the same ownership model.
 
 ## 14. Approved Next — Multiplexer backend API
 
-Approved direction (2026-09-02): the Host runtime boundary is generalized into a backend-neutral **Multiplexer API** so additional terminal multiplexers (tmux first) can be integrated without forking the shell. The contract — the domain catalog covering every UI-visible runtime capability, the capability model, backend-adapter/registry rules, and the behavior-preserving TDD migration and verification strategy — is normative in [`multiplexer-api.md`](multiplexer-api.md). Until it lands, `shardlane-host` `herdr.rs` (`HerdrClient`) remains the only runtime-boundary implementation and GUI/Remote consume it concretely. The "Herdr is the sole runtime authority" statement is amended only when a second backend actually ships (the tmux MVP), not by this approval.
+Approved direction (2026-09-02): the Host runtime boundary is generalized into a backend-neutral **Multiplexer API** so additional terminal multiplexers (tmux first) can be integrated without forking the shell. The contract — the domain catalog covering every UI-visible runtime capability, the capability model, backend-adapter/registry rules, and the behavior-preserving TDD migration and verification strategy — is normative in [`multiplexer-api.md`](multiplexer-api.md). Until it lands, `solco-host` `herdr.rs` (`HerdrClient`) remains the only runtime-boundary implementation and GUI/Remote consume it concretely. The "Herdr is the sole runtime authority" statement is amended only when a second backend actually ships (the tmux MVP), not by this approval.

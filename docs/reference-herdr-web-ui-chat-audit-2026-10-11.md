@@ -4,7 +4,7 @@ Status: **Reference audit, feeding roadmap N19** (Chat presentation on the
 official `ui.WebView`). Scope: Chat View features, communication model, and
 API/protocol shapes of `examples/herdr-web-ui` (v0.4.6), audited for reuse as
 *design and protocol thinking* — the Godiff rule applies: **UI/behavior
-reference only; do not copy or import its implementation** into Shardlane.
+reference only; do not copy or import its implementation** into Solco.
 The project is MIT-licensed and lives outside this repository at
 `~/Workspaces/wh-studio/examples/herdr-web-ui`.
 
@@ -39,9 +39,9 @@ Two consequences worth internalizing for N19:
 | Send chat message | WS `{type:"submit", id, pane_id, text, payload, delivery: "immediate"\|"queue"}` → ack-correlated `{type:"submit-result", …}` | `submit-result` is *bridge acceptance*, never agent acknowledgement |
 | Assistant output | `GET /api/pane/conversation?pane_id=…[&before\|since\|from]` poll, cursor = byte offset into the transcript stream; `history_id` changes → HTTP 409 `history_changed` → client drops pages and reloads | Whole turns, not deltas |
 | Agent status | herdr `events.subscribe` (only the collector may use it) → WS `pane-status {pane_id, agent_status, background_tasks?}` broadcast | `AgentStatus = blocked\|done\|idle\|working\|unknown` |
-| Interactions | `GET /api/pane/prompt` (parsed from the pane's visible TUI text) + `POST /api/pane/prompt/answer` → converted to `send_keys` arrow navigation; 409 `prompt_changed` when the screen moved on | **Screen scraping** — Shardlane's structured `InteractionBroker` (0.6 §17) is the better owner; do not copy this part |
+| Interactions | `GET /api/pane/prompt` (parsed from the pane's visible TUI text) + `POST /api/pane/prompt/answer` → converted to `send_keys` arrow navigation; 409 `prompt_changed` when the screen moved on | **Screen scraping** — Solco's structured `InteractionBroker` (0.6 §17) is the better owner; do not copy this part |
 | Queued sends | `PendingMessage {id, text, state: queued\|sending\|held\|uncertain}` + `pending-action {steer\|discard}`; turn gate dispatches when the agent goes working→idle | Disconnect/lease loss ⇒ held/uncertain, with copy-out escape hatch |
-| Terminal | WS `pty-data` with cumulative `pty-ack` flow control (pause 256 KiB / resume 64 KiB), 256 KB replay tail for late joiners, `observe` role | Shardlane replaces this wholesale with the official MyGo Terminal attach |
+| Terminal | WS `pty-data` with cumulative `pty-ack` flow control (pause 256 KiB / resume 64 KiB), 256 KB replay tail for late joiners, `observe` role | Solco replaces this wholesale with the official MyGo Terminal attach |
 
 Bridge → Herdr RPC inventory worth knowing: `session.snapshot`,
 `pane.*` (read/send_text/send_keys/split/close/…), `agent.start`,
@@ -97,7 +97,7 @@ interface PromptAnswer { pane_id: string; prompt_id: string;
 Takeaway for the N19 bridge: this turn/part taxonomy is the *right grain* for
 a chat transcript (text/thinking/tool/image/notice/task_result), and the
 `cursor`+`history_id`+409 triad is the right history-integrity model. In
-Shardlane these shapes must be produced by the existing Go domain
+Solco these shapes must be produced by the existing Go domain
 (`internal/agent`, Herdr runtime, `internal/history` catalog,
 `InteractionBroker`) and exposed through the bound bridge — not re-implemented
 in TypeScript.
@@ -179,10 +179,10 @@ in TypeScript.
 selection is `{machineId, paneId}`; header has a per-pane remembered
 Chat | Terminal segmented switch; sidebar shows agent marks + rolled-up
 status. Notably **absent**: unread counters, review states, retry/edit-resend
-buttons, agent handoffs (Shardlane already owns richer product semantics
+buttons, agent handoffs (Solco already owns richer product semantics
 here).
 
-## 5. Mapping to Shardlane N19 (WebView Chat)
+## 5. Mapping to Solco N19 (WebView Chat)
 
 **Transfer as-is (frontend, in the chat WebView):**
 work-block folding with live/settled titles; semantic tool rendering + lazy
@@ -205,7 +205,7 @@ skips; per-turn error boundary.
   domain (`internal/agent` + Herdr runtime; `internal/history` for the
   read-only catalog) and exposed via bridge methods. No new parsers, no
   socket access from the page.
-- Screen-scraped `InteractivePrompt` → Shardlane's structured
+- Screen-scraped `InteractivePrompt` → Solco's structured
   `InteractionBroker` (0.6 §17) over the bridge: better source of truth, no
   TUI text parsing.
 - Node-PTY sidecar + flow control → official MyGO Terminal attach (unchanged
@@ -214,9 +214,9 @@ skips; per-turn error boundary.
   *model*, implemented over the Go catalog's own pagination.
 
 **Deliberately not adopted:** multi-PC/SSH machine relay and web-push
-(device management is out of Shardlane scope); voice dictation and usage
+(device management is out of Solco scope); voice dictation and usage
 meters only if a later task asks for them (they need provider-backed
-endpoints Shardlane does not expose).
+endpoints Solco does not expose).
 
 ## 6. Suggested feature cut for the first WebView Chat (ordered)
 

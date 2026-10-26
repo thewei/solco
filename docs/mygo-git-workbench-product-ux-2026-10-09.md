@@ -1,4 +1,4 @@
-# Shardlane Git Workbench · Fork / lazygit 交互统一与功能规划
+# Solco Git Workbench · Fork / lazygit 交互统一与功能规划
 
 日期：2026-10-09  
 范围：MyGo Native UI + 唯一 `internal/gitworkbench.Runner`；**Terminal First**，不集成第二套 lazygit 进程或 Git 应用。  
@@ -33,7 +33,7 @@ UI 规范：和 Workspace / History / Settings 复用 `Spacing / Typography / Ra
 
 ## 2. 成熟产品参考与取舍
 
-| 来源 | 经过验证的成熟行为 | Shardlane 采用 | 不直接照搬 |
+| 来源 | 经过验证的成熟行为 | Solco 采用 | 不直接照搬 |
 |---|---|---|---|
 | [Fork 官网](https://fork.dev/) | Working Directory + Commit List + Side-by-side Diff；stage/unstage、amend、Branch/Tag/Stash、Merge/Rebase、Revert、Cherry-pick、Interactive Rebase、冲突助手 | 左文件树/中 Diff；原生轻量弹层；分支动作；历史 Commit 行菜单与 Revert | 不额外引入第二 Git 窗口/侧栏或独立进程 |
 | [Fork Mac Release Notes](https://fork.dev/releasenotes) | 2026-09-04 发布 Cursor AI commit messages，另有 Commit 详情弹层、导航快捷键、cherry-pick/revert 冲突预览和 Git bisect | 将真正的 AI 生成消息明确列入下一阶段，重视批准前预览与独立 Agent 权限 | 不假设当前 MyGo/Herdr 已具备 Fork/Cursor 的独立生成接口或冲突预测引擎 |
@@ -147,5 +147,5 @@ Commit Row Context Menu:
 
 ## 7. 设计生图 Prompt（仅作风格研究）
 
-> High fidelity native macOS dark Git workbench inside an existing terminal-first coding-agent application, called Shardlane. Preserve its charcoal and subtle plum gradient, macOS traffic-light titlebar, tiny precise typography, sober thin borders. Left rail: branch chip, compact Tags/Stashes/Worktrees menus, Local Changes/All Commits segmented switch, unstaged and staged file trees. Center: restrained single action bar with Stage All, Unstage All, primary Commit button, secondary Git Actions; side-by-side code diff with precise +/- gutters and syntax colors. Show an anchored Merge fast-forward confirmation and one centered native Commit dialog with selection checklist, subject, optional description, amend control and a clearly secondary Copy AI Commit Prompt, Cancel and Commit. Readonly history state should show no mutation toolbar. Keep the terminal as the application's primary product identity, no second Git application chrome, no neon glass, no giant panels or fake tabs. Responsive 16:10 screenshot, clear hierarchy and realistic density.
+> High fidelity native macOS dark Git workbench inside an existing terminal-first coding-agent application, called Solco. Preserve its charcoal and subtle plum gradient, macOS traffic-light titlebar, tiny precise typography, sober thin borders. Left rail: branch chip, compact Tags/Stashes/Worktrees menus, Local Changes/All Commits segmented switch, unstaged and staged file trees. Center: restrained single action bar with Stage All, Unstage All, primary Commit button, secondary Git Actions; side-by-side code diff with precise +/- gutters and syntax colors. Show an anchored Merge fast-forward confirmation and one centered native Commit dialog with selection checklist, subject, optional description, amend control and a clearly secondary Copy AI Commit Prompt, Cancel and Commit. Readonly history state should show no mutation toolbar. Keep the terminal as the application's primary product identity, no second Git application chrome, no neon glass, no giant panels or fake tabs. Responsive 16:10 screenshot, clear hierarchy and realistic density.
 

@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.9.0 Workspace Intelligence & Desktop Experience — Implementation Prompt
+# Solco MyGo 0.9.0 Workspace Intelligence & Desktop Experience — Implementation Prompt
 
-Continue the Shardlane MyGo migration after **0.8 History Management, Usage & Agent Inspector** is complete.
+Continue the Solco MyGo migration after **0.8 History Management, Usage & Agent Inspector** is complete.
 
 Repository:
 
@@ -19,7 +19,7 @@ Preserve all user/other-agent changes. Do not reset, stage, commit or push unles
 6. `docs/terminal-interaction-spec.md`
 7. `docs/mygo-native-execution-rules.md`
 8. `docs/mygo-native-migration-roadmap.md`
-9. `docs/reference-magpie-herdr-gpui-shardlane-0.9-audit.md`
+9. `docs/reference-magpie-herdr-gpui-solco-0.9-audit.md`
 10. `docs/mygo-native-0.9.0-workspace-intelligence-desktop-experience-plan.md`
 11. `next/CLAUDE.md`
 
@@ -104,7 +104,7 @@ Verify:
 
 Update the task ledger before writing duplicates.
 
-Never assume a reference project's API exists in Shardlane/Herdr.
+Never assume a reference project's API exists in Solco/Herdr.
 
 ## P1 — Command Center
 
@@ -201,7 +201,7 @@ Do not add file editing/saving in 0.9.
 
 Port Script definitions/application service into Go.
 
-Shardlane owns Script definitions while Herdr has no native Script resource.
+Solco owns Script definitions while Herdr has no native Script resource.
 Herdr owns execution:
 
 ```text
@@ -217,11 +217,11 @@ Implement:
 - CRUD;
 - one-shot/resident classification;
 - Herdr-backed Start transaction;
-- safe Stop only for exact Shardlane-owned Script lifecycle;
+- safe Stop only for exact Solco-owned Script lifecycle;
 - uncertain-delivery reconciliation;
 - runtime status projection.
 
-Do not turn Scripts into `os/exec` children managed by Shardlane.
+Do not turn Scripts into `os/exec` children managed by Solco.
 
 ## P6 — Services and port intelligence
 
@@ -445,7 +445,7 @@ Build on existing bounded `internal/applog`.
 Diagnostics snapshot should cover:
 
 ```text
-Shardlane version/build
+Solco version/build
 Go/MyGo version
 OS/arch
 Herdr version/protocol/path
@@ -540,7 +540,7 @@ High contrast never recolors Terminal program output.
 
 Adapt Magpie Profiles safely as **New Task Presets**, not provider configuration profiles.
 
-Store only Shardlane-owned fields:
+Store only Solco-owned fields:
 
 ```text
 Name

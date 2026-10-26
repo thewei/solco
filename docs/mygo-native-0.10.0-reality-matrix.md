@@ -1,7 +1,7 @@
-# Shardlane MyGo 0.10.0 — Live RealityMatrix
+# Solco MyGo 0.10.0 — Live RealityMatrix
 
 Status: **closed for 0.10.0 — every inherited item resolved** (GWB-001)
-Source audit: `docs/reference-godiff-shardlane-0.10-audit.md` (plan input)
+Source audit: `docs/reference-godiff-solco-0.10-audit.md` (plan input)
 Rules: every row resolves to `FIXED`, `REMOVED`, or `EXPLICITLY_DEFERRED_WITH_REAL_BLOCKER`
 before the 0.10 closure audit may claim the capability complete. Evidence must be
 end-to-end (source + test + runtime where applicable), never package-existence.
@@ -22,7 +22,7 @@ Dispositions closed 2026-10-05 after the 0.10 implementation pass; see
 | 8 | File Drop helper-only | no `OnFileDrop` wiring, no paste | **FIXED** | `win.OnFileDrop` wired in `AttachWindow`; `HandleFileDropAt` hit-tests the visible pane geometry and calls `terminal.Paste` (never appends newline); drops while Diff/Commit is visible are refused (`TestFileDropGuardOnHiddenTerminal`) |
 | 9 | Terminal Find adapter-only | `Manager.CopySearch` live, no UI | **FIXED** | Native find bar (`nativeui/terminal_find.go`) on the Terminal surface only, driven by `pane.copy_search` (Protocol 22 adapter); surface-aware Cmd+F (`handleSurfaceShortcuts`) |
 | 10 | Updater defer reason wrong | "plugin unavailable" was false — `mygo@v0.2.7/plugins/updater/native` exists | **FIXED (code) / EXPLICITLY_DEFERRED_WITH_REAL_BLOCKER (activation)** | `mygo.Use(native.Plugin)` + `updater.MenuItem()` wired in `main.go`. Exact remaining blocker: **release signing infrastructure** — no `mygo keygen` update keypair, no `updates.publicKey`/publish target in `mygo.json`, no signed-release CI. The plugin is inert until that exists; it is no longer a code gap |
-| 11 | Version metadata stale | `mygo.json` said `0.8.0` | **FIXED** | `mygo.json` version `0.10.0`; `go tool mygo build` produced `Shardlane.app` + `Shardlane 0.10.0.dmg` with `CFBundleShortVersionString = 0.10.0` |
+| 11 | Version metadata stale | `mygo.json` said `0.8.0` | **FIXED** | `mygo.json` version `0.10.0`; `go tool mygo build` produced `Solco.app` + `Solco 0.10.0.dmg` with `CFBundleShortVersionString = 0.10.0` |
 
 ## Disposition ledger (updated as work lands)
 

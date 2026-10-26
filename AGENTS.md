@@ -2,18 +2,18 @@
 
 ## Start here
 
-Before engineering Shardlane, read:
+Before engineering Solco, read:
 
 1. `docs/client-product-architecture.md` — canonical architecture source of truth.
 2. `docs/mygo-native-execution-rules.md` — active migration execution contract.
 3. `docs/mygo-native-migration-roadmap.md` — active task roadmap and milestone order.
-4. `.agents/skills/herdr-client-development/SKILL.md` — Shardlane engineering workflow.
+4. `.agents/skills/herdr-client-development/SKILL.md` — Solco engineering workflow.
 
 Architecture ownership lives only in `docs/client-product-architecture.md`; ad-hoc audits/progress evidence that are not part of the active migration contract may remain outside the repository.
 
 ## Product/runtime boundary
 
-- **Shardlane is the macOS client/product.**
+- **Solco is the macOS client/product.**
 - **Herdr is the backend/runtime authority** for workspaces, tabs, panes, layouts, terminal sessions, agents, scrollback, persistence, and process lifecycle.
 - External Agent conversation history is a separate read-only catalog; it must not become a second runtime. Runtime continuation from history must go through Herdr. The one mutation is the user-initiated, reversible Sessions Trash (2026-10-14), owned only by `internal/sessiontrash`.
 - Use mature ownership before custom code: **Herdr API → MyGo native components/official plugins → proven compatible implementation → custom**.
@@ -24,7 +24,7 @@ Architecture ownership lives only in `docs/client-product-architecture.md`; ad-h
 ```sh
 GOTOOLCHAIN=auto go tool mygo dev         # run the app
 GOTOOLCHAIN=auto go test ./...
-GOTOOLCHAIN=auto go tool mygo build   # builds build/darwin-arm64/Shardlane.app
+GOTOOLCHAIN=auto go tool mygo build   # builds build/darwin-arm64/Solco.app
 git diff --check
 git diff --cached --check
 ```
@@ -32,7 +32,7 @@ git diff --cached --check
 - `go.mod` pins Go 1.27.3 and MyGo v0.6.4 (checked elements: constructors return `ui.Element` values, persistent identity lives in `ui.Handle`); use `GOTOOLCHAIN=auto` so the repository pin does not require changing the user's global Go installation.
 - `go.mod` carries a temporary, user-approved `replace github.com/egoist/mygo => ./third_party/mygo` (v0.6.4 plus four vendored deltas re-applied on top: F146/F147 terminal `Options.LocalDragSelect`, WIX-021 field focus delegation — `AutoFocus` on a SearchField/Combobox reaches its inner input — multi-display tray flyout anchoring, and OSC 7501 program-status (`Options.OnProgramStatus`)). Do not remove the replace or add a second framework source; bump the pin and delete `third_party/mygo` only once upstream ships all four. See `third_party/mygo/LOCAL-PATCH.md`. Upstream v0.5.x additions stay unadopted until a task takes them: the Flyout API backs the quick panel (tray + header Agent popover), while `ui.WebView` (official Native-UI-embeddable WebView) does not by itself unfreeze the WebView presentation freeze — that needs an explicit product decision.
 - `GOTOOLCHAIN=auto go tool mygo vet .` (ordinary vet + type-aware element/Context checks) belongs in the check set beside `go test`.
-- When packaging changes, also build and structurally verify `Shardlane.app`.
+- When packaging changes, also build and structurally verify `Solco.app`.
 
 ## Scope and ownership
 
@@ -44,13 +44,13 @@ git diff --cached --check
 - Product decision 2026-10-11: Chat presentation moves onto the official MyGo `ui.WebView` (v0.4.1) over a single bound-service bridge (`mygo.Bind` + streaming channels + typed events; TS client via `mygo generate`). The bridge is presentation-only — the conversation runtime, Agent semantics and every Herdr method stay untouched, and the page may only ever talk to its own bridge from the app content origin (`mygo://localhost` embedded by `mygo build`; no localhost HTTP backend, no private AppKit embedding). History/Terminal/Git surfaces stay Native UI until a separate explicit task moves an HTML-suited piece of them; the native Chat implementation is retired only at acceptance parity.
 - Product decision 2026-10-13 (narrowed 2026-10-14): the `/files` preview center renders text and code natively in MyGo's `ui/editor` (read-only `editor.View`; the 8 MiB `filesview.TextPreviewCap`), while the official `ui.WebView` over a strictly read-only `filesPreview` bridge renders only Markdown and web images (the page has no mutation channel and refuses text). The file tree stays native and gains ignore rules (fixed heavy/generated names + git-owned ignored paths, "Show ignored files" toggle) and bounded local file operations (new file/folder, rename, delete with explicit confirm) owned by `internal/filesview` — no second Git runner, no new Herdr method.
 - 0.10 target: Lazygit is removed. `/workspace` has one local `WorkspacePrimarySurface` owner for Terminal / Chat / Diff Review / Commit. **No right sidebar:** `/files` is a view destination opened from the sidebar's top view tabs (Changes / Sessions / Files / Hosts), with an ignore-aware, action-carrying file tree in the left sidebar and a native code view (`ui/editor`; WebView for rendered Markdown and images) in the center; Scripts and Services belong to the existing Header Agent activity popover's Services tab. Godiff is a UI/behavior reference only; do not copy/import its `internal/*` implementation.
-- Product decision 2026-10-26: `internal/workboard` is the capability gate for one named plugin, `herdr-projects`, whose task board Shardlane presents natively (palette entry → Header popover Tasks tab → `/tasks`). The plugin stays the task authority and is reached only through its own CLI and Herdr's plugin commands; every surface and call is hidden until `herdr plugin list --json` reports it installed, enabled and in the verified `1.2.x` window, and always on remote instances. This is the only exception to "plugin UI"; see `docs/client-product-architecture.md`. On 2026-10-26 the user explicitly authorized a native Settings page for that plugin's own settings (`/settings/workboard`, shown only while the gate is open, driven by `show --json` / `set` / `unset`; voice, Web UI, cross-machine and key settings stay out) plus the management surface (archive/restore/clear, coordinator restart/new/stop, autopilot, automations on/off/run/remove, plan approval, richer New Task). Plugin semantics, validation and refusals stay the plugin's; Shardlane copies no option sets.
+- Product decision 2026-10-26: `internal/workboard` is the capability gate for one named plugin, `herdr-projects`, whose task board Solco presents natively (palette entry → Header popover Tasks tab → `/tasks`). The plugin stays the task authority and is reached only through its own CLI and Herdr's plugin commands; every surface and call is hidden until `herdr plugin list --json` reports it installed, enabled and in the verified `1.2.x` window, and always on remote instances. This is the only exception to "plugin UI"; see `docs/client-product-architecture.md`. On 2026-10-26 the user explicitly authorized a native Settings page for that plugin's own settings (`/settings/workboard`, shown only while the gate is open, driven by `show --json` / `set` / `unset`; voice, Web UI, cross-machine and key settings stay out) plus the management surface (archive/restore/clear, coordinator restart/new/stop, autopilot, automations on/off/run/remove, plan approval, richer New Task). Plugin semantics, validation and refusals stay the plugin's; Solco copies no option sets.
 - Use MyGo native widgets before custom drawing; reuse `theme.go`, `icons.go`, and `components.go` before adding one-off page styling.
 - Native window contracts: ⌘W closes the focused Tab through the shared close-tab confirm — never the window; the native window title mirrors the current route via `Shell.syncWindowTitle` (Workspace stays the bare app name).
 - Logs are structured and size-bounded under MyGo `PathLogs` (2 MiB active + 3 backups by default). Never log terminal bytes/output, prompt or conversation bodies, credentials, auth headers, provider secrets, or environment dumps; log operation names, stable runtime IDs, errors, state counts, and timing.
 - Keep MyGo pinned exactly until an explicit framework upgrade is verified.
-- Product decision 2026-10-26 (view switch): Settings → Work Board carries a `Native | Board` switch (`General.WorkboardView`, default **Board**). Board: every Project/task row and native-page entry opens the plugin's own board Tab (`openWorkBoard`); Native: Shardlane's `/project`, `/task`, `/archived` pages, kept under trial until the user releases them by changing the default. The switch exists only while the plugin gate is open; both views read the plugin's CLI and never a second store.
-- Still forbidden: a second Shardlane runtime implementation, a mode switch (the `herdr-projects` Native | Board view switch above is the one named exception), Notes/Bookmarks/Annotation, plugin UI/marketplace (the `herdr-projects` work board above is the one named exception), cloud accounts, telemetry.
+- Product decision 2026-10-26 (view switch): Settings → Work Board carries a `Native | Board` switch (`General.WorkboardView`, default **Board**). Board: every Project/task row and native-page entry opens the plugin's own board Tab (`openWorkBoard`); Native: Solco's `/project`, `/task`, `/archived` pages, kept under trial until the user releases them by changing the default. The switch exists only while the plugin gate is open; both views read the plugin's CLI and never a second store.
+- Still forbidden: a second Solco runtime implementation, a mode switch (the `herdr-projects` Native | Board view switch above is the one named exception), Notes/Bookmarks/Annotation, plugin UI/marketplace (the `herdr-projects` work board above is the one named exception), cloud accounts, telemetry.
 
 ## Git safety
 

@@ -7,7 +7,7 @@ agenthooks.go: Hook Doctor 领域包：Provider 诊断（脚本版本+接线完�
 agenthooks_test.go: 诊断/安装/幂等/外来文件保护/版本升级回归（临时 HOME，全路径注入）
 
 边界
-- 只写两类文件：自有脚本（~/.shardlane/hooks/）与 provider 配置的 hooks 段；其余内容逐值保留
+- 只写两类文件：自有脚本（~/.solco/hooks/）与 provider 配置的 hooks 段；其余内容逐值保留
 - Aider 无 hook 机制，诊断为 unsupported（状态由 Herdr 屏幕检测兜底），永不安装
 - 脚本本身不记日志、失败静默（fail-open）；生命周期权威仍在 Herdr
 

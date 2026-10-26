@@ -1,10 +1,10 @@
-# Contributing to Shardlane
+# Contributing to Solco
 
-Thank you for your interest in improving Shardlane. This document covers the setup, the verification gates every change must pass, and what reviewers look for.
+Thank you for your interest in improving Solco. This document covers the setup, the verification gates every change must pass, and what reviewers look for.
 
 ## Ground rules
 
-- **Shardlane is the client; Herdr is the runtime.** Herdr stays authoritative for workspaces, tabs, panes, terminal sessions, agents, scrollback, persistence, and process lifecycle. Read [`docs/client-product-architecture.md`](docs/client-product-architecture.md) before your first change — it is the single architectural source of truth.
+- **Solco is the client; Herdr is the runtime.** Herdr stays authoritative for workspaces, tabs, panes, terminal sessions, agents, scrollback, persistence, and process lifecycle. Read [`docs/client-product-architecture.md`](docs/client-product-architecture.md) before your first change — it is the single architectural source of truth.
 - Prefer mature owners over hand-rolled code, in this order: Herdr API → MyGo native components/official plugins → a proven compatible implementation → custom code.
 - Do not invent Herdr protocol methods or socket shapes; inspect the live API instead.
 
@@ -31,7 +31,7 @@ git diff --cached --check
 
 Additional expectations:
 
-- Packaging changes must also build and structurally verify `Shardlane.app` (`go tool mygo build` output under `build/darwin-arm64/`).
+- Packaging changes must also build and structurally verify `Solco.app` (`go tool mygo build` output under `build/darwin-arm64/`).
 - Terminal behavior changes should satisfy [`docs/terminal-interaction-spec.md`](docs/terminal-interaction-spec.md).
 
 ## Submitting changes

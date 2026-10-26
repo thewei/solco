@@ -1,4 +1,4 @@
-# Shardlane 0.9 Reference Audit — Magpie × herdr-gpui × Current MyGo Client
+# Solco 0.9 Reference Audit — Magpie × herdr-gpui × Current MyGo Client
 
 Status: **planning/reference audit**
 Audit date: 2026-10-05
@@ -9,11 +9,11 @@ Reference snapshots inspected:
 
 - `yetone/magpie` — `460057a` (`main`, 2026-10-05 11:16 +08:00)
 - `penso/herdr-gpui` — `6ae54ea` (`main`, 2026-10-04 17:29 -07:00)
-- Shardlane current branch — `rewrite/mygo`, post-0.4 tree with 0.5 work in progress
+- Solco current branch — `rewrite/mygo`, post-0.4 tree with 0.5 work in progress
 - MyGo framework source — `v0.2.7`
 
 This audit compares **product behavior and architectural patterns**, not source code to copy.
-External projects are references only; Shardlane's architecture and Herdr ownership remain authoritative.
+External projects are references only; Solco's architecture and Herdr ownership remain authoritative.
 
 ## 1. Executive conclusion
 
@@ -37,7 +37,7 @@ find anything quickly
 
 Therefore the recommended next large release is:
 
-> **Shardlane MyGo 0.9.0 — Workspace Intelligence & Desktop Experience**
+> **Solco MyGo 0.9.0 — Workspace Intelligence & Desktop Experience**
 
 It should replace the old thin “Desktop Tools” milestone with one coherent workspace experience.
 
@@ -45,7 +45,7 @@ It should replace the old thin “Desktop Tools” milestone with one coherent w
 
 The three projects solve different problems.
 
-### Shardlane
+### Solco
 
 ```text
 Herdr desktop client/product
@@ -69,7 +69,7 @@ profiles, usage, quota, sessions, backup/sync
 menu-bar-first management UX
 ```
 
-Shardlane can absorb UX and domain separation from both references, but must not become:
+Solco can absorb UX and domain separation from both references, but must not become:
 
 - a second Herdr runtime;
 - a mandatory LLM gateway;
@@ -77,7 +77,7 @@ Shardlane can absorb UX and domain separation from both references, but must not
 - a second Tab presentation system;
 - a provider credential manager merely to show useful Agent state.
 
-## 3. What Shardlane already has or already plans
+## 3. What Solco already has or already plans
 
 Do not duplicate these in 0.9.
 
@@ -130,7 +130,7 @@ Do not duplicate these in 0.9.
 
 ## 4. Three-way capability matrix
 
-| Capability | Magpie | herdr-gpui | Current / planned Shardlane | 0.9 decision |
+| Capability | Magpie | herdr-gpui | Current / planned Solco | 0.9 decision |
 |---|---|---|---|---|
 | Menu-bar quick panel | strong | status/menu patterns | 0.7 planned | already covered |
 | Agent status center | partial | strong | 0.5/0.7 | already covered |
@@ -184,7 +184,7 @@ Its command palette unifies:
 
 This is a major UX improvement because it reduces reliance on knowing where a feature lives.
 
-### Shardlane adaptation
+### Solco adaptation
 
 Create a **Command Center**, not another full Search page.
 
@@ -236,7 +236,7 @@ The Command Center is action/navigation search, not an FTS replacement.
 Palette rendering performs no Herdr RPC, filesystem scan, Git command, or History parse.
 Sources push immutable catalog snapshots into the Command Center service.
 
-## 6. Right Panel: migrate the old Shardlane product, not a generic tool drawer
+## 6. Right Panel: migrate the old Solco product, not a generic tool drawer
 
 The old Rust client already has a well-defined Project-scoped Right Panel:
 
@@ -270,7 +270,7 @@ Heavy process/window resources are not kept alive for every Project.
 
 ## 7. Files surface
 
-### Adopt from old Shardlane
+### Adopt from old Solco
 
 - Project/selected-Tab-rooted tree;
 - expandable directories;
@@ -300,9 +300,9 @@ Bounds:
 
 ## 8. Services & Port Intelligence
 
-This is one of the strongest overlaps between old Shardlane and herdr-gpui.
+This is one of the strongest overlaps between old Solco and herdr-gpui.
 
-### Old Shardlane already has
+### Old Solco already has
 
 - Script definitions;
 - resident vs one-shot command semantics;
@@ -355,7 +355,7 @@ The old Rust client owns Script semantic definitions only because Herdr has no p
 Preserve the same boundary in Go:
 
 ```text
-Shardlane owns definition/presentation
+Solco owns definition/presentation
 Herdr owns Tab/Pane/PTY/process execution
 ```
 
@@ -395,7 +395,7 @@ Rules:
 
 ## 11. Local Preview: preserve the product, change the migration implementation
 
-Old Shardlane embedded a narrow local-only WebView in the Right Panel.
+Old Solco embedded a narrow local-only WebView in the Right Panel.
 
 MyGo 0.2.7 still exposes a choice per Window:
 
@@ -419,7 +419,7 @@ Right Panel Services/Port action
 → MyGo WebView Window
 ```
 
-The Preview Window is still a Shardlane local-preview surface, not a general browser.
+The Preview Window is still a Solco local-preview surface, not a general browser.
 
 Scope:
 
@@ -483,7 +483,7 @@ additions/deletions
 open on GitHub
 ```
 
-Shardlane should adopt **read-only PR enrichment first**.
+Solco should adopt **read-only PR enrichment first**.
 
 ### Authentication boundary
 
@@ -503,7 +503,7 @@ local Git intelligence still works
 PR enrichment hidden/unavailable
 ```
 
-No token is copied into Shardlane.
+No token is copied into Solco.
 
 ### No mutation in first slice
 
@@ -515,7 +515,7 @@ Copy PR URL
 Refresh
 ```
 
-Do not merge/approve/comment from Shardlane in 0.9 core.
+Do not merge/approve/comment from Solco in 0.9 core.
 
 ## 14. Desktop Attention: complete the 0.5 + 0.7 loop
 
@@ -691,7 +691,7 @@ Nothing is uploaded automatically.
 ## 19. Official MyGo Updater + What's New
 
 Both reference clients invest heavily in update UX.
-The old Rust Shardlane also has a substantial custom staged updater.
+The old Rust Solco also has a substantial custom staged updater.
 
 MyGo 0.2.7 now has an official Native updater plugin built on signed `mygo.Updater` releases.
 
@@ -720,7 +720,7 @@ Policy:
 
 ## 20. Appearance: absorb the good parts, keep one product identity
 
-herdr-gpui has many sidebar layouts. Shardlane should not copy nine layouts.
+herdr-gpui has many sidebar layouts. Solco should not copy nine layouts.
 
 The user already chose a macOS-like, shadcn-influenced compact product language.
 
@@ -735,14 +735,14 @@ Appearance: System / Light / Dark
 One canonical Sidebar component tree remains.
 Density changes spacing, not information ownership or hierarchy.
 
-High contrast applies to Shardlane UI semantic colors only, never rewrites Terminal program colors.
+High contrast applies to Solco UI semantic colors only, never rewrites Terminal program colors.
 
-## 21. Adapt Magpie Profiles as Shardlane Task Presets
+## 21. Adapt Magpie Profiles as Solco Task Presets
 
 Magpie Profiles snapshot every Agent's provider/model configuration.
-Shardlane should **not** copy that behavior because current `StartAgentRequest` does not own provider model/effort configuration.
+Solco should **not** copy that behavior because current `StartAgentRequest` does not own provider model/effort configuration.
 
-The safe adaptation is a Shardlane-owned **New Task Preset**:
+The safe adaptation is a Solco-owned **New Task Preset**:
 
 ```go
 type TaskPreset struct {
@@ -779,7 +779,7 @@ Magpie's encrypted backup/sync system is useful but broad.
 
 Do not put WebDAV/S3 sync into 0.9 core.
 
-Potential later Shardlane-owned export scope:
+Potential later Solco-owned export scope:
 
 ```text
 settings
@@ -821,7 +821,7 @@ Do not add private LaunchAgent/Registry/autostart code just to match Magpie with
 
 herdr-gpui has sophisticated browser tabs and agent/browser skill integration.
 
-Shardlane architecture explicitly says general-purpose browsing is a non-goal.
+Solco architecture explicitly says general-purpose browsing is a non-goal.
 
 Keep only Project-rooted local Preview.
 
@@ -837,7 +837,7 @@ Do not add:
 
 The newest herdr-gpui reference includes tabs-in-titlebar work.
 
-Shardlane already has an explicit architectural decision:
+Solco already has an explicit architectural decision:
 
 > The Sidebar is the canonical Tab presentation owner.
 
@@ -860,7 +860,7 @@ herdr-gpui's saved devices, SSH tunnels, remote file copy and Teleport are stron
 ## 27. CPU / memory status — adapt, not chrome
 
 herdr-gpui shows CPU/memory continuously.
-Shardlane intentionally does not keep a permanent full-width status bar.
+Solco intentionally does not keep a permanent full-width status bar.
 
 If useful, system/resource information belongs in:
 
@@ -931,7 +931,7 @@ I know an Agent is running, but I still leave the app for many development tasks
 After 0.9
 I can find the Agent/Project/action instantly, inspect files/services/Git,
 open the local app preview, react from notifications/menu bar,
-and diagnose/update Shardlane without leaving the product.
+and diagnose/update Solco without leaving the product.
 ```
 
 That is a coherent large-version milestone.
@@ -949,4 +949,4 @@ Recommended remaining path:
 → 1.0 Final Cutover
 ```
 
-1.0 should mean the Rust desktop path is no longer required for ordinary Shardlane use, not merely that the Native UI has many features.
+1.0 should mean the Rust desktop path is no longer required for ordinary Solco use, not merely that the Native UI has many features.

@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.3.0 — Code & Package Audit
+# Solco MyGo 0.3.0 — Code & Package Audit
 
 Status: **audited test build**
 Audit date: 2026-10-05
@@ -80,7 +80,7 @@ git diff --check                        # PASS
 
 ### Isolated real-app smoke (temporary HOME, seeded provider sources)
 
-Launched `Shardlane.app` (0.3.0) via LaunchServices with a temporary `HOME`
+Launched `Solco.app` (0.3.0) via LaunchServices with a temporary `HOME`
 seeded with two Codex rollout fixtures under `~/.codex/sessions`. Ground
 truth after launch:
 
@@ -110,7 +110,7 @@ truth after launch:
 
 ### Native UI render evidence
 
-`SHARDLANE_RENDER_SMOKE=<dir> go test -run TestRenderSmokeEvidence` renders
+`SOLCO_RENDER_SMOKE=<dir> go test -run TestRenderSmokeEvidence` renders
 real frames of workspace/history list/history detail/settings General/
 settings Terminal from the actual presentation code (headless, no screen
 capture). Frames confirmed: list rows with provider badge/project/timestamp,
@@ -124,10 +124,10 @@ was deliberately not used.
 
 ## 4. Test package
 
-- DMG: `next/build/darwin-arm64/Shardlane 0.3.0.dmg` (~7.0 MB)
-- App: `next/build/darwin-arm64/Shardlane.app` (~18.5 MB)
+- DMG: `next/build/darwin-arm64/Solco 0.3.0.dmg` (~7.0 MB)
+- App: `next/build/darwin-arm64/Solco.app` (~18.5 MB)
 - SHA-256: `75d36f6465afef2369696053d37144ae5d3d167d0aef206ccd9ad7f0b99eacab`
-- version `0.3.0`, identifier `com.whstudio.shardlane.next`, macOS 13.0+,
+- version `0.3.0`, identifier `com.whstudio.solco`, macOS 13.0+,
   ad-hoc signature, not notarized.
 
 ## 5. What to test manually in 0.3.0

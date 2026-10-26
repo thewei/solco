@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.7.0 — Status Center & Agent Quick Navigation Plan
+# Solco MyGo 0.7.0 — Status Center & Agent Quick Navigation Plan
 
 Status: **planned post-0.6 release**
 Target: `0.7.0`
@@ -120,7 +120,7 @@ The panel renders the same Status Center rows/components as the in-window panel,
 
 A concise system-native menu may still be used for right-click or as a platform fallback:
 
-- Show Shardlane;
+- Show Solco;
 - Open Agents;
 - New Agent;
 - History;
@@ -151,7 +151,7 @@ The current MyGo titlebar has a minimal `titlebarActivity` that:
 - only renders `NeedsAttention`;
 - routes to the Workspace/Agents section;
 - does not expose Working/Review detail;
-- is placed beside the Shardlane brand area rather than a dedicated right-side status accessory;
+- is placed beside the Solco brand area rather than a dedicated right-side status accessory;
 - does not provide Agent rows or direct target routing.
 
 0.7 replaces that minimal control with a first-class right-side Status Center trigger.
@@ -233,7 +233,7 @@ The titlebar layout should end with a stable right-side status zone:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Shardlane  ‹ ›   Project / Tab                         ⚠ 2  ✓ 1  ⚡ 3 │
+│ Solco  ‹ ›   Project / Tab                         ⚠ 2  ✓ 1  ⚡ 3 │
 └──────────────────────────────────────────────────────────────────────┘
                                                             ▲
                                                       Status Center
@@ -627,7 +627,7 @@ The panel reuses `StatusCenterSnapshot` and compact Agent rows.
 Header:
 
 ```text
-Shardlane
+Solco
 2 need attention · 1 review · 3 working
 ```
 
@@ -660,9 +660,9 @@ A later preference may pin a compact quota/usage cell, but that is not required 
 Examples:
 
 ```text
-Shardlane — 2 need attention, 1 for review, 3 working
-Shardlane — Ready
-Shardlane — Herdr disconnected
+Solco — 2 need attention, 1 for review, 3 working
+Solco — Ready
+Solco — Herdr disconnected
 ```
 
 One summary formatter drives titlebar/tray wording where appropriate.
@@ -679,7 +679,7 @@ History
 Search
 Settings
 ────────────────────
-Show Shardlane
+Show Solco
 Quit
 ```
 
@@ -775,7 +775,7 @@ Required shared pieces:
 
 The right-side trigger should look like a macOS toolbar accessory, not a web dashboard badge cluster.
 
-The system quick panel should borrow Magpie's compact menu-bar panel interaction pattern, but render with MyGo Native UI and Shardlane's Design System.
+The system quick panel should borrow Magpie's compact menu-bar panel interaction pattern, but render with MyGo Native UI and Solco's Design System.
 
 Suggested normal density:
 

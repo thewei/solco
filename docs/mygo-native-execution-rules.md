@@ -14,9 +14,9 @@ The migration optimizes for small independent changes, fast local feedback, expl
 ## 2. Non-negotiable ownership
 
 - Herdr remains the sole authority for runtime Workspaces/Projects, Tabs, Panes/layouts, Agents, PTYs, terminal identities, scrollback, persistence, and process lifecycle.
-- Go application/domain packages own Shardlane product semantics.
+- Go application/domain packages own Solco product semantics.
 - MyGo Native UI owns presentation only.
-- History is a read-only projection over external provider sources plus Shardlane-owned disposable index/cache.
+- History is a read-only projection over external provider sources plus Solco-owned disposable index/cache.
 - Remote/Mobile APIs reuse the same Go domain services; they do not create a second runtime.
 - No client-owned PTY, Pane layout model, runtime registry, or provider process lifecycle.
 - No automatic `terminal attach --takeover`.
@@ -182,7 +182,7 @@ Do not make a task depend on full E2E if a lower level can establish correctness
 Old Rust code is a behavior oracle until cutover.
 
 Reuse:
-- `crates/shardlane-remote/tests/fixtures`;
+- `crates/solco-remote/tests/fixtures`;
 - Rust History adapter test fixtures;
 - Rust Host transaction semantics;
 - mobile Zod fixtures/contracts.
@@ -210,7 +210,7 @@ Default:
 - approximate max on disk: 8 MiB;
 - format: structured JSON;
 - default level: info;
-- debug: `SHARDLANE_LOG_LEVEL=debug`.
+- debug: `SOLCO_LOG_LEVEL=debug`.
 
 Allowed:
 - operation name;

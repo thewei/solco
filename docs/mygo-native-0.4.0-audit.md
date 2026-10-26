@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.4.0 — Operational Closure & UI System Audit
+# Solco MyGo 0.4.0 — Operational Closure & UI System Audit
 
 Status: **audited test build**
 Audit date: 2026-10-05
@@ -53,7 +53,7 @@ git diff --cached --check                                            # flags whi
 
 ### Render evidence (RENDER-06)
 
-`SHARDLANE_RENDER_SMOKE=<dir>` renders real frames from the presentation
+`SOLCO_RENDER_SMOKE=<dir>` renders real frames from the presentation
 code: workspace, History list, History detail, Settings General/Terminal/
 Providers, New Task picker, and working/blocked/done operational statuses.
 The Providers frame shows the strategy authority per row (Herdr official /
@@ -61,7 +61,7 @@ screen-managed / unsupported) with health pills and the gated Update action.
 
 ### Isolated real-app smoke (temporary HOME, seeded Codex source)
 
-Launched `Shardlane.app` 0.4.0 via LaunchServices with a temporary `HOME`:
+Launched `Solco.app` 0.4.0 via LaunchServices with a temporary `HOME`:
 process alive, catalog indexed the seeded session, FTS populated, log
 grep for the transcript body returned zero matches, clean shutdown; the
 user's running instance was untouched.
@@ -77,9 +77,9 @@ user's running instance was untouched.
 
 ## 4. Package
 
-- DMG: `next/build/darwin-arm64/Shardlane 0.4.0.dmg` (~7.0 MB)
+- DMG: `next/build/darwin-arm64/Solco 0.4.0.dmg` (~7.0 MB)
 - SHA-256: `af60c0b2dac65b63dde05f48c1a5eb2ebb02a458b5a21baf93379433e2974029`
-- version `0.4.0`, identifier `com.whstudio.shardlane.next`, macOS 13.0+, ad-hoc signature, not notarized. Internal test build; the Rust client remains the shipped default.
+- version `0.4.0`, identifier `com.whstudio.solco`, macOS 13.0+, ad-hoc signature, not notarized. Internal test build; the Rust client remains the shipped default.
 
 ## 5. Remaining architectural blockers
 

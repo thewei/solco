@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.4.0 Closure Implementation Prompt
+# Solco MyGo 0.4.0 Closure Implementation Prompt
 
-Continue the Shardlane MyGo migration in:
+Continue the Solco MyGo migration in:
 
 `/Users/wilson/Workspaces/wh-studio/herdr-client`
 
@@ -41,7 +41,7 @@ Do not start by adding Chat. First make the existing Native application one cohe
 
 - Herdr remains the sole authority for runtime Workspaces/Projects, Tabs, Panes/layouts, Agents, PTYs, terminal IDs, process lifecycle and persistence.
 - Project/Tab/Pane navigation remains client-local.
-- Never reintroduce `workspace.focus`, `tab.focus`, or `pane.focus` for normal Shardlane navigation.
+- Never reintroduce `workspace.focus`, `tab.focus`, or `pane.focus` for normal Solco navigation.
 - Never subscribe to global Herdr focus events as navigation authority.
 - Terminal geometry remains from Herdr authoritative layouts.
 - Do not create client PTYs or a second Pane/runtime model.
@@ -188,7 +188,7 @@ Unsupported
 Error
 ```
 
-Preserve the meaningful legacy status semantics (Installed/Outdated/NotInstalled/HerdrManaged/Unsupported), but map them through the newer strategy authority so Shardlane never installs a competing lifecycle hook beside Herdr official integration.
+Preserve the meaningful legacy status semantics (Installed/Outdated/NotInstalled/HerdrManaged/Unsupported), but map them through the newer strategy authority so Solco never installs a competing lifecycle hook beside Herdr official integration.
 
 Audit on:
 

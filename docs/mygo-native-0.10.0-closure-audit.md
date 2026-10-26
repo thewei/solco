@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.10.0 — Closure Audit
+# Solco MyGo 0.10.0 — Closure Audit
 
 Date: 2026-10-05
 Branch: `rewrite/mygo`
@@ -19,9 +19,9 @@ evidence, named gaps remain), `EXPLICITLY_DEFERRED` (real blocker named),
 | Race detector | `go test -race ./internal/{gitworkbench,filesview,scripts,services,preview,nativeui}/...` | PASS |
 | Formatting | `gofmt -l .` | clean |
 | Vet | `go vet ./...` | clean |
-| Native build | `go tool mygo build` | built `build/darwin-arm64/Shardlane.app` + `Shardlane 0.10.0.dmg` |
+| Native build | `go tool mygo build` | built `build/darwin-arm64/Solco.app` + `Solco 0.10.0.dmg` |
 | Whitespace | `git diff --check`, `git diff --cached --check` | clean |
-| Package metadata | PlistBuddy on built app | `CFBundleShortVersionString = 0.10.0`, identifier `com.whstudio.shardlane.next` |
+| Package metadata | PlistBuddy on built app | `CFBundleShortVersionString = 0.10.0`, identifier `com.whstudio.solco` |
 
 ## 2. 0.9 RealityMatrix inherited fixes
 

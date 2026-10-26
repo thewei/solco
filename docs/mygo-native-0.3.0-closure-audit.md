@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.3.0 — Closure Audit
+# Solco MyGo 0.3.0 — Closure Audit
 
 Status: **next-stage audit**
 Audit date: 2026-10-05
@@ -24,7 +24,7 @@ behave as one product.
 
 ### Current
 
-- Shardlane pin: `github.com/egoist/mygo v0.2.5`.
+- Solco pin: `github.com/egoist/mygo v0.2.5`.
 - Go toolchain: 1.27.1.
 
 ### Latest verified upstream
@@ -142,14 +142,14 @@ The app should prefer official MyGo components where they already solve the inte
 - `ui.Form` / field primitives for Settings and New Task controls.
 - `ui.Collapsible` for History thinking/tool detail disclosure.
 - `ui.Toast` for transient successful/failed actions.
-- `ui.Breadcrumbs` where it preserves the Shardlane shell geometry.
+- `ui.Breadcrumbs` where it preserves the Solco shell geometry.
 - official Sidebar primitives where they preserve the canonical hierarchy.
 
 ### Spike before replacing custom code
 
 - `ui.Outline` for the Project → Tab → Pane tree.
 
-Shardlane's current tree has semantic selection, custom connector guides, status presentation,
+Solco's current tree has semantic selection, custom connector guides, status presentation,
 context menus and Herdr-layout semantics. Do not rewrite it merely to use an official component.
 Run one focused parity spike; keep the custom tree if Outline cannot preserve the required UX cleanly.
 

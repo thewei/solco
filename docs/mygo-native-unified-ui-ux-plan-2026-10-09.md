@@ -1,4 +1,4 @@
-# Shardlane MyGo 统一界面与交互优化方案
+# Solco MyGo 统一界面与交互优化方案
 
 **日期**：2026-10-09  
 **状态**：历史分阶段审计 + 当前执行记录。**2026-10-09 最新产品决策已撤销此前的整个右栏方案**，以 Header Files 独立页面、Agent/Services 合并浮层为现行结构；以下早期右栏记录保留为历史审计，不再作为当前 UI 规范。真实焦点/实机验收仍待完成
@@ -18,7 +18,7 @@
 
 **Terminal First · Context Aware · One Shell**
 
-Shardlane 的身份是「以 Terminal 为中心的 Agent 开发工作区」，不是拼合起来的多个管理后台。日常工作只需要识别三层：
+Solco 的身份是「以 Terminal 为中心的 Agent 开发工作区」，不是拼合起来的多个管理后台。日常工作只需要识别三层：
 
 1. **Where（左）**：导航、实例 / Project / Tab / Pane / Agent / 历史过滤，回答「我在哪里」。
 2. **Do（中）**：唯一主工作表面，执行 Terminal / Chat / Diff Review / Commit / History 阅读 / Settings 操作，回答「我正在做什么」。
@@ -123,7 +123,7 @@ Shardlane 的身份是「以 Terminal 为中心的 Agent 开发工作区」，�
 - [Apple HIG: Popovers](https://developer.apple.com/design/human-interface-guidelines/popovers)：浮层只放少量相关操作、一次一个、在锚点附近、失焦退出。**采用**。
 - [VS Code: Custom Layout](https://code.visualstudio.com/docs/configure/custom-layout)：主次侧栏职责明确、可收起、保留视图位置和最近选择。**采用思路，不复制 IDE 的多列窗口实现**。
 - [VS Code: Sidebar Guidelines](https://code.visualstudio.com/api/ux-guidelines/sidebars)：相关视图成组，别把所有动作与 View 都塞进侧边。**采用**。
-- Godiff 作为 Git Diff/Changes 的行为参考已经记录于 `reference-godiff-shardlane-0.10-audit.md`；不复制其内部实现。
+- Godiff 作为 Git Diff/Changes 的行为参考已经记录于 `reference-godiff-solco-0.10-audit.md`；不复制其内部实现。
 
 ## 7. 概念效果图比较与准确生图提示词
 
@@ -132,11 +132,11 @@ Shardlane 的身份是「以 Terminal 为中心的 Agent 开发工作区」，�
 - **方案 A**：Terminal 最强主视觉，History / Agent 浮层功能分区更细，适合提取深度、层级、边框和密度。**不足**：个别标签、内容、列布局是生成的示意，不符合实际 MyGo/Herdr 对象树，不能直接照抄。
 - **方案 B**：Terminal / History / Agent 的结构关系更清楚，更贴近“左导航，中工作区，右上下文”的目标。**不足**：概念图额外画了顶部 tab 导航和可能不存在的 History 分类；不得引入第二路由或第二导航。
 
-**最终选择**：采用 B 的上下文关系、A 的密度控制，坚持当前 Shardlane 原生应用的实际控件和截图事实；图是审美参照，不是交互契约或源码真值。
+**最终选择**：采用 B 的上下文关系、A 的密度控制，坚持当前 Solco 原生应用的实际控件和截图事实；图是审美参照，不是交互契约或源码真值。
 
 可复用高精度 Prompt：
 
-> Refine an existing macOS-native developer application named Shardlane (Go + MyGo Native UI). Preserve the existing dark plum-to-charcoal color family, macOS traffic lights, subtle card borders, vertical left sidebar, and hierarchy Project → Tab → Pane. Design a terminal-first application, not a browser dashboard. Show three coordinated states in a single annotated design board: (1) Workspace with two stacked terminal panes as the visual anchor and a right contextual Changes/Files/Services inspector; (2) History with a left filter rail, a central conversation list or transcript, and a right inspector showing ONLY the selected history session's actual metadata, project, provider and timestamp; (3) one refined anchored Agent Activity popover reused by the title bar and tray, plus a focused single-Agent variant with only Open Terminal, Open Chat, Inspect actions. All states must share identical typography tokens, control height, gutter sizes, colors and selected/hover/focus treatment. No duplicate top tabs, no new global activity rail, no code/editor panel competing with the terminal, no fake services on History, no marketing graphics, no translucent neon glass, no gratuitous shadows. High fidelity native UI, clean textual hierarchy, realistic spacing, 16:10 macOS desktop aspect ratio, sharp legible microcopy.
+> Refine an existing macOS-native developer application named Solco (Go + MyGo Native UI). Preserve the existing dark plum-to-charcoal color family, macOS traffic lights, subtle card borders, vertical left sidebar, and hierarchy Project → Tab → Pane. Design a terminal-first application, not a browser dashboard. Show three coordinated states in a single annotated design board: (1) Workspace with two stacked terminal panes as the visual anchor and a right contextual Changes/Files/Services inspector; (2) History with a left filter rail, a central conversation list or transcript, and a right inspector showing ONLY the selected history session's actual metadata, project, provider and timestamp; (3) one refined anchored Agent Activity popover reused by the title bar and tray, plus a focused single-Agent variant with only Open Terminal, Open Chat, Inspect actions. All states must share identical typography tokens, control height, gutter sizes, colors and selected/hover/focus treatment. No duplicate top tabs, no new global activity rail, no code/editor panel competing with the terminal, no fake services on History, no marketing graphics, no translucent neon glass, no gratuitous shadows. High fidelity native UI, clean textual hierarchy, realistic spacing, 16:10 macOS desktop aspect ratio, sharp legible microcopy.
 
 ## 8. 实施任务与验收
 

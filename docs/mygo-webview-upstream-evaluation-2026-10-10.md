@@ -1,10 +1,10 @@
 # MyGo Native UI × WebView — 2026-10-10 upstream decision record
 
-Status: **Investigated / not adopted. Superseded 2026-10-11**: MyGo v0.4.1 shipped the official embedded `ui.WebView` (gate 1 met, cross-platform backends, docs, tests), and the product owner approved Chat-first adoption — recorded in `docs/client-product-architecture.md` (Decision 2026-10-11) and roadmap N19. The constraints below that survive the decision: presentation-only bridge, app-content origin only, no localhost HTTP backend, no private embedding, real-app acceptance before retiring the native Chat. This is framework capability reconnaissance, not permission to unfreeze Shardlane Chat/History WebView presentation.
+Status: **Investigated / not adopted. Superseded 2026-10-11**: MyGo v0.4.1 shipped the official embedded `ui.WebView` (gate 1 met, cross-platform backends, docs, tests), and the product owner approved Chat-first adoption — recorded in `docs/client-product-architecture.md` (Decision 2026-10-11) and roadmap N19. The constraints below that survive the decision: presentation-only bridge, app-content origin only, no localhost HTTP backend, no private embedding, real-app acceptance before retiring the native Chat. This is framework capability reconnaissance, not permission to unfreeze Solco Chat/History WebView presentation.
 
 ## Current verified facts
 
-- Shardlane uses MyGo **v0.3.7** (the upstream release of 2026-10-09 UTC), with the two local deltas documented in `third_party/mygo/LOCAL-PATCH.md`. The upstream release contains **no official `ui.WebView` for embedding HTML inside `WindowOptions.Content`**.
+- Solco uses MyGo **v0.3.7** (the upstream release of 2026-10-09 UTC), with the two local deltas documented in `third_party/mygo/LOCAL-PATCH.md`. The upstream release contains **no official `ui.WebView` for embedding HTML inside `WindowOptions.Content`**.
 - Official whole-window WebView presentation exists: a `WindowOptions.URL` page uses the system engine. It is not the same as an element nested among MyGo Native UI components.
 - Three **unmerged** implementations exist. The upstream API is not settled; none should be treated as a stable first-party dependency.
 
@@ -17,11 +17,11 @@ Status: **Investigated / not adopted. Superseded 2026-10-11**: MyGo v0.4.1 shipp
 
 Related upstream requests: [#148](https://github.com/egoist/mygo/issues/148), [#188](https://github.com/egoist/mygo/issues/188), and [#105](https://github.com/egoist/mygo/issues/105) (Native UI roadmap).
 
-These are snapshot observations as of 2026-10-10, not promises about later merges. PR descriptions report the contributors' testing; that does not equal an upstream compatibility guarantee or Shardlane integration acceptance.
+These are snapshot observations as of 2026-10-10, not promises about later merges. PR descriptions report the contributors' testing; that does not equal an upstream compatibility guarantee or Solco integration acceptance.
 
 ## Product decision
 
-**Do not cherry-pick #60, #189, or #200 into `third_party/mygo` now.** Retain the official released Native UI and the smallest two local compatibility patches. A third, large, unsettled platform-specific fork would create substantial rebasing, focus/keyboard, layout, overlay, bridge, accessibility, lifecycle and rendering risk; most Shardlane surfaces (Terminal, Chat, History, Git) do not require HTML.
+**Do not cherry-pick #60, #189, or #200 into `third_party/mygo` now.** Retain the official released Native UI and the smallest two local compatibility patches. A third, large, unsettled platform-specific fork would create substantial rebasing, focus/keyboard, layout, overlay, bridge, accessibility, lifecycle and rendering risk; most Solco surfaces (Terminal, Chat, History, Git) do not require HTML.
 
 If a need arises for HTML-specific content, prefer the existing **separate** official MyGo WebView window for local Project Preview while awaiting stable embedded support. No private AppKit/WKWebView injection and no new desktop localhost backend.
 

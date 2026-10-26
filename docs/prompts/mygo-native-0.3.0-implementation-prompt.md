@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.3.0 Implementation Prompt
+# Solco MyGo 0.3.0 Implementation Prompt
 
-You are continuing the Shardlane/herdr-client MyGo migration in:
+You are continuing the Solco/herdr-client MyGo migration in:
 
 `/Users/wilson/Workspaces/wh-studio/herdr-client`
 
@@ -25,7 +25,7 @@ Treat `docs/client-product-architecture.md` as the sole architecture authority.
 
 ## Non-negotiable architecture
 
-- Shardlane is the product/client; Herdr is the sole runtime authority.
+- Solco is the product/client; Herdr is the sole runtime authority.
 - Herdr owns runtime Workspaces/Projects, Tabs, Panes/layouts, Agents, PTYs, terminal IDs, scrollback, persistence, and process lifecycle.
 - MyGo Native UI owns presentation only.
 - Go application/domain services own product semantics.
@@ -33,7 +33,7 @@ Treat `docs/client-product-architecture.md` as the sole architecture authority.
 - Do not use `terminal attach --takeover` automatically.
 - Project/Tab/Pane navigation is client-local.
 - Herdr `focused_*` fields are bootstrap/fallback facts only.
-- Do not call or reintroduce `workspace.focus`, `tab.focus`, or `pane.focus` for ordinary Shardlane navigation.
+- Do not call or reintroduce `workspace.focus`, `tab.focus`, or `pane.focus` for ordinary Solco navigation.
 - Do not subscribe to global focus events as navigation drivers.
 - Herdr `session.snapshot.layouts` remains the geometry/topology authority for visible terminals.
 - History UI and Chat UI MUST remain Native UI.
@@ -90,7 +90,7 @@ Do not invent app-global mutable config in Native UI.
 Implement:
 1. Codex adapter with Rust fixture parity.
 2. Gemini adapter only if it does not delay the required Claude+Codex MVP.
-3. Shardlane-owned disposable SQLite catalog.
+3. Solco-owned disposable SQLite catalog.
 4. source identity tracking;
 5. session metadata/list path;
 6. FTS/search;

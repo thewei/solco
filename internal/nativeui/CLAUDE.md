@@ -8,7 +8,7 @@ brands.go: Agent 品牌位图资产与视觉标识解析器，将 live Agent 映
 agent_visual.go: Agent 品牌矢量回退图标字典、窗格 Agent 绑定与状态指示点（statusDot）
 brands_test.go: Agent 品牌位图资产检索、Antigravity 及其它 Provider 标识与 agentProvider 回退回归
 gorex_style.go: 扁平视觉系统（含终端 Ghostty 主题采纳：applyGorexTerminalTheme 按 ThemeName 固定 Ghostty 主题、否则按外观走 gorex 双配色，两种路径都带 MinimumContrast 1.3 对比度保障；terminalThemeChoices 缓存 picker 选项）：卡片/配色、图标按钮度量（gorexIconBtn·Glyph 28/16 工具栏、gorexPaneBtn·Glyph 24/14 密集、gorexRowBtn·Glyph 20/12 悬停行内操作，三档为唯一尺寸来源）、gorexToggleFace 按钮的按下/悬停/「开」态唯一来源（图标开关与文字开关同一枚中性芯片；列表/树行的选中仍是 SidebarSelect）、gorexIconTab 等分一行的图标标签（侧栏视图标签条，与 gorexIconButton 共用 gorexIconFace 的脸）、gorexPulldown 图标+下拉箭头（标题栏 Actions）与 shortDir/samePath 路径处理；无渐变、无投影
-terminal.go: 终端画布与 Gorex 窗格卡片渲染器，Pane 标题双击最大化/恢复、最大化 Tab 的窗格 Logo 数量角标（Tab 内面板数，无重叠堆叠画）、窗格标题取 Agent 名（Shardlane 生成的短名 <kind>-<6hex> 不当标题，回落到 Agent 品牌名）、标题原生拖动放置（跨窗格/跨 Tab 移动、拆分与交换）与 split 分隔条拖拽调宽高（解析为 Herdr pane.resize，双击回到 50/50；布局权威在 Herdr）；窗格头的目录文案不复述已有信息——标签已写出目录（titleSpellsOutDir，F168 去重对 shortDir 截断路径失效的修复）或单卡时标题栏第二行已是该窗格目录（paneCardCaption）都不再出第三份
+terminal.go: 终端画布与 Gorex 窗格卡片渲染器，Pane 标题双击最大化/恢复、最大化 Tab 的窗格 Logo 数量角标（Tab 内面板数，无重叠堆叠画）、窗格标题取 Agent 名（Solco 生成的短名 <kind>-<6hex> 不当标题，回落到 Agent 品牌名）、标题原生拖动放置（跨窗格/跨 Tab 移动、拆分与交换）与 split 分隔条拖拽调宽高（解析为 Herdr pane.resize，双击回到 50/50；布局权威在 Herdr）；窗格头的目录文案不复述已有信息——标签已写出目录（titleSpellsOutDir，F168 去重对 shortDir 截断路径失效的修复）或单卡时标题栏第二行已是该窗格目录（paneCardCaption）都不再出第三份
 run_command_button.go: 窗格卡片头的项目命令运行控件：嗅探命令（package.json/Makefile/justfile + 手写 Script 合并）经 root 键缓存读盘外构建；Run 直跑最后使用命令、菜单全量列出（last-used 置顶）；忙碌（pane.process_info 扫描事实）非 Agent 窗格变 Stop（pane.send_text 写 ETX=Ctrl+C）；事务走 ShellReady 探测 + pane.send_text 字面写入（agent.send_keys 只认 Agent 目标，2026-10-13 隔离探针验证；headless 按 mutate 规则丢弃），无新 Herdr 方法
 run_command_button_test.go: 运行控件状态机回归（命令菜单内容、last-used 置顶、忙碌换 Stop、Agent 繁忙隐藏、无命令隐藏、headless 点击安全丢弃）与 computePaneBusy 纯函数、合并形状测试
 breadcrumb_switcher.go: 标题栏面包屑与快速切换弹层所有者，Pane 顺序与 Herdr 实际布局对齐并展示品牌图标
@@ -154,7 +154,7 @@ commit_pi.go: Pi 一次性候选生成 UI 协调、后台取消/超时、repo/sn
 page_settings_git.go: Git 配置页：可编辑的只含风格的 Conventional Commit 规则（安全约束固定在 agent.BuildPiCommitPrompt，不在页面展示）、显式保存/恢复、Pi CLI 可执行路径
 design_system.go: 排版/间距/圆角/控件高度/TileTone 令牌，字号字重只经此处取值，禁止字面量
 theme.go: 中性调色板与 DesignTokens；Sidebar 仅在窗口无 vibrancy 材质时作为不透明回退；`highContrast`（设置「Increase contrast」的进程级镜像，Shell.View 每帧发布）让框架 Theme（Border/TextMuted）、DesignTokens、gorexColors、gdPalette 四个颜色来源同时加强边框与次要文字
-ui_evidence_test.go: 显式启用的视觉取证（SHARDLANE_UI_EVIDENCE=<dir> 渲染主要视图的深浅色 PNG，不访问真实会话）
+ui_evidence_test.go: 显式启用的视觉取证（SOLCO_UI_EVIDENCE=<dir> 渲染主要视图的深浅色 PNG，不访问真实会话）
 commit_pi_test.go, settings_git_test.go: Pi 后台时序/过期消息隔离、Git Settings 持久化及 MyGo 控件回归
 commit_message_import.go: 生成候选文本纯校验与 Subject/Body 导入，已有手写消息时必须二次确认，不触发 Git 提交
 commit_message_import_test.go: 消息长度/代码围栏/空主题校验、覆盖确认及本地状态销毁回归

@@ -1,6 +1,6 @@
-# Shardlane MyGo 0.6.0 Native Conversation & Chat Implementation Prompt
+# Solco MyGo 0.6.0 Native Conversation & Chat Implementation Prompt
 
-Continue the Shardlane MyGo migration after 0.5 Agent Workbench & Lifecycle is complete.
+Continue the Solco MyGo migration after 0.5 Agent Workbench & Lifecycle is complete.
 
 Repository:
 
@@ -24,11 +24,11 @@ Preserve user/other-agent changes. Do not reset, stage, commit, or push unless e
 
 Then inspect the original Rust behavior authorities named in the 0.6 plan, especially:
 
-- `crates/shardlane-host/src/conversations.rs`
-- `crates/shardlane-host/src/conversation_service.rs`
-- `crates/shardlane-host/src/conversation_delivery.rs`
-- `crates/shardlane-host/src/conversation_queue.rs`
-- `crates/shardlane-host/src/conversation_interactions.rs`
+- `crates/solco-host/src/conversations.rs`
+- `crates/solco-host/src/conversation_service.rs`
+- `crates/solco-host/src/conversation_delivery.rs`
+- `crates/solco-host/src/conversation_queue.rs`
+- `crates/solco-host/src/conversation_interactions.rs`
 - `crates/herdr-history/src/live/mod.rs`
 - `crates/herdr-history/src/live/registry.rs`
 - `crates/herdr-history/src/live/transport.rs`
@@ -37,7 +37,7 @@ Then inspect the original Rust behavior authorities named in the 0.6 plan, espec
 - `crates/herdr-gui/src/agent_ui/conversation.rs`
 - `crates/herdr-gui/src/agent_ui/activity.rs`
 - `crates/herdr-gui/src/agent_ui/interaction_view.rs`
-- `crates/shardlane-host/src/live_handoff.rs`
+- `crates/solco-host/src/live_handoff.rs`
 
 Port product behavior, not GPUI implementation details.
 

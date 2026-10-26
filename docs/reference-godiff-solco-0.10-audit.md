@@ -1,4 +1,4 @@
-# Shardlane 0.10 Reference & Reality Audit — Godiff × Current MyGo Client
+# Solco 0.10 Reference & Reality Audit — Godiff × Current MyGo Client
 
 Status: **planning / pre-0.10 audit**
 Audit date: 2026-10-05
@@ -31,13 +31,13 @@ Architecture authority: `docs/client-product-architecture.md`
 Reference snapshot inspected:
 
 - `egoist/godiff` — `88b89e0` (`main`, 2026-10-05 14:11 +08:00)
-- Shardlane — current `rewrite/mygo` working tree after the 0.9 implementation pass
+- Solco — current `rewrite/mygo` working tree after the 0.9 implementation pass
 - MyGo — repository pin `v0.2.7`
 
 This document has two purposes:
 
 1. decompose Godiff's useful product/UI architecture without copying its app wholesale;
-2. correct the gap between Shardlane's 0.9 closure claims and the actual current code before 0.10 starts.
+2. correct the gap between Solco's 0.9 closure claims and the actual current code before 0.10 starts.
 
 ## 1. Executive conclusion
 
@@ -45,7 +45,7 @@ The right next step is not “embed Lazygit better.”
 
 It is:
 
-> **Remove Lazygit and make Git review a first-class native Shardlane workspace surface.**
+> **Remove Lazygit and make Git review a first-class native Solco workspace surface.**
 
 The key structural change is a single `WorkspacePrimarySurface` owner inside `/workspace`:
 
@@ -72,12 +72,12 @@ This resolves the current ambiguity between Router pages, Terminal, and Right Pa
 
 ## 2. Important Godiff integration constraint
 
-The current Godiff repository is **not an importable Go library** for Shardlane:
+The current Godiff repository is **not an importable Go library** for Solco:
 
 - its module is `github.com/egoist/godiff`;
 - the application is `package main`;
 - core packages are under `github.com/egoist/godiff/internal/diff`, `internal/git`, `internal/highlight`;
-- Go's `internal` visibility rule prevents Shardlane from importing those packages from another module;
+- Go's `internal` visibility rule prevents Solco from importing those packages from another module;
 - no root `LICENSE`, `COPYING`, or `NOTICE` file was present in the audited snapshot.
 
 Therefore 0.10 must **not** vendor/copy Godiff implementation code or pretend a normal `go get` integration exists.
@@ -86,10 +86,10 @@ Approved planning stance:
 
 ```text
 Godiff = behavioral / UI / architecture reference
-Shardlane = clean-room implementation behind Shardlane-owned service interfaces
+Solco = clean-room implementation behind Solco-owned service interfaces
 ```
 
-If a future Godiff revision exposes a public importable package and explicit compatible license, Shardlane may add an adapter later without changing the 0.10 UI/domain contracts.
+If a future Godiff revision exposes a public importable package and explicit compatible license, Solco may add an adapter later without changing the 0.10 UI/domain contracts.
 
 The implementation prompt must instruct the Agent not to copy Godiff internal source into this repository.
 
@@ -107,7 +107,7 @@ FAIL github.com/egoist/godiff/internal/git TestWorkingTreeAndCommit
      node_modules generated-directory expectation differed in this audit environment
 ```
 
-This does not invalidate Godiff as a UX reference, but reinforces that Shardlane should pin its own behavior and tests rather than copy current implementation details blindly.
+This does not invalidate Godiff as a UX reference, but reinforces that Solco should pin its own behavior and tests rather than copy current implementation details blindly.
 
 ## 4. What Godiff does especially well
 
@@ -124,7 +124,7 @@ Row
    └─ main area
 ```
 
-This is a better mental model for Shardlane than the current “global route center + independent right tool UI” when Git content needs the full center width.
+This is a better mental model for Solco than the current “global route center + independent right tool UI” when Git content needs the full center width.
 
 ### 4.2 Sidebar geometry
 
@@ -167,13 +167,13 @@ Strong patterns:
 - selected row follows Diff scrolling;
 - selecting a file scrolls the Diff surface to that file.
 
-This two-way selection sync is especially valuable for Shardlane.
+This two-way selection sync is especially valuable for Solco.
 
 ### 4.4 Sidebar top chrome
 
 Godiff aligns its Sidebar top controls with the macOS traffic-light/titlebar area and uses compact icon-based controls rather than full-width navigation rows.
 
-Shardlane should adapt that visual language for its top Sidebar actions while keeping the canonical Project → Tab → Pane hierarchy.
+Solco should adapt that visual language for its top Sidebar actions while keeping the canonical Project → Tab → Pane hierarchy.
 
 ### 4.5 Main content header
 
@@ -188,9 +188,9 @@ loading state
 find/comments/layout actions
 ```
 
-This is a better reference for Shardlane's **workspace content header** than putting every workspace detail into the global titlebar.
+This is a better reference for Solco's **workspace content header** than putting every workspace detail into the global titlebar.
 
-Shardlane adaptation:
+Solco adaptation:
 
 ```text
 Project/repository name
@@ -212,7 +212,7 @@ empty/error/loading state
 
 Commit is not a modal. It replaces the main content.
 
-That pattern maps directly to Shardlane's desired center-area behavior.
+That pattern maps directly to Solco's desired center-area behavior.
 
 ### 4.7 Diff review surface
 
@@ -244,7 +244,7 @@ branch comparison
 
 The source chip in the header makes the active comparison explicit.
 
-For Shardlane 0.10, the release-blocking source is working-tree vs `HEAD`. Commit/history/branch comparison may be added where the task plan marks them, but **branch switching** is a separate Shardlane feature: current Godiff compares with branches; it does not provide the branch-switch workflow requested for Shardlane.
+For Solco 0.10, the release-blocking source is working-tree vs `HEAD`. Commit/history/branch comparison may be added where the task plan marks them, but **branch switching** is a separate Solco feature: current Godiff compares with branches; it does not provide the branch-switch workflow requested for Solco.
 
 ### 4.9 Commit experience
 
@@ -260,21 +260,21 @@ Godiff's Commit surface provides:
 
 It also uses pathspec-based Git operations to avoid committing unrelated staged paths.
 
-Shardlane should preserve the user-facing idea, while independently designing stronger stale-state/index-preservation tests around the mutation.
+Solco should preserve the user-facing idea, while independently designing stronger stale-state/index-preservation tests around the mutation.
 
-## 5. Godiff patterns Shardlane should not copy blindly
+## 5. Godiff patterns Solco should not copy blindly
 
 Do not inherit these just because Godiff has them:
 
-- its entire single-repository window model — Shardlane still has Herdr Workspace / Projects / Tabs / Panes;
-- Cmd+1/Cmd+2 semantics if they conflict with Shardlane's existing action registry;
-- its app-level Files/History tabs as a second Shardlane navigation system;
+- its entire single-repository window model — Solco still has Herdr Workspace / Projects / Tabs / Panes;
+- Cmd+1/Cmd+2 semantics if they conflict with Solco's existing action registry;
+- its app-level Files/History tabs as a second Solco navigation system;
 - any source code under Godiff `internal/*` without a legal/importable upstream contract;
 - current generated-directory implementation details that failed one upstream test in this audit environment;
 - review comments in 0.10 core;
-- general-purpose commit/history browser that duplicates Shardlane History semantics.
+- general-purpose commit/history browser that duplicates Solco History semantics.
 
-## 6. Current Shardlane implementation reality audit
+## 6. Current Solco implementation reality audit
 
 The 0.9 closure audit is useful as a ledger, but several `DONE` rows describe **package-level implementation** rather than **end-to-end product completion**.
 
@@ -382,7 +382,7 @@ The product claim “project-scoped preview reuse” therefore needs real owners
 The 0.9 closure audit records a packaged artifact named:
 
 ```text
-Shardlane 0.8.0.dmg
+Solco 0.8.0.dmg
 ```
 
 for the 0.9 closure.
@@ -391,7 +391,7 @@ for the 0.9 closure.
 
 ## 8. Current tests do not disprove these integration gaps
 
-Focused Shardlane tests currently pass for:
+Focused Solco tests currently pass for:
 
 ```text
 internal/gitintel
@@ -429,7 +429,7 @@ optional compact metadata
 status glyph / diff stats
 ```
 
-Retain Shardlane structure lines; Godiff does not have the Herdr hierarchy and cannot replace that semantic affordance.
+Retain Solco structure lines; Godiff does not have the Herdr hierarchy and cannot replace that semantic affordance.
 
 ### Right Panel — contextual workspace navigator
 
@@ -536,7 +536,7 @@ The Right Panel should select/contextualize; the primary center should render ri
 | image previews | DEFER |
 | History commit browser | OPTIONAL / later 0.10 workstream |
 | branch comparison | OPTIONAL |
-| branch switching | ADD — Shardlane feature, not copied from Godiff |
+| branch switching | ADD — Solco feature, not copied from Godiff |
 | create branch | ADD |
 | selective commit | ADOPT UX, independently implement/test mutation semantics |
 | source-code reuse | REJECT under current import/license state |

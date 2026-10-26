@@ -1,4 +1,4 @@
-# Shardlane MyGo 0.6.0 — Native Conversation & Chat Plan
+# Solco MyGo 0.6.0 — Native Conversation & Chat Plan
 
 Status: **planned post-0.5 release**
 Target: `0.6.0`
@@ -36,18 +36,18 @@ Port product semantics from the original implementation, not GPUI mechanics.
 
 | Original authority | Behavior to preserve |
 |---|---|
-| `crates/shardlane-host/src/conversations.rs` | opaque Conversation identity, stale-occupant protection, provider-neutral item projection |
-| `crates/shardlane-host/src/conversation_service.rs` | one semantic read/mutate service for live + History conversations |
-| `crates/shardlane-host/src/conversation_delivery.rs` | mutation ledger, per-Conversation serialization, exactly-once/idempotent delivery |
-| `crates/shardlane-host/src/conversation_queue.rs` | one follow-up while Working; exact-target settle/revalidate/deliver; blocked/uncertain safety |
-| `crates/shardlane-host/src/conversation_interactions.rs` | provider-neutral interaction broker, CAS revision, first-responder wins, occupant-change fail-closed |
+| `crates/solco-host/src/conversations.rs` | opaque Conversation identity, stale-occupant protection, provider-neutral item projection |
+| `crates/solco-host/src/conversation_service.rs` | one semantic read/mutate service for live + History conversations |
+| `crates/solco-host/src/conversation_delivery.rs` | mutation ledger, per-Conversation serialization, exactly-once/idempotent delivery |
+| `crates/solco-host/src/conversation_queue.rs` | one follow-up while Working; exact-target settle/revalidate/deliver; blocked/uncertain safety |
+| `crates/solco-host/src/conversation_interactions.rs` | provider-neutral interaction broker, CAS revision, first-responder wins, occupant-change fail-closed |
 | `crates/herdr-history/src/live/*` | live semantic source, incremental append/change/reset decoding, no ANSI/TUI semantics |
 | `crates/herdr-gui/src/chat/model.rs` | disposable Chat state, pending echo, Working anti-flicker, queue projection |
 | `crates/herdr-gui/src/agent_ui/conversation.rs` | turn/row projection, thinking/tool grouping, visible narration, working/stopped rows |
 | `crates/herdr-gui/src/agent_ui/activity.rs` | semantic Tool activity classes and explicit-diff rendering |
 | `crates/herdr-gui/src/agent_ui/interaction_view.rs` | Native Question/Permission/Plan interaction presentation |
-| `crates/shardlane-host/src/history_continuation.rs` | History Continue already completed in 0.5; reuse identity/transaction results |
-| `crates/shardlane-host/src/live_handoff.rs` | safe live Agent-to-Agent handoff with settle/freshness/pending-operation fences |
+| `crates/solco-host/src/history_continuation.rs` | History Continue already completed in 0.5; reuse identity/transaction results |
+| `crates/solco-host/src/live_handoff.rs` | safe live Agent-to-Agent handoff with settle/freshness/pending-operation fences |
 
 ## 3. Non-negotiable architecture
 
@@ -93,7 +93,7 @@ Herdr owns:
 - terminal IDs;
 - typed Agent session identity.
 
-Shardlane Go owns product semantics around Conversation delivery, projection and presentation.
+Solco Go owns product semantics around Conversation delivery, projection and presentation.
 
 ### 3.3 Native UI only
 
