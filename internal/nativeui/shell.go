@@ -346,6 +346,9 @@ type Shell struct {
 	// (Undo after a session is moved to the Trash).
 	pendingToast       string
 	pendingToastAction toastAction
+	// pendingReveal is an external solco://reveal request waiting for its
+	// session/tab to exist (external_reveal.go).
+	pendingReveal *revealRequest
 	// terminalFind owns the Terminal-surface find bar (CopySearch adapter).
 	terminalFind terminalFindState
 	// userDataDir is the production persistence root ("" in headless tests).

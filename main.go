@@ -132,6 +132,19 @@ func main() {
 	// back the stable notification ID across launches).
 	mygo.App.OnNotificationClick(shell.RouteAgentNotification)
 
+	// solco://reveal?session=&workspace=&tab= — an external app (My DevTools'
+	// prox) asking this window to show one Herdr tab. Solco ignores Herdr's
+	// global focus on purpose, so this explicit link is the only way in.
+	// raiseMain is set once the window exists; a link that arrives earlier
+	// stays pending inside the Shell until its tab shows up.
+	var raiseMain func()
+	mygo.App.OnOpenURL(func(raw string) {
+		shell.RouteExternalURL(raw)
+		if raiseMain != nil {
+			raiseMain()
+		}
+	})
+
 	var closeOnce sync.Once
 	closeShell := func() { closeOnce.Do(shell.Close) }
 
@@ -195,6 +208,7 @@ func main() {
 			}
 			win.Focus()
 		}
+		raiseMain = showMain
 		mygo.App.OnActivate(func(hasVisibleWindows bool) { showMain() })
 		mygo.App.OnSecondInstance(func(args []string, workingDir string) { showMain() })
 
