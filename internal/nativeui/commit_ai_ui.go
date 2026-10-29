@@ -21,8 +21,7 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 	sp := Spacing()
 	t := c.Theme()
 	if !s.commitPromptPreviewOpen {
-		open := compactButton(c, "Draft Commit Message…").
-			Tooltip("Write a commit message with Pi")
+		open := tipped(c, compactButton(c, "Draft Commit Message…"), "Write a commit message with Pi")
 		open.Disabled(len(s.selectedCommitPaths()) == 0)
 		if open.Clicked() {
 			s.commitPromptPreviewOpen = true
@@ -59,24 +58,24 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 			if s.piCommitRunning {
 				ui.Spinner(c).Size(14, 14)
 				ui.Text(c, "Generating with Pi…").FontSize(Typography().Caption).TextColor(t.TextMuted)
-				if ui.Button(c, "Cancel Generation").Clicked() {
+				if regularButton(c, "Cancel Generation").Clicked() {
 					s.cancelPiCommitSuggestion()
 					s.piCommitError = "Pi generation canceled."
 				}
 			} else {
-				generate := ui.PrimaryButton(c, "Generate with Pi")
+				generate := regularPrimaryButton(c, "Generate with Pi")
 				generate.Disabled(preview.Text == "" || !s.surface.commit.Captured || s.surface.commit.InFlight)
 				if generate.Clicked() {
 					s.startPiCommitSuggestion()
 				}
 			}
-			review := ui.Button(c, "Review Prompt")
+			review := regularButton(c, "Review Prompt")
 			review.Disabled(preview.Text == "")
 			if review.Clicked() {
 				s.commitPromptTextVisible = !s.commitPromptTextVisible
 			}
 			if !s.commitAIManualEntryOpen && s.commitAIResponse == "" {
-				if ui.Button(c, "Paste Suggestion…").Clicked() {
+				if regularButton(c, "Paste Suggestion…").Clicked() {
 					s.commitAIManualEntryOpen = true
 				}
 			}
@@ -91,14 +90,14 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 					ui.Text(c, preview.Text).FontSize(Typography().Micro).TextColor(t.TextMuted)
 				})
 			})
-			if ui.Button(c, "Copy Prompt").Clicked() {
+			if regularButton(c, "Copy Prompt").Clicked() {
 				s.copyToClipboard(preview.Text)
 				s.pendingToast = "Prompt copied to clipboard."
 			}
 		}
 		if s.commitAIManualEntryOpen || s.commitAIResponse != "" {
 			ui.Text(c, "Suggested commit message").FontSize(Typography().Caption).FontWeight(WeightSemibold)
-			ui.TextArea(c, &s.commitAIResponse).Height(76).Grow(0).
+			textArea(c, &s.commitAIResponse).Height(76).Grow(0).
 				Placeholder("Subject followed by optional body").Label("Message suggestion")
 			if s.commitAIError != "" {
 				ui.Text(c, s.commitAIError).FontSize(Typography().Caption).TextColor(t.Danger)
@@ -106,17 +105,17 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 			if s.commitAIReplaceConfirm {
 				ui.Text(c, "Replace your existing commit message?").FontSize(Typography().Caption).TextColor(t.Warning)
 				ui.Row(c).Gap(sp.S).Children(func() {
-					if ui.Button(c, "Keep Current Message").Clicked() {
+					if regularButton(c, "Keep Current Message").Clicked() {
 						s.commitAIReplaceConfirm = false
 					}
-					replace := ui.Button(c, "Replace Message")
+					replace := regularButton(c, "Replace Message")
 					replace.Disabled(s.surface.commit.InFlight || s.piCommitRunning)
 					if replace.Clicked() {
 						s.replaceCommitMessageWithSuggestion()
 					}
 				})
 			} else {
-				use := ui.Button(c, "Use Suggested Message")
+				use := regularButton(c, "Use Suggested Message")
 				use.Disabled(strings.TrimSpace(s.commitAIResponse) == "" || s.surface.commit.InFlight || s.piCommitRunning)
 				if use.Clicked() {
 					s.applyManualAISuggestion()

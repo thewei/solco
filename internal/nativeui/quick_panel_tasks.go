@@ -53,7 +53,7 @@ func (s *Shell) quickPanelTasks(c *ui.Context) {
 			if board.failed {
 				ui.Row(c).FillWidth().Padding(sp.S, sp.M, 0).Gap(sp.S).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "Couldn't read the board").FontSize(Typography().Caption).Grow(1).TextColor(c.Theme().TextMuted)
-					if ui.Button(c, "Retry").Clicked() {
+					if regularButton(c, "Retry").Clicked() {
 						s.refreshWorkboardTasks(true)
 					}
 				})
@@ -77,10 +77,10 @@ func (s *Shell) quickPanelTasks(c *ui.Context) {
 		})
 	})
 	ui.Row(c).FillWidth().Padding(sp.S, sp.M).Gap(sp.S).Justify(ui.End).Children(func() {
-		if ui.Button(c, "New Task").Clicked() {
+		if regularButton(c, "New Task").Clicked() {
 			s.openWorkboardAdd(false)
 		}
-		if ui.Button(c, "Add and Delegate").Clicked() {
+		if regularButton(c, "Add and Delegate").Clicked() {
 			s.openWorkboardAdd(true)
 		}
 	})
@@ -135,8 +135,8 @@ func (s *Shell) quickPanelTaskRowIn(c *ui.Context, task workboard.Task, group wo
 				})
 			})
 			ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-				ui.Text(c, title).FontSize(Typography().Body).SingleLine().Tooltip(title)
-				ui.Text(c, caption).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Tooltip(caption)
+				tipped(c, ui.Text(c, title).FontSize(Typography().Body).SingleLine(), title)
+				tipped(c, ui.Text(c, caption).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), caption)
 			})
 			if group == workboard.GroupWorking {
 				ui.Spinner(c)

@@ -34,11 +34,11 @@ func (s *Shell) bootstrapPage(c *ui.Context) {
 				ui.Text(c, "Updating Herdr…").FontSize(Typography().Section).FontWeight(WeightSemibold).TextColor(t.Text)
 				return
 			}
-			if ui.PrimaryButton(c, "Update Herdr").Clicked() {
+			if regularPrimaryButton(c, "Update Herdr").Clicked() {
 				s.startHerdrUpgrade()
 			}
 		}
-		if ui.Button(c, "Retry Connection").Clicked() {
+		if regularButton(c, "Retry Connection").Clicked() {
 			s.bootstrapPending = true
 			s.reloadInstances(true)
 		}
@@ -48,7 +48,7 @@ func (s *Shell) bootstrapPage(c *ui.Context) {
 		if s.herdrUpdateErr != "" {
 			if s.herdrUpdateNotWrbl {
 				ui.Text(c, "Updating Herdr needs the administrator permission, and it wasn't granted. Update it from a terminal instead, then press Retry Connection.").FontSize(Typography().Body).TextColor(t.TextMuted).MaxWidth(560)
-				if ui.Button(c, "Copy Update Command").Clicked() {
+				if regularButton(c, "Copy Update Command").Clicked() {
 					s.copyToClipboard(herdr.UpdateAsRootCommand)
 				}
 			} else {

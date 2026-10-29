@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -31,6 +32,71 @@ var defaultShortcutBindings = []shortcutBinding{
 	{Modifiers: ui.Cmd, Key: ui.KeyR, Action: shortcutRefresh},
 	{Modifiers: ui.Cmd, Key: ui.KeyBracketLeft, Action: shortcutBack},
 	{Modifiers: ui.Cmd, Key: ui.KeyBracketRight, Action: shortcutForward},
+}
+
+// The two bindings the Shell routes beside the configurable set. The key
+// handlers and the tooltips that name them read the same value, so a hint
+// cannot name a key that does nothing.
+var (
+	sidebarToggleBinding = shortcutBinding{Modifiers: ui.Super, Key: ui.KeyB}
+	chatSwitchBinding    = shortcutBinding{Modifiers: ui.Cmd | ui.Shift, Key: ui.KeyC}
+)
+
+// keycaps spells the binding as a tooltip shows it: the modifiers in the
+// macOS order (⌃⌥⇧⌘), then the key. A key with no known cap yields nil — no
+// hint rather than a wrong one.
+func (b shortcutBinding) keycaps() []string {
+	key := keycapName(b.Key)
+	if key == "" {
+		return nil
+	}
+	var caps []string
+	for _, modifier := range []struct {
+		flag ui.Modifiers
+		cap  string
+	}{{ui.Ctrl, "⌃"}, {ui.Alt, "⌥"}, {ui.Shift, "⇧"}, {ui.Super, "⌘"}} {
+		if b.Modifiers&modifier.flag != 0 {
+			caps = append(caps, modifier.cap)
+		}
+	}
+	return append(caps, key)
+}
+
+var keycapNames = map[ui.Key]string{
+	ui.KeyComma: ",", ui.KeyBracketLeft: "[", ui.KeyBracketRight: "]",
+	ui.KeyEnter: "↩", ui.KeyEscape: "⎋", ui.KeyTab: "⇥", ui.KeySpace: "Space",
+	ui.KeyUp: "↑", ui.KeyDown: "↓", ui.KeyLeft: "←", ui.KeyRight: "→",
+}
+
+// keycapName is the cap of a key, the reverse of parseKey's spellings.
+func keycapName(key ui.Key) string {
+	switch {
+	case key >= ui.KeyA && key <= ui.KeyZ:
+		return string(rune('A' + key - ui.KeyA))
+	case key >= ui.Key0 && key <= ui.Key9:
+		return string(rune('0' + key - ui.Key0))
+	}
+	if name, ok := keycapNames[key]; ok {
+		return name
+	}
+	for n := 1; n <= 12; n++ {
+		name := "F" + strconv.Itoa(n)
+		if known, ok := parseKey(name); ok && known == key {
+			return name
+		}
+	}
+	return ""
+}
+
+// shortcutKeycaps is the keycaps of the route shortcut as it is bound now,
+// from the same resolution handleRouteShortcuts fires.
+func (s *Shell) shortcutKeycaps(action shortcutAction) []string {
+	for _, binding := range shortcutBindings(s.settings.Shortcuts) {
+		if binding.Action == action {
+			return binding.keycaps()
+		}
+	}
+	return nil
 }
 
 // shortcutBindings resolves the effective route shortcuts: the persisted
@@ -140,7 +206,7 @@ func (s *Shell) handleSurfaceShortcuts(c *ui.Context) {
 	if s.router.Path() != routeWorkspace {
 		return
 	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyC) {
+	if c.Shortcut(chatSwitchBinding.Modifiers, chatSwitchBinding.Key) {
 		s.toggleTerminalChat()
 		return
 	}

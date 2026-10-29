@@ -118,10 +118,10 @@ func (s *Shell) delegateDialog(c *ui.Context) {
 				}
 			}
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Cancel").Clicked() {
+				if regularButton(c, "Cancel").Clicked() {
 					d.open = false
 				}
-				if ui.PrimaryButton(c, "Delegate").Disabled(d.loading).Clicked() {
+				if regularPrimaryButton(c, "Delegate").Disabled(d.loading).Clicked() {
 					s.submitDelegateWith()
 				}
 			})

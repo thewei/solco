@@ -224,6 +224,15 @@ func TestTasksTabHasNoTraceWithoutThePlugin(t *testing.T) {
 }
 
 func TestTasksTabRendersGroupsAndOpensTheTasksProject(t *testing.T) {
+	// Clicking a task opens its page, which reads the task's details. Fake the
+	// plugin CLI offline and run the read in-line: a real goroutine would write
+	// the page (applyOnWindow runs in-line without a window) while the test
+	// renders it — a data race, and a real CLI exec besides.
+	newWorkboardClient = func(string, string) *workboard.Client {
+		return workboard.NewClientWithExec(func(context.Context, ...string) (string, error) { return "", errors.New("offline") })
+	}
+	workboardGo = func(f func()) { f() }
+	t.Cleanup(func() { newWorkboardClient, workboardGo = workboard.NewClient, func(f func()) { go f() } })
 	s := supportedWorkboardShell()
 	tasks, _ := workboard.ParseTasks(boardList)
 	s.projection = herdr.Projection{

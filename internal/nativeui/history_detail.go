@@ -40,7 +40,7 @@ func (s *Shell) historyDetailPage(c *ui.Context, key string) {
 				ui.Text(c, "Couldn't read this session.").FontWeight(WeightSemibold)
 				ui.Text(c, "The source file may have moved. Refresh the list and try again.").
 					FontSize(Typography().BodySmall).TextColor(t.TextMuted)
-				if ui.Button(c, "Back to Sessions").Clicked() {
+				if regularButton(c, "Back to Sessions").Clicked() {
 					s.showHistoryIndex()
 				}
 			})
@@ -72,7 +72,7 @@ func (s *Shell) historyDetailNativeBody(c *ui.Context) {
 	ui.Scroll(c).Grow(1).Children(func() {
 		ui.Column(c).FillWidth().Padding(sp.M, sp.XL).Gap(sp.S).Children(func() {
 			if s.chatHasOlder {
-				if ui.Button(c, "Earlier Messages").Clicked() {
+				if regularButton(c, "Earlier Messages").Clicked() {
 					s.chatLoadOlder()
 				}
 			}

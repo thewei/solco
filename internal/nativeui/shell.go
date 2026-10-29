@@ -421,6 +421,9 @@ type Shell struct {
 	chatQueuedText    string
 	chatOutcome       string
 	chatLastRequestID string
+	// homeDraft is the workspace home prompt; submitting opens the real
+	// New Task dialog with the text as its title, never a second runtime.
+	homeDraft string
 	// Per-turn disclosure state keyed "index:part": one shared boolean made
 	// every Thinking/Tools collapsible open and close together (F94).
 	chatTurnExpanded map[string]bool
@@ -804,7 +807,7 @@ func (s *Shell) View(c *ui.Context) {
 	// During startup the workspace and all navigation remain unmounted.
 	// This also prevents invisible keyboard shortcuts from mutating state.
 	if !s.bootstrapPending && !s.bootstrapFailed {
-		if c.Shortcut(ui.Super, ui.KeyB) {
+		if c.Shortcut(sidebarToggleBinding.Modifiers, sidebarToggleBinding.Key) {
 			s.toggleSidebar()
 		}
 		s.syncRouteVisibility()

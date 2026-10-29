@@ -65,13 +65,13 @@ func (s *Shell) workboardChoice(key *ui.Context, setting workboard.Setting, valu
 	current, _ := setting.Value.(string)
 	if len(values) <= 3 {
 		idx := indexOf(values, current)
-		if ui.Segmented(key, &idx, values...).Label(setting.Name).Changed() {
+		if segmentedControl(key, &idx, values...).Label(setting.Name).Changed() {
 			set(values[idx])
 		}
 		return
 	}
 	value := current
-	if ui.Select(key, &value, values).Label(setting.Name).Changed() && value != current {
+	if selectField(key, &value, values).Label(setting.Name).Changed() && value != current {
 		set(value)
 	}
 }
@@ -108,7 +108,7 @@ func (s *Shell) workboardAmount(key *ui.Context, setting workboard.Setting, spec
 			})
 		}
 		picked := idx
-		if ui.Segmented(key, &picked, labels...).Label(setting.Name+" unit").Changed() && picked != idx {
+		if segmentedControl(key, &picked, labels...).Label(setting.Name+" unit").Changed() && picked != idx {
 			if picked == len(spec.Units) {
 				set(workboard.Amount{None: true}.String())
 				return
@@ -149,7 +149,7 @@ func (s *Shell) workboardAgent(key *ui.Context, setting workboard.Setting, spec 
 		if noneNow {
 			chosen = "none"
 		}
-		if ui.Select(key.Key("program"), &chosen, programs).Label(setting.Name+" program").Changed() && chosen != program {
+		if selectField(key.Key("program"), &chosen, programs).Label(setting.Name+" program").Changed() && chosen != program {
 			set(chosen) // a program's models are its own: the model resets
 		}
 		if noneNow || len(info.Models) == 0 {
@@ -164,7 +164,7 @@ func (s *Shell) workboardAgent(key *ui.Context, setting workboard.Setting, spec 
 			shown = workboardDefaultModel
 		}
 		picked := shown
-		if ui.Combobox(key.Key("model"), &picked, options).Width(220).Label(setting.Name+" model").Changed() && picked != shown {
+		if comboField(key.Key("model"), &picked, options).Width(220).Label(setting.Name+" model").Changed() && picked != shown {
 			if picked == workboardDefaultModel {
 				picked = ""
 			}
@@ -200,7 +200,7 @@ func (s *Shell) workboardEffort(key *ui.Context, setting workboard.Setting, sibl
 		options = append(options, current)
 	}
 	value := current
-	if ui.Select(key, &value, options).Width(160).Label(setting.Name).Changed() && value != current {
+	if selectField(key, &value, options).Width(160).Label(setting.Name).Changed() && value != current {
 		set(value)
 	}
 	return true
@@ -218,7 +218,7 @@ func (s *Shell) workboardText(key *ui.Context, setting workboard.Setting, set fu
 		*draft = setting.ValueText()
 		st.drafts[setting.Name] = draft
 	}
-	field := ui.TextInput(key, draft).Width(220).Label(setting.Name)
+	field := textField(key, draft).Width(220).Label(setting.Name)
 	if field.Submitted() {
 		text := strings.TrimSpace(*draft)
 		if text != "" && text != setting.ValueText() {

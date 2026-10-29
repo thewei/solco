@@ -24,9 +24,9 @@ func commitPromptPreference(value string) string {
 func (s *Shell) settingsGit(c *ui.Context) {
 	sp := Spacing()
 	settingsCard(c, "Commit message rules", func() {
-		ui.TextArea(c, &s.settingsGitPromptDraft).FillWidth().Height(112).Label("Git commit rules")
+		textArea(c, &s.settingsGitPromptDraft).FillWidth().Height(112).Label("Git commit rules")
 		ui.Row(c).Gap(sp.S).Children(func() {
-			if ui.PrimaryButton(c, "Save").Label("Save commit rules").Clicked() {
+			if regularPrimaryButton(c, "Save").Label("Save commit rules").Clicked() {
 				draft := strings.TrimSpace(s.settingsGitPromptDraft)
 				if len(draft) == 0 || len(draft) > 5000 {
 					s.pendingToast = "Commit rules must contain 1–5000 characters."
@@ -35,7 +35,7 @@ func (s *Shell) settingsGit(c *ui.Context) {
 				s.applySettings(func(v *settings.Settings) error { v.Workbench.CommitPrompt = draft; return nil })
 				s.pendingToast = "Commit rules saved."
 			}
-			if ui.Button(c, "Restore Default").Label("Restore default commit rules").Clicked() {
+			if regularButton(c, "Restore Default").Label("Restore default commit rules").Clicked() {
 				s.settingsGitPromptDraft = settings.DefaultCommitPrompt
 				s.applySettings(func(v *settings.Settings) error { v.Workbench.CommitPrompt = ""; return nil })
 				s.pendingToast = "Default commit rules restored."
@@ -45,8 +45,8 @@ func (s *Shell) settingsGit(c *ui.Context) {
 	settingsGroup(c, "Commit message generator",
 		row("Pi path", "Leave empty to find pi automatically.", func() {
 			ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
-				ui.TextInput(c, &s.settingsPiBinaryDraft).Width(220).Label("Pi executable path").Placeholder("pi")
-				if ui.Button(c, "Save").Label("Save Pi path").Clicked() {
+				textField(c, &s.settingsPiBinaryDraft).Width(220).Label("Pi executable path").Placeholder("pi")
+				if regularButton(c, "Save").Label("Save Pi path").Clicked() {
 					draft := strings.TrimSpace(s.settingsPiBinaryDraft)
 					if len(draft) > 1024 {
 						s.pendingToast = "Pi path is too long."

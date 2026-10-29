@@ -188,7 +188,7 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3))
 		// AutoFocus: the palette is keyboard-first from open (WIX-021) —
 		// the field hands the focus to its editor (mygo field-focus seam).
-		field := ui.SearchField(c, &s.commandCenterQuery).Label("Command Center query").
+		field := searchField(c, &s.commandCenterQuery).Label("Command Center query").
 			MinHeight(Controls().PaletteField).AutoFocus()
 		s.commandCenterQueryFocused = field.FocusWithin()
 		if field.Changed() {
@@ -258,8 +258,7 @@ func (s *Shell) commandCenterRow(c *ui.Context, i int, result commandcenter.Resu
 	row.Children(func() {
 		// Truncated titles stay recoverable via tooltip (F157, same
 		// contract as the commits list).
-		ui.Text(c, result.Action.Title).FontSize(Typography().Body).Grow(1).SingleLine().
-			Tooltip(result.Action.Title)
+		tipped(c, ui.Text(c, result.Action.Title).FontSize(Typography().Body).Grow(1).SingleLine(), result.Action.Title)
 		if result.Action.Shortcut != "" {
 			ui.Text(c, result.Action.Shortcut).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
 		}

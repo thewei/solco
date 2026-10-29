@@ -141,16 +141,17 @@ func designRowHeight(override float32) float32 {
 }
 
 // sidebarRowHeight is the density-token row height of the sidebar's rows
-// (GWB-063): compact 24 / default 26 / comfortable 30 DIP. The Git and Files
-// trees take treeRowHeight, two tighter.
+// (GWB-063): compact 26 / default 30 / comfortable 34 DIP (2026-10-29
+// Cursor-3 reskin lifted the default tier). The Git and Files trees take
+// treeRowHeight, two tighter.
 func (s *Shell) sidebarRowHeight() float32 {
 	switch s.sidebarDensity() {
 	case DensityCompact:
-		return 24
-	case DensityComfortable:
-		return 30
-	default:
 		return 26
+	case DensityComfortable:
+		return 34
+	default:
+		return 30
 	}
 }
 
@@ -159,11 +160,10 @@ func (s *Shell) sidebarRowHeight() float32 {
 func sidebarTopAction(c *ui.Context, glyph *ui.SVG, label, shortcut string, selected bool) ui.Element {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
-	b := ui.ButtonBase(c).
+	b := tipped(c, ui.ButtonBase(c).
 		Size(28, 28).
 		Radius(6).
-		Label(label).
-		Tooltip(strings.TrimSpace(label + " " + shortcut))
+		Label(label), strings.TrimSpace(label+" "+shortcut))
 	if tint, ok := rowTint(tokens, selected, b.Hovered()); ok {
 		b.Background(tint)
 	}
@@ -171,6 +171,47 @@ func sidebarTopAction(c *ui.Context, glyph *ui.SVG, label, shortcut string, sele
 		ui.Icon(c, glyph).Size(14, 14).TextColor(t.TextMuted).PassThrough()
 	})
 	return b
+}
+
+// dockPanel is the Cursor-3-style floating prompt container (2026-10-29
+// reskin): one raised surface with a hairline border that brightens while
+// focus sits inside. Callers compose the field and its controls; the panel
+// owns only the face, so the chat composer and the workspace home share it.
+func dockPanel(c *ui.Context, build func()) {
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	sp := Spacing()
+	panel := ui.Column(c).FillWidth().Radius(gorexCardR).
+		Background(t.Surface).Border(1, tokens.BorderSubtle).
+		Padding(sp.M, sp.L).Gap(sp.S).
+		Transition(ui.ElementTransition{Colors: true, Duration: 150 * time.Millisecond})
+	if panel.FocusWithin() {
+		panel.Border(1, tokens.BorderSubtle.Mix(t.Text, 0.35))
+	}
+	panel.Children(build)
+}
+
+// ghostPill is the quiet pill action (Cursor-3 quick actions): hairline
+// border, transparent fill, muted label; hover fills the neutral selection
+// tint and press one step stronger. run, when nil, renders an inert pill.
+func ghostPill(c *ui.Context, key, label string, run func()) {
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	b := ui.ButtonBase(c.Key(key)).Height(28).Radius(14).Padding(0, 12).
+		AlignItems(ui.Center).Label(label).Cursor(ui.CursorPointer).
+		Border(1, tokens.BorderSubtle)
+	switch {
+	case b.Pressed():
+		b.Background(tokens.SidebarSelectStrong)
+	case b.Hovered():
+		b.Background(tokens.SidebarSelect)
+	}
+	b.Children(func() {
+		ui.Text(c, label).FontSize(Typography().Caption).TextColor(t.TextMuted).Shrink(0)
+	})
+	if run != nil && b.Clicked() {
+		run()
+	}
 }
 
 // cornerMark resolves the ONE state dot a row shows at its leading icon's
@@ -273,7 +314,7 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 						dot := ui.Box(c).Absolute().Left(9).Top(0).Size(7, 7).Radius(3.5).
 							Background(tokens.StatusColor(tone, t.Dark))
 						if detail != "" {
-							dot.Tooltip(detail)
+							tipped(c, dot, detail)
 						}
 					}
 				})
@@ -317,7 +358,7 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 		}
 	})
 	if spec.Activity.On && spec.Activity.Detail != "" {
-		row.Tooltip(spec.Activity.Detail)
+		tipped(c, row, spec.Activity.Detail)
 	}
 	return row
 }

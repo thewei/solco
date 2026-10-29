@@ -13,7 +13,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Shell/routeHeader/routeHeaderBlock、各内页入口（Hosts/Files/Sessions/Session Detail/Settings）与 ui.Tester 无头渲染
- * [OUTPUT]: 对外提供标题栏单一归属回归：内页标题只在标题栏且落在同一位置、内页与侧栏不再自画页头/标题回声、每个内页至多一个 Refresh 且为图标、Settings/Hosts 侧栏列表同一起点、Git/Files/Sessions 侧栏同一项目头、Session 详情标题栏可返回列表
+ * [OUTPUT]: 对外提供标题栏单一归属回归：内页标题只在标题栏且落在同一位置、内页与侧栏不再自画页头/标题回声、每个内页至多一个 Refresh 且为图标、Settings/Hosts 侧栏列表同一起点、Git/Files/Sessions 侧栏同一项目头、Session 详情标题栏可返回列表；2026-10-29 TestActionsIsTheFirstOfTheTrailingTools 钉住 Actions（⋯ 图标按钮，无 chevron）在 Workspace/Changes/Files/Session 四处同一位置、位于右侧工具簇最前且仍可 Tab 到达
  * [POS]: 2026-10-14 统一 Header 决策的守卫测试；与 route_header.go 同生共死
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -303,6 +303,82 @@ func TestLongSessionTitleCannotPushTheBarsToolsOut(t *testing.T) {
 	}
 	if actions.X+actions.W > tools.X+0.5 {
 		t.Errorf("Actions (ends %.1f) runs into the tools (start %.1f)", actions.X+actions.W, tools.X)
+	}
+}
+
+// TestActionsIsTheFirstOfTheTrailingTools pins the 2026-10-29 placement:
+// whichever route offers a page-actions menu — the Workspace path, Changes,
+// a file, a session — its trigger is the same bare ellipsis icon button just
+// ahead of the Agent activity button, in one spot on all of them; never a
+// pull-down with a chevron trailing the title.
+func TestActionsIsTheFirstOfTheTrailingTools(t *testing.T) {
+	routes := []struct {
+		name  string
+		setup func(t *testing.T) *Shell
+	}{
+		{"workspace", func(t *testing.T) *Shell { return crumbShell("Solco", "main", "editor") }},
+		{"changes", headerRoutes()[4].setup},
+		{"files", func(t *testing.T) *Shell {
+			root := t.TempDir()
+			s := rightPanelTestShell(t, root)
+			s.showViewFiles()
+			s.rightPanel.selectedFilePath = filepath.Join(root, "a.txt")
+			return s
+		}},
+		{"session", func(t *testing.T) *Shell {
+			s := newMultiAgentHistoryShell(t)
+			s.router.Replace(routeHistory)
+			settleFrames(ui.NewTester(s.View, 1200, 800), 3) // loads the catalog the detail reads
+			s.router.Replace(routeHistory + "/pi:p2")
+			return s
+		}},
+	}
+	var wantY, wantToPin float32
+	for i, route := range routes {
+		tester := ui.NewTester(route.setup(t).View, 1200, 800)
+		settleFrames(tester, 12)
+		actions, ok := tester.Find("Actions")
+		if !ok {
+			t.Fatalf("%s: no Actions button; texts=%q", route.name, tester.Texts())
+		}
+		pin, ok := tester.Find(windowPinLabel)
+		if !ok {
+			t.Fatalf("%s: no trailing tools; texts=%q", route.name, tester.Texts())
+		}
+		activity, ok := tester.Find("Agents & Services")
+		if !ok {
+			activity, ok = tester.Find("Agents & Services · Disconnected")
+		}
+		if !ok {
+			t.Fatalf("%s: no Agent activity button; texts=%q", route.name, tester.Texts())
+		}
+		if math.Abs(float64(actions.W-gorexIconBtn)) > 0.5 || math.Abs(float64(actions.H-gorexIconBtn)) > 0.5 {
+			t.Errorf("%s: Actions is %.1f×%.1f, want the bare %.0f-point icon button (no chevron beside it)", route.name, actions.W, actions.H, float32(gorexIconBtn))
+		}
+		if actions.X+actions.W > activity.X+0.5 || activity.X+activity.W > pin.X+0.5 {
+			t.Errorf("%s: the trailing tools read Actions %.1f–%.1f, activity %.1f–%.1f, pin from %.1f; want them in that order",
+				route.name, actions.X, actions.X+actions.W, activity.X, activity.X+activity.W, pin.X)
+		}
+		// Moving it out of a pull-down must not cost the keyboard: the menu
+		// still opens from a Tab stop.
+		reached := false
+		for press := 0; press < 120 && !reached; press++ {
+			tester.Key(0, ui.KeyTab)
+			tester.Frame()
+			reached = tester.Focused("Actions")
+		}
+		if !reached {
+			t.Errorf("%s: Tab never reaches Actions; the page menu is no longer keyboard-reachable", route.name)
+		}
+		toPin := pin.X - actions.X
+		if i == 0 {
+			wantY, wantToPin = actions.Y, toPin
+			continue
+		}
+		if math.Abs(float64(actions.Y-wantY)) > 0.5 || math.Abs(float64(toPin-wantToPin)) > 0.5 {
+			t.Errorf("%s: Actions sits %.1f left of the pin at y=%.1f; the Workspace's is %.1f at y=%.1f — it must not move between routes",
+				route.name, toPin, actions.Y, wantToPin, wantY)
+		}
 	}
 }
 

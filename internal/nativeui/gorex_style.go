@@ -2,11 +2,11 @@ package nativeui
 
 import (
 	"log/slog"
-	"sync"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
@@ -15,7 +15,7 @@ import (
 
 /**
  * [INPUT]: 依赖 github.com/egoist/mygo/plugins/terminal, github.com/egoist/mygo/ui, os, path/filepath, runtime
- * [OUTPUT]: 对外提供 gorexColors/gorexColorsOf/gorexContentCard/gorexToggleFace/gorexIconButton/gorexIconTab/gorexActivityDot/gorexAttentionDot/shortDir/samePath/tildePath
+ * [OUTPUT]: 对外提供 gorexColors/gorexColorsOf/gorexContentCard/gorexToggleFace/iconButtonRadius（图标按钮圆角唯一来源：min(Radius.Row, size/3)，28/24 档同为 8）/gorexIconButton/gorexIconButtonDisabled（无事可做的图标按钮：字形半透明、无悬停脸）/gorexIconTab/gorexActivityDot/gorexAttentionDot/shortDir/samePath/tildePath
  * [POS]: nativeui 的窗口 chrome 与终端卡片视觉实现（扁平中性面、细线图标按钮），被 workspace/terminal/titlebar 等模块消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -50,13 +50,13 @@ type gorexColors struct {
 var gorexLightColors = gorexColors{
 	cardPaper:       ui.Hex("#ffffff"),
 	cardTranslucent: ui.RGBA(255, 255, 255, 0.58),
-	cardBorder:      ui.RGBA(0, 0, 0, 0.09),
+	cardBorder:      ui.RGBA(0, 0, 0, 0.08),
 
 	text:      ui.Hex("#1d1d1f"),
 	textMuted: ui.Hex("#636366"),
 	textFaint: ui.Hex("#8e8e93"),
 	iconMuted: ui.Hex("#8a8a8f"),
-	hover:     ui.RGBA(0, 0, 0, 0.055),
+	hover:     ui.RGBA(0, 0, 0, 0.05),
 	pressed:   ui.RGBA(0, 0, 0, 0.1),
 
 	tabActive: ui.RGBA(255, 255, 255, 0.97),
@@ -66,18 +66,18 @@ var gorexLightColors = gorexColors{
 }
 
 var gorexDarkColors = gorexColors{
-	cardPaper:       ui.Hex("#1e1e22"),
-	cardTranslucent: ui.RGBA(30, 30, 34, 0.6),
-	cardBorder:      ui.RGBA(255, 255, 255, 0.08),
+	cardPaper:       ui.Hex("#212121"),
+	cardTranslucent: ui.RGBA(33, 33, 33, 0.6),
+	cardBorder:      ui.RGBA(255, 255, 255, 0.07),
 
-	text:      ui.Hex("#f2f2f7"),
-	textMuted: ui.Hex("#aeaeb2"),
+	text:      ui.Hex("#ececee"),
+	textMuted: ui.Hex("#8b8c92"),
 	textFaint: ui.Hex("#8e8e93"),
-	iconMuted: ui.Hex("#98989d"),
-	hover:     ui.RGBA(255, 255, 255, 0.08),
-	pressed:   ui.RGBA(255, 255, 255, 0.14),
+	iconMuted: ui.Hex("#8b8c92"),
+	hover:     ui.RGBA(255, 255, 255, 0.06),
+	pressed:   ui.RGBA(255, 255, 255, 0.11),
 
-	tabActive: ui.RGBA(255, 255, 255, 0.14),
+	tabActive: ui.RGBA(255, 255, 255, 0.10),
 
 	busy:      ui.Hex("#4ade80"),
 	attention: ui.Hex("#fbbf24"),
@@ -117,7 +117,7 @@ func gorexColorsOf(dark bool) *gorexColors {
 // every other spacing here derives from it.
 const (
 	gorexGap     = 8
-	gorexCardR   = 10 // Radius().Card: pane cards and grouped panels share it
+	gorexCardR   = 12 // Radius().Card: pane cards and grouped panels share it
 	gorexHeaderH = 34
 	// Toolbar buttons are gorexIconBtn with a gorexIconGlyph glyph; the
 	// denser pane-header and find-bar buttons use the smaller pair, and the
@@ -168,12 +168,34 @@ func gorexToggleFace(b ui.Element, k *gorexColors, on bool) {
 	}
 }
 
+// iconButtonRadius is the corner of an icon button this many points on a
+// side: a third of it, capped at the row radius — shadcn's icon-sm and
+// icon-xs both round to 8, so the 28 and 24 tiers share Radius().Row and the
+// 20 row tier keeps proportionally round (2026-10-29; it was size/2.6, which
+// made the 28 button 10.8). Every shared icon-button face takes its corner
+// from here and nowhere else.
+func iconButtonRadius(size float32) float32 {
+	return min(Radius().Row, size/3)
+}
+
 // gorexIconButton is a borderless button of an icon, with a face on hover;
 // label names it for screen readers and its tooltip explains it. Selected
 // keeps a quiet filled face, as the surface switch's current side does.
 func gorexIconButton(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, selected bool, size, iconSize float32) ui.Element {
-	b := ui.Box(c).Size(size, size).Center().Radius(size / 2.6).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label)
+	b := ui.Box(c).Size(size, size).Center().Radius(iconButtonRadius(size)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label)
 	return gorexIconFace(c, b, k, svg, tooltip, selected, iconSize)
+}
+
+// gorexIconButtonDisabled is the icon button with nothing to do (Back with no
+// history behind it): the glyph at half strength and no hover face, as
+// shadcn's disabled:opacity-50. The tooltip stays, so the shortcut still
+// reads where the button would have led.
+func gorexIconButtonDisabled(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, size, iconSize float32) ui.Element {
+	b := tipped(c, ui.Box(c).Size(size, size).Center().Radius(iconButtonRadius(size)).Role(ui.RoleButton).Label(label), tooltip)
+	b.Children(func() {
+		ui.Icon(c, svg).Size(iconSize, iconSize).TextColor(k.iconMuted.Alpha(0.5))
+	})
+	return b
 }
 
 // gorexIconTab is gorexIconButton for a strip of equal choices (the sidebar's
@@ -189,7 +211,7 @@ func gorexIconTab(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip str
 // glyph that darkens on hover or when on.
 func gorexIconFace(c *ui.Context, b ui.Element, k *gorexColors, svg *ui.SVG, tooltip string, selected bool, iconSize float32) ui.Element {
 	if tooltip != "" {
-		b.Tooltip(tooltip)
+		tipped(c, b, tooltip)
 	}
 	gorexToggleFace(b, k, selected)
 	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
@@ -207,8 +229,8 @@ func gorexIconFace(c *ui.Context, b ui.Element, k *gorexColors, svg *ui.SVG, too
 // chevron, as a native toolbar pop-up button reads, in the same faces. The
 // caller attaches the Menu.
 func gorexPulldown(c *ui.Context, k *gorexColors, svg *ui.SVG, label string, height, iconSize float32) ui.Element {
-	b := ui.Row(c).Height(height).Padding(0, 6).Gap(3).AlignItems(ui.Center).Justify(ui.Center).
-		Radius(height / 2.6).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label).Tooltip(label)
+	b := tipped(c, ui.Row(c).Height(height).Padding(0, 6).Gap(3).AlignItems(ui.Center).Justify(ui.Center).
+		Radius(iconButtonRadius(height)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label), label)
 	gorexToggleFace(b, k, false)
 	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
 	col := k.iconMuted
@@ -238,35 +260,35 @@ func gorexActivityDot(c *ui.Context, col ui.Color, size float32) ui.Element {
 
 // gorexAttentionDot is the plain dot of a Pane that needs someone.
 func gorexAttentionDot(c *ui.Context, col ui.Color, tooltip string) ui.Element {
-	return ui.Box(c).Size(7, 7).Radius(4).Background(col).Margin(0, 0, 0, 2).Tooltip(tooltip)
+	return tipped(c, ui.Box(c).Size(7, 7).Radius(4).Background(col).Margin(0, 0, 0, 2), tooltip)
 }
 
 // gorexTerminalThemes are the terminals' colors: soft ink on the panes'
 // paper, in both window kinds.
 func gorexTerminalThemes() (light, dark *terminal.Theme) {
 	return &terminal.Theme{
-		Foreground: ui.Hex("#2a2d31"),
-		Background: ui.Hex("#ffffff"),
-		Cursor:     ui.Hex("#3a3d42"),
-		Selection:  ui.RGBA(46, 111, 208, 0.2),
-		Palette: [16]ui.Color{
-			ui.Hex("#2a2d31"), ui.Hex("#c2465a"), ui.Hex("#4e8e5f"), ui.Hex("#b07a1e"),
-			ui.Hex("#2e6fd0"), ui.Hex("#9050c8"), ui.Hex("#1e8c9c"), ui.Hex("#8a8d93"),
-			ui.Hex("#6e7178"), ui.Hex("#d9566b"), ui.Hex("#5ba671"), ui.Hex("#c89026"),
-			ui.Hex("#4a8fe0"), ui.Hex("#a56bd8"), ui.Hex("#2ba2b3"), ui.Hex("#b5b8be"),
-		},
-	}, &terminal.Theme{
-		Foreground: ui.Hex("#e6e6ea"),
-		Background: ui.Hex("#1e1e22"),
-		Cursor:     ui.Hex("#e6e6ea"),
-		Selection:  ui.RGBA(108, 178, 255, 0.28),
-		Palette: [16]ui.Color{
-			ui.Hex("#3a3a40"), ui.Hex("#ff6b7f"), ui.Hex("#7bd88f"), ui.Hex("#e5c07b"),
-			ui.Hex("#6cb2ff"), ui.Hex("#c792ea"), ui.Hex("#56d4dd"), ui.Hex("#d0d0d6"),
-			ui.Hex("#6e6e78"), ui.Hex("#ff8c9c"), ui.Hex("#9be8a8"), ui.Hex("#f2d28a"),
-			ui.Hex("#8ec5ff"), ui.Hex("#d7a8f2"), ui.Hex("#7fe3ea"), ui.Hex("#ffffff"),
-		},
-	}
+			Foreground: ui.Hex("#2a2d31"),
+			Background: ui.Hex("#ffffff"),
+			Cursor:     ui.Hex("#3a3d42"),
+			Selection:  ui.RGBA(46, 111, 208, 0.2),
+			Palette: [16]ui.Color{
+				ui.Hex("#2a2d31"), ui.Hex("#c2465a"), ui.Hex("#4e8e5f"), ui.Hex("#b07a1e"),
+				ui.Hex("#2e6fd0"), ui.Hex("#9050c8"), ui.Hex("#1e8c9c"), ui.Hex("#8a8d93"),
+				ui.Hex("#6e7178"), ui.Hex("#d9566b"), ui.Hex("#5ba671"), ui.Hex("#c89026"),
+				ui.Hex("#4a8fe0"), ui.Hex("#a56bd8"), ui.Hex("#2ba2b3"), ui.Hex("#b5b8be"),
+			},
+		}, &terminal.Theme{
+			Foreground: ui.Hex("#e6e6ea"),
+			Background: ui.Hex("#212121"),
+			Cursor:     ui.Hex("#e6e6ea"),
+			Selection:  ui.RGBA(108, 178, 255, 0.28),
+			Palette: [16]ui.Color{
+				ui.Hex("#3a3a40"), ui.Hex("#ff6b7f"), ui.Hex("#7bd88f"), ui.Hex("#e5c07b"),
+				ui.Hex("#6cb2ff"), ui.Hex("#c792ea"), ui.Hex("#56d4dd"), ui.Hex("#d0d0d6"),
+				ui.Hex("#6e6e78"), ui.Hex("#ff8c9c"), ui.Hex("#9be8a8"), ui.Hex("#f2d28a"),
+				ui.Hex("#8ec5ff"), ui.Hex("#d7a8f2"), ui.Hex("#7fe3ea"), ui.Hex("#ffffff"),
+			},
+		}
 }
 
 // applyGorexTerminalTheme points one attach's options at the gorex

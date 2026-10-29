@@ -28,8 +28,8 @@ func (s *Shell) quickPanelServices(c *ui.Context) {
 			}
 			ui.Row(c).FillWidth().Padding(sp.XS, sp.M).Gap(sp.S).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, iconFolder).Size(14, 14).TextColor(t.TextMuted)
-				ui.Text(c, filepath.Base(root)).FontSize(Typography().Caption).FontWeight(WeightSemibold).
-					Grow(1).MinWidth(0).SingleLine().Tooltip(root)
+				tipped(c, ui.Text(c, filepath.Base(root)).FontSize(Typography().Caption).FontWeight(WeightSemibold).
+					Grow(1).MinWidth(0).SingleLine(), root)
 			})
 			// Scripts have a real Herdr launch path; the button is present
 			// only for configured definitions, never for sample commands.
@@ -49,8 +49,8 @@ func (s *Shell) quickPanelServices(c *ui.Context) {
 						Background(designTokens(t.Dark).Panel).AlignItems(ui.Center).Children(func() {
 						ui.Icon(c, iconTerminal).Size(14, 14).TextColor(t.TextMuted)
 						ui.Column(c).Grow(1).MinWidth(0).Gap(sp.XXS).Children(func() {
-							ui.Text(c, script.Name).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).
-								SingleLine().Tooltip(script.Name)
+							tipped(c, ui.Text(c, script.Name).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).
+								SingleLine(), script.Name)
 							kind := "Service"
 							if script.OneShot {
 								kind = "One-shot"

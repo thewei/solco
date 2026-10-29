@@ -53,23 +53,23 @@ func (s *Shell) newAutomationDialog(c *ui.Context) {
 		t := c.Theme()
 		ui.Column(c).Width(440).MaxWidth(500).Gap(sp.L).Children(func() {
 			modalTitle(c, "New Automation")
-			ui.TextInput(c, &d.name).Label("Name").Placeholder("Name").AutoFocus().FillWidth()
-			ui.TextArea(c, &d.prompt).Label("Prompt").Placeholder("What each firing's task is to do").FillWidth().Height(88)
-			ui.Segmented(c, &d.trigger, "Schedule", "Event").Label("Trigger")
+			textField(c, &d.name).Label("Name").Placeholder("Name").AutoFocus().FillWidth()
+			textArea(c, &d.prompt).Label("Prompt").Placeholder("What each firing's task is to do").FillWidth().Height(88)
+			segmentedControl(c, &d.trigger, "Schedule", "Event").Label("Trigger")
 			if d.trigger == automationOnSchedule {
-				ui.TextInput(c, &d.schedule).Label("Schedule").Placeholder("every 2h · daily 09:00 · mon 09:00 · cron \"0 9 * * 1\"").FillWidth()
+				textField(c, &d.schedule).Label("Schedule").Placeholder("every 2h · daily 09:00 · mon 09:00 · cron \"0 9 * * 1\"").FillWidth()
 			} else {
-				ui.Select(c, &d.event, workboard.AutomationEvents).Label("Event")
+				selectField(c, &d.event, workboard.AutomationEvents).Label("Event")
 				ui.Checkbox(c, &d.everyRepo, "A task of any project")
-				ui.TextInput(c, &d.cond).Label("Only if").Placeholder("only if, e.g. branch = feature/* (optional)").FillWidth()
+				textField(c, &d.cond).Label("Only if").Placeholder("only if, e.g. branch = feature/* (optional)").FillWidth()
 			}
-			ui.Segmented(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
+			segmentedControl(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
 			ui.Text(c, "Each firing adds a task in "+d.project+" and puts an agent on it.").FontSize(Typography().Caption).TextColor(t.TextMuted)
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Cancel").Clicked() {
+				if regularButton(c, "Cancel").Clicked() {
 					d.open = false
 				}
-				if ui.PrimaryButton(c, "Add").Clicked() && s.newAutomationReady() {
+				if regularPrimaryButton(c, "Add").Clicked() && s.newAutomationReady() {
 					s.submitNewAutomation()
 				}
 			})

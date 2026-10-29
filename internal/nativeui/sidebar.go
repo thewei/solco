@@ -183,7 +183,7 @@ func (s *Shell) sidebarViewTabs(c *ui.Context) {
 // Diff/Chat/Commit surface. The global router history shortcut remains
 // independent of this explicit product navigation.
 func (s *Shell) sidebarBackRow(c *ui.Context) {
-	if navButton(c, iconArrowLeft, "Back", "", false).Tooltip("Back to Terminal").Clicked() {
+	if tipped(c, navButton(c, iconArrowLeft, "Back", "", false), "Back to Terminal").Clicked() {
 		s.showViewTerminal()
 	}
 }
@@ -332,8 +332,8 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 		muted, ref := t.TextMuted, pal.ref
 		switch {
 		case current && focused:
-			row.Background(t.Accent).TextColor(t.AccentText)
-			muted, ref = t.AccentText.Alpha(0.75), t.AccentText
+			row.Background(designTokens(t.Dark).SidebarSelectStrong).TextColor(t.Text)
+			muted, ref = t.TextMuted, t.Text
 		case current:
 			// Unfocused selection shares the sidebar's token so the same
 			// "this row is selected" tint reads identically across the
@@ -346,7 +346,7 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 			s.reviewCommit(cm.Hash)
 		}
 		// Long commit subjects preserve the full metadata in the tooltip.
-		row.Tooltip(cm.Subject + "\n" + cm.Author + " · " + gdCommitTime(cm.Time) + "\n" + cm.Hash)
+		tipped(c, row, cm.Subject+"\n"+cm.Author+" · "+gdCommitTime(cm.Time)+"\n"+cm.Hash)
 		row.ContextMenu(func(m *ui.Menu) {
 			if m.Item("Cherry-pick Commit…").Chosen() {
 				s.confirmCherryPickCommit(cm.Hash, cm.Subject)
@@ -365,18 +365,18 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 			labels := 0
 			for _, branch := range s.git.branches {
 				if branch.HeadShort != "" && strings.HasPrefix(cm.Hash, branch.HeadShort) && labels < 2 {
-					ui.Text(c, branch.Name).FontSize(Typography().Micro).FontWeight(WeightSemibold).
-						Padding(2, 5).Radius(3).Background(t.Accent.Alpha(0.18)).
-						TextColor(t.Accent).MaxWidth(140).SingleLine().Tooltip(branch.Name)
+					tipped(c, ui.Text(c, branch.Name).FontSize(Typography().Micro).FontWeight(WeightSemibold).
+						Padding(2, 5).Radius(3).Background(t.SurfacePressed).
+						TextColor(t.Text).MaxWidth(140).SingleLine(), branch.Name)
 					labels++
 				}
 			}
 			for _, branch := range s.git.remoteBranches {
 				if branch.HeadShort != "" && strings.HasPrefix(cm.Hash, branch.HeadShort) && labels < 2 {
 					name := branch.Remote + "/" + branch.Name
-					ui.Text(c, name).FontSize(Typography().Micro).FontWeight(WeightSemibold).
+					tipped(c, ui.Text(c, name).FontSize(Typography().Micro).FontWeight(WeightSemibold).
 						Padding(2, 5).Radius(3).Background(t.SurfaceHover).
-						TextColor(ref).MaxWidth(140).SingleLine().Tooltip(name)
+						TextColor(ref).MaxWidth(140).SingleLine(), name)
 					labels++
 				}
 			}

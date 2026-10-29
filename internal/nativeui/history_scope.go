@@ -112,7 +112,7 @@ func (s *Shell) trashScoped() []sessiontrash.Item {
 func (s *Shell) noProjectSessions(c *ui.Context, title string) {
 	ui.Column(c).Grow(1).Center().Gap(Spacing().M).Children(func() {
 		ui.Text(c, title).FontWeight(WeightSemibold)
-		if ui.Button(c, "Show All Sessions").Clicked() {
+		if regularButton(c, "Show All Sessions").Clicked() {
 			s.showHistoryScope(true)
 		}
 	})

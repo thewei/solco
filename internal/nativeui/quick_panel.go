@@ -103,7 +103,7 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 			if s.workboardAvailable() {
 				labels = append(labels, "Tasks")
 			}
-			if ui.Segmented(c, &view, labels...).FillWidth().Changed() {
+			if segmentedControl(c, &view, labels...).FillWidth().Changed() {
 				s.quickPanelTab = view
 				if view == quickPanelTasksTab {
 					s.refreshWorkboardTasks(true)
@@ -122,7 +122,7 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 		if s.offline {
 			ui.Row(c).FillWidth().Padding(sp.S, sp.M, 0).Gap(sp.S).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Herdr disconnected").FontSize(Typography().Caption).Grow(1).TextColor(t.TextMuted)
-				if ui.Button(c, "Reconnect").Clicked() {
+				if regularButton(c, "Reconnect").Clicked() {
 					s.reloadInstances(false)
 				}
 			})

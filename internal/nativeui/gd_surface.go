@@ -158,14 +158,15 @@ func (s *Shell) gdSyncButtons(c *ui.Context, pal *gdPalette) {
 		return
 	}
 	if st := s.git.upstream; st.OK && (st.Ahead > 0 || st.Behind > 0) {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+		counts := ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 			if st.Ahead > 0 {
 				ui.Text(c, "↑"+itoa(st.Ahead)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.addText)
 			}
 			if st.Behind > 0 {
 				ui.Text(c, "↓"+itoa(st.Behind)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.delText)
 			}
-		}).Tooltip("Ahead/behind " + st.Remote + "/" + st.Branch)
+		})
+		tipped(c, counts, "Ahead/behind "+st.Remote+"/"+st.Branch)
 	}
 	button := func(svg *ui.SVG, tip string, action func()) {
 		b := gdIconButton(c, svg, tip)
@@ -365,7 +366,7 @@ func (s *Shell) gdFileHeader(c *ui.Context, pal *gdPalette, idx int, f *gdFile) 
 		}
 	})
 	h.Children(func() {
-		toggle := ui.ButtonBase(c).Gap(8).Grow(1).Shrink(1).MinWidth(0).Height(46).Label(cf.Path).Tooltip(cf.Path)
+		toggle := tipped(c, ui.ButtonBase(c).Gap(8).Grow(1).Shrink(1).MinWidth(0).Height(46).Label(cf.Path), cf.Path)
 		if toggle.Clicked() {
 			f.collapsed = !collapsed
 			if !f.collapsed && s.gdSearching() {
@@ -432,15 +433,14 @@ func (s *Shell) gdFileHeader(c *ui.Context, pal *gdPalette, idx int, f *gdFile) 
 			}
 			open := gdIconButton(c, iconOpen, "Open in Editor").Disabled(cf.Status == gitworkbench.StatusDeleted)
 			if cf.Status == gitworkbench.StatusDeleted {
-				open.Tooltip("Deleted files cannot be opened")
+				tipped(c, open, "Deleted files cannot be opened")
 			}
 			if open.Clicked() {
 				s.openFileInEditor(cf.Path)
 			}
 		}
 		if adds, dels := f.sideCounts(); gdCountable(cf) && (adds > 0 || dels > 0) {
-			ui.Row(c).Gap(8).Padding(4, 9).Radius(Radius().Pill).Background(pal.pill).Shrink(0).
-				Tooltip(gdLines(adds, "added") + ", " + gdLines(dels, "removed")).Children(func() {
+			tipped(c, ui.Row(c).Gap(8).Padding(4, 9).Radius(Radius().Pill).Background(pal.pill).Shrink(0), gdLines(adds, "added")+", "+gdLines(dels, "removed")).Children(func() {
 				ui.Text(c, "+"+gdThousands(adds)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.addText)
 				ui.Text(c, "-"+gdThousands(dels)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.delText)
 			})
@@ -465,7 +465,7 @@ func (s *Shell) gdViewedButton(c *ui.Context, pal *gdPalette, f *gdFile, viewed,
 	b := ui.CheckboxBase(c, &on).Gap(7).Height(30).Padding(0, padding).Radius(Radius().Pill).Shrink(0).
 		Border(1, ui.RGBA(127, 127, 127, 0.22)).Label("Viewed")
 	if !labeled {
-		b.Tooltip("Mark as viewed")
+		tipped(c, b, "Mark as viewed")
 	}
 	if b.Changed() {
 		s.gdSetViewed(f, on)
@@ -524,7 +524,7 @@ func (s *Shell) gdGapRow(c *ui.Context, pal *gdPalette, f *gdFile, r *gdRow) {
 	s.gdCard(c, pal).Height(30).Background(pal.gapBg).Children(func() {
 		ui.Row(c).Width(gutter + 4).Height(30).Shrink(0).Children(func() {
 			button := func(svg *ui.SVG, tip string, action func()) {
-				b := ui.ButtonBase(c).Grow(1).Height(30).Center().Label(tip).Tooltip(tip).TextColor(pal.gapText).Disabled(!can)
+				b := tipped(c, ui.ButtonBase(c).Grow(1).Height(30).Center().Label(tip), tip).TextColor(pal.gapText).Disabled(!can)
 				b.BorderWidth(0, 2, 0, 0).BorderColor(pal.codeBg)
 				if b.Hovered() {
 					b.TextColor(t.Text).Background(pal.hover)
@@ -858,18 +858,12 @@ func gdIconButton(c *ui.Context, svg *ui.SVG, tip string) ui.Element {
 	return gorexIconButton(c, gorexColorsOf(c.Theme().Dark), svg, tip, tip, false, gorexIconBtn, gorexIconGlyph).Focusable()
 }
 
-// gdPulldown is gdIconButton's pull-down sibling, in the shared pull-down face
-// (gorexPulldown). The caller attaches the Menu, which makes it a Tab stop.
-func gdPulldown(c *ui.Context, svg *ui.SVG, tip string) ui.Element {
-	return gorexPulldown(c, gorexColorsOf(c.Theme().Dark), svg, tip, gorexIconBtn, gorexIconGlyph)
-}
-
 // gdSearchInput is a field filtering a list of the Git surface: the official
 // search field — the face of the Sessions search and the palette — named by
 // label. It fills its row and reports a change; its keys are text, which the
 // framework keeps from the surface's letter shortcuts.
 func gdSearchInput(c *ui.Context, query *string, label string) bool {
-	return ui.SearchField(c, query).Label(label).Grow(1).MinWidth(0).Changed()
+	return searchField(c, query).Label(label).Grow(1).MinWidth(0).Changed()
 }
 
 // gdEmptyPanel says why there is nothing to show.
@@ -917,7 +911,7 @@ func (s *Shell) gdLayoutControl(c *ui.Context) {
 			label string
 			svg   *ui.SVG
 		}{{"Split", iconSplit}, {"Unified", iconUnified}} {
-			seg := segmentFace(c, tabs, i, i == chosen, mode.label).Tooltip(mode.label)
+			seg := tipped(c, segmentFace(c, tabs, i, i == chosen, mode.label), mode.label)
 			col := k.iconMuted
 			if i == chosen || seg.Hovered() {
 				col = k.text

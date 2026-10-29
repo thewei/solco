@@ -22,8 +22,8 @@ func (s *Shell) hostsEditor(c *ui.Context) {
 		ui.Row(c).FillWidth().Padding(sp.M, sp.L).Gap(sp.S).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(tokens.BorderSubtle).Children(func() {
 			ui.Icon(c, iconFile).Size(14, 14).TextColor(t.TextMuted)
-			ui.Text(c, compactSearchPath(s.hosts.editorFile)).FontSize(Typography().Caption).
-				TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine().Tooltip(s.hosts.editorFile)
+			tipped(c, ui.Text(c, compactSearchPath(s.hosts.editorFile)).FontSize(Typography().Caption).
+				TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine(), s.hosts.editorFile)
 			if s.hostsEditorDirty() {
 				statusPill(c, "edited", ToneWorking)
 			}
@@ -47,7 +47,7 @@ func (s *Shell) hostsEditor(c *ui.Context) {
 			})
 		}
 		ui.Column(c).FillWidth().Grow(1).MinHeight(0).Padding(0, sp.L, sp.L).Children(func() {
-			ui.TextArea(c, &s.hosts.editorText).Grow(1).FillWidth().MinHeight(0).
+			textArea(c, &s.hosts.editorText).Grow(1).FillWidth().MinHeight(0).
 				Font(gdCodeFont()).Label("SSH config")
 		})
 	})
@@ -57,10 +57,10 @@ func (s *Shell) hostsEditor(c *ui.Context) {
 // drop unsaved work, laid out inside the caller's row.
 func hostsDiscardPrompt(c *ui.Context, keep, discard func()) {
 	ui.Text(c, "Discard unsaved changes?").FontSize(Typography().BodySmall).Grow(1)
-	if ui.Button(c, "Keep Editing").Clicked() {
+	if regularButton(c, "Keep Editing").Clicked() {
 		keep()
 	}
-	if ui.Button(c, "Discard").Clicked() {
+	if regularButton(c, "Discard").Clicked() {
 		discard()
 	}
 }

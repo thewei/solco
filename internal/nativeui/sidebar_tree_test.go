@@ -66,7 +66,7 @@ func TestTreeGridContract(t *testing.T) {
 
 func TestTreeRowHeightFollowsDensity(t *testing.T) {
 	shell := NewShell()
-	want := map[string][2]float32{"compact": {24, 22}, "": {26, 24}, "comfortable": {30, 28}}
+	want := map[string][2]float32{"compact": {26, 24}, "": {30, 28}, "comfortable": {34, 32}}
 	for density, heights := range want {
 		shell.settings.General.Density = density
 		if got := shell.sidebarRowHeight(); got != heights[0] {
@@ -458,7 +458,7 @@ func TestFilesSidebarSharesTheHeadAndTheGrid(t *testing.T) {
 		t.Fatalf("folder title at %.1f, file title at %.1f: siblings share one title column", folder.X, file.X)
 	}
 	project, _ := tester.Find("demo")
-	if !near(folder.X-project.X, treeGlyphW+treeTitleGap) && !near(folder.X, project.X) {
+	if !near(folder.X-project.X, treeChevronW+treeTitleGap) && !near(folder.X, project.X) {
 		t.Fatalf("project title at %.1f vs tree titles at %.1f: the head must sit on the grid", project.X, folder.X)
 	}
 }
@@ -616,13 +616,14 @@ func TestSectionHeadersWearOneGrammar(t *testing.T) {
 // TestOneDisclosureChevron pins the section header's chevron to the one
 // rotating treeChevron: no second collapsible header with a chevron of its
 // own — hand-rotated (Animate "rot") or swapped between the right- and
-// down-pointing glyphs. The two other chevrons are deliberate: the diff file
-// card's own 15pt one, and the Workspace tree rows' hover chevron.
+// down-pointing glyphs. The other chevrons are deliberate: the diff file
+// card's own 15pt one, the Workspace tree rows' hover chevron, and the
+// title-bar breadcrumb's separators, which disclose nothing.
 func TestOneDisclosureChevron(t *testing.T) {
 	rotates := regexp.MustCompile(`Animate\("rot"`)
 	swaps := regexp.MustCompile(`\biconChevron\b`)
 	allowedRotate := map[string]bool{"sidebar_tree.go": true, "gd_surface.go": true}
-	allowedSwap := map[string]bool{"icons.go": true, "components.go": true}
+	allowedSwap := map[string]bool{"icons.go": true, "components.go": true, "breadcrumb_switcher.go": true}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)

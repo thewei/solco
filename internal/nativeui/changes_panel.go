@@ -53,7 +53,7 @@ func (s *Shell) gdChangesFooter(c *ui.Context, pal *gdPalette, snap *gitworkbenc
 		if snap.Truncated {
 			ui.Text(c, "partial").FontSize(Typography().Micro).TextColor(t.TextMuted)
 		}
-		ui.Row(c).Gap(6).Tooltip("Total change: " + gdLines(snap.TotalAdditions, "added") + ", " + gdLines(snap.TotalDeletions, "removed")).Children(func() {
+		tipped(c, ui.Row(c).Gap(6), "Total change: "+gdLines(snap.TotalAdditions, "added")+", "+gdLines(snap.TotalDeletions, "removed")).Children(func() {
 			ui.Text(c, "Total:").FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(t.TextMuted)
 			ui.Text(c, "+"+gdThousands(snap.TotalAdditions)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.addText)
 			ui.Text(c, "-"+gdThousands(snap.TotalDeletions)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.delText)
@@ -98,15 +98,15 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 	muted := t.TextMuted
 	switch {
 	case chosen && focused:
-		r.Background(t.Accent)
-		textColor = t.AccentText
-		muted = t.AccentText.Alpha(0.8)
+		r.Background(designTokens(t.Dark).SidebarSelectStrong)
+		textColor = t.Text
+		muted = t.TextMuted
 	case chosen:
 		r.Background(designTokens(t.Dark).SidebarSelect)
 	case selected && focused:
-		r.Background(t.Accent)
-		textColor = t.AccentText
-		muted = t.AccentText.Alpha(0.8)
+		r.Background(designTokens(t.Dark).SidebarSelectStrong)
+		textColor = t.Text
+		muted = t.TextMuted
 	case selected:
 		r.Background(designTokens(t.Dark).SidebarSelect)
 	case r.Hovered():
@@ -122,7 +122,7 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 		if node.Dir {
 			ui.Icon(c, iconFolder).FontSize(treeGlyphW).TextColor(muted).Shrink(0)
 			ui.Box(c).Width(treeTitleGap).Shrink(0).PassThrough()
-			ui.Text(c, node.Name).FontSize(Typography().Body).SingleLine().Grow(1).Shrink(1).MinWidth(0).Tooltip(node.Path)
+			tipped(c, ui.Text(c, node.Name).FontSize(Typography().Body).SingleLine().Grow(1).Shrink(1).MinWidth(0), node.Path)
 			if !s.gdReviewingCommit() && (pane == gdViewUnstaged || pane == gdViewStaged) {
 				paths := gitDirectoryPaths(s.gitSnapshot(), node.Path, pane)
 				if len(paths) > 0 {
@@ -149,7 +149,7 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 		ui.Box(c).Width(treeTitleGap).Shrink(0).PassThrough()
 		// Full path on hover (F113): the 250px pane truncates names so
 		// service_index.go and service_index_test.go read as the same row.
-		name := ui.Text(c, node.Name).FontSize(Typography().Body).SingleLine().Grow(1).Shrink(1).MinWidth(0).Tooltip(node.Path)
+		name := tipped(c, ui.Text(c, node.Name).FontSize(Typography().Body).SingleLine().Grow(1).Shrink(1).MinWidth(0), node.Path)
 		if viewed && !(selected && focused) {
 			name.TextColor(t.TextMuted)
 		}
@@ -166,9 +166,8 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 				}
 			}
 			if gdCountable(&cf) && (cf.Additions > 0 || cf.Deletions > 0) {
-				ui.Textf(c, "+%s -%s", gdCompact(cf.Additions), gdCompact(cf.Deletions)).
-					Font(gdCodeFont()).FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(muted).Shrink(0).
-					Tooltip(gdLines(cf.Additions, "added") + ", " + gdLines(cf.Deletions, "removed"))
+				tipped(c, ui.Textf(c, "+%s -%s", gdCompact(cf.Additions), gdCompact(cf.Deletions)).
+					Font(gdCodeFont()).FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(muted).Shrink(0), gdLines(cf.Additions, "added")+", "+gdLines(cf.Deletions, "removed"))
 			}
 			letter := gdStatusLetterColor(cf.Status, pal, t)
 			switch {

@@ -1,12 +1,14 @@
 package nativeui
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 )
 
 /**
- * [INPUT]: 依赖 mygo/ui 的 Context/Theme/Popover, gorex_style, agent_visual, proc_brands, brands 的 agentProvider/agentMark 与 Herdr Pane layout 排序
- * [OUTPUT]: 对外提供 crumbSegment, Shell.breadcrumbSegments, Shell.breadcrumbSegmentsWithTheme, Shell.breadcrumbRow, crumbItemRow, crumbPathTip（末级 crumb 的目录悬停弹层）
+ * [INPUT]: 依赖 mygo/ui 的 Context/Theme/Popover, gorex_style（gorexToggleFace 芯片脸）, tooltip.go 的 tipped（被截断祖先与末级目录的 tooltip）, design_system 的 Typography/Spacing/Radius/Controls, agent_visual, proc_brands, brands 的 agentProvider/agentMark 与 Herdr Pane layout 排序
+ * [OUTPUT]: 对外提供 crumbSegment, Shell.breadcrumbSegments, Shell.breadcrumbSegmentsWithTheme, Shell.breadcrumbRow（shadcn Breadcrumb 结构的 ghost 芯片面包屑，返回是否画出路径）, crumbItemRow, crumbPathTip（末级 crumb 的目录悬停弹层）, switcherListMaxHeight（项目列表在切换弹层内的最高高度，超出后行在面板内滚动；crumb 弹层与侧栏项目切换器共用）
  * [POS]: nativeui 标题栏面包屑与快速切换弹层所有者，展示工作区/Tab/Pane层次并呈现 Agent 与进程品牌图标
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -18,6 +20,18 @@ import (
 // carry the bound Agent's provider glyph with the state dot at its corner.
 // One line (2026-10-28): the selected Pane's directory, which used to sit
 // under the path as a second row, is the last crumb's hover popup.
+// shadcn shape (2026-10-29): ghost chips joined by chevrons that belong to
+// no button; ancestors muted, the current crumb in full ink with no
+// permanent pill, a chip face on hover and while the crumb's popover is open.
+
+// Crumb chip widths: an ancestor ends in an ellipsis at crumbMaxWidth and
+// is the first to give way in a narrow bar; the current crumb has more room
+// and yields last; no chip narrows below its mark and a few letters.
+const (
+	crumbMaxWidth     = 200
+	crumbLastMaxWidth = 320
+	crumbMinWidth     = 56
+)
 
 type crumbSegment struct {
 	label string
@@ -89,112 +103,128 @@ func (s *Shell) breadcrumbSegmentsWithTheme(dark bool) []crumbSegment {
 	return path
 }
 
-// breadcrumbRow renders the switcher path plus the Actions pull-down.
-func (s *Shell) breadcrumbRow(c *ui.Context) {
+// breadcrumbRow renders the switcher path as shadcn's Breadcrumb: ghost
+// chips (ancestors muted and turning to full ink on hover, the current crumb
+// in full ink with no permanent pill, the neutral chip face while hovered or
+// while the crumb's own popover is open) joined by chevrons that are not
+// buttons. It reports whether it drew a path — the workspace surface Actions
+// then belong to the bar (titlebarTools).
+func (s *Shell) breadcrumbRow(c *ui.Context) bool {
 	t := c.Theme()
 	sp := Spacing()
+	k := gorexColorsOf(t.Dark)
 	segments := s.breadcrumbSegmentsWithTheme(t.Dark)
 	if len(segments) == 0 {
 		ui.Text(c, "Herdr").TextColor(t.TextMuted).Grow(1).SingleLine()
-		return
+		return false
 	}
-	ui.Row(c).Height(20).Gap(2).AlignItems(ui.Center).Children(func() {
+	glyph := Controls().IconRegular
+	ui.Row(c).MinWidth(0).Gap(sp.XS).AlignItems(ui.Center).Children(func() {
 		for i, segment := range segments {
 			segment := segment
 			last := i == len(segments)-1
-			var trigger ui.Element
-			ui.Box(c).Shrink(0).Children(func() {
-				b := ui.ButtonBase(c).
-					Shrink(0).
-					Radius(Radius().Row).
-					Padding(2, sp.S).
-					Label(segment.label)
-				// Clickable affordance is the hover tint and the popover;
-				// only the current segment reads as selected. The tints are
-				// the gorex header's (2026-10-06): a white pill for the
-				// current segment, a quiet face on hover.
-				k := gorexColorsOf(t.Dark)
-				switch {
-				case last:
-					b.Background(k.tabActive)
-				case b.Hovered():
-					b.Background(k.hover)
-				}
-				b.Children(func() {
-					ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-						if segment.mark.bmp != nil || segment.mark.svg != nil {
-							ui.Box(c).Size(12, 12).Shrink(0).Children(func() {
-								markView(c, segment.mark, 12, t.Text)
-							})
-						}
-						ui.Text(c, segment.label).FontSize(Typography().Caption).
-							FontWeight(WeightSemibold).SingleLine().Shrink(0)
-						if !last {
-							ui.Text(c, "›").FontSize(Typography().Micro).
-								TextColor(t.TextMuted).Shrink(0)
-						}
+			if i > 0 {
+				ui.Icon(c, iconChevron).Size(glyph, glyph).TextColor(t.TextMuted).Shrink(0)
+			}
+			open := s.crumbOpen[i]
+			b := ui.ButtonBase(c).
+				Height(Controls().RegularHeight).
+				MinWidth(crumbMinWidth).
+				Radius(Radius().Row).
+				Padding(0, sp.M).
+				Gap(sp.S).
+				Label(segment.label)
+			if last {
+				b.MaxWidth(crumbLastMaxWidth).Shrink(1)
+			} else {
+				b.MaxWidth(crumbMaxWidth).Shrink(4)
+			}
+			// Clickable affordance is the chip face and the popover (the
+			// toggle faces' one neutral chip, held while the popover is
+			// open), with ink going from muted to full as the pointer
+			// arrives; the current crumb is simply always in full ink.
+			gorexToggleFace(b, k, open)
+			b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+			ink := t.TextMuted
+			if last || open || b.Hovered() {
+				ink = t.Text
+			}
+			if !last && crumbClipped(c, segment.label) {
+				tipped(c, b, segment.label)
+			}
+			b.Children(func() {
+				if segment.mark.bmp != nil || segment.mark.svg != nil {
+					ui.Box(c).Size(glyph, glyph).Shrink(0).Children(func() {
+						markView(c, segment.mark, glyph, ink)
 					})
-				})
-				trigger = b
+				}
+				ui.Text(c, segment.label).FontSize(Typography().Section).FontWeight(WeightRegular).
+					TextColor(ink).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 			})
 			if last {
 				if cwd := s.selectedTabCWD(); cwd != "" {
-					crumbPathTip(c, trigger, cwd)
+					crumbPathTip(c, b, cwd)
 				}
 			}
-			if trigger.Clicked() {
+			if b.Clicked() {
 				// One popover at a time.
 				s.crumbOpen = [3]bool{}
 				s.crumbOpen[i] = true
 			}
 			if s.crumbOpen[i] {
-				s.crumbPopover(c, trigger, i, segment)
+				s.crumbPopover(c, b, i, segment)
 			}
 		}
-		s.headerOverflow(c)
 	})
+	return true
+}
+
+// crumbClipped reports whether an ancestor crumb's label would end in an
+// ellipsis at its widest chip; the label is then also in its tooltip, as
+// every truncated text's is.
+func crumbClipped(c *ui.Context, label string) bool {
+	sp := Spacing()
+	room := crumbMaxWidth - 2*sp.M - Controls().IconRegular - sp.S
+	width, _ := c.MeasureText(0, ui.Span{Text: label, Size: Typography().Section})
+	return width > room
 }
 
 // crumbPathTip is the last crumb's hover popup: the working directory the
-// switcher path stands for, in full from ~, in the theme's tooltip face.
-// The pointer resting on the last crumb shows it; pressing the crumb —
-// the siblings popover — hides it again, as tooltips do.
+// switcher path stands for, in full from ~, in the shared tooltip face with
+// a folder glyph and room for a long path (tipped owns the look). The
+// pointer resting on the last crumb shows it; pressing the crumb — the
+// siblings popover — hides it again, as tooltips do.
 func crumbPathTip(c *ui.Context, anchor ui.Element, cwd string) {
-	t := c.Theme()
-	fill, text := t.Inverse, t.InverseText
-	if fill == ui.Transparent {
-		fill = t.Text
-	}
-	if text == ui.Transparent {
-		text = t.Background
-	}
-	ui.TooltipBase(c, anchor, func(tip ui.Element) {
-		tip.MaxWidth(520).Padding(5, 9).Radius(7).Background(fill).
-			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.2))
-		tip.Children(func() {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconFolder).Size(11, 11).TextColor(text)
-				ui.Text(c, tildePath(cwd)).FontSize(Typography().Caption).TextColor(text)
-			})
-		})
-	})
+	tipped(c, anchor, tildePath(cwd), tipIcon(iconFolder), tipMaxWidth(520))
 }
 
-// crumbPopover lists the segment's siblings for quick switching.
+// switcherListMaxHeight is how tall a project list may grow in a switcher
+// panel — the sidebar head's and the path's alike — before its rows scroll
+// inside the panel; it leaves a pull-down room under the title bar of the
+// smallest window.
+const switcherListMaxHeight = 280
+
+// crumbPopover lists the segment's siblings for quick switching. The rows
+// scroll inside the panel past switcherListMaxHeight; a MaxHeight on the
+// column alone left a long list running out of the panel (2026-10-29).
 func (s *Shell) crumbPopover(c *ui.Context, anchor ui.Element, index int, segment crumbSegment) {
 	ui.Popover(c, anchor, &s.crumbOpen[index], func() {
 		sp := Spacing()
-		ui.Column(c).Width(300).MaxHeight(420).Padding(sp.S).Gap(1).Children(func() {
-			switch segment.kind {
-			case "project":
-				s.crumbProjectRows(c)
-			case "tab":
-				// The segment id is the selected Tab; its siblings list is
-				// scoped by the selected Project.
-				s.crumbTabRows(c, s.selectedProjectID)
-			case "pane":
-				s.crumbPaneRows(c, segment.id)
-			}
+		ui.Column(c).Width(300).Padding(sp.S).Children(func() {
+			ui.Scroll(c).FillWidth().MaxHeight(switcherListMaxHeight).Children(func() {
+				ui.Column(c).FillWidth().Gap(1).Children(func() {
+					switch segment.kind {
+					case "project":
+						s.crumbProjectRows(c)
+					case "tab":
+						// The segment id is the selected Tab; its siblings list is
+						// scoped by the selected Project.
+						s.crumbTabRows(c, s.selectedProjectID)
+					case "pane":
+						s.crumbPaneRows(c, segment.id)
+					}
+				})
+			})
 		})
 	})
 }
@@ -278,7 +308,7 @@ func crumbItemRow(c *ui.Context, mark visualMark, label string, dot operationalS
 		row = ui.ButtonBase(c).
 			FillWidth().
 			Height(28).
-			Radius(6).
+			Radius(Radius().Row).
 			Padding(0, 8).
 			Gap(7).
 			Label(label)
@@ -296,7 +326,7 @@ func crumbItemRow(c *ui.Context, mark visualMark, label string, dot operationalS
 			} else {
 				ui.Box(c).Shrink(0).Children(func() { markView(c, mark, 14, t.TextMuted) })
 			}
-			ui.Text(c, label).FontSize(Typography().Caption).Grow(1).SingleLine()
+			ui.Text(c, label).FontSize(Typography().Body).Grow(1).SingleLine()
 		})
 	})
 	return row

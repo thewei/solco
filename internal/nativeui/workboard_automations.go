@@ -68,7 +68,7 @@ func (s *Shell) projectAutomations(c *ui.Context, project workboardProject) {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			groupLabel(c, "Automations")
 			ui.Box(c).Grow(1)
-			if project.Name != workboardOtherProject && ui.Button(c, "New Automation…").Clicked() {
+			if project.Name != workboardOtherProject && regularButton(c, "New Automation…").Clicked() {
 				s.openWorkboardAutomation(project.Name)
 			}
 		})
@@ -77,20 +77,20 @@ func (s *Shell) projectAutomations(c *ui.Context, project workboardProject) {
 			caption := automationCaption(a)
 			ui.Row(c.Key("automation:" + a.ID)).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
 				ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-					ui.Text(c, a.Name).FontSize(Typography().Body).SingleLine().Tooltip(a.Name)
-					ui.Text(c, caption).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Tooltip(caption)
+					tipped(c, ui.Text(c, a.Name).FontSize(Typography().Body).SingleLine(), a.Name)
+					tipped(c, ui.Text(c, caption).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), caption)
 				})
 				label, op := "Turn Off", "automation-off"
 				if !a.On {
 					label, op = "Turn On", "automation-on"
 				}
-				if ui.Button(c, label).Width(88).Clicked() {
+				if regularButton(c, label).Width(88).Clicked() {
 					s.runBoardManage(op, a.ID)
 				}
-				if ui.Button(c, "Run…").Clicked() {
+				if regularButton(c, "Run…").Clicked() {
 					s.startBoardManage(boardAutomationRunConfirm, a.ID, 0)
 				}
-				if ui.Button(c, "Remove…").Clicked() {
+				if regularButton(c, "Remove…").Clicked() {
 					s.startBoardManage(boardAutomationRemoveConfirm, a.ID, 0)
 				}
 			})

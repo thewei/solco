@@ -28,16 +28,17 @@ func contentColumn(c *ui.Context, maxWidth float32, body func()) {
 }
 
 // segmentedTrack dresses the track of a ui.SegmentedBase in ui.Segmented's own
-// look — surface fill, 1px outline, concentric radii — and segmentFace one of
-// its segments: the chosen one a chip raised from the track (the page color on
-// the light theme's white track, the pressed surface on the dark one — what
-// ui.Segmented itself paints), the hovered one a wash. A segmented control
-// whose segments are icons or counts (ui.Segmented takes labels only) is built
-// from these two, so every segmented control in the app shares one face and
-// one height.
+// look — surface fill, 1px outline, concentric radii, segments stretched to
+// the track's height — and segmentFace one of its segments: the chosen one a
+// chip raised from the track (the page color on the light theme's white track,
+// the pressed surface on the dark one — what ui.Segmented itself paints), the
+// hovered one a wash. A segmented control whose segments are icons or counts
+// (ui.Segmented takes labels only) is built from these two, so every segmented
+// control in the app shares one face and one height; segmentedControl is the
+// labels-only one.
 func segmentedTrack(c *ui.Context, tabs ui.SegmentedParts, label string) {
 	t := c.Theme()
-	tabs.Track.Label(label).AlignItems(ui.Center).Shrink(0).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+	tabs.Track.Label(label).AlignItems(ui.Stretch).Shrink(0).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
 		Radius(t.Radius).Background(t.Surface).Border(1, t.Border)
 }
 
@@ -170,8 +171,8 @@ const valueTextMaxWidth float32 = 360
 // valueText is the muted trailing value of a fact row: one selectable line
 // that clips long values and keeps their full text in the tooltip.
 func valueText(c *ui.Context, value string) {
-	ui.Text(c, value).FontSize(Typography().Body).TextColor(c.Theme().TextMuted).
-		SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).MaxWidth(valueTextMaxWidth).Selectable().Tooltip(value)
+	tipped(c, ui.Text(c, value).FontSize(Typography().Body).TextColor(c.Theme().TextMuted).
+		SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).MaxWidth(valueTextMaxWidth).Selectable(), value)
 }
 
 // iconTile paints a glyph in white on a rounded system-color square: the
@@ -187,12 +188,12 @@ func iconTile(c *ui.Context, glyph *ui.SVG, tone TileTone, size float32) {
 // list rows, popover menus: a regular Button at the footnote size. Surfaces
 // never restate that size on a Button; the dense tier changes here, once.
 func compactButton(c *ui.Context, label string) ui.Element {
-	return ui.Button(c, label).FontSize(Typography().Micro)
+	return regularButton(c, label).FontSize(Typography().Micro)
 }
 
 // compactPrimaryButton is compactButton's accent-filled form.
 func compactPrimaryButton(c *ui.Context, label string) ui.Element {
-	return ui.PrimaryButton(c, label).FontSize(Typography().Micro)
+	return regularPrimaryButton(c, label).FontSize(Typography().Micro)
 }
 
 // emptyState is the shared nothing-here state.
@@ -265,7 +266,7 @@ func inlineNotice(c *ui.Context, tone StatusTone, text string, onRetry func()) u
 			ui.Text(c, text).FontSize(typ.BodySmall).
 				TextColor(designTokens(dark).StatusColor(tone, dark)).Grow(1).SingleLine()
 			if onRetry != nil {
-				if ui.Button(c, "Retry").Clicked() {
+				if regularButton(c, "Retry").Clicked() {
 					onRetry()
 				}
 			}

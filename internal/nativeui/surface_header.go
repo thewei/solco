@@ -6,7 +6,7 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 gorex 图标按钮、showViewTerminal/showViewChat 切换、pane 卡头范式（paneCardHeader）
+ * [INPUT]: 依赖 gorex 图标按钮、showViewTerminal/showViewChat 切换、pane 卡头范式（paneCardHeader）、tooltip.go 的 tipped 与 shortcuts.go 的 chatSwitchBinding（Chat 切换钮的键帽）
  * [OUTPUT]: 提供 surfaceToggle（Terminal⇄Chat 单一形态切换）、chatSurfaceHeader（Chat 卡统一头：agent 图标/名/状态点/双击 zoom）、paneSurfaceMemo 记忆与 openAgentFromSidebar 直跳
  * [POS]: N19 UI 批：切换按钮从窗口头移入两种卡片头并合一；侧栏 Agent 点击按记忆的表面直跳
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -23,7 +23,9 @@ func (s *Shell) surfaceToggle(c *ui.Context, k *gorexColors, from WorkspaceSurfa
 		}
 		return
 	}
-	if gorexIconButton(c, k, iconChat, "Chat", "Switch to Chat (⇧⌘C)", false, gorexIconBtn, gorexIconGlyph).Clicked() {
+	chat := gorexIconButton(c, k, iconChat, "Chat", "", false, gorexIconBtn, gorexIconGlyph)
+	tipped(c, chat, "Switch to Chat", tipKeys(chatSwitchBinding.keycaps()))
+	if chat.Clicked() {
 		s.rememberPaneSurface(paneID, WorkspaceSurfaceChat)
 		s.showViewChat()
 	}
@@ -99,9 +101,9 @@ func (s *Shell) agentStatusDotForPane(c *ui.Context, k *gorexColors, paneID stri
 	}
 	switch normalizeRuntimeStatus(a.Status) {
 	case opWorking:
-		gorexActivityDot(c, k.busy, 6).Tooltip("Working")
+		tipped(c, gorexActivityDot(c, k.busy, 6), "Working")
 	case opReadyForReview:
-		gorexActivityDot(c, k.busy, 6).Tooltip("Ready for review")
+		tipped(c, gorexActivityDot(c, k.busy, 6), "Ready for review")
 	case opNeedsAttention:
 		gorexAttentionDot(c, k.attention, "Needs attention")
 	}

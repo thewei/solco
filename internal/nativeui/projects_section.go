@@ -65,7 +65,7 @@ func (s *Shell) projectsItems(c *ui.Context, projects []workboardProject) {
 	if board.failed {
 		ui.Row(c).FillWidth().Padding(Spacing().S, Spacing().M, 0).Gap(Spacing().S).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Couldn't read the board").FontSize(Typography().Caption).Grow(1).TextColor(c.Theme().TextMuted)
-			if ui.Button(c, "Retry").Clicked() {
+			if regularButton(c, "Retry").Clicked() {
 				s.refreshWorkboardTasks(true)
 			}
 		})
@@ -103,7 +103,7 @@ func (s *Shell) projectsItems(c *ui.Context, projects []workboardProject) {
 			Dot:        project.Dot(),
 			Count:      project.Open,
 		})
-		row.Tooltip(s.projectRowTip(project, hasCoord))
+		tipped(c, row, s.projectRowTip(project, hasCoord))
 		if row.Clicked() {
 			// As in the Workspace tree: the first click opens the Project (its
 			// coordinator when one runs, else its page), a click on the Project
@@ -191,7 +191,7 @@ func (s *Shell) archivedProjectRows(c *ui.Context, archived []archivedGroup) {
 			Label:  g.Name,
 			Count:  len(g.Tasks),
 		})
-		row.Tooltip(g.Name + ": archived — open its tasks, or right-click to restore it")
+		tipped(c, row, g.Name+": archived — open its tasks, or right-click to restore it")
 		if row.Clicked() {
 			s.openWorkboardArchived()
 		}
@@ -239,7 +239,7 @@ func (s *Shell) projectTaskRow(c *ui.Context, r boardRow, last bool) {
 		Label:    title,
 		Dot:      groupOperationalState(r.Group),
 	})
-	row.Tooltip(taskRowTip(r, hasPane))
+	tipped(c, row, taskRowTip(r, hasPane))
 	if row.Clicked() {
 		if hasPane {
 			s.openPane(pane)

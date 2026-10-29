@@ -17,9 +17,9 @@ func historyFact(c *ui.Context, label, value, tooltip string) {
 		ui.Text(c, label).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
 		field := ui.Text(c, value).FontSize(Typography().BodySmall).SingleLine()
 		if tooltip != "" {
-			field.Tooltip(tooltip)
+			tipped(c, field, tooltip)
 		} else {
-			field.Tooltip(value)
+			tipped(c, field, value)
 		}
 	})
 }

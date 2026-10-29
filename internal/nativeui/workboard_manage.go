@@ -134,7 +134,7 @@ func (s *Shell) workboardArchivedPage(c *ui.Context) {
 				switch {
 				case page.failed && !page.loaded:
 					ui.Text(c, "Couldn't read the archive").TextColor(t.TextMuted)
-					if ui.Button(c, "Retry").Clicked() {
+					if regularButton(c, "Retry").Clicked() {
 						s.loadWorkboardArchived()
 					}
 				case !page.loaded:
@@ -148,7 +148,7 @@ func (s *Shell) workboardArchivedPage(c *ui.Context) {
 						ui.Text(c, g.Name).FontSize(Typography().BodySmall).FontWeight(WeightMedium)
 						ui.Text(c, itoa(len(g.Tasks))).FontSize(Typography().Caption).TextColor(t.TextMuted)
 						ui.Box(c).Grow(1)
-						if g.Name != workboardOtherProject && ui.Button(c, "Restore Project").Clicked() {
+						if g.Name != workboardOtherProject && regularButton(c, "Restore Project").Clicked() {
 							s.startBoardManage(boardRestoreProjectConfirm, g.Name, len(g.Tasks))
 						}
 					})
@@ -157,13 +157,13 @@ func (s *Shell) workboardArchivedPage(c *ui.Context) {
 						title := fallbackText(task.Title, task.ID)
 						ui.Row(c.Key("archived-task:" + task.ID)).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
 							ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-								ui.Text(c, title).FontSize(Typography().Body).SingleLine().Tooltip(title)
+								tipped(c, ui.Text(c, title).FontSize(Typography().Body).SingleLine(), title)
 								ui.Text(c, task.ID).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine()
 							})
-							if ui.Button(c, "Restore").Clicked() {
+							if regularButton(c, "Restore").Clicked() {
 								s.runBoardManage("restore-task", task.ID)
 							}
-							if ui.Button(c, "Remove…").Clicked() {
+							if regularButton(c, "Remove…").Clicked() {
 								s.startBoardManage(boardClearConfirm, task.ID, 0)
 							}
 						})

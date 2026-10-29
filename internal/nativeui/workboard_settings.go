@@ -203,7 +203,7 @@ func (s *Shell) settingsWorkboard(c *ui.Context) {
 			if s.settings.General.WorkboardNative() {
 				idx = 0
 			}
-			if ui.Segmented(c, &idx, "Native", "Board").Label("Work board view").Changed() {
+			if segmentedControl(c, &idx, "Native", "Board").Label("Work board view").Changed() {
 				s.setWorkboardView(idx == 0)
 			}
 		}))
@@ -214,14 +214,14 @@ func (s *Shell) settingsWorkboard(c *ui.Context) {
 		if len(projects) > 0 {
 			options = append(options, "Project", "Project coordinator")
 		}
-		if ui.Segmented(c, &choice, options...).Label("Settings scope").Changed() {
+		if segmentedControl(c, &choice, options...).Label("Settings scope").Changed() {
 			st.scope, st.loaded, st.failed = choice, false, false
 		}
 	})}
 	if st.scope != wbScopeEverywhere {
 		scopeRows = append(scopeRows, row("Project", "", func() {
 			project := st.project
-			if ui.Combobox(c, &project, projects).Label("Project").Changed() {
+			if comboField(c, &project, projects).Label("Project").Changed() {
 				st.project, st.loaded, st.failed = project, false, false
 			}
 		}))
@@ -231,7 +231,7 @@ func (s *Shell) settingsWorkboard(c *ui.Context) {
 	switch {
 	case st.failed:
 		ui.Text(c, "Couldn't read the settings").TextColor(t.TextMuted)
-		if ui.Button(c, "Retry").Clicked() {
+		if regularButton(c, "Retry").Clicked() {
 			st.failed = false
 		}
 		return
@@ -247,7 +247,7 @@ func (s *Shell) settingsWorkboard(c *ui.Context) {
 			}
 		})
 	}
-	ui.SearchField(c, &st.filter).Label("Filter settings").FillWidth()
+	searchField(c, &st.filter).Label("Filter settings").FillWidth()
 
 	needle := strings.ToLower(strings.TrimSpace(st.filter))
 	var titles []string
@@ -289,7 +289,7 @@ func (s *Shell) workboardSettingRow(c *ui.Context, setting workboard.Setting) se
 			// Reset keeps its slot while hidden: the controls must not shift
 			// left when a value turns the scope's own.
 			if setting.Own {
-				if ui.Button(key, "Reset").Width(workboardResetWidth).Clicked() {
+				if regularButton(key, "Reset").Width(workboardResetWidth).Clicked() {
 					s.setWorkboardSetting(setting.Name, "", true)
 				}
 			} else {

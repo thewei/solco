@@ -501,8 +501,8 @@ func (s *Shell) trashMenu(m *ui.Menu, meta history.SessionMeta) {
 // with the Trash total beside its label.
 func (s *Shell) historyTrashToggle(c *ui.Context) {
 	t := c.Theme()
-	toggle := ui.ButtonBase(c).Height(Controls().RegularHeight).Padding(0, Spacing().L).Gap(Spacing().S).
-		Radius(Radius().Control).AlignItems(ui.Center).Label("Trash").Tooltip("Deleted sessions")
+	toggle := tipped(c, ui.ButtonBase(c).Height(Controls().RegularHeight).Padding(0, Spacing().L).Gap(Spacing().S).
+		Radius(Radius().Row).AlignItems(ui.Center).Label("Trash"), "Deleted sessions")
 	gorexToggleFace(toggle, gorexColorsOf(t.Dark), s.hist.showTrash)
 	toggle.Children(func() {
 		ui.Icon(c, iconTrash).Size(13, 13).TextColor(t.TextMuted).PassThrough()

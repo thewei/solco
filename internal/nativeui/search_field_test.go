@@ -13,16 +13,16 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 nativeui 包内非测试源码的 AST（TextInput 链上的 Placeholder、ButtonBase 的 "Clear" 标签、ui.SearchField 调用）与 gitSurfaceTestShell 的 Git 面
- * [OUTPUT]: 对外提供守卫：列表筛选/搜索框只有官方 ui.SearchField 一种脸（放大镜 + 边框 + 清除钮 + Esc 清空），不再手搓；Git 面的筛选框收的是文字，输入时不会同时触发面上的快捷键
+ * [INPUT]: 依赖 nativeui 包内非测试源码的 AST（textField 链上的 Placeholder、ButtonBase 的 "Clear" 标签、searchField 调用）与 gitSurfaceTestShell 的 Git 面
+ * [OUTPUT]: 对外提供守卫：列表筛选/搜索框只有 searchField（官方 ui.SearchField 的 DS 脸：放大镜 + 边框 + 清除钮 + Esc 清空）一种脸，不再手搓；Git 面的筛选框收的是文字，输入时不会同时触发面上的快捷键
  * [POS]: 2026-10-14 第二轮审计：同一角色曾有三种脸（官方 SearchField / 无边框灰底手搓 / 无放大镜的 TextInput），收口为一种
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 // callRoot walks a method chain back to the constructor or helper that started
-// it: ui.TextInput(c, &q).Height(28).Placeholder("x") → "TextInput",
-// gdIconButton(c, i, "x").Size(22, 22) → "gdIconButton". It returns "" for a
-// chain that starts anywhere else.
+// it: textField(c, &q).Height(28).Placeholder("x") → "textField",
+// ui.ButtonBase(c).Label("x") → "ButtonBase". It returns "" for a chain that
+// starts anywhere else.
 func callRoot(e ast.Expr) string {
 	for {
 		call, ok := e.(*ast.CallExpr)
@@ -47,11 +47,12 @@ func callRoot(e ast.Expr) string {
 }
 
 // TestListFiltersAreTheOfficialSearchField pins one face for every field that
-// searches or filters a list: ui.SearchField — magnifier, border, a clear
-// button, Escape clears. The app once had three (the official one, a
-// borderless grey hand-rolled copy in the Git surface, and a bare TextInput
-// with no magnifier); a TextInput dressed with a "Search…"/"Filter…" hint, or a
-// hand-drawn "Clear" button, is that drift coming back.
+// searches or filters a list: searchField, the DS face of ui.SearchField —
+// magnifier, border, a clear button, Escape clears. The app once had three
+// (the official one, a borderless grey hand-rolled copy in the Git surface,
+// and a bare text input with no magnifier); a textField dressed with a
+// "Search…"/"Filter…" hint, or a hand-drawn "Clear" button, is that drift
+// coming back.
 func TestListFiltersAreTheOfficialSearchField(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -72,12 +73,14 @@ func TestListFiltersAreTheOfficialSearchField(t *testing.T) {
 			if !ok {
 				return true
 			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
+			if fn, isIdent := call.Fun.(*ast.Ident); isIdent {
+				if fn.Name == "searchField" {
+					searchFields++
+				}
 				return true
 			}
-			if pkg, isPkg := sel.X.(*ast.Ident); isPkg && pkg.Name == "ui" && sel.Sel.Name == "SearchField" {
-				searchFields++
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
 				return true
 			}
 			if len(call.Args) != 1 {
@@ -93,9 +96,9 @@ func TestListFiltersAreTheOfficialSearchField(t *testing.T) {
 			}
 			where := fset.Position(call.Pos())
 			switch root := callRoot(sel.X); {
-			case sel.Sel.Name == "Placeholder" && (root == "TextInput" || root == "TextInputBase") &&
+			case sel.Sel.Name == "Placeholder" && (root == "textField" || root == "TextInputBase") &&
 				(strings.HasPrefix(text, "Search") || strings.HasPrefix(text, "Filter")):
-				t.Errorf("%s: a ui.%s hinted %q is a hand-rolled search field; use ui.SearchField", where, root, text)
+				t.Errorf("%s: a %s hinted %q is a hand-rolled search field; use searchField", where, root, text)
 			case sel.Sel.Name == "Label" && root == "ButtonBase" && text == "Clear":
 				t.Errorf("%s: a hand-drawn Clear button; ui.SearchField owns the clear button", where)
 			}
@@ -103,7 +106,7 @@ func TestListFiltersAreTheOfficialSearchField(t *testing.T) {
 		})
 	}
 	if searchFields < 6 {
-		t.Fatalf("saw only %d ui.SearchField calls; the scan no longer finds the call sites", searchFields)
+		t.Fatalf("saw only %d searchField calls; the scan no longer finds the call sites", searchFields)
 	}
 }
 

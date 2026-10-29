@@ -33,11 +33,10 @@ func (s *Shell) quickPanelStat(c *ui.Context, label string, count int, tone Stat
 	if selected || count > 0 {
 		bg = tokens.StatusBackground(tone, c.Theme().Dark)
 	}
-	button := ui.ButtonBase(c).Grow(1).MinWidth(0).Radius(Radius().Row).
+	button := tipped(c, ui.ButtonBase(c).Grow(1).MinWidth(0).Radius(Radius().Row).
 		Padding(Spacing().M).Background(bg).
 		Border(1, tokens.BorderSubtle).Gap(4).
-		Label(fmt.Sprintf("%s (%d)", label, count)).
-		Tooltip("Show " + label + " agents")
+		Label(fmt.Sprintf("%s (%d)", label, count)), "Show "+label+" agents")
 	button.Children(func() {
 		ui.Text(c, fmt.Sprintf("%d", count)).FontSize(Typography().Heading).
 			FontWeight(WeightSemibold).TextColor(tokens.StatusColor(tone, c.Theme().Dark))

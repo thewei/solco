@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/thewei/solco/internal/commandcenter"
 )
 
 /**
- * [INPUT]: 依赖 mygo/ui 的 Context/TitleBar（窗口控件带几何）、gorex_style 的图标按钮与配色、router 路由态、runtime/time
- * [OUTPUT]: 对外提供 Shell.titlebar（窗口标题栏：红绿灯对齐、身份区——Terminal/Chat 为面包屑单行，选中 Pane 的目录住在末级 crumb 的悬停弹层 breadcrumb_switcher.go crumbPathTip，Changes 与各内页为 route_header.go 的单行 Title 大字标题、工具区、Windows 控件）、titlebarHeight（灯带对齐的行高纯函数，所有路由同一 42 下限）、showViewTerminal/showViewChat/showViewChanges/showViewHistory（四个视图的唯一切换入口）、toggleWindowPinned（窗口置顶的唯一入口）、sidebarToggle（红绿灯右侧固定按钮簇：侧栏收起/展开 + Router Back/Forward 页面历史，Router 拥有行为与 ⌘[/⌘] 快捷键）、chromeHistoryButton（历史按钮的无历史灭活态）
- * [POS]: nativeui 的窗口 chrome 所有者，被 shell.View 顶部消费；高度与 MyGo 红灯带对齐（F142），页面标题与页面动作的唯一归属（2026-10-14：内页只画内容），视图切换、Agent 活动浮层入口与窗口置顶在此收口；红绿灯右侧按钮簇（收起 + 页面历史 Back/Forward）是 Router 历史的可见入口，内容列让位宽度 sidebarToggleClearance 随簇加宽
+ * [INPUT]: 依赖 mygo/ui 的 Context/TitleBar（窗口控件带几何）、gorex_style 的图标按钮与配色、tooltip.go 的 tipped/tipKeys 与 shortcuts.go 的 sidebarToggleBinding/Shell.shortcutKeycaps（tooltip 键帽取自有效绑定）、commandcenter 的面板作用域、router 路由态、runtime/time
+ * [OUTPUT]: 对外提供 Shell.titlebar（窗口标题栏：红绿灯对齐、身份区——Terminal/Chat 为面包屑单行，选中 Pane 的目录住在末级 crumb 的悬停弹层 breadcrumb_switcher.go crumbPathTip，Changes 与各内页为 route_header.go 的单行 Title 大字标题、工具区、Windows 控件）、titlebarHeight（灯带对齐的行高纯函数，所有路由同一 42 下限）、showViewTerminal/showViewChat/showViewChanges/showViewHistory（四个视图的唯一切换入口）、toggleWindowPinned（窗口置顶的唯一入口）、sidebarToggle（侧栏顶带悬浮 chrome 的左右分布：左组=侧栏收起钮+Search（⌘K 的 Command Center 搜索面板）固定在红绿灯右侧，右组=Router Back/Forward 贴侧栏右缘随滑动移动，收起后并入左组右侧）、chromeHistoryButton（历史按钮的无历史灭活态）
+ * [POS]: nativeui 的窗口 chrome 所有者，被 shell.View 顶部消费；高度与 MyGo 红灯带对齐（F142），页面标题与页面动作的唯一归属（2026-10-14：内页只画内容）；页面历史与 Search 收口在侧栏顶带的悬浮 chrome（2026-10-29 用户要求：左右分布——左组侧栏钮+搜索钮居左，右组历史钮居右贴侧栏缘），右侧工具簇 titlebarTools 只剩页面 Actions、Agent 活动浮层入口与窗口置顶；内容列让位宽度 sidebarToggleClearance 覆盖收起态最宽的四钮行
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -23,8 +25,9 @@ import (
 // Terminal and Chat show their switcher path on one line — the selected
 // Pane's directory lives in the last crumb's hover popup (2026-10-28,
 // breadcrumb_switcher.go crumbPathTip) instead of a second row — while
-// Changes and every other route get one large title with its Actions menu
-// (route_header.go). Pages render content only, so no two pages open with
+// Changes and every other route get one large title (route_header.go).
+// Every route's Actions menu is the first of the trailing tools
+// (titlebarTools). Pages render content only, so no two pages open with
 // a different header of their own.
 func (s *Shell) titlebar(c *ui.Context) {
 	t := c.Theme()
@@ -37,7 +40,8 @@ func (s *Shell) titlebar(c *ui.Context) {
 	// horizontal line.
 	height := titlebarHeight(bar.Height)
 	// While the sidebar slides shut the content column reaches the window's
-	// left edge: its content then clears the traffic lights and the toggle.
+	// left edge: its content then clears the traffic lights and the whole
+	// floating chrome (the history pair falls in beside the left pair).
 	left := max(gorexGap*2, sidebarToggleClearance(bar)-s.sidebarSlideW)
 	ui.Row(c).
 		Height(height).
@@ -46,36 +50,55 @@ func (s *Shell) titlebar(c *ui.Context) {
 		DragWindow().
 		AlignItems(ui.Center).
 		Children(func() {
+			// The page's Actions menu rides in the trailing tools on every
+			// route (shadcn's header: identity left, actions right), so the
+			// control sits where it did on the last page whatever the title
+			// or the path ahead of it is.
+			var actions func(m *ui.Menu)
 			if spec, ok := s.routeHeader(); ok {
+				actions = spec.actions
 				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 					s.routeHeaderBlock(c, spec)
 				})
 			} else if s.router.Path() == routeWorkspace {
 				ui.Row(c).Grow(1).MinWidth(0).Children(func() {
-					s.breadcrumbRow(c)
+					if s.breadcrumbRow(c) {
+						actions = s.surfaceOverflowItems
+					}
 				})
 			} else {
 				ui.Box(c).Grow(1).PassThrough()
 			}
-			s.titlebarTools(c, k)
+			s.titlebarTools(c, k, actions)
 		})
 }
 
 // sidebarToggleX is where the toggle sits: right after the traffic lights.
 func sidebarToggleX(bar ui.TitleBar) float32 { return max(bar.Left, 12) + 4 }
 
-// sidebarNavGap is the gap inside the floating chrome cluster: the sidebar
-// toggle with the router's Back/Forward beside it.
+// sidebarNavGap is the gap inside the floating chrome cluster, within each
+// pair and between them when the sidebar is shut.
 const sidebarNavGap = 4
 
-// sidebarChromeStripWidth is the width of that cluster: three 28 DIP icon
-// buttons with two gaps between them.
+// sidebarLeftGroupWidth is the left-aligned pair floating after the traffic
+// lights: the sidebar toggle with the Search button (the Command Center
+// palette, ⌘K) beside it (2026-10-29 user request).
+func sidebarLeftGroupWidth() float32 { return 2*gorexIconBtn + sidebarNavGap }
+
+// sidebarRightGroupWidth is the right-aligned pair: the router's Back and
+// Forward holding the sidebar band's right edge (2026-10-29 user request).
+func sidebarRightGroupWidth() float32 { return 2*gorexIconBtn + sidebarNavGap }
+
+// sidebarChromeStripWidth is the widest the floating chrome can reach: with
+// the sidebar shut the history pair can no longer hold the band's right
+// edge and settles beside the left pair, so the content clears the whole
+// four-button row.
 func sidebarChromeStripWidth() float32 {
-	return 3*gorexIconBtn + 2*sidebarNavGap
+	return sidebarLeftGroupWidth() + sidebarNavGap + sidebarRightGroupWidth()
 }
 
 // sidebarToggleClearance is how far from the window's left edge the content
-// must start to leave the lights and the whole cluster uncovered.
+// must start to leave the lights and the floating chrome uncovered.
 func sidebarToggleClearance(bar ui.TitleBar) float32 {
 	return sidebarToggleX(bar) + sidebarChromeStripWidth() + 8
 }
@@ -86,14 +109,17 @@ func (s *Shell) sidebarBand(c *ui.Context) {
 	ui.Box(c).FillWidth().Shrink(0).Height(max(c.TitleBar().Height, 38)).DragWindow()
 }
 
-// sidebarToggle is the one show/hide control of the sidebar, with the
-// router's Back/Forward beside it: page history is one fixed cluster after
-// the traffic lights that never moves with the slide, so the pointer always
-// finds it where it was. The Router stays the behavior owner (Back/
-// Forward/CanGo*; ⌘[ and ⌘] are its own shortcuts, the tooltips name them);
-// the buttons only dress the actions in the chrome's shared icon-button
-// face, because the official ui.BackButton's bordered toolbar face would
-// clash with the borderless chrome around the traffic lights.
+// sidebarToggle lays out the sidebar band's floating chrome as one left/
+// right split (2026-10-29 user request): the left pair — the sidebar toggle
+// and the Search button into the Command Center palette — sits fixed after
+// the traffic lights; the right pair — the router's Back/Forward page
+// history — holds the band's right edge and moves with the sidebar's slide.
+// With the sidebar shut there is no band edge to hold, so the pair falls in
+// beside the left one (the content's clearance covers that widest row). The
+// Router stays the behavior owner (Back/Forward/CanGo*; ⌘[ and ⌘] are its
+// own shortcuts, the tooltips name them); the buttons keep the chrome's
+// shared borderless icon-button face, because the official ui.BackButton's
+// bordered toolbar face would clash with the chrome around the lights.
 func (s *Shell) sidebarToggle(c *ui.Context) {
 	k := gorexColorsOf(c.Theme().Dark)
 	bar := c.TitleBar()
@@ -104,26 +130,42 @@ func (s *Shell) sidebarToggle(c *ui.Context) {
 	y := (max(bar.Height, 38) - gorexIconBtn) / 2
 	ui.Row(c).Absolute().Left(sidebarToggleX(bar)).Top(y).Gap(sidebarNavGap).
 		AlignItems(ui.Center).Children(func() {
-		if gorexIconButton(c, k, iconPanel, label, label+" (⌘B)", false, gorexIconBtn, gorexIconGlyph).Clicked() {
+		toggle := gorexIconButton(c, k, iconPanel, label, "", false, gorexIconBtn, gorexIconGlyph)
+		tipped(c, toggle, label, tipKeys(sidebarToggleBinding.keycaps()))
+		if toggle.Clicked() {
 			s.toggleSidebar()
 		}
-		s.chromeHistoryButton(c, k, iconArrowLeft, "Back", "⌘[", s.router.CanGoBack(), s.router.Back)
-		s.chromeHistoryButton(c, k, iconArrowRight, "Forward", "⌘]", s.router.CanGoForward(), s.router.Forward)
+		search := gorexIconButton(c, k, iconSearch, "Search", "", false, gorexIconBtn, gorexIconGlyph)
+		tipped(c, search, "Search", tipKeys(s.shortcutKeycaps(shortcutSearch)))
+		if search.Clicked() {
+			s.openCommandCenter(commandcenter.ScopeAll)
+		}
+	})
+	right := sidebarToggleX(bar) + sidebarLeftGroupWidth() + sidebarNavGap
+	// The sidebar column's own right edge (the slide host carries the extra
+	// resize-hit strip beyond it) less the band's right inset.
+	if edge := s.sidebarSlideW - sidebarResizeHit - 12 - sidebarRightGroupWidth(); edge > right {
+		right = edge
+	}
+	ui.Row(c).Absolute().Left(right).Top(y).Gap(sidebarNavGap).
+		AlignItems(ui.Center).Children(func() {
+		s.chromeHistoryButton(c, k, iconArrowLeft, "Back", s.shortcutKeycaps(shortcutBack), s.router.CanGoBack(), s.router.Back)
+		s.chromeHistoryButton(c, k, iconArrowRight, "Forward", s.shortcutKeycaps(shortcutForward), s.router.CanGoForward(), s.router.Forward)
 	})
 }
 
-// chromeHistoryButton is one router-history action at the window's top-left:
-// the shared icon button while there is a page to reach, a muted glyph with
-// no hover face when the history ends there.
-func (s *Shell) chromeHistoryButton(c *ui.Context, k *gorexColors, glyph *ui.SVG, label, shortcut string, can bool, move func()) {
+// chromeHistoryButton is one router-history action of the band's right
+// pair: the shared icon button while there is a page to reach, the shared
+// disabled face (half-strength glyph, no hover) when the history ends
+// there. keys is the shortcut's keycaps, shown in the tooltip either way.
+func (s *Shell) chromeHistoryButton(c *ui.Context, k *gorexColors, glyph *ui.SVG, label string, keys []string, can bool, move func()) {
 	if !can {
-		ui.Box(c).Size(gorexIconBtn, gorexIconBtn).Center().Radius(gorexIconBtn / 2.6).
-			Role(ui.RoleButton).Label(label).Tooltip(label + " (" + shortcut + ")").Children(func() {
-			ui.Icon(c, glyph).Size(gorexIconGlyph, gorexIconGlyph).TextColor(k.iconMuted)
-		})
+		tipped(c, gorexIconButtonDisabled(c, k, glyph, label, "", gorexIconBtn, gorexIconGlyph), label, tipKeys(keys))
 		return
 	}
-	if gorexIconButton(c, k, glyph, label, label+" ("+shortcut+")", false, gorexIconBtn, gorexIconGlyph).Clicked() {
+	b := gorexIconButton(c, k, glyph, label, "", false, gorexIconBtn, gorexIconGlyph)
+	tipped(c, b, label, tipKeys(keys))
+	if b.Clicked() {
 		move()
 	}
 }
@@ -138,11 +180,16 @@ func titlebarHeight(barHeight float32) float32 {
 	return max(barHeight, 42)
 }
 
-// titlebarTools is the header's trailing edge: the Agent activity button
-// (floating panel), the window pin (always on top) and, on Windows, the
-// window controls. The view switch (Changes/Sessions/Files/Hosts) lives at
-// the top of the sidebar (sidebar.go sidebarViewTabs).
-func (s *Shell) titlebarTools(c *ui.Context, k *gorexColors) {
+// titlebarTools is the header's trailing edge: the page's Actions menu (nil
+// when the route offers none), the Agent activity button (floating panel),
+// the window pin (always on top) and, on Windows, the window controls. The
+// view switch (Changes/Sessions/Files/Hosts) lives at the top of the
+// sidebar (sidebar.go sidebarViewTabs); page history and Search float on
+// the sidebar band (sidebarToggle).
+func (s *Shell) titlebarTools(c *ui.Context, k *gorexColors, actions func(m *ui.Menu)) {
+	if actions != nil {
+		headerActions(c, actions)
+	}
 	s.titlebarActivity(c, k)
 	if gorexIconButton(c, k, iconPin, windowPinLabel, windowPinLabel, s.windowPinned, gorexIconBtn, gorexIconGlyph).Clicked() {
 		s.toggleWindowPinned()
@@ -181,8 +228,8 @@ func (s *Shell) windowControls(c *ui.Context, k *gorexColors) {
 				win.Maximize()
 			}
 		}
-		b := ui.Box(c).Size(gorexIconBtn, gorexIconBtn).Center().Radius(gorexIconBtn / 2.6).
-			Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("Close").Tooltip("Close")
+		b := tipped(c, ui.Box(c).Size(gorexIconBtn, gorexIconBtn).Center().Radius(iconButtonRadius(gorexIconBtn)).
+			Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("Close"), "Close")
 		col := k.iconMuted
 		if b.Pressed() {
 			b.Background(closeRed.Alpha(0.8))

@@ -53,9 +53,10 @@ var (
 	iconPin         = icon(`<path d="M12 17v5"/><path d="M9 3h6l1 7 3 3H5l3-3 1-7Z"/>`)
 	iconEyeOff      = icon(`<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.39-1.61"/><path d="M2 2l20 20"/>`)
 	iconTrash       = icon(`<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>`)
-	// iconActions marks every pull-down of secondary actions (title bar, Git
-	// toolbar, session detail): sliders, never a row of dots.
-	iconActions = icon(`<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>`)
+	// iconActions marks every menu of secondary actions (title bar, Git
+	// toolbar, session detail): shadcn's ellipsis as a bare icon button, no
+	// chevron beside it (2026-10-29; it was sliders + chevron).
+	iconActions = icon(`<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>`)
 	// The remote-sync trio of the Git toolbar.
 	iconFetch  = icon(`<path d="M12 13v8l-4-4"/><path d="m12 21 4-4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/>`)
 	iconPull   = icon(`<path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/>`)

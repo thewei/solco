@@ -68,13 +68,13 @@ func (s *Shell) commitSurface(c *ui.Context) {
 					// Height is explicit: Grow inside this intrinsic-height Column
 					// collapsed the subject input to 0px — invisible and
 					// unclickable (2026-10-06 F26).
-					ui.TextInput(c, &s.surface.commit.Subject).Grow(0).Height(Controls().RegularHeight).Placeholder("Required commit summary").Label("Commit subject")
+					textField(c, &s.surface.commit.Subject).Grow(0).Height(Controls().RegularHeight).Placeholder("Required commit summary").Label("Commit subject")
 				})
 
 				// Body.
 				ui.Column(c).FillWidth().Gap(sp.XXS).Children(func() {
 					ui.Text(c, "Description (optional)").FontSize(Typography().Caption).FontWeight(WeightSemibold)
-					ui.TextArea(c, &s.surface.commit.Body).Grow(0).Height(72).Placeholder("Extra detail").Label("Commit description")
+					textArea(c, &s.surface.commit.Body).Grow(0).Height(72).Placeholder("Extra detail").Label("Commit description")
 				})
 
 				// Selected-file checklist (GWB-223 selection checklist).
@@ -104,7 +104,7 @@ func (s *Shell) commitSurface(c *ui.Context) {
 							s.surface.commit.Selected[cf.Path] = checked
 							ui.Text(c, cf.Status.Letter()).FontSize(Typography().Micro).FontWeight(WeightSemibold).
 								TextColor(tokens.StatusColor(statusTone(cf.Status), t.Dark))
-							ui.Text(c, cf.Path).FontSize(Typography().BodySmall).Grow(1).MinWidth(0).SingleLine().Tooltip(cf.Path)
+							tipped(c, ui.Text(c, cf.Path).FontSize(Typography().BodySmall).Grow(1).MinWidth(0).SingleLine(), cf.Path)
 							ui.Text(c, "+"+itoa(cf.Additions)+" -"+itoa(cf.Deletions)).
 								FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine()
 						})

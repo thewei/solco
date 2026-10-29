@@ -9,7 +9,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Router、WorkspacePrimarySurface、Settings/History 导航与 MyGo headless Tester
- * [OUTPUT]: 锁定内页返回、历史详情归属、重复点击、顶栏互斥、快捷键 Back/Forward 的统一语义，以及红绿灯右侧簇（侧栏收起钮 + Router Back/Forward）的历史遍历与首末灭活
+ * [OUTPUT]: 锁定内页返回、历史详情归属、重复点击、顶栏互斥、快捷键 Back/Forward 的统一语义，以及侧栏顶带右缘 Router Back/Forward 按钮（2026-10-29 用户要求：顶带左右分布——左组侧栏钮+搜索钮居左，右组历史钮居右贴侧栏缘，侧栏收起后并入左组右侧）的历史遍历与首末灭活（灭活 = 字形半强度、无悬停脸，TestChromeHistoryButtonAtItsEndIsHalfStrength）
  * [POS]: UI-009 顶栏/侧栏导航回归，不触碰真实 Herdr 会话
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -63,10 +63,12 @@ func TestHistoryViewNestedFirstReturnsIndexThenTerminal(t *testing.T) {
 	}
 }
 
-// The window's top-left cluster carries the Router's page history beside
-// the sidebar toggle: Back returns through the pushed pages, Forward
-// re-enters them, and at the history's ends the buttons are inert. The
-// Router owns the walk; the buttons are its face.
+// The sidebar band's floating chrome splits left/right (2026-10-29 user
+// request): the sidebar toggle and Search sit left after the traffic
+// lights, the Router's Back/Forward hold the band's right edge — Back
+// returns through the pushed pages, Forward re-enters them, and at the
+// history's ends the buttons are inert. The Router owns the walk; the
+// buttons are its face.
 func TestChromeBackForwardWalkRouterHistory(t *testing.T) {
 	s := NewShell()
 	s.loading = false
@@ -74,7 +76,7 @@ func TestChromeBackForwardWalkRouterHistory(t *testing.T) {
 	tester.Frame()
 	for _, want := range []string{"Back", "Forward"} {
 		if _, ok := tester.Find(want); !ok {
-			t.Fatalf("no %q beside the sidebar toggle; texts=%q", want, tester.Texts())
+			t.Fatalf("no %q on the sidebar band; texts=%q", want, tester.Texts())
 		}
 	}
 	// At the start of the history Back cannot move; clicking stays put.
@@ -100,6 +102,54 @@ func TestChromeBackForwardWalkRouterHistory(t *testing.T) {
 	}
 	if got := s.router.Path(); got != routeHistory {
 		t.Fatalf("Forward went to %q, want Sessions again", got)
+	}
+}
+
+// A history button with nowhere to go reads as disabled (2026-10-29,
+// shadcn's disabled:opacity-50): at the end of the history its glyph is half
+// the strength of one that can move, and it lights no hover face. Both were
+// the same muted glyph before, so Back at the start looked like a live one.
+func TestChromeHistoryButtonAtItsEndIsHalfStrength(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		s := NewShell()
+		s.loading = false
+		tester := ui.NewTester(s.View, 1200, 800)
+		tester.SetDark(dark)
+		tester.SetPreferences(ui.Preferences{ReduceMotion: true})
+		tester.Frame()
+		s.router.Push(routeHistory) // Back has a page behind it; Forward has none ahead
+		settleFrames(tester, 3)
+		back, ok1 := tester.Find("Back")
+		forward, ok2 := tester.Find("Forward")
+		if !ok1 || !ok2 {
+			t.Fatalf("dark=%v: Back/Forward missing; texts=%q", dark, tester.Texts())
+		}
+		// The strongest pixel in the button against its own corner: the glyph's ink.
+		ink := func(r ui.Rect) int {
+			img := tester.Image()
+			at := func(x, y int) [4]uint8 {
+				i := img.PixOffset(x, y)
+				return [4]uint8{img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3]}
+			}
+			ground, best := at(int(r.X)+1, int(r.Y)+1), 0
+			for y := int(r.Y); y < int(r.Y+r.H); y++ {
+				for x := int(r.X); x < int(r.X+r.W); x++ {
+					best = max(best, rgbDiff(at(x, y), ground))
+				}
+			}
+			return best
+		}
+		live, inert := ink(back), ink(forward)
+		if live == 0 || float64(inert) > 0.75*float64(live) {
+			t.Errorf("dark=%v: the inert Forward glyph has ink %d against the live Back's %d; it should read at about half", dark, inert, live)
+		}
+		// No hover face on the inert one.
+		ground := pixelAt(tester, int(forward.X)+1, int(forward.Y)+1)
+		tester.Move(forward.X+forward.W/2, forward.Y+forward.H/2)
+		settleHover(tester)
+		if d := rgbDiff(pixelAt(tester, int(forward.X)+2, int(forward.Y+forward.H/2)), ground); d > 2 {
+			t.Errorf("dark=%v: the inert Forward lights a hover face (diff %d)", dark, d)
+		}
 	}
 }
 

@@ -65,7 +65,10 @@ func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
 
 // A button's face, probed by hand: whether hovering fills a point along its
 // edge, and whether it leaves a point near a corner bare (a rounded square
-// of the shared radius does; a flatter radius paints into the corner).
+// of the shared radius does; a flatter radius paints into the corner). The
+// corner probe is the pixel diagonally one in from the corner: at the shared
+// 8-point radius (iconButtonRadius) that pixel is entirely outside the
+// curve, while a radius of 6 or less covers part of it.
 func hoverFaceOf(tt *ui.Tester, label string) (edgeFilled, cornerBare bool) {
 	rect, ok := tt.Find(label)
 	if !ok {
@@ -75,7 +78,7 @@ func hoverFaceOf(tt *ui.Tester, label string) (edgeFilled, cornerBare bool) {
 		tt.Frame() // hover takes a pass to be seen, a second (and the clock) to be painted
 		tt.Advance(300 * time.Millisecond)
 		tt.Frame()
-		return pixelAt(tt, int(rect.X)+2, int(rect.Y+rect.H/2)), pixelAt(tt, int(rect.X)+2, int(rect.Y)+2)
+		return pixelAt(tt, int(rect.X)+2, int(rect.Y+rect.H/2)), pixelAt(tt, int(rect.X)+1, int(rect.Y)+1)
 	}
 	tt.Move(1, 1)
 	idleEdge, idleCorner := at()

@@ -126,7 +126,7 @@ func (s *Shell) workboardTaskPage(c *ui.Context) {
 	if !ok {
 		ui.Column(c).Grow(1).Center().Gap(sp.M).Children(func() {
 			emptyState(c, "This task is no longer on the board", "")
-			if ui.Button(c, "Back").Clicked() {
+			if regularButton(c, "Back").Clicked() {
 				s.router.Back()
 			}
 		})
@@ -162,15 +162,15 @@ func (s *Shell) workboardTaskActions(c *ui.Context, task workboard.Task, group w
 		for _, a := range workboardActionsForTask(task, group, detail) {
 			var button ui.Element
 			if isPrimaryWrite(a.Kind) {
-				button = ui.PrimaryButton(c, a.Label)
+				button = regularPrimaryButton(c, a.Label)
 			} else {
-				button = ui.Button(c, a.Label)
+				button = regularButton(c, a.Label)
 			}
 			if button.Clicked() {
 				s.startWorkboardAction(a, task)
 			}
 		}
-		if task.NeedsPick() && ui.Button(c, "Compare in Work Board").Clicked() {
+		if task.NeedsPick() && regularButton(c, "Compare in Work Board").Clicked() {
 			s.openWorkBoard() // the attempts to pick from are not in the list rows
 		}
 		pinned := s.workboard.board.extras.pinnedTasks[task.ID]
@@ -178,11 +178,11 @@ func (s *Shell) workboardTaskActions(c *ui.Context, task workboard.Task, group w
 		if pinned {
 			pinLabel = "Unpin"
 		}
-		if ui.Button(c, pinLabel).Clicked() {
+		if regularButton(c, pinLabel).Clicked() {
 			s.setWorkboardPin(task.ID, !pinned)
 		}
 		if detail != nil && projectForWorktree(s.projection, detail.Worktree) != "" {
-			if ui.Button(c, "Open Project").Clicked() {
+			if regularButton(c, "Open Project").Clicked() {
 				s.selectProject(projectForWorktree(s.projection, detail.Worktree))
 				s.showViewTerminal()
 			}
@@ -293,7 +293,7 @@ func (s *Shell) workboardTaskNarrative(c *ui.Context, d *workboard.Detail, g wor
 	if d.ReportLink != "" {
 		settingsCard(c, "Report", func() {
 			ui.Text(c, clipPreview(d.ReportLink, 300, 2)).FontSize(Typography().Caption).TextColor(t.TextMuted).Selectable()
-			if ui.Button(c, "Open Report").Clicked() {
+			if regularButton(c, "Open Report").Clicked() {
 				s.openBoardLink(d.ReportLink)
 			}
 		})

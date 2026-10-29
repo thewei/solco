@@ -29,7 +29,7 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 		if s.commitsMode {
 			mode = 1
 		}
-		if ui.Segmented(c, &mode, "Local Changes", "All Commits").FillWidth().Changed() {
+		if segmentedControl(c, &mode, "Local Changes", "All Commits").FillWidth().Changed() {
 			if mode == 0 {
 				s.commitsMode = false
 				s.reviewLocalChanges()
@@ -37,7 +37,7 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 				s.showGitCommits()
 			}
 		}
-		filter := ui.SearchField(c, &s.gitRefsFilter).FillWidth().Label("Filter Git references")
+		filter := searchField(c, &s.gitRefsFilter).FillWidth().Label("Filter Git references")
 		if filter.Changed() {
 			// A new search starts expanded, without carrying stale
 			// search-scoped folds into a different result set.

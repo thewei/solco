@@ -612,7 +612,7 @@ func (s *Shell) paneLogoView(c *ui.Context, k *gorexColors, surface *terminalSur
 	}
 
 	tooltip := fmt.Sprintf("%d panes in this tab • Double-click title to restore", stackCount)
-	box := ui.Box(c).Size(15, 15).Shrink(0).Cursor(ui.CursorPointer).Tooltip(tooltip)
+	box := tipped(c, ui.Box(c).Size(15, 15).Shrink(0).Cursor(ui.CursorPointer), tooltip)
 	if box.DoubleClicked() {
 		s.selectPane(surface.paneID)
 		s.zoomPaneAction(surface.paneID)
@@ -679,12 +679,12 @@ func (s *Shell) paneCardHeader(c *ui.Context, k *gorexColors, surface *terminalS
 			s.selectPane(surface.paneID)
 		}
 		if s.canDragPaneCard(surface.paneID) {
-			caption.Drag(treeNodeDrag{
+			tipped(c, caption.Drag(treeNodeDrag{
 				Instance: s.activeInstance,
 				Kind:     "pane",
 				ParentID: s.selectedTabID,
 				ID:       surface.paneID,
-			}).Cursor(ui.CursorGrab).Tooltip("Drag to move or swap pane")
+			}).Cursor(ui.CursorGrab), "Drag to move or swap pane")
 			if caption.Dragging() {
 				caption.Opacity(0.4).Cursor(ui.CursorGrabbing)
 			}
@@ -753,9 +753,9 @@ func (s *Shell) paneStatusDot(c *ui.Context, k *gorexColors, surface *terminalSu
 	}
 	switch normalizeRuntimeStatus(surface.agentStatus) {
 	case opWorking:
-		gorexActivityDot(c, k.busy, 6).Tooltip("Working")
+		tipped(c, gorexActivityDot(c, k.busy, 6), "Working")
 	case opReadyForReview:
-		gorexActivityDot(c, k.busy, 6).Tooltip("Ready for review")
+		tipped(c, gorexActivityDot(c, k.busy, 6), "Ready for review")
 	case opNeedsAttention:
 		gorexAttentionDot(c, k.attention, "Needs attention")
 	}

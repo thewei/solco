@@ -66,10 +66,10 @@ func (s *Shell) newTaskDialog(c *ui.Context) {
 		t := c.Theme()
 		ui.Column(c).Width(420).MaxWidth(480).Gap(sp.L).Children(func() {
 			modalTitle(c, "New Task")
-			ui.TextInput(c, &d.title).Label("Title").Placeholder("Title").AutoFocus().FillWidth()
-			ui.TextArea(c, &d.desc).Label("Description").Placeholder("Description (optional)").FillWidth().Height(72)
-			ui.Segmented(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
-			ui.TextInput(c, &d.after).Label("After").Placeholder("Wait for tasks, e.g. r/12, r/13 (optional)").FillWidth()
+			textField(c, &d.title).Label("Title").Placeholder("Title").AutoFocus().FillWidth()
+			textArea(c, &d.desc).Label("Description").Placeholder("Description (optional)").FillWidth().Height(72)
+			segmentedControl(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
+			textField(c, &d.after).Label("After").Placeholder("Wait for tasks, e.g. r/12, r/13 (optional)").FillWidth()
 			ui.Checkbox(c, &d.delegate, "Start an agent now")
 			switch d.kind {
 			case newTaskResearch:
@@ -78,10 +78,10 @@ func (s *Shell) newTaskDialog(c *ui.Context) {
 				ui.Text(c, "A conversation that ends when you say.").FontSize(Typography().Caption).TextColor(t.TextMuted)
 			}
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Cancel").Clicked() {
+				if regularButton(c, "Cancel").Clicked() {
 					d.open = false
 				}
-				if ui.PrimaryButton(c, "Add").Clicked() && strings.TrimSpace(d.title) != "" {
+				if regularPrimaryButton(c, "Add").Clicked() && strings.TrimSpace(d.title) != "" {
 					s.submitNewTask()
 				}
 			})

@@ -30,7 +30,7 @@ const (
 	treeRowPad   float32 = 6
 	treeChevronW float32 = 12
 	treeGlyphGap float32 = 4
-	treeGlyphW   float32 = 12
+	treeGlyphW   float32 = 16
 	treeTitleGap float32 = 5
 
 	// treeRowRadius is the corner of every selectable sidebar row: tree rows,
@@ -48,7 +48,7 @@ func treeGlyphX(level int) float32 { return treeChevronX(level) + treeChevronW +
 func treeGuideX(k int) float32 { return treeChevronX(k) + treeChevronW/2 }
 
 // treeRowHeight is the one density token behind the Git and Files trees:
-// compact 22 / default 24 / comfortable 28 DIP — two tighter than the
+// compact 24 / default 28 / comfortable 32 DIP — two tighter than the
 // Workspace rows, whose marks carry a state dot.
 func (s *Shell) treeRowHeight() float32 { return s.sidebarRowHeight() - 2 }
 
@@ -125,14 +125,16 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 	if label == "" {
 		label = spec.Title
 	}
-	row := ui.ButtonBase(c.Key(spec.Key)).FillWidth().MinWidth(0).Height(s.treeRowHeight()).
+	row := tipped(c, ui.ButtonBase(c.Key(spec.Key)).FillWidth().MinWidth(0).Height(s.treeRowHeight()).
 		Padding(0, treeRowPad).Radius(treeRowRadius).FocusRing(false).AlignItems(ui.Center).
-		Label(label).Tooltip(spec.Tooltip)
+		Label(label), spec.Tooltip)
 	glyph := t.TextMuted
 	switch {
 	case spec.Current:
-		row.Background(t.Accent.Alpha(.11)).TextColor(t.Accent)
-		glyph = t.Accent
+		// Current is a state mark, not a selection: full-brightness title and
+		// glyph, no fill, so it never competes with the neutral selection.
+		row.TextColor(t.Text)
+		glyph = t.Text
 	case spec.Selected, spec.Nav.showsCursor(row):
 		row.Background(tokens.SidebarSelect)
 	case row.Hovered():
@@ -204,9 +206,9 @@ type sidebarSectionSpec struct {
 func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui.Element, bool) {
 	t := c.Theme()
 	ui.Box(c).Height(4).Shrink(0)
-	row := ui.ButtonBase(c.Key(spec.Key)).FillWidth().Height(s.treeRowHeight()+2).
+	row := tipped(c, ui.ButtonBase(c.Key(spec.Key)).FillWidth().Height(s.treeRowHeight()+2).
 		Padding(0, treeRowPad).Radius(treeRowRadius).FocusRing(false).AlignItems(ui.Center).
-		Label("Toggle " + spec.Title).Tooltip(spec.Tooltip)
+		Label("Toggle "+spec.Title), spec.Tooltip)
 	switch {
 	case spec.Nav.showsCursor(row):
 		row.Background(designTokens(t.Dark).SidebarSelect)
@@ -244,8 +246,8 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 // Trailing of sidebarSectionSpec; the click is the caller's.
 func sectionTextAction(c *ui.Context, label, tooltip string) ui.Element {
 	t := c.Theme()
-	b := ui.ButtonBase(c).Height(gorexRowBtn).Padding(0, 7).Radius(treeRowRadius).
-		AlignItems(ui.Center).FocusRing(false).Label(label).Tooltip(tooltip).TextColor(t.TextMuted)
+	b := tipped(c, ui.ButtonBase(c).Height(gorexRowBtn).Padding(0, 7).Radius(treeRowRadius).
+		AlignItems(ui.Center).FocusRing(false).Label(label), tooltip).TextColor(t.TextMuted)
 	if b.Hovered() {
 		b.Background(t.SurfaceHover).TextColor(t.Text)
 	}

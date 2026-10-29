@@ -42,7 +42,7 @@ func (s *Shell) gitSequencerActions(c *ui.Context) {
 		continueButton := compactButton(c, "Continue "+gitOperationLabel(state.Kind))
 		continueButton.Disabled(s.git.opBusy || state.Unmerged > 0)
 		if state.Unmerged > 0 {
-			continueButton.Tooltip("Resolve and stage every conflicted file first")
+			tipped(c, continueButton, "Resolve and stage every conflicted file first")
 		}
 		if continueButton.Clicked() {
 			s.continueSequencer()
@@ -91,7 +91,7 @@ func (s *Shell) gitSequencerBanner(c *ui.Context) {
 				ui.Text(c, "Files needing resolution").FontSize(Typography().Caption).FontWeight(WeightSemibold)
 				for _, path := range state.UnmergedPaths {
 					_, index := s.gdFileForPath(path)
-					link := compactButton(c, "Review Conflict: "+path).MaxWidth(270).Tooltip(path)
+					link := tipped(c, compactButton(c, "Review Conflict: "+path).MaxWidth(270), path)
 					link.Disabled(index < 0)
 					if link.Clicked() && index >= 0 {
 						s.revealDiffFile(path)

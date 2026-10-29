@@ -1,12 +1,14 @@
 /**
  * [INPUT]: 依赖 mygo/ui, internal/agent, WorkspacePrimarySurface 状态
- * [OUTPUT]: 对外提供 workspacePage, agentCardForPane
+ * [OUTPUT]: 对外提供 workspacePage, agentCardForPane, workspaceHomeCenter, submitHomePrompt
  * [POS]: Terminal/Chat/Diff/Commit 唯一主表面切换中心
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 package nativeui
 
 import (
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
 )
@@ -46,10 +48,79 @@ func (s *Shell) workspacePage(c *ui.Context) {
 func (s *Shell) workspaceErrorBanner(c *ui.Context, t *ui.Theme) {
 	ui.Row(c).Padding(7, 12).Background(t.Danger.Alpha(0.12)).BorderWidth(0, 0, 1, 0).BorderColor(t.Danger.Alpha(0.35)).Children(func() {
 		ui.Text(c, s.errText).TextColor(t.Danger).FontSize(Typography().BodySmall).Grow(1).SingleLine()
-		if ui.Button(c, "Retry").Clicked() {
+		if regularButton(c, "Retry").Clicked() {
 			s.reloadInstances(false)
 		}
 	})
+}
+
+// workspaceHomeCenter is the prompt-first empty state of the workspace
+// (Cursor-3 home, 2026-10-29): one quiet context line of the real open
+// facts, the shared prompt dock when the work board gate is open, and a
+// row of real quick actions. It never fakes a pull-down or a send target:
+// the header keeps the switchers, and the dock submits into the plugin's
+// own New Task dialog.
+func (s *Shell) workspaceHomeCenter(c *ui.Context) {
+	t := c.Theme()
+	sp := Spacing()
+	project, branch := s.sidebarProjectTitle(), s.currentBranchName()
+	ui.Column(c).Grow(1).MinWidth(0).Center().Gap(sp.L).Padding(sp.XL).Children(func() {
+		ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, iconFolder).FontSize(14).TextColor(t.TextMuted)
+			ui.Text(c, fallbackText(project, "No project")).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+			if branch != "" {
+				ui.Text(c, "·").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+				ui.Icon(c, iconBranch).FontSize(14).TextColor(t.TextMuted)
+				ui.Text(c, branch).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+			}
+			if s.activeInstance != "" {
+				ui.Text(c, "·").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+				ui.Icon(c, iconServer).FontSize(14).TextColor(t.TextMuted)
+				ui.Text(c, s.activeInstance).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+			}
+		})
+		if s.workboardAvailable() {
+			ui.Column(c).Width(560).MaxWidth(640).Children(func() {
+				dockPanel(c, func() {
+					field := textArea(c, &s.homeDraft).Grow(1).Height(56).
+						Placeholder("Describe a task for this project…").Label("New task prompt")
+					if field.Shortcut(0, ui.KeyEnter) {
+						s.submitHomePrompt()
+					}
+					ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+						ui.Box(c).Grow(1)
+						if regularPrimaryButton(c, "New Task").Disabled(strings.TrimSpace(s.homeDraft) == "" || field.Composing()).Clicked() {
+							s.submitHomePrompt()
+						}
+					})
+				})
+			})
+		}
+		ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+			if s.workboardAvailable() {
+				ghostPill(c, "home-new-task", "New Task", func() { s.openWorkboardAdd(false) })
+			}
+			ghostPill(c, "home-files", "Browse Files", s.showViewFiles)
+			ghostPill(c, "home-sessions", "Sessions", s.showViewHistory)
+			ghostPill(c, "home-hosts", "Hosts", s.showViewHosts)
+		})
+	})
+}
+
+// submitHomePrompt turns the home prompt into the real New Task dialog:
+// the typed text becomes the task title and the dialog owns the rest. The
+// write path stays the plugin's own CLI transaction; without a Git root
+// openWorkboardAdd refuses with its own toast.
+func (s *Shell) submitHomePrompt() {
+	text := strings.TrimSpace(s.homeDraft)
+	if text == "" {
+		return
+	}
+	s.homeDraft = ""
+	s.openWorkboardAdd(false)
+	if s.workboard.newTask.open {
+		s.workboard.newTask.title = text
+	}
 }
 
 // terminalSurface renders the Terminal primary surface. The terminal canvas
@@ -58,6 +129,13 @@ func (s *Shell) workspaceErrorBanner(c *ui.Context, t *ui.Theme) {
 func (s *Shell) terminalSurface(c *ui.Context) {
 	t := c.Theme()
 	if len(s.terminals) == 0 {
+		if s.shellState() != stateLoading && s.status == "" {
+			// The quiet empty state becomes the Cursor-3 home: what is
+			// open, and the real quick actions. Loading, offline and
+			// bootstrap states keep their own faces.
+			s.workspaceHomeCenter(c)
+			return
+		}
 		ui.Column(c).Grow(1).Center().Gap(8).Children(func() {
 			if s.shellState() == stateLoading {
 				ui.Spinner(c).Size(24, 24)

@@ -164,7 +164,7 @@ func (s *Shell) workboardProjectPage(c *ui.Context) {
 	if !ok {
 		ui.Column(c).Grow(1).Center().Gap(sp.M).Children(func() {
 			emptyState(c, "This project is no longer on the board", "")
-			if ui.Button(c, "Back").Clicked() {
+			if regularButton(c, "Back").Clicked() {
 				s.router.Back()
 			}
 		})
@@ -218,17 +218,17 @@ func (s *Shell) projectFilterRow(c *ui.Context, project workboardProject) {
 	}
 	ui.Row(c).FillWidth().Gap(sp.M).Wrap().AlignItems(ui.Center).Children(func() {
 		choice := page.filter
-		if ui.Segmented(c, &choice, labels...).Label("Task filter").Changed() {
+		if segmentedControl(c, &choice, labels...).Label("Task filter").Changed() {
 			page.filter = choice
 		}
 		ui.Box(c).Grow(1)
-		if project.Coord.Running() && ui.Button(c, "Open Coordinator").Clicked() {
+		if project.Coord.Running() && regularButton(c, "Open Coordinator").Clicked() {
 			s.openProjectCoordinator(project.Name)
 		}
-		if ui.Button(c, "New Task").Clicked() {
+		if regularButton(c, "New Task").Clicked() {
 			s.openWorkboardAddIn(project.Name, false)
 		}
-		if ui.Button(c, "Add and Delegate").Clicked() {
+		if regularButton(c, "Add and Delegate").Clicked() {
 			s.openWorkboardAddIn(project.Name, true)
 		}
 	})
@@ -244,7 +244,7 @@ func (s *Shell) projectGroups(c *ui.Context, project workboardProject) {
 		page.foldedBy = map[workboard.Group]bool{}
 	}
 	nav := &s.nav.boardTasks
-	field := ui.SearchField(c, &page.find).FillWidth().Label("Find tasks")
+	field := searchField(c, &page.find).FillWidth().Label("Find tasks")
 	if c.Shortcut(ui.Cmd, ui.KeyF) {
 		field.Focus()
 	}
@@ -280,7 +280,7 @@ func (s *Shell) projectGroups(c *ui.Context, project workboardProject) {
 	// As in the TUI, finished work stays out of the list; one line counts it.
 	if page.filter == filterAll && needle == "" && len(project.Done) > 0 {
 		label := "↓ " + itoa(len(project.Done)) + " done"
-		if ui.Button(c, label).Clicked() {
+		if regularButton(c, label).Clicked() {
 			page.filter = filterDone
 		}
 	}
@@ -348,7 +348,7 @@ func (s *Shell) workboardMessageBox(c *ui.Context, label, placeholder string, dr
 		contentColumn(c, formColumnWidth, func() {
 			ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
 				ui.Text(c, label).FontSize(Typography().Caption).TextColor(t.TextMuted)
-				field := ui.TextArea(c, draft).FillWidth().Height(64).Placeholder(placeholder).Label(label)
+				field := textArea(c, draft).FillWidth().Height(64).Placeholder(placeholder).Label(label)
 				ready := strings.TrimSpace(*draft) != "" && !field.Composing()
 				submit := func() {
 					d := false
@@ -365,7 +365,7 @@ func (s *Shell) workboardMessageBox(c *ui.Context, label, placeholder string, dr
 						ui.Checkbox(c, delegate, "Delegate")
 					}
 					ui.Box(c).Grow(1)
-					if ui.PrimaryButton(c, "Send").Disabled(!ready).Clicked() {
+					if regularPrimaryButton(c, "Send").Disabled(!ready).Clicked() {
 						submit()
 					}
 				})

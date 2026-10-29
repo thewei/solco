@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 mygo/ui 的 Menu/Element、internal/herdr 的 pane 变更 RPC（SplitPane/TogglePaneZoom）、dialogs 的确认通道
- * [OUTPUT]: 对外提供 headerOverflow（Workspace 的 Actions pull-down 菜单）、headerActions（所有路由标题栏共用的唯一 Actions 触发器）、splitPaneAction/zoomPaneAction/closePaneAction（pane 动作唯一实现）、paneOverflowItems/surfaceOverflowItems（菜单构建器）
+ * [OUTPUT]: 对外提供 headerActions（所有路由标题栏共用的唯一 Actions 触发器：⋯ 图标按钮，位于标题栏右侧工具簇最左，无 chevron）、splitPaneAction/zoomPaneAction/closePaneAction（pane 动作唯一实现）、paneOverflowItems/surfaceOverflowItems（菜单构建器；surfaceOverflowItems 是 Workspace 路由 Actions 的菜单）
  * [POS]: nativeui 的 pane 动作单一来源：卡片头按钮、右键菜单、侧栏行、标题栏溢出全部走这里；单 Pane 的 zoom 语义（两侧栏最大化，F143）在此收口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,23 +15,19 @@ import (
 	"github.com/thewei/solco/internal/herdr"
 )
 
-// headerOverflow is the Actions pull-down after the title-bar breadcrumb
-// path: one menu holding the current surface's actions (2026-10-05 header
-// review). Pane items come from paneOverflowItems — the same builder behind
-// the tree rows' right-click menu and the pane header's menu.
-func (s *Shell) headerOverflow(c *ui.Context) {
-	headerActions(c, s.surfaceOverflowItems)
-}
-
-// headerActions draws the Actions pull-down with build as its menu. Every
-// route's title bar shows its page actions through this one trigger — the
-// workspace surfaces, a session, a file — so the same control sits in the
-// same place and reads the same on each page.
+// headerActions draws the Actions trigger with build as its menu: a bare
+// ellipsis icon button (shadcn's, 2026-10-29; it was sliders + chevron right
+// after the path) that opens the system menu. Every route's title bar shows
+// its page actions through this one trigger — the workspace surfaces
+// (surfaceOverflowItems, whose pane items are paneOverflowItems, the builder
+// behind the tree rows' right-click menu and the pane header's menu), a
+// session, a file — as the first of the trailing tools (titlebarTools), so
+// the same control sits in the same place and reads the same on each page.
 func headerActions(c *ui.Context, build func(m *ui.Menu)) {
 	k := gorexColorsOf(c.Theme().Dark)
 	var trigger ui.Element
 	ui.Box(c).Children(func() {
-		trigger = gorexPulldown(c, k, iconActions, "Actions", gorexIconBtn, gorexIconGlyph)
+		trigger = gorexIconButton(c, k, iconActions, "Actions", "Actions", false, gorexIconBtn, gorexIconGlyph)
 	})
 	trigger.Menu(build)
 }

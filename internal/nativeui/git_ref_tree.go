@@ -182,7 +182,7 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 	var trailing func()
 	if it.current {
 		trailing = func() {
-			ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Accent).Shrink(0)
+			ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Text).Shrink(0)
 		}
 	}
 	_, clicked := s.sidebarTreeRow(c, sidebarTreeSpec{

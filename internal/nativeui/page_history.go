@@ -73,7 +73,7 @@ func (s *Shell) historyToolbar(c *ui.Context) {
 		s.historyAgentTabs(c)
 		ui.Spacer(c)
 		ui.Row(c).Shrink(0).Gap(sp.M).AlignItems(ui.Center).Children(func() {
-			field := ui.SearchField(c, &s.hist.query).Label("Search sessions").Width(200)
+			field := searchField(c, &s.hist.query).Label("Search sessions").Width(200)
 			if field.Changed() || field.Submitted() {
 				s.applyHistoryFilters()
 			}
@@ -84,7 +84,7 @@ func (s *Shell) historyToolbar(c *ui.Context) {
 				s.historyTrashToggle(c)
 			}
 			if s.hist.showTrash && len(s.trashScoped()) > 0 {
-				if ui.Button(c, "Empty Trash").Clicked() {
+				if regularButton(c, "Empty Trash").Clicked() {
 					s.confirmEmptyTrash()
 				}
 			}
@@ -161,8 +161,8 @@ func (s *Shell) historyTabCount(provider history.AgentID) int {
 // historySelectToggle enters or leaves the multi-select mode.
 func (s *Shell) historySelectToggle(c *ui.Context) {
 	t := c.Theme()
-	toggle := ui.ButtonBase(c).Height(Controls().RegularHeight).Padding(0, Spacing().L).Gap(Spacing().S).
-		Radius(Radius().Control).AlignItems(ui.Center).Label("Select sessions").Tooltip("Select sessions")
+	toggle := tipped(c, ui.ButtonBase(c).Height(Controls().RegularHeight).Padding(0, Spacing().L).Gap(Spacing().S).
+		Radius(Radius().Row).AlignItems(ui.Center).Label("Select sessions"), "Select sessions")
 	gorexToggleFace(toggle, gorexColorsOf(t.Dark), s.hist.selecting)
 	toggle.Children(func() {
 		ui.Icon(c, iconTask).Size(13, 13).TextColor(t.TextMuted).PassThrough()
@@ -218,7 +218,7 @@ func (s *Shell) noMatchingSessions(c *ui.Context) {
 	ui.Column(c).Grow(1).Center().Gap(Spacing().M).Children(func() {
 		ui.Text(c, "No matching sessions").FontWeight(WeightSemibold)
 		ui.Text(c, "Try another search or agent.").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
-		if ui.Button(c, "Clear Filters").Clicked() {
+		if regularButton(c, "Clear Filters").Clicked() {
 			s.clearHistoryFilters()
 		}
 	})
@@ -362,8 +362,8 @@ func (s *Shell) sessionGroup(c *ui.Context, group sessionGroupView, defaultOpen 
 				s.groupSelectionBox(c, group)
 			}
 			ui.Text(c, group.name).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine().Shrink(0).PassThrough()
-			ui.Text(c, compactSearchPath(group.path)).Font(gdCodeFont()).FontSize(Typography().Micro).TextColor(t.TextMuted).
-				SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Tooltip(group.path)
+			tipped(c, ui.Text(c, compactSearchPath(group.path)).Font(gdCodeFont()).FontSize(Typography().Micro).TextColor(t.TextMuted).
+				SingleLine().Ellipsis("…").Grow(1).MinWidth(0), group.path)
 			ui.Text(c, fmt.Sprintf("%d session%s", len(group.sessions), pluralS(len(group.sessions)))).FontSize(Typography().Caption).TextColor(t.TextMuted).Shrink(0).PassThrough()
 		})
 		if header.Clicked() || activated {
@@ -427,7 +427,7 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 		}
 		agentTile(c, summary.Meta.Agent, 24)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).PassThrough().Children(func() {
-			ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Ellipsis("…").Tooltip(title).PassThrough()
+			tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Ellipsis("…"), title).PassThrough()
 			if facts := sessionFactLine(summary.Meta, s.hist.provider == ""); facts != "" {
 				ui.Text(c, facts).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").PassThrough()
 			}

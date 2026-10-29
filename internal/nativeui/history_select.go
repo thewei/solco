@@ -136,31 +136,31 @@ func (s *Shell) historySelectionBar(c *ui.Context, groups []sessionGroupView) {
 		ui.Row(c).FillWidth().Padding(sp.M, sp.XL).Gap(sp.M).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, fmt.Sprintf("%d selected", len(selected))).FontSize(Typography().Body).FontWeight(WeightMedium)
 			if len(selected) < len(visible) {
-				if ui.Button(c, "Select All").Clicked() {
+				if regularButton(c, "Select All").Clicked() {
 					s.setHistorySelected(visible, true)
 				}
 			}
 			if len(selected) > 0 {
-				if ui.Button(c, "Clear").Clicked() {
+				if regularButton(c, "Clear").Clicked() {
 					s.clearHistorySelection()
 				}
 			}
 			ui.Spacer(c)
 			if s.hist.showTrash {
-				if ui.Button(c, "Delete Forever…").Disabled(len(selected) == 0).Clicked() {
+				if regularButton(c, "Delete Forever…").Disabled(len(selected) == 0).Clicked() {
 					s.confirmDeleteForever(selected)
 				}
-				if ui.PrimaryButton(c, "Put Back").Disabled(len(selected) == 0).Clicked() {
+				if regularPrimaryButton(c, "Put Back").Disabled(len(selected) == 0).Clicked() {
 					s.restoreFromTrash(selected)
 					s.clearHistorySelection()
 				}
 				return
 			}
-			if ui.PrimaryButton(c, "Move to Trash").Disabled(len(selected) == 0).Clicked() {
+			if regularPrimaryButton(c, "Move to Trash").Disabled(len(selected) == 0).Clicked() {
 				s.moveSessionsToTrash(s.sessionMetasForKeys(selected))
 				s.setHistorySelecting(false)
 			}
-			if ui.Button(c, "Done").Clicked() {
+			if regularButton(c, "Done").Clicked() {
 				s.setHistorySelecting(false)
 			}
 		})

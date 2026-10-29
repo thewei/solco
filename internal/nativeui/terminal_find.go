@@ -40,7 +40,7 @@ func (s *Shell) terminalFindBar(c *ui.Context) {
 	ui.Row(c).FillWidth().Padding(sp.XS, sp.M).Gap(sp.S).AlignItems(ui.Center).
 		Background(designTokens(t.Dark).Panel).BorderWidth(0, 0, 1, 0).
 		BorderColor(designTokens(t.Dark).BorderSubtle).Children(func() {
-		field := ui.SearchField(c, &s.terminalFind.query).Grow(1).Label("Terminal find query")
+		field := searchField(c, &s.terminalFind.query).Grow(1).Label("Terminal find query")
 		if field.Changed() {
 			s.runTerminalFind("forward")
 		}
@@ -49,13 +49,13 @@ func (s *Shell) terminalFindBar(c *ui.Context) {
 		if s.terminalFind.busy {
 			ui.Spinner(c).Size(12, 12)
 		}
-		if ui.Button(c, "‹").Clicked() {
+		if regularButton(c, "‹").Clicked() {
 			s.runTerminalFind("backward")
 		}
-		if ui.Button(c, "›").Clicked() {
+		if regularButton(c, "›").Clicked() {
 			s.runTerminalFind("forward")
 		}
-		if ui.Button(c, "Done").Clicked() {
+		if regularButton(c, "Done").Clicked() {
 			s.terminalFind.open = false
 			s.terminalFind.errText = ""
 		}

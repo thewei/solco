@@ -112,7 +112,7 @@ func (s *Shell) hostFormRows(c *ui.Context, entry sshconfig.Entry) []settingsRow
 	f := &s.hosts.form
 	input := func(label string, value *string, placeholder string) settingsRow {
 		return row(label, "", func() {
-			field := ui.TextInput(c, value).Width(240).Label(label)
+			field := textField(c, value).Width(240).Label(label)
 			if placeholder != "" {
 				field.Placeholder(placeholder)
 			}

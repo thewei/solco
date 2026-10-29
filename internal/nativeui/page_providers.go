@@ -117,9 +117,9 @@ func (s *Shell) facetControls(c *ui.Context, row providerRow, facet providerFace
 		switch {
 		case inFlight:
 			ui.Spinner(c).Size(14, 14)
-			ui.Button(c, verb).Label(label).Disabled(true)
+			regularButton(c, verb).Label(label).Disabled(true)
 		case label != "":
-			if ui.Button(c, verb).Label(label).Clicked() {
+			if regularButton(c, verb).Label(label).Clicked() {
 				s.runProviderAction(row, facet)
 			}
 		}

@@ -1,7 +1,7 @@
 package nativeui
 
 /**
- * [INPUT]: Herdr 项目投影与当前选择、本地分支目录、既有 selectProject/confirmSwitchBranch/创建分支流程与共享 sidebar 网格
+ * [INPUT]: Herdr 项目投影与当前选择、本地分支目录、既有 selectProject/confirmSwitchBranch/创建分支流程、共享 sidebar 网格与 breadcrumb_switcher 的 switcherListMaxHeight
  * [OUTPUT]: Git、Files 与 Sessions 三个侧栏共用的头部 sidebarProjectHeader：项目名与分支名各自是可搜索的 pull-down 快速切换，外加刷新图标
  * [POS]: 侧栏头部呈现与切换交互；项目选择权威仍在 selection.go，分支变更仍走 git_service_mutation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -28,8 +28,8 @@ func (s *Shell) sidebarProjectTitle() string {
 // on the tree grid, under the chevron and title columns of the rows below.
 func switcherChip(c *ui.Context, key, label, text, tooltip string, glyph *ui.SVG, size float32, weight int, color ui.Color) ui.Element {
 	t := c.Theme()
-	chip := ui.ButtonBase(c.Key(key)).Height(22).Padding(0, treeRowPad).Radius(4).FocusRing(false).
-		AlignItems(ui.Center).Label(label).Tooltip(tooltip)
+	chip := tipped(c, ui.ButtonBase(c.Key(key)).Height(22).Padding(0, treeRowPad).Radius(4).FocusRing(false).
+		AlignItems(ui.Center).Label(label), tooltip)
 	if chip.Hovered() {
 		chip.Background(t.SurfaceHover)
 	}
@@ -58,7 +58,7 @@ func (s *Shell) sidebarProjectHeader(c *ui.Context, root, refreshLabel string, r
 				case title == "":
 					ui.Text(c, "No project").FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(t.TextMuted)
 				case len(s.projection.Projects) == 0:
-					ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine().Tooltip(tooltip)
+					tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine(), tooltip)
 				default:
 					chip := switcherChip(c, "sidebar-project", "Switch project", title, tooltip, iconFolder,
 						Typography().Body, WeightSemibold, t.Text)
@@ -98,7 +98,7 @@ func (s *Shell) sidebarProjectHeader(c *ui.Context, root, refreshLabel string, r
 // switcherSearch is the search field every switcher panel opens with. It
 // reports Enter, which picks the first match.
 func switcherSearch(c *ui.Context, text *string, label string) (submitted bool) {
-	field := ui.SearchField(c, text).FillWidth().AutoFocus().Label(label)
+	field := searchField(c, text).FillWidth().AutoFocus().Label(label)
 	return field.Submitted()
 }
 
@@ -117,7 +117,7 @@ func (s *Shell) projectSwitcherPanel(c *ui.Context) {
 			s.switchProject(matches[0].ID)
 			return
 		}
-		ui.Scroll(c).FillWidth().MaxHeight(280).Children(func() {
+		ui.Scroll(c).FillWidth().MaxHeight(switcherListMaxHeight).Children(func() {
 			ui.Column(c).FillWidth().Gap(1).Children(func() {
 				if len(matches) == 0 {
 					ui.Text(c, "No matching projects").FontSize(Typography().Caption).TextColor(t.TextMuted).Padding(sp.S)

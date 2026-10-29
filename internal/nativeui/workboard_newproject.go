@@ -70,16 +70,16 @@ func (s *Shell) newProjectDialog(c *ui.Context) {
 			modalTitle(c, "New Project")
 			ui.Column(c).FillWidth().Gap(sp.XS).Children(func() {
 				ui.Text(c, filepath.Base(d.folder)).FontSize(Typography().Body).SingleLine()
-				ui.Text(c, d.folder).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Tooltip(d.folder)
+				tipped(c, ui.Text(c, d.folder).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine(), d.folder)
 			})
 			ui.Checkbox(c, &d.coordinator, "Start its coordinator now")
 			ui.Text(c, "The folder becomes a Project with no task. It and its coordinator's conversation are kept until you archive it.").
 				FontSize(Typography().Caption).TextColor(t.TextMuted)
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Cancel").Clicked() {
+				if regularButton(c, "Cancel").Clicked() {
 					d.open = false
 				}
-				if ui.PrimaryButton(c, "Create").Clicked() {
+				if regularPrimaryButton(c, "Create").Clicked() {
 					s.submitNewProject()
 				}
 			})

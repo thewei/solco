@@ -60,7 +60,7 @@ func (s *Shell) gitWorkbenchActionBar(c *ui.Context) {
 		s.gdLayoutControl(c)
 		// The local worktree's bottom composer is the single Commit entry.
 		// This toolbar only carries review/batch actions and the pull-down.
-		more := gdPulldown(c, iconActions, "Git actions")
+		more := gdIconButton(c, iconActions, "Git actions")
 		more.Menu(func(m *ui.Menu) {
 			if compact {
 				if m.Item("Stage All").Disabled(!canStage).Chosen() {

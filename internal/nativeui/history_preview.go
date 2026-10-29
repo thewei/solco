@@ -176,14 +176,14 @@ func (s *Shell) sessionPreview(c *ui.Context, summary history.SessionSummary) {
 				}
 			}
 			ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, "Open").Clicked() {
+				if regularButton(c, "Open").Clicked() {
 					s.router.Push("/history/" + meta.Key)
 				}
-				if ui.Button(c, "Continue").Disabled(!s.canContinue()).Clicked() {
+				if regularButton(c, "Continue").Disabled(!s.canContinue()).Clicked() {
 					s.requestContinue(meta, nil)
 				}
 				ui.Spacer(c)
-				if s.hist.trash != nil && ui.Button(c, "Move to Trash").Clicked() {
+				if s.hist.trash != nil && regularButton(c, "Move to Trash").Clicked() {
 					s.moveSessionsToTrash([]history.SessionMeta{meta})
 					s.closeHistoryPreview()
 				}

@@ -133,14 +133,14 @@ func (s *Shell) hostsEmptyState(c *ui.Context) {
 	case s.hosts.err != "":
 		ui.Column(c).Grow(1).Center().Gap(Spacing().S).Children(func() {
 			emptyState(c, "SSH config unavailable", s.hosts.err)
-			if ui.Button(c, "Retry").Clicked() {
+			if regularButton(c, "Retry").Clicked() {
 				s.refreshHostsIndex(true)
 			}
 		})
 	case s.hosts.missing:
 		ui.Column(c).Grow(1).Center().Gap(Spacing().S).Children(func() {
 			emptyState(c, "No SSH config", "ssh reads host aliases from ~/.ssh/config.")
-			if ui.PrimaryButton(c, "Create ~/.ssh/config").Clicked() {
+			if regularPrimaryButton(c, "Create ~/.ssh/config").Clicked() {
 				s.openHostEditor(s.hosts.mainPath, true)
 			}
 		})
@@ -202,8 +202,8 @@ func (s *Shell) hostHeading(c *ui.Context, entry sshconfig.Entry, editing bool) 
 	k := gorexColorsOf(t.Dark)
 	ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(sp.XXS).Children(func() {
-			ui.Text(c, entry.Title()).FontSize(typ.Heading).FontWeight(WeightSemibold).
-				SingleLine().Ellipsis("…").MinWidth(0).Tooltip(entry.Title())
+			tipped(c, ui.Text(c, entry.Title()).FontSize(typ.Heading).FontWeight(WeightSemibold).
+				SingleLine().Ellipsis("…").MinWidth(0), entry.Title())
 			ui.Text(c, hostSubtitle(entry)).FontSize(typ.Caption).TextColor(t.TextMuted).
 				SingleLine().Ellipsis("…").MinWidth(0)
 		})
@@ -211,16 +211,16 @@ func (s *Shell) hostHeading(c *ui.Context, entry sshconfig.Entry, editing bool) 
 			if s.hosts.form.saving {
 				ui.Spinner(c).Size(14, 14)
 			}
-			if ui.Button(c, "Cancel").Clicked() {
+			if regularButton(c, "Cancel").Clicked() {
 				s.cancelHostForm()
 			}
-			if ui.PrimaryButton(c, "Save").Clicked() {
+			if regularPrimaryButton(c, "Save").Clicked() {
 				s.saveHostForm(entry)
 			}
 			return
 		}
 		if alias := entry.Alias(); alias != "" {
-			if ui.PrimaryButton(c, "Connect").Clicked() {
+			if regularPrimaryButton(c, "Connect").Clicked() {
 				s.connectHost(alias)
 			}
 		}
@@ -293,8 +293,8 @@ func (s *Shell) hostMachineDetail(c *ui.Context) {
 	state, known := s.machineStates[machine.ID]
 	hostsDetailPage(c, func() {
 		ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, label).FontSize(Typography().Heading).FontWeight(WeightSemibold).
-				SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Tooltip(label)
+			tipped(c, ui.Text(c, label).FontSize(Typography().Heading).FontWeight(WeightSemibold).
+				SingleLine().Ellipsis("…").Shrink(1).MinWidth(0), label)
 			if known {
 				switch {
 				case state.Reachable:
@@ -306,7 +306,7 @@ func (s *Shell) hostMachineDetail(c *ui.Context) {
 				}
 			}
 			ui.Box(c).Grow(1).PassThrough()
-			if ui.PrimaryButton(c, "Open Workspace").Clicked() {
+			if regularPrimaryButton(c, "Open Workspace").Clicked() {
 				s.openInstance(inst.Name)
 			}
 		})

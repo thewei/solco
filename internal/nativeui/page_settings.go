@@ -138,7 +138,7 @@ func settingSwitch(c *ui.Context, label string, on bool) (bool, bool) {
 // it edits a draft and reports the new value with changed.
 func settingCombobox(c *ui.Context, label string, draft *string, choices []string) (string, bool) {
 	value := *draft
-	changed := ui.Combobox(c, &value, choices).Label(label).Changed()
+	changed := comboField(c, &value, choices).Label(label).Changed()
 	if changed {
 		*draft = value
 	}
@@ -148,7 +148,7 @@ func settingCombobox(c *ui.Context, label string, draft *string, choices []strin
 // settingText is a labeled text preference committed with Return; while it
 // is not being edited it mirrors the stored value.
 func (s *Shell) settingText(c *ui.Context, label, placeholder string, draft *string, stored string, password bool, commit func(v *settings.Settings, text string)) {
-	field := ui.TextInput(c, draft).Width(240).Label(label).Placeholder(placeholder)
+	field := textField(c, draft).Width(240).Label(label).Placeholder(placeholder)
 	if password {
 		field.Password()
 	}
@@ -169,7 +169,7 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 	settingsGroup(c, "Appearance",
 		row("Theme", "", func() {
 			chosen := appearanceIndex(s.settings.General.Appearance)
-			if ui.Segmented(c, &chosen, appearanceOptions...).Label("Theme").Changed() {
+			if segmentedControl(c, &chosen, appearanceOptions...).Label("Theme").Changed() {
 				s.applySettings(func(v *settings.Settings) error {
 					v.General.Appearance = appearanceFromIndex(chosen)
 					return nil
@@ -185,7 +185,7 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 			case "comfortable":
 				idx = 2
 			}
-			if ui.Segmented(c, &idx, densityOpts...).Label("Sidebar density").Changed() {
+			if segmentedControl(c, &idx, densityOpts...).Label("Sidebar density").Changed() {
 				s.applySettings(func(v *settings.Settings) error {
 					switch idx {
 					case 0:
@@ -342,12 +342,12 @@ func (s *Shell) herdrRuntimeRow(c *ui.Context, knownVersion string) {
 			ui.Spinner(c).Size(16, 16)
 		default:
 			if _, local := s.herdrUpgradeTarget(); local {
-				if ui.Button(c, "Check").Clicked() {
+				if regularButton(c, "Check").Clicked() {
 					s.checkHerdrRuntime()
 				}
 			}
 			if protocol > 0 && protocol < herdr.MinSupportedProtocol {
-				if ui.PrimaryButton(c, "Update Herdr").Clicked() {
+				if regularPrimaryButton(c, "Update Herdr").Clicked() {
 					s.updateHerdrFromSettings()
 				}
 			}
@@ -360,7 +360,7 @@ func (s *Shell) herdrRuntimeRow(c *ui.Context, knownVersion string) {
 		if s.herdrUpdateNotWrbl {
 			ui.Row(c).Gap(Spacing().S).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Updating Herdr needs the administrator permission, and it wasn't granted. Update it from a terminal instead, then press Check.").FontSize(Typography().Caption).TextColor(t.TextMuted)
-				if ui.Button(c, "Copy Update Command").Clicked() {
+				if regularButton(c, "Copy Update Command").Clicked() {
 					s.copyToClipboard(herdr.UpdateAsRootCommand)
 				}
 			})
@@ -398,7 +398,7 @@ func (s *Shell) settingsDiagnostics(c *ui.Context) {
 		row("Herdr", "", func() { s.herdrRuntimeRow(c, snap.HerdrVersion) }),
 		row("Session", "", func() { valueText(c, fallbackText(snap.ActiveInstance, "none")) }),
 		row("Log file", compactSearchPath(snap.LogPath), func() {
-			if snap.LogPath != "" && ui.Button(c, "Reveal in Finder").Clicked() {
+			if snap.LogPath != "" && regularButton(c, "Reveal in Finder").Clicked() {
 				mygo.Shell.ShowItemInFolder(snap.LogPath)
 			}
 		}),
@@ -431,7 +431,7 @@ func (s *Shell) settingsDiagnostics(c *ui.Context) {
 	)
 
 	ui.Row(c).Gap(sp.M).AlignItems(ui.Center).Children(func() {
-		if ui.Button(c, "Copy Diagnostics").Clicked() {
+		if regularButton(c, "Copy Diagnostics").Clicked() {
 			logs, _ := diagnostics.ReadRecentLogs(500)
 			exported, err := diagnostics.BuildExportArchive(snap, logs, home)
 			if err == nil {
@@ -458,7 +458,7 @@ func (s *Shell) settingsDiagnostics(c *ui.Context) {
 					break
 				}
 			}
-			if ui.Segmented(c, &levelIdx, diagLogLevelLabels...).Label("Log level").Changed() {
+			if segmentedControl(c, &levelIdx, diagLogLevelLabels...).Label("Log level").Changed() {
 				s.diagLogLevelFilter = diagLogLevelValues[levelIdx]
 			}
 

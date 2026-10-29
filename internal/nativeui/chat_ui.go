@@ -72,12 +72,13 @@ func (s *Shell) chatTimelineRow(c *ui.Context, turn conversation.TimelineTurn, t
 	})
 }
 
-// chatComposerRow renders the prompt input, outcome banner, and Send/Queue controls.
+// chatComposerRow renders the prompt dock: the outcome banner, then the
+// raised shared dock (dockPanel) with Send/Queue controls on a row of its
+// own underneath, the Cursor-3 composer anatomy.
 func (s *Shell) chatComposerRow(c *ui.Context) {
 	t := c.Theme()
 	sp := Spacing()
-	ui.Column(c).Padding(sp.M, sp.XL, sp.L).Gap(sp.S).BorderWidth(1, 0, 0, 0).
-		BorderColor(designTokens(c.Theme().Dark).BorderSubtle).Children(func() {
+	ui.Column(c).Padding(sp.M, sp.XL, sp.L).Gap(sp.S).Children(func() {
 		// Outcome line (F65): delivery failures, queue refusals and the
 		// "do not resend" warning were written but never rendered.
 		if s.chatOutcome != "" {
@@ -86,11 +87,11 @@ func (s *Shell) chatComposerRow(c *ui.Context) {
 				ui.Text(c, s.chatOutcome).FontSize(Typography().Caption).TextColor(t.Danger).Grow(1)
 			})
 		}
-		ui.Row(c).Gap(sp.M).AlignItems(ui.End).Children(func() {
+		dockPanel(c, func() {
 			// The prompt input itself (F71): chatDraft was read by
 			// sendChatPrompt and cleared after send, but no element ever
 			// bound it — the composer had no field to type into.
-			field := ui.TextArea(c, &s.chatDraft).Grow(1).Height(64).
+			field := textArea(c, &s.chatDraft).Grow(1).Height(56).
 				Placeholder("Follow up on this conversation…").Label("Chat prompt")
 			// Enter sends (chat convention) but only when the live
 			// disposition is SentNow; multiline TextArea otherwise keeps
@@ -99,25 +100,25 @@ func (s *Shell) chatComposerRow(c *ui.Context) {
 			if field.Shortcut(0, ui.KeyEnter) && s.chatDispositionNow() == conversation.DispositionSentNow {
 				s.sendChatPrompt()
 			}
-			queued := s.chatQueuedText != ""
-			switch {
-			case queued:
-				ui.Text(c, "Queued after turn").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
-				if ui.Button(c, "Cancel").Clicked() {
-					s.cancelChatFollowUp()
+			ui.Row(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
+				if s.chatQueuedText != "" {
+					ui.Text(c, "Queued after turn").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).Grow(1)
+					if regularButton(c, "Cancel").Clicked() {
+						s.cancelChatFollowUp()
+					}
+					return
 				}
-			case s.chatDispositionNow() == conversation.DispositionSentNow:
+				ui.Box(c).Grow(1)
 				// Empty drafts render disabled: sendChatPrompt would
 				// no-op, and a live Send on an empty box reads as broken
 				// (2026-10-06 F100). While an input method is composing,
 				// Send stays disabled too: a click would commit a
 				// half-typed composition as the prompt.
-				if ui.PrimaryButton(c, "Send").Disabled(strings.TrimSpace(s.chatDraft) == "" || field.Composing()).Clicked() {
+				live := s.chatDispositionNow() == conversation.DispositionSentNow
+				if regularPrimaryButton(c, "Send").Disabled(!live || strings.TrimSpace(s.chatDraft) == "" || field.Composing()).Clicked() {
 					s.sendChatPrompt()
 				}
-			default:
-				ui.PrimaryButton(c, "Send").Disabled(true)
-			}
+			})
 		})
 	})
 }
@@ -441,7 +442,7 @@ func (s *Shell) chatDispositionNow() conversation.PromptDisposition {
 // may accumulate before the Earlier control stops offering more (0.6 §6:
 // UI state never holds an unbounded transcript).
 const (
-	chatOlderPage             = history.WindowLimit
+	chatOlderPage              = history.WindowLimit
 	chatMaxAccumulatedMessages = 4 * history.WindowLimit
 )
 
@@ -477,7 +478,7 @@ func (s *Shell) chatLoadOlder() {
 			}
 			// Prepend only messages the accumulated window does not hold
 			// yet: adjacent pages can overlap around the anchor.
-			headSeq := int64(1)<<62
+			headSeq := int64(1) << 62
 			for _, msg := range s.chatWindowMessages {
 				if msg.Seq < headSeq {
 					headSeq = msg.Seq

@@ -57,18 +57,18 @@ func (s *Shell) dialogs(c *ui.Context) {
 		ui.Modal(c, &s.mergeDialogOpen, func() {
 			ui.Column(c).Width(430).MaxWidth(480).Gap(Spacing().L).Children(func() {
 				modalTitle(c, "Merge Branch")
-				ui.Text(c, s.mergeTarget).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine().Tooltip(s.mergeTarget)
-				ui.Segmented(c, &s.mergeStrategy, "Fast-forward only", "Create merge commit").FillWidth()
+				tipped(c, ui.Text(c, s.mergeTarget).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine(), s.mergeTarget)
+				segmentedControl(c, &s.mergeStrategy, "Fast-forward only", "Create merge commit").FillWidth()
 				if s.mergeStrategy == 0 {
 					ui.Text(c, "Moves the branch forward if it has not diverged. No merge commit.").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
 				} else {
 					ui.Text(c, "Creates a merge commit. You may need to resolve conflicts.").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
 				}
 				ui.Row(c).FillWidth().Gap(Spacing().M).Justify(ui.End).Children(func() {
-					if ui.Button(c, "Cancel Merge").Clicked() {
+					if regularButton(c, "Cancel Merge").Clicked() {
 						s.mergeDialogOpen = false
 					}
-					if ui.PrimaryButton(c, "Review Merge").Clicked() {
+					if regularPrimaryButton(c, "Review Merge").Clicked() {
 						target, strategy := s.mergeTarget, s.mergeStrategy
 						s.mergeDialogOpen = false
 						if strategy == 1 {
@@ -103,17 +103,17 @@ func (s *Shell) dialogs(c *ui.Context) {
 	if s.dialogOpen {
 		ui.Modal(c, &s.dialogOpen, func() {
 			modalTitle(c, s.dialogTitle)
-			field := ui.TextInput(c, &s.dialogValue).Label(s.dialogLabel).AutoFocus().Width(360)
+			field := textField(c, &s.dialogValue).Label(s.dialogLabel).AutoFocus().Width(360)
 			submit := field.Submitted()
 			ui.Row(c).Gap(Spacing().M).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Cancel").Clicked() {
+				if regularButton(c, "Cancel").Clicked() {
 					s.dialogOpen = false
 				}
 				action := s.dialogAction
 				if action == "" {
 					action = "Save"
 				}
-				if ui.PrimaryButton(c, action).Clicked() {
+				if regularPrimaryButton(c, action).Clicked() {
 					submit = true
 				}
 			})

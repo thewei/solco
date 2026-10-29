@@ -14,7 +14,7 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 nativeui 包内非测试源码里 emptyState / workspaceEmptyBanner 的字面标题、菜单项（.Item("…")）的字面标签与 openConfirm 的标题实参、全部生产字符串字面量、菜单项/图标按钮/Tooltip/按钮的动作名字面量
+ * [INPUT]: 依赖 nativeui 包内非测试源码里 emptyState / workspaceEmptyBanner 的字面标题、菜单项（.Item("…")）的字面标签与 openConfirm 的标题实参、全部生产字符串字面量、菜单项/图标按钮/tipped tooltip（语法树取字面量）/按钮的动作名字面量
  * [OUTPUT]: 对外提供文案回归：空态标题句首大写（专有名词除外），菜单项与按钮 Title Case（短介词/冠词小写），确认框标题一律是问句，文案里没有 Please/successfully/Oops 这类填充词，同一动作在菜单项与图标按钮上只有一种拼写——同一类组件只有一种写法
  * [POS]: 2026-10-14 文案统一的守卫测试；新增空态/菜单项时由它拦下大小写漂移
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -68,7 +68,7 @@ var titleCaseSmallWords = map[string]bool{
 
 // buttonLabel matches the literal label of a Button, PrimaryButton or their
 // compact forms; a label built with "+" is checked up to its literal part.
-var buttonLabel = regexp.MustCompile(`(?:ui\.(?:Primary)?Button|compactButton|compactPrimaryButton)\(c, "([^"]+)"`)
+var buttonLabel = regexp.MustCompile(`(?:regularButton|regularPrimaryButton|compactButton|compactPrimaryButton)\(c, "([^"]+)"`)
 
 // TestButtonLabelsAreTitleCase pins the other half of that voice: buttons read
 // "Select All", "Copy Hash", "Retry Connection" — the same Title Case as the
@@ -246,13 +246,41 @@ func TestCopyHasNoFillerWords(t *testing.T) {
 }
 
 // actionLabels matches the literal names a menu item or an icon button gives
-// an action: .Item("…"), the label and tooltip of gorexIconButton, the tip of
-// gdIconButton and plain .Tooltip("…").
+// an action: .Item("…"), the label and tooltip of gorexIconButton and the tip
+// of gdIconButton. The literal text of a tipped(c, anchor, "…") tooltip is
+// read from the syntax tree instead (tippedLabels): its anchor can run over
+// many lines.
 var actionLabels = []*regexp.Regexp{
 	regexp.MustCompile(`\.Item\("([^"]+)"`),
 	regexp.MustCompile(`gorexIconButton\([^"\n]*"([^"]+)",\s*"([^"]+)"`),
 	regexp.MustCompile(`gdIconButton\([^"\n]*"([^"]+)"`),
-	regexp.MustCompile(`\.Tooltip\("([^"]+)"`),
+}
+
+// tippedLabels is the literal text of every tipped(c, anchor, "…") call in a
+// source file.
+func tippedLabels(t *testing.T, name string, src []byte) []string {
+	t.Helper()
+	parsed, err := parser.ParseFile(token.NewFileSet(), name, src, 0)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	var labels []string
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) < 3 {
+			return true
+		}
+		if fn, ok := call.Fun.(*ast.Ident); !ok || fn.Name != "tipped" {
+			return true
+		}
+		if lit, ok := call.Args[2].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			if label, err := strconv.Unquote(lit.Value); err == nil {
+				labels = append(labels, label)
+			}
+		}
+		return true
+	})
+	return labels
 }
 
 // TestSameActionIsSpelledOnce pins "one name per action": "Copy Path" in one
@@ -274,18 +302,24 @@ func TestSameActionIsSpelledOnce(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		record := func(label string) {
+			seen++
+			label = strings.TrimRight(label, "… ")
+			key := strings.ToLower(label)
+			if spellings[key] == nil {
+				spellings[key] = map[string][]string{}
+			}
+			spellings[key][label] = append(spellings[key][label], name)
+		}
 		for _, pattern := range actionLabels {
 			for _, match := range pattern.FindAllStringSubmatch(string(src), -1) {
 				for _, label := range match[1:] {
-					seen++
-					label = strings.TrimRight(label, "… ")
-					key := strings.ToLower(label)
-					if spellings[key] == nil {
-						spellings[key] = map[string][]string{}
-					}
-					spellings[key][label] = append(spellings[key][label], name)
+					record(label)
 				}
 			}
+		}
+		for _, label := range tippedLabels(t, name, src) {
+			record(label)
 		}
 	}
 	for key, variants := range spellings {

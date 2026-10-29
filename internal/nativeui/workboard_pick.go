@@ -92,14 +92,14 @@ func (s *Shell) pickDialog(c *ui.Context) {
 				}
 			})
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Cancel").Clicked() {
+				if regularButton(c, "Cancel").Clicked() {
 					d.open = false
 				}
 				action := "Keep"
 				if d.chosen >= 0 {
 					action = "Keep " + strings.ToUpper(d.passed[d.chosen].Letter)
 				}
-				if ui.PrimaryButton(c, action).Disabled(d.chosen < 0).Clicked() {
+				if regularPrimaryButton(c, action).Disabled(d.chosen < 0).Clicked() {
 					s.submitPick()
 				}
 			})
