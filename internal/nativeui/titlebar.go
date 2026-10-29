@@ -11,7 +11,7 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo/ui 的 Context/TitleBar（窗口控件带几何）、gorex_style 的图标按钮与配色、router 路由态、runtime/time
- * [OUTPUT]: 对外提供 Shell.titlebar（窗口标题栏：红绿灯对齐、身份区——Terminal/Chat 为面包屑 + cwd 双行，Changes 与各内页为 route_header.go 的单行 Title 大字标题、工具区、Windows 控件）、titlebarHeight（灯带对齐的行高纯函数，所有路由同一 42 下限）、showViewTerminal/showViewChat/showViewChanges/showViewHistory（四个视图的唯一切换入口）、toggleWindowPinned（窗口置顶的唯一入口）、sidebarToggle（红绿灯右侧固定按钮簇：侧栏收起/展开 + Router Back/Forward 页面历史，Router 拥有行为与 ⌘[/⌘] 快捷键）、chromeHistoryButton（历史按钮的无历史灭活态）
+ * [OUTPUT]: 对外提供 Shell.titlebar（窗口标题栏：红绿灯对齐、身份区——Terminal/Chat 为面包屑单行，选中 Pane 的目录住在末级 crumb 的悬停弹层 breadcrumb_switcher.go crumbPathTip，Changes 与各内页为 route_header.go 的单行 Title 大字标题、工具区、Windows 控件）、titlebarHeight（灯带对齐的行高纯函数，所有路由同一 42 下限）、showViewTerminal/showViewChat/showViewChanges/showViewHistory（四个视图的唯一切换入口）、toggleWindowPinned（窗口置顶的唯一入口）、sidebarToggle（红绿灯右侧固定按钮簇：侧栏收起/展开 + Router Back/Forward 页面历史，Router 拥有行为与 ⌘[/⌘] 快捷键）、chromeHistoryButton（历史按钮的无历史灭活态）
  * [POS]: nativeui 的窗口 chrome 所有者，被 shell.View 顶部消费；高度与 MyGo 红灯带对齐（F142），页面标题与页面动作的唯一归属（2026-10-14：内页只画内容），视图切换、Agent 活动浮层入口与窗口置顶在此收口；红绿灯右侧按钮簇（收起 + 页面历史 Back/Forward）是 Router 历史的可见入口，内容列让位宽度 sidebarToggleClearance 随簇加宽
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -20,10 +20,12 @@ import (
 // the window top to bottom, so this bar only spans the content — the page's
 // identity and the trailing tools, on the canvas color with no fill of its
 // own. The identity is the one place a page is named (2026-10-14): the
-// Terminal and Chat show their switcher path over the selected Pane's
-// directory, Changes and every other route one large title with its Actions
-// menu (route_header.go). Pages render content only, so no two pages open
-// with a different header of their own.
+// Terminal and Chat show their switcher path on one line — the selected
+// Pane's directory lives in the last crumb's hover popup (2026-10-28,
+// breadcrumb_switcher.go crumbPathTip) instead of a second row — while
+// Changes and every other route get one large title with its Actions menu
+// (route_header.go). Pages render content only, so no two pages open with
+// a different header of their own.
 func (s *Shell) titlebar(c *ui.Context) {
 	t := c.Theme()
 	k := gorexColorsOf(t.Dark)
@@ -49,9 +51,8 @@ func (s *Shell) titlebar(c *ui.Context) {
 					s.routeHeaderBlock(c, spec)
 				})
 			} else if s.router.Path() == routeWorkspace {
-				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+				ui.Row(c).Grow(1).MinWidth(0).Children(func() {
 					s.breadcrumbRow(c)
-					s.crumbPathRow(c)
 				})
 			} else {
 				ui.Box(c).Grow(1).PassThrough()
@@ -322,17 +323,6 @@ func (s *Shell) showViewHistory() {
 		return
 	}
 	s.showHistoryIndex()
-}
-
-// crumbPathRow shows the selected Pane's working directory under the
-// switcher path, as muted small text behind a folder glyph.
-func (s *Shell) crumbPathRow(c *ui.Context) {
-	cwd := s.selectedTabCWD()
-	if cwd == "" {
-		headerDetailRow(c, nil, "", "")
-		return
-	}
-	headerDetailRow(c, nil, shortDir(cwd), cwd)
 }
 
 // titlebarActivity is the Agent activity control (2026-10-07): a persistent

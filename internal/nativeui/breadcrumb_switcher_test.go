@@ -1,15 +1,19 @@
 package nativeui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/herdr"
 )
 
 /**
- * [INPUT]: 依赖 nativeui 的 Shell/breadcrumbSegments/breadcrumbSegmentsWithTheme, herdr
- * [OUTPUT]: 对外提供 TestBreadcrumbPaneSegmentListsTabPanes, TestBreadcrumbSegmentsVisualMarks
- * [POS]: nativeui 标题栏面包屑与切换器合约测试
+ * [INPUT]: 依赖 nativeui 的 Shell/breadcrumbSegments/breadcrumbSegmentsWithTheme/shortDir/tildePath, mygo/ui 的 Tester 无头渲染（Move/Advance 驱动悬停弹层）, herdr
+ * [OUTPUT]: 对外提供 TestBreadcrumbPaneSegmentListsTabPanes, TestBreadcrumbSegmentsVisualMarks, TestLastCrumbHoverShowsDirectoryOneLine
+ * [POS]: nativeui 标题栏面包屑与切换器合约测试；TestLastCrumbHoverShowsDirectoryOneLine 钉住 2026-10-28 单行头部——目录不再是第二行，只住在末级 crumb 的悬停弹层
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -42,6 +46,51 @@ func TestBreadcrumbPaneSegmentListsTabPanes(t *testing.T) {
 	siblings := panesForTab(s.projection, pane.id)
 	if len(siblings) != 2 {
 		t.Fatalf("pane popover rows = %d, want 2 (segment id %q)", len(siblings), pane.id)
+	}
+}
+
+// TestLastCrumbHoverShowsDirectoryOneLine pins the 2026-10-28 one-line
+// workspace header: the Pane's directory is not a second row anymore; it
+// shows in the last crumb's hover popup once the pointer rests on it, and
+// hides again when the pointer leaves.
+func TestLastCrumbHoverShowsDirectoryOneLine(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory for a tilde path")
+	}
+	cwd := filepath.Join(home, "Work", "solco-hover-test")
+	s := NewShell()
+	s.projection = herdr.Projection{
+		Projects: []herdr.Project{{ID: "w1", Label: "Solco", CWD: cwd}},
+		Tabs:     []herdr.Tab{{ID: "t1", Label: "main", ProjectID: "w1"}},
+		Panes:    []herdr.Pane{{ID: "p1", TerminalID: "term1", Label: "editor", TabID: "t1", CWD: cwd}},
+	}
+	s.reconcileLocalSelection(s.projection)
+
+	tester := ui.NewTester(s.View, 1200, 800)
+	tester.Frame()
+	// One line: the directory is not a static row anywhere on screen.
+	if tester.HasText(shortDir(cwd)) {
+		t.Fatalf("directory %q renders as a static row; want the last crumb's hover popup only", shortDir(cwd))
+	}
+	// The pointer resting on the last crumb shows the directory in full.
+	r, ok := tester.Find("main")
+	if !ok {
+		t.Fatalf("last crumb %q not on screen: %q", "main", tester.Texts())
+	}
+	tester.Move(r.X+r.W/2, r.Y+r.H/2)
+	tester.Advance(700 * time.Millisecond)
+	tester.Frame()
+	tip := tildePath(cwd)
+	if !tester.HasText(tip) {
+		t.Fatalf("hover popup %q missing after the pointer rested: %q", tip, tester.Texts())
+	}
+	// Leaving the crumb takes the popup away.
+	tester.Move(1150, 780)
+	tester.Advance(200 * time.Millisecond)
+	tester.Frame()
+	if tester.HasText(tip) {
+		t.Fatalf("hover popup %q still shows after the pointer left", tip)
 	}
 }
 
