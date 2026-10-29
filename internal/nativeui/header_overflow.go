@@ -1,9 +1,9 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 mygo/ui 的 Menu/Element、internal/herdr 的 pane 变更 RPC（SplitPane/TogglePaneZoom）、dialogs 的确认通道
- * [OUTPUT]: 对外提供 headerActions（所有路由标题栏共用的唯一 Actions 触发器：⋯ 图标按钮，位于标题栏右侧工具簇最左，无 chevron）、splitPaneAction/zoomPaneAction/closePaneAction（pane 动作唯一实现）、paneOverflowItems/surfaceOverflowItems（菜单构建器；surfaceOverflowItems 是 Workspace 路由 Actions 的菜单）
- * [POS]: nativeui 的 pane 动作单一来源：卡片头按钮、右键菜单、侧栏行、标题栏溢出全部走这里；单 Pane 的 zoom 语义（两侧栏最大化，F143）在此收口
+ * [INPUT]: 依赖 mygo/ui 的 Menu/Element、internal/herdr 的 pane 变更 RPC（SplitPane/TogglePaneZoom/ReleaseAgent）、workbench.go 的 paneRuntimeAgent/canReleaseAgent、dialogs 的确认通道
+ * [OUTPUT]: 对外提供 headerActions（所有路由标题栏共用的唯一 Actions 触发器：⋯ 图标按钮，位于标题栏右侧工具簇最左，无 chevron）、splitPaneAction/zoomPaneAction/closePaneAction（pane 动作唯一实现）、paneOverflowItems/surfaceOverflowItems（菜单构建器；surfaceOverflowItems 是 Workspace 路由 Actions 的菜单；Release Agent 项只对 done/idle 的 agent pane 出现，经 shared confirm 调 pane.release_agent）
+ * [POS]: nativeui 的 pane 动作单一来源：卡片头按钮、右键菜单、侧栏行、标题栏溢出全部走这里；单 Pane 的 zoom 语义（两侧栏最大化，F143）在此收口；agent 退出后 Herdr 仍保留条目（词汇表无 exited），显式 Release 是唯一撤除通道
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -108,6 +108,12 @@ func (s *Shell) paneOverflowItems(m *ui.Menu, paneID, label string) {
 	}
 	if m.Item("Rename Pane…").Chosen() {
 		s.openTextDialog("rename-pane", paneID, "Rename Pane", "Name", label)
+	}
+	if runtimeAgent, ok := s.paneRuntimeAgent(paneID); ok && canReleaseAgent(runtimeAgent) {
+		if m.Item("Release Agent").Chosen() {
+			s.openConfirm("release-agent", paneID, "Release Agent?",
+				"Herdr stops listing "+runtimeAgent.Kind+" on this pane; its output stays in the terminal scrollback.")
+		}
 	}
 	m.Separator()
 	if m.Item("Close Pane…").Chosen() {

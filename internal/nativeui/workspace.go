@@ -304,7 +304,7 @@ func (s *Shell) agentCardForPane(targetPaneID string) (agent.AgentCardModel, boo
 				ProjectID:     runtimeAgent.ProjectID,
 				Provider:      provider,
 				ProviderLabel: provider.DisplayName(),
-				Title:         agentTitleFrom(runtimeAgent),
+				Title:         s.agentTitleFrom(runtimeAgent),
 				RuntimePhase:  agent.ParseRuntimePhase(runtimeAgent.Status, false),
 			}, true
 		}

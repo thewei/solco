@@ -79,6 +79,12 @@ func (s *Shell) reconcileWorkbench() {
 		selected := runtimeAgent.PaneID != "" && runtimeAgent.PaneID == s.selectedPaneID
 		markers := s.workbench.markers.Observe(key, transition, selected)
 		s.notifyAgentTransition(runtimeAgent, transition)
+		if transition == agent.TransitionReadyForReview {
+			// The final session title usually lands with the last transcript
+			// writes: re-resolve now instead of waiting out the History-meta
+			// lane's one-minute throttle.
+			s.refreshUsageProjection(true)
+		}
 
 		provider := agentProvider(&runtimeAgent)
 		card := agent.ProjectAgentCard(agent.AgentCardInputs{
@@ -89,7 +95,7 @@ func (s *Shell) reconcileWorkbench() {
 			ProjectID:   runtimeAgent.ProjectID,
 			ProjectName: projectName[runtimeAgent.ProjectID],
 			Provider:    provider,
-			Title:       agentTitleFrom(runtimeAgent),
+			Title:       s.agentTitleFrom(runtimeAgent),
 			AgentStatus: runtimeAgent.Status,
 			Revision:    int64(runtimeAgent.Revision),
 			Attention:   agent.ParseOperationalState(runtimeAgent.Status),
@@ -109,20 +115,46 @@ func (s *Shell) reconcileWorkbench() {
 	s.pruneAgentMRU(live)
 }
 
-// agentTitleFrom applies the title fallback: name → provider display name
-// → "Agent" (the projection carries no separate task title yet).
-func agentTitleFrom(runtimeAgent herdr.Agent) string {
+// agentTitleFrom applies the title fallback: History session title (the
+// agent's own session name, cached by the History-meta lane) → agent name
+// → provider display name → "Agent".
+func (s *Shell) agentTitleFrom(runtimeAgent herdr.Agent) string {
+	if title := s.sessionTitleFor(agent.AgentKey{InstanceID: s.activeInstance, TerminalID: runtimeAgent.TerminalID}); title != "" {
+		return title
+	}
 	if runtimeAgent.Name != "" {
 		return runtimeAgent.Name
 	}
 	return ""
 }
 
+// paneRuntimeAgent finds the runtime agent attached to one pane.
+func (s *Shell) paneRuntimeAgent(paneID string) (herdr.Agent, bool) {
+	for i := range s.projection.Agents {
+		if s.projection.Agents[i].PaneID == paneID {
+			return s.projection.Agents[i], true
+		}
+	}
+	return herdr.Agent{}, false
+}
+
+// canReleaseAgent gates the release action: only an agent that no longer
+// works (done or idle on a live pane) may be released; a working or
+// blocked agent still owns its pane.
+func canReleaseAgent(runtimeAgent herdr.Agent) bool {
+	switch agent.ParseRuntimePhase(runtimeAgent.Status, false) {
+	case agent.PhaseDone, agent.PhaseIdle:
+		return true
+	default:
+		return false
+	}
+}
+
 // notifyAgentTransition delivers the narrow transition notification through
 // MyGo when the platform supports it. Markers stay the in-app source of
 // truth even when OS delivery is unavailable (0.5 §15).
 func (s *Shell) notifyAgentTransition(runtimeAgent herdr.Agent, transition agent.AgentTransition) {
-	notification := agent.NotificationFor(transition, agentTitleFrom(runtimeAgent))
+	notification := agent.NotificationFor(transition, s.agentTitleFrom(runtimeAgent))
 	if notification == nil {
 		return
 	}

@@ -81,7 +81,9 @@ project_tree.go: 侧栏 Workspace/Tab/Pane 原生拖拽入口及运行状态树�
 reorder.go: 作用域隔离的拖放语义与目标插入索引、跨 Tab/Project 移动与拆分位置计算、Herdr mutation 分发和 Pane layout 顺序投影
 reorder_test.go: Drag/Drop 真正鼠标事件、插入索引、跨 Tab/Project 移动校验、窗格卡片放置动作推导和投影排序回归
 components.go: 共用导航树行与视觉组件（treeRow 悬停图标动作 Action、行尾 N panes 计数：>1 才画、悬停让位，项目行折叠/展开都传、Tab 行仅折叠传）、sidebarRowHeight 密度令牌（2026-10-29 Cursor-3 化：compact 26/default 30/comfortable 34）、dockPanel 悬浮提示框面板（Chat composer 与 workspace home 共用的抬升面：hairline 边、聚焦增亮 150ms）、ghostPill 静默胶囊动作（中性 hover/按下脸；键盘聚焦显示 MyGo 自己的环——此前 FocusRing(false) 后聚焦完全不可见，TestGhostPillShowsKeyboardFocus 钉），拖动时提供原生浮动预览、同级插入占位条、容器高亮、动画及命中目标
-workbench.go: 桌面工作台状态中枢，Agent 目录与运行时事件分发
+workbench.go: 桌面工作台状态中枢，Agent 目录与运行时事件分发；卡片标题回退链 = History 会话标题（sessionTitleFor 缓存，usage_rows.go 车道产出）→ 运行时 Name → Provider 名 → "Agent"；ReadyForReview 转换 force 刷新 History-meta（任务收尾标题即时可得）；paneRuntimeAgent/canReleaseAgent（Release 门控：仅 done/idle 可释放）
+header_overflow.go: pane 菜单单一来源（headerActions ⋯ 触发器、paneOverflowItems/surfaceOverflowItems）：Pin/Split/Zoom/Rename/Release Agent（仅 done/idle 的 agent pane 出现，shared confirm → pane.release_agent；herdr 状态词汇无 exited，这是退出 agent 的唯一撤除通道）/Close Pane
+usage_rows.go: §17.2/§17.6 History-meta 投影车道——dispatch 车道对只读目录做一次 Recent 匹配（usageIdentityMatches 精确 id/path 身份，永不 cwd/mtime），产出每 Agent 的 usage 快照与会话标题缓存（agentSessionTitle），applyOnWindow 回填；标题真变化才重放 reconcileWorkbench（同相位重放惰性），渲染零 IO；hook 会话事件 force 刷新绕过一分钟节流
 page_history.go: Sessions 中心列表布局（参照 magpie 会话历史）：Agent 标签条（All + 各 Provider，带会话数；回收站里按回收站内容计数）、搜索/Select/Trash（+Empty Trash）工具簇（刷新不在这里：侧栏项目头里唯一一个；窄窗口整体换行；Select 与 Trash 只在挂了回收站时出现，Trash 有内容或视图打开才显示）、项目分组卡片（默认只展开最近一个项目，头部在卡内，chevron 取树侧栏同一枚 treeChevron）与行（标题/事实行/Token 列/日期↔悬停菜单固定占位，点行内展开预览；回收站视图复用同一列表，行键是条目 id、选择常开）、行菜单 Move to Trash（无回收站则无此项）、listNav 键盘（进页聚焦开场行；↓/↑ 跨项目头、←/→ 折叠项目与行内预览、Enter/Space 切换预览或勾选；移入回收站/放回/永久删除只走行菜单与工具条）、有界结果计数文案、扫描未结束时的 Updating 提示（分批渐进加载）
 history_state.go: HistoryService 列表查询的生成代际隔离，筛选清空旧可选行/预览/多选；范围状态（scopeAll/scopeRoot/projectTotal/allTotal；请求带 ProjectPath，只有无范围且无筛选的加载才喂 Recent）；Provider 元数据选择与各 Provider 总数（可选 HistoryProviderCountView / HistoryProjectCountView，标签计数取当前范围）、扫描分批上报（可选 HistoryScanProgressView：每批约 100 个来源在窗口线程刷新一次可见列表，数千个单会话文件夹不再把页面按在 Loading 态）；分组展开、多选、行内预览与详情页帧戳（只读 Chat 绑定的空闲释放）状态；回收站条目缓存与视图开关（trashItems/showTrash，trashGen 代际防过期）
 history_select.go: Sessions 多选：行/项目头勾选标记、底部批量栏（会话视图：Move to Trash；回收站：Put Back / Delete Forever…，有勾选才出现）；选择只是 UI 状态，文件搬动全在 history_trash.go
@@ -176,7 +178,7 @@ ds_components.go: 通用卡片、pageTopInset（标题栏到页面首行的唯�
 unified_page_test.go: UI-007/UI-008 Settings/Git/Chat 跨页面基础回归与尺寸矩阵（headless；含窄窗口 clean 状态可读性）
 terminal_theme_test.go: Ghostty 主题采纳回归——固定主题替换双配色且不再随外观、未知主题回落 gorex 并保留对比度、默认不变、picker 选项含 Default 与 Ghostty 全量、display 映射
 pane_header_visuals_test.go: 窗格头部视觉解析、Agent 图标与名称解析、路径格式化、标签已写出目录/单卡不复述目录的去重及最大化 Tab 窗格计数单元测试
-chat_hooks.go: Shell 钩子层：挂载原生 apphook 进程内 IPC 服务与 spool 兼容层，直接接收并更新 Agent 状态与会话绑定，驱动 blocked 交互检测
+chat_hooks.go: Shell 钩子层：挂载原生 apphook 进程内 IPC 服务与 spool 兼容层，直接接收并更新 Agent 状态与会话绑定，驱动 blocked 交互检测；session 事件落身份后 force 刷新 History-meta 投影（新任务的会话标题即时可得）
 chat_hooks_test.go: 钩子事件解析、提示词检测、投影等价去重与原生 apphook 状态/会话更新回归
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

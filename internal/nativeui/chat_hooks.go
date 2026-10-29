@@ -206,6 +206,11 @@ func (s *Shell) handleAppHookSession(evt apphook.SessionEvent) {
 		}
 	})
 
+	// A fresh session identity may already have a catalog row (or gains one
+	// moments later): re-resolve the History-meta projection now so the
+	// Agent card title follows the session without waiting out the usage
+	// lane's one-minute throttle.
+	s.refreshUsageProjection(true)
 	s.publishChatBridge()
 }
 

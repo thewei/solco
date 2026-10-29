@@ -236,6 +236,24 @@ func (m *Manager) ClosePane(session, paneID string) (Projection, error) {
 	return m.mutateAndProject(session, "pane.close", map[string]any{"pane_id": paneID})
 }
 
+// ReleaseAgent tells Herdr the pane's agent is gone (the process exited or
+// the user dismisses it): the runtime drops its agent authority and the
+// next projection no longer lists the agent. Verified against the live
+// protocol 22 schema (PaneReleaseAgentParams: pane_id, source, agent).
+func (m *Manager) ReleaseAgent(session, paneID, agentKind string) (Projection, error) {
+	if strings.TrimSpace(paneID) == "" {
+		return Projection{}, fmt.Errorf("pane id is required")
+	}
+	if strings.TrimSpace(agentKind) == "" {
+		return Projection{}, fmt.Errorf("agent kind is required")
+	}
+	return m.mutateAndProject(session, "pane.release_agent", map[string]any{
+		"pane_id": paneID,
+		"source":  "solco",
+		"agent":   agentKind,
+	})
+}
+
 // ZoomPane sets one Pane's zoom state explicitly: "on" maximizes the Pane in
 // its Tab's layout, "off" restores the split, "toggle" flips the state.
 // Verified against the live protocol 22 schema (PaneZoomParams: pane_id +

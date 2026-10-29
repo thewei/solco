@@ -2,7 +2,7 @@
 > L2 | 父级: /CLAUDE.md
 
 成员清单
-actions.go: Herdr Workspace/Tab/Pane 的权威 mutation RPC 适配器；支持 workspace.move、tab.move、pane.swap、pane.move、pane.resize 以及 pane.zoom 显式 mode（toggle|on|off，live schema PaneZoomMode）
+actions.go: Herdr Workspace/Tab/Pane/Agent 的权威 mutation RPC 适配器；支持 workspace.move、tab.move、pane.swap、pane.move、pane.resize、pane.zoom 显式 mode（toggle|on|off，live schema PaneZoomMode）、pane.release_agent（ReleaseAgent：pane_id+source+agent，live schema PaneReleaseAgentParams；客户端撤除 agent 条目的唯一通道）
 actions_contract_test.go: SplitPane RPC 与 mutation → snapshot 时序契约；ZoomPane 显式 mode 线格式与非法 mode 本地拒绝契约
 reorder_contract_test.go: Workspace/Tab/Panes 排序、跨 Tab 移动与分栏调整 RPC 的 method、字段、回读与输入校验契约
 herdr.go: Herdr Manager、PATH/常见安装位置优先的 CLI 发现（env → PATH → 安装位置 → 登录 shell）及受限时 session list（6 秒）；RunCLI 是应用侧唯一的 CLI 一次性调用入口（runCLIEnv 是其 env 覆盖内部门），ErrCLINotFound 是“没装 Herdr”的哨兵；MinSupportedProtocol 与 ErrProtocolTooOld 是协议兼容门（pingRPC/ping 分离，EnsureRunning 遇旧存活服务器绝不二次拉起），ProbeRuntime 把会话 socket 的活体身份暴露给设置页；UpgradeRuntime(ctx, session) 跑 `herdr update --handoff` 后回 ping 验证，旧服务器若活着经 `server stop`（sessionEnv 以 HERDR_SESSION 定域）请下台，升级语义全归 Herdr CLI；普通 `herdr update` 因安装目录不可写失败时（updateNotWritable 认 CLI 原话），自动经 RunAuthorizedUpdate 走系统授权（Linux pkexec --disable-internal-agent / macOS osascript administrator privileges，GUI 不经手凭据）在原位完成升级；仅当授权也被拒或无授权代理才返回 ErrUpdateNotWritable，由界面给 UpdateAsRootCommand（sudo herdr update --handoff）终端出路

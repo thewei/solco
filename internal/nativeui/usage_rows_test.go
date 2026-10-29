@@ -138,3 +138,73 @@ func TestUsageProjectionThrottled(t *testing.T) {
 	}()
 	release(nil)
 }
+
+// TestAgentCardTitleFollowsSessionTitle pins the History-meta session
+// title projection: once the catalog row for the agent's typed session
+// identity carries a title, the Agent card title follows it (instead of
+// the runtime name) and follows later renames.
+func TestAgentCardTitleFollowsSessionTitle(t *testing.T) {
+	shell := usageProjectionShell(t)
+	if got := shell.workbenchCards()[0].Title; got != "Scout" {
+		t.Fatalf("initial card title = %q, want the runtime name", got)
+	}
+	fake := newFakeHistoryView()
+	shell.hist.service = fake
+
+	matching := history.SessionSummary{Meta: history.SessionMeta{
+		Agent: history.AgentClaudeCode, ID: "session-1", FilePath: "/claude/session-1.jsonl",
+		Title: "🔍 SEARCH: Rearrange titlebar search and nav buttons",
+	}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		shell.refreshUsageProjection(true)
+	}()
+	call := <-fake.calls
+	call.release <- listResult{summaries: []history.SessionSummary{matching}}
+	<-done
+
+	if got := shell.workbenchCards()[0].Title; got != matching.Meta.Title {
+		t.Fatalf("card title = %q, want the session title", got)
+	}
+
+	// The session renames itself mid-flight: the next refresh follows.
+	matching.Meta.Title = "Ship the release"
+	done = make(chan struct{})
+	go func() {
+		defer close(done)
+		shell.refreshUsageProjection(true)
+	}()
+	call = <-fake.calls
+	call.release <- listResult{summaries: []history.SessionSummary{matching}}
+	<-done
+
+	if got := shell.workbenchCards()[0].Title; got != "Ship the release" {
+		t.Fatalf("card title = %q, want the renamed session title", got)
+	}
+}
+
+// TestAgentCardTitleWithoutCatalogTitleKeepsFallback pins the fallback:
+// a matching row with no title (or no row at all) leaves the runtime
+// name in place.
+func TestAgentCardTitleWithoutCatalogTitleKeepsFallback(t *testing.T) {
+	shell := usageProjectionShell(t)
+	fake := newFakeHistoryView()
+	shell.hist.service = fake
+
+	other := history.SessionSummary{Meta: history.SessionMeta{
+		Agent: history.AgentClaudeCode, ID: "unrelated",
+	}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		shell.refreshUsageProjection(true)
+	}()
+	call := <-fake.calls
+	call.release <- listResult{summaries: []history.SessionSummary{other}}
+	<-done
+
+	if got := shell.workbenchCards()[0].Title; got != "Scout" {
+		t.Fatalf("card title = %q, want the runtime name fallback", got)
+	}
+}

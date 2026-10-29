@@ -211,3 +211,55 @@ func TestAgentSwitcherCycleCommitCancel(t *testing.T) {
 		t.Fatal("commit did not navigate to a pane")
 	}
 }
+
+// TestPaneMenuOffersReleaseAgentForFinishedAgents pins the exit affordance:
+// Herdr keeps a done/idle agent listed on a live pane forever (its status
+// vocabulary has no exited), so the one pane menu offers Release Agent —
+// pane.release_agent via the shared confirm — only for those phases; a
+// working agent still owns its pane and is not offered.
+func TestPaneMenuOffersReleaseAgentForFinishedAgents(t *testing.T) {
+	shell := NewShell()
+	shell.loading = false
+	shell.activeInstance = "default"
+	shell.projection = herdr.Projection{
+		Protocol:         22,
+		FocusedProjectID: "w1",
+		FocusedTabID:     "t1",
+		FocusedPaneID:    "p1",
+		Projects:         []herdr.Project{{ID: "w1", Label: "Demo", TabCount: 1}},
+		Tabs:             []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "main", PaneCount: 3}},
+		Panes: []herdr.Pane{
+			{ID: "p1", TerminalID: "term-1", ProjectID: "w1", TabID: "t1"},
+			{ID: "p2", TerminalID: "term-2", ProjectID: "w1", TabID: "t1"},
+			{ID: "p3", TerminalID: "term-3", ProjectID: "w1", TabID: "t1"},
+		},
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Name: "Scout", Kind: "omp", Status: "working"},
+			{TerminalID: "term-2", PaneID: "p2", Name: "Finisher", Kind: "omp", Status: "done"},
+			{TerminalID: "term-3", PaneID: "p3", Name: "Sitter", Kind: "omp", Status: "idle"},
+		},
+	}
+	shell.reconcileWorkbench()
+
+	tester := ui.NewTester(shell.View, 1200, 800)
+	tester.Frame()
+
+	if err := tester.RightClick("Finisher"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := tester.Menu(); !containsText(menu, "Release Agent") {
+		t.Fatalf("done agent row menu missing Release Agent: %q", menu)
+	}
+	if err := tester.RightClick("Sitter"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := tester.Menu(); !containsText(menu, "Release Agent") {
+		t.Fatalf("idle agent row menu missing Release Agent: %q", menu)
+	}
+	if err := tester.RightClick("Scout"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := tester.Menu(); containsText(menu, "Release Agent") {
+		t.Fatalf("working agent row must not offer Release Agent: %q", menu)
+	}
+}

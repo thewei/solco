@@ -360,6 +360,12 @@ type Shell struct {
 	usageByAgent     map[agent.AgentKey]agent.AgentUsageSnapshot
 	usageRefreshedAt time.Time
 
+	// agentSessionTitle caches the History-meta session title per agent:
+	// the Agent card title follows the agent's own session name once the
+	// read-only catalog knows it; refreshed beside usageByAgent on the
+	// dispatch lane, read-only at render.
+	agentSessionTitle map[agent.AgentKey]string
+
 	// inspector owns the 0.8 read-only Agent inspector state.
 	inspector inspectorState
 

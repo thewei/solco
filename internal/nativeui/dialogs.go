@@ -193,6 +193,11 @@ func (s *Shell) submitConfirm(kind, target string) {
 		s.mutate(func() (herdr.Projection, error) { return s.runtime.CloseTab(s.activeInstance, target) })
 	case "close-pane":
 		s.mutate(func() (herdr.Projection, error) { return s.runtime.ClosePane(s.activeInstance, target) })
+	case "release-agent":
+		if runtimeAgent, ok := s.paneRuntimeAgent(target); ok && runtimeAgent.Kind != "" {
+			kind := runtimeAgent.Kind
+			s.mutate(func() (herdr.Projection, error) { return s.runtime.ReleaseAgent(s.activeInstance, target, kind) })
+		}
 	case "history-continue":
 		s.runContinue(target)
 	case "files-delete":
