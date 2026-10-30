@@ -30,10 +30,11 @@ under reduced-motion); glass = rgba white 6% + backdrop-filter
 blur(16-24px) + a 1px white 12% line, used for nav/cards/product
 window/pipeline; hero gradient accent headline; no JS, no external
 requests; line count <= 800.
-assets/icon.png: 512px copy of the app icon, from
-assets/app-icon/solco-512.png, never hand-edited.
-assets/mark.svg: copy of the brand Option-D mark, from
-assets/app-icon/solco-d-dark.svg; nav and footer logo plus favicon.
+assets/icon.png: 512px copy of the gray-white Herdr-inspired ram app icon, from
+assets/app-icon/solco-512.png, never hand-edited; the canonical 1024px copy is
+resources/icon.png. The prompt/export rule and canonical size exports live in
+assets/app-icon/ (see its CLAUDE.md). index.html and downloads.html use the ram
+icon for favicon, nav, footer, and platform cards; no other Solco mark exists.
 assets/herdr-logo.png: official Herdr logo, from
 herdr.dev/assets/logo.png (512px), used on the backend matrix cards.
 assets/tmux-logo.svg: official tmux logo, from tmux.app/favicon.svg

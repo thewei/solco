@@ -1,9 +1,9 @@
 /*
  * [INPUT]: referenced by index.html; the midnight #05060f / cobalt
- * #4d78ff / lane #5af1df / beacon #ffc13c palette comes from the brand
- * Option-D mark; backend accents inherit each official brand
+ * #4d78ff / lane #5af1df / beacon #ffc13c palette remains the established
+ * site palette; backend accents inherit each official brand
  * [OUTPUT]: all site styles: deep-space aurora glassmorphism
- * (designs/site-deai Option D final) — floating blobs, sticky glass nav,
+ * designs/site-deai Option D final) — floating blobs, sticky glass nav,
  * backdrop-filter glass nav/cards/product window, gradient accents,
  * scroll-reveal stagger via AOS (CDN) with a no-JS / reduced-motion
  * fallback that keeps every element visible
