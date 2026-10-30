@@ -88,6 +88,14 @@ html, body { margin: 0; background: #0e0f11; }
 .solco .meta .say { margin-top:6px; font-family:ui-monospace,SFMono-Regular,monospace; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .solco .end { padding:92px 0 96px; border-top:1px solid var(--line); position:relative; overflow:hidden; }
 .solco .end h2 { margin-bottom:30px; }
+.solco .download { display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px; max-width:980px; }
+.solco .channel { display:grid; align-content:start; gap:14px; padding:24px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.solco .channel small { font-size:13px; color:var(--dim); }
+.solco .channel b { font-size:24px; font-weight:560; letter-spacing:-.02em; }
+.solco .channel .pill { justify-self:start; height:38px; padding:0 17px; }
+.solco .channel .action { width:fit-content; color:var(--fg); border-bottom:1px solid #3a3d43; }
+.solco .channel .action:hover { border-color:#fff; }
+.solco .download-note { margin-top:24px; color:var(--dim); font-size:14px; }
 .solco .ram { position:absolute; right:16px; top:46px; width:310px; aspect-ratio:1; object-fit:contain; color:rgba(255,255,255,.055); mask-image:linear-gradient(to right,#000 52%,transparent 94%),linear-gradient(to bottom,#000 42%,transparent 92%); mask-composite:intersect; -webkit-mask-composite:source-in; pointer-events:none; }
 .solco .foot { margin-top:88px; padding:50px 0 58px; border-top:1px solid var(--line); display:grid; grid-template-columns:1.45fr 1fr 1fr 1fr; gap:38px; align-items:start; font-size:14px; }
 .solco .foot > div { margin:0; padding:0; }
@@ -110,6 +118,7 @@ html, body { margin: 0; background: #0e0f11; }
   .solco .doc { grid-template-columns:1fr; gap:0; }
   .solco .toc { display:none; }
   .solco .gal { grid-template-columns:1fr; }
+  .solco .download { grid-template-columns:1fr; }
   .solco .foot { grid-template-columns:1fr 1fr; }
   .solco .ram { display:none; }
 }

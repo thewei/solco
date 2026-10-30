@@ -1,8 +1,8 @@
 # site/
 > L2 | Parent: /CLAUDE.md
 
-index.html: the approved Workflow Story landing page. It uses Herdr's dark editorial rhythm, a cropped ram background in the Hero's right field, one real Hero screenshot, three workflow notes, a README-style feature walkthrough, the explicit Solco-to-Herdr ownership section, direct GitHub Releases CTAs, and a four-column footer.
-styles.css: the approved design tokens and presentation. It defines the #0e0f11 dark palette, #1f2125 boundaries, silver pill actions, 120px section rhythm, cropped feature evidence, responsive collapse, and left-aligned footer columns. It contains no framework dependencies.
+index.html: the approved Workflow Story landing page. It uses Herdr's dark editorial rhythm, a cropped ram background in the Hero's right field, one real Hero screenshot, three workflow notes, a README-style feature walkthrough, the explicit Solco-to-Herdr ownership section, direct GitHub Releases download channels for the signed v0.10.0 installers, and a four-column footer.
+styles.css: the approved design tokens and presentation. It defines the #0e0f11 dark palette, #1f2125 boundaries, silver pill actions, 120px section rhythm, cropped feature evidence, the three-column release channel grid, responsive collapse, and left-aligned footer columns. It contains no framework dependencies.
 assets/screens/product-hero.webp: full-app hero screenshot used by the approved workflow narrative.
 assets/screens/feature-agents.webp: workflow overview crop.
 assets/screens/feature-terminal.webp: task-surface crop.
