@@ -589,16 +589,32 @@ func (s *Shell) agentItems(c *ui.Context) {
 	// Agents group under their Workspace (2026-10-30): a faint label names
 	// the group, so the cards' second line carries only the git facts.
 	for _, group := range groupAgentCards(cards) {
+		// The group's git facts (branch, files, +/-) are drawn once, at the
+		// label's right end, for the repository its first resolved card sits
+		// in; only a card in another repository keeps its own facts (2026-10-30
+		// UX audit 3, topic 1).
+		groupRoot, groupCWD := "", ""
+		for _, card := range group.Cards {
+			if root := s.agentGitRoot(card); root != "" {
+				groupRoot, groupCWD = root, s.agentCWD(card)
+				break
+			}
+		}
 		if group.Name != "" {
-			ui.Text(c.Key("agent-group:"+group.Key), group.Name).FontSize(Typography().Micro).
-				TextColor(c.Theme().TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").
-				Padding(7, agentCardPadX, 2)
+			ui.Row(c.Key("agent-group:"+group.Key)).FillWidth().Padding(7, agentCardPadX, 2).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, group.Name).FontSize(Typography().Micro).
+					TextColor(c.Theme().TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				if groupRoot != "" {
+					branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
+					gitFactsView(c, branch, adds, dels, files, ok)
+				}
+			})
 		}
 		for _, card := range group.Cards {
 			card := card
 			label, _ := agentCardLabel(card, dupProjects)
 			selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
-			row := s.agentCardRow(c, card, selected, dupProjects, group.Name != "", nil)
+			row := s.agentCardRow(c, card, selected, dupProjects, group.Name != "", group.Name != "" && groupRoot != "" && s.agentGitRoot(card) == groupRoot, nil)
 			if row.Clicked() {
 				// N19 #4: a sidebar Agent click jumps straight to the pane's
 				// remembered surface (Chat or Terminal) instead of the detail

@@ -68,7 +68,7 @@ const (
 // element carries the Clicked/ContextMenu surface. A caller may add one
 // control at the trailing edge (trailing), which draws inside the row after
 // the spinner and the unread dot.
-func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected bool, dupProjects map[string]bool, hideProject bool, trailing func()) ui.Element {
+func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected bool, dupProjects map[string]bool, hideProject, hideFacts bool, trailing func()) ui.Element {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
 	mark := agentMark(card.Provider, t.Dark)
@@ -100,7 +100,9 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 					if card.ProjectName != "" && !hideProject {
 						tipped(c, ui.Text(c, card.ProjectName).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), card.ProjectName)
 					}
-					s.agentFactsView(c, card)
+					if !hideFacts {
+						s.agentFactsView(c, card)
+					}
 				})
 			})
 			if card.Unread {
@@ -132,12 +134,32 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 // the background meta produced facts (the caller then falls back to the
 // agent title).
 func (s *Shell) agentFactsView(c *ui.Context, card agent.AgentCardModel) bool {
-	t := c.Theme()
-	cwd := ""
+	branch, adds, dels, files, ok := s.gitMetaForCWD(s.agentCWD(card))
+	return gitFactsView(c, branch, adds, dels, files, ok)
+}
+
+// agentCWD is the card's Pane cwd ("" when the Pane is gone).
+func (s *Shell) agentCWD(card agent.AgentCardModel) string {
 	if pane := paneByID(s.projection, card.PaneID); pane != nil {
-		cwd = pane.CWD
+		return pane.CWD
 	}
-	branch, adds, dels, files, ok := s.gitMetaForCWD(cwd)
+	return ""
+}
+
+// agentGitRoot is the repository root of the card's Pane cwd, "" until the
+// background lane resolved it. Cards sharing a root share their git facts.
+func (s *Shell) agentGitRoot(card agent.AgentCardModel) string {
+	cwd := s.agentCWD(card)
+	if s.git == nil || cwd == "" {
+		return ""
+	}
+	return s.git.rootOf[cwd]
+}
+
+// gitFactsView draws one set of git facts; it reports false (drawing
+// nothing) when they are unknown or empty.
+func gitFactsView(c *ui.Context, branch string, adds, dels, files int, ok bool) bool {
+	t := c.Theme()
 	if !ok || (branch == "" && adds == 0 && dels == 0 && files == 0) {
 		return false
 	}
