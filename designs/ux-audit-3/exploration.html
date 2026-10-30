@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<!--
+  Solco · UX audit 第三轮 2026-10-30 —— 交互式设计探索（think Triage → interactive-design-exploration）
+  直接用浏览器打开（file://），无外部依赖、无构建。URL hash 预置：#t=agents&agents=A、#t=hosts&hosts=B、#t=tabs&tabs=A、#t=settings&settings=C。
+  Tokens 与 ux-audit-2 / agent-surfaces 一致（取自 internal/nativeui/theme.go / design_system.go：Row 8 / Card 10 / hairline 边 / 状态槽 16pt）。
+  数据取自真机巡检：solco 工作区下 3 个 Agent 同一 cwd，每行都重复 “main 68 +2842 −334”；Hosts 侧栏名称被 user@host 挤成 “oracle…”；Tab 栏非选中 Tab 只剩约 60pt。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Solco · UX audit 3</title>
+<style>
+  :root{--sb:#17171a;--bg:#141516;--card:#18191b;--text:#ececee;--muted:#8b8c92;--hover:rgba(255,255,255,.05);--sel:rgba(255,255,255,.08);--line:rgba(255,255,255,.07);--border:#333338;--accent:#0a84ff;--ok:#30d158;--warn:#ff9f0a;--bad:#ff453a;--add:#3fb950;--del:#f85149}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0b0c;color:var(--text);font:12px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  button{all:unset;box-sizing:border-box;cursor:pointer;color:inherit;font:inherit}
+  .shell{display:flex;min-height:100vh}
+  .stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 24px;gap:14px}
+  .label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#71717a;align-self:flex-start}
+  .panel{width:300px;flex:none;background:#18181b;border-left:1px solid #27272a;padding:14px;overflow:auto;max-height:100vh;position:sticky;top:0;height:100vh}
+  .panel h3{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#71717a;margin:16px 0 6px}
+  .panel h3:first-child{margin-top:0}
+  .opt{display:block;padding:8px 10px;border:1px solid #27272a;border-radius:6px;margin-bottom:5px;color:#a1a1aa;font-size:10.5px;line-height:1.45}
+  .opt b{display:block;color:#fafafa;font-size:11px;margin-bottom:2px}
+  .opt:hover{border-color:#3f3f46}.opt.on{border-color:#71717a;background:rgba(113,113,122,.12)}
+  .opt i{font-style:normal;color:var(--ok);font-size:9.5px;margin-left:6px}
+  .seg{display:inline-flex;gap:2px;padding:2px;border:1px solid #27272a;border-radius:7px;margin-bottom:6px}
+  .seg button{padding:3px 9px;border-radius:5px;font-size:10px;color:#a1a1aa}.seg button.on{background:#2c2c31;color:#fafafa}
+  /* ---- app mock ---- */
+  .win{display:grid;grid-template-columns:262px minmax(0,1fr);width:min(100%,1040px);height:600px;border-radius:12px;overflow:hidden;border:1px solid #2a2a2e;background:var(--bg);box-shadow:0 18px 50px rgba(0,0,0,.5)}
+  .sb{display:flex;flex-direction:column;min-height:0;background:var(--sb);border-right:1px solid var(--line)}
+  .sbtop{height:38px;flex:none;display:flex;align-items:center;gap:7px;padding:0 14px}
+  .tl{width:11px;height:11px;border-radius:50%;background:#56565b}
+  .vtabs{display:flex;gap:2px;padding:0 8px 8px}.vtab{flex:1;height:26px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}.vtab.on{background:var(--sel);color:var(--text)}
+  .sbody{flex:1;min-height:0;overflow:hidden;padding:0 8px 10px}
+  .sh{display:flex;align-items:center;gap:6px;height:26px;padding:0 6px;font-weight:600}.sh .c{margin-left:auto;font-weight:400;color:var(--muted);font-size:10.5px}
+  .glab{height:22px;display:flex;align-items:center;gap:8px;padding:0 8px;font-size:10.5px;color:#76777d}
+  .glab .meta{margin-left:auto;display:flex;gap:6px}
+  .row{display:flex;align-items:center;gap:8px;height:30px;padding:0 6px 0 8px;border-radius:7px;min-width:0}.row.on{background:var(--sel)}.row:hover{background:var(--hover)}
+  .row.tall{height:44px}
+  .row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+  .row .nm small{display:block;font-weight:400;font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+  .mk{width:16px;height:16px;border-radius:5px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff;flex:none}
+  .meta2{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);flex:none;white-space:nowrap}
+  .a{color:var(--add)}.d{color:var(--del)}
+  .ago{font-size:10.5px;color:var(--muted);flex:none}
+  .slot{width:16px;height:16px;display:grid;place-items:center;flex:none}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}.ring{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--muted);opacity:.7}
+  .tile{width:16px;height:16px;border-radius:5px;display:grid;place-items:center;color:#fff;font-size:10px;font-weight:700;flex:none}
+  .br{font-size:10.5px;color:var(--muted)}.br.dirty{color:var(--warn)}
+  .main{display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+  .tb{height:38px;flex:none;display:flex;align-items:center;gap:4px;padding:0 10px;min-width:0}
+  .tb h1{font-size:16px;font-weight:650;margin:0 6px}
+  .ib{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none}.ib:hover{background:var(--sel)}
+  .grow{flex:1}
+  .center{flex:1;display:grid;place-items:center;color:var(--muted)}
+  .term{flex:1;margin:6px 10px 10px;border:1px solid var(--line);border-radius:10px;background:#0f1011;padding:14px;font:11px/1.6 ui-monospace,Menlo,monospace;color:#9a9ba1;overflow:hidden}
+  .hint{font-size:10.5px;color:#76777d;margin:2px 8px 8px;line-height:1.5}
+  /* tab bar */
+  .tabbar{display:flex;align-items:center;gap:2px;height:38px;padding:0 6px;min-width:0;flex:1;overflow:hidden}
+  .tab{display:flex;align-items:center;gap:6px;height:28px;border-radius:8px;padding:0 8px;min-width:0;color:var(--muted);flex:none}
+  .tab.on{background:var(--sel);color:var(--text)}
+  .tab .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .tab .x{opacity:0;width:14px;text-align:center}.tab:hover .x,.tab.on .x{opacity:.8}
+  .sf{margin:2px 0 6px;height:28px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:6px;padding:0 8px;color:var(--muted)}
+  /* settings */
+  .set{display:grid;grid-template-columns:240px minmax(0,1fr);flex:1;min-height:0}
+  .sn{padding:8px;display:flex;flex-direction:column;gap:2px;background:var(--sb);border-right:1px solid var(--line)}
+  .sn .it{height:30px;border-radius:7px;display:flex;align-items:center;gap:9px;padding:0 8px}.sn .it.on{background:var(--sel)}
+  .sq{width:16px;height:16px;border-radius:5px;flex:none}
+  .grp{margin:6px 24px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+  .gl{margin:12px 24px 0;font-size:10.5px;color:var(--muted)}
+  .fr{display:flex;align-items:center;height:36px;padding:0 12px;border-top:1px solid var(--line)}.fr:first-child{border-top:none}.fr .v{margin-left:auto;color:var(--muted)}
+  .hl{background:rgba(255,214,10,.22);border-radius:3px;color:#ffe066}
+  .empty{padding:18px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="stage">
+    <div class="label" id="stageLabel"></div>
+    <div id="art"></div>
+  </div>
+  <div class="panel" id="panel"></div>
+</div>
+<script>
+const ICO={
+  term:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m8 10 3 2-3 2M13 14h3"/></svg>',
+  git:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 8v8M18 11c0 4-6 3-12 5"/></svg>',
+  hist:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>',
+  files:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  globe:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>',
+  search:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  branch:'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8"/><path d="M18 6a6 6 0 0 1-6 6H8"/></svg>',
+  more:'<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
+  plus:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  globeS:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>',
+};
+const omp='<span class="mk" style="background:#6d3df5">π</span>';
+const T={
+  agents:{label:'议题 1 · Agents 行重复 git 摘要',opts:{
+    A:['A · 摘要上移到工作区分组头','“solco · main 68 +2842 −334” 只出现一次；行只剩标题、最近活动、状态槽。同组内 cwd 不同的 Agent 才在行内补自己的摘要。','推荐'],
+    B:['B · 每行保留，但只显示与分组不同的部分','行内只在分支/变更与同工作区行不同时出现；一致时整行摘要隐藏。分组头保持现在的纯标签。',''],
+    C:['C · 保持现状','每个 Agent 卡片自带分支 + 文件数 + 增删，三行重复一模一样的数字。','']}},
+  hosts:{label:'议题 2 · Hosts 侧栏名称被截断',opts:{
+    A:['A · 名称优先：user@host 仅悬停 / 选中时显示','行内只剩名称（可用整行宽度）；endpoint 在悬停、选中时出现在行尾，其余进 tooltip。','推荐'],
+    B:['B · 两行行：名称 / user@host','每行 44pt，名称与 endpoint 各占一行，永不互相挤压；同屏主机数约减半。',''],
+    C:['C · 保持现状','名称与 user@host 同行，名称被截成 “oracle…”、“cyww-寻空…”。','']}},
+  tabs:{label:'议题 3 · Tab 栏非选中 Tab 太窄',opts:{
+    A:['A · 最小宽度 120，超出滚动（已有 ‹ ›）','选中 Tab 160–220，其余 120；放不下时靠已有的溢出滚动 + 选中项自动滚入视野。','推荐'],
+    B:['B · 非选中 Tab 只留品牌图标 + 状态槽','像浏览器固定标签；标题进 tooltip。最省空间，但认不出是哪个 Tab。',''],
+    C:['C · 保持现状','Tab 按剩余宽度均分，非选中约 60pt，只剩 “SEARCH: Rear…”。','']}},
+  settings:{label:'议题 4 · Settings 无搜索，General 混入 Voice input',opts:{
+    A:['A · 侧栏顶加搜索框','输入关键字跨页过滤设置项（命中项高亮，侧栏只留有命中的页）。需要一个设置项标签索引。',''],
+    B:['B · Voice input 独立成页，General 只留外观/窗口','不加搜索；把“麦克风 / 转写”这组移出 General，General 更短，Voice 有自己的位置。',''],
+    C:['C · A + B','搜索框 + Voice 独立页。','推荐'],
+    D:['D · 保持现状','General 里 Appearance / Window / Voice input 三组混排，无搜索。','']}}
+};
+const S={t:'agents',agents:'A',hosts:'A',tabs:'A',settings:'C',w:262};
+(location.hash||'').replace(/^#/,'').split('&').forEach(p=>{const[k,v]=p.split('=');if(k&&v)S[k]=v});
+
+function sidebarShell(active,body){
+  const v=['term','git','hist','files','globe'];
+  return `<div class="sb"><div class="sbtop"><i class="tl"></i><i class="tl"></i><i class="tl"></i></div>
+  <div class="vtabs">${v.map((n,i)=>`<div class="vtab ${i===active?'on':''}">${ICO[n]}</div>`).join('')}</div>
+  <div class="sbody">${body}</div>
+  <div style="height:40px;border-top:1px solid var(--line);display:flex;align-items:center;padding:0 12px;color:var(--muted)">This Mac · Default</div></div>`;
+}
+const metaFull=`<span class="meta2">${ICO.branch}main <span class="a">+2842</span> <span class="d">−334</span></span>`;
+function agentRow(title,ago,on,extra,wide){return `<div class="row ${on?'on':''}">${omp}<div class="nm">${title}${extra||''}</div><span class="ago">${ago}</span><span class="slot"><i class="${on?'dot':'ring'}"></i></span></div>`;}
+function wsRows(){return `<div class="sh" style="margin-top:8px">Workspace<span class="c">14</span></div>`+
+ [['L','#8b5cf6','Local Server','main','2'],['S','#ef4444','solco','main','5',1],['G','#3b82f6','getipages','main','3'],['M','#ef4444','my-annotation','master','2'],['M','#3b82f6','my-devtools','master','']].map(r=>`<div class="row ${r[5]?'on':''}"><span class="tile" style="background:${r[1]}">${r[0]}</span><div class="nm">${r[2]}</div><span class="br ${r[4]?'dirty':''}">${r[3]}</span></div>`).join('');}
+
+function agentsArt(){
+  const k=S.agents;
+  const titles=[['🔍 SEARCH: Rearrange titlebar…','12h',0],['🐭 MOUSE: Fix garbled mouse esc…','12h',1],['📁 PROJ: Make sidebar Projects…','10h',0]];
+  let body=`<div class="sh">Agents<span class="c">4</span></div>`;
+  if(k==='A'){
+    body+=`<div class="glab">solco<span class="meta">${metaFull}</span></div>`+titles.map(t=>agentRow(t[0],t[1],t[2])).join('')+
+      `<div class="glab">getipages<span class="meta"><span class="meta2">${ICO.branch}main <span class="a">+21</span></span></span></div>`+agentRow('🖼 MAG: Integrate Mag…','22h',0);
+  }else if(k==='B'){
+    body+=`<div class="glab">solco</div>`+agentRow(titles[0][0],'12h',0,'')+agentRow(titles[1][0],'12h',1,'')+
+      `<div class="row">${omp}<div class="nm">📁 PROJ: Make sidebar Projects…</div><span class="meta2">${ICO.branch}feat/proj <span class="a">+12</span></span><span class="ago">10h</span><span class="slot"><i class="ring"></i></span></div>`+
+      `<div class="glab">getipages</div>`+agentRow('🖼 MAG: Integrate Mag…','22h',0);
+  }else{
+    const m=`<span class="meta2" style="display:flex;margin-top:2px">${ICO.branch}main · 68 <span class="a">+2842</span> <span class="d">−334</span></span>`;
+    body+=`<div class="glab">solco</div>`+titles.map(t=>`<div class="row tall ${t[2]?'on':''}">${omp}<div class="nm">${t[0]}${m}</div><span class="ago">${t[1]}</span><span class="slot"><i class="${t[2]?'dot':'ring'}"></i></span></div>`).join('')+
+    `<div class="glab">getipages</div><div class="row tall">${omp}<div class="nm">🖼 MAG: Integrate Mag…<span class="meta2" style="display:flex;margin-top:2px">${ICO.branch}main · 2 <span class="a">+21</span></span></div><span class="ago">22h</span><span class="slot"><i class="ring"></i></span></div>`;
+  }
+  body+=`<div class="sh" style="margin-top:8px">Projects<span class="c">0</span></div>`+wsRows();
+  return `<div class="win">${sidebarShell(0,body)}<div class="main"><div class="tb"><div class="tabbar" style="flex:1"><div class="tab on">${omp}<span class="tt">MOUSE: Fix garbled…</span><i class="dot"></i></div></div><div class="ib">${ICO.more}</div></div>
+  <div class="term">Report: what changed, evidence, verification.<br><br>完成。侧栏 pane 行现在带 Agent working 的 loading 状态。<br>变更：components.go — treeRowSpec 新增 Working 字段…<br>测试：TestTreeRowsCarryTheAgentWorkingSpinner …<br><br>› </div></div></div>
+  <div class="hint">${k==='A'?'分组头的摘要对应该工作区的 cwd；Agent 的 cwd 与分组不一致时，才在行内回退为自己的摘要（见 getipages 同理）。':k==='B'?'第三行 cwd 在 feat/proj 分支，所以只有它保留行内摘要。':'现状：同 cwd 的三个 Agent 重复同一串数字，行高被撑到 44。'}</div>`;
+}
+
+const hostsAll=[['oracle-hk','ubuntu@132.145.120.163'],['oracle-arm','ubuntu@100.88.0.5'],['WjDev','ubuntu@3.215.210.188'],['CywwDev','root@39.107.66.39'],['cyww-寻空间生产环境','root@120.76.98.206'],['cyww-xunkongjian-gateway','root@120.77.1.247'],['Whisky Production Server','imsadmin@18.143.56.98'],['Signum Dev','microsite@20.24.234.110'],['Roya Recycle Prod','root@120.76.218.226']];
+function hostsArt(){
+  const k=S.hosts;
+  const rows=hostsAll.map((h,i)=>{
+    const sel=i===4;
+    if(k==='A')return `<div class="row ${sel?'on':''}" style="gap:8px"><span style="color:var(--muted)">${ICO.globeS}</span><div class="nm">${h[0]}</div>${sel?`<span class="meta2" style="color:var(--muted)">${h[1]}</span>`:''}</div>`;
+    if(k==='B')return `<div class="row tall ${sel?'on':''}"><span style="color:var(--muted)">${ICO.globeS}</span><div class="nm">${h[0]}<small>${h[1]}</small></div></div>`;
+    return `<div class="row ${sel?'on':''}"><span style="color:var(--muted)">${ICO.globeS}</span><div class="nm" style="flex:0 1 auto;max-width:96px">${h[0]}</div><span class="meta2" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;justify-content:flex-end">${h[1]}</span></div>`;
+  }).join('');
+  const body=`<div class="glab" style="padding-top:2px;color:var(--muted)">SSH Config</div><div class="sf">${ICO.search}Search</div><div class="sh">Cyww<span class="c">5</span></div>${rows}`;
+  return `<div class="win">${sidebarShell(4,body)}<div class="main"><div class="tb"><h1>Hosts</h1></div><div class="center">Select a host</div></div></div>
+  <div class="hint">${k==='A'?'悬停任意行也会在行尾亮出 user@host；同名 ForwardAgent 一类块靠选中后的 endpoint 与详情页区分。':k==='B'?'每行两行：同屏约 9 → 5 行；长名与 endpoint 都完整可读。':'现状：名称与 endpoint 同一行，谁都显示不全。'}</div>`;
+}
+
+const tabsData=[['SEARCH: Rearrange titlebar search and nav…','🔍',0],['solco coordinator','',0],['3','',0],['MOUSE: Fix garbled mouse escape output in new panes','🐭',1],['PANE: Fix sidebar pane stale agent status','🧳',0],['PROJ: Make sidebar Projects cleanable','📁',0]];
+function tabsArt(){
+  const k=S.tabs;
+  const tabs=tabsData.map(t=>{
+    const on=t[2];
+    let w,body;
+    if(k==='A'){w=on?200:120;body=`${omp}<span class="tt">${t[1]} ${t[0]}</span><i class="dot" style="${on?'':'display:none'}"></i><span class="x">×</span>`;}
+    else if(k==='B'){w=on?200:40;body=on?`${omp}<span class="tt">${t[1]} ${t[0]}</span><i class="dot"></i><span class="x">×</span>`:`${omp}<i class="ring" style="margin-left:-2px"></i>`;}
+    else{w=on?150:64;body=`${omp}<span class="tt">${t[1]} ${t[0]}</span>${on?'<i class="dot"></i><span class="x">×</span>':''}`;}
+    return `<div class="tab ${on?'on':''}" style="width:${w}px">${body}</div>`;
+  }).join('');
+  const body=`<div class="sh">Workspace<span class="c">14</span></div>`+wsRows().replace(/^.*?<\/div>/,'');
+  return `<div class="win">${sidebarShell(0,body)}<div class="main"><div class="tb"><div class="tabbar">${tabs}<div class="ib">${ICO.plus}</div></div><div class="ib">${ICO.more}</div></div>
+  <div class="term">› </div></div></div>
+  <div class="hint">${k==='A'?'6 个 Tab 在 760pt 内放不下时，右侧出现已有的 ‹ › 并把选中 Tab 滚入视野；每个 Tab 至少 120pt，能读出 “SEARCH: Rearr…”。':k==='B'?'非选中 Tab 只剩品牌 + 状态点；靠 tooltip 与顺序识别，⌥⌘1–9 已能直达。':'现状：非选中 Tab 约 64pt，emoji + 前缀吃掉全部宽度，几个 Tab 看起来一模一样。'}</div>`;
+}
+
+const setPages=[['General','#8e8e93',['Theme','Sidebar density','Increase contrast','Window opacity','Show Tabs in Sidebar','Restore window position','Voice input endpoint','Voice input model']],['Terminal','#30d158',['Font size','Cursor style','Scrollback']],['Agents','#bf5af2',['Default agent','Hook Doctor']],['Git','#ff9f0a',['Auto fetch','Diff layout']],['Quota','#32ade6',['Providers','Refresh']],['Diagnostics','#0a84ff',['Logs','Export diagnostics']],['Work Board','#0a84ff',['Board view','Autopilot']]];
+let setQ='';
+function highlight(s,q){if(!q)return s;const i=s.toLowerCase().indexOf(q.toLowerCase());return i<0?s:s.slice(0,i)+'<span class="hl">'+s.slice(i,i+q.length)+'</span>'+s.slice(i+q.length);}
+function settingsArt(){
+  const k=S.settings;
+  const hasSearch=k==='A'||k==='C';
+  const voiceOwn=k==='B'||k==='C';
+  let pages=setPages.map(p=>({n:p[0],c:p[1],items:p[2].filter(it=>!(voiceOwn&&/^Voice/.test(it)))}));
+  if(voiceOwn)pages.splice(2,0,{n:'Voice',c:'#ff375f',items:['Endpoint','API key','Model']});
+  let shown=pages;
+  if(hasSearch&&setQ)shown=pages.filter(p=>p.items.some(i=>i.toLowerCase().includes(setQ.toLowerCase())));
+  const nav=(hasSearch?`<div class="sf" style="margin:0 0 6px;border-color:${setQ?'#4c9dff':'var(--border)'}">${ICO.search}<input id="sq" value="${setQ}" placeholder="Search settings" style="all:unset;flex:1;min-width:0;color:var(--text);font:inherit"></div>`:'')+
+    shown.map((p,i)=>`<div class="it ${i===0?'on':''}"><i class="sq" style="background:${p.c}"></i>${p.n}</div>`).join('')+(shown.length?'':'<div class="empty">No matching settings</div>');
+  const cur=shown[0];
+  let content='';
+  if(!cur)content='<div class="center">No results</div>';
+  else if(hasSearch&&setQ){
+    content=shown.map(p=>`<div class="gl">${p.n}</div><div class="grp">${p.items.filter(i=>i.toLowerCase().includes(setQ.toLowerCase())).map(i=>`<div class="fr"><span>${highlight(i,setQ)}</span><span class="v">›</span></div>`).join('')}</div>`).join('');
+  }else{
+    const groups=cur.n==='General'?[['Appearance',['Theme','Sidebar density','Increase contrast','Window opacity']],['Window',['Show Tabs in Sidebar','Restore window position']],...(voiceOwn?[]:[['Voice input',['Endpoint','API key','Model']]])]:[[cur.n,cur.items]];
+    content=groups.map(g=>`<div class="gl">${g[0]}</div><div class="grp">${g[1].map(i=>`<div class="fr"><span>${i}</span><span class="v">›</span></div>`).join('')}</div>`).join('');
+  }
+  return `<div class="win" style="grid-template-columns:1fr"><div class="main" style="height:100%"><div class="tb" style="gap:10px"><span style="color:var(--muted);font-size:16px;margin-left:8px">Settings</span><h1>${cur?'› '+cur.n:''}</h1></div><div class="set"><div class="sn">${nav}</div><div style="overflow:hidden;padding-top:4px">${content}</div></div></div></div>
+  <div class="hint">${hasSearch?'试试在搜索框输入 “voice” / “font” / “fetch”（原型可输入）。':''}${voiceOwn?' Voice 独立成页后，General 只剩 Appearance / Window 两组。':''}${k==='D'?'现状：General 末尾挂着 Voice input 一组，无搜索入口。':''}</div>`;
+}
+
+function render(){
+  const t=T[S.t];
+  document.getElementById('stageLabel').textContent=t.label+' · 方案 '+S[S.t];
+  const a=document.getElementById('art');
+  a.style.width='min(1040px,100%)';
+  a.innerHTML=({agents:agentsArt,hosts:hostsArt,tabs:tabsArt,settings:settingsArt})[S.t]();
+  const sq=document.getElementById('sq');
+  if(sq){sq.addEventListener('input',e=>{setQ=e.target.value;const pos=e.target.selectionStart;render();const n=document.getElementById('sq');n.focus();n.setSelectionRange(pos,pos)});}
+  const p=document.getElementById('panel');
+  p.innerHTML=`<h3>议题</h3><div class="seg">${Object.keys(T).map(k=>`<button class="${S.t===k?'on':''}" data-t="${k}">${({agents:'Agents',hosts:'Hosts',tabs:'Tabs',settings:'Settings'})[k]}</button>`).join('')}</div>
+  <h3>${t.label}</h3>`+Object.entries(t.opts).map(([k,o])=>`<div class="opt ${S[S.t]===k?'on':''}" data-o="${k}"><b>${o[0]}${o[2]?`<i>${o[2]}</i>`:''}</b>${o[1]}</div>`).join('')+
+  `<h3>约束</h3><div class="opt" style="cursor:default">只改呈现；Herdr 数据与协议不动；状态槽 / 控件脸 / tooltip 仍走既有单一来源（status_indicator.go、controls.go、tooltip.go）。</div>`;
+  p.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{S.t=b.dataset.t;history.replaceState(null,'','#t='+S.t+'&'+S.t+'='+S[S.t]);render()});
+  p.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{S[S.t]=b.dataset.o;history.replaceState(null,'','#t='+S.t+'&'+S.t+'='+S[S.t]);render()});
+}
+render();
+</script>
+</body>
+</html>
