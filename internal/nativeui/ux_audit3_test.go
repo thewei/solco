@@ -224,3 +224,17 @@ func TestCommandCenterShowsTheMenuAccelerators(t *testing.T) {
 		t.Errorf("Settings label = %q, want ⌘,", got)
 	}
 }
+
+// TestEmptyGitSectionsAreOnlyAHeader pins that an empty Remotes/Tags/Stashes
+// section is its header and the 0 — no "None" line under it.
+func TestEmptyGitSectionsAreOnlyAHeader(t *testing.T) {
+	_, tester, _ := treeTestShell(t)
+	for _, name := range []string{"Remotes", "Tags", "Stashes"} {
+		if !tester.HasText(name) {
+			t.Fatalf("%s header missing; texts=%q", name, tester.Texts())
+		}
+	}
+	if tester.HasText("None") {
+		t.Fatalf("an empty section still draws \"None\"; texts=%q", tester.Texts())
+	}
+}

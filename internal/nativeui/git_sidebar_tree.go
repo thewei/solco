@@ -255,7 +255,9 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 // lives in the right-click menu.
 func (s *Shell) gitSidebarSection(c *ui.Context, name string, count int, action *gitSectionAction, children func()) {
 	key := s.gitFoldKey("section/" + name)
-	closed := s.gitTreeClosed[key]
+	// An empty section is its header and the 0: opening it only to read
+	// "None" cost a row per Remotes/Tags/Stashes.
+	closed := s.gitTreeClosed[key] || (count == 0 && strings.TrimSpace(s.gitRefsFilter) == "")
 	spec := sidebarSectionSpec{Key: "git-section:" + name, Title: name, Count: count, Closed: closed, Nav: &s.nav.gitRefs}
 	if action != nil {
 		if !action.disabled {
