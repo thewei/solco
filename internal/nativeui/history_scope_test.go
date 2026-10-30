@@ -72,7 +72,9 @@ func TestSessionsOpenOnTheProjectsOwnAndSwitchToAll(t *testing.T) {
 	f := scopedTrashFixture(t, "/work/alpha")
 	tester := f.page()
 	settleFrames(tester, 3)
-	if !hasAll(tester, scopeCardAlpha, scopeTitleRelease, scopeTitleSpacing, scopeTitleFlaky) || hasAny(tester, scopeCardBeta) {
+	// One project, scoped to it: no card header (the sidebar names it), the
+	// rows sit under day labels.
+	if !hasAll(tester, scopeTitleRelease, scopeTitleSpacing, scopeTitleFlaky) || hasAny(tester, scopeCardAlpha, scopeCardBeta) {
 		t.Fatalf("the list must open on /work/alpha's sessions only; texts=%q", tester.Texts())
 	}
 	if f.shell.hist.projectTotal != 3 || f.shell.hist.allTotal != 4 {

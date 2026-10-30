@@ -18,10 +18,25 @@ import (
 
 const previewTestKey = "codex:22222222-aaaa-bbbb-cccc-000000000002"
 
-// TestHistoryRowClickUnfoldsDetailInPlace pins the row click: it unfolds the
+// TestHistoryRowClickOpensTheSession pins the row click (2026-10-30 UX audit):
+// reading is what a click is for, so it goes to the session page.
+func TestHistoryRowClickOpensTheSession(t *testing.T) {
+	shell, _, _ := newHistoryTestShell(t)
+	shell.router.Replace(routeHistory)
+	tester := ui.NewTester(shell.View, 1200, 800)
+	tester.Frame()
+	if err := tester.Click("Build history"); err != nil {
+		t.Fatal(err)
+	}
+	if got := shell.router.Path(); got != "/history/"+previewTestKey {
+		t.Fatalf("a row click went to %q, want the session page", got)
+	}
+}
+
+// TestHistoryRowInfoUnfoldsDetailInPlace pins the ⓘ button: it unfolds the
 // detail table under the row (no message excerpt), stays on the list, and
-// folds again on a second click.
-func TestHistoryRowClickUnfoldsDetailInPlace(t *testing.T) {
+// folds again on a second press.
+func TestHistoryRowInfoUnfoldsDetailInPlace(t *testing.T) {
 	shell, _, _ := newHistoryTestShell(t)
 	shell.router.Replace(routeHistory)
 	tester := ui.NewTester(shell.View, 1200, 800)
@@ -30,12 +45,9 @@ func TestHistoryRowClickUnfoldsDetailInPlace(t *testing.T) {
 	if tester.HasText("Session ID") {
 		t.Fatalf("the table must not show before the row is opened; texts=%q", tester.Texts())
 	}
-	if err := tester.Click("Build history"); err != nil {
-		t.Fatal(err)
-	}
-	tester.Frame()
+	openRowInfo(t, tester, "Build history")
 	if shell.router.Path() != routeHistory {
-		t.Fatalf("a row click navigated away: %q", shell.router.Path())
+		t.Fatalf("the info button navigated away: %q", shell.router.Path())
 	}
 	for _, want := range []string{"Time", "Folder", "Session ID", "Continue", "File", "Transcript", "View Session", "Export as Markdown", "Copy Resume Command"} {
 		if !tester.HasText(want) {
@@ -46,12 +58,12 @@ func TestHistoryRowClickUnfoldsDetailInPlace(t *testing.T) {
 		t.Fatalf("the message excerpt is gone; texts=%q", tester.Texts())
 	}
 
-	if err := tester.Click("Build history"); err != nil {
+	if err := tester.Click("Session info"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()
 	if tester.HasText("Session ID") || shell.hist.preview.key != "" {
-		t.Fatalf("second click did not fold the detail; texts=%q", tester.Texts())
+		t.Fatalf("second press did not fold the detail; texts=%q", tester.Texts())
 	}
 }
 
@@ -62,10 +74,7 @@ func TestHistoryDetailOpensTranscriptOnlyOnRequest(t *testing.T) {
 	shell.router.Replace(routeHistory)
 	tester := ui.NewTester(shell.View, 1200, 800)
 	tester.Frame()
-	if err := tester.Click("Build history"); err != nil {
-		t.Fatal(err)
-	}
-	tester.Frame()
+	openRowInfo(t, tester, "Build history")
 	if err := tester.Click("View Session"); err != nil {
 		t.Fatal(err)
 	}
@@ -81,9 +90,7 @@ func TestHistoryDetailShowsUsageAndRouting(t *testing.T) {
 	shell.router.Replace(routeHistory)
 	tester := ui.NewTester(shell.View, 1200, 800)
 	tester.Frame()
-	if err := tester.Click("Build history"); err != nil {
-		t.Fatal(err)
-	}
+	openRowInfo(t, tester, "Build history")
 	shell.hist.preview.usage = &history.SessionUsage{
 		Input: 1810, Output: 473, CacheRead: 6500,
 		Routes: []history.UsageRoute{{Provider: "zhipu", Model: "glm-5.3-flash", Level: "high", Calls: 2, Tokens: 2283}},

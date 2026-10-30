@@ -247,11 +247,18 @@ func (s *Shell) historyGroupsBody(c *ui.Context) {
 		contentColumn(c, listColumnWidth, func() {
 			ui.Column(c).FillWidth().Padding(0, sp.XL, sp.XL).Gap(sp.L).Children(func() {
 				ui.Text(c, count).FontSize(Typography().Caption).TextColor(t.TextMuted).Padding(0, 0, 0, sp.XS)
-				for i, group := range groups {
-					// The latest project opens by default; a search opens
-					// every project it matched in, and so does the Trash —
-					// what is there is what Put Back can reach.
-					s.sessionGroup(c, group, i == 0 || searching || s.hist.showTrash)
+				if s.sessionsAreOneProject(groups) {
+					// One project, scoped to it: its card header would only
+					// repeat the sidebar's "This project", so the rows sit
+					// under day labels instead.
+					s.sessionDayList(c, groups[0])
+				} else {
+					for i, group := range groups {
+						// The latest project opens by default; a search opens
+						// every project it matched in, and so does the Trash —
+						// what is there is what Put Back can reach.
+						s.sessionGroup(c, group, i == 0 || searching || s.hist.showTrash)
+					}
 				}
 				if !s.hist.showTrash && (s.hist.loading || s.hist.scanning) {
 					// Rows are already visible while the catalog is still
@@ -393,11 +400,74 @@ func (s *Shell) sessionGroup(c *ui.Context, group sessionGroupView, defaultOpen 
 	})
 }
 
+// sessionsAreOneProject reports a list scoped to a project that holds a
+// single project group (the Trash, which lists across projects, never is).
+func (s *Shell) sessionsAreOneProject(groups []sessionGroupView) bool {
+	return len(groups) == 1 && !s.hist.showTrash && s.historyScopeRoot() != ""
+}
+
+// sessionDayLabel names the stretch of time a session was last active in:
+// Today, Yesterday, the last week and month, then the month itself.
+func sessionDayLabel(ms int64, now time.Time) string {
+	if ms <= 0 {
+		return "Earlier"
+	}
+	at, now := time.UnixMilli(ms).Local(), now.Local()
+	day := func(t time.Time) time.Time { return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()) }
+	days := int(day(now).Sub(day(at)).Hours()/24 + 0.5)
+	switch {
+	case days <= 0:
+		return "Today"
+	case days == 1:
+		return "Yesterday"
+	case days < 7:
+		return "Last 7 days"
+	case days < 30:
+		return "Last 30 days"
+	case at.Year() == now.Year():
+		return at.Format("January")
+	}
+	return at.Format("January 2006")
+}
+
+// sessionDayList is a single project's sessions as one card, the rows under
+// day labels (the list is newest first, so a label opens each stretch).
+func (s *Shell) sessionDayList(c *ui.Context, group sessionGroupView) {
+	sp := Spacing()
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	now := time.Now()
+	ui.Column(c).FillWidth().Radius(Radius().Card).Background(tokens.Panel).
+		Border(1, tokens.BorderSubtle).Clip().Children(func() {
+		last := ""
+		for i, summary := range group.sessions {
+			summary := summary
+			if label := sessionDayLabel(summary.Meta.UpdatedAt, now); label != last {
+				last = label
+				if i > 0 {
+					ui.Box(c).FillWidth().Height(1).Shrink(0).Background(tokens.BorderSubtle)
+				}
+				ui.Text(c, label).FontSize(Typography().Caption).FontWeight(WeightSemibold).TextColor(t.TextMuted).
+					Padding(sp.M, rowInset, sp.XS)
+			} else {
+				ui.Row(c).FillWidth().Height(1).Shrink(0).Children(func() {
+					ui.Box(c).Width(rowInset + 24 + Spacing().L).Shrink(0)
+					ui.Box(c).Grow(1).FillHeight().Background(tokens.BorderSubtle)
+				})
+			}
+			s.sessionRow(c, summary)
+			if !s.historySelecting() && s.hist.preview.key == summary.Meta.Key {
+				s.sessionPreview(c, summary)
+			}
+		}
+	})
+}
+
 // sessionRow renders one session as a quiet list row: agent mark, title over
 // a muted fact line, the token total, and the date — which gives way to a
-// pull-down chevron under the pointer. A click unfolds the inline preview (or, while
-// selecting, ticks the row); everything else lives in the menu and the
-// preview's actions.
+// Continue, info and ⋯ under the pointer. A click opens the session to read
+// (or, while selecting, ticks the row); the facts live behind ⓘ and the rest
+// in the menu.
 func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 	sp := Spacing()
 	t := c.Theme()
@@ -419,9 +489,11 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 	case row.Hovered(), !selecting && s.hist.preview.key == key:
 		row.Background(tokens.PanelHover)
 	}
-	// The inline preview is the row's fold: → opens it, ← closes it, and
-	// while selecting (or in the Trash) a row is a plain leaf that ticks.
-	activated := s.nav.sessions.row(c, row, navRow{Key: key, Folder: !selecting, Expanded: !selecting && s.hist.preview.key == key})
+	// A click reads the session (⏎ too) and the info (ⓘ) card is the row's
+	// fold: → opens it, ← closes it. In the Trash, which has no page to
+	// open, the click is the fold itself; while selecting a row ticks.
+	folds := !selecting && s.hist.showTrash
+	activated := s.nav.sessions.row(c, row, navRow{Key: key, Folder: folds, Expanded: folds && s.hist.preview.key == key})
 	row.Children(func() {
 		if selecting {
 			selectionMark(c, selected)
@@ -433,6 +505,12 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 				ui.Text(c, facts).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").PassThrough()
 			}
 		})
+		// Continue, ⓘ and ⋯ take the room between the title and the figures,
+		// so neither the token total nor the date moves when the pointer
+		// enters the row.
+		if !s.hist.showTrash && !selecting && (open || row.Hovered()) {
+			s.sessionRowActions(c, summary.Meta, open, menu)
+		}
 		// The token total keeps its slot even when unknown, so the dates
 		// below it stay on one vertical line.
 		ui.Column(c).Width(historyMetricWidth).Shrink(0).AlignItems(ui.End).Gap(2).PassThrough().Children(func() {
@@ -441,9 +519,7 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 				ui.Text(c, "tokens").FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().PassThrough()
 			}
 		})
-		if open {
-			s.sessionRowActions(c, summary.Meta)
-		} else if row.Hovered() && !selecting {
+		if s.hist.showTrash && row.Hovered() && !selecting {
 			// The button plus the margin fills the date's footprint, so the
 			// hover swap does not shift the row.
 			more := gorexIconButton(c, gorexColorsOf(t.Dark), iconChevronDown, "Actions for "+title, "", false, gorexRowBtn, gorexRowGlyph).
@@ -456,10 +532,13 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 	})
 	row.ContextMenu(menu)
 	if row.Clicked() || activated {
-		if selecting {
+		switch {
+		case selecting:
 			s.setHistorySelected([]string{key}, !selected)
-		} else {
+		case s.hist.showTrash:
 			s.toggleHistoryPreview(key)
+		default:
+			s.router.Push("/history/" + key)
 		}
 	}
 }

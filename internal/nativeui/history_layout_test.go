@@ -106,9 +106,8 @@ func TestHistoryRowShowsTokenTotalAndFacts(t *testing.T) {
 }
 
 // TestHistoryRowHoverKeepsColumnsInPlace pins the stable trailing slot: the
-// pull-down that replaces the date under the pointer fills the date's
-// footprint, so the token column (and the title column) do not shift when
-// the pointer enters the row.
+// row's Continue, ⓘ and ⋯ appear between the title and the figures, so the
+// token column and the date do not shift when the pointer enters the row.
 func TestHistoryRowHoverKeepsColumnsInPlace(t *testing.T) {
 	shell := newMultiAgentHistoryShell(t)
 	shell.router.Replace(routeHistory)
@@ -127,17 +126,19 @@ func TestHistoryRowHoverKeepsColumnsInPlace(t *testing.T) {
 	if !ok {
 		t.Fatalf("row title missing; texts=%q", tester.Texts())
 	}
+	if tester.HasText("Session info") {
+		t.Fatalf("the row actions show before the pointer is on the row; texts=%q", tester.Texts())
+	}
 	tester.Move(title.X+title.W/2, title.Y+title.H/2)
 	tester.Frame()
-	more, ok := tester.Find("Actions for Tighten sidebar spacing")
-	if !ok {
-		t.Fatalf("hovered row has no menu button; texts=%q", tester.Texts())
+	for _, want := range []string{"Continue", "Session info", "More actions for Tighten sidebar spacing"} {
+		if !tester.HasText(want) {
+			t.Fatalf("hovered row has no %q; texts=%q", want, tester.Texts())
+		}
 	}
-	if got, want := more.X+more.W, date.X+date.W; got < want-0.5 || got > want+0.5 {
-		t.Fatalf("menu button ends at %.1f, date ended at %.1f", got, want)
-	}
-	if more.W != gorexRowBtn || more.H != gorexRowBtn {
-		t.Fatalf("menu button is %.0fx%.0f, want the row tier %dx%d", more.W, more.H, gorexRowBtn, gorexRowBtn)
+	more, _ := tester.Find("More actions for Tighten sidebar spacing")
+	if more.W != gorexRowBtn+4 || more.H != gorexRowBtn+4 {
+		t.Fatalf("⋯ is %.0fx%.0f, want the row tier %dx%d", more.W, more.H, gorexRowBtn+4, gorexRowBtn+4)
 	}
 	after, ok := tester.Find("507k")
 	if !ok {
@@ -145,6 +146,9 @@ func TestHistoryRowHoverKeepsColumnsInPlace(t *testing.T) {
 	}
 	if after.X < tokens.X-0.5 || after.X > tokens.X+0.5 {
 		t.Fatalf("hover moved the token column from x=%.1f to x=%.1f", tokens.X, after.X)
+	}
+	if now, ok := tester.Find(stamp); !ok || now.X < date.X-0.5 || now.X > date.X+0.5 {
+		t.Fatalf("hover moved the date from x=%.1f (found=%v, now %+v)", date.X, ok, now)
 	}
 }
 

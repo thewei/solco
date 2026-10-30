@@ -80,24 +80,14 @@ func TestSessionsArrowsWalkRowsAndHeaders(t *testing.T) {
 	wantCursor(t, tester, "Project beta")
 }
 
-// The inline preview is the row's fold: → opens it (and only opens), ←
-// closes it, and a second ← climbs to the project; Enter toggles it like a
-// click.
-func TestSessionsRightAndLeftOpenAndCloseThePreview(t *testing.T) {
+// A session row is a leaf of the list: Enter opens the session (as a click
+// does), → and ← leave it alone, and ← climbs to the project.
+func TestSessionsEnterOpensTheSessionAndArrowsLeaveItAlone(t *testing.T) {
 	f, tester := navSessions(t)
 	wakeOnFirstRow(tester)
 	pressKey(tester, 0, ui.KeyRight)
-	if f.shell.hist.preview.key != trashKeyFlaky {
-		t.Fatalf("→ must open the preview of the cursor row; preview %q", f.shell.hist.preview.key)
-	}
-	wantCursor(t, tester, "Fix the flaky terminal test")
-	pressKey(tester, 0, ui.KeyRight)
-	if f.shell.hist.preview.key != trashKeyFlaky {
-		t.Fatalf("→ on an open row must not close it; preview %q", f.shell.hist.preview.key)
-	}
-	pressKey(tester, 0, ui.KeyLeft)
-	if f.shell.hist.preview.key != "" {
-		t.Fatalf("← on an open row must fold the preview; preview %q", f.shell.hist.preview.key)
+	if f.shell.hist.preview.key != "" || f.shell.router.Path() != routeHistory {
+		t.Fatalf("→ on a session row must do nothing; preview %q path %q", f.shell.hist.preview.key, f.shell.router.Path())
 	}
 	wantCursor(t, tester, "Fix the flaky terminal test")
 	pressKey(tester, 0, ui.KeyLeft)
@@ -105,12 +95,8 @@ func TestSessionsRightAndLeftOpenAndCloseThePreview(t *testing.T) {
 	pressKey(tester, 0, ui.KeyDown)
 	wantCursor(t, tester, "Fix the flaky terminal test")
 	pressKey(tester, 0, ui.KeyEnter)
-	if f.shell.hist.preview.key != trashKeyFlaky {
-		t.Fatalf("Enter must open the preview; preview %q", f.shell.hist.preview.key)
-	}
-	pressKey(tester, 0, ui.KeyEnter)
-	if f.shell.hist.preview.key != "" {
-		t.Fatalf("Enter must toggle it closed; preview %q", f.shell.hist.preview.key)
+	if got, want := f.shell.router.Path(), "/history/"+trashKeyFlaky; got != want {
+		t.Fatalf("Enter must open the session; path %q, want %q", got, want)
 	}
 }
 

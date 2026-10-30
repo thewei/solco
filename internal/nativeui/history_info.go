@@ -220,35 +220,22 @@ func (s *Shell) sessionInfoTable(c *ui.Context, meta history.SessionMeta, info h
 	})
 }
 
-// sessionRowActions are the open row's trailing actions, in place of its date:
-// Continue, copy the resume command, Continue in another Agent, Trash.
-func (s *Shell) sessionRowActions(c *ui.Context, meta history.SessionMeta) {
+// sessionRowActions are the row's trailing actions under the pointer (or
+// while its info card is open), in place of its date: Continue, the ⓘ that
+// folds the info card, and ⋯ with every other action (Continue in, copy the
+// resume command, Trash …).
+func (s *Shell) sessionRowActions(c *ui.Context, meta history.SessionMeta, infoOpen bool, menu func(*ui.Menu)) {
 	t := c.Theme()
 	k := gorexColorsOf(t.Dark)
-	can := s.canContinue()
-	if regularButton(c, "Continue").Disabled(!can).Shrink(0).Clicked() {
+	if regularButton(c, "Continue").Disabled(!s.canContinue()).Shrink(0).Clicked() {
 		s.requestContinue(meta, nil)
 	}
-	if gorexIconButton(c, k, iconTerminal, "Copy Resume Command", "Copy Resume Command", false, gorexRowBtn+4, gorexRowGlyph+2).
+	if gorexIconButton(c, k, iconInfo, "Session info", "Session info", infoOpen, gorexRowBtn+4, gorexRowGlyph+2).
 		Shrink(0).Clicked() {
-		s.copySessionResume(meta)
+		s.toggleHistoryPreview(meta.Key)
 	}
-	if targets := s.continueTargets(meta); len(targets) > 0 {
-		regularButton(c, "Continue in").Disabled(!can).Shrink(0).Menu(func(m *ui.Menu) {
-			for _, target := range targets {
-				if m.Item(target.DisplayName()).Chosen() {
-					s.requestContinue(meta, &target)
-				}
-			}
-		})
-	}
-	if s.hist.trash != nil {
-		if gorexIconButton(c, k, iconTrash, "Move to Trash", "Move to Trash", false, gorexRowBtn+4, gorexRowGlyph+2).
-			Shrink(0).Clicked() {
-			s.moveSessionsToTrash([]history.SessionMeta{meta})
-			s.closeHistoryPreview()
-		}
-	}
+	gorexIconButton(c, k, iconActions, "More actions for "+fallbackText(meta.Title, history.Untitled), "", false, gorexRowBtn+4, gorexRowGlyph+2).
+		Shrink(0).Menu(menu)
 }
 
 // historyDetailInfo is the detail page's collapsible card: a "Session details"

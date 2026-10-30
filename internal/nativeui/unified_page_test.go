@@ -100,18 +100,22 @@ func TestCleanGitSurfaceKeepsItsMessageReadableWhenNarrow(t *testing.T) {
 	if title.W < 90 || title.H > 30 {
 		t.Fatalf("message squeezed to %.0f x %.0f px at 900 px wide, want one readable line", title.W, title.H)
 	}
-	for _, want := range []string{"View Commits", "Open Terminal"} {
+	for _, want := range []string{"View All Commits", "Open Terminal"} {
 		if !narrow.HasText(want) {
 			t.Fatalf("narrow clean surface lost %q: %q", want, narrow.Texts())
 		}
 	}
 
-	// Room to spare keeps the actions beside the message.
+	// Room to spare keeps the page as it is: the message on one line, the
+	// actions below the commits.
 	wide := ui.NewTester(s.View, 1700, 800)
 	wide.Frame()
 	title, _ = wide.Find("Working tree clean")
-	if open, ok := wide.Find("Open Terminal"); !ok || open.Y > title.Y+title.H {
-		t.Errorf("a wide clean surface keeps the actions on the message's row: title=%v open=%v (found %v)", title, open, ok)
+	if title.H > 30 {
+		t.Errorf("a wide clean surface wraps its message: title=%v", title)
+	}
+	if _, ok := wide.Find("Open Terminal"); !ok {
+		t.Error("a wide clean surface lost Open Terminal")
 	}
 }
 
@@ -125,12 +129,12 @@ func TestCleanGitSurfaceOffersHistoryAndTerminalWithoutCenteredModal(t *testing.
 	s.rebuildDiffRows()
 	tester := ui.NewTester(s.View, 1200, 800)
 	tester.Frame()
-	for _, want := range []string{"Working tree clean", "View Commits", "Open Terminal"} {
+	for _, want := range []string{"Working tree clean", "View All Commits", "Open Terminal"} {
 		if !tester.HasText(want) {
 			t.Fatalf("clean Git surface missing %q: %q", want, tester.Texts())
 		}
 	}
-	if err := tester.Click("View Commits"); err != nil {
+	if err := tester.Click("View All Commits"); err != nil {
 		t.Fatal(err)
 	}
 	if !s.commitsMode {

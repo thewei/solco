@@ -571,19 +571,21 @@ func TestDetailPageMoveToTrashLeavesThePage(t *testing.T) {
 	}
 }
 
-// TestPreviewMoveToTrashFoldsTheRow pins the inline preview's own action.
+// TestPreviewMoveToTrashFoldsTheRow pins the row pull-down's Move to Trash
+// on an open info card.
 func TestPreviewMoveToTrashFoldsTheRow(t *testing.T) {
 	f := newTrashFixture(t)
 	tester := f.page()
-	if err := tester.Click("Tighten sidebar spacing"); err != nil {
-		t.Fatal(err)
-	}
-	tester.Frame()
+	openRowInfo(t, tester, "Tighten sidebar spacing")
 	tester.Frame()
 	if f.shell.hist.preview.key != trashKeySpacing {
 		t.Fatalf("preview = %q", f.shell.hist.preview.key)
 	}
-	if err := tester.Click("Move to Trash"); err != nil {
+	if err := tester.Click("More actions for Tighten sidebar spacing"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if err := tester.ChooseMenuItem("Move to Trash"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()
@@ -598,10 +600,7 @@ func TestPreviewMoveToTrashFoldsTheRow(t *testing.T) {
 func TestTrashingThePreviewedRowFromItsMenuClosesThePreview(t *testing.T) {
 	f := newTrashFixture(t)
 	tester := f.page()
-	if err := tester.Click("Tighten sidebar spacing"); err != nil {
-		t.Fatal(err)
-	}
-	tester.Frame()
+	openRowInfo(t, tester, "Tighten sidebar spacing")
 	tester.Frame()
 	if f.shell.hist.preview.key != trashKeySpacing {
 		t.Fatalf("preview = %q", f.shell.hist.preview.key)
@@ -636,11 +635,7 @@ func TestSessionsOfferNoDeleteWithoutATrash(t *testing.T) {
 		t.Fatalf("a delete item without a Trash: %q", tester.Menu())
 	}
 	tester.CloseMenu()
-	if err := tester.Click("Tighten sidebar spacing"); err != nil {
-		t.Fatal(err)
-	}
-	tester.Frame()
-	tester.Frame()
+	openRowInfo(t, tester, "Tighten sidebar spacing")
 	if shell.hist.preview.key == "" {
 		t.Fatal("the row did not open its preview")
 	}

@@ -276,16 +276,13 @@ func TestSessionMenuOffersContinueOnlyWhenItCanRun(t *testing.T) {
 }
 
 // TestPreviewContinueButtonStagesTheConfirm pins the second entry point: the
-// row's unfolded preview carries Continue, and it asks before acting.
+// row's Continue (shown under the pointer) asks before acting.
 func TestPreviewContinueButtonStagesTheConfirm(t *testing.T) {
 	shell, fake, _ := newContinueTestShell(t)
 	shell.router.Replace(routeHistory)
 	tester := ui.NewTester(shell.View, 1200, 800)
 	tester.Frame()
-	if err := tester.Click("Build history"); err != nil {
-		t.Fatal(err)
-	}
-	tester.Frame()
+	openRowInfo(t, tester, "Build history")
 	if err := tester.Click("Continue"); err != nil {
 		t.Fatal(err)
 	}
