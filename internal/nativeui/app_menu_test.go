@@ -59,7 +59,7 @@ func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 	for _, it := range menu.Items() {
 		bar = append(bar, it.Label)
 	}
-	if want := []string{"Solco", "Go", "Edit", "Window"}; !slices.Equal(bar, want) {
+	if want := []string{"Solco", "Go", "Tab", "Edit", "Window", "Help"}; !slices.Equal(bar, want) {
 		t.Fatalf("menu bar = %q, want %q", bar, want)
 	}
 
@@ -82,19 +82,34 @@ func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 		t.Fatalf("%q accelerator = %q — ⌘H must hide the app", hide.Label, hide.Accelerator)
 	}
 
-	// The Go menu's accelerators are muscle memory: ⌘1 Workspace, ⌘W Close
-	// Tab (tab-scoped, never the window — F103), ⇧⌘P Command Center.
+	// The Go menu's accelerators are muscle memory: the pages take ⌘1–5 in
+	// the sidebar's tab order, ⇧⌘P is the Command Center.
 	goMenu := menuNamed(t, menu, "Go").Submenu
 	for label, want := range map[string]string{
-		"Workspace": "CmdOrCtrl+1", "Close Tab": "CmdOrCtrl+W", "Command Center": "CmdOrCtrl+Shift+P",
+		"Workspace": "CmdOrCtrl+1", "Changes": "CmdOrCtrl+2", "Sessions": "CmdOrCtrl+3",
+		"Files": "CmdOrCtrl+4", "Hosts": "CmdOrCtrl+5", "Command Center": "CmdOrCtrl+Shift+P",
 	} {
 		if item := menuItemNamed(goMenu, label); item == nil || item.Accelerator != want {
 			t.Errorf("Go ▸ %s accelerator = %+v, want %s", label, item, want)
 		}
 	}
+	// The Tab menu: ⌘T new, ⌘W close (tab-scoped, never the window — F103),
+	// ⌥⌘1–8 select by position, ⌥⌘9 the last.
+	tabMenu := menuNamed(t, menu, "Tab").Submenu
+	for label, want := range map[string]string{
+		"New Tab": "CmdOrCtrl+T", "Close Tab": "CmdOrCtrl+W", "Select Tab 1": "CmdOrCtrl+Alt+1",
+		"Select Tab 8": "CmdOrCtrl+Alt+8", "Last Tab": "CmdOrCtrl+Alt+9",
+	} {
+		if item := menuItemNamed(tabMenu, label); item == nil || item.Accelerator != want {
+			t.Errorf("Tab ▸ %s accelerator = %+v, want %s", label, item, want)
+		}
+	}
+	if help := menuItemNamed(menuNamed(t, menu, "Help").Submenu, "Keyboard Shortcuts"); help == nil || help.Accelerator != "CmdOrCtrl+/" {
+		t.Errorf("Help ▸ Keyboard Shortcuts = %+v, want CmdOrCtrl+/", help)
+	}
 
 	seen := map[string]string{}
-	for _, name := range []string{"Solco", "Go"} {
+	for _, name := range []string{"Solco", "Go", "Tab"} {
 		for _, it := range menuNamed(t, menu, name).Submenu {
 			if it.Type == mygo.MenuItemSeparator {
 				continue
@@ -253,5 +268,83 @@ func TestWorkspaceLandsTheTerminalFromAnySurface(t *testing.T) {
 				t.Errorf("%s Workspace a second time (from %s) left the Terminal: %s showing %q", via, name, got, s.surface.current())
 			}
 		}
+	}
+}
+
+// TestShortcutSheetListsTheBoundKeys pins the sheet to the real bindings: each
+// accelerator the Go and Tab menus carry appears in the sheet under the same
+// keycaps, and the route shortcuts show the keys the Shell really fires.
+func TestShortcutSheetListsTheBoundKeys(t *testing.T) {
+	s := NewShell()
+	left, right := s.shortcutSections()
+	listed := map[string]string{}
+	for _, sections := range [][]shortcutSection{left, right} {
+		for _, section := range sections {
+			for _, r := range section.Rows {
+				if len(r.Keys) == 0 {
+					t.Errorf("sheet row %q has no keys — a row without a key is not a shortcut", r.Title)
+				}
+				listed[strings.Join(r.Keys, "")] = r.Title
+			}
+		}
+	}
+	menu := s.MenuBar(nil)
+	for _, name := range []string{"Go", "Tab"} {
+		for _, it := range menuNamed(t, menu, name).Submenu {
+			if it.Accelerator == "" || strings.HasPrefix(it.Label, "Select Tab ") || it.Label == "Last Tab" {
+				continue
+			}
+			if _, ok := listed[strings.Join(acceleratorKeycaps(it.Accelerator), "")]; !ok {
+				t.Errorf("%s ▸ %s (%s) is not in the shortcut sheet", name, it.Label, it.Accelerator)
+			}
+		}
+	}
+	if got := listed["⌥⌘1–9"]; got != "Select Tab" {
+		t.Errorf("sheet lists ⌥⌘1–9 as %q, want Select Tab", got)
+	}
+	if got, want := strings.Join(s.shortcutKeycaps(shortcutSearch), ""), "⌘K"; got != want {
+		t.Errorf("Search keycaps = %q, want %q", got, want)
+	}
+}
+
+// TestSelectTabKeycaps pins which Tab chips name a key: ⌥⌘1–8 by position,
+// ⌥⌘9 on the last Tab only when it is past the eighth.
+func TestSelectTabKeycaps(t *testing.T) {
+	for _, c := range []struct {
+		n, count int
+		want     string
+	}{{1, 3, "⌥⌘1"}, {8, 12, "⌥⌘8"}, {9, 9, "⌥⌘9"}, {9, 12, ""}, {12, 12, "⌥⌘9"}} {
+		if got := strings.Join(selectTabKeycaps(c.n, c.count), ""); got != c.want {
+			t.Errorf("selectTabKeycaps(%d,%d) = %q, want %q", c.n, c.count, got, c.want)
+		}
+	}
+}
+
+// TestTabMenuSelectsTabsByPosition pins ⌥⌘1–8 and ⌥⌘9: the nth Tab of the
+// selected Workspace in Herdr's order, "Last Tab" the final one, and a
+// position past the end changes nothing.
+func TestTabMenuSelectsTabsByPosition(t *testing.T) {
+	s := tabBarShell(12, "t1")
+	choose := func(label string) {
+		t.Helper()
+		item := menuItemNamed(menuNamed(t, s.MenuBar(nil), "Tab").Submenu, label)
+		if item == nil {
+			t.Fatalf("no %q in the Tab menu", label)
+		}
+		item.Click(item, nil)
+	}
+	choose("Select Tab 3")
+	if s.selectedTabID != "t3" {
+		t.Fatalf("Select Tab 3 landed on %q, want t3", s.selectedTabID)
+	}
+	choose("Last Tab")
+	if s.selectedTabID != "t12" {
+		t.Fatalf("Last Tab landed on %q, want t12", s.selectedTabID)
+	}
+	few := tabBarShell(2, "t1")
+	item := menuItemNamed(menuNamed(t, few.MenuBar(nil), "Tab").Submenu, "Select Tab 5")
+	item.Click(item, nil)
+	if few.selectedTabID != "t1" {
+		t.Fatalf("Select Tab 5 of 2 moved the selection to %q", few.selectedTabID)
 	}
 }

@@ -39,3 +39,41 @@ func (s *Shell) CloseTabFromMenu() {
 	}
 	s.openConfirm("close-tab", s.selectedTabID, "Close Tab?", "This closes the selected Herdr Tab and all Panes in it.")
 }
+
+// NewTabFromMenu opens a Tab in the selected Workspace (⌘T): the Tab bar's
+// "+" and the Workspace row's "+" run the same newProjectTab.
+func (s *Shell) NewTabFromMenu() {
+	s.applyOnWindow(func() {
+		if project := s.selectedProject(); project != nil && !s.loading {
+			s.newProjectTab(*project)
+		}
+	})
+}
+
+// SelectTabFromMenu selects the nth Tab of the selected Workspace in Herdr's
+// order (⌥⌘1–8); lastTab (⌥⌘9) means the last one, as in a browser. A Tab
+// that does not exist is a no-op.
+func (s *Shell) SelectTabFromMenu(n int) {
+	s.applyOnWindow(func() {
+		project := s.selectedProject()
+		if project == nil || s.loading {
+			return
+		}
+		tabs := tabsForProject(s.projection, project.ID)
+		if n == lastTab {
+			n = len(tabs)
+		}
+		if n < 1 || n > len(tabs) {
+			return
+		}
+		if s.holdCommitNavigation() {
+			return
+		}
+		s.selectTab(tabs[n-1].ID)
+	})
+}
+
+// ShowShortcutsFromMenu opens the Keyboard Shortcuts sheet (⌘/).
+func (s *Shell) ShowShortcutsFromMenu() {
+	s.applyOnWindow(func() { s.shortcutsOpen = true })
+}

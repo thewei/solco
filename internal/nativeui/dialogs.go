@@ -131,6 +131,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 	s.pickDialog(c)
 	s.deviceAddDialog(c)
 	s.usageConsentDialog(c)
+	s.shortcutsSheet(c)
 	if s.confirmOpen {
 		// Destructive confirms must not default-focus the destructive
 		// button: AlertDialog focuses and Enter-clicks its LAST button, so

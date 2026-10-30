@@ -42,6 +42,45 @@ var (
 	chatSwitchBinding    = shortcutBinding{Modifiers: ui.Cmd | ui.Shift, Key: ui.KeyC}
 )
 
+// The menu bar's accelerators, one place for the menu and the Keyboard
+// Shortcuts sheet (shortcuts_sheet.go) so a listed key is a bound key. The
+// pages take ⌘1–5 in the sidebar's tab order; Tabs take ⌥⌘1–9.
+const (
+	accelWorkspace     = "CmdOrCtrl+1"
+	accelChanges       = "CmdOrCtrl+2"
+	accelSessions      = "CmdOrCtrl+3"
+	accelFiles         = "CmdOrCtrl+4"
+	accelHosts         = "CmdOrCtrl+5"
+	accelNewTab        = "CmdOrCtrl+T"
+	accelCloseTab      = "CmdOrCtrl+W"
+	accelCommandCenter = "CmdOrCtrl+Shift+P"
+	accelShortcuts     = "CmdOrCtrl+/"
+
+	// lastTab is the pseudo index of "the last Tab" (⌥⌘9).
+	lastTab = 9
+)
+
+// selectTabAccelerator is the accelerator of Select Tab n (⌥⌘n).
+func selectTabAccelerator(n int) string { return "CmdOrCtrl+Alt+" + itoa(n) }
+
+// acceleratorKeycaps spells a menu accelerator as keycaps in the macOS order
+// (⌃⌥⇧⌘ then the key), as shortcutBinding.keycaps does for a binding.
+func acceleratorKeycaps(accelerator string) []string {
+	parts := strings.Split(accelerator, "+")
+	key := parts[len(parts)-1]
+	var caps []string
+	for _, modifier := range []struct{ name, cap string }{
+		{"Ctrl", "⌃"}, {"Alt", "⌥"}, {"Shift", "⇧"}, {"CmdOrCtrl", "⌘"}, {"Cmd", "⌘"},
+	} {
+		for _, part := range parts[:len(parts)-1] {
+			if part == modifier.name {
+				caps = append(caps, modifier.cap)
+			}
+		}
+	}
+	return append(caps, strings.ToUpper(key))
+}
+
 // keycaps spells the binding as a tooltip shows it: the modifiers in the
 // macOS order (⌃⌥⇧⌘), then the key. A key with no known cap yields nil — no
 // hint rather than a wrong one.

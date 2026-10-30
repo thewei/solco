@@ -112,6 +112,7 @@ type Shell struct {
 	accumulatedResizeX float32
 	accumulatedResizeY float32
 
+	shortcutsOpen   bool // the Keyboard Shortcuts sheet (Help ▸ Keyboard Shortcuts, ⌘/)
 	dialogOpen      bool
 	dialogKind      string
 	dialogTarget    string

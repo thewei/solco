@@ -28,6 +28,7 @@ type titlebarTab struct {
 	Detail   string
 	HasState bool
 	Service  bool
+	Keys     []string // the Select Tab shortcut as keycaps; nil past the ninth Tab
 }
 
 // titlebarTabs lists the selected Workspace's Tabs in Herdr's order, each
@@ -40,7 +41,7 @@ func (s *Shell) titlebarTabs(dark bool) []titlebarTab {
 	activity := buildSidebarActivity(s.projection, s.serviceIndex, s.paneShellIdle)
 	tabs := tabsForProject(s.projection, project.ID)
 	out := make([]titlebarTab, 0, len(tabs))
-	for _, tab := range tabs {
+	for i, tab := range tabs {
 		panes := panesForTab(s.projection, tab.ID)
 		label := tab.Label
 		if len(panes) == 1 {
@@ -54,9 +55,23 @@ func (s *Shell) titlebarTabs(dark bool) []titlebarTab {
 			ID: tab.ID, Label: fallbackText(label, "Tab"), Mark: s.tabRowMark(panes, dark),
 			Selected: tab.ID == s.selectedTabID, Panes: len(panes),
 			Tone: tone, Detail: detail, HasState: ok, Service: spec.serviceSlot(),
+			Keys: selectTabKeycaps(i+1, len(tabs)),
 		})
 	}
 	return out
+}
+
+// selectTabKeycaps is the Select Tab shortcut of the nth of count Tabs: ⌥⌘n
+// up to the eighth, ⌥⌘9 for the last when there are more than eight (Last
+// Tab), none for the Tabs between.
+func selectTabKeycaps(n, count int) []string {
+	switch {
+	case n < lastTab:
+		return acceleratorKeycaps(selectTabAccelerator(n))
+	case n == count:
+		return acceleratorKeycaps(selectTabAccelerator(lastTab))
+	}
+	return nil
 }
 
 const (
@@ -98,7 +113,8 @@ func (s *Shell) tabBarRow(c *ui.Context) bool {
 				s.tabBarScroll.X = min(s.tabBarScroll.MaxX, s.tabBarScroll.X+tabScrollStep)
 			})
 		}
-		add := gorexIconButton(c, k, iconPlus, "New Tab", "New Tab in "+project.Label, false, gorexIconBtn, gorexIconGlyph)
+		add := gorexIconButton(c, k, iconPlus, "New Tab", "", false, gorexIconBtn, gorexIconGlyph)
+		tipped(c, add, "New Tab in "+project.Label, tipKeys(acceleratorKeycaps(accelNewTab)))
 		if add.Clicked() {
 			s.newProjectTab(*project)
 		}
@@ -166,6 +182,7 @@ func (s *Shell) tabChip(c *ui.Context, k *gorexColors, tab titlebarTab, reveal b
 			}
 		}
 	})
+	tipped(c, b, tab.Label, tipKeys(tab.Keys))
 	if b.Clicked() && !tab.Selected {
 		s.selectTab(tab.ID)
 	}
