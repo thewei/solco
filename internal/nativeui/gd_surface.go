@@ -80,14 +80,11 @@ func (s *Shell) gdDiffSurface(c *ui.Context) {
 	// The Git tools live in the title bar (gitHeaderTools), so the diff opens
 	// straight with its content, and they stay on an otherwise clean worktree.
 	if len(s.git.gdFiles) == 0 {
-		title, detail := "Working tree clean", gdAbbreviateHome(s.git.root)
-		if s.gdReviewingCommit() {
-			title, detail = "No changes in commit", s.git.commitHash
+		if !s.gdReviewingCommit() {
+			s.gitCleanState(c, "Working tree clean", gdAbbreviateHome(s.git.root))
+			return
 		}
-		s.gdEmptyPanel(c, pal, title, detail, func() {
-			if !s.gdReviewingCommit() && compactButton(c, "View Commits").Clicked() {
-				s.showGitCommits()
-			}
+		s.gdEmptyPanel(c, pal, "No changes in commit", s.git.commitHash, func() {
 			if compactPrimaryButton(c, "Open Terminal").Clicked() {
 				s.showSurface(WorkspaceSurfaceTerminal)
 			}
