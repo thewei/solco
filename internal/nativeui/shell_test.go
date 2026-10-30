@@ -206,12 +206,16 @@ func TestCommandCenterUnifiedSearch(t *testing.T) {
 	s.commandCenterQuery = "alpha"
 	tester := ui.NewTester(s.View, 1200, 800)
 	tester.Frame()
-	if !tester.HasText("Project: Alpha Project") {
+	if !tester.HasText("Alpha Project") {
 		t.Fatalf("palette missing project result; texts=%q", tester.Texts())
 	}
-	if err := tester.Click("Project: Alpha Project"); err != nil {
-		t.Fatal(err)
+	// "Alpha Project" also names the sidebar row: click the palette row, the
+	// one right under its WORKSPACES group header.
+	header, ok := tester.Find("WORKSPACES")
+	if !ok {
+		t.Fatalf("palette missing its Workspaces group; texts=%q", tester.Texts())
 	}
+	tester.ClickAt(header.X+40, header.Y+header.H+16)
 	tester.Frame()
 	if got := s.router.Path(); got != routeWorkspace {
 		t.Fatalf("clicking palette result route = %q", got)

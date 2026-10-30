@@ -230,6 +230,7 @@ type Shell struct {
 	commandCenterOpen         bool
 	commandCenterScope        commandcenter.Scope
 	commandCenterQuery        string
+	commandCenterChip         int // index into commandCenterChips
 	commandCenterSelected     int
 	commandCenterReveal       int
 	commandCenterQueryFocused bool

@@ -354,7 +354,7 @@ func TestCommandCenterDeviceActions(t *testing.T) {
 		t.Fatal("Device: This Mac offered while no device is in use")
 	}
 	toA, ok := commandCenterAction(s, "device.switch."+a)
-	if !ok || !toA.Available || toA.Title != "Device: Build box" || toA.Section != "Devices" {
+	if !ok || !toA.Available || toA.Title != "Build box" || toA.Section != "Devices" {
 		t.Fatalf("switch-to-A action = %+v (found=%v)", toA, ok)
 	}
 	toB, ok := commandCenterAction(s, "device.switch."+b)
@@ -369,7 +369,7 @@ func TestCommandCenterDeviceActions(t *testing.T) {
 		}
 		return out
 	}
-	if got := titles("build"); len(got) == 0 || got[0] != "Device: Build box" {
+	if got := titles("build"); len(got) == 0 || got[0] != "Build box" {
 		t.Fatalf("searching the device's name found %q", got)
 	}
 	if got := titles("old laptop"); len(got) != 0 {
@@ -388,7 +388,7 @@ func TestCommandCenterDeviceActions(t *testing.T) {
 	if action, _ := commandCenterAction(s, "device.switch."+a); action.Available {
 		t.Fatal("the device in use and answering is offered")
 	}
-	if action, ok := commandCenterAction(s, "device.switch.local"); !ok || !action.Available || action.Title != "Device: This Mac" {
+	if action, ok := commandCenterAction(s, "device.switch.local"); !ok || !action.Available || action.Title != "This Mac" {
 		t.Fatalf("Device: This Mac = %+v (found=%v)", action, ok)
 	}
 	s.devices.lost = &deviceOutage{instance: a}

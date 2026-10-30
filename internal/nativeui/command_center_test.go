@@ -204,3 +204,48 @@ func TestCommandCenterKeys(t *testing.T) {
 		t.Fatal("escape must close the palette")
 	}
 }
+
+// TestCommandCenterChipsNarrowBySection pins the 2026-10-30 scope chips: each
+// chip keeps only its registry sections, the rows carry no "Agent: "-style
+// title prefix, and ⌘P (Navigation scope) ignores the chip.
+func TestCommandCenterChipsNarrowBySection(t *testing.T) {
+	shell := commandCenterShell(t)
+	shell.openCommandCenter(commandcenter.ScopeAll)
+	sections := func() map[string]bool {
+		got := map[string]bool{}
+		for _, r := range shell.commandCenterResults() {
+			got[r.Action.Section] = true
+		}
+		return got
+	}
+	if all := sections(); !all["Agents"] || !all["Navigation"] || !all["App"] {
+		t.Fatalf("All chip sections = %v", all)
+	}
+	for chip, want := range map[string]string{"Agents": "Agents", "Workspaces": "Navigation", "Commands": "App"} {
+		for i, c := range commandCenterChips {
+			if c.Label == chip {
+				shell.commandCenterChip = i
+			}
+		}
+		got := sections()
+		if len(got) != 1 && !(chip == "Commands" && len(got) <= 2) || !got[want] {
+			t.Fatalf("%s chip sections = %v, want only %s", chip, got, want)
+		}
+	}
+	for _, a := range shell.buildCommandCenterActions() {
+		if a.Kind == commandcenter.TargetAgent && a.Title != "Scout" {
+			t.Fatalf("agent row title = %q, want the bare agent name", a.Title)
+		}
+	}
+	shell.commandCenterChip = 1
+	shell.openCommandCenter(commandcenter.ScopeNavigation)
+	if shell.commandCenterChip != 0 {
+		t.Fatal("opening the palette must reset the chip")
+	}
+	shell.commandCenterChip = 1
+	for _, r := range shell.commandCenterResults() {
+		if r.Action.Section != "Navigation" {
+			t.Fatalf("Navigation scope leaked %q", r.Action.Section)
+		}
+	}
+}

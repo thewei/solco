@@ -28,6 +28,79 @@ const (
 	commandCenterNoReveals = -1
 )
 
+// commandCenterChips are the ⌘K scope chips (2026-10-30 UX audit): All, then
+// one chip per kind of thing the palette indexes. Files and Sessions are not
+// chips on purpose — finding them takes filesystem/catalog reads, and opening
+// the palette performs none (they keep their own search fields). Sections
+// are the registry sections each chip keeps.
+var commandCenterChips = []struct {
+	Label    string
+	Sections []string
+}{
+	{"All", nil},
+	{"Agents", []string{"Agents"}},
+	{"Workspaces", []string{"Navigation"}},
+	{"Commands", []string{"App", "Devices"}},
+}
+
+func commandCenterChipLabels() []string {
+	labels := make([]string, len(commandCenterChips))
+	for i, chip := range commandCenterChips {
+		labels[i] = chip.Label
+	}
+	return labels
+}
+
+// commandCenterResults ranks the query inside the scope and the chosen chip.
+// The ⌘P navigation scope is already one kind and shows no chips.
+func (s *Shell) commandCenterResults() []commandcenter.Result {
+	results := s.commandCenterIndexCache.Query(s.commandCenterQuery, s.commandCenterScope)
+	if s.commandCenterScope != commandcenter.ScopeAll || s.commandCenterChip <= 0 || s.commandCenterChip >= len(commandCenterChips) {
+		return results
+	}
+	keep := commandCenterChips[s.commandCenterChip].Sections
+	kept := results[:0]
+	for _, result := range results {
+		for _, section := range keep {
+			if result.Action.Section == section {
+				kept = append(kept, result)
+				break
+			}
+		}
+	}
+	return kept
+}
+
+// commandCenterSectionTitle names a registry section as its chip does.
+func commandCenterSectionTitle(section string) string {
+	if section == "Navigation" {
+		return "Workspaces"
+	}
+	return section
+}
+
+// commandCenterKind is the quiet right-hand label that replaced the title
+// prefixes ("Agent: ", "Device: "): what kind of thing the row is.
+func commandCenterKind(action commandcenter.Action) string {
+	switch action.Kind {
+	case commandcenter.TargetProject:
+		return "Workspace"
+	case commandcenter.TargetTab:
+		return "Tab"
+	case commandcenter.TargetPane:
+		return "Pane"
+	case commandcenter.TargetAgent:
+		return "Agent"
+	}
+	switch action.Section {
+	case "Devices":
+		return "Device"
+	case "App":
+		return "Command"
+	}
+	return ""
+}
+
 // handleCommandCenterShortcuts opens the palette: Cmd/Ctrl+Shift+P → All,
 // Cmd/Ctrl+P → Navigation.
 func (s *Shell) handleCommandCenterShortcuts(c *ui.Context) {
@@ -51,6 +124,7 @@ func (s *Shell) openCommandCenter(scope commandcenter.Scope) {
 	s.commandCenterIndexCache = commandcenter.Build(s.buildCommandCenterActions())
 	s.commandCenterScope = scope
 	s.commandCenterQuery = ""
+	s.commandCenterChip = 0
 	s.commandCenterSelected = 0
 	s.commandCenterReveal = commandCenterNoReveals
 	s.commandCenterOpen = true
@@ -72,15 +146,15 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 	// Navigation: projects → tabs → panes, straight from the projection.
 	for _, project := range s.projection.Projects {
 		actions = append(actions, commandcenter.Action{
-			ID: "nav.project." + project.ID, Title: "Project: " + project.Label,
-			Section: "Navigation", Kind: commandcenter.TargetProject, TargetID: project.ID,
+			ID: "nav.project." + project.ID, Title: project.Label,
+			Section: "Navigation", Keywords: []string{"project", "workspace"}, Kind: commandcenter.TargetProject, TargetID: project.ID,
 			ScopeFilter: commandcenter.ScopeNavigation, Available: true,
 		})
 	}
 	for _, tab := range s.projection.Tabs {
 		actions = append(actions, commandcenter.Action{
-			ID: "nav.tab." + tab.ID, Title: "Tab: " + tab.Label,
-			Section: "Navigation", Kind: commandcenter.TargetTab, TargetID: tab.ID,
+			ID: "nav.tab." + tab.ID, Title: tab.Label,
+			Section: "Navigation", Keywords: []string{"tab"}, Kind: commandcenter.TargetTab, TargetID: tab.ID,
 			ScopeFilter: commandcenter.ScopeNavigation, Available: true,
 		})
 	}
@@ -90,8 +164,8 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 			label = pane.ID
 		}
 		actions = append(actions, commandcenter.Action{
-			ID: "nav.pane." + pane.ID, Title: "Pane: " + label,
-			Section: "Navigation", Kind: commandcenter.TargetPane, TargetID: pane.ID,
+			ID: "nav.pane." + pane.ID, Title: label,
+			Section: "Navigation", Keywords: []string{"pane"}, Kind: commandcenter.TargetPane, TargetID: pane.ID,
 			ScopeFilter: commandcenter.ScopeNavigation, Available: pane.TerminalID != "",
 		})
 	}
@@ -99,8 +173,8 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 	// Agents from the reconciled workbench.
 	for _, card := range s.workbenchCards() {
 		actions = append(actions, commandcenter.Action{
-			ID: "agent.open." + card.Key.TerminalID, Title: "Agent: " + card.Title,
-			Section: "Agents", Keywords: []string{"open agent", card.Provider.DisplayName()},
+			ID: "agent.open." + card.Key.TerminalID, Title: card.Title,
+			Section: "Agents", Keywords: []string{"agent", "open agent", card.Provider.DisplayName()},
 			Kind: commandcenter.TargetAgent, TargetID: card.Key.TerminalID,
 			Available: true,
 		})
@@ -200,7 +274,24 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 			s.commandCenterSelected = 0
 			s.commandCenterReveal = 0
 		}
-		results := s.commandCenterIndexCache.Query(s.commandCenterQuery, s.commandCenterScope)
+		if s.commandCenterScope == commandcenter.ScopeAll {
+			// ⇥ / ⇧⇥ walk the chips without leaving the field.
+			n := len(commandCenterChips)
+			switch {
+			case field.Shortcut(0, ui.KeyTab):
+				s.commandCenterChip = (s.commandCenterChip + 1) % n
+				s.commandCenterSelected, s.commandCenterReveal = 0, 0
+			case field.Shortcut(ui.Shift, ui.KeyTab):
+				s.commandCenterChip = (s.commandCenterChip - 1 + n) % n
+				s.commandCenterSelected, s.commandCenterReveal = 0, 0
+			}
+			before := s.commandCenterChip
+			segmentedControl(c, &s.commandCenterChip, commandCenterChipLabels()...).FillWidth()
+			if s.commandCenterChip != before {
+				s.commandCenterSelected, s.commandCenterReveal = 0, 0
+			}
+		}
+		results := s.commandCenterResults()
 		if s.commandCenterSelected >= len(results) {
 			s.commandCenterSelected = len(results) - 1
 		}
@@ -211,7 +302,7 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 		if field.Submitted() {
 			// The submitted action recomputes from the CURRENT query: an
 			// IME commit or fast typing may land in the same pass.
-			s.commandCenterSubmit(s.commandCenterIndexCache.Query(s.commandCenterQuery, s.commandCenterScope))
+			s.commandCenterSubmit(s.commandCenterResults())
 		}
 		total := len(results)
 		if total > commandCenterMaxShown {
@@ -233,7 +324,7 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 						Background(designTokens(c.Theme().Dark).BorderSubtle)
 				}
 				ui.Row(c).FillWidth().Padding(sp.S, sp.M).Children(func() {
-					ui.Text(c, strings.ToUpper(group.Section)).
+					ui.Text(c, strings.ToUpper(commandCenterSectionTitle(group.Section))).
 						FontSize(Typography().Micro).TextColor(c.Theme().TextMuted)
 				})
 				for _, result := range group.Results {
@@ -246,7 +337,10 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 		if total > len(results) {
 			shown = fmt.Sprintf("%d of %d results", len(results), total)
 		}
-		hint := "↑↓ select · Enter open · Esc close"
+		hint := "↑↓ select · ⇥ scope · Enter open · Esc close"
+		if s.commandCenterScope != commandcenter.ScopeAll {
+			hint = "↑↓ select · Enter open · Esc close"
+		}
 		if s.commandCenterScope == commandcenter.ScopeNavigation {
 			hint = "Navigation — " + hint
 		}
@@ -266,6 +360,9 @@ func (s *Shell) commandCenterRow(c *ui.Context, i int, result commandcenter.Resu
 		tipped(c, ui.Text(c, result.Action.Title).FontSize(Typography().Body).Grow(1).SingleLine(), result.Action.Title)
 		if result.Action.Shortcut != "" {
 			ui.Text(c, result.Action.Shortcut).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
+		}
+		if kind := commandCenterKind(result.Action); kind != "" {
+			ui.Text(c, kind).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0)
 		}
 	})
 	if i == s.commandCenterSelected {
@@ -418,16 +515,16 @@ func (s *Shell) deviceCommandActions() []commandcenter.Action {
 	actions := make([]commandcenter.Action, 0, len(machines)+2)
 	if len(machines) > 0 && s.activeIsRemote() {
 		actions = append(actions, commandcenter.Action{
-			ID: "device.switch.local", Title: "Device: This Mac", Section: "Devices",
-			Keywords: []string{"switch device", "local", "mac"},
+			ID: "device.switch.local", Title: "This Mac", Section: "Devices",
+			Keywords: []string{"device", "switch device", "local", "mac"},
 			Kind:     commandcenter.TargetRoute, TargetID: deviceActionPrefix + "local", Available: true,
 		})
 	}
 	for _, instance := range machines {
 		inUse := instance.Name == s.activeInstance && s.devices.lostFor(instance.Name) == nil
 		actions = append(actions, commandcenter.Action{
-			ID: "device.switch." + instance.Name, Title: "Device: " + instance.DisplayName, Section: "Devices",
-			Keywords: []string{"switch device", "ssh", "remote", instance.Machine.Target},
+			ID: "device.switch." + instance.Name, Title: instance.DisplayName, Section: "Devices",
+			Keywords: []string{"device", "switch device", "ssh", "remote", instance.Machine.Target},
 			Kind:     commandcenter.TargetRoute, TargetID: deviceActionPrefix + instance.Name,
 			Available: instance.Machine.Enabled && !inUse,
 		})
