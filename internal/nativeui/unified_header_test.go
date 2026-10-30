@@ -218,7 +218,7 @@ func TestEachRouteHasOneRefreshAndItIsAnIcon(t *testing.T) {
 // TestInnerSidebarsShareOneInset pins the sidebar body's inset: entering
 // Hosts, the first line of the list starts where Settings' used to; Settings
 // dropped the view-tab strip (2026-10-15), so its list starts one strip
-// higher, at the same x.
+// higher (under its search field), at the same x.
 func TestInnerSidebarsShareOneInset(t *testing.T) {
 	routes := headerRoutes()
 	var wantX, hostsY float32
@@ -246,8 +246,11 @@ func TestInnerSidebarsShareOneInset(t *testing.T) {
 		// The strip the Settings sidebar no longer renders: one icon tab row
 		// (padding puts all six points of spacing below it).
 		strip := gorexIconBtn + Spacing().S
-		if math.Abs(float64(rect.Y-(hostsY-strip))) > 0.25 {
-			t.Errorf("%s: sidebar list starts at y %.1f, want exactly one view-tab strip (%.0f) above the other inner pages' %.1f", tc.name, rect.Y, strip, hostsY)
+		// Settings' list sits under its search field (2026-10-30 UX audit 3):
+		// one field height plus the column's 3pt gap.
+		search := Controls().RegularHeight + 3
+		if math.Abs(float64(rect.Y-(hostsY-strip+search))) > 0.5 {
+			t.Errorf("%s: sidebar list starts at y %.1f, want one view-tab strip (%.0f) above the other inner pages' %.1f with the %.0f search field in between", tc.name, rect.Y, strip, hostsY, search)
 		}
 	}
 }

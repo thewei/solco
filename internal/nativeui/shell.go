@@ -176,6 +176,7 @@ type Shell struct {
 	settings                   settings.Settings
 	settingsFontDraft          string
 	settingsThemeDraft         string
+	settingsQuery              string // the Settings sidebar's search box
 	settingsVoiceEndpointDraft string
 	settingsVoiceKeyDraft      string
 	settingsVoiceModelDraft    string

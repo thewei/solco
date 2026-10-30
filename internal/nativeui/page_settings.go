@@ -54,6 +54,7 @@ type settingsSection struct {
 var settingsSections = []settingsSection{
 	{"/settings/general", "General", iconSettings, TileGray},
 	{"/settings/terminal", "Terminal", iconTerminal, TileGreen},
+	{"/settings/voice", "Voice", iconMic, TilePink},
 	{"/settings/providers", "Agents", iconAgent, TilePurple},
 	{"/settings/git", "Git", iconBranch, TileOrange},
 	{usageSettingsPath, "Quota", iconQuota, TileTeal},
@@ -64,6 +65,9 @@ var settingsSections = []settingsSection{
 // to be the page's own inner column (inner-page style). The title bar names
 // the page, so the list starts at its first section.
 func (s *Shell) settingsNav(c *ui.Context) {
+	if s.settingsSearch(c) {
+		return
+	}
 	for _, section := range settingsSections {
 		section := section
 		selected := s.router.Path() == section.path
@@ -106,6 +110,9 @@ func (s *Shell) settingsLayout(c *ui.Context, r *ui.Route) {
 			case r.Match("/terminal"):
 				r.Title("Settings · Terminal")
 				settingsPage(c, func() { s.settingsTerminal(c) })
+			case r.Match("/voice"):
+				r.Title("Settings · Voice")
+				settingsPage(c, func() { s.settingsVoice(c) })
 			case r.Match("/providers"):
 				r.Title("Settings · Agents")
 				settingsPage(c, func() { s.settingsProviders(c) })
@@ -211,6 +218,14 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 				})
 			}
 		}),
+		row("Serif chat text", "Sets the assistant's reading text in Chat in a serif face. Code, tool rows and the interface stay sans.", func() {
+			if on, changed := settingSwitch(c, "Serif chat text", s.settings.General.ChatSerif); changed {
+				s.applySettings(func(v *settings.Settings) error {
+					v.General.ChatSerif = on
+					return nil
+				})
+			}
+		}),
 		row("Window opacity", "", func() {
 			pct := math.Round(s.settings.General.EffectiveOpacity() * 100)
 			ui.Row(c).AlignItems(ui.Center).Gap(Spacing().M).Children(func() {
@@ -242,7 +257,12 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 			}
 		}),
 	)
-	settingsGroup(c, "Voice input",
+}
+
+// settingsVoice is Settings → Voice: the transcription endpoint behind the
+// Chat composer's Mic (2026-10-30 UX audit 3: it used to hang off General).
+func (s *Shell) settingsVoice(c *ui.Context) {
+	settingsGroup(c, "Transcription",
 		row("Endpoint", "", func() {
 			s.settingText(c, "Endpoint", "https://api.openai.com/v1", &s.settingsVoiceEndpointDraft, s.settings.Voice.EndpointURL, false,
 				func(v *settings.Settings, text string) { v.Voice.EndpointURL = text })

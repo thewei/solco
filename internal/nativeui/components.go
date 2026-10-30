@@ -56,6 +56,12 @@ func navButton(c *ui.Context, glyph *ui.SVG, label, shortcut string, selected bo
 // navTileButton is a destination row led by a colored icon tile: the
 // sidebar list of a multi-page surface such as Settings.
 func navTileButton(c *ui.Context, glyph *ui.SVG, tone TileTone, label string, selected bool) ui.Element {
+	return navTileButtonDetail(c, glyph, tone, label, "", selected)
+}
+
+// navTileButtonDetail is navTileButton with a quiet detail after the label
+// (a search hit's page name).
+func navTileButtonDetail(c *ui.Context, glyph *ui.SVG, tone TileTone, label, detail string, selected bool) ui.Element {
 	tokens := designTokens(c.Theme().Dark)
 	b := ui.ButtonBase(c).
 		FillWidth().
@@ -70,6 +76,9 @@ func navTileButton(c *ui.Context, glyph *ui.SVG, tone TileTone, label string, se
 	b.Children(func() {
 		iconTile(c, glyph, tone, 20)
 		ui.Text(c, label).FontSize(Typography().Body).Grow(1).SingleLine().PassThrough()
+		if detail != "" {
+			ui.Text(c, detail).FontSize(Typography().Micro).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0).PassThrough()
+		}
 	})
 	return b
 }
