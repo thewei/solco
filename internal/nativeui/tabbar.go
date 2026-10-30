@@ -82,7 +82,7 @@ const (
 	tabChipSelectedMinWidth float32 = 160
 	tabChipSelectedMaxWidth float32 = 240
 	tabScrollStep           float32 = 180
-	tabRevealFrames                 = 3
+	tabRevealWindow                 = 1500 * time.Millisecond
 )
 
 // tabBarRow draws the title-bar Tab strip and reports whether it drew one.
@@ -95,17 +95,15 @@ func (s *Shell) tabBarRow(c *ui.Context) bool {
 		ui.Text(c, "Herdr").TextColor(t.TextMuted).Grow(1).SingleLine()
 		return false
 	}
-	// The strip's own ‹ › appear only once it overflows, which narrows it
-	// after the first scroll, so the selected chip is revealed again for a
-	// few frames until it settles whole in view.
+	// The selected chip is revealed for a moment after it is chosen, not just
+	// once: the strip's own ‹ › appear only once it overflows (narrowing it),
+	// and state dots / brand marks land after the first frames, so a single
+	// reveal ends with the chip's close × clipped.
 	if s.tabBarSelected != s.selectedTabID {
-		s.tabBarReveal = tabRevealFrames
+		s.tabBarRevealUntil = time.Now().Add(tabRevealWindow)
 	}
 	s.tabBarSelected = s.selectedTabID
-	selectionMoved := s.tabBarReveal > 0
-	if selectionMoved && s.tabBarScroll.MaxX > 0 { // count frames once the overflow is known
-		s.tabBarReveal--
-	}
+	selectionMoved := time.Now().Before(s.tabBarRevealUntil)
 
 	ui.Row(c).Grow(1).MinWidth(0).Gap(2).AlignItems(ui.Center).Children(func() {
 		overflowLeft := s.tabBarScroll.X > 1
