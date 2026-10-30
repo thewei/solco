@@ -122,7 +122,8 @@ type treeRowSpec struct {
 	StatusSlot bool
 	// Tile, when set, replaces the Mark with a letter tile (the Workspace
 	// row, 2026-10-30), Branch/Dirty add the repository facts after the
-	// label: the branch name muted, a dirty dot when files changed.
+	// label in fixed columns (branch, then the pane tally): the branch muted,
+	// amber when files changed — never a second dot.
 	Tile   string
 	Branch string
 	Dirty  bool
@@ -319,34 +320,63 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 				ui.Box(c).Width(5).Shrink(0).PassThrough()
 			}
 			ui.Text(c, spec.Label).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").PassThrough()
-			if spec.Branch != "" {
-				tipped(c, ui.Text(c, spec.Branch).FontSize(Typography().Micro).TextColor(t.TextMuted).
-					SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).MaxWidth(84).PassThrough(), spec.Branch)
-			}
-			if spec.Dirty {
-				tipped(c, ui.Box(c).Size(6, 6).Radius(3).Shrink(0).Background(t.Warning), "Uncommitted changes")
-			}
 			hovered := row.Hovered()
+			controls := func() {
+				if spec.Expandable && hovered {
+					glyph := iconChevron
+					if spec.Expanded {
+						glyph = iconChevronDown
+					}
+					ui.Icon(c, glyph).Size(11, 11).TextColor(t.TextMuted).Shrink(0).PassThrough()
+				}
+				if spec.Action != nil && hovered {
+					action := gorexIconButton(c, gorexColorsOf(t.Dark), spec.Action.Glyph, spec.Action.Label, spec.Action.tooltip(), false, gorexRowBtn, gorexRowGlyph)
+					if action.Clicked() {
+						spec.Action.Run()
+					}
+				}
+			}
 			// The collapsed pane tally (2026-10-07): tiny muted digits at the
 			// trailing edge; under the pointer it steps aside for the
 			// chevron and the row's action.
-			if spec.Count > 1 && !hovered {
-				ui.Text(c, itoa(spec.Count)).Label(itoa(spec.Count) + " panes").
-					FontSize(Typography().Micro).TextColor(t.TextMuted).
-					Shrink(0).PassThrough()
-			}
-			if spec.Expandable && hovered {
-				glyph := iconChevron
-				if spec.Expanded {
-					glyph = iconChevronDown
+			tally := func() {
+				if spec.Count > 1 && !hovered {
+					ui.Text(c, itoa(spec.Count)).Label(itoa(spec.Count) + " panes").
+						FontSize(Typography().Micro).TextColor(t.TextMuted).
+						Shrink(0).PassThrough()
 				}
-				ui.Icon(c, glyph).Size(11, 11).TextColor(t.TextMuted).Shrink(0).PassThrough()
 			}
-			if spec.Action != nil && hovered {
-				action := gorexIconButton(c, gorexColorsOf(t.Dark), spec.Action.Glyph, spec.Action.Label, spec.Action.tooltip(), false, gorexRowBtn, gorexRowGlyph)
-				if action.Clicked() {
-					spec.Action.Run()
-				}
+			if spec.Tile != "" {
+				// A Workspace row's meta is two fixed columns — branch, then the
+				// pane tally — so every row's branch and count line up whatever
+				// it holds (2026-10-30; they used to float against a variable
+				// label and each other). The branch wears amber when the working
+				// tree has uncommitted changes, so a row has no second dot: the
+				// one dot at the edge is only ever the state slot. Under the
+				// pointer the same box holds the chevron and the action, so
+				// nothing shifts.
+				ui.Row(c).Width(treeBranchColW + treeMetaGap + treeCountColW).Shrink(0).Gap(treeMetaGap).AlignItems(ui.Center).PassThrough().Children(func() {
+					ui.Box(c).Grow(1).MinWidth(0).PassThrough()
+					if hovered {
+						controls()
+						return
+					}
+					if spec.Branch != "" {
+						ink, tip := t.TextMuted, spec.Branch
+						if spec.Dirty {
+							ink, tip = t.Warning, spec.Branch+" — uncommitted changes"
+						}
+						tipped(c, ui.Text(c, spec.Branch).FontSize(Typography().Micro).TextColor(ink).
+							SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).MaxWidth(treeBranchColW).PassThrough(), tip)
+					}
+					ui.Row(c).Width(treeCountColW).Shrink(0).PassThrough().Children(func() {
+						ui.Box(c).Grow(1).MinWidth(0).PassThrough()
+						tally()
+					})
+				})
+			} else {
+				tally()
+				controls()
 			}
 			// The state slot ends the row: spinner, dot or ring in one place.
 			if tone, detail, ok := spec.indicator(); ok {

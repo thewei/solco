@@ -82,3 +82,34 @@ func TestTreeRowIndicatorPrecedence(t *testing.T) {
 		t.Fatalf("quiet row rendered an indicator")
 	}
 }
+
+// TestWorkspaceRowMetaColumnsAlign pins the 2026-10-30 fix: a Workspace row's
+// branch and pane tally sit in fixed columns, and the state slot ends the row
+// — whatever else (dirty, a service dot, no branch at all) the row holds.
+func TestWorkspaceRowMetaColumnsAlign(t *testing.T) {
+	view := func(c *ui.Context) {
+		treeRow(c, treeRowSpec{Key: "r1", Tile: "A", Label: "alpha", Branch: "main", Dirty: true, Count: 3, StatusSlot: true,
+			Activity: sidebarActivity{On: true, Tone: ToneSuccess, Detail: "dev server"}})
+		treeRow(c, treeRowSpec{Key: "r2", Tile: "B", Label: "beta", Branch: "feat/a-rather-long-branch", Count: 12, StatusSlot: true})
+		treeRow(c, treeRowSpec{Key: "r3", Tile: "C", Label: "gamma", Count: 2, StatusSlot: true})
+		treeRow(c, treeRowSpec{Key: "r4", Tile: "D", Label: "delta", Branch: "dev", StatusSlot: true})
+	}
+	tester := ui.NewTester(view, 300, 200)
+	tester.Frame()
+	right := func(label string) float32 {
+		el, ok := tester.Find(label)
+		if !ok {
+			t.Fatalf("%q missing; texts=%q", label, tester.Texts())
+		}
+		return el.X + el.W
+	}
+	counts := []float32{right("3 panes"), right("12 panes"), right("2 panes")}
+	for _, x := range counts[1:] {
+		if x != counts[0] {
+			t.Fatalf("pane tallies end at %v, want one column", counts)
+		}
+	}
+	if a, b := right("main"), right("dev"); a != b {
+		t.Fatalf("branches end at %v and %v, want one column", a, b)
+	}
+}

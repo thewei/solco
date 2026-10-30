@@ -33,6 +33,12 @@ const (
 	treeGlyphW   float32 = 16
 	treeTitleGap float32 = 5
 
+	// A Workspace row's meta columns (components.go): the branch, then the
+	// pane tally, in fixed-width boxes so rows line up.
+	treeBranchColW float32 = 72
+	treeCountColW  float32 = 16
+	treeMetaGap    float32 = 4
+
 	// treeRowRadius is the corner of every selectable sidebar row: tree rows,
 	// Changes rows and the commit list.
 	treeRowRadius float32 = 4
