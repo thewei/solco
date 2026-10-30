@@ -94,7 +94,9 @@ page_history.go: Sessions 中心列表布局（参照 magpie 会话历史）：A
 history_state.go: HistoryService 列表查询的生成代际隔离，筛选清空旧可选行/预览/多选；范围状态（scopeAll/scopeRoot/projectTotal/allTotal；请求带 ProjectPath，只有无范围且无筛选的加载才喂 Recent）；Provider 元数据选择与各 Provider 总数（可选 HistoryProviderCountView / HistoryProjectCountView，标签计数取当前范围）、扫描分批上报（可选 HistoryScanProgressView：每批约 100 个来源在窗口线程刷新一次可见列表，数千个单会话文件夹不再把页面按在 Loading 态）、扫描收尾 force 刷新 History-meta 投影（标题主动获取：目录落定即出标题，不等节流或事件）；分组展开、多选、行内预览与详情页帧戳（只读 Chat 绑定的空闲释放）状态；回收站条目缓存与视图开关（trashItems/showTrash，trashGen 代际防过期）
 history_select.go: Sessions 多选：行/项目头勾选标记、底部批量栏（会话视图：Move to Trash；回收站：Put Back / Delete Forever…，有勾选才出现）；选择只是 UI 状态，文件搬动全在 history_trash.go
 history_preview.go: 行内会话详情的状态机：点行展开/收起，并懒读该会话 token 用量（history.ReadUsage，代际防过期）；展开面板就是 history_info.go 的详情表；不再摘录消息，不缓存任何会话内容
-status_indicator.go: 全局唯一状态指示（16pt 右侧槽位：working 旋转、idle/resolved 空心环、其余实心点、未知为空槽；Agent 行/Tab/Project/Pane/浮层/Pane 卡标题共用，不再有角标点或私有 spinner）
+status_indicator.go: 全局唯一状态指示（16pt 右侧槽位：working 旋转、idle/resolved 空心环、其余实心点、服务=圆角方块 statusIndicatorService（形状表种类、颜色表紧急度）、未知为空槽；Agent 行/Tab/Project/Pane/浮层/Pane 卡标题共用，不再有角标点或私有 spinner）
+files_start.go: /files 未选文件时的起始页（2026-10-30 UX audit）：最近文件（Session.RecentFiles，MRU，只列仍在当前根下的）、Changed in git、README；渲染零 IO，按根缓存
+hosts_start.go: Hosts 起始页与过滤（2026-10-30）：Recently connected 卡片（Session.RecentHosts，Connect/Edit）、user@host 副标题、Filter hosts；只读 sshconfig 索引
 status_indicator_test.go: 形状与 state→tone 映射回归
 quick_panel_quota.go: Header 浮层 Quota 页（2 列迷你卡，头条取计数额度否则最紧窗口；页脚 Updated/Open Quota）
 quick_panel_quota_test.go: Quota 页迷你卡、头条、header 计数 waiting/total、migrateRoute
