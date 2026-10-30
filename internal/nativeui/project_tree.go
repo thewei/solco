@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 Herdr 权威 Workspace/Tab 顺序及 Pane layout、reorder.go 的受限拖动规则
  * [OUTPUT]: 提供侧栏 Workspace → Tab → Pane 交互树、排序与原生拖放入口
- * [POS]: nativeui 的运行时导航树；状态标识不再干扰用户持久化的拖动顺序
+ * [POS]: nativeui 的运行时导航树；状态标识不再干扰用户持久化的拖动顺序；单 Pane Tab 行的身份图取该 Pane 绑定 Agent 的品牌图（次选可识别程序品牌，其余 tab 字形，tabRowMark）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -91,7 +91,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 				Selected:   selectedTab && tab.PaneCount <= 1,
 				Expandable: len(panes) > 1,
 				Expanded:   expandedTab,
-				Mark:       s.tabRowMark(panes),
+				Mark:       s.tabRowMark(panes, dark),
 				Label:      tab.Label,
 				Status:     tab.AgentStatus,
 				Activity:   activity[tab.ID],
@@ -155,13 +155,18 @@ func (s *Shell) projectItems(c *ui.Context) {
 	}
 }
 
-// tabRowMark picks a collapsed Tab row's leading mark (2026-10-06 A5): a
-// Tab presenting a single non-Agent Pane that runs a recognized program —
-// a long-lived dev server, a database — shows that program's brand, so the
-// running service is visible without expanding the Tab. Everything else
-// keeps the plain tab glyph; the icon-corner dot carries the running state.
-func (s *Shell) tabRowMark(panes []herdr.Pane) visualMark {
-	if len(panes) == 1 && s.paneAgent(panes[0].ID) == nil {
+// tabRowMark picks a single-pane Tab row's leading mark (2026-10-06 A5):
+// a Tab presenting one Pane wears that Pane's identity — the bound
+// Agent's brand first (2026-10-30: matching the breadcrumb switcher and
+// the pane rows; a single-pane Tab renders no pane row, so the Tab row is
+// where the Agent's icon shows), then a recognized program's brand for a
+// long-lived service. Multi-pane Tabs and unrecognized shells keep the
+// plain tab glyph; the icon-corner dot carries the running state.
+func (s *Shell) tabRowMark(panes []herdr.Pane, dark bool) visualMark {
+	if len(panes) == 1 {
+		if mark, isAgent := s.agentMarkForPane(panes[0].ID, dark); isAgent {
+			return mark
+		}
 		if brand, ok := s.procMarkForPane(panes[0].ID); ok {
 			return brand
 		}

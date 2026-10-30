@@ -267,34 +267,35 @@ func TestBuildSidebarActivityProjectDaemonFallback(t *testing.T) {
 }
 
 // TestTabRowMarkShowsRunningServiceBrand pins A5 (2026-10-06 annotation
-// round): a collapsed Tab presenting one non-Agent Pane that runs a
-// recognized program shows that program's brand on the row, so a
-// long-lived service is visible without expanding the Tab. Agent panes and
-// unknown or absent services keep the plain tab glyph.
+// round) plus the 2026-10-30 agent-brand extension: a collapsed Tab
+// presenting one Pane wears that Pane's identity — the bound Agent's
+// brand first (a single-pane Tab renders no pane row, so the Tab row is
+// where the Agent's icon shows), then a recognized program's brand for a
+// long-lived service. Unknown or absent services and multi-pane Tabs keep
+// the plain tab glyph.
 func TestTabRowMarkShowsRunningServiceBrand(t *testing.T) {
 	s := NewShell()
 	s.projection = herdr.Projection{
-		Agents: []herdr.Agent{{PaneID: "pa", Status: "working"}},
+		Agents: []herdr.Agent{{PaneID: "pa", Kind: "omp", Status: "working"}},
 	}
 	s.serviceIndex = sidebarServiceIndex{
 		Panes: map[string]paneServiceActivity{
 			"ps": {Proc: "node", Ports: []uint16{3000}},
 			"pu": {Proc: "mcp-feedback-server", Ports: []uint16{3001}},
-			"pa": {Proc: "node", Ports: []uint16{3002}},
 		},
 		Projects: map[string]paneServiceActivity{},
 	}
 
-	if mark := s.tabRowMark([]herdr.Pane{{ID: "ps", TabID: "t1"}}); mark.svg == nil || mark.svg == iconTab {
+	if mark := s.tabRowMark([]herdr.Pane{{ID: "ps", TabID: "t1"}}, false); mark.svg == nil || mark.svg == iconTab {
 		t.Fatalf("service pane tab mark = %+v, want the node brand", mark)
 	}
-	if mark := s.tabRowMark([]herdr.Pane{{ID: "pu", TabID: "t1"}}); mark.svg != iconTab {
+	if mark := s.tabRowMark([]herdr.Pane{{ID: "pu", TabID: "t1"}}, false); mark.svg != iconTab {
 		t.Fatalf("unknown service tab mark = %+v, want the plain tab glyph", mark)
 	}
-	if mark := s.tabRowMark([]herdr.Pane{{ID: "pa", TabID: "t1"}}); mark.svg != iconTab {
-		t.Fatalf("agent pane tab mark = %+v, want the plain tab glyph", mark)
+	if mark := s.tabRowMark([]herdr.Pane{{ID: "pa", TabID: "t1"}}, false); mark.bmp == nil {
+		t.Fatalf("agent pane tab mark = %+v, want the Agent's brand bitmap", mark)
 	}
-	if mark := s.tabRowMark([]herdr.Pane{{ID: "ps", TabID: "t1"}, {ID: "pu", TabID: "t1"}}); mark.svg != iconTab {
+	if mark := s.tabRowMark([]herdr.Pane{{ID: "ps", TabID: "t1"}, {ID: "pu", TabID: "t1"}}, false); mark.svg != iconTab {
 		t.Fatalf("multi-pane tab mark = %+v, want the plain tab glyph", mark)
 	}
 }
