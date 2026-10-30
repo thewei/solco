@@ -26,6 +26,7 @@ import (
 	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/preview"
 	"github.com/thewei/solco/internal/scripts"
 	"github.com/thewei/solco/internal/services"
 	"github.com/thewei/solco/internal/settings"
@@ -184,6 +185,10 @@ type Shell struct {
 	// HistoryService.
 	hist historyState
 
+	// usage owns the Usage page's presentation state (quota readings, local
+	// activity, opt-in switches); it reads nothing until the page asks.
+	usage *usageState
+
 	// providers owns the unified Providers health presentation state: one
 	// card per provider joining the Herdr integration facet and the direct
 	// status hook facet (audit on entry/refresh/after-action only).
@@ -234,6 +239,12 @@ type Shell struct {
 	workboard workboardState
 	// rightPanel owns the Native Right Panel (Changes/Files/Services).
 	rightPanel rightPanelState
+	// filesSearch is the Files sidebar's one search (names | content).
+	filesSearch filesSearchState
+	// staticPreview serves the project root to HTML previews, started by the
+	// first Open Preview and closed with the root (files_static_preview.go).
+	staticPreview     *preview.StaticServer
+	staticPreviewRoot string
 
 	// hosts owns the SSH Hosts page (2026-10-13): a local ~/.ssh/config
 	// index plus raw-editor state. Local client capability — connections
@@ -349,6 +360,8 @@ type Shell struct {
 	changesSearchOpen, gitCommitSearchOpen, gitCommitFilesSearchOpen bool
 	gitRefsSelected                                                  string
 	gitRefsHinted                                                    bool
+	// gitRefsReveal is the sidebar ref row a commit chip asked to scroll to.
+	gitRefsReveal string
 	unstagedOpen                                                     bool
 	stagedOpen                                                       bool
 	// commitsMode shows the All Commits pane instead of the split panes.
@@ -385,6 +398,18 @@ type Shell struct {
 	// read-only catalog knows it; refreshed beside usageByAgent on the
 	// dispatch lane, read-only at render.
 	agentSessionTitle map[agent.AgentKey]string
+	// agentSessionMod is each live agent's session file modification time
+	// (the sidebar's "last worked" tag), refreshed with the title cache.
+	agentSessionMod map[agent.AgentKey]time.Time
+	// agentSubagents caches each Claude Code agent's spawned sub-agents
+	// (subagents.go), refreshed by a throttled background read.
+	agentSubagents map[agent.AgentKey][]history.Subagent
+	// tabBarScroll / tabBarSelected keep the title-bar Tab strip's scroll
+	// and the last selection it scrolled to (tabbar.go).
+	tabBarScroll   ui.ScrollState
+	tabBarSelected string
+	subagentsBusy  bool
+	subagentsAt    time.Time
 
 	// inspector owns the 0.8 read-only Agent inspector state.
 	inspector inspectorState
@@ -568,6 +593,7 @@ func NewShell(opts ...ShellOption) *Shell {
 	// is NeedsAttention, so the zero filter would land users on an empty
 	// "No agents here" first screen (2026-10-06 F57).
 	s.workbench.filterAll = true
+	s.usage = newUsageState()
 	s.settingsService = app.NewSettingsService(settings.NewMemoryStore(settings.Default()))
 	s.settings = s.settingsService.Current()
 	s.settingsFontDraft = s.settings.Terminal.FontFamily

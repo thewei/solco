@@ -109,7 +109,7 @@ func (s *Shell) quickPanelEntryRow(c *ui.Context, entry StatusCenterEntry, dupPr
 	card := entry.Card
 	var row ui.Element
 	ui.Box(c).FillWidth().Children(func() {
-		row = s.agentCardRow(c, card, false, dupProjects, func() {
+		row = s.agentCardRow(c, card, false, dupProjects, false, func() {
 			if !card.ReviewPending {
 				return
 			}

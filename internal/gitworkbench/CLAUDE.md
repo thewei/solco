@@ -27,12 +27,14 @@ Git workbench 是 Solco 的本地 Git 域服务：Runner 负责仓库读取与�
 - `history_actions_test.go`：历史操作边界测试。
 - `models_test.go`：领域模型约束测试。
 - `mutation_matrix_test.go`：Git 操作拒绝/保护矩阵测试。
-- `operations.go`：同步、Stash、Tag、Worktree、含完整父 SHA 的历史提交及 sequencer 操作，供原生历史图谱使用。
+- `operations.go`：同步、Stash（含其提交与 base 提交，`StashSnapshot` 把 tracked 变更与第三父的未跟踪文件合成一次审阅，供图谱把 stash 挂到所属提交）、Tag、Worktree、含完整父 SHA 的历史提交及 sequencer 操作，供原生历史图谱使用。
 - `operations_test.go`：真实 Git 操作和保护回归。
 - `line_patch.go`：按所选行构造单 hunk 补丁并经 `git apply --cached --recount [--reverse] -`（Runner.Stdin）暂存/取消暂存部分行；未选中的删除行回退为上下文、未选中的新增行丢弃。
 - `line_patch_test.go`：真实 Git 回归（多 hunk 偏移、反向取消、无换行标记、空选区拒绝）。
 - `blob.go`：`BlobSize`/`ReadBlob`（`cat-file -s` / `cat-file blob`，带上限、拒绝选项形态的规格），供 diff 卡片预览二进制两侧。
 - `blob_test.go`：真实 Git 回归（HEAD/索引大小与字节、超限拒绝、非法规格拒绝）。
+- `commit_graph.go`：`ListCommitGraph`（--branches/--remotes/--tags + HEAD、--date-order、--decorate=full 的真实 %D 装饰，隐藏 ref 走 Git 原生 --exclude，stash/notes 不入图）、`ResolveCommit`（完整 ref→提交，拒绝非 refs/ 名）、`CommitByHash`、`GraphPosition`（commit 在图谱里的行号，窗口据此精确扩大；MaxGraphLimit 2 万）、`CommitRef`。
+- `commit_graph_test.go`：真实仓库回归（全分支、装饰、隐藏只去独占提交、HEAD 恒显示、守卫）。
 - `commit_parents_test.go`：真实 Git 提交父 SHA 读取回归，支持历史图谱连接。
 - `patch.go`：Diff/hunk 补丁构建和应用。
 - `repository.go`：Git 仓库元数据读取。

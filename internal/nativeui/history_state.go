@@ -129,6 +129,11 @@ type historyState struct {
 	previewGen    atomic.Uint64
 	previewCancel context.CancelFunc
 
+	// detailInfo / detailInfoOpen are the /history/{id} details card's
+	// usage read and fold state (history_info.go); released with the page.
+	detailInfo     historyPreview
+	detailInfoOpen bool
+
 	// Continue (history_continue.go): the plan awaiting the user's confirm,
 	// whether a confirmed one is still running, and the runtime seam tests
 	// replace.

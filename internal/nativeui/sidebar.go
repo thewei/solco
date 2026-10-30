@@ -8,11 +8,13 @@ package nativeui
  */
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/herdr"
 )
@@ -49,13 +51,20 @@ func (s *Shell) sidebar(c *ui.Context) {
 			s.gitRepositorySidebar(c)
 		} else if s.router.Path() == routeFiles {
 			s.syncRightPanelRoot()
-			s.sidebarProjectHeader(c, s.rightPanel.currentRoot, "Refresh files", s.refreshFiles, nil)
+			s.sidebarProjectHeader(c, s.rightPanel.currentRoot, "Refresh files", s.refreshFiles, &headerSearch{
+				Query: &s.filesSearch.query, Open: &s.filesSearch.open, Label: "Search files", Button: "Search files",
+				Changed: s.filesSearchChanged, Submit: s.filesSearchOpenFirst,
+			})
 			ui.Divider(c)
 			s.filesToolView(c)
 		} else if isHistoryRoute(s.router.Path()) {
 			// Sessions wears the same project/branch head as Git and Files;
 			// under it the scope rows say whose sessions the list shows.
-			s.sidebarProjectHeader(c, s.historyProjectRoot(), "Refresh sessions", s.refreshHistoryScan, nil)
+			refreshLabel, refresh := "Refresh sessions", s.refreshHistoryScan
+			if s.router.Path() == routeQuota {
+				refreshLabel, refresh = "Refresh quota", func() { s.refreshUsage(true) }
+			}
+			s.sidebarProjectHeader(c, s.historyProjectRoot(), refreshLabel, refresh, nil)
 			ui.Divider(c)
 			s.historyNav(c)
 		} else if s.sidebarInnerPage() {
@@ -300,8 +309,15 @@ const (
 func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 	t := c.Theme()
 
-	entries := s.filteredCommits()
+	// A search reads the whole window; otherwise folded merges leave their
+	// merged-in branch out of both the list and the graph.
+	view := s.commitView()
+	fold, foldedCounts := view.fold, view.counts
+	entries := view.shown
 	filtering := strings.TrimSpace(s.gitCommitFilter) != ""
+	if filtering {
+		entries = s.filteredCommits()
+	}
 	if s.gdReviewingCommit() {
 		s.commitsSelected = -1
 		for i, cm := range entries {
@@ -311,25 +327,29 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 		}
 	}
 
-	graphs := gitHistoryGraph(s.git.commits)
 	// The graph column hugs the lanes the history uses; a filtered list shows
 	// dots only, since its rows are no longer neighbours.
-	graphW := gitGraphWidth(graphs)
-	if filtering {
-		graphW = gitGraphWidthFor(1)
-	}
 	windowW, _ := c.Size()
 	centerW := s.gitCenterWidth(windowW)
-	graphByHash := make(map[string]gitGraphRow, len(graphs))
-	for i, cm := range s.git.commits {
-		graphByHash[cm.Hash] = graphs[i]
-	}
+	graphByHash := view.graphs
 	focused := s.commitsList.FocusWithin(c)
+	hiddenRefs := s.graphHiddenSet()
+	chipIndex := s.newGitChipIndex()
+	s.consumeLocate(entries)
 	if s.git.commitsLoading && len(entries) == 0 {
 		ui.Column(c).Grow(1).Center().Padding(16).Children(func() {
 			ui.Spinner(c).Size(16, 16)
 		})
 		return
+	}
+	// Keyed before the list is built: the entries may have grown or shrunk
+	// since the last frame (fold, unfold, search), and a stale key function
+	// would give the new rows no key.
+	s.commitsList.Key = func(i int) any {
+		if i >= 0 && i < len(entries) {
+			return entries[i].Hash
+		}
+		return nil
 	}
 	list := ui.List(c, &s.commitsList, len(entries), func(i int) {
 		if i < 0 || i >= len(entries) {
@@ -343,6 +363,10 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 		row := ui.Row(c).Gap(8).Padding(0, 8).Radius(treeRowRadius).AlignItems(ui.Center).MinWidth(0)
 		muted, ref := t.TextMuted, pal.ref
 		switch {
+		case s.git.flashHash == cm.Hash:
+			// The commit a sidebar click just located.
+			row.Background(pal.match).TextColor(t.Text)
+			muted, ref = t.TextMuted, t.Text
 		case current && focused:
 			row.Background(designTokens(t.Dark).SidebarSelectStrong).TextColor(t.Text)
 			muted, ref = t.TextMuted, t.Text
@@ -375,28 +399,22 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 			}
 		})
 		row.Children(func() {
-			gitGraphGlyph(c, graphByHash[cm.Hash], graphW, filtering)
-			// Real local/remote-tracking decorations follow cached ref
-			// object hashes, never guessed from the commit subject.
-			labels := 0
-			for _, branch := range s.git.branches {
-				if branch.HeadShort != "" && strings.HasPrefix(cm.Hash, branch.HeadShort) && labels < 2 {
-					tipped(c, ui.Text(c, branch.Name).FontSize(Typography().Micro).FontWeight(WeightSemibold).
-						Padding(2, 5).Radius(3).Background(t.SurfacePressed).
-						TextColor(t.Text).MaxWidth(140).SingleLine(), branch.Name)
-					labels++
-				}
+			graph := graphByHash[cm.Hash]
+			graphW := gitGraphRowWidth(graph)
+			if filtering {
+				graphW = gitGraphWidthFor(1)
 			}
-			for _, branch := range s.git.remoteBranches {
-				if branch.HeadShort != "" && strings.HasPrefix(cm.Hash, branch.HeadShort) && labels < 2 {
-					name := branch.Remote + "/" + branch.Name
-					tipped(c, ui.Text(c, name).FontSize(Typography().Micro).FontWeight(WeightSemibold).
-						Padding(2, 5).Radius(3).Background(t.SurfaceHover).
-						TextColor(ref).MaxWidth(140).SingleLine(), name)
-					labels++
-				}
-			}
+			gitGraphGlyph(c, graph, graphW, filtering)
+			gitCommitChips(c, chipIndex.chips(cm, hiddenRefs), ref, func(chip gitChip) {
+				// A chip opens its commit and shows where its ref lives in
+				// the sidebar.
+				s.reviewCommit(cmp.Or(chip.review, cm.Hash))
+				s.revealInSidebar(chip.target)
+			})
 			ui.Text(c, cm.Subject).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine()
+			if !filtering && fold.foldable(cm.Hash) {
+				s.foldToggle(c, cm.Hash, foldedCounts[cm.Hash])
+			}
 			// Author and age give way first when the center is narrow.
 			if centerW >= gitCommitsShowAuthor {
 				ui.Text(c, cm.Author).FontSize(Typography().BodySmall).TextColor(muted).Width(90).SingleLine()
@@ -407,12 +425,6 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 			}
 		})
 	}).Grow(1).MinHeight(0).Padding(4, 8)
-	s.commitsList.Key = func(i int) any {
-		if i >= 0 && i < len(entries) {
-			return entries[i].Hash
-		}
-		return nil
-	}
 	list.Children(func() {
 		if len(entries) == 0 {
 			ui.Text(c, "No matching commits").FontSize(Typography().Body).TextColor(t.TextMuted).Padding(12)
@@ -567,28 +579,74 @@ func (s *Shell) agentItems(c *ui.Context) {
 		ui.Text(c, "No active agents").Padding(Spacing().M, Spacing().L).TextColor(c.Theme().TextMuted)
 		return
 	}
+	s.refreshSubagents() // throttled, background; keeps the nested rows live
 	dupProjects := duplicateAgentProjectLabels(cards)
-	for _, card := range cards {
-		card := card
-		label, _ := agentCardLabel(card, dupProjects)
-		selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
-		row := s.agentCardRow(c, card, selected, dupProjects, nil)
-		if row.Clicked() {
-			// N19 #4: a sidebar Agent click jumps straight to the pane's
-			// remembered surface (Chat or Terminal) instead of the detail
-			// popover; the popover stays on the tray and header entry
-			// points.
-			s.openAgentFromSidebar(card)
+	// Agents group under their Workspace (2026-10-30): a faint label names
+	// the group, so the cards' second line carries only the git facts.
+	for _, group := range groupAgentCards(cards) {
+		if group.Name != "" {
+			ui.Text(c.Key("agent-group:"+group.Key), group.Name).FontSize(Typography().Micro).
+				TextColor(c.Theme().TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").
+				Padding(7, agentCardPadX, 2)
 		}
-		row.ContextMenu(func(m *ui.Menu) {
-			if m.Item("Open Chat").Chosen() {
-				s.openChat(card)
+		for _, card := range group.Cards {
+			card := card
+			label, _ := agentCardLabel(card, dupProjects)
+			selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
+			row := s.agentCardRow(c, card, selected, dupProjects, group.Name != "", nil)
+			if row.Clicked() {
+				// N19 #4: a sidebar Agent click jumps straight to the pane's
+				// remembered surface (Chat or Terminal) instead of the detail
+				// popover; the popover stays on the tray and header entry
+				// points.
+				s.openAgentFromSidebar(card)
 			}
-			if card.PaneID != "" {
-				s.paneOverflowItems(m, card.PaneID, label)
+			row.ContextMenu(func(m *ui.Menu) {
+				if m.Item("Open Chat").Chosen() {
+					s.openChat(card)
+				}
+				if card.PaneID != "" {
+					s.paneOverflowItems(m, card.PaneID, label)
+				}
+			})
+			// Sub-agents hang under the agent that spawned them while any
+			// is running; once all are done they fold into the card's ⤷N.
+			if subs := openSubagents(card, time.Now()); len(subs) > 0 {
+				for i, sub := range subs {
+					if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
+						s.openAgentFromSidebar(card)
+					}
+				}
 			}
-		})
+		}
 	}
+}
+
+// agentGroup is one Workspace's cards in the sidebar Agents list.
+type agentGroup struct {
+	Key   string
+	Name  string
+	Cards []agent.AgentCardModel
+}
+
+// groupAgentCards splits the (already actionable-first) cards by Workspace.
+// Groups keep the order their strongest card appears in, and each group
+// keeps the cards' order, so the list stays stable and the most urgent
+// Workspace leads.
+func groupAgentCards(cards []agent.AgentCardModel) []agentGroup {
+	var groups []agentGroup
+	at := map[string]int{}
+	for _, card := range cards {
+		key := card.ProjectID
+		i, ok := at[key]
+		if !ok {
+			i = len(groups)
+			at[key] = i
+			groups = append(groups, agentGroup{Key: key, Name: card.ProjectName})
+		}
+		groups[i].Cards = append(groups[i].Cards, card)
+	}
+	return groups
 }
 
 func (s *Shell) handleSidebarSelection(selected string) {

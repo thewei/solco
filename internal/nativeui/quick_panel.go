@@ -10,8 +10,8 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 mygo 的 Flyout（Tray/Parent 锚定、Popover 系统材质、菜单式关闭与 Escape）、ui.Segmented、agent_card 共享卡片、agent_quick_panel 的分组与条目行
- * [OUTPUT]: 对外提供 Shell.QuickPanelView（Agents 按状态分组的列表 / Services / Tasks——仅 herdr-projects 门打开时）、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
+ * [INPUT]: 依赖 mygo 的 Flyout（Tray/Parent 锚定、Popover 系统材质、菜单式关闭与 Escape）、segmentTabs（Git 侧栏 Changes/Commits 同款页签）、agent_card 共享卡片、agent_quick_panel 的分组与条目行
+ * [OUTPUT]: 对外提供 Shell.QuickPanelView（页签 Agents 按状态分组的列表 / Quota 额度卡片 / Services / Tasks——仅 herdr-projects 门打开时）、Shell.selectQuickPanelTab、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
  * [POS]: Agent 活动的唯一浮层：托盘/标题栏打开，一层到底——点击 Agent 直达其面板并收起浮层，没有第二层详情；同一 Flyout 生命周期，锚定/贴边/翻转/关闭归框架
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -29,9 +29,34 @@ import (
 // QuickPanelWidth is the §17.1 suggested panel width (360–420 DIP).
 const QuickPanelWidth = 400
 
-// quickPanelTasksTab is the Tasks tab's index; it exists only while the
+// The panel's tabs are named by a stable id (s.quickPanelTab), shown in the
+// order Agents, Quota, Services, Tasks. Tasks exists only while the
 // herdr-projects plugin gate is open.
-const quickPanelTasksTab = 2
+const (
+	quickPanelAgentsTab   = 0
+	quickPanelServicesTab = 1
+	quickPanelTasksTab    = 2
+	quickPanelQuotaTab    = 3
+)
+
+// quickPanelTabItem is one tab of the strip.
+type quickPanelTabItem struct {
+	id  int
+	tab segmentTab
+}
+
+// quickPanelTabItems lists the tabs in display order.
+func (s *Shell) quickPanelTabItems() []quickPanelTabItem {
+	items := []quickPanelTabItem{
+		{quickPanelAgentsTab, segmentTab{"Agents", iconAgent}},
+		{quickPanelQuotaTab, segmentTab{"Quota", iconQuota}},
+		{quickPanelServicesTab, segmentTab{"Services", iconServer}},
+	}
+	if s.workboardAvailable() {
+		items = append(items, quickPanelTabItem{quickPanelTasksTab, segmentTab{"Tasks", iconTask}})
+	}
+	return items
+}
 
 // QuickPanelHeight caps the content-driven height; the rows scroll inside
 // beyond it. The flyout shrinks to fit a small work area on its own.
@@ -98,25 +123,35 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 	}
 	body.Children(func() {
 		ui.Row(c).FillWidth().Padding(sp.M, sp.M, sp.XS).Children(func() {
-			view := s.quickPanelTabIndex()
-			labels := []string{"Agents", "Services"}
-			if s.workboardAvailable() {
-				labels = append(labels, "Tasks")
-			}
-			if segmentedControl(c, &view, labels...).FillWidth().Changed() {
-				s.quickPanelTab = view
-				if view == quickPanelTasksTab {
-					s.refreshWorkboardTasks(true)
+			// The same tab face as the Git sidebar's Changes | Commits.
+			items := s.quickPanelTabItems()
+			tabs := make([]segmentTab, len(items))
+			chosen := 0
+			for i, item := range items {
+				tabs[i] = item.tab
+				if item.id == s.quickPanelTabIndex() {
+					chosen = i
 				}
-				s.fitQuickPanel()
+			}
+			agents := len(s.filterStatusEntries(s.BuildStatusCenterSnapshot()))
+			if segmentTabs(c, "Panel view", &chosen, tabs, func(i int) int {
+				if items[i].id == quickPanelAgentsTab {
+					return agents
+				}
+				return 0
+			}) {
+				s.selectQuickPanelTab(items[chosen].id)
 			}
 		})
 		switch s.quickPanelTabIndex() {
-		case 1:
+		case quickPanelServicesTab:
 			s.quickPanelServices(c)
 			return
 		case quickPanelTasksTab:
 			s.quickPanelTasks(c)
+			return
+		case quickPanelQuotaTab:
+			s.quickPanelQuota(c)
 			return
 		}
 		if s.offline {
@@ -149,6 +184,20 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 			})
 		})
 	})
+}
+
+// selectQuickPanelTab switches the tab and loads what it needs: Tasks reads
+// the board, Quota reads the switched-on providers once (the service's own
+// TTL makes a quick return a cache hit; no timer).
+func (s *Shell) selectQuickPanelTab(id int) {
+	s.quickPanelTab = id
+	switch id {
+	case quickPanelTasksTab:
+		s.refreshWorkboardTasks(true)
+	case quickPanelQuotaTab:
+		s.refreshUsage(false)
+	}
+	s.fitQuickPanel()
 }
 
 // quickPanelTabIndex is the tab to show: the Tasks tab collapses back to
@@ -255,6 +304,9 @@ func (s *Shell) openQuickPanelFlyout(base mygo.FlyoutOptions) {
 	if s.quickPanelTabIndex() == quickPanelTasksTab {
 		s.refreshWorkboardTasks(true)
 	}
+	if s.quickPanelTabIndex() == quickPanelQuotaTab {
+		s.refreshUsage(false)
+	}
 	base.Width = QuickPanelWidth
 	base.Height = s.quickPanelContentHeight()
 	base.Focusable = true
@@ -299,10 +351,12 @@ func (s *Shell) invalidateQuickPanel() {
 // height (the Reconnect row included while Herdr is unreachable).
 func (s *Shell) quickPanelContentHeight() int {
 	switch s.quickPanelTabIndex() {
-	case 1:
+	case quickPanelServicesTab:
 		return QuickPanelHeight
 	case quickPanelTasksTab:
 		return s.quickPanelTasksHeight()
+	case quickPanelQuotaTab:
+		return s.quickPanelQuotaHeight()
 	}
 	entries := s.filterStatusEntries(s.BuildStatusCenterSnapshot())
 	captions := 0

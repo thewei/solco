@@ -410,6 +410,7 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 	}
 	selecting := s.historySelecting()
 	selected := selecting && s.hist.selected[key]
+	open := !selecting && !s.hist.showTrash && s.hist.preview.key == key
 	row := ui.ButtonBase(c.Key("session:"+key)).FillWidth().Padding(sp.M, rowInset).Gap(sp.L).AlignItems(ui.Center).
 		FocusRing(false).Label(title)
 	switch {
@@ -440,7 +441,9 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 				ui.Text(c, "tokens").FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().PassThrough()
 			}
 		})
-		if row.Hovered() && !selecting {
+		if open {
+			s.sessionRowActions(c, summary.Meta)
+		} else if row.Hovered() && !selecting {
 			// The button plus the margin fills the date's footprint, so the
 			// hover swap does not shift the row.
 			more := gorexIconButton(c, gorexColorsOf(t.Dark), iconChevronDown, "Actions for "+title, "", false, gorexRowBtn, gorexRowGlyph).
@@ -537,22 +540,20 @@ func historyShortDate(ms int64, now time.Time) string {
 }
 
 // sessionResumeCommand builds the provider's own resume invocation prefixed
-// with the project folder — the copyable "继续" command.
+// with the project folder — the copyable "Continue" command. The arguments
+// come from agent.ResumeArgs, the one owner of each Provider's resume flag.
 func sessionResumeCommand(meta history.SessionMeta) string {
-	cd := ""
-	if meta.ProjectPath != "" {
-		cd = fmt.Sprintf("cd %q && ", meta.ProjectPath)
+	binary := map[history.AgentID]string{
+		history.AgentClaudeCode: "claude",
+		history.AgentCodex:      "codex",
+		history.AgentPi:         "pi",
+		history.AgentOMP:        "omp",
+	}[meta.Agent]
+	args, err := agent.ResumeArgs(agent.ResumeIntent{Provider: meta.Agent, NativeSessionID: meta.ID})
+	if binary == "" || err != nil {
+		return sessionCd(meta) + fmt.Sprintf("# no known resume command for %s (session %s)", meta.Agent, meta.ID)
 	}
-	switch meta.Agent {
-	case history.AgentClaudeCode:
-		return cd + fmt.Sprintf("claude --resume %s", meta.ID)
-	case history.AgentCodex:
-		return cd + fmt.Sprintf("codex resume %s", meta.ID)
-	case history.AgentPi:
-		return cd + fmt.Sprintf("pi --resume %s", meta.ID)
-	default:
-		return cd + fmt.Sprintf("# no known resume command for %s (session %s)", meta.Agent, meta.ID)
-	}
+	return sessionCd(meta) + binary + " " + strings.Join(args, " ")
 }
 
 // exportSessionMarkdown assembles the full conversation as Markdown over

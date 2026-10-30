@@ -3,7 +3,8 @@
 // no-recursive-follow, ignore semantics (fixed names + git-owned paths),
 // bounded local file operations, the 1 MiB preview cap with text/binary
 // classification, and copy-path/reveal helpers. Opening the panel performs
-// zero repository-wide recursive scans.
+// zero repository-wide recursive scans; only a search the user starts reads
+// the whole tree (search.go: file index + ripgrep/git grep content search).
 package filesview
 
 import (

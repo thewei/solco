@@ -29,6 +29,7 @@ func (s *Shell) historyDetailPage(c *ui.Context, key string) {
 	sp := Spacing()
 	t := c.Theme()
 	ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+		s.historyDetailInfo(c, key)
 		if !s.chatReadOnly || s.chatConversationID != key {
 			return
 		}

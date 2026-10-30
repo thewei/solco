@@ -110,3 +110,14 @@ func TestWorkboardViewDefaultsToTheBoardAndOnlyNativeOptsIn(t *testing.T) {
 		}
 	}
 }
+
+func TestTabsInTitleBarByDefault(t *testing.T) {
+	var g GeneralSettings
+	if !g.TabsInTitleBar() {
+		t.Fatal("an absent tabs_placement must mean the title-bar Tab bar")
+	}
+	g.TabsPlacement = "sidebar"
+	if g.TabsInTitleBar() {
+		t.Fatal(`"sidebar" must keep the Tabs in the sidebar tree`)
+	}
+}

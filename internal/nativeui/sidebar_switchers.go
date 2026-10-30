@@ -60,6 +60,8 @@ type headerSearch struct {
 	Label, Button string
 	// Changed runs when the query is edited or cleared by closing.
 	Changed func()
+	// Submit runs on Enter; nil leaves Enter to the field.
+	Submit func()
 }
 
 // close empties the search and hides its field.
@@ -94,6 +96,9 @@ func (h *headerSearch) field(c *ui.Context) {
 	f := searchField(c, h.Query).FillWidth().AutoFocus().Label(h.Label)
 	if f.Changed() && h.Changed != nil {
 		h.Changed()
+	}
+	if f.Submitted() && h.Submit != nil {
+		h.Submit()
 	}
 	if f.Shortcut(0, ui.KeyEscape) {
 		h.close()

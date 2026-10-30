@@ -314,8 +314,8 @@ func (s *Shell) crumbPaneRows(c *ui.Context, tabID string) {
 	}
 }
 
-// crumbItemRow is one switcher row: glyph (with the agent state dot at
-// its corner when bound), label, selected tint.
+// crumbItemRow is one switcher row: glyph, label, the agent state in the
+// trailing slot when bound, selected tint.
 func crumbItemRow(c *ui.Context, mark visualMark, label string, dot operationalState, selected bool) ui.Element {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
@@ -332,17 +332,11 @@ func crumbItemRow(c *ui.Context, mark visualMark, label string, dot operationalS
 			row.Background(tint)
 		}
 		row.Children(func() {
-			if dot != opUnknown {
-				ui.Box(c).Size(14, 14).Shrink(0).Children(func() {
-					markView(c, mark, 14, t.TextMuted)
-					ui.Box(c).Absolute().Left(9).Top(7).Children(func() {
-						statusDot(c, dot)
-					})
-				})
-			} else {
-				ui.Box(c).Shrink(0).Children(func() { markView(c, mark, 14, t.TextMuted) })
-			}
+			ui.Box(c).Shrink(0).Children(func() { markView(c, mark, 14, t.TextMuted) })
 			ui.Text(c, label).FontSize(Typography().Body).Grow(1).SingleLine()
+			if dot != opUnknown {
+				statusIndicator(c, dot)
+			}
 		})
 	})
 	return row

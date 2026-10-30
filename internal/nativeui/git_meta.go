@@ -61,6 +61,11 @@ func (s *Shell) refreshGitMeta() {
 			s.ensureGitMetaForCWD(agent.CWD)
 		}
 	}
+	for _, project := range s.projection.Projects {
+		if project.CWD != "" {
+			s.ensureGitMetaForCWD(project.CWD)
+		}
+	}
 	if cwd := s.selectedTabCWD(); cwd != "" {
 		s.ensureGitMetaForCWD(cwd)
 	}

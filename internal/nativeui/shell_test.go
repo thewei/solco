@@ -88,6 +88,7 @@ func TestNativeShellSkeleton(t *testing.T) {
 
 func TestNativeSidebarContextMenus(t *testing.T) {
 	s := NewShell()
+	s.settings.General.TabsPlacement = "sidebar" // these assertions read the tree/breadcrumb layout
 	s.loading = false
 	s.instances = []herdr.Instance{{Name: "default", DisplayName: "Workspace Alpha", Running: true, Default: true}}
 	s.activeInstance = "default"

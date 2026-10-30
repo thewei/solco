@@ -8,6 +8,8 @@ package nativeui
  */
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -119,8 +121,11 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		return
 	}
 	leafGlyph := iconBranch
-	if scope == "tag" {
+	switch scope {
+	case "tag":
 		leafGlyph = iconTag
+	case "remote":
+		leafGlyph = iconCloud
 	}
 	var visit func(*gitRefNode, int)
 	visit = func(n *gitRefNode, level int) {
@@ -145,6 +150,15 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}
 		if folder {
 			item.kind, item.glyph = "Folder", iconFolder
+		} else {
+			item.ref = gitRefNamespace[scope] + value
+		}
+		var eye *gitEye
+		if refs := s.graphHideable(scope, n); len(refs) > 0 {
+			hidden := s.graphHiddenSet()
+			allHidden := !slices.ContainsFunc(refs, func(ref string) bool { return !hidden[ref] })
+			eye = &gitEye{hidden: allHidden, toggle: func() { s.setGraphHidden(refs, !allHidden) }}
+			item.eye = eye
 		}
 		s.gitTreeRow(c, item, func() {
 			if folder {
@@ -155,6 +169,9 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}, func(m *ui.Menu) {
 			if n.leaf {
 				menu(value, m)
+			}
+			if eye != nil && m.Item(eye.label()).Chosen() {
+				eye.toggle()
 			}
 			if folder && m.Item("Collapse Folder").Chosen() {
 				s.gitTreeClosed[key] = true
@@ -180,6 +197,28 @@ type gitTreeItem struct {
 	// hint is said once, on the first click that only selects the row, to
 	// tell what a double click will do (check out a branch).
 	hint string
+	// ref is the full ref a single click locates in the graph (leaf rows);
+	// commit is the commit it locates when the row has no ref of its own (a
+	// stash, a detached worktree).
+	ref, commit string
+	// review, when set, is what the reviewer opens for the located commit.
+	review string
+	// eye hides the row's refs from the graph; nil where nothing can be hidden.
+	eye *gitEye
+}
+
+// gitEye is a row's graph-visibility control: hidden is its current state,
+// toggle flips it.
+type gitEye struct {
+	hidden bool
+	toggle func()
+}
+
+func (e *gitEye) label() string {
+	if e.hidden {
+		return "Show in Graph"
+	}
+	return "Hide from Graph"
 }
 
 // gitTreeRow draws one row on the shared sidebar grid. A stash subject can
@@ -193,8 +232,17 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 			ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Text).Shrink(0)
 		}
 	}
-	key := "git-ref:" + it.title + "@" + it.tooltip
-	_, clicked := s.sidebarTreeRow(c, sidebarTreeSpec{
+	key := gitRefRowKey(it.title, it.tooltip)
+	var eyeAction *treeRowAction
+	if it.eye != nil {
+		glyph := iconEye
+		if it.eye.hidden {
+			glyph = iconEyeOff
+		}
+		eyeAction = &treeRowAction{Label: it.eye.label(), Glyph: glyph, Run: it.eye.toggle}
+	}
+	row, clicked := s.sidebarTreeRow(c, sidebarTreeSpec{
+		Action: eyeAction, ActionSticky: it.eye != nil && it.eye.hidden, Dim: it.eye != nil && it.eye.hidden,
 		Key: key, Title: it.title, Label: it.kind + " " + it.title,
 		Tooltip: it.tooltip, Level: it.level, Folder: it.folder, Expanded: !it.closed,
 		Glyph: it.glyph, Current: it.current, Trailing: trailing, Menu: menu, Nav: &s.nav.gitRefs,
@@ -205,9 +253,24 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 				s.gitRefsHinted = true
 				s.pendingToast = it.hint
 			}
+			// Located last: its own notice (a hidden ref) outranks the hint.
+			if it.ref != "" {
+				s.locateRef(it.ref)
+			} else if it.commit != "" {
+				s.commitsMode = true
+				s.revealCommitReviewing(it.commit, cmp.Or(it.review, it.commit))
+			}
 		},
 	})
+	if s.gitRefsReveal == key {
+		row.ScrollIntoView()
+		s.gitRefsReveal = ""
+	}
 	if clicked {
 		action()
 	}
 }
+
+// gitRefRowKey is a ref row's identity: its title and tooltip, which no two
+// rows of one tree share.
+func gitRefRowKey(title, tooltip string) string { return "git-ref:" + title + "@" + tooltip }

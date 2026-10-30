@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 mygo/ui 的 SVG/Box、herdr.Agent、history.AgentID 与设计系统状态色
- * [OUTPUT]: 对外提供 agentGlyph、Shell.paneAgent、statusDot
- * [POS]: Agent 品牌单色矢量回退图标、窗格 Agent 绑定检索（paneShellIdle 实测判活门控：实测回 shell 提示符的绑定是死绑定）与运行时状态圆点渲染
+ * [OUTPUT]: 对外提供 agentGlyph、Shell.paneAgent
+ * [POS]: Agent 品牌单色矢量回退图标、窗格 Agent 绑定检索（paneShellIdle 实测判活门控：实测回 shell 提示符的绑定是死绑定）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -83,19 +83,4 @@ func (s *Shell) paneAgent(paneID string) *herdr.Agent {
 		}
 	}
 	return nil
-}
-
-// statusDot is the small round Agent-state marker shown at a glyph's
-// corner: red/orange = waiting for the user (attention), blue = working,
-// green = ready for review, gray = idle/unknown. Colors resolve through
-// the shared operational tones so the dot never disagrees with the status
-// pills.
-func statusDot(c *ui.Context, state operationalState) {
-	t := c.Theme()
-	tone := operationalTone(state)
-	color := designTokens(t.Dark).StatusColor(tone, t.Dark)
-	if state == opIdle || state == opUnknown {
-		color = t.TextMuted
-	}
-	ui.Box(c).Size(7, 7).Radius(3.5).Background(color).Shrink(0)
 }

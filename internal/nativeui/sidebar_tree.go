@@ -102,6 +102,9 @@ type sidebarTreeSpec struct {
 	// Action is the row's one hover icon at the trailing edge; its slot is
 	// reserved while set, so the title never moves under the pointer.
 	Action *treeRowAction
+	// ActionSticky keeps the Action visible without the pointer: a state the
+	// row must show on its own (a ref hidden from the graph).
+	ActionSticky bool
 	// Dim mutes the title (symlinks).
 	Dim bool
 	// Trailing draws content at the row's right edge.
@@ -182,7 +185,7 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 		}
 		if spec.Action != nil {
 			ui.Box(c).Size(gorexRowBtn+2, gorexRowBtn).Shrink(0).Center().Children(func() {
-				if !row.Hovered() {
+				if !row.Hovered() && !spec.ActionSticky {
 					return
 				}
 				action := gorexIconButton(c, gorexColorsOf(t.Dark), spec.Action.Glyph, spec.Action.Label, spec.Action.tooltip(), false, gorexRowBtn, gorexRowGlyph)

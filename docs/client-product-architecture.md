@@ -189,6 +189,34 @@ MyGo Native UI
     delete, Move to Trash / Put Back) live in the row menus and toolbars.
     Presentation only: no new runtime path, no Herdr method, and the tree
     data, folding and file operations keep their owners.
+  - **Decision 2026-10-30 — Files search is one box with a Files | Content
+    switch.** The Files sidebar head carries a search button (no keyboard
+    shortcut) that opens one field; a segmented switch under it picks the
+    result type, one at a time. *Files* ranks names (prefix > substring >
+    subsequence) in memory over a background file index
+    (`git ls-files`, else `rg --files`); *Content* runs ripgrep, falling back
+    to `git grep` when it is not installed, with Aa / whole-word / regex
+    toggles and "include ignored" following the tree's Show ignored files
+    eye. Results are bounded (300 names, 500 matches, 20 per file, 15 s) and
+    a hit opens its file with the code view on the line, the match selected
+    (Markdown as source). Owner: `internal/filesview/search.go` (domain, no
+    UI) + `internal/nativeui/files_search.go` (presentation). Searches only
+    start from the user's typing; no index is kept on disk, no daemon, no
+    Herdr method.
+  - **Decision 2026-10-30 — HTML pages preview through a project static
+    server, in the Local Preview window.** Selecting `.html/.htm/.xhtml`
+    in Files adds *Open Preview* and *Open in Browser* to the viewer bar.
+    Only pressing one starts `internal/preview.StaticServer`: read-only
+    (GET/HEAD), `127.0.0.1` on a free port, one server per root (closed when
+    the root changes), Host-checked against DNS rebinding, rooted at the
+    project folder, `.git` never served, symlinks that leave the root (or
+    lead into hidden paths) refused, a folder serves its `index.html` or a
+    listing page. Entries the Files tree hides stay unserved while *Show
+    ignored files* is off, and follow the eye when it is on. The page opens
+    in the existing loopback-only Local Preview window (an open window is
+    taken to the new page) or the system browser. This is not the Files
+    WebView page: it keeps its own bridge and still talks to nothing else.
+    No Herdr method, no hot reload.
 - Daily development of the new desktop path must not require compiling the
   Rust GUI. Current `solco-host`, `solco-history` and
   `solco-remote` remain compatibility/parity references until each domain
@@ -893,6 +921,8 @@ History presentation bounds how many variable-height transcript messages it cons
 
 **Sessions scope (2026-10-14).** Git, Files and Sessions are the project-scoped pages and open their left sidebar with the same head (`sidebarProjectHeader`: the project and its branch as pull-downs, one Refresh icon). On Sessions the list opens on the project the head names — the selected Tab's repository, else its working directory — and a scope row ("This project" / "All sessions", each with its count) widens it; with no project (or a remote Herdr instance, whose paths this Mac's history cannot match) the list is simply the whole catalog. A project scope is that folder and everything below it, matched on path boundaries (`/work/a` covers `/work/a/pkg` but not `/work/ab`): the list, the search, the Agent-tab counts and the Trash rows all use the one rule (`internal/history` `withinProject` / `ProjectContains`). Switching the project reloads the list and resets the Agent tab; switching the branch changes nothing here — sessions belong to the folder — and lands on Git and Terminal. The Trash view follows the scope, and Empty Trash removes exactly the entries it shows (the confirm says "of this project"). The scope is transient (no new persisted setting) and read-only: no Herdr method is added.
 
+**Quota (2026-10-30; named Usage until that day).** A third row under the Sessions sidebar head opens `/quota` (title bar `Sessions › Quota`; settings at `/settings/quota`; old persisted `/usage` routes are migrated): one card per agent showing its own quota windows (bars, used/left, reset countdown, pace), a summary row (tightest limit, next reset, source health) and, for Claude Code and Codex, a 30-day local token strip. `internal/usage` (no framework code) owns the readers: Codex asks its own `codex app-server`; Claude Code, Cursor, Zhipu GLM and GitHub Copilot call that vendor's own usage endpoint with a token; Antigravity reads its quota offline from Google\'s cloudcode-pa API with the sign-in Antigravity itself saved on this Mac (token file under `~/.gemini`, else its Keychain item; refreshed in memory, never written back) — only after the user allowed it in the consent dialog (which states that Google does not support this use and the risk is the user\'s; the yes is `Usage.SignInAllowed`, withdrawn when the switch goes off) — and otherwise asks the running app\'s local language server on loopback (the card offers Allow Sign-In… and Open Antigravity). Cards choose their layout from the data: a counted allowance is a hero number, model groups are titled compact rows, sub-limits compact rows, the rest plain bars, bar-less facts (reset credits, extra usage) chips. Cursor accounts still on an old request-based plan (the usage endpoint reports a request cap such as 500) show their request count as the allowance instead of the dollar-share percentages. Boundaries: opt-in per provider (first run pre-selects only Codex and reads nothing until "Show Usage"); each provider reaches only its own host; another app's sign-in (Claude Code's Keychain item, Cursor's token via cursor-agent, `gh auth token`, Antigravity's saved sign-in) is read only after an explicit consent dialog unless the user pasted a token; pasted tokens live only in `mygo.Secrets` (`usage.<id>.token`) and are never shown again, written to settings or logged; a custom `ANTHROPIC_BASE_URL` or an expired Claude token produces a state, never a request or a refresh; reads happen on page open (service TTL 30 s, Claude 5 min) or manual Refresh with a per-provider floor — no timer, no recorded history (the strip is recomputed from the session files `internal/history` already indexes, via `usage_daily.go`), no cost estimate, no threshold notification. A failed read keeps the last values marked stale with the one fix (Set Up / Update Token / Retry Now). No Herdr method is added.
+
 History session metadata keeps both the source/display fact `project_path` and a normalized stable `project_key`. `project_key` uses the same canonical-path/component normalization semantics as the client Project key; Project History queries and scoped History search filter on this key directly. The in-memory catalog derives it when a session row is inserted and it does not become a second Project/runtime authority: live runtime identity still belongs to Herdr and `ProjectIndex` remains a disposable client projection. History scope is expressed through these project keys, never through a persisted Workspace grouping; the History catalog does not persist Workspace ownership.
 
 ## 8. Persistence
@@ -1103,3 +1133,5 @@ A change is architecturally correct when all are true:
 ## 14. Approved Next — Multiplexer backend API
 
 Approved direction (2026-09-02): the Host runtime boundary is generalized into a backend-neutral **Multiplexer API** so additional terminal multiplexers (tmux first) can be integrated without forking the shell. The contract — the domain catalog covering every UI-visible runtime capability, the capability model, backend-adapter/registry rules, and the behavior-preserving TDD migration and verification strategy — is normative in [`multiplexer-api.md`](multiplexer-api.md). Until it lands, `solco-host` `herdr.rs` (`HerdrClient`) remains the only runtime-boundary implementation and GUI/Remote consume it concretely. The "Herdr is the sole runtime authority" statement is amended only when a second backend actually ships (the tmux MVP), not by this approval.
+
+**Agent surfaces (2026-10-30).** Presentation only; design in `designs/agent-surfaces/`. One shared status indicator (`status_indicator.go`) is the only drawing of an Agent/Tab/Project/Pane state: a 16pt right-hand slot (spinner = working, hollow ring = idle/resolved, solid dot otherwise, empty when nothing is known). The Header Agent popover uses the Git panel's `segmentTabs` (Agents / Quota / Services / Tasks) and its trigger shows `waiting/total`; its Quota tab renders mini cards from the same `internal/usage` snapshots as `/quota` (reads on tab open through the TTL cache, still no timer). Sidebar Agents group under a faint Workspace label, show last-worked time, and nest Claude Code sub-agents read from the session's own `subagents/` files (read-only; Herdr is not asked and has no parent relation). A Workspace's Tabs live in a title-bar Tab bar by default; the settings switch "Show Tabs in Sidebar" (default off) moves them back into the sidebar tree in the breadcrumb's place; the tabs remain Herdr's.

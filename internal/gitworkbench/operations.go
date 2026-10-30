@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -91,6 +90,8 @@ func (r *Runner) DeleteUntracked(root string, paths []string) error {
 // Stash is one entry of the stash list.
 type Stash struct {
 	Ref     string // e.g. stash@{0}
+	Hash    string // the stash commit itself (what a review of the stash reads)
+	Base    string // the commit the stash was made on (its first parent); "" if unknown
 	Subject string
 }
 
@@ -107,7 +108,7 @@ func (r *Runner) StashPush(ctx context.Context, root, message string) error {
 
 // StashList enumerates the stash entries, newest first.
 func (r *Runner) StashList(ctx context.Context, root string) ([]Stash, error) {
-	out, err := r.Read(ctx, root, "stash", "list", "--format=%gd\t%s")
+	out, err := r.Read(ctx, root, "stash", "list", "--format=%gd\t%H\t%P\t%s")
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +117,12 @@ func (r *Runner) StashList(ctx context.Context, root string) ([]Stash, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 2)
+		parts := strings.SplitN(line, "\t", 4)
 		s := Stash{Ref: parts[0]}
-		if len(parts) > 1 {
-			s.Subject = parts[1]
+		if len(parts) > 3 {
+			s.Hash = parts[1]
+			s.Base, _, _ = strings.Cut(parts[2], " ")
+			s.Subject = parts[3]
 		}
 		stashes = append(stashes, s)
 	}
@@ -412,36 +415,13 @@ type CommitInfo struct {
 	Author  string
 	Time    time.Time
 	Parents []string // real Git ancestry for native graph projection
+	// Refs are the refs that point at this commit (graph reads only).
+	Refs []CommitRef
 }
 
 // ListCommits reads the history of HEAD, newest first, bounded.
 func (r *Runner) ListCommits(ctx context.Context, root string, limit int) ([]CommitInfo, error) {
-	if limit <= 0 || limit > 2000 {
-		limit = 200
-	}
-	out, err := r.Read(ctx, root,
-		"log", "-n", strconv.Itoa(limit),
-		"--format=%H%x09%h%x09%s%x09%an%x09%at%x09%P")
-	if err != nil {
-		return nil, err
-	}
-	var commits []CommitInfo
-	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-		if line == "" {
-			continue
-		}
-		f := strings.SplitN(line, "\t", 6)
-		if len(f) < 5 {
-			continue
-		}
-		sec, _ := strconv.ParseInt(f[4], 10, 64)
-		cm := CommitInfo{Hash: f[0], Short: f[1], Subject: f[2], Author: f[3], Time: time.Unix(sec, 0)}
-		if len(f) > 5 {
-			cm.Parents = strings.Fields(f[5])
-		}
-		commits = append(commits, cm)
-	}
-	return commits, nil
+	return r.readCommits(ctx, root, limit)
 }
 
 // CommitMessage reads the full message (subject, blank line, body) of one
@@ -478,16 +458,52 @@ func (r *Runner) CommitSnapshot(ctx context.Context, root, hash string) (*Change
 	rangeArg := from + ".." + hash
 	snap.DiffBase = rangeArg
 
-	ns, err := r.Read(ctx, root, "diff", "--name-status", "-z", "-M", rangeArg)
+	budget := &snapshotBudget{limit: MaxSnapshotBytes}
+	files, adds, dels, truncated, err := r.rangeFiles(ctx, root, rangeArg, budget)
 	if err != nil {
 		snap.Err = err.Error()
 		return snap, err
 	}
+	snap.Files, snap.TotalAdditions, snap.TotalDeletions, snap.Truncated = files, adds, dels, truncated
+	sortFilesByPath(snap.Files)
+	return snap, nil
+}
+
+// StashSnapshot is a stash as one review: the tracked changes it holds
+// (against the commit it was made on) plus, when it was made with -u, the
+// untracked files Git keeps on the stash commit's third parent.
+func (r *Runner) StashSnapshot(ctx context.Context, root, hash string) (*ChangesSnapshot, error) {
+	snap, err := r.CommitSnapshot(ctx, root, hash)
+	if err != nil {
+		return snap, err
+	}
+	third, terr := r.Read(ctx, root, "rev-parse", "--verify", "--quiet", hash+"^3")
+	untracked := strings.TrimSpace(string(third))
+	if terr != nil || untracked == "" {
+		return snap, nil
+	}
+	budget := &snapshotBudget{limit: MaxSnapshotBytes}
+	files, adds, dels, truncated, err := r.rangeFiles(ctx, root, emptyTreeID(ctx, r, root)+".."+untracked, budget)
+	if err != nil {
+		snap.Err = err.Error()
+		return snap, err
+	}
+	snap.Files = append(snap.Files, files...)
+	snap.TotalAdditions += adds
+	snap.TotalDeletions += dels
+	snap.Truncated = snap.Truncated || truncated
+	sortFilesByPath(snap.Files)
+	return snap, nil
+}
+
+// rangeFiles reads the changed files of one from..to range for a review.
+func (r *Runner) rangeFiles(ctx context.Context, root, rangeArg string, budget *snapshotBudget) (files []ChangeFile, adds, dels int, truncated bool, err error) {
+	ns, err := r.Read(ctx, root, "diff", "--name-status", "-z", "-M", rangeArg)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
 	entries := parseNameStatusZ(ns)
 
-	var untracked []string // none in a commit; keeps the census below honest
-	_ = untracked
-	budget := &snapshotBudget{limit: MaxSnapshotBytes}
 	// Line counts first: they say which files are too big to read with the rest.
 	nsStats, _ := r.Read(ctx, root, "diff", "--numstat", "-z", "-M", rangeArg)
 	numstat := parseNumstatZ(nsStats)
@@ -495,23 +511,18 @@ func (r *Runner) CommitSnapshot(ctx context.Context, root, hash string) (*Change
 		"diff", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "-U3",
 		"--submodule=short", rangeArg)
 	if err != nil {
-		snap.Err = err.Error()
-		return snap, err
+		return nil, 0, 0, false, err
 	}
-	if !budget.take(int64(len(patch))) {
-		snap.Truncated = true
-	}
+	truncated = !budget.take(int64(len(patch)))
 	patches := parsePatchSet(patch)
 
-	files, adds, dels := emitChangeFiles(entries, patches, numstat, nil, nil, emitOptions{DeferAll: !whole})
+	files, adds, dels = emitChangeFiles(entries, patches, numstat, nil, nil, emitOptions{DeferAll: !whole})
 	for i := range files {
 		// Name-status entries always set the first column; a commit review
 		// has no index sides.
 		files[i].Staged, files[i].Unstaged = false, false
 	}
-	snap.Files, snap.TotalAdditions, snap.TotalDeletions = files, adds, dels
-	sortFilesByPath(snap.Files)
-	return snap, nil
+	return files, adds, dels, truncated, nil
 }
 
 // parseNameStatusZ parses `git diff --name-status -z`: a status token

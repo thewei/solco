@@ -6,6 +6,7 @@ package nativeui
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/thewei/solco/internal/gitworkbench"
@@ -147,6 +148,8 @@ func (s *Shell) loadBranches() {
 	s.git.branchesLoading = true
 	s.git.commitsLoading = true
 	gen := s.git.branchesGen.Add(1)
+	graphGen := s.git.graphGen.Load()
+	graphQuery := gitworkbench.GraphQuery{Limit: s.graphWindow(), Hidden: slices.Clone(s.graphHiddenList())}
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), gitworkbench.ReadTimeout)
@@ -157,7 +160,7 @@ func (s *Shell) loadBranches() {
 		stashes, _ := s.git.runner.StashList(ctx, root)
 		tags, _ := s.git.runner.ListTags(ctx, root)
 		worktrees, _ := s.git.runner.ListWorktrees(ctx, root)
-		commits, _ := s.git.runner.ListCommits(ctx, root, 200)
+		commits, _ := s.git.runner.ListCommitGraph(ctx, root, graphQuery)
 		sequencer, sequencerErr := s.git.runner.SequencerState(ctx, root)
 		s.applyGuarded(s.git.branchesGen.Load, gen, func() {
 			s.git.branchesLoading = false
@@ -171,7 +174,13 @@ func (s *Shell) loadBranches() {
 			s.git.stashes = stashes
 			s.git.tags = tags
 			s.git.worktrees = worktrees
-			s.git.commits = commits
+			// A graph re-read (eye, widened window) that started after this
+			// one began owns the list.
+			if s.git.graphGen.Load() == graphGen {
+				s.git.commits = commits
+			} else {
+				commits = s.git.commits
+			}
 			// A history view opened before refs finished loading gets its
 			// first read-only commit after the root/generation fence.
 			if s.commitsMode && !s.gdReviewingCommit() && len(commits) > 0 {

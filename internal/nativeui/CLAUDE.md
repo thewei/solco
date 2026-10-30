@@ -35,6 +35,10 @@ panel_motion.go: 整高侧栏（macOS vibrancy 材质、无 vibrancy 时不透�
 panel_motion_test.go: Reduce Motion 下左导航收起/恢复，以及各窗口宽度无右栏回归
 right_panel.go: 旧会话设置兼容字段及 Files 缓存、根目录 identity fence、URL Preview 管理；**不绘制右栏**
 right_panel_files.go: /files 左侧目录缓存/树（共用侧栏网格行与项目/分支头部；工具条用共用 gorexIconButton，开关态与全 App 同一枚中性芯片，无私有 accent 底；整棵树是 listNav 焦点组，进页即聚焦打开的文件/首行，方向键/Enter 见 list_nav.go；新建/重命名/删除/复制路径只走右键菜单）及点击加载预览的适配器
+files_search.go: Files 侧栏统一搜索（2026-10-30）——头部搜索钮（headerSearch，无快捷键）展开一个输入框，其下「Files | Content」图标分段开关（与 Git 侧栏 Changes | Commits 同一件 segmentTabs）一次只出一种结果：Files = 异步文件清单（filesview.ListFiles）上的内存排序（MatchFiles，≤300 行、状态行报总数）；Content = 去抖 220ms 的 ripgrep→git grep 全文搜索（Aa/全词/正则三枚文本开关，结果按文件分组、命中文本高亮、≤500 条），「含忽略文件」跟随树工具条的 Show ignored files 眼睛；Enter 打开首个结果；点命中 → openFileAt 打开文件、代码视图居中到命中行并选中命中文本（Markdown 改开源码）；换项目重置、刷新/新建/重命名/删除使清单失效；代际围栏 + cancel，渲染零 IO；结果行暂不进 listNav 键盘组
+files_search_test.go: 搜索钮开合并清空、按名排序/点击打开、Content 分组高亮与点击定位到命中行并选中、Markdown 命中开源码、眼睛联动忽略文件、换项目重置
+files_static_preview.go: Files 查看条里 HTML 文件的「Open Preview」「Open in Browser」（2026-10-30）——点了才在项目根起 internal/preview.StaticServer（只读、127.0.0.1 随机端口、同根复用、忽略集合随树的眼睛开关同步、换项目即关），页面进既有 Local Preview 窗口（已开则跳页）或系统浏览器；桌面调用是可替换 var
+files_static_preview_test.go: 只有 HTML 有预览入口、点了才起服务且同根一个端口、相对资源可取、忽略项随眼睛、换项目服务即关
 page_files.go: Header Files 独立页面：左树/中预览（查看条 + 分级预览体）、当前 Tab CWD 归属和空态；页面只画内容，标题/根路径/文件动作在标题栏（route_header.go）
 files_native_preview.go: Files 预览分级计划与原生层——选中后离 UI lane 探测 size×flavor×偏好：文本/代码/Markdown 源码进只读 editor.View（Buffer 离 UI lane 构建，8 MiB 上限、截断胶囊、散文自动换行），Markdown 渲染与网页图片交 WebView 页，解码得了的图片原生位图，其余给真实失败态；查看条（名称/大小/截断/Rendered⇄Source 分段）横跨所有层级；重命名、偏好切换、Source 切换都重新计划
 code_theme.go: codeEditorTheme——把 Git 评审的语法色/代码色/行号色（gd_palette 调色板，经 codehl.KindClasses 这张 token→类表）穿到框架 editor 上，同一份代码在 Files 与 Git 评审里同色
@@ -89,9 +93,21 @@ usage_rows.go: §17.2/§17.6 History-meta 投影车道——dispatch 车道对�
 page_history.go: Sessions 中心列表布局（参照 magpie 会话历史）：Agent 标签条（All + 各 Provider，带会话数；回收站里按回收站内容计数）、搜索/Select/Trash（+Empty Trash）工具簇（刷新不在这里：侧栏项目头里唯一一个；窄窗口整体换行；Select 与 Trash 只在挂了回收站时出现，Trash 有内容或视图打开才显示）、项目分组卡片（默认只展开最近一个项目，头部在卡内，chevron 取树侧栏同一枚 treeChevron）与行（标题/事实行/Token 列/日期↔悬停菜单固定占位，点行内展开预览；回收站视图复用同一列表，行键是条目 id、选择常开）、行菜单 Move to Trash（无回收站则无此项）、listNav 键盘（进页聚焦开场行；↓/↑ 跨项目头、←/→ 折叠项目与行内预览、Enter/Space 切换预览或勾选；移入回收站/放回/永久删除只走行菜单与工具条）、有界结果计数文案、扫描未结束时的 Updating 提示（分批渐进加载）
 history_state.go: HistoryService 列表查询的生成代际隔离，筛选清空旧可选行/预览/多选；范围状态（scopeAll/scopeRoot/projectTotal/allTotal；请求带 ProjectPath，只有无范围且无筛选的加载才喂 Recent）；Provider 元数据选择与各 Provider 总数（可选 HistoryProviderCountView / HistoryProjectCountView，标签计数取当前范围）、扫描分批上报（可选 HistoryScanProgressView：每批约 100 个来源在窗口线程刷新一次可见列表，数千个单会话文件夹不再把页面按在 Loading 态）、扫描收尾 force 刷新 History-meta 投影（标题主动获取：目录落定即出标题，不等节流或事件）；分组展开、多选、行内预览与详情页帧戳（只读 Chat 绑定的空闲释放）状态；回收站条目缓存与视图开关（trashItems/showTrash，trashGen 代际防过期）
 history_select.go: Sessions 多选：行/项目头勾选标记、底部批量栏（会话视图：Move to Trash；回收站：Put Back / Delete Forever…，有勾选才出现）；选择只是 UI 状态，文件搬动全在 history_trash.go
-history_preview.go: 行内会话预览：点行懒读原始会话末尾若干条（Tail 窗口，代际防过期），只读展示，带 Open/Continue/Move to Trash；不缓存任何会话内容
-history_scope.go: Sessions 的范围（This project 默认 / All sessions）：historyProjectRoot（选中 Tab 的仓库根，否则 cwd；远程 Herdr 实例无项目）/ historyScopeRoot、showHistoryScope（切范围时 Agent 标签复位）、syncHistoryScope（项目切换时重载）、historyTotals/providerTotal、trashScoped（回收站行/计数/Empty Trash 与列表同范围）、空项目空态 noProjectSessions（"Show All Sessions"）与侧栏范围行 historyNav（项目头下两行，带计数，纵向撑满让标准页脚钉底，FocusGroup 方向键）
+history_preview.go: 行内会话详情的状态机：点行展开/收起，并懒读该会话 token 用量（history.ReadUsage，代际防过期）；展开面板就是 history_info.go 的详情表；不再摘录消息，不缓存任何会话内容
+status_indicator.go: 全局唯一状态指示（16pt 右侧槽位：working 旋转、idle/resolved 空心环、其余实心点、未知为空槽；Agent 行/Tab/Project/Pane/浮层/Pane 卡标题共用，不再有角标点或私有 spinner）
+status_indicator_test.go: 形状与 state→tone 映射回归
+quick_panel_quota.go: Header 浮层 Quota 页（2 列迷你卡，头条取计数额度否则最紧窗口；页脚 Updated/Open Quota）
+quick_panel_quota_test.go: Quota 页迷你卡、头条、header 计数 waiting/total、migrateRoute
+subagents_state.go: Claude Code 子代理读取节流（4s、后台读、仅 Claude path 身份；变化才重建 workbench）
+tabbar.go: 设置「Show Tabs in Sidebar」（默认关）关闭时占据面包屑位置的标题栏 Tab 条（品牌图/标题/状态槽位/悬停 ×/溢出滚动 ‹ › 并让选中项入视/+ 新建；Tab 仍走 selectTab/close-tab 确认/newProjectTab；此时侧栏树只列 Workspace）
+tabbar_test.go: Tab 条模型、替换面包屑、溢出滚动到选中项
+usage_state.go: Quota（原 Usage）状态与动作——internal/usage.Service + history.DailyUsageReader + usageSecrets（Keychain，key `usage.<id>.token`；测试注入内存实现），refreshUsage(Ids)（只在页面打开/手动刷新时读，无定时器；无开关打开则连 Keychain 也不碰）、逐家开关 requestUsageProvider（读他人登录的 Claude/Cursor/Copilot 先弹同意框，已粘贴自有令牌则免）、首次启用 commitUsageFirstRun、令牌 save/remove、30 天活动异步加载
+page_usage.go: /quota 页（原 /usage，migrateRoute 迁移旧会话路由）——首次启用视图（仅 Codex 预勾，点 Show Usage 前什么都不读）、摘要行（Tightest limit / Next reset / Sources + Used|Left）、卡片网格（窗口条用 Painter 画，≥80% 警告/≥95% 危险，配速刻度与 Runs out 文案，过期数据不推配速；Claude/Codex 带 30 天活动条）、同一行卡片等高（Stretch + 底部来源行）、卡片错误态（保留旧值 + Set Up/Update Token/Retry Now；Antigravity 未获允许时给 Allow Sign-In…/Open Antigravity，打开后 8 s 自动重读）、按窗口特征分版式（计数额度=大数字 hero、模型组=带标题紧凑行、次要限额=紧凑行、其余=普通条、无条事实=chip）、同意对话框（含 Antigravity 的 Google 条款风险）；标题栏 Sessions › Usage 与 Actions（Show Used/Show Left/Usage Settings…）
+usage_settings.go: /settings/quota——每家一组（开关、令牌字段 Password 且不回显、智谱平台分段、Status + Check Now）；令牌只进 Keychain，设置文件只存开关与智谱平台
+usage_page_test.go: 路由归属/标题栏、首次启用零读取、卡片读数与 Left、失败保留旧值、同意门、令牌不进设置文件、设置分组、Sessions 侧栏 Usage 行、格式化
+history_scope.go: Sessions 的范围（This project 默认 / All sessions）：historyProjectRoot（选中 Tab 的仓库根，否则 cwd；远程 Herdr 实例无项目）/ historyScopeRoot、showHistoryScope（切范围时 Agent 标签复位）、syncHistoryScope（项目切换时重载）、historyTotals/providerTotal、trashScoped（回收站行/计数/Empty Trash 与列表同范围）、空项目空态 noProjectSessions（"Show All Sessions"）与侧栏范围行 historyNav（项目头下两行，带计数，分隔线下第三行 Usage 进 /usage，纵向撑满让标准页脚钉底，FocusGroup 方向键）
 history_trash.go: Sessions 删除 = 移入回收站（取代旧的 Hide；经 SessionTrashView 接缝只调 internal/sessiontrash，不新增 Herdr 方法）：移入（后台线程搬文件→摘除 Catalog 行→关预览/详情→刷新列表与回收站，Undo 提示条）、放回（先搬回再同步 Scan，不覆盖既有文件，冲突有专门提示）、永久删除/清空（二次确认，对话框 kind history-delete-forever / history-empty-trash）、回收站视图的行（条目 id 作行键，标题等从被搬走的文件按需读回）/计数/筛选/菜单（随 Sessions 范围，Empty Trash 只清当前显示的条目并在确认里说明），以及保护：Herdr 投影里运行中 Agent 的会话身份（文件路径或原生 id，且 Provider 一致）命中、或文件 60 秒内刚写过的会话不搬；日志只记操作名/数量/稳定 id，不记标题与正文
+history_info.go: 会话详情表（时间/文件夹/会话 ID/继续命令/换 Agent 命令/用量/路由/源文件/内容操作，命令 ID 路径各带复制）、展开行的行内动作条（Continue/复制命令/Continue in/Trash）、详情页的可折叠「Session details」卡；列表与详情页共用这一个表面，只读
 history_detail.go: /history/{id} 详情页：与 Chat 共用的只读视图（WebView 页或原生时间线回退，最新消息优先、向上懒加载）；页面停止构建后释放只读绑定；标题、Provider · 项目 · 模型与操作菜单在标题栏（route_header.go），页面不自带头部
 history_continue.go: Sessions 的 Continue / Continue in <Agent>：只读规划（PlanHistoryContinuation）→ 已在运行则定位窗格，否则经共享确认框后由既有 Herdr launch transaction 新建 Tab 续接（同 Agent 原生 resume 或跨 Agent 带最新消息简报），成功选中新窗格；失败按类给一行文案（shell 没就绪、Agent 没启动、可能已启动等分开说，不猜原因），已创建的窗格直接展示；引擎经 continuationRuntime 缝可被测试替换
 text_clip.go: Inspector 摘要与工具输出预览共用的按字节/行数 Unicode 安全截断（clipNativeText/clipPreview）
@@ -99,7 +115,7 @@ history_test.go: History 页面真实 Catalog 场景回归
 history_select_test.go: 多选模式机制（Select 进出、行点击勾选而非展开、项目头勾选不折叠、筛选/回收站切换清空选择）、最近项目默认单开回归；删除/放回的真实文件语义在 history_trash_test.go
 history_trash_test.go: Sessions 回收站回归（真实 Provider 夹具文件 + 真实 HistoryService/sessiontrash.Store）：行菜单 Move to Trash 搬文件/摘行/Undo 提示、Undo 放回、回收站列表读回标题与放回、Agent 标签与搜索、永久删除/清空先确认（取消不动）、批量移入、刚写入/运行中会话拒绝、放回冲突不覆盖、详情页与预览里的移入、无回收站不出现删除入口；含内存替身 fakeTrash 与已变异验证过的守卫
 history_nav_test.go: Sessions 列表键盘回归——进页聚焦且不亮、↓/↑ 跨项目头与边界、←/→ 折叠项目与预览（→ 只开不关）、Enter 切换预览、选择模式里行是叶子（Enter/Space 勾选、→ 不动）、确认框收起后键盘回到光标、搜索框里字母仍是文字
-history_preview_test.go: 行内预览懒读、代际防过期、阻塞读取与 Open 跳转回归
+history_preview_test.go: 行内详情展开/收起、View Session 跳转、用量与路由行、命令构造、时间区间格式、代际防过期回归
 history_continue_test.go: Continue 先确认再动、同 Agent 续接/跨 Agent 交接（简报取自原文最新窗口）、已在运行只定位窗格、无项目目录的说明、失败分类与已创建窗格的定位、行菜单/预览入口与禁用态回归（假体，不启动真实 Agent）
 history_detail_test.go: 详情共享 Chat 只读绑定、最新消息优先与向上分页、切换重绑/离开释放、不可读来源恢复态回归
 text_clip_test.go: 截断的 Unicode 边界、行/字符上限与截断标记回归
@@ -121,7 +137,7 @@ gd_header_test.go: 卡片头响应式回归——900 宽（用户打开导航、
 gd_perf_test.go: Diff 大文件基线（行模型构建/帧耗时 benchmark）与惰性计算结构性回归——词级 diff 按需、度量只算一次、快照刷新保留缓存、就近优先加载
 gd_large_test.go: 大 diff 占位→Show→按需读取→渲染 端到端回归（真实仓库）；失败重试、过大无动作、刷新保留/失效语义、不预读颜色
 git_workbench_actions.go: Git 工具住在标题栏（2026-10-30：原 diff 上方工具条并入 header）——gitHeaderTools（文件列表开关 gitFilePaneToggle、Fetch/Pull/Push 图标含 ahead/behind、Split/Unified）排在页面 Actions 之前，仅本地 Changes 视图（gitHeaderToolsShown，commit review/Terminal 不出现）；Git 项并入页面 Actions 菜单（gitActionItems：Stage/Unstage All、Stash、Undo Last Commit、View Commits、Git Settings），不再有第二个 ⋯；仓库 Refresh 唯一入口在 Git 侧栏
-git_sidebar_tree.go: 左侧 Git 引用导航，Worktrees/Branches/Remotes/Tags/Stashes 共用 sidebarTreeRow 与 sidebarSectionHeader；分区悬停 "+" 与右键菜单承载创建动作，无 "···"；顶部 gitViewTabs 是图标分段 Changes（+改动数）| Commits（ui.SegmentedBase，同 ui.Segmented 的脸），切换调 reviewLocalChanges/showGitCommits；引用筛选在头部搜索按钮后展开（headerSearch，Esc 先清空再关闭）；叶子行为 Deliberate 两步：单击只选中（首次提示 "Double-click to check out …"）、双击/Enter 才切换，目录仍单击折叠
+git_sidebar_tree.go: 左侧 Git 引用导航，Worktrees/Branches/Remotes/Tags/Stashes 共用 sidebarTreeRow 与 sidebarSectionHeader；分区悬停 "+" 与右键菜单承载创建动作，无 "···"；顶部 gitViewTabs 是图标分段 Changes（+改动数）| Commits（ui.SegmentedBase，同 ui.Segmented 的脸），切换调 reviewLocalChanges/showGitCommits；引用筛选在头部搜索按钮后展开（headerSearch，Esc 先清空再关闭）；叶子行为 Deliberate 两步：单击选中并在 Commits 图谱里定位其提交（git_graph_refs.go；首次提示 "Double-click to check out …"）、双击/Enter 才切换，目录仍单击折叠；本地/远程分支叶子与目录行尾有眼睛（隐藏的行常显 eye-off 且变灰，当前分支无眼睛）
 git_ref_tree.go: Git 引用按斜线构树、目录键稳定、筛选时独立折叠/再次展开、行经 sidebarTreeRow（网格+导向线）、右键菜单，不执行 Git IO
 git_review_split.go: Changes 双模式主工作台，Changes 文件树+Diff+底部单行 Commit 编辑器（空闲只有 Subject+Commit，聚焦/有草稿时展开 Description 与 Amend 行；经 Pi 只填 Subject）；Commits 为图谱列表（顶部 gitListHead 搜索 + "N commits"）上层 + 下层评审：左列 gitCommitCard（可选中的 subject/body、3 行折叠 Show more、作者·相对时间、短 hash + Copy Commit Hash、Copy Message/Cherry-pick/Revert）与只读文件树，右列工具栏 + Diff（取代原 Commit/Changes/File Tree 三个 Segmented 子页签）；文件导航宽度及上限唯一来源 gitFilePaneLimits；中心区（窗口−侧栏）<750 时导航自动收起，开合偏好按宽/窄两档各自记忆，工具栏 gitFilePaneToggle 取回（Changes 操作条与 Commits 评审共用）；底部 Commit 按钮走 compactPrimaryButton，Commit options 下拉走共享图标按钮脸
 git_review_split_test.go: Git 双模式分栏、960 DIP 几何、拖拽、历史只读与底部草稿统一 Commit Modal 测试；文件导航窄窗口自动收起/按中心区判断/宽窄两档偏好各自记忆/提交评审同规则；下层视图是 Segmented（选中脸对照普通 Segmented、点击切换）；两个 Commit 主按钮取档（快捷条 compact、对话框页脚与 Cancel 同高）
@@ -133,14 +149,20 @@ gd_stage_lines.go: Fork 式行级暂存：已跟踪、仅一侧有改动的文�
 gd_stage_lines_test.go: 真实仓库端到端（点行号 → Stage 1 Line → 索引只含该行；Stage Hunk 只暂存该 hunk）、⇧/⌘ 选择、行号栏拖选、快照刷新作废、首张卡片与标题栏贴合、卡片间距由上一张卡的 end 行承担（gdCardGap，窗口纸色）、可暂存条件的回归
 gd_media.go: diff 卡片里二进制变更的预览（2026-10-30）：图片（PNG/JPEG/GIF/WebP/BMP，≤8 MiB）前/后并排含尺寸与大小，新增/删除只显示一侧；其他二进制显示大小变化（A → B）；两侧来源随 gdFile.view（合并/暂存比 HEAD，未暂存比索引；commit review 取该提交 DiffBase 两端）；读取与解码离 UI lane、Bitmap 回 UI lane，快照刷新时沿用旧画面再静默重读；只读，无新 Git runner/Herdr 方法/WebView
 gd_media_test.go: 真实仓库：改动/新增 PNG 并排与尺寸文字、非图片大小变化、无法解码的 .png 的说明、commit review 读提交自身的 blob 而非工作树
+git_graph_refs.go: 图谱与引用联动——眼睛隐藏/显示分支（按仓库存 settings.Workbench.GraphHidden，Git --exclude 判可见）、Show All 与 N hidden、点引用 locateRef→revealCommit 定位（窗口按 git rev-list 行号精确扩大（最多 20000），consumeLocate 在列表里 ScrollTo 并高亮 1.2s）、仅重读图谱 loadCommitGraph（graphGen 防过期）
+git_graph_refs_test.go: 真实仓库回归——单击定位/隐藏引用只提示/窗口扩大/眼睛（目录与叶子、持久化、Show All）/当前分支无眼睛/提交行 chip
 git_panel_test.go: Git 面板（designs/git-panel Option A）回归：引用单击选中·双击切换、目录单击折叠、搜索按钮与 Esc、图谱列宽自适应、提交卡复制完整信息、编辑器单行、窄侧栏头部
 git_tree_interaction_test.go: 所有 Git 引用组反复折叠/展开、筛选后目录折叠与恢复回归
 git_file_tree_fold_test.go: Changes/Commits 中重复点击相同文件目录的折叠与再展开回归
 git_directory_actions.go: Staged/Unstaged 独立目录子文件解析，路径边界准确，不以目录路径批量 Git add
 git_quick_ai.go: 底部 Pi 提交生成器；异步 root/snapshot/草稿门禁、仅安全元数据、只填 Subject，拒绝自动提交
 git_workbench_polish_test.go: Split/Unified 真实点击、目录选中与边界、唯一 Refresh、Actions 菜单（含 Git 项）和异步草稿门禁回归；Git 图标按钮/下拉与 Commit options 悬停脸对照同尺寸共享按钮（角落探针取斜向内一像素，8 点圆角下该像素整个在曲线外）、工具栏 Tab 必达（Fetch/Pull/Push/Git actions/Copy path）
-git_commit_graph.go: 历史提交真实父 SHA 的 merge lanes 纯渲染投影；无运行时 Git IO；车道颜色跟线不跟槽位（首父继承、压缩槽位保有 fork 色，仅新开车道领新色），gitGraphRowH 24 即 Commits 行距；列宽随实际车道数自适应（gitGraphWidth：18+11·(n−1)，最多 6 道），筛选后的列表只画圆点（dotOnly，行已不相邻，连线无意义）——glyph 是行内最高子元素且行无纵向 padding、List 无 Gap，相邻行贴边令导线跨行连续
-git_commit_graph_test.go: 提交父节点拓扑及合并分支回归；车道颜色跟线回归（fork 异色、压缩换槽保色、首父链同色、无关主线不借用 fork 色）
+git_commit_graph.go: 历史提交真实父 SHA 的稳定车道投影（车道只开合不平移：Top/Bottom/Through/Converge/Diverge；首父永远沿本车道走到父提交那一行再以圆角肘弯汇入，次父新开车道或接入已有线，同行释放的车道不复用以免 S 弯）与画笔（1.25 细线、半径 3 小圆点、StrokePath 圆角肘弯，不再用 Line 画斜线）；颜色跟线不跟槽位（首父继承、仅新开车道领新色）；列宽按行取（gitGraphRowWidth，单车道段字紧贴圆点，分支行右移），最多 12 道；筛选后只画圆点；无运行时 Git IO；gitGraphRowH 24 即 Commits 行距，行贴边令导线跨行连续
+git_commit_graph_test.go: 合并/汇入/接入已等待车道/车道不平移/颜色跟线手写回归，加 60 组种子随机历史的连续性不变量（上一行向下的线 = 下一行从上接收的线，同车道同颜色；提交离开的线数 = 父数）与各形状的无异常绘制
+git_graph_fold.go: 合并提交的折叠 —— gitFold 在已加载窗口上算出“合并带进来的提交”（第二及后续父可达、首父不可达、且不是别条可见线的祖先），apply 返回去掉被折叠分支的列表（幸存提交丢弃被隐藏的父，图谱据此重连）和每个合并隐藏的数量；合并行末的 fold/unfold 图标（Fold/Unfold Merged Commits，折叠后带 +N）；折叠按仓库存 settings.Workbench.GraphFolded（重启保留），搜索时读全窗口，定位到被折叠的提交时自动展开（unfoldFor）；gitCommitView 缓存折叠/泳道投影（窗口或折叠变化才重算，窗口可达 2 万提交）
+git_graph_fold_test.go: 折叠只隐藏合并带进来的提交、不吞别线依赖、已并入主线的分支不可折叠、嵌套合并、真实仓库里点图标折叠/展开与定位自动展开
+git_commit_chips.go: Commits 行的标签 chip —— 分支/远程分支/Tag/stash/worktree 各带与侧栏同款图示（branch、cloud、tag、archive、folder-open），来自 %D 真实装饰 + stash 列表（挂在其 base 提交）+ worktree（游离 HEAD 挂在其提交，已在别处检出的分支换 worktree 图示）；最多 3 个，余下折成 +N；侧栏 stash/游离 worktree 单击经 gitTreeItem.commit 定位，带分支的 worktree 沿用 ref 定位；点 chip = 打开其提交（stash chip 打开 stash 本身）并把侧栏对应行选中、滚入视野（展开所在分区与目录、清掉会隐藏它的搜索）
+git_ref_linkage_test.go: 真实仓库回归——stash（审阅区显示 stash 本身含未跟踪文件）/游离 worktree 单击定位、chip 点击回显侧栏行、各类 chip 图示、折叠状态持久化与清空
 git_layout_render_test.go: 仅显式启用时输出 Changes/Commits 实际 MyGo 渲染截图
 changes_panel.go: Changed File Tree 行落在共用侧栏网格（chevron 槽·图标·标题·悬停图标动作·+N -N·状态字母）、导向线、行高走密度令牌；目录每次直接点击均切换折叠，不依赖 List.Changed；文件行保留多选及 Diff 导航；状态字母右对齐，与分组头 Stage/Unstage 同止于右缘
 bootstrap_page.go: 启动时全屏居中 Loading 或可重试的错误页面，尚未初次完成 Herdr projection 时不挂载侧栏或顶部菜单；本地 Herdr 协议过旧（herdrUpgradeable）时额外提供「Update Herdr」就地更新入口，更新中（herdrUpdating）用 spinner 替代两个动作；更新失败持久可见（herdrUpdateErr 不再随 updating 态消失），授权未发生（herdrUpdateNotWrbl，含拒绝与无授权代理）时给用户语言出路 + Copy Update Command

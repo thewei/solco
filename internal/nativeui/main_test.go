@@ -12,6 +12,8 @@ import (
 func TestMain(m *testing.M) {
 	writeClipboard = func(string) error { return nil }
 	revealInFinder = func(string) {}
+	openInBrowser = func(string) error { return nil }
+	showStaticPreview = func(*Shell, string) error { return nil }
 	os.Exit(m.Run())
 }
 

@@ -30,6 +30,7 @@ type gitService struct {
 	branchesGen  atomic.Uint64
 	preflightGen atomic.Uint64
 	gdLoadGen    atomic.Uint64
+	graphGen     atomic.Uint64
 
 	// root binding: resolved repo root of the selected Tab ("", not a repo).
 	root             string
@@ -98,6 +99,16 @@ type gitService struct {
 	// commit history for the All Commits pane.
 	commits        []gitworkbench.CommitInfo
 	commitsLoading bool
+	// graphLimit is the commits the graph window holds (0 = the default); it
+	// widens when a located commit is older than the window.
+	graphLimit int
+	// commitView is the Commits list's projection (folds, graph lanes) of
+	// commits, rebuilt only when the commits or the folds change.
+	commitView *gitCommitView
+	// locateHash is a commit the Commits list must scroll to once it is a row;
+	// flashHash is the one highlighted for a moment after that.
+	locateHash string
+	flashHash  string
 
 	// gdSourceKind is what the review shows: the worktree's changes or one
 	// commit's diff (the All Commits selection).
@@ -325,6 +336,7 @@ func (s *Shell) resetGitContextState() {
 	s.git.worktrees = nil
 	s.git.stashes = nil
 	s.git.commits = nil
+	s.git.graphLimit, s.git.locateHash, s.git.flashHash = 0, "", ""
 	s.git.source = gdSourceWorktree
 	s.git.commitHash = ""
 	s.git.commitSnap = nil

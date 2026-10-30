@@ -1,8 +1,11 @@
 package nativeui
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/history"
 )
 
 /**
@@ -65,7 +68,7 @@ const (
 // element carries the Clicked/ContextMenu surface. A caller may add one
 // control at the trailing edge (trailing), which draws inside the row after
 // the spinner and the unread dot.
-func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected bool, dupProjects map[string]bool, trailing func()) ui.Element {
+func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected bool, dupProjects map[string]bool, hideProject bool, trailing func()) ui.Element {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
 	mark := agentMark(card.Provider, t.Dark)
@@ -86,10 +89,6 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 		row.Children(func() {
 			ui.Box(c).Size(agentCardMark, agentCardMark).Shrink(0).Children(func() {
 				markView(c, mark, agentCardMark, t.TextMuted)
-				// Always shown; gray means idle (round three follow-up).
-				ui.Box(c).Absolute().Left(11).Top(10).Children(func() {
-					statusDot(c, operationalState(card.Attention))
-				})
 			})
 			ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
 				// First line: the agent's own session title (2026-10-30
@@ -98,24 +97,26 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 				// keeps the card single-line.
 				tipped(c, ui.Text(c, card.Title).FontSize(Typography().Body).SingleLine(), card.Title)
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					if card.ProjectName != "" {
+					if card.ProjectName != "" && !hideProject {
 						tipped(c, ui.Text(c, card.ProjectName).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), card.ProjectName)
 					}
 					s.agentFactsView(c, card)
 				})
 			})
-			// A working (or launching) agent spins at the trailing edge:
-			// mid-flight work reads at a glance, with no status words —
-			// the row stays word-free by contract, so the spinner is
-			// unnamed; AT already reads it as a progress indicator inside
-			// the labeled row. The spinner paints only while its row
-			// shows (mygo drives the frames), so idle agents cost nothing.
-			if card.Working() {
-				ui.Spinner(c)
-			}
 			if card.Unread {
 				ui.Box(c).Size(6, 6).Radius(3).Background(tokens.StatusColor(ToneAttention, t.Dark)).Shrink(0)
 			}
+			if n := len(card.Subagents); n > 0 && len(openSubagents(card, time.Now())) == 0 {
+				tipped(c, ui.Text(c, "⤷"+itoa(n)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0),
+					pluralUnits(n, "sub-agent")+" ran")
+			}
+			// The row ends with when the Agent last worked and its state
+			// slot (2026-10-30): spinner, dot and ring are one indicator
+			// (status_indicator.go), never at the icon any more.
+			if ago := agentAgo(card.LastActive, time.Now()); ago != "" {
+				ui.Text(c, ago).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+			}
+			statusIndicator(c, agentIndicatorState(card))
 			if trailing != nil {
 				trailing()
 			}
@@ -157,4 +158,98 @@ func (s *Shell) agentFactsView(c *ui.Context, card agent.AgentCardModel) bool {
 		}
 	})
 	return true
+}
+
+// agentIndicatorState is the state a card's slot draws: a working (or
+// launching) card spins whatever its attention projection says, otherwise
+// the attention state itself.
+func agentIndicatorState(card agent.AgentCardModel) operationalState {
+	if card.Working() {
+		return opWorking
+	}
+	return operationalState(card.Attention)
+}
+
+// agentAgo is the short "last worked" tag: "<1m", "7m", "3h", "2d"; empty
+// when the instant is unknown.
+func agentAgo(at, now time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	d := now.Sub(at)
+	switch {
+	case d < time.Minute:
+		return "<1m"
+	case d < time.Hour:
+		return itoa(int(d/time.Minute)) + "m"
+	case d < 48*time.Hour:
+		return itoa(int(d/time.Hour)) + "h"
+	default:
+		return itoa(int(d/(24*time.Hour))) + "d"
+	}
+}
+
+// subagentRowsShown caps the nested rows under one agent.
+const subagentRowsShown = 6
+
+// openSubagents are the sub-agent rows a card shows nested under it: the most
+// recent ones, but only while at least one is still running (an all-done
+// card folds them into its ⤷N chip instead).
+func openSubagents(card agent.AgentCardModel, now time.Time) []history.Subagent {
+	running := false
+	for _, sub := range card.Subagents {
+		if sub.Active(now) {
+			running = true
+			break
+		}
+	}
+	if !running {
+		return nil
+	}
+	subs := card.Subagents
+	if len(subs) > subagentRowsShown {
+		subs = subs[len(subs)-subagentRowsShown:]
+	}
+	return subs
+}
+
+// subagentRow is one nested sub-agent: a guide line from its parent, the
+// kind in bold, the task muted, the same state slot at the end (a spinner
+// while it writes, a ring once done). Clicking it opens the parent.
+func (s *Shell) subagentRow(c *ui.Context, parent agent.AgentCardModel, sub history.Subagent, last bool) ui.Element {
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	name := sub.Type
+	if name == "" {
+		name = "Sub-agent"
+	}
+	var row ui.Element
+	ui.Box(c.Key("sub:" + parent.PaneID + ":" + sub.ID)).FillWidth().Children(func() {
+		row = ui.ButtonBase(c).FillWidth().Height(24).Radius(6).Padding(0, agentCardPadX).Gap(6).
+			AlignItems(ui.Center).Label(name + " " + sub.Description)
+		if tint, ok := rowTint(tokens, false, row.Hovered()); ok {
+			row.Background(tint)
+		}
+		row.Draw(func(p *ui.Painter, r ui.Rect) {
+			x := r.X + agentCardPadX + agentCardMark/2
+			bottom := r.Y + r.H
+			if last {
+				bottom = r.Y + r.H/2
+			}
+			p.Line(x, r.Y, x, bottom, 1, tokens.TreeLine)
+			p.Line(x, r.Y+r.H/2, x+9, r.Y+r.H/2, 1, tokens.TreeLine)
+		})
+		row.Children(func() {
+			ui.Box(c).Width(agentCardMark + 4).Shrink(0).PassThrough()
+			ui.Text(c, name).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).SingleLine().Shrink(0).PassThrough()
+			ui.Text(c, sub.Description).FontSize(Typography().Micro).TextColor(t.TextMuted).
+				SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Grow(1).PassThrough()
+			if sub.Active(time.Now()) {
+				statusIndicator(c, opWorking)
+			} else {
+				statusIndicator(c, opIdle)
+			}
+		})
+	})
+	return row
 }

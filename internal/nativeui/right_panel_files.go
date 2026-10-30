@@ -26,7 +26,14 @@ func (s *Shell) filesToolView(c *ui.Context) {
 	}
 	s.requestIgnoreSet()
 	ui.Column(c).FillWidth().Grow(1).MinHeight(0).Children(func() {
+		if s.filesSearch.open {
+			s.filesSearchOptions(c)
+		}
 		s.filesTreeToolbar(c)
+		if s.filesSearchOn() {
+			s.filesSearchResults(c, root)
+			return
+		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			s.navList(c, &s.nav.files, true, ui.Column(c).FillWidth().Padding(4, sidebarGutter, 12), func() {
 				s.renderDirectoryLevel(c, root, 0)
@@ -54,6 +61,8 @@ func (s *Shell) filesTreeToolbar(c *ui.Context) {
 		if gorexIconButton(c, k, iconEyeOff, "Show ignored files", "Show ignored files",
 			s.rightPanel.showIgnored, gorexPaneBtn, gorexPaneGlyph).Clicked() {
 			s.rightPanel.showIgnored = !s.rightPanel.showIgnored
+			// The search follows the toggle: what it may look into changed.
+			s.filesSearchChanged()
 		}
 	})
 }
@@ -68,6 +77,7 @@ func (s *Shell) refreshFiles() {
 	s.rightPanel.loadingDirs = make(map[string]bool)
 	s.rightPanel.ignoredRoot = ""
 	s.rightPanel.ignoredSet = filesview.NewIgnoreSet(nil)
+	s.filesSearchInvalidate()
 	if root := s.rightPanel.currentRoot; root != "" {
 		s.requestDirectory(root)
 	}

@@ -197,6 +197,7 @@ func (s *Shell) runFilesOp(op string, run func() (string, error), refreshDir, ol
 		slog.Info("files op done", "op", op)
 		s.migrateFilesSelection(oldPath, newPath)
 		s.invalidateFilesTree(refreshDir, oldPath)
+		s.filesSearchInvalidate()
 		// The operation may have changed ignore semantics (a new
 		// .gitignore, a now-matching *.log, a deleted ignore file):
 		// re-arm the git lookup for the next render.

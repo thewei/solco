@@ -370,6 +370,7 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	s.updateDockBadge()
 	s.refreshUsageProjection(false)
 	s.refreshGitMeta()
+	s.refreshSubagents()
 	// The floating Quick Panel shares this reconciled state but gets no
 	// input of its own while open; push the repaint to it.
 	s.invalidateQuickPanel()

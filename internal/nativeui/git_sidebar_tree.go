@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // gitSectionAction is a section's one creation action: the "+" that shows
@@ -22,11 +23,45 @@ type gitSectionAction struct {
 	run      func()
 }
 
-// gitViewTabs is the Changes | Commits switch at the top of the Git sidebar:
-// the shared segmented face with an icon on each segment and, on Changes, the
-// count of changed files. (Commits, not History: History is the Sessions page.)
-func (s *Shell) gitViewTabs(c *ui.Context) {
+// segmentTab is one segment of segmentTabs: a glyph and a label.
+type segmentTab struct {
+	label string
+	svg   *ui.SVG
+}
+
+// segmentTabs is the sidebar's two-way switch — Changes | Commits at the top of
+// Git, Files | Content under the Files search: the shared segmented face with
+// an icon on each segment. badge, when given, returns a count shown after a
+// segment's label (0 shows none). It reports whether the choice changed.
+func segmentTabs(c *ui.Context, name string, chosen *int, items []segmentTab, badge func(i int) int) bool {
 	t := c.Theme()
+	tabs := ui.SegmentedBase(c, chosen, len(items))
+	segmentedTrack(c, tabs, name)
+	tabs.Track.FillWidth().Children(func() {
+		for i, tab := range items {
+			seg := segmentFace(c, tabs, i, i == *chosen, tab.label).Grow(1).Justify(ui.Center)
+			col := t.TextMuted
+			if i == *chosen || seg.Hovered() {
+				col = t.Text
+			}
+			seg.Children(func() {
+				ui.Icon(c, tab.svg).Size(gorexPaneGlyph, gorexPaneGlyph).TextColor(col).Shrink(0)
+				ui.Text(c, tab.label).SingleLine().TextColor(col)
+				if badge != nil {
+					if n := badge(i); n > 0 {
+						ui.Text(c, itoa(n)).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine()
+					}
+				}
+			})
+		}
+	})
+	return tabs.Track.Changed()
+}
+
+// gitViewTabs is the Changes | Commits switch at the top of the Git sidebar,
+// with, on Changes, the count of changed files. (Commits, not History: History
+// is the Sessions page.)
+func (s *Shell) gitViewTabs(c *ui.Context) {
 	chosen := 0
 	if s.commitsMode {
 		chosen = 1
@@ -35,28 +70,14 @@ func (s *Shell) gitViewTabs(c *ui.Context) {
 	if snap := s.gitSnapshot(); snap != nil {
 		changed = len(snap.Files)
 	}
-	tabs := ui.SegmentedBase(c, &chosen, 2)
-	segmentedTrack(c, tabs, "Git view")
-	tabs.Track.FillWidth().Children(func() {
-		for i, tab := range []struct {
-			label string
-			svg   *ui.SVG
-		}{{"Changes", iconFileDiff}, {"Commits", iconCommit}} {
-			seg := segmentFace(c, tabs, i, i == chosen, tab.label).Grow(1).Justify(ui.Center)
-			col := t.TextMuted
-			if i == chosen || seg.Hovered() {
-				col = t.Text
+	moved := segmentTabs(c, "Git view", &chosen, []segmentTab{{"Changes", iconFileDiff}, {"Commits", iconCommit}},
+		func(i int) int {
+			if i == 0 {
+				return changed
 			}
-			seg.Children(func() {
-				ui.Icon(c, tab.svg).Size(gorexPaneGlyph, gorexPaneGlyph).TextColor(col).Shrink(0)
-				ui.Text(c, tab.label).SingleLine().TextColor(col)
-				if i == 0 && changed > 0 {
-					ui.Text(c, itoa(changed)).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine()
-				}
-			})
-		}
-	})
-	if tabs.Track.Changed() {
+			return 0
+		})
+	if moved {
 		if chosen == 0 {
 			s.commitsMode = false
 			s.reviewLocalChanges()
@@ -95,19 +116,21 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 				}, func() {
 					shown := 0
 					for _, wt := range s.git.worktrees {
-						label := wt.Branch
-						if label == "" {
-							label = "(detached)"
-						}
-						if wt.Bare {
-							label = "(bare)"
-						}
+						label := gitWorktreeLabel(wt)
 						if !gitRefMatches(s.gitRefsFilter, label, wt.Path) {
 							continue
 						}
 						shown++
 						worktree := wt
-						s.gitTreeRow(c, gitTreeItem{title: label, tooltip: wt.Path, kind: "Worktree", glyph: iconBranch}, func() {
+						item := gitTreeItem{title: label, tooltip: wt.Path, kind: "Worktree", glyph: iconWorktree}
+						switch {
+						case wt.Bare:
+						case wt.Branch != "":
+							item.ref = gitworkbench.RefHeadsPrefix + wt.Branch
+						case wt.Head != "":
+							item.commit = wt.Head
+						}
+						s.gitTreeRow(c, item, func() {
 							if !worktree.Bare {
 								s.openExternalPath(worktree.Path)
 							}
@@ -205,7 +228,7 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 						}
 						shown++
 						st := stash
-						s.gitTreeRow(c, gitTreeItem{title: st.Ref + "  " + st.Subject, tooltip: st.Subject, kind: "Stash", glyph: iconBranch}, func() {
+						s.gitTreeRow(c, gitTreeItem{title: st.Ref + "  " + st.Subject, tooltip: st.Subject, kind: "Stash", glyph: iconStash, commit: st.Base, review: st.Hash}, func() {
 							s.copyToClipboard(st.Ref)
 						}, func(m *ui.Menu) {
 							if m.Item("Pop Stash").Chosen() {
@@ -250,4 +273,15 @@ func (s *Shell) gitSidebarSection(c *ui.Context, name string, count int, action 
 	if !closed {
 		children()
 	}
+}
+
+// gitWorktreeLabel is a worktree row's title: its branch, or what it lacks.
+func gitWorktreeLabel(wt gitworkbench.Worktree) string {
+	switch {
+	case wt.Bare:
+		return "(bare)"
+	case wt.Branch == "":
+		return "(detached)"
+	}
+	return wt.Branch
 }

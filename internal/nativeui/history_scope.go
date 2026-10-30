@@ -153,5 +153,13 @@ func (s *Shell) historyNav(c *ui.Context) {
 		}); clicked {
 			s.showHistoryScope(true)
 		}
+		// Usage is a sibling of the lists, not a scope of them.
+		ui.Divider(c)
+		if _, clicked := s.sidebarTreeRow(c, sidebarTreeSpec{
+			Key: "sessions-usage", Title: "Quota", Glyph: iconQuota,
+			Selected: s.router.Path() == routeQuota,
+		}); clicked && s.router.Path() != routeQuota {
+			s.router.Push(routeQuota)
+		}
 	})
 }

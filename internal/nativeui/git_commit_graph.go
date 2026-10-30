@@ -1,8 +1,8 @@
 package nativeui
 
 /**
- * [INPUT]: Git CommitInfo full parent hashes, ordered by the existing history reader
- * [OUTPUT]: Bounded native commit graph lanes/edges for the history table, with wire-continuous lane colors
+ * [INPUT]: Git CommitInfo full parent hashes, date-ordered by the graph reader (parents never precede their children)
+ * [OUTPUT]: A stable-lane commit graph — each row says which wires pass, enter the dot, leave it, converge into it and fork out of it — and its painter: hairline wires with rounded elbows at forks and merges, small dots, per-row width
  * [POS]: Pure Git history visual projection; no Git invocation in the render loop
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,98 +14,120 @@ import (
 	"github.com/thewei/solco/internal/gitworkbench"
 )
 
-// gitGraphRow is one commit's slice of the graph. Before/After are the
-// active lanes around the row; the color slices parallel them by position
-// but index lane identity (the hash), so a lane keeps its color while it
-// compacts toward lane 0 and its wire reads as one continuous stroke.
-type gitGraphRow struct {
-	Before       []string
-	After        []string
-	BeforeColors []int
-	AfterColors  []int
-	Lane         int
-	// Color is the commit's own lane color index.
+// gitGraphWire is one wire's lane and color.
+type gitGraphWire struct {
+	Lane  int
 	Color int
 }
 
+// gitGraphRow is one commit's slice of the graph. Lanes never move: a lane is
+// held by the commit it waits for and freed when that commit arrives, so a
+// wire is a straight vertical from where it opens to where it closes and the
+// only bends are the elbows at a fork or a merge.
+type gitGraphRow struct {
+	// Lane and Color are the commit's own lane and wire color.
+	Lane  int
+	Color int
+	// Top: a wire enters the dot from above on Lane (the commit was awaited).
+	// Bottom: the first parent leaves the dot downward on Lane.
+	Top    bool
+	Bottom bool
+	// Through are the other lanes whose wire runs the whole row untouched.
+	Through []gitGraphWire
+	// Converge are other lanes whose wire ends at this commit, entering from
+	// above (children that share it as parent).
+	Converge []gitGraphWire
+	// Diverge are other lanes the commit connects into below: a merge's
+	// further parents (a new wire, or one already waiting for that parent).
+	Diverge []gitGraphWire
+	// Lanes is how many lanes the row touches (highest used lane + 1).
+	Lanes int
+}
+
 // gitHistoryGraph follows actual parent IDs, not branches inferred from
-// subjects. A merge makes a secondary lane until both paths reconverge.
-// Up to 200 commits are already bounded by the existing reader.
+// subjects. The reader's date order guarantees a parent is listed after all of
+// its children, which is what lets one pass assign lanes.
 func gitHistoryGraph(commits []gitworkbench.CommitInfo) []gitGraphRow {
 	rows := make([]gitGraphRow, len(commits))
-	active := []string{}
-	colors := map[string]int{}
-	next := 0
-	// freshColor hands a new lane its round-robin color.
-	freshColor := func(hash string) {
-		if _, ok := colors[hash]; !ok {
-			colors[hash] = next % len(gitLaneColors)
-			next++
+	var lanes []string // the commit each lane waits for; "" = free
+	var colors []int   // each lane's wire color
+	next := 0          // round-robin color for a wire that just opened
+	fresh := func() int { next++; return (next - 1) % len(gitLaneColors) }
+	freeLane := func(avoid map[int]bool) int {
+		for i, hash := range lanes {
+			if hash == "" && !avoid[i] {
+				return i
+			}
 		}
+		lanes = append(lanes, "")
+		colors = append(colors, 0)
+		return len(lanes) - 1
 	}
+
 	for i, cm := range commits {
-		lane := slices.Index(active, cm.Hash)
-		if lane < 0 {
-			lane = len(active)
-			active = append(active, cm.Hash)
+		row := gitGraphRow{}
+		var waiting []int
+		for l, hash := range lanes {
+			if hash == cm.Hash {
+				waiting = append(waiting, l)
+			}
 		}
-		freshColor(cm.Hash)
-		before := append([]string(nil), active...)
-		beforeColors := make([]int, len(before))
-		for j, hash := range before {
-			freshColor(hash)
-			beforeColors[j] = colors[hash]
-		}
-		after := append([]string(nil), active...)
-		if len(cm.Parents) == 0 {
-			after = append(after[:lane], after[lane+1:]...)
+		if len(waiting) > 0 {
+			row.Lane, row.Top = waiting[0], true
+			row.Color = colors[row.Lane]
 		} else {
-			after[lane] = cm.Parents[0]
-			// The first parent continues this lane and inherits its wire
-			// color; only an additional parent opens a genuinely new lane
-			// and earns a fresh color. A parent already colored belongs to
-			// an earlier lane (a rejoin) and keeps that color.
-			for j, parent := range cm.Parents {
-				if _, ok := colors[parent]; ok {
-					continue
-				}
-				if j == 0 {
-					colors[parent] = colors[cm.Hash]
-				} else {
-					colors[parent] = next % len(gitLaneColors)
-					next++
-				}
-			}
-			for j := 1; j < len(cm.Parents); j++ {
-				parent := cm.Parents[j]
-				if !slices.Contains(after, parent) {
-					after = append(after, parent)
-				}
+			row.Lane = freeLane(nil)
+			row.Color = fresh()
+		}
+		for l, hash := range lanes {
+			if hash != "" && hash != cm.Hash {
+				row.Through = append(row.Through, gitGraphWire{l, colors[l]})
 			}
 		}
-		// Rejoining parents leave one lane, not duplicate wires.
-		seen := map[string]bool{}
-		unique := after[:0]
-		for _, name := range after {
-			if !seen[name] {
-				unique = append(unique, name)
-				seen[name] = true
+		justFreed := map[int]bool{row.Lane: true}
+		for _, l := range waiting {
+			if l != row.Lane {
+				row.Converge = append(row.Converge, gitGraphWire{l, colors[l]})
+			}
+			lanes[l] = ""
+			justFreed[l] = true
+		}
+		lanes[row.Lane] = ""
+
+		for p, parent := range cm.Parents {
+			if p == 0 {
+				// The first parent always continues this lane, even when another
+				// wire already waits for it: the wires run on side by side and
+				// converge on the parent's own row, as a branch reaches its
+				// fork point.
+				lanes[row.Lane], colors[row.Lane] = parent, row.Color
+				row.Bottom = true
+				continue
+			}
+			if l := slices.Index(lanes, parent); l >= 0 {
+				// A merged-in parent already has a wire: connect into it.
+				if l != row.Lane {
+					row.Diverge = append(row.Diverge, gitGraphWire{l, colors[l]})
+				}
+				continue
+			}
+			// A new wire opens for a further parent; a lane freed on this very
+			// row is not reused, so no lane reads as an S-bend.
+			l := freeLane(justFreed)
+			lanes[l], colors[l] = parent, fresh()
+			row.Diverge = append(row.Diverge, gitGraphWire{l, colors[l]})
+		}
+		for len(lanes) > 0 && lanes[len(lanes)-1] == "" {
+			lanes, colors = lanes[:len(lanes)-1], colors[:len(colors)-1]
+		}
+
+		row.Lanes = row.Lane + 1
+		for _, set := range [][]gitGraphWire{row.Through, row.Converge, row.Diverge} {
+			for _, w := range set {
+				row.Lanes = max(row.Lanes, w.Lane+1)
 			}
 		}
-		afterColors := make([]int, len(unique))
-		for j, hash := range unique {
-			freshColor(hash)
-			afterColors[j] = colors[hash]
-		}
-		rows[i] = gitGraphRow{
-			Before:       before,
-			After:        append([]string(nil), unique...),
-			BeforeColors: beforeColors,
-			AfterColors:  afterColors,
-			Lane:         lane,
-			Color:        colors[cm.Hash],
-		}
-		active = append([]string(nil), unique...)
+		rows[i] = row
 	}
 	return rows
 }
@@ -122,17 +144,20 @@ const gitGraphRowH float32 = 24
 
 const (
 	gitGraphStep     float32 = 11
-	gitGraphInset    float32 = 9 // lane 0's x, and the room after the last lane
-	gitGraphMaxLanes         = 6
+	gitGraphInset    float32 = 8 // lane 0's x, and the room after the last lane
+	gitGraphMaxLanes         = 12
+	// gitGraphWire is the wire's thickness; the dot is a little over twice it.
+	gitGraphWireW float32 = 1.25
+	gitGraphDotR  float32 = 3
+	// gitGraphCorner is the radius of an elbow's rounded corner.
+	gitGraphCorner float32 = 6
 )
 
-// gitGraphWidth is the width of the graph column: just the lanes the history
-// uses (up to six), so the dot sits next to its subject instead of in a fixed
-// 76-wide gutter. One width serves every row, so the subjects keep a column.
+// gitGraphWidth is the width the widest row needs (up to gitGraphMaxLanes).
 func gitGraphWidth(rows []gitGraphRow) float32 {
 	lanes := 1
 	for _, r := range rows {
-		lanes = max(lanes, len(r.Before), len(r.After), r.Lane+1)
+		lanes = max(lanes, r.Lanes, r.Lane+1)
 	}
 	return gitGraphWidthFor(min(lanes, gitGraphMaxLanes))
 }
@@ -141,55 +166,65 @@ func gitGraphWidthFor(lanes int) float32 {
 	return gitGraphInset*2 + float32(max(lanes, 1)-1)*gitGraphStep
 }
 
+// gitGraphRowWidth is the width one row needs: its own lanes, so a stretch of
+// single-lane history keeps its subjects close to the dot and a branch's rows
+// step right of it.
+func gitGraphRowWidth(r gitGraphRow) float32 {
+	return gitGraphWidthFor(min(max(r.Lanes, r.Lane+1), gitGraphMaxLanes))
+}
+
 // gitGraphGlyph draws one row of the graph in a column width wide. dotOnly
 // draws the commit's dot alone — a filtered list is not a history, so wires
 // between rows that are no longer neighbours would lead nowhere.
 func gitGraphGlyph(c *ui.Context, graph gitGraphRow, width float32, dotOnly bool) {
 	ui.Box(c).Width(width).Height(gitGraphRowH).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+		color := func(idx int) ui.Color { return gitLaneColors[idx%len(gitLaneColors)] }
+		cy := r.Y + r.H/2
+		laneX := func(l int) float32 { return r.X + gitGraphInset + float32(min(l, gitGraphMaxLanes-1))*gitGraphStep }
+		dotX := laneX(graph.Lane)
 		if dotOnly {
-			color := gitLaneColors[graph.Color%len(gitLaneColors)]
-			x, center := r.X+gitGraphInset, r.Y+r.H/2
-			p.Fill(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color, 4)
-			p.Stroke(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color.Alpha(0.85), 4, 0.75)
-			return
-		}
-		const step = gitGraphStep
-		center := r.Y + r.H/2
-		laneColor := func(idx int) ui.Color { return gitLaneColors[idx%len(gitLaneColors)] }
-		for i, hash := range graph.Before {
-			if i >= 6 {
-				break
+			dotX = r.X + gitGraphInset
+		} else {
+			for _, w := range graph.Through {
+				p.Line(laneX(w.Lane), r.Y, laneX(w.Lane), r.Y+r.H, gitGraphWireW, color(w.Color))
 			}
-			x := r.X + gitGraphInset + float32(i)*step
-			color := laneColor(graph.BeforeColors[i])
-			if i != graph.Lane {
-				p.Line(x, r.Y, x, center, 1.4, color.Alpha(0.8))
+			if graph.Top {
+				p.Line(dotX, r.Y, dotX, cy, gitGraphWireW, color(graph.Color))
 			}
-			target := slices.Index(graph.After, hash)
-			if i != graph.Lane && target >= 0 && target < 6 {
-				nx := r.X + gitGraphInset + float32(target)*step
-				p.Line(x, center, nx, r.Y+r.H, 1.4, color.Alpha(0.8))
+			if graph.Bottom {
+				p.Line(dotX, cy, dotX, r.Y+r.H, gitGraphWireW, color(graph.Color))
 			}
-		}
-		for i := range graph.After {
-			if i >= 6 {
-				break
+			var elbow ui.Path
+			for _, w := range graph.Converge {
+				// Down its own lane, round the corner, then in to the dot.
+				x := laneX(w.Lane)
+				s, rad := gitGraphSign(dotX-x), min(gitGraphCorner, abs32(dotX-x)-gitGraphDotR)
+				elbow.Reset().MoveTo(x, r.Y).LineTo(x, cy-rad).QuadTo(x, cy, x+s*rad, cy).LineTo(dotX-s*gitGraphDotR, cy)
+				p.StrokePath(&elbow, gitGraphWireW, color(w.Color))
 			}
-			x := r.X + gitGraphInset + float32(i)*step
-			p.Line(x, center, x, r.Y+r.H, 1.4, laneColor(graph.AfterColors[i]).Alpha(0.85))
-		}
-		if graph.Lane < 6 {
-			x := r.X + gitGraphInset + float32(graph.Lane)*step
-			color := laneColor(graph.Color)
-			p.Line(x, r.Y, x, center, 1.5, color)
-			p.Fill(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color, 4)
-			p.Stroke(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color.Alpha(0.85), 4, 0.75)
-			for j := 1; j < len(graph.After); j++ {
-				if !slices.Contains(graph.Before, graph.After[j]) && j < 6 {
-					to := r.X + gitGraphInset + float32(j)*step
-					p.Line(x, center, to, r.Y+r.H, 1.4, laneColor(graph.AfterColors[j]))
-				}
+			for _, w := range graph.Diverge {
+				// Out of the dot, round the corner, then down the lane.
+				x := laneX(w.Lane)
+				s, rad := gitGraphSign(x-dotX), min(gitGraphCorner, abs32(x-dotX)-gitGraphDotR)
+				elbow.Reset().MoveTo(dotX+s*gitGraphDotR, cy).LineTo(x-s*rad, cy).QuadTo(x, cy, x, cy+rad).LineTo(x, r.Y+r.H)
+				p.StrokePath(&elbow, gitGraphWireW, color(w.Color))
 			}
 		}
+		p.Fill(ui.Rect{X: dotX - gitGraphDotR, Y: cy - gitGraphDotR, W: gitGraphDotR * 2, H: gitGraphDotR * 2},
+			color(graph.Color), gitGraphDotR)
 	})
+}
+
+func gitGraphSign(v float32) float32 {
+	if v < 0 {
+		return -1
+	}
+	return 1
+}
+
+func abs32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

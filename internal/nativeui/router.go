@@ -20,13 +20,14 @@ const (
 	routeSettings  = "/settings/general"
 	routeFiles     = "/files"
 	routeHosts     = "/hosts"
+	routeQuota     = "/quota"
 )
 
 // isHistoryRoute is the one exact boundary for the History top-level view.
 // Prefix matching without the slash would accidentally classify paths such
 // as /history-old as History, despite the Router rendering Not Found.
 func isHistoryRoute(path string) bool {
-	return path == routeHistory || path == "/history-projects" ||
+	return path == routeHistory || path == "/history-projects" || path == routeQuota ||
 		strings.HasPrefix(path, routeHistory+"/")
 }
 
@@ -51,6 +52,9 @@ func (s *Shell) routeView(c *ui.Context) {
 		case r.Match(routeHistory):
 			r.Title("Sessions")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.historyPage(c) })
+		case r.Match(routeQuota):
+			r.Title("Quota")
+			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.usagePage(c) })
 		case r.Match("/history/{id}"):
 			r.Title("Session Detail")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.historyDetailPage(c, r.Param("id")) })
@@ -94,6 +98,8 @@ func (s *Shell) currentRouteTitle() string {
 		return "Workspace"
 	case path == routeHistory:
 		return "Sessions"
+	case path == routeQuota:
+		return "Quota"
 	case path == routeFiles:
 		return "Files"
 	case path == routeHosts:
@@ -127,6 +133,9 @@ func (s *Shell) syncRouteVisibility() {
 	nowWorkspace := path == routeWorkspace
 	slog.Debug("native route changed", "from", s.visibleRoute, "to", path)
 	s.visibleRoute = path
+	if s.usage != nil {
+		s.usage.pageOpen = false // entering /usage reads once
+	}
 	if wasWorkspace && !nowWorkspace {
 		s.closeAllTerminals()
 		return

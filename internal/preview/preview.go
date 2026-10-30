@@ -92,6 +92,17 @@ func NewWindowController(opts ...func(*WindowController)) *WindowController {
 
 // OpenPreviewWindow creates or focuses a dedicated MyGo WebView window for an approved loopback URL.
 func (c *WindowController) OpenPreviewWindow(targetURL string) (*mygo.Window, error) {
+	return c.open(targetURL, false)
+}
+
+// ShowPreviewURL is OpenPreviewWindow for a window that follows its caller:
+// one already open is taken to targetURL instead of only focused (the Files
+// static server previews many pages in one window).
+func (c *WindowController) ShowPreviewURL(targetURL string) (*mygo.Window, error) {
+	return c.open(targetURL, true)
+}
+
+func (c *WindowController) open(targetURL string, navigate bool) (*mygo.Window, error) {
 	cleanURL, err := NormalizePreviewTarget(targetURL)
 	if err != nil {
 		return nil, err
@@ -101,6 +112,12 @@ func (c *WindowController) OpenPreviewWindow(targetURL string) (*mygo.Window, er
 	defer c.mu.Unlock()
 
 	if c.win != nil && !c.win.IsDestroyed() {
+		if navigate && c.win.Page().URL() != cleanURL {
+			if err := c.win.Page().LoadURL(cleanURL); err != nil {
+				return nil, err
+			}
+			c.win.SetTitle(fmt.Sprintf("Solco Preview — %s", cleanURL))
+		}
 		c.win.Show()
 		c.win.Focus()
 		return c.win, nil

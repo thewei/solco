@@ -56,6 +56,7 @@ var settingsSections = []settingsSection{
 	{"/settings/terminal", "Terminal", iconTerminal, TileGreen},
 	{"/settings/providers", "Agents", iconAgent, TilePurple},
 	{"/settings/git", "Git", iconBranch, TileOrange},
+	{usageSettingsPath, "Quota", iconQuota, TileTeal},
 	{"/settings/diagnostics", "Diagnostics", iconInfo, TileBlue},
 }
 
@@ -114,6 +115,9 @@ func (s *Shell) settingsLayout(c *ui.Context, r *ui.Route) {
 			case r.Match("/workboard"):
 				r.Title("Settings · Work Board")
 				settingsPage(c, func() { s.settingsWorkboard(c) })
+			case r.Match("/quota"), r.Match("/usage"):
+				r.Title("Settings · Quota")
+				settingsPage(c, func() { s.settingsUsage(c) })
 			case r.Match("/diagnostics"):
 				r.Title("Settings · Diagnostics")
 				settingsPage(c, func() { s.settingsDiagnostics(c) })
@@ -221,6 +225,14 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 		}),
 	)
 	settingsGroup(c, "Window",
+		row("Show Tabs in Sidebar", "On lists each Workspace's Tabs in the sidebar tree. Off (default) puts them in a Tab bar across the top of the window, like a browser.", func() {
+			if on, changed := settingSwitch(c, "Show Tabs in Sidebar", !s.settings.General.TabsInTitleBar()); changed {
+				s.applySettings(func(v *settings.Settings) error {
+					v.General.TabsPlacement = map[bool]string{true: "sidebar", false: ""}[on]
+					return nil
+				})
+			}
+		}),
 		row("Restore window position", "", func() {
 			if restore, changed := settingSwitch(c, "Restore window position", s.settings.General.RestoreWindow); changed {
 				s.applySettings(func(v *settings.Settings) error {

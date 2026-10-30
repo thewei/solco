@@ -20,6 +20,26 @@ type Settings struct {
 	// transcription endpoint (local proxies included). The API key is a
 	// secret: never logged, never echoed.
 	Voice VoiceSettings `json:"voice,omitempty"`
+	// Usage is the Usage page's switches. Tokens are never kept here: they
+	// live in the system credential store (mygo.Secrets).
+	Usage UsageSettings `json:"usage,omitempty"`
+}
+
+// UsageSettings are the Usage page preferences (product decision 2026-10-30):
+// which providers Solco may contact (each is opt-in, nothing is read before
+// the user switches it on), the Zhipu site, and the Used/Left reading.
+type UsageSettings struct {
+	// Configured is set once the first-run choice was made.
+	Configured bool `json:"configured,omitempty"`
+	// Enabled maps a provider id (internal/usage.ID) to its opt-in.
+	Enabled map[string]bool `json:"enabled,omitempty"`
+	// SignInAllowed maps a provider id to the user's yes for reading another
+	// app's saved sign-in (Antigravity's OAuth login); cleared with its switch.
+	SignInAllowed map[string]bool `json:"sign_in_allowed,omitempty"`
+	// ZhipuSite is "global" (api.z.ai, the default) or "china" (open.bigmodel.cn).
+	ZhipuSite string `json:"zhipu_site,omitempty"`
+	// ShowLeft shows what is left instead of what is used.
+	ShowLeft bool `json:"show_left,omitempty"`
 }
 
 // VoiceSettings points dictation at an OpenAI-compatible
@@ -56,10 +76,18 @@ type GeneralSettings struct {
 	// the plugin's own board Tab) or "native" (Solco's Project and task
 	// pages). User decision 2026-10-26; the native pages stay under trial.
 	WorkboardView string `json:"workboard_view,omitempty"`
+	// TabsPlacement says where a Workspace's Tabs live: "" or "titlebar" (the
+	// default — a browser-style Tab bar takes the breadcrumb's place and the
+	// sidebar tree lists only Workspaces) or "sidebar" (the tree lists Tabs
+	// and Panes too). Stored as a word so an absent key means the default.
+	TabsPlacement string `json:"tabs_placement,omitempty"`
 	// Opacity controls the transparency of the application window shell
 	// (0.50 to 1.00). An unset (0) or out-of-range value defaults to 1.00 (opaque).
 	Opacity float64 `json:"opacity,omitempty"`
 }
+
+// TabsInTitleBar reports Show Tabs in Sidebar left off (the default).
+func (g GeneralSettings) TabsInTitleBar() bool { return g.TabsPlacement != "sidebar" }
 
 // WorkboardNative reports the opt-in native work board pages; anything but
 // "native" (including unset) keeps the plugin's own board.
@@ -118,6 +146,13 @@ type WorkbenchSettings struct {
 	// (2026-10-05 sidebar review). Cosmetics only: Herdr owns panes, the
 	// client only remembers which ones the user pinned to the sidebar top.
 	PinnedPanes map[string][]string `json:"pinned_panes,omitempty"`
+	// GraphHidden maps a repository root to the full ref names the user hid
+	// from the Commits graph (the sidebar eye). Cosmetics only: Git decides
+	// what hiding removes, the client just remembers the choice.
+	GraphHidden map[string][]string `json:"graph_hidden,omitempty"`
+	// GraphFolded maps a repository root to the merge commits (full hashes)
+	// whose merged-in branch the Commits graph folds away. Cosmetics only.
+	GraphFolded map[string][]string `json:"graph_folded,omitempty"`
 }
 
 type ShortcutSettings struct {

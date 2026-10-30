@@ -399,6 +399,7 @@ func (s *Shell) bindChatWindow(conversationID string, readOnly bool) {
 // gone, so no stale transcript can be mistaken for a pane's conversation
 // (the inspector and the Workspace chat read the same state).
 func (s *Shell) releaseHistoryChat() {
+	s.hist.detailInfo = historyPreview{}
 	if !s.chatReadOnly {
 		return
 	}

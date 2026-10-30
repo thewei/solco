@@ -39,10 +39,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 			projectPanes = append(projectPanes, tabPanes...)
 		}
 		projectCount := projectPaneCount
-		glyph := iconFolder
-		if expandedProject {
-			glyph = iconFolderOpen
-		}
+		branch, _, _, dirtyFiles, _ := s.gitMetaForCWD(project.CWD)
 		row := treeRow(c, treeRowSpec{
 			Height:     s.sidebarRowHeight(),
 			Key:        "project:" + project.ID,
@@ -50,7 +47,10 @@ func (s *Shell) projectItems(c *ui.Context) {
 			Selected:   selectedProject && s.selectedTabID == "",
 			Expandable: len(tabs) > 0,
 			Expanded:   expandedProject,
-			Mark:       visualMark{svg: glyph},
+			Tile:       project.Label,
+			Branch:     branch,
+			Dirty:      dirtyFiles > 0,
+			StatusSlot: true,
 			Label:      project.Label,
 			Status:     s.liveAgentStatus(project.AgentStatus, projectPanes),
 			Activity:   activity[project.ID],
@@ -69,7 +69,8 @@ func (s *Shell) projectItems(c *ui.Context) {
 			}
 		}
 		row.ContextMenu(func(m *ui.Menu) { s.projectMenuItems(m, project) })
-		if !expandedProject {
+		if !expandedProject || s.tabsInTitleBar() {
+			// With the Tab bar in the title bar the tree lists Workspaces only.
 			continue
 		}
 
@@ -86,14 +87,8 @@ func (s *Shell) projectItems(c *ui.Context) {
 			if !expandedTab {
 				tabCount = len(panes)
 			}
-			// A single-pane Tab is the pane's face: its agent working shows
-			// the same trailing spinner the Agents section's cards carry.
-			tabWorking := false
 			tabLabel := tab.Label
 			if len(panes) == 1 {
-				if a := s.paneAgent(panes[0].ID); a != nil {
-					tabWorking = normalizeRuntimeStatus(a.Status) == opWorking
-				}
 				// A single-pane Tab is the pane's face: it speaks the
 				// Agent's conversation title, the same one the Agents
 				// section shows, so the tree reads like the cards.
@@ -112,7 +107,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 				Mark:       s.tabRowMark(panes, dark),
 				Label:      tabLabel,
 				Status:     s.liveAgentStatus(tab.AgentStatus, panes),
-				Working:    tabWorking,
+				StatusSlot: true,
 				Activity:   activity[tab.ID],
 				Count:      tabCount,
 				Drag:       s.treeDragFor(treeNodeDrag{s.activeInstance, "tab", project.ID, tab.ID}),
@@ -148,11 +143,9 @@ func (s *Shell) projectItems(c *ui.Context) {
 					}
 				}
 				dot := opUnknown
-				working := false
 				if isAgent {
 					if a := s.paneAgent(pane.ID); a != nil {
 						dot = normalizeRuntimeStatus(a.Status)
-						working = dot == opWorking
 					}
 				}
 				paneStatus := pane.AgentStatus
@@ -170,7 +163,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 					Selected:          pane.ID == s.selectedPaneID,
 					Mark:              mark,
 					Dot:               dot,
-					Working:           working,
+					StatusSlot:        true,
 					Label:             label,
 					Status:            paneStatus,
 					Activity:          activity[pane.ID],

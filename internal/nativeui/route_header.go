@@ -42,6 +42,8 @@ func (s *Shell) routeHeader() (routeHeaderSpec, bool) {
 		}
 	case path == routeHistory || path == "/history-projects":
 		return routeHeaderSpec{title: "Sessions"}, true
+	case path == routeQuota:
+		return s.usageRouteHeader(), true
 	case strings.HasPrefix(path, routeHistory+"/"):
 		return s.sessionRouteHeader(strings.TrimPrefix(path, routeHistory+"/")), true
 	case path == routeFiles:

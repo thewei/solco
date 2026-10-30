@@ -22,13 +22,25 @@ import (
 // their targets may no longer exist.
 func persistableRoute(path string) string {
 	switch path {
-	case routeWorkspace, routeFiles, routeHosts, routeHistory, "/history-projects":
+	case routeWorkspace, routeFiles, routeHosts, routeHistory, routeQuota, "/history-projects":
 		return path
 	}
 	if strings.HasPrefix(path, "/settings/") {
 		return path
 	}
 	return routeWorkspace
+}
+
+// migrateRoute maps a route saved under an old name onto its current one:
+// Usage became Quota on 2026-10-30.
+func migrateRoute(path string) string {
+	switch path {
+	case "/usage":
+		return routeQuota
+	case "/settings/usage":
+		return usageSettingsPath
+	}
+	return path
 }
 
 // restorableRoute reports whether a persisted route can come back verbatim.
@@ -137,6 +149,7 @@ func (s *Shell) restoreSession() {
 	if !sessionHasState(session) {
 		return
 	}
+	session.Route = migrateRoute(session.Route)
 	if session.Route != "" && session.Route != s.visibleRoute && restorableRoute(session.Route) {
 		s.router.Replace(session.Route)
 		s.visibleRoute = session.Route

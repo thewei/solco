@@ -3,6 +3,7 @@ package nativeui
 import (
 	"context"
 	"maps"
+	"os"
 	"strings"
 	"time"
 
@@ -96,12 +97,16 @@ func (s *Shell) refreshUsageProjection(force bool) {
 		}
 		snapshots := make(map[agent.AgentKey]agent.AgentUsageSnapshot, len(targets))
 		titles := make(map[agent.AgentKey]string, len(targets))
+		mods := make(map[agent.AgentKey]time.Time, len(targets))
 		for _, target := range targets {
 			title := ""
 			for _, summary := range summaries {
 				if usageIdentityMatches(target.provider, target.kind, target.value, summary.Meta) {
 					snapshots[target.key] = agent.BuildAgentUsageSnapshot(target.key, summary.Meta)
 					title = strings.TrimSpace(summary.Meta.Title)
+					if summary.Meta.UpdatedAt > 0 {
+						mods[target.key] = time.UnixMilli(summary.Meta.UpdatedAt)
+					}
 					break
 				}
 			}
@@ -116,15 +121,23 @@ func (s *Shell) refreshUsageProjection(force bool) {
 			if title != "" {
 				titles[target.key] = title
 			}
+			// The named file's own mtime is the freshest "last worked".
+			if target.kind == "path" && target.value != "" {
+				if info, err := os.Stat(target.value); err == nil {
+					mods[target.key] = info.ModTime()
+				}
+			}
 		}
 		s.applyOnWindow(func() {
 			s.usageByAgent = snapshots
 			titleChanged := !maps.Equal(s.agentSessionTitle, titles)
+			modChanged := !maps.Equal(s.agentSessionMod, mods)
 			s.agentSessionTitle = titles
+			s.agentSessionMod = mods
 			// Only a real title change replays the workbench reconcile:
 			// same-phase replay is inert (ClassifyTransition returns None)
 			// but not free.
-			if titleChanged {
+			if titleChanged || modChanged {
 				s.reconcileWorkbench()
 			}
 		})

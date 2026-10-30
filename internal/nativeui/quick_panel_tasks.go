@@ -1,7 +1,7 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 workboard_tasks 的 workboardBoard/workboardGroups/projectForWorktree、quickPanelGroupHeader 与 agent 卡片同款行尺寸、statusDot/operationalState、openWorkboardTaskPage
+ * [INPUT]: 依赖 workboard_tasks 的 workboardBoard/workboardGroups/projectForWorktree、quickPanelGroupHeader 与 agent 卡片同款行尺寸、statusIndicator/operationalState、openWorkboardTaskPage
  * [OUTPUT]: Shell.quickPanelTasks（Agent 活动浮层的 Tasks 页签：按 Needs you / Ready to approve / Working / To do 分组的只读列表）、quickPanelTasksHeight
  * [POS]: herdr-projects work board 在浮层里的唯一呈现；点击打开任务详情页（workboard_page.go，页内有 Open Project 进入已匹配的 Project）；quickPanelTaskRowIn 让 Project 页复用同一行并接入 listNav（弹层传 nil）；行右键菜单与底部 New task 只发起意图，写入全部走 workboard_actions.go（Approve 经 shared confirm）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -129,18 +129,11 @@ func (s *Shell) quickPanelTaskRowIn(c *ui.Context, task workboard.Task, group wo
 			row.Background(tint)
 		}
 		row.Children(func() {
-			ui.Box(c).Size(agentCardMark, agentCardMark).Shrink(0).Children(func() {
-				ui.Box(c).Absolute().Left(5).Top(5).Children(func() {
-					statusDot(c, groupOperationalState(group))
-				})
-			})
 			ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
 				tipped(c, ui.Text(c, title).FontSize(Typography().Body).SingleLine(), title)
 				tipped(c, ui.Text(c, caption).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), caption)
 			})
-			if group == workboard.GroupWorking {
-				ui.Spinner(c)
-			}
+			statusIndicator(c, groupOperationalState(group))
 		})
 	})
 	if row.Clicked() {

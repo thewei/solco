@@ -109,6 +109,27 @@ func TestStashPushListPop(t *testing.T) {
 	if !validStashRef(stashes[0].Ref) {
 		t.Fatalf("unexpected stash ref %q", stashes[0].Ref)
 	}
+	if head := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD")); stashes[0].Base != head {
+		t.Fatalf("stash base = %q, want the commit it was made on %q", stashes[0].Base, head)
+	}
+	if want := strings.TrimSpace(runGit(t, root, "rev-parse", stashes[0].Ref)); stashes[0].Hash != want {
+		t.Fatalf("stash hash = %q, want %q", stashes[0].Hash, want)
+	}
+	// Reviewed as one change set: the tracked edit and the untracked file.
+	review, err := r.StashSnapshot(ctx, root, stashes[0].Hash)
+	if err != nil {
+		t.Fatalf("stash snapshot: %v", err)
+	}
+	paths := map[string]bool{}
+	for _, f := range review.Files {
+		paths[f.Path] = true
+	}
+	if len(review.Files) != 2 || !paths["base.txt"] || !paths["extra.txt"] {
+		t.Fatalf("a stash review shows tracked and untracked files, got %v", paths)
+	}
+	if plain, _ := r.CommitSnapshot(ctx, root, stashes[0].Hash); len(plain.Files) != 1 {
+		t.Fatalf("control: a plain commit review of a stash misses its untracked file, got %d files", len(plain.Files))
+	}
 	if err := r.StashPop(ctx, root, stashes[0].Ref); err != nil {
 		t.Fatalf("stash pop: %v", err)
 	}

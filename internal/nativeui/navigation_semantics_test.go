@@ -159,6 +159,7 @@ func TestChromeHistoryButtonAtItsEndIsHalfStrength(t *testing.T) {
 // one entry — never a bare /workspace push beside the selection push.
 func TestPaneSelectionRidesRouterHistory(t *testing.T) {
 	s := NewShell()
+	s.settings.General.TabsPlacement = "sidebar" // these assertions read the tree/breadcrumb layout
 	s.loading = false
 	s.activeInstance = "default"
 	s.projection = herdr.Projection{

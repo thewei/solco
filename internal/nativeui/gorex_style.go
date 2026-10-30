@@ -15,7 +15,7 @@ import (
 
 /**
  * [INPUT]: 依赖 github.com/egoist/mygo/plugins/terminal, github.com/egoist/mygo/ui, os, path/filepath, runtime
- * [OUTPUT]: 对外提供 gorexColors/gorexColorsOf/gorexContentCard/gorexToggleFace/iconButtonRadius（图标按钮圆角唯一来源：min(Radius.Row, size/3)，28/24 档同为 8）/gorexIconButton/gorexIconButtonDisabled（无事可做的图标按钮：字形半透明、无悬停脸）/gorexIconTab/gorexActivityDot/gorexAttentionDot/shortDir/samePath/tildePath
+ * [OUTPUT]: 对外提供 gorexColors/gorexColorsOf/gorexContentCard/gorexToggleFace/iconButtonRadius（图标按钮圆角唯一来源：min(Radius.Row, size/3)，28/24 档同为 8）/gorexIconButton/gorexIconButtonDisabled（无事可做的图标按钮：字形半透明、无悬停脸）/gorexIconTab/shortDir/samePath/tildePath
  * [POS]: nativeui 的窗口 chrome 与终端卡片视觉实现（扁平中性面、细线图标按钮），被 workspace/terminal/titlebar 等模块消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -43,8 +43,6 @@ type gorexColors struct {
 
 	// tabActive fills a selected icon chip (the surface switch).
 	tabActive ui.Color
-
-	busy, attention ui.Color
 }
 
 var gorexLightColors = gorexColors{
@@ -60,9 +58,6 @@ var gorexLightColors = gorexColors{
 	pressed:   ui.RGBA(0, 0, 0, 0.1),
 
 	tabActive: ui.RGBA(255, 255, 255, 0.97),
-
-	busy:      ui.Hex("#34a853"),
-	attention: ui.Hex("#f59e0b"),
 }
 
 var gorexDarkColors = gorexColors{
@@ -78,9 +73,6 @@ var gorexDarkColors = gorexColors{
 	pressed:   ui.RGBA(255, 255, 255, 0.11),
 
 	tabActive: ui.RGBA(255, 255, 255, 0.10),
-
-	busy:      ui.Hex("#4ade80"),
-	attention: ui.Hex("#fbbf24"),
 }
 
 // Increase contrast keeps every surface and strengthens what is drawn on it:
@@ -198,6 +190,37 @@ func gorexIconButtonDisabled(c *ui.Context, k *gorexColors, svg *ui.SVG, label, 
 	return b
 }
 
+// gorexIconCount is the icon button that carries a "waiting/total" tally
+// after its glyph (the Header Agent trigger, 2026-10-30): the numerator in
+// the tone of what waits — muted at zero — and "/total" muted. With no total
+// it is the plain square icon button.
+func gorexIconCount(c *ui.Context, k *gorexColors, svg *ui.SVG, label string, waiting, total int, tone StatusTone) ui.Element {
+	if total <= 0 {
+		return gorexIconButton(c, k, svg, label, label, false, gorexIconBtn, gorexIconGlyph)
+	}
+	t := c.Theme()
+	b := tipped(c, ui.Row(c).Height(gorexIconBtn).MinWidth(gorexIconBtn).Padding(0, 7).Gap(5).AlignItems(ui.Center).Justify(ui.Center).
+		Radius(iconButtonRadius(gorexIconBtn)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label), label)
+	gorexToggleFace(b, k, false)
+	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+	col := k.iconMuted
+	if b.Hovered() {
+		col = k.text
+	}
+	numerator := t.TextMuted
+	if waiting > 0 {
+		numerator = designTokens(t.Dark).StatusColor(tone, t.Dark)
+	}
+	b.Children(func() {
+		ui.Icon(c, svg).Size(gorexIconGlyph, gorexIconGlyph).TextColor(col).PassThrough()
+		ui.Row(c).AlignItems(ui.Center).PassThrough().Children(func() {
+			ui.Text(c, itoa(waiting)).FontSize(Typography().Caption).FontWeight(WeightSemibold).TextColor(numerator).SingleLine().PassThrough()
+			ui.Text(c, "/"+itoa(total)).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().PassThrough()
+		})
+	})
+	return b
+}
+
 // gorexIconTab is gorexIconButton for a strip of equal choices (the sidebar's
 // view tabs): the same faces, but each tab takes an equal share of its row
 // instead of a fixed square.
@@ -242,25 +265,6 @@ func gorexPulldown(c *ui.Context, k *gorexColors, svg *ui.SVG, label string, hei
 		ui.Icon(c, iconChevronDown).Size(9, 9).TextColor(col)
 	})
 	return b
-}
-
-// gorexActivityDot is the dot of something running: a solid dot in a soft
-// halo. It does not animate, as drawing frames all along would cost more
-// than it tells.
-func gorexActivityDot(c *ui.Context, col ui.Color, size float32) ui.Element {
-	e := ui.Box(c).Size(size+6, size+6).Margin(0, 0, 0, 1)
-	e.Draw(func(p *ui.Painter, r ui.Rect) {
-		cx, cy := r.X+r.W/2, r.Y+r.H/2
-		halo := size/2 + 2.5
-		p.Fill(ui.Rect{X: cx - halo, Y: cy - halo, W: 2 * halo, H: 2 * halo}, col.Alpha(0.22), halo)
-		p.Fill(ui.Rect{X: cx - size/2, Y: cy - size/2, W: size, H: size}, col, size/2)
-	})
-	return e
-}
-
-// gorexAttentionDot is the plain dot of a Pane that needs someone.
-func gorexAttentionDot(c *ui.Context, col ui.Color, tooltip string) ui.Element {
-	return tipped(c, ui.Box(c).Size(7, 7).Radius(4).Background(col).Margin(0, 0, 0, 2), tooltip)
 }
 
 // gorexTerminalThemes are the terminals' colors: soft ink on the panes'

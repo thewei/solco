@@ -48,37 +48,37 @@ func TestTreeRowStatePresentation(t *testing.T) {
 	}
 }
 
-// TestTreeRowCornerMarkPrecedence pins the single icon-corner dot (2026-10-06
-// annotation round A4): an Agent Pane's own state wins, the subtree activity
+// TestTreeRowIndicatorPrecedence pins the single trailing status indicator (2026-10-06
+// annotation round A4, moved to the trailing slot 2026-10-30): an Agent Pane's own state wins, the subtree activity
 // rollup comes next, the raw Status is the fallback, and a quiet row shows
 // nothing. Two dots used to stack at the row's trailing edge.
-func TestTreeRowCornerMarkPrecedence(t *testing.T) {
-	dot, detail, ok := treeRowSpec{Dot: opWorking}.cornerMark()
+func TestTreeRowIndicatorPrecedence(t *testing.T) {
+	dot, detail, ok := treeRowSpec{Dot: opWorking}.indicator()
 	if !ok || dot != ToneWorking || detail != operationalLabel(opWorking) {
 		t.Fatalf("agent dot = %v %q ok=%v, want ToneWorking + label", dot, detail, ok)
 	}
 	idle := treeRowSpec{Dot: opIdle}
-	if dot, _, ok := idle.cornerMark(); !ok || dot != ToneMuted {
+	if dot, _, ok := idle.indicator(); !ok || dot != ToneMuted {
 		t.Fatalf("idle agent dot = %v ok=%v, want muted gray", dot, ok)
 	}
-	dot, detail, ok = treeRowSpec{Activity: sidebarActivity{On: true, Tone: ToneSuccess, Detail: "node on :3000"}}.cornerMark()
+	dot, detail, ok = treeRowSpec{Activity: sidebarActivity{On: true, Tone: ToneSuccess, Detail: "node on :3000"}}.indicator()
 	if !ok || dot != ToneSuccess || detail != "node on :3000" {
 		t.Fatalf("activity dot = %v %q ok=%v, want green service", dot, detail, ok)
 	}
 	paneBoth := treeRowSpec{Dot: opWorking, Activity: sidebarActivity{On: true, Tone: ToneSuccess}}
-	if dot, _, ok := paneBoth.cornerMark(); !ok || dot != ToneWorking {
+	if dot, _, ok := paneBoth.indicator(); !ok || dot != ToneWorking {
 		t.Fatalf("pane row with both = %v ok=%v, want the agent state to win", dot, ok)
 	}
 	ancestorBoth := treeRowSpec{Status: "working", Activity: sidebarActivity{On: true, Tone: ToneSuccess}}
-	if dot, _, ok := ancestorBoth.cornerMark(); !ok || dot != ToneSuccess {
+	if dot, _, ok := ancestorBoth.indicator(); !ok || dot != ToneSuccess {
 		t.Fatalf("ancestor row with both = %v ok=%v, want the rollup to win", dot, ok)
 	}
 	statusOnly := treeRowSpec{Status: "working"}
-	if dot, _, ok := statusOnly.cornerMark(); !ok || dot != ToneWorking {
+	if dot, _, ok := statusOnly.indicator(); !ok || dot != ToneWorking {
 		t.Fatalf("status fallback = %v ok=%v, want ToneWorking", dot, ok)
 	}
 	quiet := treeRowSpec{Status: "idle"}
-	if _, _, ok := quiet.cornerMark(); ok {
-		t.Fatalf("quiet row rendered a corner dot")
+	if _, _, ok := quiet.indicator(); ok {
+		t.Fatalf("quiet row rendered an indicator")
 	}
 }

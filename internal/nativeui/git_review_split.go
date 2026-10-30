@@ -253,6 +253,11 @@ func (s *Shell) gitCommitHistoryPane(c *ui.Context) {
 				summary = itoa(len(s.filteredCommits())) + " of " + summary
 			}
 			ui.Text(c, summary).FontSize(Typography().BodySmall).TextColor(t.TextMuted).SingleLine()
+			if n := s.graphHiddenCount(); n > 0 {
+				if sectionTextAction(c, itoa(n)+" hidden · Show All", "Show every branch in the graph").Clicked() {
+					s.showAllInGraph()
+				}
+			}
 		})
 		s.commitsPane(c, gdPaletteFor(t))
 	})

@@ -108,17 +108,24 @@ type treeRowSpec struct {
 	Mark              visualMark
 	Label             string
 	Status            string
-	// Dot renders the bound Agent's state as a small dot at the icon's
-	// corner (agent Panes); opUnknown leaves the icon plain.
+	// Dot renders the bound Agent's state in the row's trailing status slot
+	// (agent Panes); opUnknown leaves the slot to the other facts.
 	Dot operationalState
-	// Activity rolls subtree state into the same icon-corner dot on
-	// ancestor rows: a service (green) or agents running below this row
-	// (2026-10-06 sidebar service rollup), with a tooltip naming what runs.
+	// Activity rolls subtree state into the same slot on ancestor rows: a
+	// service (green) or agents running below this row (2026-10-06 sidebar
+	// service rollup), with a tooltip naming what runs.
 	Activity sidebarActivity
-	// Working shows the trailing spinner the Agents section's cards show
-	// (agent_card.go): the row's agent is mid-flight — the same Working
-	// bucket — so a running pane reads at a glance in the tree too.
-	Working bool
+	// StatusSlot reserves the trailing slot even when the row has nothing
+	// to show, so the Workspace tree's rows keep one aligned column
+	// (statusIndicator is the one drawing function; Git/Files trees leave
+	// it off).
+	StatusSlot bool
+	// Tile, when set, replaces the Mark with a letter tile (the Workspace
+	// row, 2026-10-30), Branch/Dirty add the repository facts after the
+	// label: the branch name muted, a dirty dot when files changed.
+	Tile   string
+	Branch string
+	Dirty  bool
 	// Action is the row's one primary action, an icon button at the
 	// trailing edge under the pointer (a project's "+"). Everything else
 	// lives in the row's right-click menu — no row of dots.
@@ -218,19 +225,13 @@ func ghostPill(c *ui.Context, key, label string, run func()) {
 	}
 }
 
-// cornerMark resolves the ONE state dot a row shows at its leading icon's
-// top-right corner (2026-10-06 annotation round): an Agent Pane's own state
-// first (gray means idle, as in the Agents section), then the rolled-up
-// activity (a service or agents running beneath an ancestor row), then the
-// raw runtime Status. The trailing status dot and the bottom-right activity
-// dot this replaces used to stack at the row's right edge, misaligned and
-// competing.
-func (spec treeRowSpec) cornerMark() (StatusTone, string, bool) {
-	if spec.Dot != opUnknown {
-		tone := operationalTone(spec.Dot)
-		if spec.Dot == opIdle {
-			tone = ToneMuted
-		}
+// indicator resolves the ONE state a row shows in its trailing status slot
+// (2026-10-30: moved from the icon corner, the Agent's spinner and the dot
+// share the slot): an Agent Pane's own state first (a hollow ring means
+// idle, as in the Agents section), then the rolled-up activity (a service or
+// agents running beneath an ancestor row), then the raw runtime Status.
+func (spec treeRowSpec) indicator() (StatusTone, string, bool) {
+	if tone, ok := indicatorToneFor(spec.Dot); ok {
 		return tone, operationalLabel(spec.Dot), true
 	}
 	if spec.Activity.On {
@@ -307,41 +308,32 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 			// Indent only — the trailing chevron replaced the leading one,
 			// so rows sit flush with the section edge (2026-10-05 round 2).
 			ui.Box(c).Width(float32(spec.Depth) * 14).Shrink(0).PassThrough()
-			if spec.Mark.svg != nil || spec.Mark.bmp != nil {
-				// The 16pt frame holds the 14pt mark with room for the single
-				// state dot overlaid at the mark's top-right corner
-				// (2026-10-06 annotation round): absolutely positioned on the
-				// icon, never floated at the row's trailing edge.
+			if spec.Tile != "" {
+				letterTile(c, spec.Tile, tileToneFor(spec.Label), 16)
+				ui.Box(c).Width(6).Shrink(0).PassThrough()
+			} else if spec.Mark.svg != nil || spec.Mark.bmp != nil {
 				ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Children(func() {
 					markView(c, spec.Mark, 14, t.TextMuted)
-					if tone, detail, ok := spec.cornerMark(); ok {
-						dot := ui.Box(c).Absolute().Left(9).Top(0).Size(7, 7).Radius(3.5).
-							Background(tokens.StatusColor(tone, t.Dark))
-						if detail != "" {
-							tipped(c, dot, detail)
-						}
-					}
 				})
 				// Breathe between the glyph and its label (2026-10-05).
 				ui.Box(c).Width(5).Shrink(0).PassThrough()
 			}
-			ui.Text(c, spec.Label).FontSize(Typography().Body).Grow(1).SingleLine().PassThrough()
+			ui.Text(c, spec.Label).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").PassThrough()
+			if spec.Branch != "" {
+				tipped(c, ui.Text(c, spec.Branch).FontSize(Typography().Micro).TextColor(t.TextMuted).
+					SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).MaxWidth(84).PassThrough(), spec.Branch)
+			}
+			if spec.Dirty {
+				tipped(c, ui.Box(c).Size(6, 6).Radius(3).Shrink(0).Background(t.Warning), "Uncommitted changes")
+			}
 			hovered := row.Hovered()
-			// The collapsed pane tally (2026-10-07): tiny muted digits at
-			// the trailing edge; under the pointer it steps aside for the
+			// The collapsed pane tally (2026-10-07): tiny muted digits at the
+			// trailing edge; under the pointer it steps aside for the
 			// chevron and the row's action.
 			if spec.Count > 1 && !hovered {
 				ui.Text(c, itoa(spec.Count)).Label(itoa(spec.Count) + " panes").
 					FontSize(Typography().Micro).TextColor(t.TextMuted).
 					Shrink(0).PassThrough()
-			}
-			// The Agents section's cards end their row with a spinner while
-			// the agent works (agent_card.go); a tree row carries the same
-			// word-free marker, stepping aside under the pointer like the
-			// tally does. The spinner paints only while its row shows, so
-			// idle agents cost nothing.
-			if spec.Working && !hovered {
-				ui.Spinner(c)
 			}
 			if spec.Expandable && hovered {
 				glyph := iconChevron
@@ -356,6 +348,12 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 					spec.Action.Run()
 				}
 			}
+			// The state slot ends the row: spinner, dot or ring in one place.
+			if tone, detail, ok := spec.indicator(); ok {
+				statusIndicatorTone(c, tone, detail)
+			} else if spec.StatusSlot {
+				statusSlotEmpty(c)
+			}
 		})
 		if drag := spec.Drag; drag != nil {
 			value, over := ui.DragOver[treeNodeDrag](container)
@@ -369,8 +367,5 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 				Transition(ui.ElementTransition{Size: true, Duration: 150 * time.Millisecond})
 		}
 	})
-	if spec.Activity.On && spec.Activity.Detail != "" {
-		tipped(c, row, spec.Activity.Detail)
-	}
 	return row
 }

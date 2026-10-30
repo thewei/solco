@@ -178,6 +178,7 @@ func TestBuildSidebarActivityServiceBeatsAgent(t *testing.T) {
 // agentsOpen), and a frame with activity never crashes the tree.
 func TestSidebarRendersServiceActivity(t *testing.T) {
 	s := NewShell()
+	s.settings.General.TabsPlacement = "sidebar" // these assertions read the tree/breadcrumb layout
 	s.loading = false
 	s.activeInstance = "default"
 	s.projection = herdr.Projection{
@@ -301,12 +302,14 @@ func TestTabRowMarkShowsRunningServiceBrand(t *testing.T) {
 }
 
 // TestTreeRowsCarryTheAgentWorkingSpinner pins the 2026-10-30 loading
-// state: a tree row whose pane's agent is mid-flight ends with the same
-// trailing spinner the Agents section's cards show (agent_card.go) — a
-// single-pane Tab row (the pane's face) and an expanded multi-pane Tab's
-// pane row alike — while an idle agent's row stays spinner-free.
+// state: a tree row whose pane's agent is mid-flight ends with the shared
+// state slot's spinner (status_indicator.go, the one the Agents section's
+// cards use) — a single-pane Tab row (the pane's face) and an expanded
+// multi-pane Tab's pane row alike — while a row with no agent stays empty.
+// (An idle agent's slot is a hollow ring, TestIndicatorShapes.)
 func TestTreeRowsCarryTheAgentWorkingSpinner(t *testing.T) {
 	s := NewShell()
+	s.settings.General.TabsPlacement = "sidebar" // these assertions read the tree/breadcrumb layout
 	s.loading = false
 	s.activeInstance = "default"
 	s.projection = herdr.Projection{
@@ -362,9 +365,6 @@ func TestTreeRowsCarryTheAgentWorkingSpinner(t *testing.T) {
 
 	if ink := inkAfter("Working Tab"); ink < 40 {
 		t.Fatalf("working single-pane tab row shows no spinner ink (max diff %d)", ink)
-	}
-	if ink := inkAfter("Idle Tab"); ink > 15 {
-		t.Fatalf("idle tab row is not spinner-free (max diff %d)", ink)
 	}
 	if ink := inkAfter("split working pane"); ink < 40 {
 		t.Fatalf("working pane row shows no spinner ink (max diff %d)", ink)

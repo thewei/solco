@@ -30,6 +30,14 @@ type AgentCardModel struct {
 	// an Idle card keeps sorting in the Working group. Zero means never
 	// recently active. The honest status pill/bucket never reads it.
 	ActiveUntil time.Time
+	// LastActive is when the Agent last did work: now while it works, else
+	// the later of its last observed transition and its session file's
+	// modification time. Zero when unknown. Presentation only — the sidebar
+	// shows it as a short "3m" tag.
+	LastActive time.Time
+	// Subagents are the agents this one spawned (Claude Code only, read from
+	// its session files); the sidebar nests them under the card.
+	Subagents []history.Subagent
 }
 
 // AgentCardInputs are the authoritative facts one card is projected from.

@@ -19,6 +19,9 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `claude_blocks.go`：Claude 原生消息块映射。
 - `codex.go`：Codex rollout 会话流解析器。
 - `codex_blocks.go`：Codex 工具与内容块映射。
+- `usage.go`：按需流式读取单个会话文件的 token 用量（输入/输出/缓存读写）与按模型×思考档位的路由聚合（Pi/OMP、Claude Code 按消息 id 去重、Codex 取累计 total）；不进目录库、只读、256 MiB/8 MiB 行上限，不支持的 Provider 返回 ErrNoUsage。
+- `subagents.go`：Claude Code 子代理清单（只读 `<session>/subagents/agent-*.meta.json` 与 jsonl mtime；Active=20s 内写过；布局缺失即空，供侧栏嵌套，Herdr 无父子关系）
+- `usage_daily.go`：Quota（原 Usage）页的 30 天活动条数据——按本地日汇总 Claude Code / Codex 会话文件里的 token（每个文件按 (mtime,size) 只解析一次，缓存只在内存；不落盘、不记录历史、日期补零到今天）。
 - `pi.go`：Pi / Oh My Pi 会话解析器；会话标题优先取 agent 自己写的 `title`/`title_change` 行（文件序最后一行生效，空标题不清除旧值；omp 改名会话即此），无标题行才回退首条消息启发式。
 - `live.go`：Provider 会话的只读增量 decoder / 追尾接口。
 - `catalog_test.go`：内存 Catalog 的写入/排序/搜索/路径唯一/并发（-race）契约与描述行提取；Forget 同时释放行与路径。

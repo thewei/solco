@@ -21,6 +21,9 @@ import (
 // preview plan.
 func (s *Shell) openFilePreview(path string) {
 	st := &s.rightPanel
+	if st.reveal != nil && st.reveal.path != path {
+		st.reveal = nil // a hit's line belongs to its own file only
+	}
 	if st.selectedFilePath == path {
 		return
 	}
@@ -190,6 +193,7 @@ func (s *Shell) beginNativeText(path string, flavor filesview.Flavor) {
 				SoftWrap: flavor == filesview.FlavorMarkdown || buf.Language() == nil,
 			}
 		}
+		s.applyFilesReveal()
 	}
 	if s.win == nil {
 		preview, buf, err := load()
@@ -270,6 +274,16 @@ func (s *Shell) filesPreviewBar(c *ui.Context, selected string) {
 		}
 		if st.nativeText != nil && st.nativeText.Truncated {
 			statusPill(c, "Showing the first "+filesview.FormatFileSize(filesview.TextPreviewCap), ToneAttention)
+		}
+		if isHTMLPage(selected) {
+			s.syncStaticPreview()
+			k := gorexColorsOf(t.Dark)
+			if gorexIconButton(c, k, iconGlobe, "Open in Browser", "Open in the default browser", false, gorexPaneBtn, gorexPaneGlyph).Clicked() {
+				s.openStaticInBrowser(selected)
+			}
+			if tipped(c, regularButton(c, "Open Preview"), "Serve the project folder on localhost and preview the page").Clicked() {
+				s.openStaticPreview(selected)
+			}
 		}
 		if st.previewPlanned == selected && filesview.PreviewFlavor(selected) == filesview.FlavorMarkdown &&
 			s.webPreviewUsable() && st.previewSize <= filesview.PreviewCap {

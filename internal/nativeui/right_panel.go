@@ -74,6 +74,10 @@ type rightPanelState struct {
 	nativeImage        *ui.Bitmap
 	nativeImageLoading bool
 	nativeImageFailed  string
+
+	// reveal is the line a search hit asked the code view to show: applied
+	// when that file's text lands, or at once when it is already open.
+	reveal *filesReveal
 }
 
 func defaultRightPanelState() rightPanelState {
@@ -102,6 +106,8 @@ func (s *Shell) syncRightPanelRoot() {
 	s.rightPanel.loadingDirs = make(map[string]bool)
 	s.rightPanel.ignoredRoot = ""
 	s.rightPanel.ignoredSet = filesview.NewIgnoreSet(nil)
+	s.filesSearchReset()
+	s.closeStaticPreview()
 	s.clearNativeFilesPreview()
 	// The preview page must drop the previous root's selection too.
 	s.publishFilesPreview()

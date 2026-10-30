@@ -466,9 +466,10 @@ func (s *Shell) paneCard(c *ui.Context, k *gorexColors, surface *terminalSurface
 		bg = k.cardTranslucent
 	}
 	if focused {
-		// A focused pane is the only one that takes the accent: a quiet ring
-		// is enough to tell which split receives the keyboard.
-		border = c.Theme().Accent.Alpha(0.6)
+		// The focused pane takes a quiet neutral ring (2026-10-30: the blue
+		// tint is gone; the card's own ink at half strength reads as bright
+		// white on dark, soft black on light).
+		border = k.text.Alpha(0.5)
 	}
 	card.Background(bg).Border(1, border)
 	var dropAction paneCardDropAction
@@ -700,7 +701,6 @@ func (s *Shell) paneCardHeader(c *ui.Context, k *gorexColors, surface *terminalS
 				ui.Text(c, detail).FontSize(Typography().BodySmall).TextColor(k.textMuted).
 					SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 			}
-			s.paneStatusDot(c, k, surface)
 			// The pane menu trigger sits against the title (2026-10-06 F148,
 			// user request): the terminal surface's right click is a program
 			// event now, so the pane menu needs a visible, always-there home
@@ -745,24 +745,13 @@ func (s *Shell) paneCardHeader(c *ui.Context, k *gorexColors, surface *terminalS
 				s.closePaneAction(surface.paneID)
 			}
 		})
+		// The Agent's state ends the header (2026-10-30), the same
+		// indicator the sidebar rows use; a Pane without an Agent keeps no
+		// slot.
+		if surface.agentStatus != "" {
+			statusIndicator(c, normalizeRuntimeStatus(surface.agentStatus))
+		}
 	})
-}
-
-// paneStatusDot mirrors the Pane's Agent state as a gorex badge: a halo
-// dot while it works or is ready for review, a plain dot when it needs
-// someone. Panes without an Agent show nothing.
-func (s *Shell) paneStatusDot(c *ui.Context, k *gorexColors, surface *terminalSurface) {
-	if surface.agentStatus == "" {
-		return
-	}
-	switch normalizeRuntimeStatus(surface.agentStatus) {
-	case opWorking:
-		tipped(c, gorexActivityDot(c, k.busy, 6), "Working")
-	case opReadyForReview:
-		tipped(c, gorexActivityDot(c, k.busy, 6), "Ready for review")
-	case opNeedsAttention:
-		gorexAttentionDot(c, k.attention, "Needs attention")
-	}
 }
 
 func (s *Shell) syncTerminals(projection herdr.Projection) error {

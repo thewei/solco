@@ -1,6 +1,9 @@
 package nativeui
 
 import (
+	"strings"
+	"unicode/utf8"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/history"
 )
@@ -182,6 +185,31 @@ func iconTile(c *ui.Context, glyph *ui.SVG, tone TileTone, size float32) {
 		Background(tone.Color(c.Theme().Dark)).Center().Children(func() {
 		ui.Icon(c, glyph).Size(size*0.62, size*0.62).TextColor(ui.Hex("#ffffff")).PassThrough()
 	})
+}
+
+// letterTile is iconTile's text twin: the label's first letter on a tone
+// tile, the Workspace row's identity (2026-10-30).
+func letterTile(c *ui.Context, label string, tone TileTone, size float32) {
+	letter, _ := utf8.DecodeRuneInString(strings.ToUpper(strings.TrimSpace(label)))
+	if letter == utf8.RuneError {
+		letter = '?'
+	}
+	ui.Box(c).Size(size, size).Shrink(0).Radius(size * 0.26).
+		Background(tone.Color(c.Theme().Dark)).Center().Children(func() {
+		ui.Text(c, string(letter)).FontSize(size * 0.62).FontWeight(WeightSemibold).
+			TextColor(ui.Hex("#ffffff")).PassThrough()
+	})
+}
+
+// tileToneFor gives a name a stable tile tone (never gray), so one Workspace
+// keeps its color across launches and machines.
+func tileToneFor(name string) TileTone {
+	tones := [...]TileTone{TileBlue, TileGreen, TileOrange, TileRed, TilePink, TilePurple, TileTeal, TileYellow, TileIndigo}
+	var h uint32 = 2166136261
+	for i := 0; i < len(name); i++ {
+		h = (h ^ uint32(name[i])) * 16777619
+	}
+	return tones[h%uint32(len(tones))]
 }
 
 // compactButton is the secondary action of dense surfaces — Git toolbars,

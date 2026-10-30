@@ -101,8 +101,8 @@ func TestGitRefsSearchOpensFromItsButtonAndClosesClean(t *testing.T) {
 // The graph column is as wide as the lanes the history uses, so the dot sits
 // by its subject instead of in a fixed gutter, and a filtered list gets one lane.
 func TestGitGraphWidthFollowsLanes(t *testing.T) {
-	one := []gitGraphRow{{Lane: 0, Before: []string{"a"}, After: []string{"a"}}}
-	three := []gitGraphRow{{Lane: 2, Before: []string{"a", "b", "c"}, After: []string{"a", "b", "c"}}}
+	one := []gitGraphRow{{Lane: 0, Lanes: 1}}
+	three := []gitGraphRow{{Lane: 2, Lanes: 3}}
 	if got, want := gitGraphWidth(one), gitGraphWidthFor(1); got != want {
 		t.Fatalf("a linear history is %v wide, want %v", got, want)
 	}
@@ -112,7 +112,7 @@ func TestGitGraphWidthFollowsLanes(t *testing.T) {
 	if gitGraphWidth(one) > 24 {
 		t.Fatalf("the single-lane graph is %v wide: the dot would sit far from the subject", gitGraphWidth(one))
 	}
-	many := []gitGraphRow{{Lane: 20}}
+	many := []gitGraphRow{{Lane: 20, Lanes: 21}}
 	if got, want := gitGraphWidth(many), gitGraphWidthFor(gitGraphMaxLanes); got != want {
 		t.Fatalf("lanes are capped at %d: width %v, want %v", gitGraphMaxLanes, got, want)
 	}

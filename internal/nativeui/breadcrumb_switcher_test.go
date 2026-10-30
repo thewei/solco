@@ -64,6 +64,7 @@ func TestLastCrumbHoverShowsDirectoryOneLine(t *testing.T) {
 	}
 	cwd := filepath.Join(home, "Work", "solco-hover-test")
 	s := NewShell()
+	s.settings.General.TabsPlacement = "sidebar" // these assertions read the tree/breadcrumb layout
 	s.projection = herdr.Projection{
 		Projects: []herdr.Project{{ID: "w1", Label: "Solco", CWD: cwd}},
 		Tabs:     []herdr.Tab{{ID: "t1", Label: "main", ProjectID: "w1"}},
@@ -102,6 +103,7 @@ func TestLastCrumbHoverShowsDirectoryOneLine(t *testing.T) {
 // picks (the second Pane makes the Pane a crumb of its own).
 func crumbShell(project, tab, pane string) *Shell {
 	s := NewShell()
+	s.settings.General.TabsPlacement = "sidebar" // these assertions read the tree/breadcrumb layout
 	s.projection = herdr.Projection{
 		Projects: []herdr.Project{{ID: "w1", Label: project, CWD: "/tmp/crumbs"}},
 		Tabs:     []herdr.Tab{{ID: "t1", Label: tab, ProjectID: "w1", PaneCount: 2}},

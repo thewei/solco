@@ -467,6 +467,7 @@ func TestFilesSidebarSharesTheHeadAndTheGrid(t *testing.T) {
 // holding two panes, and the first pane selected.
 func workspaceTreeShell() *Shell {
 	s := NewShell()
+	s.settings.General.TabsPlacement = "sidebar" // the tree tests read the Tab rows
 	s.loading = false
 	s.instances = []herdr.Instance{{Name: "default", DisplayName: "Workspace Alpha", Running: true, Default: true}}
 	s.activeInstance = "default"

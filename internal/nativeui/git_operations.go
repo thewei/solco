@@ -9,6 +9,7 @@ package nativeui
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -336,6 +337,7 @@ func (s *Shell) reviewCommit(hash string) {
 		return
 	}
 	root := s.git.root
+	isStash := slices.ContainsFunc(s.git.stashes, func(st gitworkbench.Stash) bool { return st.Hash == hash })
 	s.git.source = gdSourceCommit
 	s.git.commitHash = hash
 	s.gitCommitBodyOpen = false
@@ -356,16 +358,16 @@ func (s *Shell) reviewCommit(hash string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), gitworkbench.ReadTimeout*2)
 		defer cancel()
-		snap, err := s.git.runner.CommitSnapshot(ctx, root, hash)
+		snapshot := s.git.runner.CommitSnapshot
+		if isStash {
+			// A stash reads as a whole: tracked changes plus untracked files.
+			snapshot = s.git.runner.StashSnapshot
+		}
+		snap, err := snapshot(ctx, root, hash)
 		body, _ := s.git.runner.CommitMessage(ctx, root, hash)
 		var meta *gitworkbench.CommitInfo
-		if commits, cerr := s.git.runner.ListCommits(ctx, root, 500); cerr == nil {
-			for i := range commits {
-				if commits[i].Hash == hash {
-					meta = &commits[i]
-					break
-				}
-			}
+		if found, cerr := s.git.runner.CommitByHash(ctx, root, hash); cerr == nil {
+			meta = found
 		}
 		s.applyOnUI(func() {
 			if s.git == nil || s.git.root != root || s.git.source != gdSourceCommit || s.git.commitHash != hash {

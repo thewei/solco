@@ -62,7 +62,13 @@ func (s *Shell) titlebar(c *ui.Context) {
 				})
 			} else if s.router.Path() == routeWorkspace {
 				ui.Row(c).Grow(1).MinWidth(0).Children(func() {
-					if s.breadcrumbRow(c) {
+					drew := false
+					if s.tabsInTitleBar() {
+						drew = s.tabBarRow(c)
+					} else {
+						drew = s.breadcrumbRow(c)
+					}
+					if drew {
 						actions = s.surfaceOverflowItems
 					}
 				})
@@ -394,13 +400,14 @@ func (s *Shell) titlebarActivity(c *ui.Context, k *gorexColors) {
 		label = "Agents & Services · Disconnected"
 	}
 	var tone StatusTone
-	total := 0
+	waiting, total := 0, 0
 	if summary != nil {
 		// Work-board tasks that need the human fold into the same attention
 		// and review counts (one aggregation); tasks whose Agent is already
 		// listed are not counted twice.
 		taskAttention, taskReview := headerTaskCounts(s.actionableTasks(), summary.Entries)
 		attention, review := summary.NeedsAttention+taskAttention, summary.ReviewPending+taskReview
+		waiting, total = headerTally(attention, review, len(summary.Entries), taskAttention+taskReview)
 		parts := make([]string, 0, 3)
 		if attention > 0 {
 			parts = append(parts, strconv.Itoa(attention)+" attention")
@@ -422,31 +429,13 @@ func (s *Shell) titlebarActivity(c *ui.Context, k *gorexColors) {
 		case summary.Working > 0:
 			tone = ToneWorking
 		}
-		total = attention + review + summary.Working
 	}
 
-	var anchor ui.Element
-	ui.Box(c).Size(gorexIconBtn+3, gorexIconBtn+1).Children(func() {
-		// The trigger's accessible label carries the actionable summary
-		// when there is one ("1 attention · 1 review"), the plain name
-		// otherwise; the badge floats the total at the top-right corner.
-		anchor = gorexIconButton(c, k, iconActivity, label, label, false, gorexIconBtn, gorexIconGlyph)
-		if total > 0 {
-			ui.Box(c).Absolute().Right(0).Top(0).Children(func() {
-				dark := c.Theme().Dark
-				textColor := ui.RGBA(255, 255, 255, 1)
-				if dark {
-					textColor = ui.Hex("#1d1d1f")
-				}
-				badge := ui.Box(c).MinWidth(13).Height(13).Padding(0, 3).Center().
-					Radius(Radius().Row).
-					Background(designTokens(dark).StatusColor(tone, dark))
-				badge.Children(func() {
-					ui.Text(c, strconv.Itoa(total)).FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(textColor)
-				})
-			})
-		}
-	})
+	// The trigger carries "waiting/total" (2026-10-30, was a corner badge of
+	// the sum): how many of the listed agents wait for the user, out of all
+	// of them. Its accessible label carries the actionable summary when
+	// there is one ("1 attention · 1 review"), the plain name otherwise.
+	anchor := gorexIconCount(c, k, iconActivity, label, waiting, total, tone)
 	if anchor.Clicked() {
 		s.toggleAgentActivityPanel(anchor)
 	}
@@ -460,4 +449,13 @@ func (s *Shell) agentActivitySummary() *StatusCenterSnapshot {
 	}
 	snapshot := s.BuildStatusCenterSnapshot()
 	return &snapshot
+}
+
+// headerTally is the Header trigger's "waiting/total": waiting = attention +
+// review (work-board tasks included), total = every listed agent plus the
+// waiting tasks that have no agent of their own, so the numerator can never
+// pass the denominator.
+func headerTally(attention, review, agents, waitingTasks int) (waiting, total int) {
+	waiting = attention + review
+	return waiting, agents + waitingTasks
 }

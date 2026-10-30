@@ -83,28 +83,13 @@ func (s *Shell) chatSurfaceHeader(c *ui.Context, k *gorexColors) {
 		})
 		ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(k.text).
 			SingleLine().Ellipsis("…").Shrink(0).MaxWidthPercent(60)
-		s.agentStatusDotForPane(c, k, s.chatPaneID)
 		if _, hasCard := s.agentCardForPane(s.chatPaneID); hasCard && s.chatConversationID != "" {
 			statusPill(c, s.chatDispositionSummary(), dispositionTone(s.chatDispositionNow()))
 		}
 		ui.Spacer(c)
 		s.surfaceToggle(c, k, WorkspaceSurfaceChat, s.chatPaneID)
+		if a := s.paneAgent(s.chatPaneID); a != nil && a.Status != "" {
+			statusIndicator(c, normalizeRuntimeStatus(a.Status))
+		}
 	})
-}
-
-// agentStatusDotForPane renders the pane's Agent state as the pane card's
-// status dot (chat header twin of paneStatusDot).
-func (s *Shell) agentStatusDotForPane(c *ui.Context, k *gorexColors, paneID string) {
-	a := s.paneAgent(paneID)
-	if a == nil || a.Status == "" {
-		return
-	}
-	switch normalizeRuntimeStatus(a.Status) {
-	case opWorking:
-		tipped(c, gorexActivityDot(c, k.busy, 6), "Working")
-	case opReadyForReview:
-		tipped(c, gorexActivityDot(c, k.busy, 6), "Ready for review")
-	case opNeedsAttention:
-		gorexAttentionDot(c, k.attention, "Needs attention")
-	}
 }

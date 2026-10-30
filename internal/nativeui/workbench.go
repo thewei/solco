@@ -27,6 +27,10 @@ type workbenchState struct {
 	// report idle between every short task loop, and without the anchor the
 	// honest bucket flip would keep reshuffling the list.
 	recentWorking map[agent.AgentKey]time.Time
+	// lastActive is the last instant this client saw the Agent work or
+	// change phase; the sidebar's time tag takes the later of it and the
+	// session file's modification time (Shell.agentSessionMod).
+	lastActive map[agent.AgentKey]time.Time
 
 	// /agents + header popover client-local filter state.
 	filterAll  bool
@@ -57,6 +61,9 @@ func (s *Shell) reconcileWorkbench() {
 	if s.workbench.recentWorking == nil {
 		s.workbench.recentWorking = make(map[agent.AgentKey]time.Time)
 	}
+	if s.workbench.lastActive == nil {
+		s.workbench.lastActive = make(map[agent.AgentKey]time.Time)
+	}
 
 	projectName := make(map[string]string, len(s.projection.Projects))
 	for _, project := range s.projection.Projects {
@@ -80,6 +87,9 @@ func (s *Shell) reconcileWorkbench() {
 		s.workbench.previous[key] = phase
 		if phase == agent.PhaseWorking {
 			s.workbench.recentWorking[key] = now.Add(agent.WorkingHysteresis)
+		}
+		if phase == agent.PhaseWorking || (transition != agent.TransitionNone && transition != agent.TransitionFirstObservation) {
+			s.workbench.lastActive[key] = now
 		}
 
 		selected := runtimeAgent.PaneID != "" && runtimeAgent.PaneID == s.selectedPaneID
@@ -108,6 +118,11 @@ func (s *Shell) reconcileWorkbench() {
 			Markers:     markers,
 		})
 		card.ActiveUntil = s.workbench.recentWorking[key]
+		card.LastActive = s.workbench.lastActive[key]
+		card.Subagents = s.agentSubagents[key]
+		if mod := s.agentSessionMod[key]; mod.After(card.LastActive) {
+			card.LastActive = mod
+		}
 		cards = append(cards, card)
 		live[key] = true
 	}
@@ -115,6 +130,7 @@ func (s *Shell) reconcileWorkbench() {
 	for key := range s.workbench.recentWorking {
 		if !live[key] {
 			delete(s.workbench.recentWorking, key)
+			delete(s.workbench.lastActive, key)
 		}
 	}
 	s.workbench.directory.Replace(cards)
