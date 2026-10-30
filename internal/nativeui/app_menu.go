@@ -31,7 +31,7 @@ func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 	}
 	appMenu = append(appMenu,
 		mygo.Separator(),
-		nav("Settings…", "CmdOrCtrl+,", routeSettings),
+		nav("Settings…", accelSettings, routeSettings),
 		mygo.Separator(),
 		&mygo.MenuItem{Role: mygo.RoleHide},
 		&mygo.MenuItem{Role: mygo.RoleHideOthers},

@@ -196,19 +196,21 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 	// the same name (TestLaunchersAgreeOnViewDestinations). The palette lists
 	// a section alphabetically, so the order below is only reading order.
 	actions = append(actions,
-		commandcenter.Action{ID: "app.workspace", Title: "Workspace", Section: "App",
+		commandcenter.Action{ID: "app.workspace", Title: "Workspace", Section: "App", Shortcut: acceleratorLabel(accelWorkspace),
 			Keywords: []string{"terminal"}, Kind: commandcenter.TargetRoute, TargetID: "action:open-workspace", Available: true},
-		commandcenter.Action{ID: "app.changes", Title: "Changes", Section: "App",
+		commandcenter.Action{ID: "app.changes", Title: "Changes", Section: "App", Shortcut: acceleratorLabel(accelChanges),
 			Keywords: []string{"git", "diff", "review", "commit", "staged"}, Kind: commandcenter.TargetRoute, TargetID: "action:open-changes", Available: true},
-		commandcenter.Action{ID: "app.history", Title: "Sessions", Section: "App",
+		commandcenter.Action{ID: "app.history", Title: "Sessions", Section: "App", Shortcut: acceleratorLabel(accelSessions),
 			Keywords: []string{"history", "conversations"}, Kind: commandcenter.TargetRoute, TargetID: "/history", Available: true},
-		commandcenter.Action{ID: "app.open-files", Title: "Files", Section: "App",
+		commandcenter.Action{ID: "app.open-files", Title: "Files", Section: "App", Shortcut: acceleratorLabel(accelFiles),
 			Keywords: []string{"browse files", "directory", "tree", "file preview"}, Kind: commandcenter.TargetRoute, TargetID: "action:open-files", Available: true},
-		commandcenter.Action{ID: "app.hosts", Title: "Hosts", Section: "App",
+		commandcenter.Action{ID: "app.quota", Title: "Quota", Section: "App",
+			Keywords: []string{"usage", "limits", "tokens", "claude", "codex", "cursor", "copilot"}, Kind: commandcenter.TargetRoute, TargetID: routeQuota, Available: true},
+		commandcenter.Action{ID: "app.hosts", Title: "Hosts", Section: "App", Shortcut: acceleratorLabel(accelHosts),
 			Keywords: []string{"ssh", "machines", "servers"}, Kind: commandcenter.TargetRoute, TargetID: "/hosts", Available: true},
 		// One Settings entry: the old Appearance/General pair both pushed
 		// /settings/general and read as two identical commands (F16).
-		commandcenter.Action{ID: "app.settings", Title: "Settings", Section: "App",
+		commandcenter.Action{ID: "app.settings", Title: "Settings", Section: "App", Shortcut: acceleratorLabel(accelSettings),
 			Keywords: []string{"preferences", "appearance", "theme", "density", "language"}, Kind: commandcenter.TargetSetting, TargetID: "/settings/general", Available: true},
 		commandcenter.Action{ID: "app.hook-doctor", Title: "Set Up Agents", Section: "App",
 			Keywords: []string{"agents", "hooks", "integration", "install", "update", "claude", "antigravity"}, Kind: commandcenter.TargetRoute, TargetID: "/settings/providers", Available: true},

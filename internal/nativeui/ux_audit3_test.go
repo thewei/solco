@@ -194,3 +194,33 @@ func TestSelectedTabEndsWholeInView(t *testing.T) {
 		}
 	}
 }
+
+// TestCommandCenterShowsTheMenuAccelerators pins that a palette command which
+// has a key shows exactly the key the menu binds, and that Quota — a page the
+// Sessions sidebar reaches — is also a palette command.
+func TestCommandCenterShowsTheMenuAccelerators(t *testing.T) {
+	s := NewShell()
+	menu := map[string]string{}
+	for _, name := range append([]string{homeDestination.name}, "Changes", "Sessions", "Files", "Hosts") {
+		if item := menuItemNamed(menuNamed(t, s.MenuBar(nil), "Go").Submenu, name); item != nil {
+			menu[name] = item.Accelerator
+		}
+	}
+	menu["Settings"] = accelSettings
+	seen := map[string]bool{}
+	for _, a := range s.buildCommandCenterActions() {
+		if a.Section != "App" {
+			continue
+		}
+		seen[a.Title] = true
+		if accel, ok := menu[a.Title]; ok && a.Shortcut != acceleratorLabel(accel) {
+			t.Errorf("%s shows %q, the menu binds %q", a.Title, a.Shortcut, accel)
+		}
+	}
+	if !seen["Quota"] {
+		t.Error("the Command Center has no Quota command")
+	}
+	if got := acceleratorLabel(accelSettings); got != "⌘," {
+		t.Errorf("Settings label = %q, want ⌘,", got)
+	}
+}

@@ -55,6 +55,7 @@ const (
 	accelCloseTab      = "CmdOrCtrl+W"
 	accelCommandCenter = "CmdOrCtrl+Shift+P"
 	accelShortcuts     = "CmdOrCtrl+/"
+	accelSettings      = "CmdOrCtrl+,"
 
 	// lastTab is the pseudo index of "the last Tab" (⌥⌘9).
 	lastTab = 9
@@ -79,6 +80,12 @@ func acceleratorKeycaps(accelerator string) []string {
 		}
 	}
 	return append(caps, strings.ToUpper(key))
+}
+
+// acceleratorLabel is the accelerator as one string of keycaps ("⌘1"), the
+// shape the Command Center prints beside a command.
+func acceleratorLabel(accelerator string) string {
+	return strings.Join(acceleratorKeycaps(accelerator), "")
 }
 
 // keycaps spells the binding as a tooltip shows it: the modifiers in the
