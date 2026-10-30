@@ -1,320 +1,112 @@
 <!doctype html>
-<!--
-  [INPUT]: depends on styles.css, assets/icon.png,
-  assets/herdr-logo.png, assets/tmux-logo.svg, assets/uu-logo.png, and
-  assets/luvus-logo.png; scroll-reveal stagger depends on the AOS 2.3.4 CDN
-  (the only external request); download links depend on the fixed GitHub
-  Releases asset names Solco-macos-aarch64(.zip|.sha256)
-  [OUTPUT]: the Solco landing page (beside downloads.html): deep-space aurora glassmorphism
-  (designs/site-deai Option D final) — sticky glass nav with a scrolled
-  compact state, large hero + floating aurora blobs + glass
-  nav/cards/product window, AOS scroll-reveal stagger across sections, with
-  the multi-backend matrix (Herdr/tmux/UU Remote/Luvus) as a first-class
-  citizen; a no-JS / no-CDN / reduced-motion fallback keeps all content
-  visible
-  [POS]: the entry page in site/, published as-is by
-  .github/workflows/pages.yml; the design-final record lives in
-  designs/site-deai/README.md
-  [PROTOCOL]: Update this header on change, then check CLAUDE.md.
--->
-<html lang="en" class="no-js">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script>document.documentElement.classList.remove('no-js');</script>
-  <title>Solco: a native multi-runtime workspace for coding agents</title>
-  <meta name="description" content="Solco is a GPU-accelerated macOS workspace for coding agents. Herdr, tmux, UU Remote and Luvus behind one neutral multiplexer seam — sessions stay authoritative on the backend, Solco just makes them beautiful.">
-  <link rel="icon" type="image/png" href="assets/icon.png">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css">
+  <title>Solco — A native macOS workspace for AI coding agents</title>
+  <meta name="description" content="Solco brings coding agents, terminal sessions, project files, Git review, devices, and tasks into one calm native macOS workspace.">
+  <meta property="og:title" content="Solco — A native macOS workspace for AI coding agents">
+  <meta property="og:description" content="One calm native workspace for agents, terminal, files, Git, devices, and tasks.">
+  <meta property="og:image" content="./assets/appicon/solco-1024.png">
+  <link rel="icon" type="image/png" href="./assets/appicon/favicon-128.png">
+  <link rel="apple-touch-icon" href="./assets/appicon/solco-192.png">
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <a class="skip" href="#main">Skip to main content</a>
-
-  <div class="aurora" aria-hidden="true">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
-  </div>
-
   <header class="nav">
-    <a class="brand" href="./">
-      <img src="assets/icon.png" alt="" width="24" height="24">
+    <a class="brand" href="#top">
+      <img src="./assets/appicon/solco-128.png" alt="" width="28" height="28">
       <span>Solco</span>
     </a>
-    <nav class="navlinks" aria-label="Site">
-      <a href="#backends">Backends</a>
-      <a href="#workspaces">Workspaces</a>
+    <nav aria-label="Primary">
+      <a href="#features">Features</a>
       <a href="#architecture">Architecture</a>
-      <a href="https://github.com/thewei/solco/tree/main/docs">Docs</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/thewei/solco">GitHub</a>
     </nav>
-    <a class="nav-dl" data-platform-download href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download</a>
+    <a class="action" href="#download">Get Solco</a>
   </header>
 
-  <main id="main">
-
-    <!-- ============ HERO ============ -->
-    <section class="hero">
-      <div class="hero-copy">
-    <p class="pill rise"><i></i>Native · macOS, Linux &amp; Windows · four multiplexer backends · v0.1.18</p>
-        <h1 class="rise d1">Every backend.<br><span class="grad">One native lane.</span></h1>
-        <p class="sub rise d2">
-          A GPU-accelerated native workspace for coding agents on macOS, Linux and Windows. Herdr, tmux, UU Remote and
-          Luvus behind one neutral seam — sessions stay authoritative on the backend,
-          Solco just makes them beautiful.
-        </p>
-        <div class="cta rise d3">
-          <a class="btn-primary" data-platform-download href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download</a>
-          <a class="btn-ghost" href="https://github.com/thewei/solco">★ Star on GitHub</a>
-          <a class="btn-ghost" href="downloads.html">All platforms</a>
-        </div>
-        <p class="runtime-note rise d4">
-          <span class="prompt">$</span> wax install herdr
-          <span class="note-sep">·</span> the app offers this on first run if the runtime is missing
-          <span class="note-sep">·</span> free &amp; open source under GPLv3
-        </p>
-      </div>
-
-      <div class="mockup rise d2">
-        <div class="shot-frame">
-          <img src="assets/app-light.png" alt="Solco with real Herdr, tmux and Luvus workspaces and live agents" width="2392" height="1986">
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <div>
+        <p class="kicker">Native macOS workspace for AI coding agents</p>
+        <h1 id="hero-title">Think. Build. Ship. <span>Together with AI.</span></h1>
+        <p class="lede">Solco is a native macOS workspace for AI coding agents, bringing agents, code, terminal, and your machine together in one calm, focused space.</p>
+        <div class="actions">
+          <a class="action primary" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for macOS</a>
+          <a class="ghost" href="#features">Explore features</a>
         </div>
       </div>
+      <figure>
+        <img src="./assets/screens/product-hero.webp" alt="The Solco app showing sessions, an active coding agent, terminal, files, and project controls." width="1600" height="1073">
+      </figure>
     </section>
 
-    <!-- ============ BACKENDS ============ -->
-    <section class="backends" id="backends">
-      <header class="sec-head" data-aos="fade-up">
-        <p class="sec-kicker">Multiplexer backends</p>
-        <h2>One client. Four engines. No second brain.</h2>
-        <p class="sec-sub">
-          Backends keep sovereignty over sessions, panes, scrollback and agent lifecycle.
-          Solco projects whichever engine you point it at — switch without losing state,
-          mix local and remote in one sidebar.
-        </p>
-      </header>
-
-      <div class="backend-grid">
-        <article class="bcard" data-aos="fade-up">
-          <div class="bcard-top">
-            <img class="blogo" src="assets/herdr-logo.png" alt="Herdr logo" width="44" height="44">
-            <span class="brole brole-primary">Default runtime</span>
-          </div>
-          <h3><a href="https://herdr.dev">Herdr</a></h3>
-          <p class="bdesc">The agent-first multiplexer and Solco's primary authority. Owns workspaces, tabs, panes, scrollback and full agent lifecycle — with lossless context transfer between providers.</p>
-          <ul class="bfeats">
-            <li>Agent semantics, never PTY guesswork</li>
-            <li>Context Transfer &amp; Live Handoff</li>
-            <li>Persisted across restarts</li>
-          </ul>
-          <a class="blink" href="https://herdr.dev">herdr.dev<span aria-hidden="true"> →</span></a>
+    <section id="features" aria-labelledby="features-title">
+      <div class="section-head">
+        <p class="kicker">Features</p>
+        <h2 id="features-title">Everything you need, in one native workspace.</h2>
+      </div>
+      <div class="features">
+        <article>
+          <h3>Agents and sessions</h3>
+          <p>Run multiple agents in organized sessions. Keep context, history, and results in one place.</p>
+          <figure>
+            <img src="./assets/screens/feature-agents.webp" alt="Solco sessions sidebar with live coding agents." width="1600" height="1026" loading="lazy">
+          </figure>
         </article>
-
-        <article class="bcard" data-aos="fade-up" data-aos-delay="100">
-          <div class="bcard-top">
-            <img class="blogo" src="assets/tmux-logo.svg" alt="tmux logo" width="44" height="44">
-            <span class="brole">Industry standard</span>
-          </div>
-          <h3><a href="https://tmux.app">tmux</a></h3>
-          <p class="bdesc">The classic terminal multiplexer, projected into a native shell. Solco drives a real <code>tmux attach</code> child on a PTY — your existing servers and <code>.tmux.conf</code> keep working untouched.</p>
-          <ul class="bfeats">
-            <li>Zero-config adoption of live sessions</li>
-            <li>Split / zoom / swap via native menu</li>
-            <li>Works over SSH out of the box</li>
-          </ul>
-          <a class="blink" href="https://tmux.app">tmux.app<span aria-hidden="true"> →</span></a>
+        <article>
+          <h3>Terminal and files</h3>
+          <p>Work beside native terminal sessions, project files, and remote hosts without leaving the task.</p>
+          <figure>
+            <img src="./assets/screens/feature-terminal.webp" alt="Solco terminal beside an active coding task." width="1600" height="1026" loading="lazy">
+            <img class="sub" src="./assets/screens/feature-files.webp" alt="Solco Files view with the project tree and preview surface." width="1600" height="1026" loading="lazy">
+          </figure>
         </article>
-
-        <article class="bcard" data-aos="fade-up" data-aos-delay="200">
-          <div class="bcard-top">
-            <img class="blogo blogo-wide" src="assets/uu-logo.png" alt="UU Remote logo" width="128" height="30">
-            <span class="brole brole-remote">Remote bridge</span>
-          </div>
-          <h3><a href="https://uuyc.163.com">UU Remote</a></h3>
-          <p class="bdesc">NetEase UU Remote's <code>uuyc-cli lterm</code> sessions, bridged through the same seam. Reach cloud GPUs and remote dev boxes without leaving the sidebar — graceful degradation when the CLI is absent.</p>
-          <ul class="bfeats">
-            <li>Remote terminals beside local ones</li>
-            <li>Same pane ops as every backend</li>
-            <li>Capability-gated, never brittle</li>
-          </ul>
-          <a class="blink" href="https://uuyc.163.com">uuyc.163.com<span aria-hidden="true"> →</span></a>
-        </article>
-
-        <article class="bcard" data-aos="fade-up" data-aos-delay="300">
-          <div class="bcard-top">
-            <img class="blogo" src="assets/luvus-logo.png" alt="Luvus logo" width="44" height="44">
-            <span class="brole brole-new">New · Agent mission control</span>
-          </div>
-          <h3><a href="https://github.com/RizRiyz/luvus">Luvus</a></h3>
-          <p class="bdesc">Mission control for AI coding agents. Worktree orchestration, per-agent token and cost awareness, and the Universal Harness Protocol (UHP&nbsp;1.0) — now a first-class Solco backend.</p>
-          <ul class="bfeats">
-            <li>UHP 1.0 semantic waits &amp; snapshots</li>
-            <li>Agent fork with context intact</li>
-            <li>Git-aware dashboards &amp; quality gates</li>
-          </ul>
-          <a class="blink" href="https://github.com/RizRiyz/luvus">github.com/RizRiyz/luvus<span aria-hidden="true"> →</span></a>
+        <article>
+          <h3>Git and devices</h3>
+          <p>Review changes, commit with confidence, and move work between machines.</p>
+          <figure>
+            <img src="./assets/screens/feature-git.webp" alt="Solco changes view showing staged files and a real code diff." width="1600" height="1026" loading="lazy">
+            <img class="sub" src="./assets/screens/feature-hosts.webp" alt="Solco hosts view with saved machines and connection state." width="1600" height="1026" loading="lazy">
+          </figure>
         </article>
       </div>
     </section>
 
-    <!-- ============ WORKSPACES ============ -->
-    <section class="workspaces" id="workspaces">
-      <div class="ws-copy" data-aos="fade-up">
-        <p class="sec-kicker">Native multi-workspace</p>
-        <h2>A workspace per project. A project per obsession.</h2>
-        <p class="ws-text">A workspace <em>is</em> a live backend instance — not a folder in some registry. Every window binds to one; the sidebar lists them all across every connected engine. Quit the app, kill the machine, come back tomorrow: layout, cwd and scrollback are exactly where the backend kept them.</p>
-        <ul class="ws-points">
-          <li><strong>Live enumeration.</strong> Instances come from the backends themselves — no stale client-side registry to rot.</li>
-          <li><strong>Display names stay yours.</strong> Rename anything; the runtime keeps its real identity.</li>
-          <li><strong>One TUI child per instance.</strong> Desktop and mobile viewers share it; idle children get reaped.</li>
-        </ul>
+    <section id="architecture" aria-labelledby="architecture-title">
+      <div class="section-head centered">
+        <p class="kicker">Architecture</p>
+        <h2 id="architecture-title">A calm client. A strong foundation.</h2>
       </div>
-      <div class="ws-diagram" role="img" aria-label="An instance picker listing workspaces across Herdr, Luvus, tmux and UU Remote" data-aos="fade-left" data-aos-delay="150">
-        <div class="wsr">
-          <p class="wsr-title">Instance picker</p>
-          <div class="wsr-row wsr-on"><i class="dot dot-herdr"></i>solco <span>herdr · 3 panes · 2 agents</span></div>
-          <div class="wsr-row"><i class="dot dot-luvus"></i>agent-fleet <span>luvus · orchestration</span></div>
-          <div class="wsr-row"><i class="dot dot-tmux"></i>infra-cluster <span>tmux · 6 windows</span></div>
-          <div class="wsr-row"><i class="dot dot-uu"></i>cloud-gpu-node <span>uu remote · training</span></div>
-          <div class="wsr-foot"><span class="wsr-key">⌘K</span> jump to any instance, any backend</div>
-        </div>
+      <div class="architecture">
+        <div><strong>Solco</strong><span>Native macOS workspace</span></div>
+        <div aria-hidden="true" class="link"></div>
+        <div><strong>Herdr</strong><span>Runtime and session authority</span></div>
       </div>
+      <p class="footnote">Solco owns the native experience. Herdr owns sessions, processes, and runtime state.</p>
     </section>
 
-    <!-- ============ ARCHITECTURE ============ -->
-    <section class="arch" id="architecture">
-      <div class="arch-head" data-aos="fade-up">
-        <p class="sec-kicker">The seam</p>
-        <h2>Backend-neutral by construction</h2>
+    <section id="download" aria-labelledby="download-title">
+      <p class="kicker">Get started</p>
+      <h2 id="download-title">Download Solco for macOS.</h2>
+      <div class="actions center">
+        <a class="action primary" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for macOS</a>
+        <a class="ghost" href="https://github.com/thewei/solco/releases">All downloads</a>
       </div>
-      <div class="arch-pipe" role="img" aria-label="Pipeline from the native shell through the neutral multiplexer API to the four backends" data-aos="fade-up" data-aos-delay="100">
-        <div class="pipe-layer pipe-ui">
-          <strong>Solco shell</strong>
-          <span>GPUI · libghostty-vt · navigation, taste, zero runtime logic</span>
-        </div>
-        <div class="pipe-arrow" aria-hidden="true">↓&nbsp;&nbsp;MuxRegistry + capability flags</div>
-        <div class="pipe-layer pipe-mux">
-          <strong>Neutral Multiplexer API</strong>
-          <span>instances · projection snapshots · pane ops · byte streams · capability gating</span>
-        </div>
-        <div class="pipe-arrow" aria-hidden="true">↓&nbsp;&nbsp;one adapter file per backend</div>
-        <div class="pipe-row">
-          <div class="pipe-node pn-herdr"><i class="dot dot-herdr"></i>Herdr<br><span>full agent protocol</span></div>
-          <div class="pipe-node pn-tmux"><i class="dot dot-tmux"></i>tmux<br><span>attach stream</span></div>
-          <div class="pipe-node pn-uu"><i class="dot dot-uu"></i>UU Remote<br><span>uuyc lterm</span></div>
-          <div class="pipe-node pn-luvus"><i class="dot dot-luvus"></i>Luvus<br><span>UHP 1.0</span></div>
-        </div>
-      </div>
-      <p class="arch-fine" data-aos="fade-up" data-aos-delay="200">Consumers never branch on backend identity — differences flow through capability flags, so a backend without agents simply hides agent surfaces instead of faking them. <a href="https://github.com/thewei/solco/blob/main/docs/multiplexer-api.md">Read the API contract</a>.</p>
+      <p class="footnote">macOS 13+ · Apple Silicon · Free and open source</p>
     </section>
-
-    <!-- ============ FEATURES ============ -->
-    <section class="bento" aria-label="Capabilities">
-      <article class="tile t-a" data-aos="fade-up">
-        <h3>Agents, first-class</h3>
-        <p>Launch, watch, prompt, resume. Semantic operations over Herdr's protocol — never keystrokes into a PTY. Context Transfer moves a task between providers with its memory intact.</p>
-        <code>solco agent resume --session 4f2e</code>
-      </article>
-      <article class="tile t-b" data-aos="fade-up" data-aos-delay="100">
-        <h3>Panes that survive restarts</h3>
-        <p>Layout, cwd and scrollback live on the backend, not in the window. Quit, reopen, continue.</p>
-        <div class="mini-panes" aria-hidden="true"><span></span><span></span></div>
-      </article>
-      <article class="tile t-c" data-aos="fade-up" data-aos-delay="200">
-        <h3>GPU-native shell</h3>
-        <p>GPUI + libghostty-vt. No Electron, no webview, no telemetry, no cloud accounts.</p>
-      </article>
-      <article class="tile t-d" data-aos="fade-up" data-aos-delay="100">
-        <h3>History, searchable</h3>
-        <p>Every past coding-agent conversation, indexed and searchable in place.</p>
-      </article>
-      <article class="tile t-e" data-aos="fade-up" data-aos-delay="200">
-        <h3>Mobile companion</h3>
-        <p>An optional hosted Mobile Web bundle served by the Host Remote API — same mux seam underneath.</p>
-      </article>
-      <article class="tile t-f" data-aos="fade-up" data-aos-delay="300">
-        <h3>Free, and yours to inspect</h3>
-        <p>GPLv3. The whole workspace is source you can read, build and change.</p>
-        <a class="btn-ghost" href="https://github.com/thewei/solco">Browse the source</a>
-      </article>
-    </section>
-
   </main>
 
-  <footer class="foot">
-    <div class="foot-row">
-      <p class="foot-brand"><img src="assets/icon.png" alt="" width="20" height="20"> Solco is the client; the backends are the runtime.</p>
-      <nav class="foot-links" aria-label="Footer">
-        <a href="https://github.com/thewei/solco">GitHub</a>
-        <a href="https://github.com/thewei/solco/tree/main/docs">Docs</a>
-        <a href="https://github.com/thewei/solco/releases">Releases</a>
-        <a href="https://herdr.dev">Herdr</a>
-        <a href="https://github.com/RizRiyz/luvus">Luvus</a>
-      </nav>
-    </div>
-    <p class="foot-fine">© 2026 Wilson · GPL-3.0 · built with GPUI and libghostty-vt</p>
+  <footer>
+    <span class="brand small"><img src="./assets/appicon/solco-128.png" alt="" width="20" height="20"> Solco</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/thewei/solco">GitHub</a>
+      <a href="https://github.com/thewei/solco/releases">Releases</a>
+      <a href="https://herdr.dev">Herdr</a>
+    </nav>
+    <small>© 2026 Solco. GPL-3.0.</small>
   </footer>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
-  <script>
-    (function () {
-      var nav = document.querySelector('.nav');
-      var onScroll = function () {
-        nav.classList.toggle('scrolled', window.scrollY > 24);
-      };
-      onScroll();
-      window.addEventListener('scroll', onScroll, { passive: true });
-      var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (window.AOS && !reduceMotion) {
-        AOS.init({ once: true, duration: 700, easing: 'ease-out-cubic', offset: 80 });
-      } else {
-        // No CDN or reduced motion: reveal everything immediately.
-        document.querySelectorAll('[data-aos]').forEach(function (el) {
-          el.classList.add('aos-animate');
-        });
-      }
-    })();
-    (function () {
-      // Platform-aware download: one built archive per release platform.
-      // Unknown platforms land on downloads.html instead of an archive they
-      // cannot run. The static href (no-JS fallback) stays the arm64 zip.
-      var base = 'https://github.com/thewei/solco/releases/latest/download/';
-      var map = {
-        'macos-arm64': base + 'Solco-macos-aarch64.zip',
-        'macos-x64': base + 'Solco-macos-x86_64.zip',
-        'linux-x64': base + 'Solco-linux-x86_64.tar.gz',
-        'windows-x64': base + 'Solco-windows-x86_64.zip'
-      };
-      var downloads = 'downloads.html';
-      function apply(href) {
-        document.querySelectorAll('[data-platform-download]').forEach(function (a) {
-          a.href = href;
-        });
-      }
-      function pick() {
-        var ua = navigator.userAgent;
-        if (/Macintosh/.test(ua)) return map['macos-arm64'];
-        if (/Windows/.test(ua)) return map['windows-x64'];
-        if (/Linux/.test(ua)) return map['linux-x64'];
-        return downloads;
-      }
-      if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValue) {
-        navigator.userAgentData.getHighEntropyValue(['architecture', 'platform'])
-          .then(function (hint) {
-            var arch = hint && hint.architecture;
-            var platform = (hint && hint.platform || '').toLowerCase();
-            if (platform.indexOf('mac') !== -1) {
-              apply(arch === 'x86' ? map['macos-x64'] : map['macos-arm64']);
-            } else if ((hint && hint.platform || '').indexOf('Windows') !== -1) {
-              apply(map['windows-x64']);
-            } else {
-              apply(pick());
-            }
-          })
-          .catch(function () { apply(pick()); });
-      } else {
-        apply(pick());
-      }
-    })();
-  </script>
 </body>
 </html>

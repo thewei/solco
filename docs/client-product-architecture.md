@@ -950,8 +950,9 @@ the matching `CFBundleIconFile` entry; scripts must not duplicate these values.
 
 Historical note: the current Go/MyGo application no longer uses that Rust
 packaging path. `mygo.config.ts` owns the active icon and reads only
-`resources/icon.png`; `site/assets/app-icon/` holds its canonical exports and
-design provenance. No second Solco mark or icon source is permitted.
+`resources/icon.png`; `site/assets/app-icon/PROMPT.md` holds its design
+provenance and Apple safe-margin export rule, while `site/assets/appicon/`
+holds the site-facing copies. No second Solco mark or icon source is permitted.
 
 `scripts/package-macos.sh` is the reproducible local/release orchestration
 entrypoint: it builds, bundles, signs, validates the bundle, and optionally

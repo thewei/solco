@@ -1,9 +1,9 @@
 # Solco icon prompt
 
 /**
- * [INPUT]: Based on the Herdr logo at site/assets/herdr-logo.png.
+ * [INPUT]: Based on the Herdr logo at the archived Herdr brand reference.
  * [OUTPUT]: Records the approved gray-white ram icon prompt and the generated source image path.
- * [POS]: site/assets/app-icon 的设计来源记录，服务于 resources/icon.png 与 site/assets/icon.png。
+ * [POS]: site/assets/app-icon 的设计来源记录，服务于 resources/icon.png 与 site/assets/appicon/solco-1024.png。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,4 +11,4 @@ Premium macOS app icon, monochrome gray and silver palette. Preserve the recogni
 
 Generated source: /Users/wilson/.codex/generated_images/01a18afb-1dcd-7a13-9cea-17a8cc4fd293/call_a66c3e0a0fd945eebc9dc949.png
 
-Export rule: crop to the icon subject, keep a square 1024px canvas, and reserve Apple's icon safe margin. Place the rounded-square subject in a 100px transparent border on every side; its content box is 824px and its corner radius is about 185.4px. Copy that 1024px master verbatim to resources/icon.png and reduce it to 512px for site/assets/icon.png.
+Export rule: crop to the icon subject, keep a square 1024px canvas, and reserve Apple's icon safe margin. Place the rounded-square subject in a 100px transparent border on every side; its content box is 824px and its corner radius is about 185.4px. Copy that 1024px master verbatim to resources/icon.png and site/assets/appicon/solco-1024.png; derive all smaller site exports from that master.

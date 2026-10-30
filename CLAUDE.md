@@ -6,8 +6,7 @@ Current implementation: Go 1.27.3 + MyGo Native UI (pinned v0.6.4, patched fork 
 internal/ - Go application/domain packages (nativeui presentation, apphook in-app IPC engine, agenthooks Hook Doctor provisioning, agentstatus OSC 7501 status arbitration, herdr adapter, agent/history/sessiontrash/gitworkbench domains, workboard herdr-projects plugin capability gate, settings, applog, ...)
 resources/ - MyGo packaging resources (app icon)
 third_party/ - vendored patched MyGo framework fork (go.mod replace target; see third_party/mygo/LOCAL-PATCH.md)
-site/ - public site (landing + downloads page) published to GitHub Pages (static HTML/CSS, no build step)
-site/assets/app-icon/ - canonical Solco app-icon exports, icon prompt, and PNG export rule
+site/ - GitHub Pages landing site (static HTML/CSS, no build step); assets/app-icon holds the icon prompt and Apple safe-margin export rule
 docs/ - architecture source of truth, MyGo migration contract/roadmap, interaction/performance/audit documentation
 designs/ - interactive design explorations (self-contained `exploration.html` + `README.md` Decision record per topic; not built, not shipped; product code waits for the recorded Decision)
 .agents/skills/ - project-local engineering workflow/checklists
