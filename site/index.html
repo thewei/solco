@@ -3,110 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Solco — A native macOS workspace for AI coding agents</title>
-  <meta name="description" content="Solco brings coding agents, terminal sessions, project files, Git review, devices, and tasks into one calm native macOS workspace.">
-  <meta property="og:title" content="Solco — A native macOS workspace for AI coding agents">
-  <meta property="og:description" content="One calm native workspace for agents, terminal, files, Git, devices, and tasks.">
+  <title>Solco — Coding agents, without the juggling</title>
+  <meta name="description" content="Solco is the native macOS workspace for coding agents, terminal sessions, project files, Git review, devices, and tasks.">
+  <meta property="og:title" content="Solco — Coding agents, without the juggling">
+  <meta property="og:description" content="Native speed. Clear attention. One calm workspace for agents and the work behind them.">
   <meta property="og:image" content="./assets/appicon/solco-1024.png">
   <link rel="icon" type="image/png" href="./assets/appicon/favicon-128.png">
   <link rel="apple-touch-icon" href="./assets/appicon/solco-192.png">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <header class="nav">
-    <a class="brand" href="#top">
-      <img src="./assets/appicon/solco-128.png" alt="" width="28" height="28">
-      <span>Solco</span>
-    </a>
-    <nav aria-label="Primary">
-      <a href="#features">Features</a>
-      <a href="#architecture">Architecture</a>
-      <a href="#download">Download</a>
-      <a href="https://github.com/thewei/solco">GitHub</a>
-    </nav>
-    <a class="action" href="#download">Get Solco</a>
-  </header>
+  <div class="solco">
+            <div class="solco">
+  <div class="wrap"><nav class="nav">
+    <a class="brand" href="#features"><img src="./assets/appicon/solco-128.png" alt="">Solco</a>
+    <div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#machines">Machines</a><a href="#ownership">Architecture</a></div>
+    <div class="right"><a href="https://github.com/thewei/solco">GitHub</a><a class="pill" href="#download">Download</a></div>
+  </nav></div>
+  <header class="hero wrap"><div>
+    <h1>Coding agents,<br><span>without the juggling.</span></h1>
+    <p class="sub">Solco is the native macOS workspace for agents and the work behind them. <b>Open it once. Return to what moved.</b></p>
+    <div class="cta"><a class="pill" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for Mac</a><a href="#workflow">Walk the workflow →</a></div>
+    <img class="ram" src="./assets/appicon/solco-512.png" alt="">
+  </div></header>
+  <section class="statement wrap"><p>Native speed. Clear attention. <span>Sessions, terminal, files and review share one calm surface instead of competing for it.</span></p></section>
+  <section id="features" class="herd wrap"><div class="herd-head"><h2>Your workflow,<br><span>step by step.</span></h2><p>Each screen shows the exact moment it belongs to. No feature tour for its own sake.</p></div>
+    <div class="scene"><img src="./assets/screens/product-hero.webp" alt="The complete Solco workspace."></div>
+    <div class="notes">
+      <div class="note"><b>Start a task</b><code>Open a session</code><span>Pick a repo and begin where context belongs.</span></div>
+      <div class="note"><b>Let it work</b><code>Monitor attention</code><span>Terminal and agent stay connected to the task.</span></div>
+      <div class="note"><b>Ship the result</b><code>Review and commit</code><span>Diff, stage and commit beside the session.</span></div>
+    </div>
+  </section>
+  <div class="doc wrap">
+    <aside class="toc"><div class="file">PRODUCT.md</div><a class="on" href="#workflow"><span>01</span>One task surface</a><a href="#machines"><span>02</span>Every machine</a><a href="#review"><span>03</span>Review</a><a href="#ownership"><span>04</span>Ownership</a></aside>
+    <article class="md">
+      <section id="workflow"><h3><i>01</i>One task surface</h3><p>Sessions, terminal and output remain in one native layout. You stop reconstructing context from scattered windows.</p><figure class="crop"><img src="./assets/screens/feature-terminal.webp" alt=""></figure></section>
+      <section id="machines"><h3><i>02</i>Every machine, one view</h3><p>Saved devices and their sessions join the sidebar under their own name.</p><figure class="crop"><img src="./assets/screens/feature-hosts.webp" alt=""></figure></section>
+      <section id="review"><h3><i>03</i>Review before landing</h3><p>Real diffs, staged state and commit flow are native, not another browser tab.</p><figure class="crop"><img src="./assets/screens/feature-git.webp" alt=""></figure></section>
+      <section id="ownership"><h3><i>04</i>Ownership stays clear</h3><p>Solco owns presentation. <b>Herdr owns sessions, processes and runtime state.</b> No second runtime hidden behind the interface.</p><pre class="pre"><span class="d"># the boundary is simple</span>
+Solco  → native macOS workspace
+Herdr  → sessions · panes · agents · process life</pre></section>
+    </article>
+  </div>
+  <section id="download" class="end wrap"><h2>Ready in one install.<br><span>Keep the workflow.</span></h2><div class="cta"><a class="pill" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for Mac</a><a href="https://github.com/thewei/solco">Star on GitHub →</a></div></section>
+  <footer class="foot wrap"><div class="me"><div class="top"><img src="./assets/appicon/solco-128.png" alt=""><b>Solco</b></div><span>Coding agents, without the juggling.</span><span>Free and open source, GPL-3.0.</span></div><div><h4>Product</h4><a href="#features">Features</a><a href="#download">Download</a></div><div><h4>Learn</h4><a href="#workflow">Workflow</a><a href="#ownership">Architecture</a></div><div><h4>Community</h4><a href="https://github.com/thewei/solco">GitHub</a><a href="https://herdr.dev">Herdr</a></div></footer>
+</div>
 
-  <main id="top">
-    <section class="hero" aria-labelledby="hero-title">
-      <div>
-        <p class="kicker">Native macOS workspace for AI coding agents</p>
-        <h1 id="hero-title">Think. Build. Ship. <span>Together with AI.</span></h1>
-        <p class="lede">Solco is a native macOS workspace for AI coding agents, bringing agents, code, terminal, and your machine together in one calm, focused space.</p>
-        <div class="actions">
-          <a class="action primary" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for macOS</a>
-          <a class="ghost" href="#features">Explore features</a>
-        </div>
-      </div>
-      <figure>
-        <img src="./assets/screens/product-hero.webp" alt="The Solco app showing sessions, an active coding agent, terminal, files, and project controls." width="1600" height="1073">
-      </figure>
-    </section>
-
-    <section id="features" aria-labelledby="features-title">
-      <div class="section-head">
-        <p class="kicker">Features</p>
-        <h2 id="features-title">Everything you need, in one native workspace.</h2>
-      </div>
-      <div class="features">
-        <article>
-          <h3>Agents and sessions</h3>
-          <p>Run multiple agents in organized sessions. Keep context, history, and results in one place.</p>
-          <figure>
-            <img src="./assets/screens/feature-agents.webp" alt="Solco sessions sidebar with live coding agents." width="1600" height="1026" loading="lazy">
-          </figure>
-        </article>
-        <article>
-          <h3>Terminal and files</h3>
-          <p>Work beside native terminal sessions, project files, and remote hosts without leaving the task.</p>
-          <figure>
-            <img src="./assets/screens/feature-terminal.webp" alt="Solco terminal beside an active coding task." width="1600" height="1026" loading="lazy">
-            <img class="sub" src="./assets/screens/feature-files.webp" alt="Solco Files view with the project tree and preview surface." width="1600" height="1026" loading="lazy">
-          </figure>
-        </article>
-        <article>
-          <h3>Git and devices</h3>
-          <p>Review changes, commit with confidence, and move work between machines.</p>
-          <figure>
-            <img src="./assets/screens/feature-git.webp" alt="Solco changes view showing staged files and a real code diff." width="1600" height="1026" loading="lazy">
-            <img class="sub" src="./assets/screens/feature-hosts.webp" alt="Solco hosts view with saved machines and connection state." width="1600" height="1026" loading="lazy">
-          </figure>
-        </article>
-      </div>
-    </section>
-
-    <section id="architecture" aria-labelledby="architecture-title">
-      <div class="section-head centered">
-        <p class="kicker">Architecture</p>
-        <h2 id="architecture-title">A calm client. A strong foundation.</h2>
-      </div>
-      <div class="architecture">
-        <div><strong>Solco</strong><span>Native macOS workspace</span></div>
-        <div aria-hidden="true" class="link"></div>
-        <div><strong>Herdr</strong><span>Runtime and session authority</span></div>
-      </div>
-      <p class="footnote">Solco owns the native experience. Herdr owns sessions, processes, and runtime state.</p>
-    </section>
-
-    <section id="download" aria-labelledby="download-title">
-      <p class="kicker">Get started</p>
-      <h2 id="download-title">Download Solco for macOS.</h2>
-      <div class="actions center">
-        <a class="action primary" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for macOS</a>
-        <a class="ghost" href="https://github.com/thewei/solco/releases">All downloads</a>
-      </div>
-      <p class="footnote">macOS 13+ · Apple Silicon · Free and open source</p>
-    </section>
-  </main>
-
-  <footer>
-    <span class="brand small"><img src="./assets/appicon/solco-128.png" alt="" width="20" height="20"> Solco</span>
-    <nav aria-label="Footer">
-      <a href="https://github.com/thewei/solco">GitHub</a>
-      <a href="https://github.com/thewei/solco/releases">Releases</a>
-      <a href="https://herdr.dev">Herdr</a>
-    </nav>
-    <small>© 2026 Solco. GPL-3.0.</small>
-  </footer>
+  </div>
+  <script>
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(button.dataset.copy);
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy'; }, 1400);
+      });
+    });
+  </script>
 </body>
 </html>

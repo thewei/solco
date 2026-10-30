@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<!--
+  exploration-shell.html — Design Storybook scaffold
+
+  Mental model: Storybook for design proposals (not product Storybook).
+  ┌─────────────────────────────────────────┬──────────────────┐
+  │ Canvas (full preview)                   │ Story panel      │
+  │                                         │ · Variants       │
+  │                                         │ · States         │
+  │                                         │ ─────────────    │
+  │                                         │ ▼ Story (docs)   │
+  └─────────────────────────────────────────┴──────────────────┘
+
+  Copy to: designs/<topic>/exploration.html
+  Prefer opening directly in a browser (file://). Use a static server only when the demo requires it.
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><!-- AGENT: topic title -->Solco Site · Herdr-Inspired Design Exploration</title>
+
+  <style>
+    [data-ide-shell] {
+      --shell-bg: #0f0f10;
+      --shell-panel: #18181b;
+      --shell-border: #27272a;
+      --shell-text: #fafafa;
+      --shell-muted: #a1a1aa;
+      --shell-accent: #71717a;
+      --panel-w: 280px;
+      box-sizing: border-box;
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: var(--shell-bg);
+      color: var(--shell-text);
+      min-height: 100vh;
+      margin: 0;
+    }
+    [data-ide-shell] * { box-sizing: border-box; }
+
+    [data-ide-shell] .ide-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ----- Canvas (left / main) ----- */
+    [data-ide-shell] .ide-stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+      background: #111113;
+    }
+    [data-ide-shell] .ide-stage-label {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      z-index: 20;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--shell-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      pointer-events: none;
+    }
+    [data-ide-shell] .ide-panel-collapse-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 30;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-collapse-btn { right: 10px; }
+    [data-ide-shell] .ide-artboard-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 32px 32px;
+    }
+    [data-ide-shell] .ide-artboard {
+      display: none;
+      width: 100%;
+      max-width: 960px;
+      max-height: calc(100vh - 80px);
+    }
+    [data-ide-shell] .ide-artboard.active { display: block; }
+    [data-ide-shell] .ide-artboard .design-root {
+      all: initial;
+      display: block;
+      font-family: inherit;
+    }
+
+    /* ----- Story panel (right — Controls + Story docs) ----- */
+    [data-ide-shell] .ide-story-panel {
+      width: var(--panel-w);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      transition: width 0.2s;
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel {
+      width: 0;
+      border-left: none;
+    }
+    [data-ide-shell] .ide-panel-expand-btn {
+      display: none;
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 40;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn { display: grid; place-items: center; }
+
+    [data-ide-shell] .ide-panel-header {
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid var(--shell-border);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--shell-muted);
+    }
+    [data-ide-shell] .ide-panel-controls {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      min-height: 0;
+    }
+    [data-ide-shell] .ide-section-title {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--shell-accent);
+      margin: 0 0 6px;
+    }
+    [data-ide-shell] .ide-section-title + .ide-section-title { margin-top: 14px; }
+    [data-ide-shell] .ide-variant-card,
+    [data-ide-shell] .ide-state-card {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      margin-bottom: 5px;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    [data-ide-shell] .ide-variant-card:hover,
+    [data-ide-shell] .ide-state-card:hover { border-color: #3f3f46; }
+    [data-ide-shell] .ide-variant-card.active,
+    [data-ide-shell] .ide-state-card.active {
+      border-color: var(--shell-accent);
+      background: rgba(113, 113, 122, 0.1);
+    }
+    [data-ide-shell] .ide-variant-card h2 { font-size: 11px; font-weight: 600; margin: 0 0 2px; }
+    [data-ide-shell] .ide-variant-card p { margin: 0; color: var(--shell-muted); font-size: 10px; line-height: 1.4; }
+    [data-ide-shell] .ide-state-card { font-size: 10px; color: var(--shell-muted); }
+    [data-ide-shell] .ide-state-card strong { display: block; color: var(--shell-text); font-size: 10px; }
+
+    /* Story docs — collapsible bottom (Storybook addons style) */
+    [data-ide-shell] .ide-panel-story {
+      border-top: 1px solid var(--shell-border);
+      flex-shrink: 0;
+    }
+    [data-ide-shell] .ide-story-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border: none;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--shell-muted);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+    }
+    [data-ide-shell] .ide-story-toggle:hover { color: var(--shell-text); background: rgba(255, 255, 255, 0.04); }
+    [data-ide-shell] .ide-story-body {
+      padding: 0 14px 14px;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--shell-muted);
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    [data-ide-shell] .ide-layout.story-collapsed .ide-story-body { display: none; }
+    [data-ide-shell] .ide-story-body h1 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--shell-text);
+      margin: 0 0 6px;
+    }
+    [data-ide-shell] .ide-story-body p { margin: 0 0 8px; }
+    [data-ide-shell] .ide-story-body ul { margin: 0; padding-left: 16px; }
+    [data-ide-shell] .ide-story-body li { margin-bottom: 4px; }
+  </style>
+
+  <style id="design-styles-solco">
+[data-ide-shell] .solco {
+  --bg:#0e0f11; --panel:#131416; --panel2:#18191c; --fg:#f3f3f4; --mute:#8a8e96;
+  --dim:#5d6168; --line:#1f2125; --edge:rgba(255,255,255,.09); --pill:#f3f3f4; --pill-ink:#0e0f11;
+  --silver-a:#f4f5f7; --silver-b:#b6bac2; --silver-c:#71757d;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;
+  color:var(--fg); background:var(--bg); font-size:14px; line-height:1.5;
+}
+[data-ide-shell] .solco * { box-sizing:border-box; margin:0; }
+[data-ide-shell] .solco a { color:inherit; text-decoration:none; }
+[data-ide-shell] .solco img { display:block; max-width:100%; }
+[data-ide-shell] .solco .wrap { width:100%; padding:0 28px; }
+[data-ide-shell] .solco .nav { height:70px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+[data-ide-shell] .solco .brand { display:flex; align-items:center; gap:10px; font-weight:650; font-size:17px; letter-spacing:-.02em; }
+[data-ide-shell] .solco .brand img { width:24px; height:24px; border-radius:6px; }
+[data-ide-shell] .solco .links { display:flex; gap:26px; font-size:14px; color:var(--mute); }
+[data-ide-shell] .solco .links a:hover, [data-ide-shell] .solco .links a.on { color:var(--fg); }
+[data-ide-shell] .solco .right { display:flex; align-items:center; gap:18px; font-size:14px; color:var(--mute); }
+[data-ide-shell] .solco .pill { height:35px; padding:0 15px; display:inline-flex; align-items:center; border-radius:999px; background:var(--pill); color:var(--pill-ink); font-weight:550; font-size:14px; }
+[data-ide-shell] .solco .pill:hover { background:#fff; }
+[data-ide-shell] .solco .hero { position:relative; padding:92px 0 46px; }
+[data-ide-shell] .solco h1 { font-size:clamp(46px,7vw,82px); font-weight:590; line-height:1.02; letter-spacing:-.04em; }
+[data-ide-shell] .solco h1 span { color:var(--mute); }
+[data-ide-shell] .solco .sub { margin-top:24px; max-width:600px; font-size:18px; line-height:1.58; color:var(--mute); }
+[data-ide-shell] .solco .sub b { color:var(--fg); font-weight:520; }
+[data-ide-shell] .solco .cta { margin-top:32px; display:flex; align-items:center; gap:18px; color:var(--mute); }
+[data-ide-shell] .solco .cta .pill { height:43px; padding:0 21px; }
+[data-ide-shell] .solco .cta a:not(.pill):hover { color:var(--fg); }
+[data-ide-shell] .solco .install { margin-top:34px; max-width:640px; border:1px solid var(--line); border-radius:12px; background:#121315; overflow:hidden; }
+[data-ide-shell] .solco .tabs { display:flex; gap:2px; padding:6px; border-bottom:1px solid var(--line); }
+[data-ide-shell] .solco .tabs button { height:28px; padding:0 12px; border:0; border-radius:7px; background:none; color:var(--dim); font-size:13px; cursor:pointer; }
+[data-ide-shell] .solco .tabs button:hover { color:var(--fg); }
+[data-ide-shell] .solco .tabs button.on { background:var(--panel2); color:var(--fg); }
+[data-ide-shell] .solco .command { display:flex; align-items:center; gap:14px; padding:14px 14px 14px 18px; font-family:ui-monospace,SFMono-Regular,monospace; font-size:13px; color:#d6d8dd; }
+[data-ide-shell] .solco .command .dollar { color:var(--dim); flex:none; }
+[data-ide-shell] .solco .command code { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+[data-ide-shell] .solco .copy { flex:none; height:30px; padding:0 12px; border:1px solid #2b2e33; border-radius:7px; background:var(--panel2); color:var(--fg); font-size:13px; cursor:pointer; }
+[data-ide-shell] .solco .install-note { margin-top:11px; font-size:13.5px; color:var(--dim); }
+[data-ide-shell] .solco .install-note a { color:var(--mute); border-bottom:1px solid #33363c; }
+[data-ide-shell] .solco .install-note a:hover { color:var(--fg); }
+[data-ide-shell] .solco .window { position:relative; padding:0 28px 88px; }
+[data-ide-shell] .solco .window::before { content:""; position:absolute; inset:0 0 auto; height:440px; background:radial-gradient(50% 55% at 50% 28%,rgba(155,164,178,.15),transparent 72%); pointer-events:none; }
+[data-ide-shell] .solco .frame { position:relative; margin:0 auto; border-radius:13px; overflow:hidden; box-shadow:0 0 0 1px var(--edge),0 46px 110px -45px rgba(0,0,0,.82); mask-image:linear-gradient(to bottom,#000 64%,transparent 98%); }
+[data-ide-shell] .solco .frame img { width:100%; height:auto; }
+[data-ide-shell] .solco .statement { padding:32px 0 98px; border-bottom:1px solid var(--line); }
+[data-ide-shell] .solco .statement p { max-width:1060px; font-size:clamp(27px,3.2vw,42px); font-weight:540; line-height:1.18; letter-spacing:-.028em; }
+[data-ide-shell] .solco .statement span { color:var(--mute); }
+[data-ide-shell] .solco .herd { padding:92px 0 72px; border-bottom:1px solid var(--line); }
+[data-ide-shell] .solco .herd-head { display:grid; grid-template-columns:1.15fr 1fr; align-items:end; gap:48px; margin-bottom:42px; }
+[data-ide-shell] .solco h2 { font-size:clamp(36px,4.7vw,62px); font-weight:570; line-height:1.03; letter-spacing:-.038em; }
+[data-ide-shell] .solco h2 span { color:var(--mute); }
+[data-ide-shell] .solco .herd-head p { font-size:18px; line-height:1.6; color:var(--mute); }
+[data-ide-shell] .solco .scene { border-radius:12px; overflow:hidden; box-shadow:0 0 0 1px var(--edge),0 46px 115px -45px rgba(0,0,0,.82); }
+[data-ide-shell] .solco .scene img { width:100%; height:auto; }
+[data-ide-shell] .solco .notes { display:grid; grid-template-columns:repeat(3,1fr); gap:30px; padding-top:34px; }
+[data-ide-shell] .solco .note { display:grid; gap:9px; padding-top:15px; border-top:1px solid var(--line); }
+[data-ide-shell] .solco .note b { font-size:16px; font-weight:530; }
+[data-ide-shell] .solco .note code { justify-self:start; font-size:13px; font-family:ui-monospace,SFMono-Regular,monospace; color:#e8b46a; background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:3px 8px; }
+[data-ide-shell] .solco .note span { font-size:14.5px; color:var(--mute); }
+[data-ide-shell] .solco .doc { display:grid; grid-template-columns:206px minmax(0,1fr); gap:88px; padding:90px 0 20px; }
+[data-ide-shell] .solco .toc { position:sticky; top:44px; align-self:start; font-size:14px; }
+[data-ide-shell] .solco .toc .file { padding-bottom:12px; margin-bottom:10px; border-bottom:1px solid var(--line); font-family:ui-monospace,SFMono-Regular,monospace; font-size:12px; color:var(--dim); }
+[data-ide-shell] .solco .toc a { display:flex; gap:12px; padding:7px 0; color:var(--dim); transition:color .2s; }
+[data-ide-shell] .solco .toc a span { width:18px; font-family:ui-monospace,SFMono-Regular,monospace; font-size:12px; line-height:20px; color:#3f4248; }
+[data-ide-shell] .solco .toc a:hover, [data-ide-shell] .solco .toc a.on { color:var(--fg); }
+[data-ide-shell] .solco .toc a.on span { color:#e8912a; }
+[data-ide-shell] .solco .md section { padding-bottom:94px; scroll-margin-top:44px; }
+[data-ide-shell] .solco .md h3 { display:flex; align-items:center; gap:12px; margin-bottom:19px; font-size:33px; font-weight:560; line-height:1.1; letter-spacing:-.027em; }
+[data-ide-shell] .solco .md h3 i { color:#3f4248; font-family:ui-monospace,SFMono-Regular,monospace; font-size:23px; font-style:normal; }
+[data-ide-shell] .solco .md p { max-width:740px; font-size:17px; line-height:1.68; color:var(--mute); }
+[data-ide-shell] .solco .md p b { color:var(--fg); font-weight:520; }
+[data-ide-shell] .solco .md code { font-family:ui-monospace,SFMono-Regular,monospace; font-size:14px; color:#d6d8dd; background:var(--panel2); border:1px solid var(--line); border-radius:5px; padding:1px 6px; }
+[data-ide-shell] .solco .crop { max-width:390px; margin-top:27px; border-radius:12px; overflow:hidden; box-shadow:0 0 0 1px var(--edge),0 28px 70px -34px rgba(0,0,0,.72); mask-image:linear-gradient(to bottom,#000 66%,transparent 98%); pointer-events:none; }
+[data-ide-shell] .solco .crop img { width:100%; height:auto; object-fit:cover; object-position:top left; }
+[data-ide-shell] .solco .pre { max-width:760px; margin-top:24px; padding:17px 20px; border:1px solid var(--line); border-radius:10px; background:var(--panel); font-family:ui-monospace,SFMono-Regular,monospace; font-size:13.5px; line-height:1.72; color:#c9cbd0; white-space:pre; overflow-x:auto; }
+[data-ide-shell] .solco .pre .d { color:#62666e; } [data-ide-shell] .solco .pre .hi { color:#fff; }
+[data-ide-shell] .solco .more { display:inline-block; margin-top:22px; color:var(--fg); border-bottom:1px solid #3a3d43; }
+[data-ide-shell] .solco .more:hover { border-color:var(--fg); }
+[data-ide-shell] .solco .gal { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:28px; }
+[data-ide-shell] .solco .gal a { border-radius:12px; overflow:hidden; background:var(--panel); box-shadow:0 0 0 1px var(--line); transition:transform .25s,box-shadow .25s; }
+[data-ide-shell] .solco .gal a:hover { transform:translateY(-3px); box-shadow:0 0 0 1px #33363c; }
+[data-ide-shell] .solco .gal img { aspect-ratio:16/10; width:100%; object-fit:cover; object-position:top left; }
+[data-ide-shell] .solco .meta { padding:12px 14px 14px; border-top:1px solid var(--line); }
+[data-ide-shell] .solco .meta .t { display:flex; justify-content:space-between; font-size:15px; }
+[data-ide-shell] .solco .meta .t span { color:var(--dim); font-size:13px; }
+[data-ide-shell] .solco .meta .say { margin-top:6px; font-family:ui-monospace,SFMono-Regular,monospace; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+[data-ide-shell] .solco .end { padding:92px 0 96px; border-top:1px solid var(--line); position:relative; overflow:hidden; }
+[data-ide-shell] .solco .end h2 { margin-bottom:30px; }
+[data-ide-shell] .solco .ram { position:absolute; right:16px; top:46px; width:310px; aspect-ratio:1; object-fit:contain; color:rgba(255,255,255,.055); mask-image:linear-gradient(to right,#000 52%,transparent 94%),linear-gradient(to bottom,#000 42%,transparent 92%); mask-composite:intersect; -webkit-mask-composite:source-in; pointer-events:none; }
+[data-ide-shell] .solco .foot { margin-top:88px; padding:50px 0 58px; border-top:1px solid var(--line); display:grid; grid-template-columns:1.45fr 1fr 1fr 1fr; gap:38px; align-items:start; font-size:14px; }
+[data-ide-shell] .solco .foot > div { margin:0; padding:0; }
+[data-ide-shell] .solco .foot h4, [data-ide-shell] .solco .foot ul { margin:0; padding-left:0; list-style-position:outside; }
+[data-ide-shell] .solco .me { display:grid; gap:13px; color:var(--dim); align-content:start; }
+[data-ide-shell] .solco .me .top { display:flex; align-items:center; gap:10px; color:var(--fg); }
+[data-ide-shell] .solco .me img { width:32px; height:32px; border-radius:8px; }
+[data-ide-shell] .solco .foot h4 { margin:0 0 13px; font-size:13px; font-weight:500; color:var(--fg); }
+[data-ide-shell] .solco .foot > div > a { display:block; width:fit-content; color:var(--dim); }
+[data-ide-shell] .solco .foot a:hover { color:var(--fg); }
+[data-ide-shell] .solco .mobile-only { display:none; }
+[data-ide-shell] .solco .hero .ram { position:absolute; z-index:-1; right:-116px; top:-4px; width:464px; opacity:.28; mask-image:linear-gradient(to right,#000 45%,transparent 92%),linear-gradient(to bottom,#000 42%,transparent 90%); mask-composite:intersect; -webkit-mask-composite:source-in; pointer-events:none; }
+@media (max-width:920px) {
+  [data-ide-shell] .solco .links { display:none; }
+  [data-ide-shell] .solco .hero { padding:66px 0 38px; }
+  [data-ide-shell] .solco .herd-head { grid-template-columns:1fr; align-items:start; gap:22px; }
+  [data-ide-shell] .solco .notes { grid-template-columns:1fr; }
+  [data-ide-shell] .solco .doc { grid-template-columns:1fr; gap:0; }
+  [data-ide-shell] .solco .toc { display:none; }
+  [data-ide-shell] .solco .gal { grid-template-columns:1fr; }
+  [data-ide-shell] .solco .foot { grid-template-columns:1fr 1fr; }
+  [data-ide-shell] .solco .ram { display:none; }
+}
+  </style>
+</head>
+<body data-ide-shell>
+  <div class="ide-layout" id="ideLayout">
+    <main class="ide-stage">
+      <span class="ide-stage-label" id="stageLabel">Variant A</span>
+      <button type="button" class="ide-panel-collapse-btn" id="panelCollapseBtn" title="收起面板，全画布演示">›</button>
+
+      <div class="ide-artboard-wrap">
+        <div class="ide-artboard active" data-variant="A">
+          <div class="design-root" id="designRootA">
+            <div class="solco">
+  <div class="wrap"><nav class="nav">
+    <a class="brand" href="#top"><img src="./assets/appicon/solco-128.png" alt="">Solco</a>
+    <div class="links"><a class="on" href="#top">App</a><a href="#features">Features</a><a href="#architecture">Architecture</a><a href="#github">GitHub</a></div>
+    <div class="right"><a href="#github">GitHub</a><a class="pill" href="#download">Download</a></div>
+  </nav></div>
+  <header class="hero wrap">
+    <div>
+      <h1>One native home<br><span>for your agents.</span></h1>
+      <p class="sub">Solco keeps coding agents, terminal, files and Git in one native macOS workspace. <b>Sessions stay live. Work stays findable.</b></p>
+      <div class="cta"><a class="pill" href="#download">Download for Mac</a><a href="#features">See how it works →</a></div>
+      <div class="install">
+        <div class="tabs"><button class="on" type="button">macOS</button></div>
+        <div class="command"><span class="dollar">$</span><code>curl -fsSL https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip | sh</code><button class="copy" type="button">Copy</button></div>
+      </div>
+      <p class="install-note">Requires macOS 13+ and an Apple Silicon Mac. <a href="#download">Release notes →</a></p>
+    </div>
+  </header>
+  <div class="window"><div class="frame"><img src="./assets/screens/product-hero.webp" alt="Solco app with sessions, agent, terminal, files, and project controls."></div></div>
+  <section class="statement wrap"><p>One calm client for real work. <span>The native surface stays quiet; the session keeps producing, and Git review stays one glance away.</span></p></section>
+  <section class="herd wrap">
+    <div class="herd-head">
+      <h2>Agents in context.<br><span>Work in motion.</span></h2><p>Run several agents without losing the thread. Every session keeps its task, terminal and result together.</p>
+    </div>
+    <div class="scene"><img src="./assets/screens/feature-agents.webp" alt="Solco sessions with live coding agents."></div>
+    <div class="notes">
+      <div class="note"><b>Keep context</b><code>Sessions</code><span>Each repo and task owns its history.</span></div>
+      <div class="note"><b>See status</b><code>Working · Needs you</code><span>Attention rises; the rest stays quiet.</span></div>
+      <div class="note"><b>Resume instantly</b><code>Reattach</code><span>Pick up where the agent left off.</span></div>
+    </div>
+  </section>
+  <div class="doc wrap">
+    <aside class="toc"><div class="file">README.md</div><a class="on" href="#sessions"><span>01</span>Sessions</a><a href="#terminal"><span>02</span>Terminal</a><a href="#files"><span>03</span>Files</a><a href="#git"><span>04</span>Git review</a><a href="#devices"><span>05</span>Devices</a></aside>
+    <article class="md">
+      <section id="sessions"><h3><i>01</i>Sessions and agents</h3><p>Give each task a stable place. Solco shows live agents and read-only history without turning history into another runtime.</p><figure class="crop"><img src="./assets/screens/feature-agents.webp" alt=""></figure></section>
+      <section id="terminal"><h3><i>02</i>Native terminal</h3><p>Work beside real terminal sessions with native selection, scrolling and layout.</p><figure class="crop"><img src="./assets/screens/feature-terminal.webp" alt=""></figure></section>
+      <section id="files"><h3><i>03</i>Project files</h3><p>Open code, Markdown and images next to the work that changed them.</p><figure class="crop"><img src="./assets/screens/feature-files.webp" alt=""></figure></section>
+      <section id="git"><h3><i>04</i>Git review</h3><p>Read the diff, inspect history, stage and commit with confidence.</p><figure class="crop"><img src="./assets/screens/feature-git.webp" alt=""></figure></section>
+      <section id="devices"><h3><i>05</i>Remote devices</h3><p>Add a machine over SSH and bring its sessions into one view.</p><figure class="crop"><img src="./assets/screens/feature-hosts.webp" alt=""></figure></section>
+    </article>
+  </div>
+  <section class="end wrap"><h2>Built for focus.<br><span>Ready when you are.</span></h2><div class="cta"><a class="pill" href="#download">Download Solco</a><a href="#github">Browse source →</a></div></section>
+  <footer class="foot wrap"><div class="me"><div class="top"><img src="./assets/appicon/solco-128.png" alt=""><b>Solco</b></div><span>A native macOS workspace for coding agents.</span><span>Free and open source, GPL-3.0.</span></div><div><h4>Product</h4><a href="#features">Features</a><a href="#download">Download</a><a href="#architecture">Architecture</a></div><div><h4>Learn</h4><a href="#github">README</a><a href="#github">Releases</a></div><div><h4>Community</h4><a href="#github">GitHub</a><a href="https://herdr.dev">Herdr</a></div></footer>
+</div>
+
+          </div>
+        </div>
+        <div class="ide-artboard" data-variant="B">
+          <div class="design-root" id="designRootB">
+            <div class="solco">
+  <div class="wrap"><nav class="nav">
+    <a class="brand" href="#top"><img src="./assets/appicon/solco-128.png" alt="">Solco</a>
+    <div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#machines">Machines</a><a href="#questions">FAQ</a></div>
+    <div class="right"><a href="#github">GitHub</a><a class="pill" href="#download">Download</a></div>
+  </nav></div>
+  <header class="hero wrap"><div>
+    <h1>Coding agents,<br><span>without the juggling.</span></h1>
+    <p class="sub">Solco is the native macOS workspace for agents and the work behind them. <b>Open it once. Return to what moved.</b></p>
+    <div class="cta"><a class="pill" href="#download">Download for Mac</a><a href="#workflow">Walk the workflow →</a></div>
+    <img class="ram" src="./assets/appicon/solco-512.png" alt="">
+  </div></header>
+  <section class="statement wrap"><p>Native speed. Clear attention. <span>Sessions, terminal, files and review share one calm surface instead of competing for it.</span></p></section>
+  <section class="herd wrap"><div class="herd-head"><h2>Your workflow,<br><span>step by step.</span></h2><p>Each screen shows the exact moment it belongs to. No feature tour for its own sake.</p></div>
+    <div class="scene"><img src="./assets/screens/product-hero.webp" alt="The complete Solco workspace."></div>
+    <div class="notes">
+      <div class="note"><b>Start a task</b><code>Open a session</code><span>Pick a repo and begin where context belongs.</span></div>
+      <div class="note"><b>Let it work</b><code>Monitor attention</code><span>Terminal and agent stay connected to the task.</span></div>
+      <div class="note"><b>Ship the result</b><code>Review and commit</code><span>Diff, stage and commit beside the session.</span></div>
+    </div>
+  </section>
+  <div class="doc wrap">
+    <aside class="toc"><div class="file">PRODUCT.md</div><a class="on" href="#workflow"><span>01</span>One task surface</a><a href="#machines"><span>02</span>Every machine</a><a href="#review"><span>03</span>Review</a><a href="#ownership"><span>04</span>Ownership</a></aside>
+    <article class="md">
+      <section id="workflow"><h3><i>01</i>One task surface</h3><p>Sessions, terminal and output remain in one native layout. You stop reconstructing context from scattered windows.</p><figure class="crop"><img src="./assets/screens/feature-terminal.webp" alt=""></figure></section>
+      <section id="machines"><h3><i>02</i>Every machine, one view</h3><p>Saved devices and their sessions join the sidebar under their own name.</p><figure class="crop"><img src="./assets/screens/feature-hosts.webp" alt=""></figure></section>
+      <section id="review"><h3><i>03</i>Review before landing</h3><p>Real diffs, staged state and commit flow are native, not another browser tab.</p><figure class="crop"><img src="./assets/screens/feature-git.webp" alt=""></figure></section>
+      <section id="ownership"><h3><i>04</i>Ownership stays clear</h3><p>Solco owns presentation. <b>Herdr owns sessions, processes and runtime state.</b> No second runtime hidden behind the interface.</p><pre class="pre"><span class="d"># the boundary is simple</span>
+Solco  → native macOS workspace
+Herdr  → sessions · panes · agents · process life</pre></section>
+    </article>
+  </div>
+  <section class="end wrap"><h2>Ready in one install.<br><span>Keep the workflow.</span></h2><div class="cta"><a class="pill" href="#download">Download for Mac</a><a href="#github">Star on GitHub →</a></div></section>
+  <footer class="foot wrap"><div class="me"><div class="top"><img src="./assets/appicon/solco-128.png" alt=""><b>Solco</b></div><span>Coding agents, without the juggling.</span><span>Free and open source, GPL-3.0.</span></div><div><h4>Product</h4><a href="#features">Features</a><a href="#download">Download</a></div><div><h4>Learn</h4><a href="#workflow">Workflow</a><a href="#ownership">Architecture</a></div><div><h4>Community</h4><a href="#github">GitHub</a><a href="https://herdr.dev">Herdr</a></div></footer>
+</div>
+
+          </div>
+        </div>
+        <div class="ide-artboard" data-variant="C">
+          <div class="design-root" id="designRootC">
+            <div class="solco">
+  <div class="wrap"><nav class="nav">
+    <a class="brand" href="#top"><img src="./assets/appicon/solco-128.png" alt="">Solco</a>
+    <div class="links"><a class="on" href="#top">App</a><a href="#workflow">Workflow</a><a href="#devices">Devices</a><a href="#questions">Questions</a></div>
+    <div class="right"><a href="#github">GitHub</a><a class="pill" href="#download">Download</a></div>
+  </nav></div>
+  <header class="hero wrap"><div>
+    <h1>Solco 0.10<br><span>The native agent workspace.</span></h1>
+    <p class="sub">The current release makes Git review and devices first-class while preserving the calm native surface.</p>
+    <div class="cta"><a class="pill" href="#download">Download 0.10 for Mac</a><a href="#highlights">What changed →</a></div>
+  </div></header>
+  <section class="statement wrap"><p>Fewer surfaces. Stronger decisions. <span>Git review, sessions, terminal and remote work now read as one product rather than five windows.</span></p></section>
+  <section class="herd wrap"><div class="herd-head"><h2>What lands<br><span>in 0.10.</span></h2><p>Each release solves one structural problem. This one makes real work easier to inspect and carry.</p></div>
+    <div class="scene"><img src="./assets/screens/feature-git.webp" alt="Git review surface in Solco."></div>
+    <div class="notes">
+      <div class="note"><b>Review deeply</b><code>Diff · Stage</code><span>Read, inspect and stage changes with precision.</span></div>
+      <div class="note"><b>Carry work</b><code>Devices</code><span>Connect machines over SSH into one sidebar.</span></div>
+      <div class="note"><b>Stay native</b><code>macOS</code><span>Native controls and keyboard behavior throughout.</span></div>
+    </div>
+  </section>
+  <div class="doc wrap">
+    <aside class="toc"><div class="file">RELEASE.md</div><a class="on" href="#highlights"><span>01</span>Highlights</a><a href="#devices"><span>02</span>Devices</a><a href="#workflow"><span>03</span>Workflow</a><a href="#questions"><span>04</span>Questions</a></aside>
+    <article class="md">
+      <section id="highlights"><h3><i>01</i>Review and commit</h3><p>The Git surface is compact, scannable and exact: changes, staged state and commit context together.</p><figure class="crop"><img src="./assets/screens/feature-git.webp" alt=""></figure></section>
+      <section id="devices"><h3><i>02</i>Devices and sessions</h3><p>Switch machines without changing mental models. Saved hosts stay visible and observable.</p><figure class="crop"><img src="./assets/screens/feature-hosts.webp" alt=""></figure></section>
+      <section id="workflow"><h3><i>03</i>Everyday workflow</h3><p>Agents, terminal and files remain adjacent so implementation never loses its context.</p><figure class="crop"><img src="./assets/screens/product-hero.webp" alt=""></figure></section>
+      <section id="questions"><h3><i>04</i>Questions</h3><p><b>Which system?</b> macOS 13+ on Apple Silicon.</p><p><b>Which agents?</b> Any agent that runs in a supported terminal session.</p><p><b>Is it free?</b> Yes. Solco is GPL-3.0 open source.</p></section>
+    </article>
+  </div>
+  <section class="end wrap"><h2>Install 0.10.<br><span>Keep working.</span></h2><div class="cta"><a class="pill" href="#download">Download for Mac</a><a href="#github">Read the source →</a></div></section>
+  <footer class="foot wrap"><div class="me"><div class="top"><img src="./assets/appicon/solco-128.png" alt=""><b>Solco</b></div><span>Release 0.10 · native agent workspace.</span><span>Free and open source, GPL-3.0.</span></div><div><h4>Product</h4><ul><li><a href="#highlights">Highlights</a></li><li><a href="#download">Download</a></li></ul></div><div><h4>Learn</h4><ul><li><a href="#workflow">Workflow</a></li><li><a href="#ownership">Architecture</a></li></ul></div><div><h4>Community</h4><ul><li><a href="#github">GitHub</a></li><li><a href="https://herdr.dev">Herdr</a></li></ul></div></footer>
+</div>
+
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <button type="button" class="ide-panel-expand-btn" id="panelExpandBtn" title="展开面板">☰</button>
+
+    <aside class="ide-story-panel">
+      <div class="ide-panel-header">Design Storybook</div>
+      <div class="ide-panel-controls">
+        <div class="ide-section-title">Variants</div>
+        <div id="variantList"></div>
+        <div class="ide-section-title" id="statesSectionTitle" hidden>Interaction states</div>
+        <div id="statesList"></div>
+      </div>
+      <div class="ide-panel-story">
+        <button type="button" class="ide-story-toggle" id="storyToggleBtn">
+          <span>Story</span><span id="storyChevron">▼</span>
+        </button>
+        <div class="ide-story-body" id="storyBody">
+          <h1>Solco 官网：参考 Herdr 的三个结构方向</h1>
+          <p>共同点：72px 导航、暗色 #0e0f11、细线分区、大号 negative tracking 标题、居中产品截图、README 式纵向长文、显式 Solco→Herdr 边界。</p>
+          <ul><li>A 最接近 Herdr 的长文目录结构；B 用三步工作流降低认知负担；C 以 0.10 Release 为叙事锚点。</li><li>截图全部使用真实 Solco 资产；图标只在 navbar/footer。</li><li>右侧 › 可全画布预览，Esc 收起面板。</li></ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const IDE_CONFIG = {
+      variants: {
+        A: { label: 'Editorial Dark', title: 'A · Editorial Dark', desc: '最贴近 Herdr：README 目录 + 大幅产品叙事', states: [] },
+        B: { label: 'Workflow Story', title: 'B · Workflow Story', desc: '三步工作流 + 边界说明，信息更收敛', states: [] },
+        C: { label: 'Release Digest', title: 'C · Release Digest', desc: '以 0.10 版本为核心，偏产品发布页', states: [] },
+      },
+      stateLabels: { '': 'Default' },
+    };
+
+    let activeVariant = 'A';
+    let activeState = '';
+    const ideLayout = document.getElementById('ideLayout');
+    const stageLabel = document.getElementById('stageLabel');
+    const statesSection = document.getElementById('statesSectionTitle');
+    const statesList = document.getElementById('statesList');
+    const variantList = document.getElementById('variantList');
+    const artboards = document.querySelectorAll('.ide-artboard');
+
+    function renderVariantCards() {
+      variantList.innerHTML = '';
+      Object.entries(IDE_CONFIG.variants).forEach(([id, cfg]) => {
+        const card = document.createElement('div');
+        card.className = 'ide-variant-card' + (id === activeVariant ? ' active' : '');
+        card.innerHTML = '<h2>' + (cfg.title || id) + '</h2><p>' + (cfg.desc || '') + '</p>';
+        card.addEventListener('click', () => setVariant(id));
+        variantList.appendChild(card);
+      });
+    }
+
+    function renderStateCards() {
+      const states = IDE_CONFIG.variants[activeVariant]?.states ?? [];
+      statesList.innerHTML = '';
+      statesSection.hidden = !states.length;
+      states.forEach((s) => {
+        const card = document.createElement('div');
+        card.className = 'ide-state-card' + (s === activeState ? ' active' : '');
+        const label = (IDE_CONFIG.stateLabels[s] ?? s) || 'Default';
+        card.innerHTML = '<strong>' + label + '</strong>';
+        card.addEventListener('click', () => setState(s));
+        statesList.appendChild(card);
+      });
+    }
+
+    function applyInteractionClass() {
+      artboards.forEach((ab) => {
+        if (ab.dataset.variant !== activeVariant) return;
+        const root = ab.querySelector('.design-root');
+        if (!root) return;
+        const id = root.id;
+        root.className = 'design-root' + (activeState ? ' ide-mode-' + activeState : '');
+        if (id) root.id = id;
+      });
+    }
+
+    function setVariant(v) {
+      activeVariant = v;
+      activeState = '';
+      artboards.forEach((ab) => ab.classList.toggle('active', ab.dataset.variant === v));
+      const cfg = IDE_CONFIG.variants[v];
+      stageLabel.textContent = 'Variant ' + v + (cfg?.label ? ' — ' + cfg.label : '');
+      renderVariantCards();
+      renderStateCards();
+      applyInteractionClass();
+    }
+
+    function setState(s) {
+      activeState = activeState === s && s !== '' ? '' : s;
+      renderStateCards();
+      applyInteractionClass();
+      const stateName = (IDE_CONFIG.stateLabels[activeState] ?? activeState) || 'Default';
+      stageLabel.textContent = 'Variant ' + activeVariant + ' · ' + stateName;
+    }
+
+    document.getElementById('panelCollapseBtn')?.addEventListener('click', () => {
+      ideLayout.classList.add('panel-collapsed');
+    });
+    document.getElementById('panelExpandBtn')?.addEventListener('click', () => {
+      ideLayout.classList.remove('panel-collapsed');
+    });
+    document.getElementById('storyToggleBtn')?.addEventListener('click', () => {
+      const collapsed = ideLayout.classList.toggle('story-collapsed');
+      document.getElementById('storyChevron').textContent = collapsed ? '▶' : '▼';
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (activeState) setState(activeState);
+        else ideLayout.classList.add('panel-collapsed');
+      }
+    });
+
+    renderVariantCards();
+    setVariant('A');
+  </script>
+</body>
+</html>
