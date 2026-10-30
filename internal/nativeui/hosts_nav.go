@@ -137,8 +137,12 @@ func (s *Shell) hostsNavRow(c *ui.Context, entry sshconfig.Entry) {
 		Selected: s.hosts.selected == key, Nav: &s.nav.hosts,
 		Menu: func(m *ui.Menu) { s.hostEntryMenu(m, entry) },
 	}
-	// user@host tells apart blocks that share a name (two "ForwardAgent").
+	// user@host tells apart blocks that share a name (two "ForwardAgent"),
+	// but only on the hovered / selected row — the name keeps the width
+	// otherwise (2026-10-30 UX audit 3); the tooltip carries it for the rest.
 	if endpoint := hostEndpoint(entry); endpoint != "" {
+		spec.Tooltip = entry.Title() + " · " + endpoint
+		spec.TrailingOnDemand = true
 		spec.Trailing = func() {
 			ui.Text(c, endpoint).FontSize(Typography().Micro).TextColor(c.Theme().TextMuted).
 				SingleLine().Shrink(3).MinWidth(0)

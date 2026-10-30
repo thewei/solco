@@ -78,14 +78,19 @@ func TestHostsStartAndFilter(t *testing.T) {
 	if tester.HasText("RECENTLY CONNECTED") {
 		t.Fatal("no connection recorded yet, so no recent cards")
 	}
-	if !tester.HasText("deploy@10.0.0.12") {
-		t.Fatalf("rows lack the user@host subtitle; texts=%q", tester.Texts())
+	// 2026-10-30 UX audit 3: a list row gives its name the whole width; user@host
+	// shows on the selected or hovered row (TestHostEndpointShowsOnlyOnTheSelectedRow).
+	if tester.HasText("deploy@10.0.0.12") {
+		t.Fatalf("an unselected row drew its user@host; texts=%q", tester.Texts())
 	}
 	s.noteRecentHost("dev-box")
 	s.noteRecentHost("gone-host") // no longer in the config
 	settleFrames(tester, 3)
 	if !tester.HasText("RECENTLY CONNECTED") {
 		t.Fatalf("no recent card; texts=%q", tester.Texts())
+	}
+	if !tester.HasText("deploy@10.0.0.12") {
+		t.Fatalf("the recent card lacks the user@host subtitle; texts=%q", tester.Texts())
 	}
 	if tester.HasText("gone-host") {
 		t.Fatal("a host missing from the config must not get a card")

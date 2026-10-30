@@ -115,6 +115,9 @@ type sidebarTreeSpec struct {
 	Dim bool
 	// Trailing draws content at the row's right edge.
 	Trailing func()
+	// TrailingOnDemand draws Trailing only while the row is hovered or
+	// selected, so the title keeps the whole width the rest of the time.
+	TrailingOnDemand bool
 	// Menu is the row's context menu.
 	Menu func(*ui.Menu)
 	// Nav is the list's keyboard model; nil leaves the row to the mouse.
@@ -186,7 +189,7 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 		if spec.Dim && !spec.Current {
 			title.TextColor(t.TextMuted)
 		}
-		if spec.Trailing != nil {
+		if spec.Trailing != nil && (!spec.TrailingOnDemand || row.Hovered() || spec.Selected) {
 			spec.Trailing()
 		}
 		if spec.Action != nil {
