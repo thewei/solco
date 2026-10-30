@@ -253,6 +253,11 @@ type sidebarActivity struct {
 	On     bool
 	Tone   StatusTone
 	Detail string
+	// Service marks a running service or daemon (not an Agent state): the
+	// row's status slot draws it as a rounded square, so the green of "a dev
+	// server is up" never reads as the green of "an Agent is ready for review"
+	// (2026-10-30, designs/ux-audit).
+	Service bool
 }
 
 // buildSidebarActivity rolls service and agent activity up the sidebar
@@ -283,7 +288,7 @@ func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIn
 
 	for _, pane := range projection.Panes {
 		if svc := services.Panes[pane.ID]; len(svc.Ports) > 0 {
-			index[pane.ID] = sidebarActivity{On: true, Tone: ToneSuccess, Detail: serviceActivityDetail(svc)}
+			index[pane.ID] = sidebarActivity{On: true, Tone: ToneSuccess, Detail: serviceActivityDetail(svc), Service: true}
 		}
 	}
 	for _, tab := range projection.Tabs {
@@ -300,6 +305,7 @@ func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIn
 		if daemon := services.Projects[project.ID]; len(daemon.Ports) > 0 {
 			act.On = true
 			act.Tone = ToneSuccess
+			act.Service = true
 			act.Detail = joinDetails(act.Detail, serviceActivityDetail(daemon))
 			on = true
 		}
@@ -330,7 +336,7 @@ func rollupActivity(index map[string]sidebarActivity, agentStateByPane map[strin
 	}
 	switch {
 	case serviceCount > 0:
-		act.On, act.Tone = true, ToneSuccess
+		act.On, act.Tone, act.Service = true, ToneSuccess, true
 	case agentCount > 0:
 		act.On = true
 		if strongest == opUnknown || strongest == opIdle {

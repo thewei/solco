@@ -244,6 +244,15 @@ func (spec treeRowSpec) indicator() (StatusTone, string, bool) {
 	return ToneNeutral, "", false
 }
 
+// serviceSlot reports that the resolved state is a running service, not an
+// Agent's: the slot then draws a rounded square (statusIndicatorService).
+func (spec treeRowSpec) serviceSlot() bool {
+	if _, ok := indicatorToneFor(spec.Dot); ok {
+		return false
+	}
+	return spec.Activity.On && spec.Activity.Service
+}
+
 // treeRow draws a compact Finder/Xcode-style hierarchy row with connector
 // guides. Children are pointer-pass-through so clicks/context menus belong to
 // the whole row rather than only its empty padding.
@@ -380,7 +389,11 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 			}
 			// The state slot ends the row: spinner, dot or ring in one place.
 			if tone, detail, ok := spec.indicator(); ok {
-				statusIndicatorTone(c, tone, detail)
+				if spec.serviceSlot() {
+					statusIndicatorService(c, tone, detail)
+				} else {
+					statusIndicatorTone(c, tone, detail)
+				}
 			} else if spec.StatusSlot {
 				statusSlotEmpty(c)
 			}

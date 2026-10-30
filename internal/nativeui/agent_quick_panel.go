@@ -57,21 +57,30 @@ type quickPanelGroup struct {
 }
 
 // quickPanelGroups splits the snapshot's entries into status sections in the
-// directory's priority order — Needs attention, Review, Working, Idle —
-// leaving out the empty ones. Each section keeps the snapshot's own order.
+// directory's priority order — Needs you (attention then review: the same set
+// the header's waiting count counts), Working, Idle — leaving out the empty
+// ones. Each section keeps the snapshot's own order.
 func quickPanelGroups(entries []StatusCenterEntry) []quickPanelGroup {
 	groups := []quickPanelGroup{
-		{Label: "Needs attention", Tone: ToneAttention},
-		{Label: "Review", Tone: ToneSuccess},
+		{Label: "Needs you", Tone: ToneAttention},
 		{Label: "Working", Tone: ToneWorking},
 		{Label: "Idle", Tone: ToneMuted},
 	}
-	for _, entry := range entries {
-		i := int(entry.Bucket)
-		if i < 0 || i >= len(groups) {
-			i = len(groups) - 1
+	groupOf := map[agent.AgentDirectoryBucket]int{
+		agent.BucketNeedsAttention: 0, agent.BucketReadyForReview: 0, agent.BucketWorking: 1,
+	}
+	// Attention rows lead Review rows inside "Needs you".
+	for _, bucket := range []agent.AgentDirectoryBucket{agent.BucketNeedsAttention, agent.BucketReadyForReview, agent.BucketWorking} {
+		for _, entry := range entries {
+			if entry.Bucket == bucket {
+				groups[groupOf[bucket]].Entries = append(groups[groupOf[bucket]].Entries, entry)
+			}
 		}
-		groups[i].Entries = append(groups[i].Entries, entry)
+	}
+	for _, entry := range entries {
+		if _, listed := groupOf[entry.Bucket]; !listed {
+			groups[2].Entries = append(groups[2].Entries, entry)
+		}
 	}
 	kept := groups[:0]
 	for _, group := range groups {

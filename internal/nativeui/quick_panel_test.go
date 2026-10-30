@@ -76,7 +76,7 @@ func quickPanelShell(t *testing.T) *Shell {
 func TestQuickPanelViewGroupsAgentsByState(t *testing.T) {
 	shell := quickPanelShell(t)
 	tester := ui.NewTester(shell.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
-	for _, want := range []string{"Agents", "Services", "Needs attention", "Working", "Idle", "Scout", "Ranger", "Sleeper"} {
+	for _, want := range []string{"Agents", "Services", "Needs you", "Working", "Idle", "Scout", "Ranger", "Sleeper"} {
 		if !tester.HasText(want) {
 			t.Fatalf("panel missing %q; texts=%q", want, tester.Texts())
 		}
@@ -97,9 +97,9 @@ func TestQuickPanelViewGroupsAgentsByState(t *testing.T) {
 		}
 		return rect.Y
 	}
-	if !(y("Needs attention") < y("Ranger") && y("Ranger") < y("Working") &&
+	if !(y("Needs you") < y("Ranger") && y("Ranger") < y("Working") &&
 		y("Working") < y("Scout") && y("Scout") < y("Idle") && y("Idle") < y("Sleeper")) {
-		t.Fatalf("rows are not grouped Needs attention › Working › Idle; texts=%q", tester.Texts())
+		t.Fatalf("rows are not grouped Needs you › Working › Idle; texts=%q", tester.Texts())
 	}
 }
 
@@ -246,8 +246,8 @@ func TestQuickPanelRowMenuHoldsTheOtherActions(t *testing.T) {
 	shell.reconcileWorkbench()
 	shell.router.Replace("/history")
 	tester = ui.NewTester(shell.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
-	if !tester.HasText("Review") {
-		t.Fatalf("a finished Agent is not under Review; texts=%q", tester.Texts())
+	if !tester.HasText("Needs you") {
+		t.Fatalf("a finished Agent is not under Needs you; texts=%q", tester.Texts())
 	}
 	if err := tester.RightClick("Scout"); err != nil {
 		t.Fatal(err)

@@ -113,3 +113,16 @@ func TestWorkspaceRowMetaColumnsAlign(t *testing.T) {
 		t.Fatalf("branches end at %v and %v, want one column", a, b)
 	}
 }
+
+func TestServiceSlotIsNotAnAgentDot(t *testing.T) {
+	svc := sidebarActivity{On: true, Tone: ToneSuccess, Detail: "node on :3000", Service: true}
+	if !(treeRowSpec{Activity: svc}).serviceSlot() {
+		t.Fatal("a running service must draw as the service square")
+	}
+	if (treeRowSpec{Activity: sidebarActivity{On: true, Tone: ToneSuccess, Detail: "1 agent running"}}).serviceSlot() {
+		t.Fatal("an agent roll-up is a dot, not the service square")
+	}
+	if (treeRowSpec{Dot: opWorking, Activity: svc}).serviceSlot() {
+		t.Fatal("a pane's own Agent state outranks its service and keeps the dot shapes")
+	}
+}

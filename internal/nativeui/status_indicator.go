@@ -6,8 +6,8 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo/ui 的 Box/Spinner、operational.go 的 operationalState/operationalTone、design_system 的 StatusColor、tooltip.go 的 tipped
- * [OUTPUT]: 对外提供 statusSlotSize（状态槽位边长）、statusIndicator（按 operationalState 画槽位）、statusIndicatorTone（按 StatusTone 画槽位，服务/汇总行用）、indicatorShapeFor（tone→形状的唯一规则）、statusSlotEmpty（占位但不画）
- * [POS]: 全应用 Agent/行状态的唯一指示器（2026-10-30 用户拍板，design: designs/agent-surfaces）：16pt 槽位里 working=转圈、attention/review/服务=实心点、idle=空心环，点与 Loading 同位重叠；侧栏 Agents/Workspace 行、Pane 卡片头、Chat 头、切换器与 Tasks 行都调它，不再各画各的圆点
+ * [OUTPUT]: 对外提供 statusSlotSize（状态槽位边长）、statusIndicator（按 operationalState 画槽位）、statusIndicatorTone（按 StatusTone 画槽位，汇总行用）、statusIndicatorService（服务方块）、indicatorShapeFor（tone→形状的唯一规则）、statusSlotEmpty（占位但不画）
+ * [POS]: 全应用 Agent/行状态的唯一指示器（2026-10-30 用户拍板，design: designs/agent-surfaces）：16pt 槽位里 working=转圈、attention/review=实心圆点、服务=圆角方块（statusIndicatorService；形状表种类、颜色表紧急度，2026-10-30 UX audit）、idle=空心环，点与 Loading 同位重叠；侧栏 Agents/Workspace 行、Pane 卡片头、Chat 头、切换器与 Tasks 行都调它，不再各画各的圆点
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -78,6 +78,20 @@ func statusIndicatorTone(c *ui.Context, tone StatusTone, detail string) ui.Eleme
 		default:
 			ui.Box(c).Size(7, 7).Radius(3.5).Background(color).PassThrough()
 		}
+	})
+	return slot
+}
+
+// statusIndicatorService draws a running service in the same slot as an Agent
+// state but as a rounded square: shape says what kind of thing is running,
+// colour only how urgent it is, so a green square (a dev server is up) never
+// reads as a green dot (an Agent is ready for review).
+func statusIndicatorService(c *ui.Context, tone StatusTone, detail string) ui.Element {
+	t := c.Theme()
+	color := designTokens(t.Dark).StatusColor(tone, t.Dark)
+	slot := tipped(c, ui.Box(c).Size(statusSlotSize, statusSlotSize).Shrink(0).Center(), detail)
+	slot.Children(func() {
+		ui.Box(c).Size(7, 7).Radius(2).Background(color).PassThrough()
 	})
 	return slot
 }

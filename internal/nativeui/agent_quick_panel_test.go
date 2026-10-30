@@ -28,8 +28,8 @@ func TestQuickPanelGroupsFollowThePriorityOrder(t *testing.T) {
 	for _, group := range groups {
 		labels = append(labels, group.Label)
 	}
-	if len(groups) != 3 || labels[0] != "Needs attention" || labels[1] != "Working" || labels[2] != "Idle" {
-		t.Fatalf("groups = %q, want Needs attention, Working, Idle (Review is empty and omitted)", labels)
+	if len(groups) != 3 || labels[0] != "Needs you" || labels[1] != "Working" || labels[2] != "Idle" {
+		t.Fatalf("groups = %q, want Needs you, Working, Idle", labels)
 	}
 	if groups[0].Tone != ToneAttention || groups[1].Tone != ToneWorking || groups[2].Tone != ToneMuted {
 		t.Fatalf("group tones = %v %v %v", groups[0].Tone, groups[1].Tone, groups[2].Tone)
@@ -41,7 +41,7 @@ func TestQuickPanelGroupsFollowThePriorityOrder(t *testing.T) {
 		t.Fatal("no entries, no groups")
 	}
 	review := quickPanelGroups([]StatusCenterEntry{entry("done-1", agent.BucketReadyForReview)})
-	if len(review) != 1 || review[0].Label != "Review" || review[0].Tone != ToneSuccess {
+	if len(review) != 1 || review[0].Label != "Needs you" || review[0].Tone != ToneAttention {
 		t.Fatalf("review group = %+v", review)
 	}
 }

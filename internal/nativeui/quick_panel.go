@@ -26,8 +26,9 @@ import (
 // panel and closes the flyout. The height follows the content up to the
 // fixed cap — beyond it the list scrolls inside.
 
-// QuickPanelWidth is the §17.1 suggested panel width (360–420 DIP).
-const QuickPanelWidth = 400
+// QuickPanelWidth is 440 DIP so the four tab labels (Agents / Quota / Services /
+// Tasks) and a `waiting/total` trigger fit unclipped (2026-10-30 UX audit; was 400).
+const QuickPanelWidth = 440
 
 // The panel's tabs are named by a stable id (s.quickPanelTab), shown in the
 // order Agents, Quota, Services, Tasks. Tasks exists only while the

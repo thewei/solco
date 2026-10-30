@@ -27,6 +27,7 @@ type titlebarTab struct {
 	Tone     StatusTone
 	Detail   string
 	HasState bool
+	Service  bool
 }
 
 // titlebarTabs lists the selected Workspace's Tabs in Herdr's order, each
@@ -52,7 +53,7 @@ func (s *Shell) titlebarTabs(dark bool) []titlebarTab {
 		out = append(out, titlebarTab{
 			ID: tab.ID, Label: fallbackText(label, "Tab"), Mark: s.tabRowMark(panes, dark),
 			Selected: tab.ID == s.selectedTabID, Panes: len(panes),
-			Tone: tone, Detail: detail, HasState: ok,
+			Tone: tone, Detail: detail, HasState: ok, Service: spec.serviceSlot(),
 		})
 	}
 	return out
@@ -152,7 +153,11 @@ func (s *Shell) tabChip(c *ui.Context, k *gorexColors, tab titlebarTab, reveal b
 				TextColor(t.TextMuted).Shrink(0).PassThrough()
 		}
 		if tab.HasState {
-			statusIndicatorTone(c, tab.Tone, tab.Detail)
+			if tab.Service {
+				statusIndicatorService(c, tab.Tone, tab.Detail)
+			} else {
+				statusIndicatorTone(c, tab.Tone, tab.Detail)
+			}
 		}
 		if tab.Selected || b.Hovered() {
 			closeBtn := gorexIconButton(c, k, iconClose, "Close Tab", "Close Tab", false, gorexRowBtn, gorexRowGlyph)
