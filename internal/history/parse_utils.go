@@ -172,6 +172,8 @@ func injectedUserContent(text string) bool {
 		"IMPORTANT: Do NOT read",
 		"Caveat: The messages below",
 		"# Files pasted by the user",
+		"# AGENTS.md instructions for",
+		"<external_codex_apps_",
 	}
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(trimmed, prefix) {

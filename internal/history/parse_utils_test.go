@@ -25,3 +25,25 @@ References are relative to /Users/wilson/.agents/skills/think.
 		t.Fatalf("plain text = %q, want %q", got, want)
 	}
 }
+
+// TestAgentsInstructionsInjectionIsMetaNotTitle pins the 2026-10-30 UX audit
+// bug: Codex injects the repository AGENTS.md as a user message, which must
+// become metadata so the real first request titles the session.
+func TestAgentsInstructionsInjectionIsMetaNotTitle(t *testing.T) {
+	injected := "# AGENTS.md instructions for /Users/wilson/Workspaces/solco\n\n<INSTRUCTIONS>…</INSTRUCTIONS>"
+	if userKind(injected) != MessageMeta {
+		t.Fatalf("AGENTS.md injection kind = %v, want MessageMeta", userKind(injected))
+	}
+	appPage := `<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>`
+	if userKind(appPage) != MessageMeta {
+		t.Fatalf("Codex app page marker kind = %v, want MessageMeta", userKind(appPage))
+	}
+	messages := []TranscriptMessage{
+		{Role: RoleUser, Kind: userKind(injected), Text: injected},
+		{Role: RoleUser, Kind: userKind(appPage), Text: appPage},
+		{Role: RoleUser, Kind: userKind("Review the sidebar"), Text: "Review the sidebar"},
+	}
+	if got, want := titleFromMessages(messages), "Review the sidebar"; got != want {
+		t.Fatalf("title = %q, want %q", got, want)
+	}
+}

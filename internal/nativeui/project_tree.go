@@ -44,7 +44,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 			Height:     s.sidebarRowHeight(),
 			Key:        "project:" + project.ID,
 			Depth:      0,
-			Selected:   selectedProject && s.selectedTabID == "",
+			Selected:   s.workspaceRowSelected(selectedProject),
 			Expandable: len(tabs) > 0,
 			Expanded:   expandedProject,
 			Tile:       project.Label,
@@ -212,6 +212,13 @@ func (s *Shell) liveAgentStatus(status string, panes []herdr.Pane) string {
 		}
 	}
 	return ""
+}
+
+// workspaceRowSelected tells whether the selected Workspace's own row carries
+// the selection: when no Tab is selected, and always in the Tab bar mode,
+// where the tree lists no Tab rows for the selection to land on.
+func (s *Shell) workspaceRowSelected(isSelectedProject bool) bool {
+	return isSelectedProject && (s.selectedTabID == "" || s.tabsInTitleBar())
 }
 
 // newProjectTab opens a Tab in project: the project row's hover "+" and its
