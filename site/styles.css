@@ -1,4 +1,7 @@
+html, body { margin: 0; background: #0e0f11; }
+
 .solco {
+  min-height: 100vh;
   --bg:#0e0f11; --panel:#131416; --panel2:#18191c; --fg:#f3f3f4; --mute:#8a8e96;
   --dim:#5d6168; --line:#1f2125; --edge:rgba(255,255,255,.09); --pill:#f3f3f4; --pill-ink:#0e0f11;
   --silver-a:#f4f5f7; --silver-b:#b6bac2; --silver-c:#71757d;
