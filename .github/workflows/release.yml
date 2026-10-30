@@ -40,6 +40,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # MyGo caches a release ID and overwrites assets by name; these uploads
+      # must run one at a time. GitHub Actions uses the hyphenated field.
+      max-parallel: 1
       matrix:
         include:
           - name: macOS
@@ -60,8 +63,6 @@ jobs:
       - name: Install NSIS, for the Windows installer
         if: matrix.name == 'Windows'
         run: sudo apt-get update && sudo apt-get install -y nsis
-      # MyGo resolves and caches the draft-release ID before each upload. Matrix
-      # jobs can otherwise cache a stale ID after GitHub recreates the draft.
       - name: Build and upload release updates
         env:
           GH_TOKEN: ${{ github.token }}
