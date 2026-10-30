@@ -115,6 +115,10 @@ type treeRowSpec struct {
 	// ancestor rows: a service (green) or agents running below this row
 	// (2026-10-06 sidebar service rollup), with a tooltip naming what runs.
 	Activity sidebarActivity
+	// Working shows the trailing spinner the Agents section's cards show
+	// (agent_card.go): the row's agent is mid-flight — the same Working
+	// bucket — so a running pane reads at a glance in the tree too.
+	Working bool
 	// Action is the row's one primary action, an icon button at the
 	// trailing edge under the pointer (a project's "+"). Everything else
 	// lives in the row's right-click menu — no row of dots.
@@ -330,6 +334,14 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 				ui.Text(c, itoa(spec.Count)).Label(itoa(spec.Count) + " panes").
 					FontSize(Typography().Micro).TextColor(t.TextMuted).
 					Shrink(0).PassThrough()
+			}
+			// The Agents section's cards end their row with a spinner while
+			// the agent works (agent_card.go); a tree row carries the same
+			// word-free marker, stepping aside under the pointer like the
+			// tally does. The spinner paints only while its row shows, so
+			// idle agents cost nothing.
+			if spec.Working && !hovered {
+				ui.Spinner(c)
 			}
 			if spec.Expandable && hovered {
 				glyph := iconChevron

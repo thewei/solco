@@ -2,6 +2,7 @@ package nativeui
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -213,6 +214,33 @@ func computePaneBusy(panes []herdr.Pane, infos map[string]*herdr.PaneProcessInfo
 	return busy
 }
 
+// computeShellIdlePanes reports the panes whose measured foreground process
+// group holds nothing beyond their own shell — the shell sitting at its
+// prompt. It is the liveness fact behind the pane-Agent gate: Herdr's
+// binding outlives the agent process (status hooks carry transitions, not
+// exits), so a binding on a shell-idle pane is a leftover. Unmeasured panes
+// stay absent, and callers treat absence as "assume alive".
+func computeShellIdlePanes(panes []herdr.Pane, infos map[string]*herdr.PaneProcessInfo) map[string]bool {
+	idle := make(map[string]bool)
+	for _, pane := range panes {
+		info := infos[pane.ID]
+		if info == nil || info.ShellPID == 0 {
+			continue
+		}
+		quiet := true
+		for _, fg := range info.ForegroundProcesses {
+			if fg.PID != info.ShellPID && fg.Name != "" {
+				quiet = false
+				break
+			}
+		}
+		if quiet {
+			idle[pane.ID] = true
+		}
+	}
+	return idle
+}
+
 // paneBusyState reports one pane's busy fact for the run control.
 func (s *Shell) paneBusyState(paneID string) (paneBusyInfo, bool) {
 	info, ok := s.paneBusyIndex[paneID]
@@ -231,7 +259,9 @@ type sidebarActivity struct {
 // hierarchy: Panes light for their own services (their Agent state already
 // owns the icon-corner dot), Tabs and Projects light for whatever runs
 // beneath them — services in green, otherwise the strongest Agent state.
-func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIndex) map[string]sidebarActivity {
+// shellIdle is the scan's measured shell-prompt fact; a binding on such a
+// pane is a dead leftover and must not count as a running agent.
+func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIndex, shellIdle map[string]bool) map[string]sidebarActivity {
 	index := make(map[string]sidebarActivity, len(projection.Panes)+len(projection.Tabs)+len(projection.Projects))
 
 	panesByTab := make(map[string][]string, len(projection.Tabs))
@@ -245,6 +275,9 @@ func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIn
 	agentStateByPane := make(map[string]operationalState, len(projection.Agents))
 	for i := range projection.Agents {
 		agent := &projection.Agents[i]
+		if shellIdle[agent.PaneID] {
+			continue
+		}
 		agentStateByPane[agent.PaneID] = normalizeRuntimeStatus(agent.Status)
 	}
 
@@ -423,6 +456,7 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 
 	next := computeSidebarServices(herdr.Projection{Panes: panes}, listeners, infos)
 	busy := computePaneBusy(panes, infos)
+	shellIdle := computeShellIdlePanes(panes, infos)
 	if s.win == nil {
 		return
 	}
@@ -430,7 +464,15 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 		if generation != s.generation.Load() || instance != s.activeInstance {
 			return
 		}
+		livenessChanged := !maps.Equal(s.paneShellIdle, shellIdle)
 		s.serviceIndex = next
 		s.paneBusyIndex = busy
+		s.paneShellIdle = shellIdle
+		if livenessChanged {
+			// The measured liveness facts moved: the Agent directory and
+			// its consumers follow immediately instead of waiting for the
+			// next projection event.
+			s.reconcileWorkbench()
+		}
 	})
 }

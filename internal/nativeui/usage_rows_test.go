@@ -1,6 +1,9 @@
 package nativeui
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -206,5 +209,81 @@ func TestAgentCardTitleWithoutCatalogTitleKeepsFallback(t *testing.T) {
 
 	if got := shell.workbenchCards()[0].Title; got != "Scout" {
 		t.Fatalf("card title = %q, want the runtime name fallback", got)
+	}
+}
+
+// TestScanCompletionRefreshesAgentTitles pins the proactive fetch: the
+// background catalog reconciliation ends with one forced History-meta
+// refresh, so a title that only exists after the scan lands without
+// waiting for a runtime event or the one-minute throttle.
+func TestScanCompletionRefreshesAgentTitles(t *testing.T) {
+	shell := usageProjectionShell(t)
+	if got := shell.workbenchCards()[0].Title; got != "Scout" {
+		t.Fatalf("initial card title = %q, want the runtime name", got)
+	}
+	fake := newFakeHistoryView()
+	shell.hist.service = fake
+
+	matching := history.SessionSummary{Meta: history.SessionMeta{
+		Agent: history.AgentClaudeCode, ID: "session-1", FilePath: "/claude/session-1.jsonl",
+		Title: "🔍 SEARCH: Rearrange titlebar search and nav buttons",
+	}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// runHistoryScan is startHistoryScan's body without the window
+		// gate (headless tests have no window); the completion applies
+		// inline, so the forced refresh is the call this release answers.
+		shell.runHistoryScan(context.Background())
+	}()
+	call := <-fake.calls
+	call.release <- listResult{summaries: []history.SessionSummary{matching}}
+	<-done
+
+	if got := shell.workbenchCards()[0].Title; got != matching.Meta.Title {
+		t.Fatalf("card title = %q, want the session title after the scan", got)
+	}
+}
+
+// TestLiveTitleReadsPastTheScan pins the brand-new agent case: the session
+// is not indexed yet (the catalog only refreshes on scans), so the title
+// lane reads the named session file directly and the card still gets the
+// agent's own title instead of the runtime name.
+func TestLiveTitleReadsPastTheScan(t *testing.T) {
+	const jsonl = `{"type":"title","v":1,"title":"🖱️ MOUSE: Fix garbled mouse escape output in new panes","source":"auto"}
+{"type":"session","version":3,"id":"pi-live-1","timestamp":"2026-10-30T08:00:00.000Z","cwd":"/work/new"}
+{"type":"message","timestamp":"2026-10-30T08:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"每次新建的 pane 都会先出现乱码"}]}}
+`
+	file := filepath.Join(t.TempDir(), "2026-10-30T08-00-00-000Z_pi-live-1.jsonl")
+	if err := os.WriteFile(file, []byte(jsonl), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	shell := NewShell()
+	shell.activeInstance = "inst-1"
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{
+			TerminalID: "term-9", PaneID: "p9", Status: "working", Name: "Fresh",
+			AgentSession: &herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Source: "herdr:omp", Value: file},
+		}},
+	}
+	shell.reconcileWorkbench()
+	if got := shell.workbenchCards()[0].Title; got != "Fresh" {
+		t.Fatalf("initial card title = %q, want the runtime name", got)
+	}
+	fake := newFakeHistoryView()
+	shell.hist.service = fake
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		shell.refreshUsageProjection(true)
+	}()
+	call := <-fake.calls
+	call.release <- listResult{} // nothing indexed yet
+	<-done
+
+	if got := shell.workbenchCards()[0].Title; got != "🖱️ MOUSE: Fix garbled mouse escape output in new panes" {
+		t.Fatalf("card title = %q, want the live session title", got)
 	}
 }

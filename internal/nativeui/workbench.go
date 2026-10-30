@@ -67,6 +67,12 @@ func (s *Shell) reconcileWorkbench() {
 	live := make(map[agent.AgentKey]bool, len(s.projection.Agents))
 	now := time.Now()
 	for _, runtimeAgent := range s.projection.Agents {
+		if s.paneShellIdle[runtimeAgent.PaneID] {
+			// Measured at its bare shell prompt: Herdr's binding outlives
+			// the agent process, so this entry is a dead leftover, not a
+			// running agent card (2026-10-30 sidebar stale-agent defect).
+			continue
+		}
 		key := agent.AgentKey{InstanceID: s.activeInstance, TerminalID: runtimeAgent.TerminalID}
 		phase := agent.ParseRuntimePhase(runtimeAgent.Status, false)
 		previous := s.workbench.previous[key]
@@ -126,6 +132,21 @@ func (s *Shell) agentTitleFrom(runtimeAgent herdr.Agent) string {
 		return runtimeAgent.Name
 	}
 	return ""
+}
+
+// agentCardTitleForPane resolves a pane's Agent title the way the Agents
+// section shows it (session title → agent name → provider name), gated on
+// a live agent: a dead binding or an untitled agent reports false so tree
+// rows keep the pane's own label.
+func (s *Shell) agentCardTitleForPane(paneID string) (string, bool) {
+	if s.paneAgent(paneID) == nil {
+		return "", false
+	}
+	card, has := s.agentCardForPane(paneID)
+	if !has || card.Title == "" {
+		return "", false
+	}
+	return card.Title, true
 }
 
 // paneRuntimeAgent finds the runtime agent attached to one pane.

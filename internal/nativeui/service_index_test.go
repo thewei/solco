@@ -100,7 +100,7 @@ func TestBuildSidebarActivityServiceRollup(t *testing.T) {
 		Projects: map[string]paneServiceActivity{},
 	}
 
-	activity := buildSidebarActivity(projection, svcs)
+	activity := buildSidebarActivity(projection, svcs, nil)
 	for _, id := range []string{"p1", "t1", "w1"} {
 		act, ok := activity[id]
 		if !ok || !act.On || act.Tone != ToneSuccess {
@@ -124,7 +124,7 @@ func TestBuildSidebarActivityAgentRollup(t *testing.T) {
 		Agents:   []herdr.Agent{{PaneID: "p1", Status: "working"}},
 	}
 
-	activity := buildSidebarActivity(projection, sidebarServiceIndex{})
+	activity := buildSidebarActivity(projection, sidebarServiceIndex{}, nil)
 	if _, on := activity["p1"]; on {
 		t.Fatalf("pane row should keep its icon dot, got %+v", activity["p1"])
 	}
@@ -138,13 +138,13 @@ func TestBuildSidebarActivityAgentRollup(t *testing.T) {
 	}
 
 	projection.Agents = []herdr.Agent{{PaneID: "p1", Status: "idle"}}
-	activity = buildSidebarActivity(projection, sidebarServiceIndex{})
+	activity = buildSidebarActivity(projection, sidebarServiceIndex{}, nil)
 	if act := activity["w1"]; !act.On || act.Tone != ToneMuted {
 		t.Fatalf("idle rollup = %+v (want muted)", act)
 	}
 
 	projection.Agents = nil
-	activity = buildSidebarActivity(projection, sidebarServiceIndex{})
+	activity = buildSidebarActivity(projection, sidebarServiceIndex{}, nil)
 	if len(activity) != 0 {
 		t.Fatalf("empty subtree lit %v", activity)
 	}
@@ -166,7 +166,7 @@ func TestBuildSidebarActivityServiceBeatsAgent(t *testing.T) {
 	}
 
 	for _, id := range []string{"t1", "w1"} {
-		if act := buildSidebarActivity(projection, svcs)[id]; act.Tone != ToneSuccess {
+		if act := buildSidebarActivity(projection, svcs, nil)[id]; act.Tone != ToneSuccess {
 			t.Fatalf("activity[%s] = %+v (want green over agent)", id, act)
 		}
 	}
@@ -260,7 +260,7 @@ func TestBuildSidebarActivityProjectDaemonFallback(t *testing.T) {
 		Projects: map[string]paneServiceActivity{"w2": {Proc: "vite", Ports: []uint16{5173}}},
 	}
 
-	act := buildSidebarActivity(projection, svcs)["w2"]
+	act := buildSidebarActivity(projection, svcs, nil)["w2"]
 	if !act.On || act.Tone != ToneSuccess || act.Detail != "vite on :5173" {
 		t.Fatalf("project daemon dot = %+v", act)
 	}
@@ -297,5 +297,79 @@ func TestTabRowMarkShowsRunningServiceBrand(t *testing.T) {
 	}
 	if mark := s.tabRowMark([]herdr.Pane{{ID: "ps", TabID: "t1"}, {ID: "pu", TabID: "t1"}}, false); mark.svg != iconTab {
 		t.Fatalf("multi-pane tab mark = %+v, want the plain tab glyph", mark)
+	}
+}
+
+// TestTreeRowsCarryTheAgentWorkingSpinner pins the 2026-10-30 loading
+// state: a tree row whose pane's agent is mid-flight ends with the same
+// trailing spinner the Agents section's cards show (agent_card.go) — a
+// single-pane Tab row (the pane's face) and an expanded multi-pane Tab's
+// pane row alike — while an idle agent's row stays spinner-free.
+func TestTreeRowsCarryTheAgentWorkingSpinner(t *testing.T) {
+	s := NewShell()
+	s.loading = false
+	s.activeInstance = "default"
+	s.projection = herdr.Projection{
+		Projects: []herdr.Project{{ID: "w1", Label: "Project A", TabCount: 3}},
+		Tabs: []herdr.Tab{
+			{ID: "t1", ProjectID: "w1", Label: "Working Tab", PaneCount: 1},
+			{ID: "t2", ProjectID: "w1", Label: "Idle Tab", PaneCount: 1},
+			{ID: "t3", ProjectID: "w1", Label: "Split Tab", PaneCount: 2},
+		},
+		Panes: []herdr.Pane{
+			{ID: "p1", ProjectID: "w1", TabID: "t1", Label: "working pane"},
+			{ID: "p2", ProjectID: "w1", TabID: "t2", Label: "idle pane"},
+			{ID: "p3", ProjectID: "w1", TabID: "t3", Label: "split working pane"},
+			{ID: "p4", ProjectID: "w1", TabID: "t3", Label: "plain pane"},
+		},
+		Agents: []herdr.Agent{
+			{PaneID: "p1", Kind: "omp", Status: "working"},
+			{PaneID: "p2", Kind: "omp", Status: "idle"},
+			{PaneID: "p3", Kind: "omp", Status: "working"},
+		},
+	}
+	s.selectedProjectID = "w1"
+	s.selectedTabID = "t3" // the multi-pane Tab expands by selection
+	s.selectedPaneID = "p3"
+
+	tester := ui.NewTester(s.View, 1200, 800)
+	tester.Frame()
+
+	// The trailing spinner sits inside the row, just before its right
+	// padding: Find returns the row itself (the ButtonBase carries the
+	// label), so the box is anchored to the row's right edge. Each
+	// sampled column takes its reference from the same column's quiet
+	// strip near the row's bottom edge, so a background gradient never
+	// reads as ink.
+	inkAfter := func(label string) int {
+		el, ok := tester.Find(label)
+		if !ok {
+			t.Fatalf("row %q missing; texts=%q", label, tester.Texts())
+		}
+		midY := int(el.Y + el.H/2)
+		right := int(el.X + el.W)
+		best := 0
+		for dx := 25; dx >= 9; dx-- {
+			paper := pixelAt(tester, right-dx, midY+13)
+			for dy := -7; dy <= 7; dy += 2 {
+				if d := rgbDiff(pixelAt(tester, right-dx, midY+dy), paper); d > best {
+					best = d
+				}
+			}
+		}
+		return best
+	}
+
+	if ink := inkAfter("Working Tab"); ink < 40 {
+		t.Fatalf("working single-pane tab row shows no spinner ink (max diff %d)", ink)
+	}
+	if ink := inkAfter("Idle Tab"); ink > 15 {
+		t.Fatalf("idle tab row is not spinner-free (max diff %d)", ink)
+	}
+	if ink := inkAfter("split working pane"); ink < 40 {
+		t.Fatalf("working pane row shows no spinner ink (max diff %d)", ink)
+	}
+	if ink := inkAfter("plain pane"); ink > 15 {
+		t.Fatalf("plain pane row is not spinner-free (max diff %d)", ink)
 	}
 }

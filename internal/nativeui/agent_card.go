@@ -7,26 +7,25 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo/ui 的 ButtonBase、Spinner，agent_visual 的品牌 mark 与状态点、git_meta 的 git 事实
- * [OUTPUT]: 对外提供 Shell.agentCardRow（侧栏 Agents 区与 Agent 活动浮层共享的两行卡片，可选行尾控件）与 agentCardTextInset（卡片文字起点，卡片下方的说明行对齐用）
- * [POS]: Agent 卡片的唯一呈现实现（2026-10-07）：品牌 mark + 角落状态点 + 项目/标题行 + git 事实行；工作中卡片尾随 Spinner（card.Working，与目录 Working 桶同一语义）；点击语义留给调用方
+ * [OUTPUT]: 对外提供 Shell.agentCardRow（侧栏 Agents 区与 Agent 活动浮层共享的两行卡片，可选行尾控件）与 agentCardTextInset（卡片文字起点，卡片下方的说明行对齐用）；第一行 = 会话标题（agentCardLabel 以标题为主名，多卡同项目时 a11y 标签追项目消歧），第二行 = 项目名 + git 事实（同一 muted 样式）
+ * [POS]: Agent 卡片的唯一呈现实现（2026-10-07；2026-10-30 用户拍板：标题上移第一行、项目名下到第二行，推翻 F118 的「项目名即标题」）：品牌 mark + 角落状态点 + 标题行 + 项目/事实行；工作中卡片尾随 Spinner（card.Working，与目录 Working 桶同一语义）；点击语义留给调用方
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// agentCardLabel builds the card's visible title. The project is the title
-// (F118); when several visible cards share one project, the project name
-// alone cannot tell them apart, so the agent's own title is appended
-// ("Project · Agent", F169). The second result reports whether the label
-// already carries the agent title, so callers skip the duplicate caption.
+// agentCardLabel builds the card's accessibility label. The session title
+// is the primary name (2026-10-30 user request — the project name moved to
+// the second line, reversing F118); when several visible cards share one
+// project, the project name is appended so the rows stay tellable apart
+// (F169). The second result reports whether the label already carries the
+// project, so callers need no duplicate disambiguation line.
 func agentCardLabel(card agent.AgentCardModel, dupProjects map[string]bool) (string, bool) {
-	label := card.ProjectName
-	if label == "" {
-		label = card.Title
-		return label, false
+	if card.Title == "" {
+		return card.ProjectName, false
 	}
-	if dupProjects[card.ProjectName] && card.Title != "" && card.Title != label {
-		return label + " · " + card.Title, true
+	if card.ProjectName != "" && dupProjects[card.ProjectName] {
+		return card.Title + " · " + card.ProjectName, true
 	}
-	return label, false
+	return card.Title, false
 }
 
 // duplicateAgentProjectLabels reports project labels shared by more than
@@ -70,7 +69,7 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
 	mark := agentMark(card.Provider, t.Dark)
-	label, labelIncludesTitle := agentCardLabel(card, dupProjects)
+	label, _ := agentCardLabel(card, dupProjects)
 	var row ui.Element
 	ui.Box(c.Key("agent:" + card.PaneID)).Children(func() {
 		row = ui.ButtonBase(c).
@@ -93,12 +92,17 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 				})
 			})
 			ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-				tipped(c, ui.Text(c, label).FontSize(Typography().Body).SingleLine(), label)
-				// The caption repeats the agent title only when the label
-				// does not already carry it (a disambiguated label does).
-				if !labelIncludesTitle && !s.agentFactsView(c, card) && card.Title != label {
-					tipped(c, ui.Text(c, card.Title).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), card.Title)
-				}
+				// First line: the agent's own session title (2026-10-30
+				// user request); the project name and the git facts share
+				// the second line in the same muted style. Neither present
+				// keeps the card single-line.
+				tipped(c, ui.Text(c, card.Title).FontSize(Typography().Body).SingleLine(), card.Title)
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					if card.ProjectName != "" {
+						tipped(c, ui.Text(c, card.ProjectName).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), card.ProjectName)
+					}
+					s.agentFactsView(c, card)
+				})
 			})
 			// A working (or launching) agent spins at the trailing edge:
 			// mid-flight work reads at a glance, with no status words —

@@ -90,6 +90,9 @@ func (s *Shell) reconcileBlockedInteractions() {
 // mutation applies in place and always bumps the revision. The two app-hook
 // handlers used to inline this locate-or-create twice (F171).
 func (s *Shell) upsertProjectionAgent(paneID string, mutate func(*herdr.Agent)) {
+	// An agent report is proof of life: the pane cannot be sitting at its
+	// bare shell prompt anymore, so the scan's idle measurement is stale.
+	delete(s.paneShellIdle, paneID)
 	for i := range s.projection.Agents {
 		agent := &s.projection.Agents[i]
 		if agent.PaneID == paneID {
@@ -211,6 +214,10 @@ func (s *Shell) handleAppHookSession(evt apphook.SessionEvent) {
 	// Agent card title follows the session without waiting out the usage
 	// lane's one-minute throttle.
 	s.refreshUsageProjection(true)
+	// The fresh session's transcript lands on disk moments later, and a
+	// scan is the only thing that indexes it into the catalog the title
+	// lane reads; a no-op while a scan is already running.
+	s.startHistoryScan()
 	s.publishChatBridge()
 }
 

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 mygo/ui 的 SVG/Box、herdr.Agent、history.AgentID 与设计系统状态色
  * [OUTPUT]: 对外提供 agentGlyph、Shell.paneAgent、statusDot
- * [POS]: Agent 品牌单色矢量回退图标、窗格 Agent 绑定检索与运行时状态圆点渲染
+ * [POS]: Agent 品牌单色矢量回退图标、窗格 Agent 绑定检索（paneShellIdle 实测判活门控：实测回 shell 提示符的绑定是死绑定）与运行时状态圆点渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -69,8 +69,14 @@ func agentGlyph(provider history.AgentID) *ui.SVG {
 	}
 }
 
-// paneAgent returns the live Agent bound to a Pane, if any.
+// paneAgent returns the live Agent bound to a Pane, if any. Herdr's binding
+// outlives the agent process — status hooks and OSC 7501 carry transitions,
+// never the exit — so a pane measured at its bare shell prompt (the service
+// scan's paneShellIdle fact) reports no agent.
 func (s *Shell) paneAgent(paneID string) *herdr.Agent {
+	if s.paneShellIdle[paneID] {
+		return nil
+	}
 	for index := range s.projection.Agents {
 		if s.projection.Agents[index].PaneID == paneID {
 			return &s.projection.Agents[index]

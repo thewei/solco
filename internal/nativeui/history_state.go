@@ -383,6 +383,12 @@ func (s *Shell) runHistoryScan(ctx context.Context) {
 		if ctx.Err() == nil {
 			s.hist.scanning = false
 			s.hist.loaded = false
+			// The catalog just settled: re-resolve the History-meta
+			// projection now, so agent titles reflect the scan instead of
+			// waiting out the usage lane's one-minute throttle or the next
+			// runtime event (2026-10-30 user request: titles fetch
+			// proactively, especially right after startup).
+			s.refreshUsageProjection(true)
 		}
 	})
 }

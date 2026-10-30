@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 Herdr 权威 Workspace/Tab 顺序及 Pane layout、reorder.go 的受限拖动规则
  * [OUTPUT]: 提供侧栏 Workspace → Tab → Pane 交互树、排序与原生拖放入口
- * [POS]: nativeui 的运行时导航树；状态标识不再干扰用户持久化的拖动顺序；单 Pane Tab 行的身份图取该 Pane 绑定 Agent 的品牌图（次选可识别程序品牌，其余 tab 字形，tabRowMark）
+ * [POS]: nativeui 的运行时导航树；状态标识不再干扰用户持久化的拖动顺序；单 Pane Tab 行的身份图取该 Pane 绑定 Agent 的品牌图（次选可识别程序品牌，其余 tab 字形，tabRowMark）；Agent working 的行（单 Pane Tab 行与 pane 行）行尾画 Agents 区卡片同款 Spinner（treeRowSpec.Working，Working 桶同语义）；pane 实测回 shell 提示符时死绑定不再上色（paneAgent 门控、liveAgentStatus 清空行 Status）；有活 Agent 的 pane 行与单 Pane Tab 行标签取 Agents 区同款标题（agentCardTitleForPane，会话标题优先）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -21,7 +21,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 		return
 	}
 	projects := orderedProjects(s.projection)
-	activity := buildSidebarActivity(s.projection, s.serviceIndex)
+	activity := buildSidebarActivity(s.projection, s.serviceIndex, s.paneShellIdle)
 	mergeTaskActivity(activity, s.actionableTasks())
 	for _, project := range projects {
 		project := project
@@ -32,8 +32,11 @@ func (s *Shell) projectItems(c *ui.Context) {
 		// project row shows how many panes run beneath it whether it is
 		// folded or expanded, so the nesting depth never hides the load.
 		projectPaneCount := 0
+		projectPanes := make([]herdr.Pane, 0, 8)
 		for _, tab := range tabs {
-			projectPaneCount += len(panesForTab(s.projection, tab.ID))
+			tabPanes := panesForTab(s.projection, tab.ID)
+			projectPaneCount += len(tabPanes)
+			projectPanes = append(projectPanes, tabPanes...)
 		}
 		projectCount := projectPaneCount
 		glyph := iconFolder
@@ -49,7 +52,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 			Expanded:   expandedProject,
 			Mark:       visualMark{svg: glyph},
 			Label:      project.Label,
-			Status:     project.AgentStatus,
+			Status:     s.liveAgentStatus(project.AgentStatus, projectPanes),
 			Activity:   activity[project.ID],
 			Count:      projectCount,
 			Action:     &treeRowAction{Label: "New tab in " + project.Label, Glyph: iconPlus, Run: func() { s.newProjectTab(project) }},
@@ -83,6 +86,21 @@ func (s *Shell) projectItems(c *ui.Context) {
 			if !expandedTab {
 				tabCount = len(panes)
 			}
+			// A single-pane Tab is the pane's face: its agent working shows
+			// the same trailing spinner the Agents section's cards carry.
+			tabWorking := false
+			tabLabel := tab.Label
+			if len(panes) == 1 {
+				if a := s.paneAgent(panes[0].ID); a != nil {
+					tabWorking = normalizeRuntimeStatus(a.Status) == opWorking
+				}
+				// A single-pane Tab is the pane's face: it speaks the
+				// Agent's conversation title, the same one the Agents
+				// section shows, so the tree reads like the cards.
+				if title, ok := s.agentCardTitleForPane(panes[0].ID); ok {
+					tabLabel = title
+				}
+			}
 			row := treeRow(c, treeRowSpec{
 				Height:     s.sidebarRowHeight(),
 				Key:        "tab:" + tab.ID,
@@ -92,8 +110,9 @@ func (s *Shell) projectItems(c *ui.Context) {
 				Expandable: len(panes) > 1,
 				Expanded:   expandedTab,
 				Mark:       s.tabRowMark(panes, dark),
-				Label:      tab.Label,
-				Status:     tab.AgentStatus,
+				Label:      tabLabel,
+				Status:     s.liveAgentStatus(tab.AgentStatus, panes),
+				Working:    tabWorking,
 				Activity:   activity[tab.ID],
 				Count:      tabCount,
 				Drag:       s.treeDragFor(treeNodeDrag{s.activeInstance, "tab", project.ID, tab.ID}),
@@ -114,6 +133,11 @@ func (s *Shell) projectItems(c *ui.Context) {
 			for paneIndex, pane := range panes {
 				pane := pane
 				label := fallbackText(pane.Label, "Pane")
+				// A pane with a live Agent introduces itself by the same
+				// title the Agents section carries (session title first).
+				if title, ok := s.agentCardTitleForPane(pane.ID); ok {
+					label = title
+				}
 				mark, isAgent := s.agentMarkForPane(pane.ID, dark)
 				if !isAgent {
 					// A Pane running a recognizable program shows that
@@ -124,10 +148,18 @@ func (s *Shell) projectItems(c *ui.Context) {
 					}
 				}
 				dot := opUnknown
+				working := false
 				if isAgent {
 					if a := s.paneAgent(pane.ID); a != nil {
 						dot = normalizeRuntimeStatus(a.Status)
+						working = dot == opWorking
 					}
+				}
+				paneStatus := pane.AgentStatus
+				if s.paneShellIdle[pane.ID] {
+					// Measured at its shell prompt: Herdr's status belongs
+					// to a dead binding, not to anything running here.
+					paneStatus = ""
 				}
 				row := treeRow(c, treeRowSpec{
 					Height:            s.sidebarRowHeight(),
@@ -138,8 +170,9 @@ func (s *Shell) projectItems(c *ui.Context) {
 					Selected:          pane.ID == s.selectedPaneID,
 					Mark:              mark,
 					Dot:               dot,
+					Working:           working,
 					Label:             label,
-					Status:            pane.AgentStatus,
+					Status:            paneStatus,
 					Activity:          activity[pane.ID],
 					Drag:              s.treeDragFor(treeNodeDrag{s.activeInstance, "pane", tab.ID, pane.ID}),
 				})
@@ -172,6 +205,20 @@ func (s *Shell) tabRowMark(panes []herdr.Pane, dark bool) visualMark {
 		}
 	}
 	return visualMark{svg: iconTab}
+}
+
+// liveAgentStatus returns Herdr's rolled-up status only while some pane
+// beneath it may still carry a live agent: when every pane is measured at
+// its bare shell prompt (paneShellIdle), the rollup is a dead binding's
+// leftover and the row must not paint it. Unmeasured panes keep Herdr's
+// status.
+func (s *Shell) liveAgentStatus(status string, panes []herdr.Pane) string {
+	for _, pane := range panes {
+		if !s.paneShellIdle[pane.ID] {
+			return status
+		}
+	}
+	return ""
 }
 
 // newProjectTab opens a Tab in project: the project row's hover "+" and its

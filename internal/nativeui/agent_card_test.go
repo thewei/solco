@@ -9,11 +9,11 @@ import (
 	"github.com/thewei/solco/internal/history"
 )
 
-// TestAgentCardLabelDisambiguatesSharedProjects pins F169: several visible
-// cards of one project share the same project-name title (F118), so their
-// labels append the agent's own title; a lone project card keeps the plain
-// project name.
-func TestAgentCardLabelDisambiguatesSharedProjects(t *testing.T) {
+// TestAgentCardLabelLeadsWithTheSessionTitle pins the 2026-10-30 contract
+// (F118 reversed): the session title is the card's primary name; only
+// several visible cards of one project append the project for
+// disambiguation (F169), a lone card keeps the bare title.
+func TestAgentCardLabelLeadsWithTheSessionTitle(t *testing.T) {
 	cards := []agent.AgentCardModel{
 		{ProjectName: "herdr-client", Title: "keytest"},
 		{ProjectName: "herdr-client", Title: "test-claude"},
@@ -26,27 +26,28 @@ func TestAgentCardLabelDisambiguatesSharedProjects(t *testing.T) {
 		t.Fatalf("dup set = %+v", dups)
 	}
 	want := []struct {
-		label    string
-		includes bool
+		label     string
+		carriesPr bool
 	}{
-		{"herdr-client · keytest", true},
-		{"herdr-client · test-claude", true},
-		{"solo-project", false},
+		{"keytest · herdr-client", true},
+		{"test-claude · herdr-client", true},
+		{"forgotten-agent", false},
 		{"title-only", false},
 		{"self-named", false},
 	}
 	for i, tc := range want {
-		label, includes := agentCardLabel(cards[i], dups)
-		if label != tc.label || includes != tc.includes {
-			t.Fatalf("card %d label = (%q, %v), want (%q, %v)", i, label, includes, tc.label, tc.includes)
+		label, carries := agentCardLabel(cards[i], dups)
+		if label != tc.label || carries != tc.carriesPr {
+			t.Fatalf("card %d label = (%q, %v), want (%q, %v)", i, label, carries, tc.label, tc.carriesPr)
 		}
 	}
 }
 
-// TestSidebarAgentCardsStayDistinguishablePerProject renders the sidebar's
-// Agents section with two same-project agents and asserts both card labels
-// carry the agent title, so the section never shows identical rows.
-func TestSidebarAgentCardsStayDistinguishablePerProject(t *testing.T) {
+// TestSidebarAgentCardsShowTitleOverProject renders the sidebar's Agents
+// section with two same-project agents: each card names its session title
+// on the first line and carries the project on the shared second line —
+// never the old project-first label, and never identical rows.
+func TestSidebarAgentCardsShowTitleOverProject(t *testing.T) {
 	s := NewShell()
 	s.loading = false
 	// reconcileWorkbench normally builds these from the first applied
@@ -73,23 +74,29 @@ func TestSidebarAgentCardsStayDistinguishablePerProject(t *testing.T) {
 	})
 
 	tester := ui.NewTester(s.View, 1200, 800)
-	// Label and tooltip both surface the same string, so count distinct
-	// texts: both disambiguated labels must appear, and the bare duplicate
-	// project title must not appear at all.
-	joined := map[string]bool{}
-	plain := 0
-	for _, text := range tester.Texts() {
+	titles := map[string]int{}
+	projects := 0
+	order := map[string]int{}
+	for index, text := range tester.Texts() {
 		switch text {
-		case "herdr-client · keytest", "herdr-client · test-claude":
-			joined[text] = true
+		case "keytest", "test-claude":
+			titles[text]++
+			if _, seen := order[text]; !seen {
+				order[text] = index
+			}
 		case "herdr-client":
-			plain++
+			projects++
+			if _, seen := order["herdr-client"]; !seen {
+				order["herdr-client"] = index
+			}
 		}
 	}
-	if len(joined) != 2 {
-		t.Fatalf("joined labels = %v, want both agent titles", joined)
+	if len(titles) != 2 || projects != 2 {
+		t.Fatalf("titles = %v, project lines = %d; want each card title once and the project on both second lines", titles, projects)
 	}
-	if plain != 0 {
-		t.Fatalf("bare duplicate title rendered %d times; the section must not show identical rows", plain)
+	// The title is painted before its project line: first title index
+	// precedes the first project line.
+	if order["keytest"] > order["herdr-client"] {
+		t.Fatalf("project line painted before the title (title@%d, project@%d)", order["keytest"], order["herdr-client"])
 	}
 }

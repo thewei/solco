@@ -13,9 +13,11 @@ import (
 // §17.2 usage secondary line + session title: the quick-panel/status rows
 // render a cached History-meta usage projection ("Sonnet · 38k tok · $0.21
 // est.") when the bound session metadata carries model/token facts, and the
-// Agent cards title themselves after the same metadata's session title. The
-// refresh runs on the dispatch lane against the read-only catalog; the
-// render only reads the resulting maps — no render-time IO.
+// Agent cards title themselves after the session's title — read live from
+// the named session file, because the catalog only refreshes on explicit
+// scans while agents rename their sessions mid-task. The refresh runs on
+// the dispatch lane; the render only reads the resulting maps — no
+// render-time IO.
 
 // usageProjectionThrottle mirrors the 0.8 aggregator's one-minute throttle.
 const usageProjectionThrottle = time.Minute
@@ -95,14 +97,24 @@ func (s *Shell) refreshUsageProjection(force bool) {
 		snapshots := make(map[agent.AgentKey]agent.AgentUsageSnapshot, len(targets))
 		titles := make(map[agent.AgentKey]string, len(targets))
 		for _, target := range targets {
+			title := ""
 			for _, summary := range summaries {
 				if usageIdentityMatches(target.provider, target.kind, target.value, summary.Meta) {
 					snapshots[target.key] = agent.BuildAgentUsageSnapshot(target.key, summary.Meta)
-					if title := strings.TrimSpace(summary.Meta.Title); title != "" {
-						titles[target.key] = title
-					}
+					title = strings.TrimSpace(summary.Meta.Title)
 					break
 				}
+			}
+			// The catalog indexes a source only on scans: a brand-new
+			// agent's session is not in it yet, and a renamed session's
+			// fresh title lands there even later. One bounded parse of the
+			// named file per agent per refresh keeps the card current
+			// without waiting for either.
+			if live, ok := liveSessionTitle(target.provider, target.kind, target.value); ok {
+				title = live
+			}
+			if title != "" {
+				titles[target.key] = title
 			}
 		}
 		s.applyOnWindow(func() {
@@ -134,4 +146,18 @@ func usageIdentityMatches(provider history.AgentID, kind, value string, meta his
 	default:
 		return false
 	}
+}
+
+// liveSessionTitle reads one agent's session file directly for its current
+// title. Only a path identity names a file; an id relies on the catalog.
+func liveSessionTitle(provider history.AgentID, kind, value string) (string, bool) {
+	if kind != "path" || value == "" {
+		return "", false
+	}
+	summary, err := history.SummarizeSource(history.SessionFileRef{Agent: provider, FilePath: value})
+	if err != nil {
+		return "", false
+	}
+	title := strings.TrimSpace(summary.Meta.Title)
+	return title, title != ""
 }

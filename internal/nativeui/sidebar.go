@@ -537,13 +537,15 @@ func (s *Shell) activeInstanceInfo() *herdr.Instance {
 }
 
 func (s *Shell) agentItems(c *ui.Context) {
-	if len(s.projection.Agents) == 0 {
+	// Two-line Agent cards (2026-10-05 round two) via the shared card
+	// builder (2026-10-07): the same rows the agent activity panel shows.
+	// The directory is reconcile-gated on measured agent liveness, so a
+	// dead binding never surfaces here (2026-10-30).
+	cards := s.workbenchCards()
+	if len(cards) == 0 {
 		ui.Text(c, "No active agents").Padding(Spacing().M, Spacing().L).TextColor(c.Theme().TextMuted)
 		return
 	}
-	// Two-line Agent cards (2026-10-05 round two) via the shared card
-	// builder (2026-10-07): the same rows the agent activity panel shows.
-	cards := s.workbenchCards()
 	dupProjects := duplicateAgentProjectLabels(cards)
 	for _, card := range cards {
 		card := card

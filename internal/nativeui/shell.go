@@ -290,6 +290,11 @@ type Shell struct {
 	// scan (any foreground process beyond the pane's shell); the pane
 	// header's run control reads it to swap Run for Stop.
 	paneBusyIndex map[string]paneBusyInfo
+	// paneShellIdle caches the same scan's negative fact: the pane's
+	// foreground process group holds nothing beyond its own shell. Herdr's
+	// agent binding outlives the agent process, so this measurement is what
+	// retires a dead binding from the pane-Agent surfaces.
+	paneShellIdle map[string]bool
 	// previews owns persistent preview window controllers (GWB-007).
 	previews *previewManager
 	// git owns the 0.10 Git Workbench orchestration (single cache).
@@ -566,6 +571,7 @@ func NewShell(opts ...ShellOption) *Shell {
 	s.scriptBusy = make(map[string]bool)
 	s.runBusy = make(map[string]bool)
 	s.paneBusyIndex = make(map[string]paneBusyInfo)
+	s.paneShellIdle = make(map[string]bool)
 	s.changesSelected = -1
 	s.changesList.Selected = &s.changesSelected
 	s.unstagedSelected = -1
