@@ -21,6 +21,11 @@ export default {
   frontendDist: "frontend/dist",
   bindings: "frontend/src/mygo.ts",
 
+  updates: {
+    publicKey: "MqdM0/CqkQ2NmX0RpMrNm1CzCnUXLt55Z/bZq+zhk8w=",
+    github: "thewei/solco",
+  },
+
   macos: {
     minimumSystemVersion: "13.0",
     infoPlist: { NSMicrophoneUsageDescription: "Solco uses the microphone for chat voice dictation." },

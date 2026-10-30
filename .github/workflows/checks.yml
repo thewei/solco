@@ -29,6 +29,8 @@ jobs:
         run: go test ./...
 
       - name: Build app bundle
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: go tool mygo build
 
       - name: Verify app bundle
