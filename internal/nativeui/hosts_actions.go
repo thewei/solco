@@ -106,6 +106,7 @@ func (s *Shell) connectHost(alias string) {
 		s.status = "Connecting needs an active workspace and project"
 		return
 	}
+	s.noteRecentHost(alias)
 	instance, projectID := s.activeInstance, s.selectedProjectID
 	cwd := s.projectCWD(projectID)
 	s.status = "Opening an ssh tab…"

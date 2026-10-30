@@ -192,6 +192,11 @@ type SessionSettings struct {
 	RightPanelOpen    bool   `json:"right_panel_open"`
 	RightPanelSurface string `json:"right_panel_surface,omitempty"`
 	RightPanelWidth   int    `json:"right_panel_width,omitempty"`
+	// RecentFiles are the files last opened in Files (newest first, absolute
+	// paths): the start page lists the ones under the current root.
+	RecentFiles []string `json:"recent_files,omitempty"`
+	// RecentHosts are the ssh aliases last connected from Hosts (newest first).
+	RecentHosts []string `json:"recent_hosts,omitempty"`
 }
 
 func Default() Settings {

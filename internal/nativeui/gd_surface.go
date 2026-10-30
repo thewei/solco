@@ -55,8 +55,9 @@ func (s *Shell) gdDiffSurface(c *ui.Context) {
 		s.gitSequencerBanner(c)
 	}
 
-	// A commit review never drifts; the drift banner is worktree-only.
-	if s.git.staleBanner && !s.gdReviewingCommit() {
+	// A commit review never drifts; the drift banner is worktree-only, and a
+	// clean tree has nothing to refresh toward (2026-10-30 UX audit).
+	if s.git.staleBanner && !s.gdReviewingCommit() && len(s.git.gdFiles) > 0 {
 		s.gdChangedPill(c, pal)
 	}
 
@@ -79,7 +80,7 @@ func (s *Shell) gdDiffSurface(c *ui.Context) {
 	// The Git tools live in the title bar (gitHeaderTools), so the diff opens
 	// straight with its content, and they stay on an otherwise clean worktree.
 	if len(s.git.gdFiles) == 0 {
-		title, detail := "No local changes", gdAbbreviateHome(s.git.root)
+		title, detail := "Working tree clean", gdAbbreviateHome(s.git.root)
 		if s.gdReviewingCommit() {
 			title, detail = "No changes in commit", s.git.commitHash
 		}

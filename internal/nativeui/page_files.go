@@ -51,7 +51,7 @@ func (s *Shell) filesPage(c *ui.Context) {
 		case root == "":
 			emptyState(c, "No folder", "Open a tab in a project to browse its files.")
 		case selected == "":
-			emptyState(c, "Select a file to preview", "")
+			s.filesStart(c, root)
 		default:
 			s.filesPreviewBar(c, selected)
 			s.filesPreviewBody(c, selected)

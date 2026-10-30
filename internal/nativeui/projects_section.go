@@ -72,9 +72,8 @@ func (s *Shell) projectsItems(c *ui.Context, projects []workboardProject) {
 	}
 	archived := s.archivedOnlyProjects(projects)
 	if len(projects) == 0 && len(archived) == 0 {
-		if !board.failed && !board.loadedAt.IsZero() {
-			ui.Text(c, "No projects yet").Padding(Spacing().M, Spacing().L).TextColor(c.Theme().TextMuted)
-		}
+		// Nothing to list: the header (count 0 and its "+") is the whole
+		// section — no body line saying so (2026-10-30 UX audit).
 		return
 	}
 	for _, project := range projects {

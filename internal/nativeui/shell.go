@@ -231,6 +231,9 @@ type Shell struct {
 	commandCenterScope        commandcenter.Scope
 	commandCenterQuery        string
 	commandCenterChip         int // index into commandCenterChips
+	recentFiles               []string // files opened in Files, newest first (persisted in the session)
+	filesStartInfo            filesStartCache
+	recentHosts               []string // ssh aliases last connected from Hosts, newest first (persisted in the session)
 	commandCenterSelected     int
 	commandCenterReveal       int
 	commandCenterQueryFocused bool

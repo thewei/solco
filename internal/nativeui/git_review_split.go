@@ -156,6 +156,11 @@ func (s *Shell) gitQuickCommitComposer(c *ui.Context) {
 	if snap == nil || s.gdReviewingCommit() {
 		return
 	}
+	// A clean tree has nothing to commit: the bar goes unless a draft or an
+	// amend is in progress (2026-10-30 UX audit — the empty state is one block).
+	if len(snap.Files) == 0 && s.gitQuickSubject == "" && s.gitQuickBody == "" && !s.gitQuickAmend {
+		return
+	}
 	ui.Column(c).FillWidth().Shrink(0).Padding(8, 12).
 		BorderWidth(1, 0, 0, 0).BorderColor(s.tokens(t.Dark).BorderSubtle).Children(func() {
 		contentColumn(c, formColumnWidth, func() {

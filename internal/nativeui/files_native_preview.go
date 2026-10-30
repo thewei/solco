@@ -28,6 +28,7 @@ func (s *Shell) openFilePreview(path string) {
 		return
 	}
 	st.selectedFilePath = path
+	s.noteRecentFile(path)
 	s.planFilePreview(path)
 }
 

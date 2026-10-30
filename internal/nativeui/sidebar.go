@@ -257,6 +257,11 @@ func (s *Shell) sidebarFilesView(c *ui.Context) {
 			return
 		}
 
+		// A clean tree: the center's "Working tree clean" says it once; two
+		// empty Unstaged/Staged headers would say it again.
+		if len(snap.Files) == 0 {
+			return
+		}
 		unstagedFiles, stagedFiles := s.splitSections(snap)
 		unstagedRows := s.sectionRows(unstagedFiles)
 		stagedRows := s.sectionRows(stagedFiles)

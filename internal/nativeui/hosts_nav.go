@@ -36,6 +36,9 @@ func (s *Shell) hostsNav(c *ui.Context) {
 				s.refreshMachineStatus(true)
 			}
 		})
+		if len(s.hosts.entries) > 0 {
+			searchField(c, &s.hosts.filter).Label("Filter hosts").Placeholder("Filter hosts…").FillWidth()
+		}
 		s.navList(c, &s.nav.hosts, true, ui.Scroll(c).Grow(1).MinHeight(0), func() {
 			s.hostsNavEntries(c)
 			s.nav.hosts.barrier() // the machines are not part of the last group
@@ -92,9 +95,14 @@ func (s *Shell) hostsNavEntries(c *ui.Context) {
 		ui.Text(c, "No hosts yet").FontSize(Typography().BodySmall).TextColor(t.TextMuted).Padding(6, 8)
 		return
 	}
-	groups := hostGroups(s.hosts.entries, s.hosts.groups, s.hostsMainFile())
+	entries := s.filteredHostEntries()
+	if len(entries) == 0 {
+		ui.Text(c, "No matching hosts").FontSize(Typography().BodySmall).TextColor(t.TextMuted).Padding(6, 8)
+		return
+	}
+	groups := hostGroups(entries, s.hosts.groups, s.hostsMainFile())
 	if groups == nil {
-		for _, entry := range s.hosts.entries {
+		for _, entry := range entries {
 			s.hostsNavRow(c, entry)
 		}
 		return
@@ -128,6 +136,13 @@ func (s *Shell) hostsNavRow(c *ui.Context, entry sshconfig.Entry) {
 		Key: key, Title: entry.Title(), Tooltip: entry.Title(), Glyph: iconGlobe,
 		Selected: s.hosts.selected == key, Nav: &s.nav.hosts,
 		Menu: func(m *ui.Menu) { s.hostEntryMenu(m, entry) },
+	}
+	// user@host tells apart blocks that share a name (two "ForwardAgent").
+	if endpoint := hostEndpoint(entry); endpoint != "" {
+		spec.Trailing = func() {
+			ui.Text(c, endpoint).FontSize(Typography().Micro).TextColor(c.Theme().TextMuted).
+				SingleLine().Shrink(3).MinWidth(0)
+		}
 	}
 	if alias := entry.Alias(); alias != "" {
 		spec.Action = &treeRowAction{Label: "Connect", Glyph: iconTerminal, Run: func() { s.connectHost(alias) }}

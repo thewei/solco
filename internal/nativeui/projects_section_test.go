@@ -150,8 +150,8 @@ func TestProjectsSectionEmptyAndFailedStates(t *testing.T) {
 	s := projectsSectionShell(t)
 	s.workboard.board = workboardBoard{loadedAt: timeNow()}
 	tt := ui.NewTester(s.View, 1200, 800)
-	if !tt.HasText("Projects") || !tt.HasText("No projects yet") {
-		t.Fatalf("empty board: %q", tt.Texts())
+	if !tt.HasText("Projects") || tt.HasText("No projects yet") {
+		t.Fatalf("empty board keeps the header and drops the body line: %q", tt.Texts())
 	}
 	s.workboard.board = workboardBoard{loadedAt: timeNow(), failed: true}
 	tt.Frame()

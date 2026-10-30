@@ -116,6 +116,8 @@ func (s *Shell) captureSession() settings.SessionSettings {
 		RightPanelOpen:    s.rightPanel.open,
 		RightPanelSurface: string(s.rightPanel.surface),
 		RightPanelWidth:   s.rightPanel.width,
+		RecentFiles:       s.recentFiles,
+		RecentHosts:       s.recentHosts,
 	}
 	// N19 #4: the per-pane surface memory persists, so sidebar Agent clicks
 	// land where the user left them across launches.
@@ -171,6 +173,8 @@ func (s *Shell) restoreSession() {
 			}
 		}
 	}
+	s.recentFiles = append([]string(nil), session.RecentFiles...)
+	s.recentHosts = append([]string(nil), session.RecentHosts...)
 	s.projectsOpen = session.ProjectsOpen
 	s.agentsOpen = session.AgentsOpen
 	s.pinsOpen = session.PinsOpen

@@ -34,6 +34,7 @@ type hostsPageState struct {
 	closed map[string]bool
 
 	selected string // hostEntryKey or hostMachineKeyPrefix+profile id
+	filter   string // the sidebar's "Filter hosts" text; session-only
 
 	editing            bool
 	editorFile         string
@@ -145,7 +146,7 @@ func (s *Shell) hostsEmptyState(c *ui.Context) {
 			}
 		})
 	default:
-		emptyState(c, "Select a host", "")
+		s.hostsStart(c)
 	}
 }
 

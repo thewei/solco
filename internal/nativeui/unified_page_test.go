@@ -93,7 +93,7 @@ func TestCleanGitSurfaceKeepsItsMessageReadableWhenNarrow(t *testing.T) {
 
 	narrow := ui.NewTester(s.View, 900, 800)
 	narrow.Frame()
-	title, ok := narrow.Find("No local changes")
+	title, ok := narrow.Find("Working tree clean")
 	if !ok {
 		t.Fatalf("narrow clean surface lost its message: %q", narrow.Texts())
 	}
@@ -109,7 +109,7 @@ func TestCleanGitSurfaceKeepsItsMessageReadableWhenNarrow(t *testing.T) {
 	// Room to spare keeps the actions beside the message.
 	wide := ui.NewTester(s.View, 1700, 800)
 	wide.Frame()
-	title, _ = wide.Find("No local changes")
+	title, _ = wide.Find("Working tree clean")
 	if open, ok := wide.Find("Open Terminal"); !ok || open.Y > title.Y+title.H {
 		t.Errorf("a wide clean surface keeps the actions on the message's row: title=%v open=%v (found %v)", title, open, ok)
 	}
@@ -125,7 +125,7 @@ func TestCleanGitSurfaceOffersHistoryAndTerminalWithoutCenteredModal(t *testing.
 	s.rebuildDiffRows()
 	tester := ui.NewTester(s.View, 1200, 800)
 	tester.Frame()
-	for _, want := range []string{"No local changes", "View Commits", "Open Terminal"} {
+	for _, want := range []string{"Working tree clean", "View Commits", "Open Terminal"} {
 		if !tester.HasText(want) {
 			t.Fatalf("clean Git surface missing %q: %q", want, tester.Texts())
 		}
