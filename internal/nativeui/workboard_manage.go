@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 internal/workboard 的 manage.go（Archived/Restore/Clear/ArchiveDone/ArchiveProject/RestoreProject/CoordinatorControl/Autopilots/SetAutopilot）、workboardWrite 单一写通道、openConfirm/submitConfirm 确认机制、board 缓存 extras.autopilot
- * [OUTPUT]: routeArchived（/archived 路由）、openWorkboardArchived/loadWorkboardArchived、workboardArchivedPage、archivedRouteHeader、boardManageItems（Project 菜单的管理项：Archive Done / Archive Project / 协调者 Restart·New·Stop / Autopilot）、startBoardManage/runBoardManage
+ * [OUTPUT]: routeArchived（/archived 路由）、openWorkboardArchived/loadWorkboardArchived、workboardArchivedPage、archivedRouteHeader、boardManageItems（Project 菜单的管理项：Archive Done / Archive Project / 协调者 Restart·New·Stop / Autopilot）、startBoardManage/runBoardManage；archive-project 成功后清掉该 Project 的 ★（插件 archive --repo 不清 pin，pin 住的零任务行会永远留在侧栏；unpin 失败只记日志，不吞归档成功）
  * [POS]: 管理面（P6）：每个动词的含义归插件，这里只负责带数量与后果的确认文案（archive --repo 会停 Agent/协调者/自动化，clear 永久移除记录，autopilot on 持续耗 token）；归档列表不进板缓存，只在 /archived 页打开或写入后读取；/archived 与 /task、/project 一样不随重启恢复
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/herdr"
@@ -217,7 +218,7 @@ func (s *Shell) startBoardManage(kind, target string, n int) {
 	case boardArchiveDoneConfirm:
 		s.openConfirm(kind, target, "Archive done tasks?", "Archive the "+count+" done task"+pluralS(n)+" of "+target+"? They leave the board; Archived lists them and Restore brings them back.")
 	case boardArchiveProjectConfirm:
-		s.openConfirm(kind, target, "Archive "+target+"?", "Archive "+target+" and its "+count+" task"+pluralS(n)+"? Anything running in it is stopped, its coordinator is stopped and its automations are turned off. Restore Project brings the tasks and automations back.")
+		s.openConfirm(kind, target, "Archive "+target+"?", "Archive "+target+" and its "+count+" task"+pluralS(n)+"? Anything running in it is stopped, its coordinator is stopped and its automations are turned off, and it leaves the sidebar. Restore Project brings the tasks and automations back.")
 	case boardRestoreProjectConfirm:
 		s.openConfirm(kind, target, "Restore "+target+"?", "Restore "+target+" and its "+count+" archived task"+pluralS(n)+"? Its automations that were on come back on. Work stopped when it was archived stays stopped.")
 	case boardClearConfirm:
@@ -265,8 +266,29 @@ func (s *Shell) runBoardManage(op, target string) {
 			}
 			return nil
 		case "archive-project":
+			if err := client.ArchiveProject(ctx, target); err != nil {
+				return err
+			}
 			toast = "Archived " + target
-			return client.ArchiveProject(ctx, target)
+			// The plugin's ★ survives its own archive (pins are a separate
+			// store `archive --repo` never touches), yet it refuses to pin an
+			// archived Project — the stale mark would keep a zero-task row in
+			// the sidebar for good. Drop it; a failed cleanup must not
+			// disguise a finished archive, so it only logs.
+			pinned, err := client.Pinned(ctx)
+			if err != nil {
+				slog.Warn("work board pin re-read failed", "op", op, "target", target, "error", err)
+				return nil
+			}
+			for _, name := range pinned.Projects {
+				if strings.EqualFold(name, target) {
+					if err := client.Unpin(ctx, target); err != nil {
+						slog.Warn("work board unpin after archive failed", "op", op, "target", target, "error", err)
+					}
+					break
+				}
+			}
+			return nil
 		case "restore-project":
 			toast = "Restored " + target
 			return client.RestoreProject(ctx, target)

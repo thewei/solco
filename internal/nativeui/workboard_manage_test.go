@@ -25,13 +25,17 @@ const automationRows = `[
 ]`
 
 // manageShell answers the reads of the board and the archive, records writes.
-func manageShell(t *testing.T, ran *[]string, autopilot string) *Shell {
+func manageShell(t *testing.T, ran *[]string, autopilot string, pinned ...string) *Shell {
 	t.Helper()
+	pinnedJSON := `{"machine":null,"projects":[],"tasks":[]}`
+	if len(pinned) > 0 {
+		pinnedJSON = pinned[0]
+	}
 	newWorkboardClient = func(string, string) *workboard.Client {
 		return workboard.NewClientWithExec(func(_ context.Context, args ...string) (string, error) {
 			switch {
 			case args[0] == "list" && len(args) > 1 && args[1] == "--pinned":
-				return `{"machine":null,"projects":[],"tasks":[]}`, nil
+				return pinnedJSON, nil
 			case args[0] == "list" && len(args) > 1 && args[1] == "--archived":
 				return archivedRows, nil
 			case args[0] == "list":
@@ -149,6 +153,25 @@ func TestManagementAsksWithConsequencesThenRunsExactlyOneVerb(t *testing.T) {
 		if got := strings.Join(ran, "|"); got != tc.argv {
 			t.Fatalf("%s: ran %q, want %q", tc.kind, got, tc.argv)
 		}
+	}
+}
+
+// TestArchiveProjectDropsAStalePin pins the cleanup: the plugin's ★ survives
+// its own archive, and a pinned Project with no task left would sit in the
+// sidebar for good, so archiving drops the pin; an unpinned Project is left
+// alone.
+func TestArchiveProjectDropsAStalePin(t *testing.T) {
+	var ran []string
+	s := manageShell(t, &ran, `[]`, `{"machine":null,"projects":["r"],"tasks":[]}`)
+	s.runBoardManage("archive-project", "r")
+	if got := strings.Join(ran, "|"); got != "archive --repo r|unpin r" {
+		t.Fatalf("pinned: ran %q", got)
+	}
+	ran = nil
+	s = manageShell(t, &ran, `[]`)
+	s.runBoardManage("archive-project", "r")
+	if got := strings.Join(ran, "|"); got != "archive --repo r" {
+		t.Fatalf("unpinned: ran %q", got)
 	}
 }
 

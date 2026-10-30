@@ -19,7 +19,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `claude_blocks.go`：Claude 原生消息块映射。
 - `codex.go`：Codex rollout 会话流解析器。
 - `codex_blocks.go`：Codex 工具与内容块映射。
-- `pi.go`：Pi / Oh My Pi 会话解析器。
+- `pi.go`：Pi / Oh My Pi 会话解析器；会话标题优先取 agent 自己写的 `title`/`title_change` 行（文件序最后一行生效，空标题不清除旧值；omp 改名会话即此），无标题行才回退首条消息启发式。
 - `live.go`：Provider 会话的只读增量 decoder / 追尾接口。
 - `catalog_test.go`：内存 Catalog 的写入/排序/搜索/路径唯一/并发（-race）契约与描述行提取；Forget 同时释放行与路径。
 - `legacy_test.go`：旧 SQLite 目录清理（只删 history.sqlite3 家族、幂等）。
@@ -27,7 +27,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `codex_test.go`：Codex 会话解析行为。
 - `history_test.go`：跨 Provider 解析与历史模型语义。
 - `live_test.go`：增量读取/解码的边界行为。
-- `pi_test.go`：Pi Provider 解析和 live 增量回归。
+- `pi_test.go`：Pi Provider 解析和 live 增量回归；`TestPiTitleRowWinsOverFirstMessage` 钉 agent 自生成标题优先（含空 title 行不清除、title 行不计 unknown）。
 - `scanner_test.go`：来源扫描、去重与索引协调；同 mtime 大小变化仍重读；每 100 个来源一批的上报契约；SummarizeSource 读回一行摘要。
 - `service_test.go`：HistoryService 列表/读取/扫描契约；Open 始终反映原始文件的当前内容（追加后无需重扫）；Forget 后所有读取面一致。
 - `service_filter_test.go`：Provider/Project 提前过滤、完整 Provider 集合和各 Provider 计数（排除归档）的回归；Project 范围含子文件夹且不误收同前缀兄弟目录（列表/搜索/计数同一规则）与 `ProjectContains` 表驱动。

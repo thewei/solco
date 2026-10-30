@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 history/models.go (TranscriptMessage, SessionFileRef), parse_utils.go (clipText, epochMS, toolInput, injectedUserContent)
- * [OUTPUT]: 对外提供 ParsePiTranscript, piParseState, newPiParseState
+ * [OUTPUT]: 对外提供 ParsePiTranscript, piParseState, newPiParseState；会话标题优先取 agent 自己写的 title/title_change 行（随工作改名，文件序最后一行生效，空标题不清除旧值），无标题行才回退首条消息启发式
  * [POS]: history 包中 Pi / Oh My Pi 会话历史与 live append log 解析器，与 claude.go / codex.go 兄弟对称
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -18,6 +18,7 @@ import (
 
 type piParseState struct {
 	sessionID    string
+	sessionTitle string
 	cwd          string
 	createdAt    int64
 	lastTS       int64
@@ -61,7 +62,12 @@ func ParsePiTranscript(reference SessionFileRef) (ParsedTranscript, error) {
 }
 
 func (s *piParseState) transcript(reference SessionFileRef) ParsedTranscript {
-	title := titleFromMessages(s.messages)
+	// The agent's own session title is the authoritative name; the first
+	// message heuristic only covers sessions that never got a title row.
+	title := strings.TrimSpace(s.sessionTitle)
+	if title == "" {
+		title = titleFromMessages(s.messages)
+	}
 	if title == "" {
 		title = Untitled
 	}
@@ -127,6 +133,16 @@ func (s *piParseState) feedPiLine(line string) {
 		}
 		if ts := epochMS(row["timestamp"]); ts > 0 {
 			s.createdAt = ts
+		}
+	case "title", "title_change":
+		// The agent names its own session: a `title` row at head and
+		// `title_change` rows whenever it renames the session mid-flight
+		// (real files carry both, source "auto"). Last one in file order
+		// wins; blank titles never clear a previous one.
+		if title, ok := row["title"].(string); ok {
+			if text := strings.TrimSpace(title); text != "" {
+				s.sessionTitle = text
+			}
 		}
 	case "message":
 		messageObj, ok := row["message"].(map[string]any)

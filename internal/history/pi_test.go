@@ -88,6 +88,38 @@ func TestPiParseTranscript(t *testing.T) {
 	}
 }
 
+// TestPiTitleRowWinsOverFirstMessage pins the agent-authored session
+// title: the `title` row at head and later `title_change` rows (source
+// auto) are the session's real name — the last one wins and the first
+// message heuristic only covers sessions without any title row; a blank
+// title row never clears a previous one.
+func TestPiTitleRowWinsOverFirstMessage(t *testing.T) {
+	const jsonl = `{"type":"title","v":1,"title":"🔍 SEARCH: First take","source":"auto","updatedAt":"2026-10-06T10:00:00.000Z"}
+{"type":"session","version":3,"id":"pi-sess-t","timestamp":"2026-10-06T10:00:00.000Z","cwd":"/work/x"}
+{"type":"message","timestamp":"2026-10-06T10:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"Check the git status"}]}}
+{"type":"title_change","title":"🔍 SEARCH: Reorganize title bar","updatedAt":"2026-10-06T10:05:00.000Z"}
+{"type":"title_change","title":"","updatedAt":"2026-10-06T10:06:00.000Z"}
+{"type":"title_change","title":"🔍 SEARCH: Reorganize title bar search buttons","updatedAt":"2026-10-06T10:07:00.000Z"}
+`
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "2026-10-06T10-00-00-000Z_pi-sess-t.jsonl")
+	if err := os.WriteFile(filePath, []byte(jsonl), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ref := SessionFileRef{Agent: AgentOMP, NativeID: "pi-sess-t", FilePath: filePath, MtimeMS: 1000, SizeBytes: int64(len(jsonl))}
+
+	transcript, err := ParsePiTranscript(ref)
+	if err != nil {
+		t.Fatalf("ParsePiTranscript failed: %v", err)
+	}
+	if transcript.Meta.Title != "🔍 SEARCH: Reorganize title bar search buttons" {
+		t.Errorf("got Title %q, want the agent's last title_change value", transcript.Meta.Title)
+	}
+	if transcript.UnknownLineCount != 0 {
+		t.Errorf("title rows counted as unknown lines: %d", transcript.UnknownLineCount)
+	}
+}
+
 func TestPiLiveDecoderIncremental(t *testing.T) {
 	decoder, err := NewLiveDecoder(AgentPi)
 	if err != nil {

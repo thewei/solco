@@ -72,8 +72,8 @@ func (s *Shell) chatSurfaceHeader(c *ui.Context, k *gorexColors) {
 			if m, ok := s.agentMarkForPane(s.chatPaneID, dark); ok {
 				mark = m
 			}
-			if title, ok := s.agentCardTitleForPane(s.chatPaneID); ok {
-				title = title
+			if card, ok := s.agentCardTitleForPane(s.chatPaneID); ok {
+				title = card
 			} else if a := s.paneAgent(s.chatPaneID); a != nil && a.Name != "" {
 				title = a.Name
 			}
