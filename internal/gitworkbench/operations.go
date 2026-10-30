@@ -444,6 +444,21 @@ func (r *Runner) ListCommits(ctx context.Context, root string, limit int) ([]Com
 	return commits, nil
 }
 
+// CommitMessage reads the full message (subject, blank line, body) of one
+// commit, trailing whitespace trimmed. The hash must name a commit; a
+// non-commit is refused before the log runs.
+func (r *Runner) CommitMessage(ctx context.Context, root, hash string) (string, error) {
+	if _, err := r.Read(ctx, root, "rev-parse", "--verify", "--quiet", hash+"^{commit}"); err != nil {
+		return "", &Error{Class: ErrStaleState, OpClass: OpRead, Op: "log",
+			err: fmt.Errorf("%q is not a commit", hash)}
+	}
+	out, err := r.Read(ctx, root, "log", "-1", "--format=%B", hash, "--")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(out), " \t\r\n"), nil
+}
+
 // CommitSnapshot builds the change set of one commit: its diff against the
 // first parent (or the empty tree for a root commit). Review-only: the
 // staged/unstaged sides and the worktree do not apply.

@@ -327,7 +327,7 @@ type Shell struct {
 	// The Changes center is split between commits/files and the existing Diff viewer.
 	gitUpperHeight       float32
 	gitFilePaneWidth     float32
-	gitLowerTab          int
+	gitCommitBodyOpen    bool // the commit card shows the whole body
 	gitQuickSubject      string
 	gitQuickBody         string
 	gitQuickAmend        bool
@@ -340,8 +340,17 @@ type Shell struct {
 	gitTreeClosed   map[string]bool
 	gitRefsFilter   string
 	gitCommitFilter string
-	unstagedOpen    bool
-	stagedOpen      bool
+	// gitRefsSearchOpen shows the sidebar head's reference search field;
+	// gitRefsSelected is the ref row a single click selected (kind:name),
+	// which a double click or Enter then acts on; gitRefsHinted is whether the
+	// "double-click to act" hint has already been shown this run.
+	gitRefsSearchOpen bool
+	// The three Git lists' search buttons: Changes files, Commits, commit files.
+	changesSearchOpen, gitCommitSearchOpen, gitCommitFilesSearchOpen bool
+	gitRefsSelected                                                  string
+	gitRefsHinted                                                    bool
+	unstagedOpen                                                     bool
+	stagedOpen                                                       bool
 	// commitsMode shows the All Commits pane instead of the split panes.
 	gitConflictFilesExpanded bool
 	commitsMode              bool
@@ -588,7 +597,6 @@ func NewShell(opts ...ShellOption) *Shell {
 	s.sidebarW = sidebarWidth
 	s.gitUpperHeight = gitSplitDefaultTop
 	s.gitFilePaneWidth = gitFilePaneDefaultWidth
-	s.gitLowerTab = 1
 	s.gitTreeClosed = make(map[string]bool)
 	s.nav.hosts.OnMove = s.followHostCursor
 	s.unstagedOpen, s.stagedOpen = true, true

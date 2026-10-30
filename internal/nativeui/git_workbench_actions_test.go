@@ -21,19 +21,29 @@ func TestGitToolbarCompactKeepsPrimaryActions(t *testing.T) {
 	s.showSurface(WorkspaceSurfaceDiff)
 	tester := ui.NewTester(s.View, 960, 640)
 	tester.Frame()
-	for _, want := range []string{"Commit subject draft", "Commit", "Git actions", "Fetch", "Pull (fast-forward only)", "Push"} {
+	for _, want := range []string{"Commit subject draft", "Commit", "Actions", "Fetch", "Pull (fast-forward only)", "Push"} {
 		if !tester.HasText(want) {
 			t.Fatalf("compact toolbar lacks %q: %q", want, tester.Texts())
 		}
 	}
-	if tester.HasText("Stage All") || tester.HasText("Unstage All") {
-		t.Fatalf("compact toolbar still consumes Diff space: %q", tester.Texts())
+	for _, w := range [][2]int{{960, 640}, {1512, 982}} {
+		tester.SetSize(w[0], w[1])
+		tester.Frame()
+		if tester.HasText("Stage All") || tester.HasText("Unstage All") {
+			t.Fatalf("toolbar at %d wide still carries batch actions: %q", w[0], tester.Texts())
+		}
 	}
-	tester.SetSize(1512, 982)
+	if err := tester.Click("Actions"); err != nil {
+		t.Fatal(err)
+	}
 	tester.Frame()
-	if !tester.HasText("Stage All") || !tester.HasText("Unstage All") {
-		t.Fatalf("expanded toolbar did not restore batch actions: %q", tester.Texts())
+	menu := strings.Join(tester.Menu(), " | ")
+	for _, want := range []string{"Stage All", "Unstage All"} {
+		if !strings.Contains(menu, want) {
+			t.Fatalf("Git actions menu lost %q: %s", want, menu)
+		}
 	}
+	tester.CloseMenu()
 }
 
 // Fetch / Pull / Push are icon buttons in the toolbar (not menu rows); each
@@ -313,5 +323,40 @@ func TestGitRevertRequiresFullHashAndConfirmation(t *testing.T) {
 	s.confirmRevertCommit("0123456789abcdef0123456789abcdef01234567", "old change")
 	if !s.confirmOpen || s.confirmKind != "git-revert-commit" {
 		t.Fatal("full commit hash should request Revert confirmation")
+	}
+}
+
+// The Git tools ride in the title bar (2026-10-30): the file-list toggle,
+// Fetch/Pull/Push and the layout switch sit on the header's line, ahead of
+// the one page Actions, only in the local Changes view — and the Git actions
+// are inside that Actions menu, not a second ellipsis.
+func TestGitToolsLiveInTheTitleBar(t *testing.T) {
+	s := gitSurfaceTestShell(t, t.TempDir())
+	s.showSurface(WorkspaceSurfaceDiff)
+	tt := ui.NewTester(s.View, 1280, 760)
+	tt.Frame()
+	actions, ok := tt.Find("Actions")
+	if !ok {
+		t.Fatalf("no page Actions; texts=%q", tt.Texts())
+	}
+	for _, label := range []string{"Hide file list", "Fetch", "Pull (fast-forward only)", "Push", "Split", "Unified"} {
+		r, ok := tt.Find(label)
+		if !ok {
+			t.Fatalf("title bar lacks %q; texts=%q", label, tt.Texts())
+		}
+		if r.Y > titlebarHeight(0) || r.X >= actions.X {
+			t.Errorf("%q at (%.0f,%.0f) is not in the header, ahead of Actions at x=%.0f", label, r.X, r.Y, actions.X)
+		}
+	}
+	for _, dup := range []string{"Git actions"} {
+		if tt.HasText(dup) {
+			t.Errorf("%q is a second ellipsis; its items belong to Actions", dup)
+		}
+	}
+
+	s.showSurface(WorkspaceSurfaceTerminal)
+	tt.Frame()
+	if tt.HasText("Fetch") || tt.HasText("Hide file list") {
+		t.Fatalf("Terminal must not carry the Git tools: %q", tt.Texts())
 	}
 }

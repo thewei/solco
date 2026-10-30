@@ -22,31 +22,64 @@ type gitSectionAction struct {
 	run      func()
 }
 
+// gitViewTabs is the Changes | Commits switch at the top of the Git sidebar:
+// the shared segmented face with an icon on each segment and, on Changes, the
+// count of changed files. (Commits, not History: History is the Sessions page.)
+func (s *Shell) gitViewTabs(c *ui.Context) {
+	t := c.Theme()
+	chosen := 0
+	if s.commitsMode {
+		chosen = 1
+	}
+	changed := 0
+	if snap := s.gitSnapshot(); snap != nil {
+		changed = len(snap.Files)
+	}
+	tabs := ui.SegmentedBase(c, &chosen, 2)
+	segmentedTrack(c, tabs, "Git view")
+	tabs.Track.FillWidth().Children(func() {
+		for i, tab := range []struct {
+			label string
+			svg   *ui.SVG
+		}{{"Changes", iconFileDiff}, {"Commits", iconCommit}} {
+			seg := segmentFace(c, tabs, i, i == chosen, tab.label).Grow(1).Justify(ui.Center)
+			col := t.TextMuted
+			if i == chosen || seg.Hovered() {
+				col = t.Text
+			}
+			seg.Children(func() {
+				ui.Icon(c, tab.svg).Size(gorexPaneGlyph, gorexPaneGlyph).TextColor(col).Shrink(0)
+				ui.Text(c, tab.label).SingleLine().TextColor(col)
+				if i == 0 && changed > 0 {
+					ui.Text(c, itoa(changed)).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine()
+				}
+			})
+		}
+	})
+	if tabs.Track.Changed() {
+		if chosen == 0 {
+			s.commitsMode = false
+			s.reviewLocalChanges()
+		} else {
+			s.showGitCommits()
+		}
+	}
+}
+
+// gitRefsFilterChanged starts a new search expanded, without carrying stale
+// search-scoped folds into a different result set.
+func (s *Shell) gitRefsFilterChanged() {
+	for key := range s.gitTreeClosed {
+		if strings.HasPrefix(key, "search/") {
+			delete(s.gitTreeClosed, key)
+		}
+	}
+}
+
 func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Grow(1).MinHeight(0).Padding(7, sidebarGutter, 0).Gap(6).Children(func() {
-		mode := 0
-		if s.commitsMode {
-			mode = 1
-		}
-		if segmentedControl(c, &mode, "Local Changes", "All Commits").FillWidth().Changed() {
-			if mode == 0 {
-				s.commitsMode = false
-				s.reviewLocalChanges()
-			} else {
-				s.showGitCommits()
-			}
-		}
-		filter := searchField(c, &s.gitRefsFilter).FillWidth().Label("Filter Git references")
-		if filter.Changed() {
-			// A new search starts expanded, without carrying stale
-			// search-scoped folds into a different result set.
-			for key := range s.gitTreeClosed {
-				if strings.HasPrefix(key, "search/") {
-					delete(s.gitTreeClosed, key)
-				}
-			}
-		}
+		s.gitViewTabs(c)
 		if s.git.root == "" {
 			ui.Text(c, "No Git repository").Padding(10).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			return

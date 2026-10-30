@@ -13,7 +13,6 @@ import (
 // of codiff and of the diff renderer it uses.
 type gdPalette struct {
 	dark       bool
-	appBg      ui.Color // behind the cards: the gorex card's own paper, so the pinned-header bands continue it seamlessly
 	code       ui.Color // the code's own color
 	lineNumber ui.Color
 	codeBg     ui.Color // the background of the cards
@@ -45,7 +44,6 @@ type gdPalette struct {
 
 var (
 	gdLightPalette = gdPalette{
-		appBg:      ui.RGBA(255, 255, 255, 0.95), // gorexStyle cardFocused (light)
 		code:       ui.Hex("#111111"),
 		lineNumber: ui.Hex("#9a9a9a"),
 		codeBg:     ui.Hex("#ffffff"),
@@ -75,7 +73,6 @@ var (
 	}
 	gdDarkPalette = gdPalette{
 		dark:       true,
-		appBg:      ui.Hex("#212121"), // gorexStyle cardFocused (dark)
 		code:       ui.Hex("#c8c8c8"),
 		lineNumber: ui.Hex("#6c6c6c"),
 		codeBg:     ui.Hex("#1c1c1c"),

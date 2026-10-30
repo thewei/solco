@@ -19,7 +19,7 @@ func TestGitDiffNeverMountsRetiredInspector(t *testing.T) {
 	s.showSurface(WorkspaceSurfaceDiff)
 	tt := ui.NewTester(s.View, 1280, 800)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
-	for _, want := range []string{"Local Changes", "Unstaged Files", "Changes"} {
+	for _, want := range []string{"Commits", "Unstaged Files", "Changes"} {
 		if !tt.HasText(want) {
 			t.Fatalf("Git diff missing %q: %q", want, tt.Texts())
 		}

@@ -23,8 +23,15 @@ const (
 	gdRowGap                     // unchanged lines not shown
 	gdRowLine                    // a line, or a pair of lines side by side
 	gdRowEnd                     // the bottom of a file's card
-	gdRowCommit                  // the message of the commit under review
+	gdRowHunk                    // a hunk's header, where its lines can be staged
 )
+
+// gdHunkRowH is the height of a hunk's header row.
+const gdHunkRowH = 26
+
+// gdCardGap is the space between one file's card and the next, drawn at the
+// foot of the card above (not as a band over the next header).
+const gdCardGap = 12
 
 // gdRow is a row of the diff surface.
 type gdRow struct {
@@ -124,9 +131,6 @@ func (s *Shell) buildGdRows() {
 	rows := s.git.gdRows[:0]
 	gen := s.git.gdLoadGen.Load()
 	needLoad := false
-	if cm := s.git.commitMeta; s.gdReviewingCommit() && cm != nil {
-		rows = append(rows, gdRow{kind: gdRowCommit})
-	}
 	for fi, f := range s.git.gdFiles {
 		if !s.gdFileVisible(fi) {
 			continue
@@ -171,10 +175,14 @@ func (s *Shell) buildGdRows() {
 				rows = s.appendGdContext(rows, idx, f, int32(g.oldStart+k), int32(g.newStart+k))
 			}
 		}
+		_, canStage := s.gdStageSide(f)
 		for hi := range f.hunks() {
 			addGap(f.gapBefore(hi))
 			lines := f.hunks()[hi].Lines
 			h := int32(hi)
+			if canStage {
+				rows = append(rows, gdRow{kind: gdRowHunk, file: idx, hunk: h, a: -1, b: -1})
+			}
 			if !split {
 				for li := range lines {
 					rows = append(rows, gdRow{kind: gdRowLine, file: idx, hunk: h, a: int32(li), b: -1})
@@ -229,11 +237,11 @@ func (s *Shell) appendGdContext(rows []gdRow, idx int32, f *gdFile, old, new int
 
 // key returns the identity of a row.
 func (s *Shell) gdRowIdentity(r *gdRow) gdRowKey {
-	if r.kind == gdRowCommit {
-		return gdRowKey{kind: gdRowCommit, file: s.git.commitHash}
-	}
 	f := s.git.gdFiles[r.file]
 	k := gdRowKey{kind: r.kind, file: f.cf.Path, gap: r.gap}
+	if r.kind == gdRowHunk {
+		k.gap = r.hunk
+	}
 	if r.kind == gdRowLine {
 		if r.hunk < 0 {
 			k.old, k.new = r.old, r.new

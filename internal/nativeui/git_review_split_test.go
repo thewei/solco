@@ -244,73 +244,61 @@ func TestGitCommitReviewNavigatorClosesInANarrowWindow(t *testing.T) {
 	}
 }
 
-// The commit review's Commit / Changes / File Tree views are a native
-// segmented control: choosing a segment switches the lower view, and the
-// selected one wears the face of a plain ui.Segmented — one face for every
-// segmented control in the app, not a hand-painted tab with a tint of its own.
-func TestGitCommitReviewViewsAreASegmentedControl(t *testing.T) {
+// The Git sidebar's Changes | Commits switch is a native segmented control with
+// an icon on each segment: the selected one wears the face of a plain
+// ui.Segmented — one face for every segmented control in the app, not a
+// hand-painted tab with a tint of its own — and choosing a segment switches
+// the Git view.
+func TestGitViewTabsAreASegmentedControl(t *testing.T) {
 	root := t.TempDir()
 	s := gitSurfaceTestShell(t, root)
 	s.git.rootOf[root] = root
-	s.git.refreshing = true
-	cm := gitworkbench.CommitInfo{Hash: "0123456789abcdef0123456789abcdef01234567", Short: "0123456", Subject: "Add split review", Author: "Example", Time: time.Now()}
-	s.git.commits = []gitworkbench.CommitInfo{cm}
 	s.showSurface(WorkspaceSurfaceDiff)
-	s.commitsMode = true
-	s.git.source = gdSourceCommit
-	s.git.commitHash = cm.Hash
-	commitSnap := *s.git.snapshot
-	s.git.commitSnap = &commitSnap
-	s.git.commitMeta = &cm
-	s.git.gdFilesFor = nil
-	s.gitLowerTab = 1
-	s.rebuildDiffRows()
 
-	// The review rendered without the title bar (which also says "Changes"),
-	// above a plain Segmented to compare faces with.
 	reference := 1
 	tt := ui.NewTester(func(c *ui.Context) {
-		ui.Column(c).FillWidth().Grow(1).Children(func() {
+		ui.Column(c).FillWidth().Grow(1).Gap(12).Children(func() {
 			ui.Segmented(c, &reference, "Ref A", "Ref B").Shrink(0)
-			ui.Column(c).Grow(1).MinHeight(0).Children(func() { s.gitCommitReview(c) })
+			ui.Row(c).Width(260).Shrink(0).Children(func() { s.gitViewTabs(c) })
 		})
-	}, 1100, 700)
+	}, 400, 200)
 	tt.Frame()
-	if _, ok := tt.Find("Commit view"); !ok {
-		t.Fatalf("the lower views are not one labelled segmented control; texts=%q", tt.Texts())
+	if _, ok := tt.Find("Git view"); !ok {
+		t.Fatalf("the Git views are not one labelled segmented control; texts=%q", tt.Texts())
 	}
-	// A spot just inside the left edge of a segment's text, clear of glyphs.
-	chip := func(label string) [4]uint8 {
+	// Ref B is just the label's box (the face lies above it); a Git view tab's
+	// box is the whole segment (the face lies a few points inside it).
+	chip := func(label string, dy int) [4]uint8 {
 		t.Helper()
 		rect, ok := tt.Find(label)
 		if !ok {
 			t.Fatalf("no %q segment; texts=%q", label, tt.Texts())
 		}
-		return pixelAt(tt, int(rect.X)-3, int(rect.Y+rect.H/2))
+		return pixelAt(tt, int(rect.X+rect.W/2), int(rect.Y)+dy)
 	}
-	tt.Move(1090, 690)
+	tt.Move(390, 190)
 	tt.Frame()
-	selected, native := chip("Changes"), chip("Ref B")
+	selected, native := chip("Changes", 3), chip("Ref B", -3)
 	if rgbDiff(selected, native) > 2 {
 		t.Fatalf("the selected view wears %v where a plain Segmented's selected segment wears %v", selected, native)
 	}
-	if idle := chip("File Tree"); rgbDiff(selected, idle) < 6 {
+	if idle := chip("Commits", 3); rgbDiff(selected, idle) < 6 {
 		t.Fatalf("the selected view (%v) is not told apart from an unselected one (%v)", selected, idle)
 	}
 
-	if err := tt.Click("File Tree"); err != nil {
+	if err := tt.Click("Commits"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if s.gitLowerTab != 2 {
-		t.Fatalf("File Tree did not switch the lower view: tab=%d", s.gitLowerTab)
+	if !s.commitsMode {
+		t.Fatal("Commits did not switch the Git view")
 	}
 	if err := tt.Click("Changes"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if s.gitLowerTab != 1 {
-		t.Fatalf("Changes did not switch the lower view back: tab=%d", s.gitLowerTab)
+	if s.commitsMode {
+		t.Fatal("Changes did not switch the Git view back")
 	}
 }
 
@@ -364,7 +352,7 @@ func TestGitHistoryEmptyCannotMutateWorktree(t *testing.T) {
 	}
 	s.reviewLocalChanges()
 	tt.Frame()
-	if s.commitsMode || !tt.HasText("Git actions") || !tt.HasText("Commit subject draft") {
+	if s.commitsMode || !tt.HasText("Fetch") || !tt.HasText("Commit subject draft") {
 		t.Fatalf("return to worktree must restore navigator and controls: %q", tt.Texts())
 	}
 }

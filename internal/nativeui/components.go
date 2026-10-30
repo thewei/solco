@@ -259,7 +259,7 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 			FillWidth().
 			Height(height).
 			Radius(6).
-			Padding(0, 7, 0, 6).
+			Padding(0, treeRowPad). // the same right edge as the Git/Files rows and section counts
 			Label(spec.Label)
 		if tint, ok := rowTint(tokens, spec.Selected, row.Hovered()); ok {
 			row.Background(tint)

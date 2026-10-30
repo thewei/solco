@@ -74,7 +74,7 @@ func TestChangesRowActionsAreNamedIconButtons(t *testing.T) {
 	}
 }
 
-// One changed file reads "1 file" in the header and beside Commit, never
+// One changed file reads "1 file" in the list head, never
 // "1 files": the commonest state is the one a hand-glued plural gets wrong.
 func TestChangesCountAgreesWithItsNumber(t *testing.T) {
 	root := t.TempDir()
@@ -87,10 +87,10 @@ func TestChangesCountAgreesWithItsNumber(t *testing.T) {
 	tester := ui.NewTester(shell.View, 1200, 800)
 	tester.Frame()
 	tester.Frame()
-	if !tester.HasText("1 file") || !tester.HasText("  1 file") {
-		t.Fatalf("one changed file should read %q in the header and beside Commit: %q", "1 file", tester.Texts())
+	if !tester.HasText("1 file") {
+		t.Fatalf("one changed file should read %q in the list head: %q", "1 file", tester.Texts())
 	}
-	if tester.HasText("1 files") || tester.HasText("  1 files") {
+	if tester.HasText("1 files") {
 		t.Fatalf("a single file is counted as plural: %q", tester.Texts())
 	}
 }

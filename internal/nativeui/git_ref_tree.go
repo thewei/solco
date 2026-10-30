@@ -140,6 +140,9 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}
 		item := gitTreeItem{title: n.name, tooltip: value, kind: gitRefKinds[scope], glyph: leafGlyph,
 			level: level, folder: folder, closed: closed, current: current}
+		if scope == "local" && !current && !folder {
+			item.hint = "Double-click to check out " + value
+		}
 		if folder {
 			item.kind, item.glyph = "Folder", iconFolder
 		}
@@ -174,10 +177,15 @@ type gitTreeItem struct {
 	glyph                   *ui.SVG
 	level                   int
 	folder, closed, current bool
+	// hint is said once, on the first click that only selects the row, to
+	// tell what a double click will do (check out a branch).
+	hint string
 }
 
 // gitTreeRow draws one row on the shared sidebar grid. A stash subject can
-// repeat; its title carries the unique stash reference.
+// repeat; its title carries the unique stash reference. A leaf row is
+// deliberate: one click selects it, only a double click or Enter runs action
+// (folders keep folding on one click, which changes nothing in the repo).
 func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu func(*ui.Menu)) {
 	var trailing func()
 	if it.current {
@@ -185,10 +193,19 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 			ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Text).Shrink(0)
 		}
 	}
+	key := "git-ref:" + it.title + "@" + it.tooltip
 	_, clicked := s.sidebarTreeRow(c, sidebarTreeSpec{
-		Key: "git-ref:" + it.title + "@" + it.tooltip, Title: it.title, Label: it.kind + " " + it.title,
+		Key: key, Title: it.title, Label: it.kind + " " + it.title,
 		Tooltip: it.tooltip, Level: it.level, Folder: it.folder, Expanded: !it.closed,
 		Glyph: it.glyph, Current: it.current, Trailing: trailing, Menu: menu, Nav: &s.nav.gitRefs,
+		Deliberate: true, Selected: s.gitRefsSelected == key,
+		OnSelect: func() {
+			s.gitRefsSelected = key
+			if it.hint != "" && !s.gitRefsHinted {
+				s.gitRefsHinted = true
+				s.pendingToast = it.hint
+			}
+		},
 	})
 	if clicked {
 		action()

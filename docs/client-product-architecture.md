@@ -348,7 +348,7 @@ Normative 0.10 boundaries:
   renders in the official `ui.WebView` and the tree carries ignore rules
   plus bounded file operations; amended 2026-10-14: code shows in the
   native `ui/editor` view and the WebView renders only Markdown and images
-  — see the Files decisions.) Changes uses the left Git-reference tree and a Fork-style center: Local Changes places staged/unstaged files beside Diff with a bottom commit composer; All Commits places the ancestry-aware history graph above a changed-file tree and read-only Diff.
+  — see the Files decisions.) Changes uses the left Git-reference tree and a Fork-style center: Changes places staged/unstaged files beside Diff with a bottom commit composer; Commits places the ancestry-aware history graph above a changed-file tree and read-only Diff.
   The existing Header/tray Agent activity flyout (a MyGo Flyout, shown as a
   system popover on macOS) has an Agents /
   Services switch: Agents lists the live agents grouped by state, and a click
@@ -363,15 +363,22 @@ Normative 0.10 boundaries:
   repository state; the transitional `gitintel` cache must be migrated or
   removed rather than duplicated.
 - **As built 2026-10-10, Changes layout:** the contextual left sidebar
-  shows Local Changes / All Commits, collapsible Worktrees, local Branches,
+  shows Changes / Commits (renamed 2026-10-30; icon segments), collapsible Worktrees, local Branches,
   read-only cached Remotes, Tags and Stashes. Slash-delimited refs form nested
   folders; collapse/filter state is local to the bound repository. The
   central Git primary surface has two screenshot-grounded layouts:
-  Local Changes uses a resizable file-tree/Diff row and a bottom lightweight
-  composer that opens the existing protected Commit modal; All Commits uses
+  Changes uses a resizable file-tree/Diff row and a bottom lightweight
+  one-line composer that opens the existing protected Commit modal; Commits uses
   a resizable history graph/table above a changed-file tree and read-only
-  Godiff review. Neither layout changes Herdr pane topology or creates a
-  second Git runner, router or docked right inspector.
+  Godiff review. Amended 2026-10-30 (designs/git-panel, Option A): the sidebar
+  head is one row (project · branch · search · refresh); a reference row only
+  selects on one click and acts (check out) on double-click/Enter; commit
+  messages and diff code are selectable and copyable (Copy Hunk / File Patch);
+  the Changes view's Git tools (file list toggle, Fetch/Pull/Push, Split/Unified) live in the title bar ahead of the page Actions, and Stage All / Unstage All live in that Actions menu only. Neither layout changes Herdr pane topology or creates a
+  second Git runner, router or docked right inspector. A binary change shows in
+  its diff card (2026-10-30): pictures the native decoder knows (PNG, JPEG, GIF,
+  WebP, BMP) side by side, Before | After, and any other binary file as its size
+  change, read through the same Git runner (`cat-file`) and decoded off the UI lane.
 - Native Git review supports working-tree/index changes versus HEAD plus
   untracked files, bounded patch parsing, virtualized unified/split rendering,
   syntax highlighting, bounded word-level presentation differences and
@@ -940,6 +947,11 @@ The single packaging configuration is `[package.metadata.bundle]` in the root
 version inheritance, and app icon source (`assets/app-icon/`). `cargo-bundle`
 converts the icon source into `Contents/Resources/Solco.icns` and writes
 the matching `CFBundleIconFile` entry; scripts must not duplicate these values.
+
+Historical note: the current Go/MyGo application no longer uses that Rust
+packaging path. `mygo.config.ts` owns the active icon and reads only
+`resources/icon.png`; `site/assets/app-icon/` holds its canonical exports and
+design provenance. No second Solco mark or icon source is permitted.
 
 `scripts/package-macos.sh` is the reproducible local/release orchestration
 entrypoint: it builds, bundles, signs, validates the bundle, and optionally

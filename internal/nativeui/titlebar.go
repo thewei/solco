@@ -69,6 +69,9 @@ func (s *Shell) titlebar(c *ui.Context) {
 			} else {
 				ui.Box(c).Grow(1).PassThrough()
 			}
+			if s.gitHeaderToolsShown() {
+				s.gitHeaderTools(c)
+			}
 			s.titlebarTools(c, k, actions)
 		})
 }

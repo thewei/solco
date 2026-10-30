@@ -180,6 +180,10 @@ func (s *Shell) diffOverflowItems(m *ui.Menu) {
 	if m.Item("Open in Editor").Disabled(!picked || cf.Status == gitworkbench.StatusDeleted).Chosen() {
 		s.openFileInEditor(cf.Path)
 	}
+	if s.gitHeaderToolsShown() {
+		m.Separator()
+		s.gitActionItems(m)
+	}
 	m.Separator()
 	if m.Item("Commit…").Chosen() {
 		s.showSurface(WorkspaceSurfaceCommit)

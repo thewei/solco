@@ -390,3 +390,28 @@ func TestListCommitsAndCommitSnapshot(t *testing.T) {
 		t.Fatal("unknown hashes must be refused")
 	}
 }
+
+func TestCommitMessageReadsSubjectAndBody(t *testing.T) {
+	root, r := tempRepo(t)
+	ctx, cancel := opCtx(t)
+	defer cancel()
+
+	writeRepoFile(t, root, "base.txt", "second\n")
+	mustRunGit(t, root, "add", "-A")
+	mustRunGit(t, root, "commit", "-q", "-m", "feat: subject line", "-m", "First body paragraph.\nSecond line.")
+
+	commits, err := r.ListCommits(ctx, root, 1)
+	if err != nil || len(commits) != 1 {
+		t.Fatalf("commits = %v, %v", commits, err)
+	}
+	msg, err := r.CommitMessage(ctx, root, commits[0].Hash)
+	if err != nil {
+		t.Fatalf("CommitMessage: %v", err)
+	}
+	if want := "feat: subject line\n\nFirst body paragraph.\nSecond line."; msg != want {
+		t.Fatalf("message = %q, want %q", msg, want)
+	}
+	if _, err := r.CommitMessage(ctx, root, "--output=/tmp/x"); err == nil {
+		t.Fatal("a non-commit argument must be refused before any log runs")
+	}
+}

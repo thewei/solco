@@ -115,6 +115,12 @@ func DecodeImageBounded(path string) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
+	return DecodeImageBytes(raw)
+}
+
+// DecodeImageBytes is DecodeImageBounded for bytes already in hand (a Git
+// blob): the same pixel budget, checked before the full decode allocates.
+func DecodeImageBytes(raw []byte) (image.Image, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err

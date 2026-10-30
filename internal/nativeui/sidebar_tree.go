@@ -93,10 +93,11 @@ type sidebarTreeSpec struct {
 	Folder   bool
 	Expanded bool
 	Glyph    *ui.SVG
-	// Current marks the checked-out branch or the open file: accent tinted.
+	// Current marks the checked-out branch or the open file: bright title and
+	// the neutral selection face (SidebarSelect).
 	Current bool
 	// Selected is the row's selection face — the one every navigation list
-	// wears (SidebarSelect). Current stays a state mark, not a selection.
+	// wears (SidebarSelect); on a Deliberate row it is the stronger one.
 	Selected bool
 	// Action is the row's one hover icon at the trailing edge; its slot is
 	// reserved while set, so the title never moves under the pointer.
@@ -109,6 +110,13 @@ type sidebarTreeSpec struct {
 	Menu func(*ui.Menu)
 	// Nav is the list's keyboard model; nil leaves the row to the mouse.
 	Nav *listNav
+	// Deliberate makes a leaf row two-step: a click only selects it (OnSelect;
+	// Selected wears the face, current branch included) and the row's click
+	// comes back true for a double click or Enter alone — for rows whose
+	// action must not fire by accident (switching a branch). Folders keep
+	// folding on one click.
+	Deliberate bool
+	OnSelect   func()
 }
 
 // sidebarTreeRow draws one row of the grid and returns it with whether it was
@@ -130,10 +138,19 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 		Label(label), spec.Tooltip)
 	glyph := t.TextMuted
 	switch {
+	case spec.Deliberate && spec.Selected:
+		// The row a click only selected wears the stronger face, so it reads
+		// apart from the current row's softer one when both are on screen.
+		row.Background(tokens.SidebarSelectStrong)
+		if spec.Current {
+			row.TextColor(t.Text)
+			glyph = t.Text
+		}
 	case spec.Current:
-		// Current is a state mark, not a selection: full-brightness title and
-		// glyph, no fill, so it never competes with the neutral selection.
-		row.TextColor(t.Text)
+		// The checked-out branch / open file: full-brightness title and glyph
+		// on the neutral selection face — a check mark alone was too faint to
+		// find in a long list.
+		row.TextColor(t.Text).Background(tokens.SidebarSelect)
 		glyph = t.Text
 	case spec.Selected, spec.Nav.showsCursor(row):
 		row.Background(tokens.SidebarSelect)
@@ -175,7 +192,14 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 			})
 		}
 	})
-	return row, activated || row.Clicked()
+	clicked := activated || row.Clicked()
+	if spec.Deliberate && !spec.Folder {
+		clicked = row.DoubleClicked() || (row.Focused() && row.Shortcut(0, ui.KeyEnter))
+		if row.Clicked() && !clicked && spec.OnSelect != nil {
+			spec.OnSelect()
+		}
+	}
+	return row, clicked
 }
 
 // sidebarSectionSpec describes one collapsible group header of a sidebar
@@ -187,8 +211,9 @@ type sidebarSectionSpec struct {
 	Closed bool
 	// Tooltip is the full text of a clipped title (a file group's path).
 	Tooltip string
-	// Action is the header's one hover icon (a "+"); its slot is always
-	// reserved so the count never jumps. The same action belongs in Menu.
+	// Action is the header's one hover icon (a "+"); it takes the count's
+	// slot at the right edge while the pointer is on the header. The same
+	// action belongs in Menu.
 	Action *treeRowAction
 	// Menu is the header's context menu.
 	Menu func(*ui.Menu)
@@ -223,13 +248,19 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 		treeChevron(c, true, !spec.Closed, t.TextMuted)
 		ui.Box(c).Width(treeGlyphGap).Shrink(0).PassThrough()
 		ui.Text(c, spec.Title).FontSize(Typography().Body).FontWeight(WeightSemibold).Grow(1).MinWidth(0).SingleLine()
-		ui.Textf(c, "%d", spec.Count).FontSize(Typography().Micro).TextColor(t.TextMuted).Shrink(0)
+		count := func() {
+			ui.Textf(c, "%d", spec.Count).FontSize(Typography().Micro).TextColor(t.TextMuted).Shrink(0)
+		}
 		if spec.Trailing != nil {
+			count()
 			spec.Trailing()
 			return
 		}
-		ui.Box(c).Size(gorexRowBtn+2, gorexRowBtn).Shrink(0).Center().Children(func() {
+		// The count ends at the row's right edge — where a row's check mark and
+		// size end — and gives way to the hover action in the same slot.
+		ui.Row(c).Size(gorexRowBtn+2, gorexRowBtn).Shrink(0).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 			if spec.Action == nil || !row.Hovered() {
+				count()
 				return
 			}
 			add := gorexIconButton(c, gorexColorsOf(t.Dark), spec.Action.Glyph, spec.Action.Label, spec.Action.tooltip(), false, gorexRowBtn, gorexRowGlyph)

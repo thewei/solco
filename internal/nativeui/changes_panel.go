@@ -45,24 +45,6 @@ func (s *Shell) gdChangedTreeList(c *ui.Context, pal *gdPalette, rows []gitworkb
 	return list
 }
 
-// gdChangesFooter draws the Total row and the Commit action.
-func (s *Shell) gdChangesFooter(c *ui.Context, pal *gdPalette, snap *gitworkbench.ChangesSnapshot) {
-	t := c.Theme()
-	ui.Row(c).FillWidth().MinHeight(40).Padding(6, 10).Gap(8).AlignItems(ui.Center).
-		BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
-		if snap.Truncated {
-			ui.Text(c, "partial").FontSize(Typography().Micro).TextColor(t.TextMuted)
-		}
-		tipped(c, ui.Row(c).Gap(6), "Total change: "+gdLines(snap.TotalAdditions, "added")+", "+gdLines(snap.TotalDeletions, "removed")).Children(func() {
-			ui.Text(c, "Total:").FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(t.TextMuted)
-			ui.Text(c, "+"+gdThousands(snap.TotalAdditions)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.addText)
-			ui.Text(c, "-"+gdThousands(snap.TotalDeletions)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.delText)
-		})
-		// Commit is deliberately available only once, in the center
-		// Workbench toolbar. This footer is a read-only total summary.
-	})
-}
-
 // currentChangesTree builds (or reuses) the filtered changed-path tree.
 func (s *Shell) currentChangesTree(snap *gitworkbench.ChangesSnapshot) *gitworkbench.TreeNode {
 	if s.changesTree != nil {
@@ -177,7 +159,7 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 				letter = t.TextMuted
 			}
 			ui.Text(c, gdStatusLetter(&cf)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(letter).
-				Width(12).TextAlign(ui.Center).Shrink(0)
+				Width(12).TextAlign(ui.End).Shrink(0) // flush right: the letter ends where the pane header's Stage/Unstage ends
 		})
 	})
 	// Directory disclosure is independent of List.Changed: selecting the

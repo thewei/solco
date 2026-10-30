@@ -27,7 +27,7 @@ func TestHerdrBootstrapHidesWorkspaceChromeAndCentersLoader(t *testing.T) {
 		label.Y+label.H/2 < 315 || label.Y+label.H/2 > 490 {
 		t.Fatalf("loading label is not centered within the window: %+v", label)
 	}
-	for _, hidden := range []string{"Hide Sidebar", "Local Changes", "Terminal view", "History view", "Settings", "Workspace", "Agents"} {
+	for _, hidden := range []string{"Hide Sidebar", "Search files", "Terminal view", "History view", "Settings", "Workspace", "Agents"} {
 		if tt.HasText(hidden) {
 			t.Fatalf("%q must not mount during bootstrap: %q", hidden, tt.Texts())
 		}

@@ -43,21 +43,21 @@ func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
 			t.Fatalf("Split did not restore layout on pass %d", i)
 		}
 	}
-	if err := tt.Click("Git actions"); err != nil {
+	if err := tt.Click("Actions"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	menu := strings.Join(tt.Menu(), " | ")
-	for _, want := range []string{"Stash All Changes", "View All Commits", "Git Settings"} {
+	for _, want := range []string{"Stash All Changes", "View Commits", "Git Settings"} {
 		if !strings.Contains(menu, want) {
-			t.Fatalf("Git actions lost %s: %s", want, menu)
+			t.Fatalf("Actions lost %s: %s", want, menu)
 		}
 	}
 	// Fetch / Pull / Push are toolbar icons now; Refresh lives in the
 	// sidebar header. Neither repeats in the pull-down.
 	for _, dup := range []string{"Fetch", "Pull", "Push", "Refresh"} {
 		if strings.Contains(menu, dup) {
-			t.Fatalf("duplicate %s in Git actions: %s", dup, menu)
+			t.Fatalf("duplicate %s in Actions: %s", dup, menu)
 		}
 	}
 	tt.CloseMenu()
@@ -125,7 +125,8 @@ func TestGitIconButtonsWearTheSharedFace(t *testing.T) {
 			{"Fetch", toolbarEdge, toolbarCorner},
 			{"Pull (fast-forward only)", toolbarEdge, toolbarCorner},
 			{"Push", toolbarEdge, toolbarCorner},
-			{"Git actions", toolbarEdge, toolbarCorner},
+			{"Actions", toolbarEdge, toolbarCorner},
+			{"Hide file list", toolbarEdge, toolbarCorner},
 			{"Commit options", paneEdge, paneCorner},
 		} {
 			if edge, corner := hoverFaceOf(tt, tc.label); edge != tc.edge || corner != tc.corner {
@@ -144,7 +145,7 @@ func TestGitToolbarIconButtonsStayTabStops(t *testing.T) {
 	s.showSurface(WorkspaceSurfaceDiff)
 	tt := ui.NewTester(s.View, 1280, 760)
 	tt.Frame()
-	for _, label := range []string{"Fetch", "Pull (fast-forward only)", "Push", "Git actions", "Copy Path"} {
+	for _, label := range []string{"Fetch", "Pull (fast-forward only)", "Push", "Hide file list", "Copy Path"} {
 		reached := false
 		for i := 0; i < 80 && !reached; i++ {
 			tt.Key(0, ui.KeyTab)

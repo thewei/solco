@@ -338,8 +338,9 @@ func (s *Shell) reviewCommit(hash string) {
 	root := s.git.root
 	s.git.source = gdSourceCommit
 	s.git.commitHash = hash
+	s.gitCommitBodyOpen = false
 	s.git.commitSnap = nil
-	s.git.commitMeta = nil
+	s.git.commitMeta, s.git.commitBody = nil, ""
 	s.git.gdFiles = nil
 	s.git.gdFilesFor = nil
 	s.git.gdRows = nil
@@ -356,6 +357,7 @@ func (s *Shell) reviewCommit(hash string) {
 		ctx, cancel := context.WithTimeout(context.Background(), gitworkbench.ReadTimeout*2)
 		defer cancel()
 		snap, err := s.git.runner.CommitSnapshot(ctx, root, hash)
+		body, _ := s.git.runner.CommitMessage(ctx, root, hash)
 		var meta *gitworkbench.CommitInfo
 		if commits, cerr := s.git.runner.ListCommits(ctx, root, 500); cerr == nil {
 			for i := range commits {
@@ -376,6 +378,7 @@ func (s *Shell) reviewCommit(hash string) {
 			}
 			s.git.commitSnap = snap
 			s.git.commitMeta = meta
+			s.git.commitBody = body
 			s.gdSetFiles()
 		})
 	}()
@@ -396,7 +399,7 @@ func (s *Shell) reviewLocalChanges() {
 	}
 	s.git.source = gdSourceWorktree
 	s.git.commitSnap = nil
-	s.git.commitMeta = nil
+	s.git.commitMeta, s.git.commitBody = nil, ""
 	s.git.gdFiles = nil
 	s.git.gdFilesFor = nil
 	s.git.gdRows = nil

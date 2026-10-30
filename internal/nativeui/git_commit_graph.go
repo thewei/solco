@@ -118,25 +118,56 @@ var gitLaneColors = []ui.Color{
 // gitGraphRowH is the graph glyph's height and, by being the tallest child
 // of a padding-free row, the All Commits row pitch: adjacent glyphs tile
 // edge to edge, so lane wires run unbroken across rows.
-const gitGraphRowH float32 = 26
+const gitGraphRowH float32 = 24
 
-func gitGraphGlyph(c *ui.Context, graph gitGraphRow) {
-	ui.Box(c).Width(76).Height(gitGraphRowH).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-		const step float32 = 11
+const (
+	gitGraphStep     float32 = 11
+	gitGraphInset    float32 = 9 // lane 0's x, and the room after the last lane
+	gitGraphMaxLanes         = 6
+)
+
+// gitGraphWidth is the width of the graph column: just the lanes the history
+// uses (up to six), so the dot sits next to its subject instead of in a fixed
+// 76-wide gutter. One width serves every row, so the subjects keep a column.
+func gitGraphWidth(rows []gitGraphRow) float32 {
+	lanes := 1
+	for _, r := range rows {
+		lanes = max(lanes, len(r.Before), len(r.After), r.Lane+1)
+	}
+	return gitGraphWidthFor(min(lanes, gitGraphMaxLanes))
+}
+
+func gitGraphWidthFor(lanes int) float32 {
+	return gitGraphInset*2 + float32(max(lanes, 1)-1)*gitGraphStep
+}
+
+// gitGraphGlyph draws one row of the graph in a column width wide. dotOnly
+// draws the commit's dot alone — a filtered list is not a history, so wires
+// between rows that are no longer neighbours would lead nowhere.
+func gitGraphGlyph(c *ui.Context, graph gitGraphRow, width float32, dotOnly bool) {
+	ui.Box(c).Width(width).Height(gitGraphRowH).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+		if dotOnly {
+			color := gitLaneColors[graph.Color%len(gitLaneColors)]
+			x, center := r.X+gitGraphInset, r.Y+r.H/2
+			p.Fill(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color, 4)
+			p.Stroke(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color.Alpha(0.85), 4, 0.75)
+			return
+		}
+		const step = gitGraphStep
 		center := r.Y + r.H/2
 		laneColor := func(idx int) ui.Color { return gitLaneColors[idx%len(gitLaneColors)] }
 		for i, hash := range graph.Before {
 			if i >= 6 {
 				break
 			}
-			x := r.X + 9 + float32(i)*step
+			x := r.X + gitGraphInset + float32(i)*step
 			color := laneColor(graph.BeforeColors[i])
 			if i != graph.Lane {
 				p.Line(x, r.Y, x, center, 1.4, color.Alpha(0.8))
 			}
 			target := slices.Index(graph.After, hash)
 			if i != graph.Lane && target >= 0 && target < 6 {
-				nx := r.X + 9 + float32(target)*step
+				nx := r.X + gitGraphInset + float32(target)*step
 				p.Line(x, center, nx, r.Y+r.H, 1.4, color.Alpha(0.8))
 			}
 		}
@@ -144,18 +175,18 @@ func gitGraphGlyph(c *ui.Context, graph gitGraphRow) {
 			if i >= 6 {
 				break
 			}
-			x := r.X + 9 + float32(i)*step
+			x := r.X + gitGraphInset + float32(i)*step
 			p.Line(x, center, x, r.Y+r.H, 1.4, laneColor(graph.AfterColors[i]).Alpha(0.85))
 		}
 		if graph.Lane < 6 {
-			x := r.X + 9 + float32(graph.Lane)*step
+			x := r.X + gitGraphInset + float32(graph.Lane)*step
 			color := laneColor(graph.Color)
 			p.Line(x, r.Y, x, center, 1.5, color)
 			p.Fill(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color, 4)
 			p.Stroke(ui.Rect{X: x - 4, Y: center - 4, W: 8, H: 8}, color.Alpha(0.85), 4, 0.75)
 			for j := 1; j < len(graph.After); j++ {
 				if !slices.Contains(graph.Before, graph.After[j]) && j < 6 {
-					to := r.X + 9 + float32(j)*step
+					to := r.X + gitGraphInset + float32(j)*step
 					p.Line(x, center, to, r.Y+r.H, 1.4, laneColor(graph.AfterColors[j]))
 				}
 			}

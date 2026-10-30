@@ -32,7 +32,9 @@ func (s *Shell) sidebar(c *ui.Context) {
 		}
 		if s.sidebarInDiffMode() {
 			// Git references are full-height navigation, not compressed toolbar chips.
-			s.sidebarProjectHeader(c, s.git.root, "Refresh repository", s.refreshGitChanges)
+			s.sidebarProjectHeader(c, s.git.root, "Refresh repository", s.refreshGitChanges, &headerSearch{
+				Query: &s.gitRefsFilter, Open: &s.gitRefsSearchOpen, Label: "Filter Git references", Button: "Search references", Changed: s.gitRefsFilterChanged,
+			})
 			ui.Divider(c)
 		}
 		// No divider on the plain workspace sidebar: with no row above it
@@ -47,13 +49,13 @@ func (s *Shell) sidebar(c *ui.Context) {
 			s.gitRepositorySidebar(c)
 		} else if s.router.Path() == routeFiles {
 			s.syncRightPanelRoot()
-			s.sidebarProjectHeader(c, s.rightPanel.currentRoot, "Refresh files", s.refreshFiles)
+			s.sidebarProjectHeader(c, s.rightPanel.currentRoot, "Refresh files", s.refreshFiles, nil)
 			ui.Divider(c)
 			s.filesToolView(c)
 		} else if isHistoryRoute(s.router.Path()) {
 			// Sessions wears the same project/branch head as Git and Files;
 			// under it the scope rows say whose sessions the list shows.
-			s.sidebarProjectHeader(c, s.historyProjectRoot(), "Refresh sessions", s.refreshHistoryScan)
+			s.sidebarProjectHeader(c, s.historyProjectRoot(), "Refresh sessions", s.refreshHistoryScan, nil)
 			ui.Divider(c)
 			s.historyNav(c)
 		} else if s.sidebarInnerPage() {
@@ -210,17 +212,23 @@ func (s *Shell) sidebarFilesView(c *ui.Context) {
 
 	snap := s.gdActiveSnapshot()
 	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Row(c).FillWidth().Padding(6, 12, 2).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Local Changes").FontSize(Typography().Body).FontWeight(WeightSemibold)
-			if snap != nil {
-				ui.Text(c, "  "+pluralFiles(len(snap.Files))).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
-			}
-		})
-
-		ui.Row(c).FillWidth().Padding(8, 10, 10).Children(func() {
-			if gdSearchInput(c, &s.changes.filter, "Filter files") {
+		s.gitListHead(c, &headerSearch{
+			Query: &s.changes.filter, Open: &s.changesSearchOpen, Label: "Filter files", Button: "Search files",
+			Changed: func() {
 				s.changesTree = nil
 				s.git.gdRowsDirty = true
+			},
+		}, 10, func() {
+			if snap == nil {
+				return
+			}
+			ui.Text(c, pluralFiles(len(snap.Files))).FontSize(Typography().BodySmall).TextColor(t.TextMuted).SingleLine()
+			tipped(c, ui.Row(c).Gap(6).Shrink(0), "Total change: "+gdLines(snap.TotalAdditions, "added")+", "+gdLines(snap.TotalDeletions, "removed")).Children(func() {
+				ui.Text(c, "+"+gdThousands(snap.TotalAdditions)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.addText)
+				ui.Text(c, "-"+gdThousands(snap.TotalDeletions)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.delText)
+			})
+			if snap.Truncated {
+				ui.Text(c, "partial").FontSize(Typography().Micro).TextColor(t.TextMuted)
 			}
 		})
 
@@ -277,27 +285,23 @@ func (s *Shell) sidebarFilesView(c *ui.Context) {
 				}
 			}
 		})
-
-		// The godiff footer: totals and the Commit action.
-		s.gdChangesFooter(c, pal, snap)
 	})
 }
 
-// commitsPane is the All Commits pane: the history of HEAD, filtered by the
+// The widths of the center under which the Commits list drops its author and
+// then its age column.
+const (
+	gitCommitsShowAuthor float32 = 760
+	gitCommitsShowAge    float32 = 600
+)
+
+// commitsPane is the Commits pane: the history of HEAD, filtered by the
 // search field, each row opening the commit's diff in the review.
 func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 	t := c.Theme()
 
-	var entries []gitworkbench.CommitInfo
-	q := strings.ToLower(strings.TrimSpace(s.gitCommitFilter))
-	for _, cm := range s.git.commits {
-		if q == "" ||
-			strings.Contains(strings.ToLower(cm.Subject), q) ||
-			strings.Contains(strings.ToLower(cm.Author), q) ||
-			strings.HasPrefix(cm.Hash, q) {
-			entries = append(entries, cm)
-		}
-	}
+	entries := s.filteredCommits()
+	filtering := strings.TrimSpace(s.gitCommitFilter) != ""
 	if s.gdReviewingCommit() {
 		s.commitsSelected = -1
 		for i, cm := range entries {
@@ -308,6 +312,14 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 	}
 
 	graphs := gitHistoryGraph(s.git.commits)
+	// The graph column hugs the lanes the history uses; a filtered list shows
+	// dots only, since its rows are no longer neighbours.
+	graphW := gitGraphWidth(graphs)
+	if filtering {
+		graphW = gitGraphWidthFor(1)
+	}
+	windowW, _ := c.Size()
+	centerW := s.gitCenterWidth(windowW)
 	graphByHash := make(map[string]gitGraphRow, len(graphs))
 	for i, cm := range s.git.commits {
 		graphByHash[cm.Hash] = graphs[i]
@@ -354,12 +366,16 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 			if m.Item("Revert Commit…").Chosen() {
 				s.confirmRevertCommit(cm.Hash, cm.Subject)
 			}
+			m.Separator()
 			if m.Item("Copy Commit Hash").Chosen() {
 				s.copyToClipboard(cm.Hash)
 			}
+			if m.Item("Copy Subject").Chosen() {
+				s.copyToClipboard(cm.Subject)
+			}
 		})
 		row.Children(func() {
-			gitGraphGlyph(c, graphByHash[cm.Hash])
+			gitGraphGlyph(c, graphByHash[cm.Hash], graphW, filtering)
 			// Real local/remote-tracking decorations follow cached ref
 			// object hashes, never guessed from the commit subject.
 			labels := 0
@@ -381,9 +397,14 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 				}
 			}
 			ui.Text(c, cm.Subject).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine()
-			ui.Text(c, cm.Author).FontSize(Typography().BodySmall).TextColor(muted).Width(90).SingleLine()
+			// Author and age give way first when the center is narrow.
+			if centerW >= gitCommitsShowAuthor {
+				ui.Text(c, cm.Author).FontSize(Typography().BodySmall).TextColor(muted).Width(90).SingleLine()
+			}
 			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(ref).Width(64).SingleLine()
-			ui.Text(c, gdRelativeTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(muted).Width(62).SingleLine()
+			if centerW >= gitCommitsShowAge {
+				ui.Text(c, gdRelativeTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(muted).Width(62).SingleLine()
+			}
 		})
 	}).Grow(1).MinHeight(0).Padding(4, 8)
 	s.commitsList.Key = func(i int) any {

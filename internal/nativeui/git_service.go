@@ -60,6 +60,10 @@ type gitService struct {
 	gdSelHunk   int
 	gdViewed    map[string]string // path -> fingerprint marked viewed
 	gdHScroll   map[string]float32
+	gdHover     gdHoverLine
+	gdDrag      gdGutterDrag
+	gdPick      gdLinePick // the changed lines picked in the gutter, for partial staging
+	gdHostRef   ui.Handle  // the diff list's host, for its width in gdScrollSideways
 	gdWordWrap  bool
 	gdCharW     float32
 	// find in diffs
@@ -101,6 +105,9 @@ type gitService struct {
 	commitHash string
 	commitSnap *gitworkbench.ChangesSnapshot
 	commitMeta *gitworkbench.CommitInfo
+	// commitBody is the full message of the commit under review (subject,
+	// blank line, body); read apart from the list, which keeps only subjects.
+	commitBody string
 
 	// Current Git sequencer facts are refreshed off the UI lane together with
 	// branches. A conflict is repository state, not an ad hoc dialog flag.
@@ -307,11 +314,12 @@ func (s *Shell) resetGitContextState() {
 	s.git.gdMatch = 0
 	s.git.branches = nil
 	s.gitTreeClosed = make(map[string]bool)
-	s.gitRefsFilter = ""
+	s.gitRefsFilter, s.gitRefsSearchOpen, s.gitRefsSelected = "", false, ""
 	s.gitCommitFilter = ""
 	s.gitCommitFilesFilter = ""
+	s.changesSearchOpen, s.gitCommitSearchOpen, s.gitCommitFilesSearchOpen = false, false, false
 	s.gitQuickSubject, s.gitQuickBody, s.gitQuickAmend = "", "", false
-	s.gitLowerTab = 1
+	s.gitCommitBodyOpen = false
 	s.git.remoteBranches = nil
 	s.git.tags = nil
 	s.git.worktrees = nil
@@ -320,7 +328,7 @@ func (s *Shell) resetGitContextState() {
 	s.git.source = gdSourceWorktree
 	s.git.commitHash = ""
 	s.git.commitSnap = nil
-	s.git.commitMeta = nil
+	s.git.commitMeta, s.git.commitBody = nil, ""
 	s.branchFilter = ""
 	s.branchMenuOpen = false
 	s.gitConflictFilesExpanded = false

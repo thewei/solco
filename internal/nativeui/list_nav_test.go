@@ -329,7 +329,7 @@ func TestFilesTreeCursorIsDarkAgainOnReEntry(t *testing.T) {
 // letter (see TestSidebarListsBindNoLetters).
 func TestGitRefsFilterKeepsItsLetters(t *testing.T) {
 	shell, tester, _ := treeTestShell(t)
-	if err := tester.Click("Filter Git references"); err != nil {
+	if err := tester.Click("Search references"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()

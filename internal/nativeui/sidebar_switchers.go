@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: Herdr 项目投影与当前选择、本地分支目录、既有 selectProject/confirmSwitchBranch/创建分支流程、共享 sidebar 网格与 breadcrumb_switcher 的 switcherListMaxHeight
- * [OUTPUT]: Git、Files 与 Sessions 三个侧栏共用的头部 sidebarProjectHeader：项目名与分支名各自是可搜索的 pull-down 快速切换，外加刷新图标
+ * [OUTPUT]: Git、Files 与 Sessions 三个侧栏共用的头部 sidebarProjectHeader：单行：项目名与分支名各自是可搜索的 pull-down 快速切换，外加可选的搜索钮（headerSearch，点开才展开字段，Esc/再点收起并清空）与刷新图标；侧栏 ≤236pt 时项目只留文件夹图标
  * [POS]: 侧栏头部呈现与切换交互；项目选择权威仍在 selection.go，分支变更仍走 git_service_mutation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -36,31 +36,94 @@ func switcherChip(c *ui.Context, key, label, text, tooltip string, glyph *ui.SVG
 	chip.Children(func() {
 		ui.Icon(c, glyph).FontSize(treeGlyphW).TextColor(t.TextMuted).Shrink(0)
 		ui.Box(c).Width(treeGlyphGap).Shrink(0).PassThrough()
-		ui.Text(c, text).FontSize(size).FontWeight(weight).TextColor(color).SingleLine().Shrink(1).MinWidth(0)
+		if text != "" {
+			ui.Text(c, text).FontSize(size).FontWeight(weight).TextColor(color).SingleLine().Shrink(1).MinWidth(0)
+		}
 		ui.Box(c).Width(3).Shrink(0).PassThrough()
 		ui.Icon(c, iconChevronDown).FontSize(9).TextColor(t.TextMuted).Shrink(0)
 	})
 	return chip
 }
 
-// sidebarProjectHeader is the head of the Git, Files and Sessions sidebars:
-// the project and its branch — each a pull-down that switches in place — and
-// the refresh icon. root is the folder the sidebar shows, offered as the
-// project's tooltip.
-func (s *Shell) sidebarProjectHeader(c *ui.Context, root, refreshLabel string, refresh func()) {
+// sidebarHeaderNarrow is the sidebar width at and under which the project
+// chip keeps only its folder glyph (its name in the tooltip), so the branch
+// keeps its name.
+const sidebarHeaderNarrow float32 = 236
+
+// headerSearch is the search a sidebar head may carry: a magnifier button
+// that opens a field under the head. Closing it (the button again, or Esc)
+// clears the query, so no hidden filter outlives its field.
+type headerSearch struct {
+	Query *string
+	Open  *bool
+	// Label names the field; Button names the magnifier that opens it.
+	Label, Button string
+	// Changed runs when the query is edited or cleared by closing.
+	Changed func()
+}
+
+// close empties the search and hides its field.
+func (h *headerSearch) close() {
+	*h.Open = false
+	if *h.Query != "" {
+		*h.Query = ""
+		if h.Changed != nil {
+			h.Changed()
+		}
+	}
+}
+
+// button is the magnifier that opens and closes the field; it wears the
+// selected face while the field shows.
+func (h *headerSearch) button(c *ui.Context, k *gorexColors) {
+	label := h.Button
+	if *h.Open {
+		label = "Close " + strings.ToLower(h.Button)
+	}
+	if gorexIconButton(c, k, iconSearch, label, label, *h.Open, gorexPaneBtn, gorexPaneGlyph).Clicked() {
+		if *h.Open {
+			h.close()
+		} else {
+			*h.Open = true
+		}
+	}
+}
+
+// field is the opened search: focused as it appears, Esc closes it.
+func (h *headerSearch) field(c *ui.Context) {
+	f := searchField(c, h.Query).FillWidth().AutoFocus().Label(h.Label)
+	if f.Changed() && h.Changed != nil {
+		h.Changed()
+	}
+	if f.Shortcut(0, ui.KeyEscape) {
+		h.close()
+	}
+}
+
+// sidebarProjectHeader is the head of the Git, Files and Sessions sidebars,
+// one row: the project and its branch — each a pull-down that switches in
+// place — then the search button (when search is given) and the refresh icon.
+// root is the folder the sidebar shows, offered as the project's tooltip.
+func (s *Shell) sidebarProjectHeader(c *ui.Context, root, refreshLabel string, refresh func(), search *headerSearch) {
 	t := c.Theme()
 	title, tooltip := s.sidebarProjectTitle(), root
 	branch := s.currentBranchName()
-	ui.Row(c).FillWidth().Padding(8, sidebarGutter, 6).Gap(4).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-			ui.Row(c).FillWidth().MinWidth(0).Children(func() {
+	k := gorexColorsOf(t.Dark)
+	narrow := s.sidebarW <= sidebarHeaderNarrow
+	ui.Column(c).FillWidth().Children(func() {
+		ui.Row(c).FillWidth().Padding(6, sidebarGutter, 4).Gap(2).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Children(func() {
 				switch {
 				case title == "":
 					ui.Text(c, "No project").FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(t.TextMuted)
 				case len(s.projection.Projects) == 0:
-					tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine(), tooltip)
+					tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine().Shrink(1).MinWidth(0), tooltip)
 				default:
-					chip := switcherChip(c, "sidebar-project", "Switch project", title, tooltip, iconFolder,
+					chipTitle, chipTip := title, tooltip
+					if narrow {
+						chipTitle, chipTip = "", title
+					}
+					chip := switcherChip(c, "sidebar-project", "Switch project", chipTitle, chipTip, iconFolder,
 						Typography().Body, WeightSemibold, t.Text)
 					wasOpen := s.projectMenuOpen
 					toggleMenu(&s.projectMenuOpen, chip)
@@ -71,9 +134,10 @@ func (s *Shell) sidebarProjectHeader(c *ui.Context, root, refreshLabel string, r
 						ui.Popover(c, chip, &s.projectMenuOpen, func() { s.projectSwitcherPanel(c) })
 					}
 				}
-			})
-			if s.git != nil && s.git.root != "" && branch != "" {
-				ui.Row(c).FillWidth().MinWidth(0).Children(func() {
+				if s.git != nil && s.git.root != "" && branch != "" {
+					if !narrow && title != "" {
+						ui.Text(c, "/").FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0)
+					}
 					chip := switcherChip(c, "sidebar-branch", "Switch branch", branch, branch, iconBranch,
 						Typography().BodySmall, 400, t.TextMuted)
 					wasOpen := s.branchMenuOpen
@@ -84,13 +148,19 @@ func (s *Shell) sidebarProjectHeader(c *ui.Context, root, refreshLabel string, r
 					if s.branchMenuOpen {
 						ui.Popover(c, chip, &s.branchMenuOpen, func() { s.branchSwitcherPanel(c) })
 					}
-				})
+				}
+			})
+			if search != nil {
+				search.button(c, k)
+			}
+			if refresh != nil {
+				if gorexIconButton(c, k, iconRefresh, refreshLabel, refreshLabel, false, gorexPaneBtn, gorexPaneGlyph).Clicked() {
+					refresh()
+				}
 			}
 		})
-		if refresh != nil {
-			if gorexIconButton(c, gorexColorsOf(t.Dark), iconRefresh, refreshLabel, refreshLabel, false, gorexPaneBtn, gorexPaneGlyph).Clicked() {
-				refresh()
-			}
+		if search != nil && *search.Open {
+			ui.Row(c).FillWidth().Padding(0, sidebarGutter, 6).Children(func() { search.field(c) })
 		}
 	})
 }

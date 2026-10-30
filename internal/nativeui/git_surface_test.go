@@ -162,7 +162,7 @@ func TestSidebarSplitPanesAndRepoBar(t *testing.T) {
 	shell.showSurface(WorkspaceSurfaceDiff)
 	shell.rebuildDiffRows()
 	tester.Frame()
-	if !tester.HasText("Local Changes") || !tester.HasText("All Commits") {
+	if !tester.HasText("Changes") || !tester.HasText("Commits") {
 		t.Fatalf("diff sidebar missing the mode toggle; texts=%q", tester.Texts())
 	}
 	if !tester.HasText("Unstaged Files") || !tester.HasText("Staged Files") {
@@ -185,7 +185,7 @@ func TestSidebarSplitPanesAndRepoBar(t *testing.T) {
 	if !tester.HasText("Stage") || !tester.HasText("Unstage") {
 		t.Fatalf("pane headers missing the Stage/Unstage actions; texts=%q", tester.Texts())
 	}
-	for _, label := range []string{"Split", "Unified", "Commit subject draft", "Commit", "Git actions", "Fetch", "Pull (fast-forward only)", "Push"} {
+	for _, label := range []string{"Split", "Unified", "Commit subject draft", "Commit", "Actions", "Fetch", "Pull (fast-forward only)", "Push"} {
 		if !tester.HasText(label) {
 			t.Fatalf("Git Workbench toolbar missing %s: %q", label, tester.Texts())
 		}
@@ -193,7 +193,7 @@ func TestSidebarSplitPanesAndRepoBar(t *testing.T) {
 
 	shell.showSurface(WorkspaceSurfaceTerminal)
 	tester.Frame()
-	if tester.HasText("Unstaged Files") || tester.HasText("Stashes") || tester.HasText("Git actions") {
+	if tester.HasText("Unstaged Files") || tester.HasText("Stashes") || tester.HasText("Fetch") {
 		t.Fatalf("terminal must drop Git-specific controls: texts=%q", tester.Texts())
 	}
 	// The runtime sections return outside the git surface.
@@ -204,7 +204,7 @@ func TestSidebarSplitPanesAndRepoBar(t *testing.T) {
 
 // TestSidebarSwitchesWithPrimarySurface pins the Diff-mode sidebar: on the
 // Diff surface the left sidebar becomes Godiff's Files navigator (filter +
-// tree + Total/Commit footer); back on Terminal it is the canonical runtime
+// tree + file/line totals in its list head); back on Terminal it is the canonical runtime
 // navigator again.
 func TestSidebarSwitchesWithPrimarySurface(t *testing.T) {
 	root := t.TempDir()
@@ -222,19 +222,23 @@ func TestSidebarSwitchesWithPrimarySurface(t *testing.T) {
 	// Terminal: the runtime navigator, no diff footer.
 	shell.showSurface(WorkspaceSurfaceTerminal)
 	tester.Frame()
-	if tester.HasText("Total:") {
-		t.Fatalf("terminal sidebar must not show the diff footer; texts=%q", tester.Texts())
+	if tester.HasText("2 files") {
+		t.Fatalf("terminal sidebar must not show the diff totals; texts=%q", tester.Texts())
 	}
 
 	// Diff: the Godiff Files sidebar.
 	shell.showSurface(WorkspaceSurfaceDiff)
 	shell.rebuildDiffRows()
 	tester.Frame()
-	if !tester.HasText("Total:") {
-		t.Fatalf("diff sidebar missing the Total footer; texts=%q", tester.Texts())
+	if !tester.HasText("2 files") {
+		t.Fatalf("diff sidebar missing the file totals; texts=%q", tester.Texts())
 	}
+	if err := tester.Click("Search files"); err != nil {
+		t.Fatalf("diff sidebar missing the search button: %v", err)
+	}
+	tester.Frame()
 	if !tester.HasText("Filter files") {
-		t.Fatalf("diff sidebar missing the file filter; texts=%q", tester.Texts())
+		t.Fatalf("search button did not open the file filter; texts=%q", tester.Texts())
 	}
 	if !tester.HasText("README.md") {
 		t.Fatalf("diff sidebar missing the changed file row; texts=%q", tester.Texts())
@@ -243,8 +247,8 @@ func TestSidebarSwitchesWithPrimarySurface(t *testing.T) {
 	// Back to Terminal: the navigator returns.
 	shell.showSurface(WorkspaceSurfaceTerminal)
 	tester.Frame()
-	if tester.HasText("Total:") {
-		t.Fatalf("terminal sidebar must drop the diff footer; texts=%q", tester.Texts())
+	if tester.HasText("2 files") {
+		t.Fatalf("terminal sidebar must drop the diff totals; texts=%q", tester.Texts())
 	}
 	if !tester.HasText("Projects") && !tester.HasText("Agents") {
 		t.Fatalf("terminal sidebar missing the runtime navigator; texts=%q", tester.Texts())

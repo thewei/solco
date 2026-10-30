@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<!--
+  Solco · Git 面板优化 —— Design Storybook（interactive-design-exploration）
+
+  直接用浏览器打开（file://），无外部依赖、无构建。
+  Tokens 来自真实实现：internal/nativeui/theme.go、design_system.go（字号 12/11/10.5/10、圆角 Row 8 / Control 6、控件 24/28）、
+  gd_palette.go（diff 绿/红/行号/代码底）、git_commit_graph.go（泳道色 + 同一套父链算法，下方 graph() 是它的 JS 移植）、
+  sidebar_tree.go（行 26 高、chevron 槽 + 图标 + 标题网格）、sidebar_switchers.go（项目/分支 chip）。
+  原型里的 Git 数据与耗时均为模拟；真实行为以 Phase 4 实机验证为准。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Solco · Git 面板优化</title>
+
+<!-- ============================ SHELL (Design Storybook) ============================ -->
+<style>
+  [data-ide-shell]{--shell-bg:#0f0f10;--shell-panel:#18181b;--shell-border:#27272a;--shell-text:#fafafa;--shell-muted:#a1a1aa;--shell-accent:#71717a;--panel-w:312px;
+    box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--shell-bg);color:var(--shell-text);min-height:100vh;margin:0}
+  [data-ide-shell] *{box-sizing:border-box}
+  [data-ide-shell] .ide-layout{display:flex;min-height:100vh}
+  [data-ide-shell] .ide-stage{flex:1;position:relative;display:flex;flex-direction:column;min-height:100vh;min-width:0;background:#111113}
+  [data-ide-shell] .ide-stage-label{position:absolute;top:12px;left:14px;z-index:20;font-size:9px;font-weight:600;color:var(--shell-accent);text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+  [data-ide-shell] .ide-panel-collapse-btn{position:absolute;top:10px;right:10px;z-index:30;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer;font-size:12px}
+  [data-ide-shell] .ide-artboard-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:34px 24px 18px}
+  [data-ide-shell] .ide-artboard{display:none;width:100%;max-width:1240px}
+  [data-ide-shell] .ide-artboard.active{display:block}
+  [data-ide-shell] .ide-artboard .design-root{all:initial;display:block;font-family:inherit}
+  [data-ide-shell] .ide-story-panel{width:var(--panel-w);flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--shell-border);background:var(--shell-panel);transition:width .2s;overflow:hidden;height:100vh;position:sticky;top:0}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel{width:0;border-left:none}
+  [data-ide-shell] .ide-panel-expand-btn{display:none;position:fixed;top:10px;right:10px;z-index:40;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer;font-size:12px}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn{display:grid;place-items:center}
+  [data-ide-shell] .ide-panel-header{padding:12px 14px 8px;border-bottom:1px solid var(--shell-border);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--shell-muted);white-space:nowrap}
+  [data-ide-shell] .ide-panel-controls{flex:1;overflow-y:auto;padding:12px 14px;min-height:0}
+  [data-ide-shell] .ide-section-title{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--shell-accent);margin:0 0 6px}
+  [data-ide-shell] .ide-section-title:not(:first-child){margin-top:14px}
+  [data-ide-shell] .ide-variant-card,[data-ide-shell] .ide-state-card{padding:8px 10px;border-radius:6px;border:1px solid var(--shell-border);margin-bottom:5px;cursor:pointer;transition:border-color .12s,background .12s}
+  [data-ide-shell] .ide-variant-card:hover,[data-ide-shell] .ide-state-card:hover{border-color:#3f3f46}
+  [data-ide-shell] .ide-variant-card.active,[data-ide-shell] .ide-state-card.active{border-color:var(--shell-accent);background:rgba(113,113,122,.1)}
+  [data-ide-shell] .ide-variant-card h2{font-size:11px;font-weight:600;margin:0 0 2px}
+  [data-ide-shell] .ide-variant-card p{margin:0;color:var(--shell-muted);font-size:10px;line-height:1.4}
+  [data-ide-shell] .ide-state-card{font-size:10px;line-height:1.4;color:var(--shell-muted)}
+  [data-ide-shell] .ide-state-card strong{display:block;color:var(--shell-text);font-size:10.5px}
+  [data-ide-shell] .ctl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px;font-size:10.5px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--shell-border);border-radius:7px}
+  [data-ide-shell] .shell-seg button{all:unset;cursor:pointer;padding:3px 8px;border-radius:5px;font-size:10px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg button.on{background:#2c2c31;color:var(--shell-text)}
+  [data-ide-shell] .ide-panel-story{border-top:1px solid var(--shell-border);flex-shrink:0}
+  [data-ide-shell] .ide-story-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:none;background:rgba(255,255,255,.02);color:var(--shell-muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+  [data-ide-shell] .ide-story-toggle:hover{color:var(--shell-text);background:rgba(255,255,255,.04)}
+  [data-ide-shell] .ide-story-body{padding:0 14px 14px;font-size:11px;line-height:1.55;color:var(--shell-muted);max-height:230px;overflow-y:auto}
+  [data-ide-shell] .ide-layout.story-collapsed .ide-story-body{display:none}
+  [data-ide-shell] .ide-story-body h1{font-size:13px;font-weight:600;color:var(--shell-text);margin:0 0 6px}
+  [data-ide-shell] .ide-story-body p{margin:0 0 8px}
+  [data-ide-shell] .ide-story-body ul{margin:0 0 8px;padding-left:16px}
+  [data-ide-shell] .ide-story-body li{margin-bottom:4px}
+  [data-ide-shell] .ide-story-body b{color:var(--shell-text);font-weight:600}
+  [data-ide-shell] .ide-story-body code{font:10.5px ui-monospace,Menlo,monospace;background:#232327;padding:0 4px;border-radius:4px;color:#d4d4d8}
+</style>
+
+<!-- ============================ DESIGN · common (all variants) ============================ -->
+<style id="design-styles-common">
+  @keyframes gspin{to{transform:rotate(360deg)}}
+  @keyframes gpop{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes gsx{from{width:26px;opacity:.4}to{width:var(--sxw,220px);opacity:1}}
+  @keyframes gflash{from{background:color-mix(in srgb,var(--accent) 30%,transparent)}to{background:transparent}}
+
+  [data-ide-shell] .ide-artboard .design-root{
+    --sb:#17171a;--bg:#141516;--text:#ececee;--muted:#8b8c92;
+    --hover:rgba(255,255,255,.05);--sel:rgba(255,255,255,.08);--selS:rgba(255,255,255,.14);
+    --line:rgba(255,255,255,.07);--border:#333338;--accent:#0a84ff;--ok:#30d158;--warn:#ff9f0a;--bad:#ff453a;
+    --code-bg:#1c1c1c;--add-bg:#22382a;--add-bar:#5ecc71;--del-bg:#40262a;--del-bar:#ff6762;--ln:#6c6c6c;--ref:#e9a134;--card-border:rgba(230,230,230,.10);
+    --k:#c68ae5;--str:#65ba85;--com:#6c6c6c;--fn:#5da6ec;--num:#e9a134;--wadd:rgba(94,204,113,.30);--wdel:rgba(255,103,98,.32);
+    --track:rgba(255,255,255,.06);--tabon:rgba(255,255,255,.10);--tabon-b:rgba(255,255,255,.10);--pill-shadow:0 1px 2px rgba(0,0,0,.3);
+    --menu-bg:rgba(44,44,48,.94);--menu-border:rgba(255,255,255,.12);--scrim:rgba(0,0,0,.45);--tipbg:#ececee;--tiptx:#18181b;--pop-shadow:0 6px 20px rgba(0,0,0,.4);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;font-size:12px;line-height:1.25;color:var(--text);-webkit-font-smoothing:antialiased;
+  }
+  [data-ide-shell] .ide-artboard .design-root[data-theme="light"]{
+    --sb:#efeff1;--bg:#fbfbfb;--text:#18181b;--muted:#71717a;
+    --hover:rgba(0,0,0,.05);--sel:rgba(0,0,0,.06);--selS:rgba(0,0,0,.11);
+    --line:rgba(0,0,0,.07);--border:#e1e1e5;--ok:#16a34a;--warn:#c93400;--bad:#dc2626;
+    --code-bg:#fff;--add-bg:#e2f7ea;--add-bar:#0dbe4e;--del-bg:#ffe6e8;--del-bar:#ff2e3f;--ln:#9a9a9a;--ref:#c56e0e;--card-border:rgba(17,17,17,.10);
+    --k:#8a3fb0;--str:#16803c;--com:#8a8a8a;--fn:#1a6fd1;--num:#b15f0a;--wadd:rgba(13,190,78,.25);--wdel:rgba(255,46,63,.22);
+    --track:rgba(0,0,0,.05);--tabon:#fff;--tabon-b:rgba(0,0,0,.08);--pill-shadow:0 1px 2px rgba(0,0,0,.12);
+    --menu-bg:rgba(246,246,248,.95);--menu-border:rgba(0,0,0,.12);--scrim:rgba(0,0,0,.22);--tipbg:#18181b;--tiptx:#fafafa;--pop-shadow:0 6px 20px rgba(0,0,0,.18);
+  }
+
+  [data-ide-shell] .ide-artboard .design-root{
+    & *{box-sizing:border-box}
+    & button{all:unset;box-sizing:border-box;cursor:default;color:inherit;font:inherit}
+    & button:focus-visible,& input:focus-visible,& textarea:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:1px}
+    & .tr:focus-visible,& .crow:focus-visible{outline:none;background:var(--selS)}
+    & svg.ico{flex:none;display:block}
+    & .mut{color:var(--muted)}
+    & .grow{flex:1;min-width:0}
+    & code,& .mono{font:11px ui-monospace,SFMono-Regular,Menlo,monospace}
+    & ::selection{background:rgba(10,132,255,.45);color:inherit}
+    & .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+    /* ---- window ---- */
+    & .win{position:relative;display:grid;grid-template-columns:var(--sbw,252px) minmax(0,1fr);width:min(100%,var(--winw,1180px));margin:0 auto;height:clamp(540px,calc(100vh - 78px),760px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+    & .sb{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--sb);border-right:1px solid var(--line);container-type:inline-size;container-name:sb}
+    & .sb-top{height:38px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px}
+    & .tl{width:11px;height:11px;border-radius:50%;background:#56565b}
+    & .vtabs{display:flex;gap:2px;padding:0 8px 8px;flex:none}
+    & .vtab{flex:1;height:26px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+    & .vtab.on{background:var(--sel);color:var(--text)}
+    & .foot{flex:none;display:flex;align-items:center;gap:6px;height:38px;padding:0 10px;border-top:1px solid var(--line);color:var(--muted)}
+
+    /* ---- shared small controls ---- */
+    & .ib{position:relative;width:24px;height:24px;border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none}
+    & .ib:hover{background:var(--hover);color:var(--text)}
+    & .ib.on{background:var(--sel);color:var(--text)}
+    & .ib.spin svg{animation:gspin .8s linear infinite}
+    & .ib .bd{position:absolute;top:0;right:-1px;min-width:13px;height:13px;padding:0 3px;border-radius:7px;background:var(--accent);color:#fff;font-size:9px;font-weight:600;display:grid;place-items:center;line-height:1}
+    & .ib.dis{opacity:.4;pointer-events:none}
+    & .chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 6px;border-radius:6px;min-width:0;max-width:100%}
+    & .chip:hover,& .chip.open{background:var(--hover)}
+    & .chip .ico{color:var(--muted)}
+    & .ab{font-size:10px;color:var(--muted);display:inline-flex;gap:4px}
+    & .ab b{font-weight:500}
+    & .btn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:8px;border:1px solid var(--border);font-size:11.5px;font-weight:500;white-space:nowrap}
+    & .btn:hover{background:var(--hover)}
+    & .btn .ico{color:var(--muted)}
+    & .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+    & .btn.pri .ico{color:#fff}
+    & .btn.pri:hover{filter:brightness(1.08)}
+    & .btn.dis{opacity:.45;pointer-events:none}
+    & .kbd{font:10px ui-monospace,Menlo,monospace;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px;height:16px;display:inline-grid;place-items:center}
+    & .sepv{width:1px;height:14px;background:var(--line);margin:0 3px;flex:none}
+
+    /* ---- Git header ---- */
+    & .gh{display:flex;align-items:center;gap:2px;padding:2px 8px 4px 6px;flex:none;min-height:32px}
+    & .gh .slash{color:var(--muted);opacity:.55;padding:0 1px;flex:none}
+    & .gh .proj{flex:0 1 auto;font-weight:600}
+    & .gh .br{flex:0 1 auto}
+    & .gh2{display:flex;flex-direction:column;gap:5px;padding:2px 8px 6px;flex:none}
+    & .gh2 .r1{display:flex;align-items:center;gap:2px;margin-left:-2px}
+    & .gh2 .r1 .proj{font-weight:600;flex:0 1 auto}
+    & .selbtn{display:flex;align-items:center;gap:7px;height:26px;padding:0 8px;border:1px solid var(--border);border-radius:8px;width:100%}
+    & .selbtn:hover,& .selbtn.open{background:var(--hover)}
+    & .selbtn .ico{color:var(--muted)}
+    & .sbsearch{padding:0 8px 6px;flex:none}
+    & .sx{display:flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 8px;border:1px solid var(--border);border-radius:8px;width:var(--sxw,220px);max-width:100%;animation:gsx .16s ease-out;background:transparent}
+    & .sx.full{width:100%;animation:none}
+    & .sx input{all:unset;flex:1;min-width:0;font-size:12px;color:var(--text)}
+    & .sx input::placeholder{color:var(--muted)}
+    & .sx .ico{color:var(--muted)}
+    & .sx:focus-within{border-color:color-mix(in srgb,var(--accent) 70%,var(--border))}
+    & .sx .x{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;color:var(--muted)}
+    & .sx .x:hover{background:var(--hover);color:var(--text)}
+
+    /* ---- view switch · A: shadcn Tabs (pill track) ---- */
+    & .ptabs{display:flex;gap:2px;padding:3px;margin:2px 8px 6px;background:var(--track);border-radius:9px;flex:none}
+    & .ptab{flex:1;min-width:0;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-weight:500;border:1px solid transparent}
+    & .ptab:hover{color:var(--text)}
+    & .ptab.on{background:var(--tabon);border-color:var(--tabon-b);color:var(--text);box-shadow:var(--pill-shadow)}
+    & .cnt{min-width:16px;height:15px;padding:0 5px;border-radius:8px;background:var(--hover);color:var(--muted);font-size:10px;font-weight:500;display:inline-grid;place-items:center;line-height:1}
+    & .on > .cnt{background:var(--sel);color:var(--text)}
+    /* ---- view switch · C: source-list rows ---- */
+    & .srcl{display:flex;flex-direction:column;gap:1px;padding:0 8px 4px;flex:none}
+    & .srow{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 6px;border-radius:7px;font-weight:500}
+    & .srow .ico{color:var(--muted)}
+    & .srow:hover{background:var(--hover)}
+    & .srow.on{background:var(--sel)}
+    & .srow.on .ico{color:var(--text)}
+    & .srow .cnt{margin-left:auto}
+    & .srow.on .cnt{background:var(--selS)}
+    & .rule{height:1px;background:var(--line);margin:4px 8px 2px;flex:none}
+
+    /* ---- refs tree ---- */
+    & .refs{flex:1;min-height:0;overflow:auto;padding:0 8px 8px}
+    & .sh2{display:flex;align-items:center;gap:6px;height:28px;margin-top:4px;padding:0 6px;border-radius:7px;font-weight:600}
+    & .sh2:hover{background:var(--hover)}
+    & .sh2 .ico.chv{color:var(--muted);transition:transform .12s}
+    & .sh2.closed .ico.chv{transform:rotate(-90deg)}
+    & .sh2 .cnt{background:transparent;padding:0;min-width:0;margin-left:auto}
+    & .sh2 .add{display:none;margin:0 -2px 0 2px;width:20px;height:20px}
+    & .sh2:hover .add{display:grid}
+    & .sh2:hover .cnt{display:none}
+    & .tr{display:flex;align-items:center;gap:6px;height:26px;padding:0 6px;border-radius:7px;white-space:nowrap;position:relative}
+    & .tr .ico{color:var(--muted)}
+    & .tr:hover{background:var(--hover)}
+    & .tr.sel{background:var(--sel)}
+    & .tr.cur{color:var(--text)}
+    & .tr.cur .ico.g{color:var(--text)}
+    & .tr .chvs{width:12px;flex:none;display:grid;place-items:center}
+    & .tr .ico.chv{color:var(--muted);transition:transform .12s}
+    & .tr.closed .ico.chv{transform:rotate(-90deg)}
+    & .tr .trail{margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:10px}
+    & .tr .okm{color:var(--text)}
+    & .tr.l1{padding-left:20px}.tr.l2{padding-left:34px}.tr.l3{padding-left:48px}
+    & .none{padding:2px 8px 2px 32px;color:var(--muted);font-size:11px}
+
+    /* ---- main ---- */
+    & .main{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg);container-type:inline-size;container-name:main}
+    & .tb{height:38px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px 0 16px}
+    & .tb h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+    & .tool{height:36px;flex:none;display:flex;align-items:center;gap:3px;padding:0 10px;border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
+    & .tool.lt{padding-left:6px}
+    & .stat{display:inline-flex;align-items:center;gap:7px;padding:0 6px;font-size:11px;color:var(--muted)}
+    & .stat .a{color:var(--ok);font-weight:600}.stat .d{color:var(--bad);font-weight:600}
+    & .segi{display:inline-flex;gap:1px;padding:2px;background:var(--track);border-radius:8px}
+    & .segi button{width:24px;height:20px;border-radius:6px;display:grid;place-items:center;color:var(--muted)}
+    & .segi button.on{background:var(--tabon);color:var(--text);box-shadow:var(--pill-shadow)}
+    & .ltab{position:relative;height:36px;display:flex;align-items:center;gap:6px;padding:0 10px;color:var(--muted);font-weight:500;margin-bottom:-1px}
+    & .ltab:hover{color:var(--text)}
+    & .ltab.on{color:var(--text)}
+    & .ltab.on::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;border-radius:2px;background:var(--text)}
+    & .ltab.on .cnt{background:var(--sel);color:var(--text)}
+    & .tool.tabs{padding-left:4px;border-top:1px solid var(--line)}
+
+    /* ---- Local Changes ---- */
+    & .lc{flex:1;min-height:0;display:flex}
+    & .nav{width:var(--navw,252px);flex:none;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+    & .nav.off{display:none}
+    & .nscroll{flex:1;overflow:auto;padding:4px 8px 8px}
+    & .nav .sh2{margin-top:2px}
+    & .nav .sh2 .act{margin-left:auto;font-size:10px;font-weight:600;color:var(--muted);padding:0 6px;height:20px;border-radius:6px;display:none;align-items:center}
+    & .nav .sh2:hover .act{display:inline-flex}
+    & .nav .sh2:hover .act:hover{background:var(--hover);color:var(--text)}
+    & .nav .sh2 .cnt + .act{margin-left:4px}
+    & .nav .sh2:hover .cnt{display:inline-grid}
+    & .tr .st{font-size:10px;font-weight:700;width:12px;text-align:center;flex:none}
+    & .st.M{color:var(--warn)}.st.A{color:var(--ok)}.st.D{color:var(--bad)}
+    & .tr .pm{font-size:10px;display:inline-flex;gap:5px}
+    & .tr .pm .a{color:var(--ok)}.tr .pm .d{color:var(--bad)}
+    & .tr .rowact{display:none;width:18px;height:18px;border-radius:5px;place-items:center;color:var(--muted)}
+    & .tr:hover .rowact{display:grid}
+    & .tr .rowact:hover{background:var(--hover);color:var(--text)}
+    & .rc{flex:1;min-width:0;display:flex;flex-direction:column}
+    & .dscroll{flex:1;min-height:0;overflow:auto;padding:8px 10px 14px}
+    & .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center;padding:20px}
+    & .empty b{color:var(--text);font-weight:600;font-size:13px}
+
+    /* ---- diff cards ---- */
+    & .fc{border:1px solid var(--card-border);border-radius:8px;background:var(--code-bg);margin-bottom:8px;overflow:hidden}
+    & .fc.flash{animation:gflash 1s ease-out}
+    & .fch{height:30px;display:flex;align-items:center;gap:6px;padding:0 6px 0 4px;border-bottom:1px solid var(--card-border);background:color-mix(in srgb,var(--code-bg) 94%,var(--text))}
+    & .fc.closed .fch{border-bottom:none}
+    & .fc.closed .fbody{display:none}
+    & .fc.closed .ico.chv{transform:rotate(-90deg)}
+    & .fch .ico.chv{color:var(--muted);transition:transform .12s}
+    & .fch .path{font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace;min-width:0}
+    & .fch .path .dir{color:var(--muted)}.fch .path b{font-weight:600}
+    & .fch .hov{opacity:0;transition:opacity .1s}
+    & .fch:hover .hov,& .fch:focus-within .hov{opacity:1}
+    & .pill{font-size:10px;font-weight:600;padding:1px 6px;border-radius:5px;background:var(--hover);display:inline-flex;gap:5px}
+    & .pill .a{color:var(--ok)}.pill .d{color:var(--bad)}
+    & .viewed{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted)}
+    & .viewed i{width:11px;height:11px;border:1px solid var(--muted);border-radius:3px;display:grid;place-items:center}
+    & .viewed.on i{background:var(--accent);border-color:var(--accent);color:#fff}
+    & .hk{height:22px;display:flex;align-items:center;gap:8px;padding:0 8px 0 0;color:var(--muted);font:11px ui-monospace,Menlo,monospace;background:color-mix(in srgb,var(--code-bg) 96%,var(--text))}
+    & .hk .hno{width:41px;flex:none}
+    & .hk .hov{opacity:0;margin-left:auto}
+    & .hk:hover .hov{opacity:1}
+    & .ln{display:flex;font:12px/18px ui-monospace,SFMono-Regular,Menlo,monospace;min-height:18px}
+    & .ln .bar{width:3px;flex:none}
+    & .ln .no{width:38px;flex:none;text-align:right;padding-right:7px;color:var(--ln);user-select:none;-webkit-user-select:none;cursor:pointer}
+    & .ln .no:hover{color:var(--text)}
+    & .ln .cd{tab-size:4;flex:1;min-width:0;white-space:pre;padding:0 12px;overflow:hidden;user-select:text;-webkit-user-select:text;cursor:text}
+    & .ln.add{background:var(--add-bg)}.ln.add .bar{background:var(--add-bar)}.ln.add .no{color:var(--add-bar)}
+    & .ln.del{background:var(--del-bg)}.ln.del .bar{background:var(--del-bar)}.ln.del .no{color:var(--del-bar)}
+    & .cd i{font-style:normal}.cd .k{color:var(--k)}.cd .s{color:var(--str)}.cd .c{color:var(--com);font-style:italic}.cd .f{color:var(--fn)}.cd .n{color:var(--num)}
+    & .cd mark{background:var(--wadd);color:inherit;border-radius:2px}.ln.del .cd mark{background:var(--wdel)}
+    & .gap{height:22px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--muted);font-size:11px;background:color-mix(in srgb,var(--code-bg) 96%,var(--text))}
+    & .gap:hover{color:var(--text)}
+
+    /* ---- composer ---- */
+    & .cmp{flex:none;border-top:1px solid var(--line);padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+    & .cmp .r1{display:flex;gap:6px;align-items:center}
+    & .fld{all:unset;box-sizing:border-box;height:28px;border:1px solid var(--border);border-radius:8px;padding:0 10px;flex:1;min-width:0;font-size:12px;color:var(--text)}
+    & .fld::placeholder{color:var(--muted)}
+    & .fld:focus{border-color:color-mix(in srgb,var(--accent) 70%,var(--border))}
+    & textarea.fld{height:54px;padding:6px 10px;resize:none;display:block;width:100%;line-height:1.4}
+    & .cmp .more{display:none;flex-direction:column;gap:6px}
+    & .cmp.open .more{display:flex}
+    & .cmp .r3{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}
+    & .ck{display:inline-flex;align-items:center;gap:6px}
+    & .ck i{width:13px;height:13px;border:1px solid var(--muted);border-radius:4px}
+    & .split{display:inline-flex}
+    & .split .btn{border-radius:8px 0 0 8px}
+    & .split .caret{height:28px;width:22px;border-radius:0 8px 8px 0;background:var(--accent);color:#fff;display:grid;place-items:center;border-left:1px solid rgba(255,255,255,.3)}
+    & .split .btn.pri{height:28px;padding:0 12px}
+    & .split.dis{opacity:.45;pointer-events:none}
+
+    /* ---- History ---- */
+    & .hist{flex:1;min-height:0;display:flex;flex-direction:column}
+    & .hlist{flex:1;min-height:110px;overflow:auto;padding:2px 0}
+    & .crow{display:flex;align-items:center;height:var(--rh,24px);padding:0 12px 0 6px;gap:8px;position:relative}
+    & .crow:hover{background:var(--hover)}
+    & .crow.sel{background:var(--sel)}
+    & .hlist:focus-within .crow.sel{background:var(--selS)}
+    & .crow.flash{animation:gflash 1s ease-out}
+    & .gsvg{flex:none;display:block}
+    & .cmain{display:flex;align-items:center;gap:6px;min-width:0;flex:1}
+    & .csubj{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    & .cauth{display:flex;align-items:center;gap:6px;width:116px;flex:none;color:var(--muted);font-size:11px}
+    & .cdate{width:62px;flex:none;text-align:right;color:var(--muted);font-size:11px}
+    & .csha{width:64px;flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;color:var(--ref);font:11px ui-monospace,Menlo,monospace;border-radius:5px;height:18px;padding:0 3px}
+    & .csha .ico{display:none;color:var(--muted)}
+    & .crow:hover .csha .ico{display:block}
+    & .csha:hover{background:var(--hover)}
+    & .crow.two{align-items:stretch}
+    & .crow.two .cmain{flex-direction:column;align-items:flex-start;justify-content:center;gap:3px}
+    & .crow.two .l1,& .crow.two .l2{display:flex;align-items:center;gap:6px;min-width:0;max-width:100%}
+    & .crow.two .l2{color:var(--muted);font-size:11px}
+    & .crow.two .csha{width:auto;padding:0 2px}
+    & .av{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:8.5px;font-weight:700;color:#fff;flex:none}
+    & .rp{display:inline-flex;align-items:center;gap:3px;height:16px;padding:0 5px;border-radius:5px;font-size:10.5px;font-weight:600;flex:none;max-width:130px}
+    & .rp .ico{flex:none}
+    & .rp.branch{background:color-mix(in srgb,var(--accent) 20%,transparent);color:color-mix(in srgb,var(--accent) 80%,var(--text))}
+    & .rp.head{background:var(--accent);color:#fff}
+    & .rp.remote{background:var(--hover);color:var(--muted)}
+    & .rp.tag{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--ref)}
+    & .hsp{height:9px;flex:none;cursor:ns-resize;display:grid;align-items:center;border-top:1px solid var(--line)}
+    & .hsp:hover{background:var(--hover)}
+    & .review{flex:none;height:var(--revh,310px);min-height:150px;display:flex;border-top:1px solid var(--line)}
+    & .cpane{width:var(--cpw,300px);flex:none;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+    & .chead{padding:10px 12px 10px;display:flex;flex-direction:column;gap:7px;flex:none;border-bottom:1px solid var(--line)}
+    & .csub{font-size:13px;font-weight:600;line-height:1.35;user-select:text;-webkit-user-select:text;cursor:text}
+    & .cbody{font-size:11.5px;line-height:1.5;color:var(--muted);user-select:text;-webkit-user-select:text;cursor:text;white-space:pre-wrap;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+    & .cbody.open{-webkit-line-clamp:unset;max-height:120px;overflow:auto;display:block}
+    & .more{color:var(--accent);font-size:11px;align-self:flex-start;margin-top:-3px}
+    & .cmeta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+    & .cmeta b{color:var(--text);font-weight:600}
+    & .shab{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 5px;border-radius:5px;background:var(--hover);color:var(--ref);font:11px ui-monospace,Menlo,monospace}
+    & .shab:hover{background:var(--sel)}
+    & .shab .ico{color:var(--muted)}
+    & .cact{display:flex;gap:5px;flex-wrap:wrap}
+    & .cact .btn{height:22px;padding:0 7px;font-size:11px;flex:none}
+    & .cfiles{flex:1;min-height:0;display:flex;flex-direction:column}
+    & .cfh{height:28px;flex:none;display:flex;align-items:center;gap:6px;padding:0 6px 0 12px;font-weight:600;font-size:11px;color:var(--muted)}
+    & .cfh .cnt{margin-right:auto}
+
+    /* ---- overlays ---- */
+    & .ov-scrim{position:absolute;inset:0;background:var(--scrim);display:grid;place-items:center;z-index:50;animation:gpop .14s ease-out}
+    & .dlg{width:340px;padding:16px;border-radius:12px;background:var(--bg);border:1px solid var(--border);box-shadow:var(--pop-shadow);display:flex;flex-direction:column;gap:8px}
+    & .dlg h3{margin:0;font-size:14px;font-weight:600}
+    & .dlg p{margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+    & .dlg .foot2{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+    & .dlg .btn{height:28px;padding:0 12px}
+    & .pop{position:absolute;z-index:40;width:290px;padding:6px;border-radius:10px;background:var(--bg);border:1px solid var(--border);box-shadow:var(--pop-shadow);display:flex;flex-direction:column;gap:4px;animation:gpop .12s ease-out}
+    & .pop .plist{max-height:230px;overflow:auto;display:flex;flex-direction:column;gap:1px}
+    & .pi{display:flex;align-items:center;gap:8px;height:26px;padding:0 8px;border-radius:7px}
+    & .pi:hover{background:var(--sel)}
+    & .pi .ico{color:var(--muted)}
+    & .pi .okm{margin-left:auto;color:var(--text)}
+    & .menu{position:absolute;z-index:60;min-width:190px;padding:5px;border-radius:9px;background:var(--menu-bg);backdrop-filter:blur(20px);border:1px solid var(--menu-border);box-shadow:var(--pop-shadow);animation:gpop .1s ease-out}
+    & .mi{display:flex;align-items:center;gap:20px;height:22px;padding:0 10px;border-radius:5px;font-size:12px}
+    & .mi:hover{background:var(--accent);color:#fff}
+    & .mi.dis{opacity:.4;pointer-events:none}
+    & .mi span.k{margin-left:auto;opacity:.6}
+    & .msep{height:1px;background:var(--menu-border);margin:4px 6px}
+    & .toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:9px;background:var(--tipbg);color:var(--tiptx);font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.35);animation:gpop .14s ease-out;white-space:nowrap}
+    & .toast .ico{color:var(--ok)}
+    & .toast.soft{background:var(--menu-bg);color:var(--text);border:1px solid var(--menu-border);backdrop-filter:blur(16px)}
+    & .toast.soft .ico{color:var(--muted)}
+    & .tip{position:absolute;z-index:80;max-width:300px;padding:6px 12px;border-radius:8px;background:var(--tipbg);color:var(--tiptx);font-size:12px;pointer-events:none;white-space:pre-line;animation:gpop .1s ease-out}
+    & .tip::after{content:"";position:absolute;width:8px;height:8px;background:var(--tipbg);transform:rotate(45deg);left:var(--ax,50%);margin-left:-4px;top:var(--ay,auto);bottom:var(--by,-3px);border-radius:1px}
+  }
+
+  /* container queries on the main column (narrow windows) */
+  @container main (max-width: 760px){
+    [data-ide-shell] .ide-artboard .design-root .win .cauth{display:none}
+    [data-ide-shell] .ide-artboard .design-root .win .stat .lbl{display:none}
+  }
+  @container main (max-width: 600px){
+    [data-ide-shell] .ide-artboard .design-root .win .cdate{display:none}
+    [data-ide-shell] .ide-artboard .design-root .win .cpane{width:220px}
+  }
+  /* a narrow sidebar: the project shrinks to its folder glyph so the branch keeps its name */
+  @container sb (max-width: 236px){
+    [data-ide-shell] .ide-artboard .design-root .win .gh .proj .t,
+    [data-ide-shell] .ide-artboard .design-root .win .gh .proj .ico:last-child,
+    [data-ide-shell] .ide-artboard .design-root .win .gh .slash{display:none}
+    [data-ide-shell] .ide-artboard .design-root .win .gh .proj{padding:0 5px}
+  }
+</style>
+
+<!-- ============================ SHELL MARKUP ============================ -->
+</head>
+<body data-ide-shell>
+<div class="ide-layout" id="ideLayout">
+  <main class="ide-stage">
+    <div class="ide-stage-label" id="stageLabel">Git panel</div>
+    <button class="ide-panel-collapse-btn" id="collapseBtn" title="Collapse panel (Esc when idle)">›</button>
+    <div class="ide-artboard-wrap">
+      <div class="ide-artboard active" data-variant="A"><div class="design-root" data-theme="dark"></div></div>
+      <div class="ide-artboard" data-variant="B"><div class="design-root" data-theme="dark"></div></div>
+      <div class="ide-artboard" data-variant="C"><div class="design-root" data-theme="dark"></div></div>
+    </div>
+  </main>
+  <button class="ide-panel-expand-btn" id="expandBtn" title="Show panel">‹</button>
+  <aside class="ide-story-panel">
+    <div class="ide-panel-header">Design Storybook · Git panel</div>
+    <div class="ide-panel-controls">
+      <div class="ide-section-title">Variants</div>
+      <div class="ide-variant-card active" data-v="A"><h2>A · Tabs in the sidebar (shadcn Tabs)</h2><p>原位精修：视图切换留在侧栏，改成带图标+计数的 shadcn 胶囊 Tabs；头部压成 1 行面包屑。</p></div>
+      <div class="ide-variant-card" data-v="B"><h2>B · Tabs move to the center toolbar</h2><p>视图切换上移到中心工具栏（shadcn 线形 Tabs，与工具合并成一行）；侧栏变纯导航，头部 2 行（项目 / 分支选择）。</p></div>
+      <div class="ide-variant-card" data-v="C"><h2>C · Source list (no tabs)</h2><p>Changes / Commits 变成侧栏顶部的两个导航行（图标+计数，macOS source list / Fork 形态），没有 Tab 控件。</p></div>
+
+      <div class="ide-section-title">Controls</div>
+      <div class="ctl">View<span class="shell-seg" data-ctl="view"><button data-val="changes" class="on">Changes</button><button data-val="history">Commits</button></span></div>
+      <div class="ctl">Commit list<span class="shell-seg" data-ctl="list"><button data-val="cols" class="on">1-line</button><button data-val="two">2-line</button></span></div>
+      <div class="ctl">Working tree<span class="shell-seg" data-ctl="dirty"><button data-val="1" class="on">Dirty</button><button data-val="0">Clean</button></span></div>
+      <div class="ctl">Theme<span class="shell-seg" data-ctl="theme"><button data-val="dark" class="on">Dark</button><button data-val="light">Light</button></span></div>
+      <div class="ctl">Sidebar<span class="shell-seg" data-ctl="sbw"><button data-val="200">200</button><button data-val="252" class="on">252</button><button data-val="320">320</button></span></div>
+      <div class="ctl">Window<span class="shell-seg" data-ctl="winw"><button data-val="1180" class="on">1180</button><button data-val="960">960</button><button data-val="760">760</button></span></div>
+
+      <div class="ide-section-title">Interaction states</div>
+      <div class="ide-state-card" data-state="search-sb"><strong>Search · expanded (sidebar)</strong>点图标才展开，Esc 收起；过滤引用树</div>
+      <div class="ide-state-card" data-state="search-center"><strong>Search · expanded (center)</strong>Changes 过滤文件 / Commits 搜提交</div>
+      <div class="ide-state-card" data-state="dbl"><strong>Double-click a branch</strong>单击只选中；双击（或 Enter）才切换，脏工作区先确认</div>
+      <div class="ide-state-card" data-state="select-diff"><strong>Select &amp; copy diff code</strong>拖选代码，行号不入选；⌘C / 右键 Copy</div>
+      <div class="ide-state-card" data-state="menu-diff"><strong>Context menu · diff</strong>Copy Selection / Line / Hunk / File Patch</div>
+      <div class="ide-state-card" data-state="menu-commit"><strong>Context menu · commit</strong>Copy Hash / Message / Subject + 既有 Cherry-pick / Revert</div>
+      <div class="ide-state-card" data-state="pop-branch"><strong>Branch pull-down</strong>弹层里单击即切换（这是菜单语义，保持）</div>
+    </div>
+    <div class="ide-panel-story">
+      <button class="ide-story-toggle" id="storyToggle"><span>Story</span><span id="storyCaret">▾</span></button>
+      <div class="ide-story-body">
+        <h1>要解决的 10 个问题</h1>
+        <ul>
+          <li><b>Tab 组</b>：纯文字分段、无图标无计数 → 图标 + 计数 + shadcn 形态（用 <code>segmentedTrack/segmentFace</code> 现成脸搭）。</li>
+          <li><b>头部</b>：项目/分支/刷新占 2 行 ≈58pt → 1 行 32pt（A/C）或 2 行 58pt 但分支可读性更强（B）。</li>
+          <li><b>搜索</b>：常驻且只过滤引用，与 All Commits 的提交搜索同屏两个 → 图标按钮，点击才展开，作用域写进占位符。</li>
+          <li><b>单击危险</b>：分支单击即切换、Worktree 单击开 Finder、Remote/Tag/Stash 单击复制 → 单击只选中，双击/Enter 才执行。</li>
+          <li><b>提交列表</b>：图谱固定 76 宽，1~2 泳道时圆点到标题隔 ≈50pt → 按真实泳道数自适应宽。</li>
+          <li><b>重复</b>：同一 subject 出现 3 次；Stage All 在工具栏与分区头各一份；「Local Changes」标题与 Tab 同名；Total 脚注 → 各留一份。</li>
+          <li><b>复制</b>：提交信息不可选、diff 只有 Copy Line → 可选中 + Copy 菜单 + Copy Hunk/Patch。</li>
+        </ul>
+        <p>原型里 Split/Unified 为未改动的占位；所有 Git 动作为模拟。</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ======================================================================
+   DATA
+   ====================================================================== */
+const I = {
+  branch:'<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  commit:'<circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/>',
+  history:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  diff:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/>',
+  search:'<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  chevd:'<path d="m6 9 6 6 6-6"/>', chevr:'<path d="m9 18 6-6-6-6"/>',
+  copy:'<rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>', x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  down:'<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>', up:'<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  fetch:'<path d="M12 13v8"/><path d="m8 17 4 4 4-4"/><path d="M4.4 15.3A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.4 8.3"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  panel:'<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
+  tag:'<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r=".6" fill="currentColor"/>',
+  archive:'<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  cloud:'<path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9Z"/>',
+  layers:'<path d="m12.8 2.2a2 2 0 0 0-1.6 0L2.6 6.1a1 1 0 0 0 0 1.8l8.6 3.9a2 2 0 0 0 1.6 0l8.6-3.9a1 1 0 0 0 0-1.8Z"/><path d="m22 17.6-9.2 4.2a2 2 0 0 1-1.6 0L2 17.6"/><path d="m22 12.6-9.2 4.2a2 2 0 0 1-1.6 0L2 12.6"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  cols:'<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>', rows:'<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/>',
+  ext:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  spark:'<path d="M9.9 15.5A2 2 0 0 0 8.5 14.1l-6.1-1.6a.5.5 0 0 1 0-1L8.5 9.9A2 2 0 0 0 9.9 8.5l1.6-6.1a.5.5 0 0 1 1 0l1.6 6.1a2 2 0 0 0 1.4 1.4l6.1 1.6a.5.5 0 0 1 0 1l-6.1 1.6a2 2 0 0 0-1.4 1.4l-1.6 6.1a.5.5 0 0 1-1 0z"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  term:'<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+  git:'<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+  globe:'<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'
+};
+const ico=(n,sz=14,cls='')=>`<svg class="ico ${cls}" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const REFS={
+  worktrees:[{n:'main',path:'~/Workspaces/wh-studio/solco'}],
+  branches:['main','feat/editor','feat/git-panel','fix/diff-copy','release/0.10'],
+  remotes:['origin/main','origin/feat/editor'],
+  tags:['v0.10.0','v0.9.5'],
+  stashes:[{n:'stash@{0}',s:'WIP release'}]
+};
+const AUTH={Wilson:'#5e5ce6','Mina Park':'#30b0c7',Ravi:'#bf5af2'};
+const COMMITS=[
+ {h:'e0dfcf7',p:['64ec38c'],s:'feat(projects): New Project without a first task; header “+” creates a Project',a:'Wilson',t:'3d ago',abs:'Oct 27, 2026 22:11',refs:[{k:'branch',n:'main'}],
+  body:'The plugin has no create-Project verb, so a merged-event automation is added in the chosen folder, the Project’s name is read back from it, and it is removed at once. `pin` then keeps the Project in the sidebar and `coordinator restart` optionally starts its coordinator.'},
+ {h:'64ec38c',p:['90388be'],s:'feat(projects): Show Archived Projects toggle with Restore Project',a:'Wilson',t:'3d ago',abs:'Oct 27, 2026 18:40',refs:[],body:''},
+ {h:'90388be',p:['3c91261','a1f0e22'],s:'Merge branch ‘feat/editor’ into main',a:'Wilson',t:'3d ago',abs:'Oct 27, 2026 16:02',refs:[{k:'remote',n:'origin/main'}],body:''},
+ {h:'3c91261',p:['5e3f49e'],s:'Projects: row/task rows lead to the coordinator / agent pane; fix board re-entry bounce',a:'Mina Park',t:'3d ago',abs:'Oct 27, 2026 11:30',refs:[],body:''},
+ {h:'a1f0e22',p:['b7d2c40'],s:'feat(editor): read-only editor.View for the /files preview',a:'Ravi',t:'4d ago',abs:'Oct 26, 2026 21:14',refs:[{k:'branch',n:'feat/editor'}],body:''},
+ {h:'5e3f49e',p:['9822f3e'],s:'feat: present the herdr-projects work board natively',a:'Wilson',t:'4d ago',abs:'Oct 26, 2026 15:48',refs:[],body:''},
+ {h:'b7d2c40',p:['9822f3e'],s:'fix(files): honor ignore rules when listing the tree',a:'Ravi',t:'4d ago',abs:'Oct 26, 2026 12:02',refs:[],body:''},
+ {h:'9822f3e',p:['aa84a40'],s:'feat(workboard): project find + keyboard list, New Automation, Delegate with…',a:'Wilson',t:'5d ago',abs:'Oct 25, 2026 20:21',refs:[],body:''},
+ {h:'aa84a40',p:['6de2034'],s:'feat(sessions): the list opens on the project the sidebar names, with the shared project head',a:'Wilson',t:'15d ago',abs:'Oct 15, 2026 10:09',refs:[{k:'tag',n:'v0.10.0'}],body:''},
+ {h:'6de2034',p:['a5ce17a'],s:'feat: route continuations through the launch registry and disambiguate same-project agent cards (F149/F169)',a:'Wilson',t:'16d ago',abs:'Oct 14, 2026 17:55',refs:[],body:''},
+ {h:'a5ce17a',p:['9e1c4fe'],s:'feat(nativeui): pane header project command run control',a:'Mina Park',t:'17d ago',abs:'Oct 13, 2026 09:30',refs:[],body:''},
+ {h:'9e1c4fe',p:['1d77b03'],s:'fix(nativeui): title-bar New Tab shares the project row’s New Tab path',a:'Wilson',t:'17d ago',abs:'Oct 13, 2026 08:12',refs:[],body:''},
+ {h:'1d77b03',p:['c04e9a1'],s:'refactor(history): split provider scanners behind one catalog',a:'Mina Park',t:'20d ago',abs:'Oct 10, 2026 14:40',refs:[],body:''},
+ {h:'c04e9a1',p:['7b3ae55'],s:'chore: bump MyGo pin to v0.6.4 and re-apply the four vendored deltas',a:'Wilson',t:'24d ago',abs:'Oct 6, 2026 19:05',refs:[{k:'tag',n:'v0.9.5'}],body:''},
+ {h:'7b3ae55',p:[],s:'docs: architecture source of truth',a:'Wilson',t:'2mo ago',abs:'Aug 29, 2026 11:00',refs:[],body:''}
+];
+const FILES={
+  unstaged:[
+    {p:'internal/nativeui/sidebar_switchers.go',st:'M',a:9,d:4},
+    {p:'internal/nativeui/git_review_split.go',st:'M',a:42,d:18},
+    {p:'designs/git-panel/README.md',st:'A',a:120,d:0}],
+  staged:[{p:'internal/nativeui/CLAUDE.md',st:'M',a:1,d:1}]
+};
+const COMMIT_FILES=[
+  {p:'docs/client-product-architecture.md',st:'M',a:8,d:7},{p:'internal/nativeui/CLAUDE.md',st:'M',a:1,d:1},
+  {p:'internal/nativeui/projects_section.go',st:'M',a:5,d:4},{p:'internal/nativeui/workboard_newproject.go',st:'M',a:49,d:32},
+  {p:'internal/nativeui/workboard_newproject_test.go',st:'M',a:7,d:16},{p:'internal/workboard/manage.go',st:'M',a:33,d:34},
+  {p:'internal/workboard/manage_test.go',st:'M',a:53,d:17}
+];
+const DIFFS=[
+ {p:'internal/nativeui/sidebar_switchers.go',a:9,d:4,hunks:[{head:'@@ -52,9 +52,10 @@ func (s *Shell) sidebarProjectHeader(c *ui.Context, root, refreshLabel string, refresh func())',lines:[
+   ['c',52,52,'\tui.Row(c).FillWidth().Padding(8, sidebarGutter, 6).Gap(4).AlignItems(ui.Center).Children(func() {'],
+   ['d',53,0,'\t\tui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {'],
+   ['d',54,0,'\t\t\tui.Row(c).FillWidth().MinWidth(0).Children(func() {'],
+   ['a',0,53,'\t\ts.projectChip(c, title, tooltip)'],
+   ['a',0,54,'\t\tui.Text(c, "/").FontSize(Typography().Body).TextColor(t.TextMuted).Shrink(0)'],
+   ['a',0,55,'\t\ts.branchChip(c, branch, upstream) // ↑2 ↓0 live on the chip'],
+   ['c',55,56,'\t\tui.Box(c).Grow(1)'],
+   ['d',56,0,'\t\tif refresh != nil {'],
+   ['a',0,57,'\t\tif s.git != nil && s.git.root != "" {'],
+   ['a',0,58,'\t\t\ts.headerSearchButton(c, "Filter references", &s.gitRefsFilterOpen)'],
+   ['c',57,59,'\t\t\tif gorexIconButton(c, colors, iconRefresh, refreshLabel, refreshLabel, false, gorexPaneBtn, gorexPaneGlyph).Clicked() {'],
+   ['c',58,60,'\t\t\t\trefresh()'],
+   ['c',59,61,'\t\t\t}']
+ ]}]},
+ {p:'internal/nativeui/git_review_split.go',a:42,d:18,hunks:[{head:'@@ -225,12 +225,14 @@ func (s *Shell) gitCommitHistoryPane(c *ui.Context)',lines:[
+   ['c',225,225,'func (s *Shell) gitCommitHistoryPane(c *ui.Context) {'],
+   ['d',226,0,'\tui.Row(c).FillWidth().Height(36).Padding(6, 12).Gap(8).Children(func() {'],
+   ['d',227,0,'\t\tui.Text(c, "All Commits").FontSize(Typography().Body).FontWeight(WeightSemibold)'],
+   ['a',0,226,'\t// The tab already says "Commits"; the toolbar keeps only what is new here.'],
+   ['a',0,227,'\ts.gitToolbar(c, gitToolbarSpec{Search: &s.gitCommitFilter, Count: len(s.git.commits)})'],
+   ['c',228,228,'\ts.commitsPane(c, gdPaletteFor(t))'],
+   ['c',229,229,'}']
+ ]}]},
+ {p:'designs/git-panel/README.md',a:120,d:0,closed:true,hunks:[]}
+];
+
+/* ======================================================================
+   graph() — JS port of git_commit_graph.go gitHistoryGraph (same lanes + colors)
+   ====================================================================== */
+const LANE=['#e9a134','#5da6ec','#65ba85','#c68ae5','#e7858f','#e5ca68'];
+function graph(commits){
+  let active=[],colors={},next=0;const rows=[];
+  const fresh=h=>{if(!(h in colors)){colors[h]=next++%LANE.length;}};
+  for(const cm of commits){
+    let lane=active.indexOf(cm.h);if(lane<0){lane=active.length;active.push(cm.h);}
+    fresh(cm.h);
+    const before=active.slice(),bc=before.map(h=>{fresh(h);return colors[h];});
+    let after=active.slice();
+    if(!cm.p.length){after.splice(lane,1);}
+    else{
+      after[lane]=cm.p[0];
+      cm.p.forEach((p,j)=>{if(p in colors)return;if(j===0)colors[p]=colors[cm.h];else colors[p]=next++%LANE.length;});
+      for(let j=1;j<cm.p.length;j++){if(!after.includes(cm.p[j]))after.push(cm.p[j]);}
+    }
+    const uniq=[...new Set(after)],ac=uniq.map(h=>{fresh(h);return colors[h];});
+    rows.push({before,after:uniq,bc,ac,lane,color:colors[cm.h]});active=uniq.slice();
+  }
+  return rows;
+}
+const GRAPH=graph(COMMITS);
+const MAXLANES=Math.min(6,Math.max(...GRAPH.map(g=>Math.max(g.before.length,g.after.length))));
+function gsvg(g,H,step,pad){
+  const W=pad*2+Math.max(1,MAXLANES)*step-step+8,cy=H/2,x=i=>pad+4+i*step;
+  let s='';const col=i=>LANE[i%LANE.length];
+  g.before.forEach((h,i)=>{if(i>=6)return;const tx=g.after.indexOf(h);
+    if(i!==g.lane){s+=`<line x1="${x(i)}" y1="0" x2="${x(i)}" y2="${cy}" stroke="${col(g.bc[i])}" stroke-opacity=".8" stroke-width="1.4"/>`;
+      if(tx>=0&&tx<6)s+=`<line x1="${x(i)}" y1="${cy}" x2="${x(tx)}" y2="${H}" stroke="${col(g.bc[i])}" stroke-opacity=".8" stroke-width="1.4"/>`;}});
+  g.after.forEach((h,i)=>{if(i>=6)return;s+=`<line x1="${x(i)}" y1="${cy}" x2="${x(i)}" y2="${H}" stroke="${col(g.ac[i])}" stroke-opacity=".85" stroke-width="1.4"/>`;});
+  if(g.lane<6){const nx=x(g.lane),c=col(g.color);
+    s+=`<line x1="${nx}" y1="0" x2="${nx}" y2="${cy}" stroke="${c}" stroke-width="1.5"/>`;
+    for(let j=1;j<g.after.length;j++){if(!g.before.includes(g.after[j])&&j<6)s+=`<line x1="${nx}" y1="${cy}" x2="${x(j)}" y2="${H}" stroke="${col(g.ac[j])}" stroke-width="1.4"/>`;}
+    s+=`<circle cx="${nx}" cy="${cy}" r="4" fill="${c}" stroke="${c}" stroke-opacity=".85" stroke-width=".75"/>`;}
+  return `<svg class="gsvg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${s}</svg>`;
+}
+
+/* ======================================================================
+   STATE
+   ====================================================================== */
+const S={v:'A',view:'changes',theme:'dark',sbw:252,winw:1180,list:'cols',dirty:true,
+  branch:'main',selRef:'',selCommit:0,selFile:null,
+  sbSearch:false,sbQ:'',toolSearch:false,toolQ:'',navWide:true,navNarrow:false,composer:false,
+  closedSec:{},closedFold:{},hint:false,revh:340,diffMode:'unified'};
+
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+let root=()=>$('.ide-artboard.active .design-root');
+const win=()=>$('.win',root());
+
+/* ======================================================================
+   BUILDERS
+   ====================================================================== */
+function av(name,sz=16){const ini=name.split(' ').map(w=>w[0]).join('').slice(0,2);return `<span class="av" style="background:${AUTH[name]||'#8e8e93'};width:${sz}px;height:${sz}px">${ini}</span>`;}
+function tipAttr(t){return t?` data-tip="${esc(t)}"`:'';}
+function ib(act,icon,tip,extra='',arg=''){return `<button class="ib ${extra}" data-act="${act}" ${arg?`data-arg="${esc(arg)}"`:''}${tipAttr(tip)} aria-label="${esc(tip)}">${ico(icon)}</button>`;}
+const TOTAL=200;
+const navIsOpen=()=>(S.winw-S.sbw)<750?S.navNarrow:S.navWide;
+const nChanges=()=>S.dirty?FILES.unstaged.length+FILES.staged.length:0;
+const upstream={a:2,d:0};
+
+/* ----- header (A / C: one row; B: two rows) ----- */
+function hdr(){
+  const sbBtn=ib('sb-search','search','Filter references',S.sbSearch?'on':'')+ib('refresh','refresh','Refresh repository','','');
+  const proj=`<button class="chip proj" data-act="pop-proj"${tipAttr('Switch project\n~/Workspaces/wh-studio/solco')}>${ico('folder')}<span class="t">solco</span>${ico('chevd',10)}</button>`;
+  const abb=`<span class="ab">${upstream.a?`<b>↑${upstream.a}</b>`:''}${upstream.d?`<b>↓${upstream.d}</b>`:''}</span>`;
+  if(S.v==='B'){
+    return `<div id="m-hdr" class="gh2"><div class="r1">${proj}<span class="grow"></span>${sbBtn}</div>
+      <button class="selbtn" data-act="pop-branch"${tipAttr('Switch branch')}>${ico('branch')}<span class="t grow" style="font-weight:500">${esc(S.branch)}</span>${abb}${ico('chevd',10)}</button></div>`;
+  }
+  return `<div id="m-hdr" class="gh">${proj}<span class="slash">/</span>
+    <button class="chip br" data-act="pop-branch"${tipAttr('Switch branch')}>${ico('branch')}<span class="t">${esc(S.branch)}</span>${abb}${ico('chevd',10)}</button>
+    <span class="grow"></span>${sbBtn}</div>`;
+}
+function sbsearch(){
+  if(!S.sbSearch)return `<div id="m-sbs"></div>`;
+  return `<div id="m-sbs" class="sbsearch"><div class="sx full">${ico('search',13)}<input id="in-sb" placeholder="Filter branches, tags, stashes…" value="${esc(S.sbQ)}"/><button class="x" data-act="sb-search-close">${ico('x',10)}</button></div></div>`;
+}
+
+/* ----- view switch ----- */
+function viewSwitch(){
+  const n=nChanges();
+  if(S.v==='A'){
+    return `<div class="ptabs" role="tablist">
+      <button class="ptab ${S.view==='changes'?'on':''}" data-act="view" data-arg="changes" role="tab">${ico('diff',13)}<span>Changes</span>${n?`<span class="cnt">${n}</span>`:''}</button>
+      <button class="ptab ${S.view==='history'?'on':''}" data-act="view" data-arg="history" role="tab">${ico('commit',13)}<span>Commits</span></button></div>`;
+  }
+  if(S.v==='C'){
+    return `<div class="srcl"><button class="srow ${S.view==='changes'?'on':''}" data-act="view" data-arg="changes">${ico('diff')}<span>Local Changes</span>${n?`<span class="cnt">${n}</span>`:''}</button>
+      <button class="srow ${S.view==='history'?'on':''}" data-act="view" data-arg="history">${ico('commit')}<span>Commits</span><span class="cnt">${TOTAL}</span></button></div><div class="rule"></div>`;
+  }
+  return '';
+}
+
+/* ----- refs tree ----- */
+function match(q,...ss){q=q.trim().toLowerCase();return !q||ss.some(s=>s.toLowerCase().includes(q));}
+function row(o){
+  const cls=['tr',o.lvl?'l'+o.lvl:'',S.selRef===o.key?'sel':'',o.cur?'cur':'',o.closed?'closed':''].join(' ');
+  const chv=o.folder?`<span class="chvs">${ico('chevd',10,'chv')}</span>`:'<span class="chvs"></span>';
+  return `<div class="${cls}" tabindex="0" data-key="${esc(o.key)}" data-kind="${o.kind}" data-name="${esc(o.name||'')}" ${o.folder?`data-fold="${esc(o.fkey)}"`:''}${tipAttr(o.tip)}>
+    ${chv}${ico(o.icon,14,'g')}<span class="t">${esc(o.title)}</span>${o.trail?`<span class="trail">${o.trail}</span>`:''}</div>`;
+}
+function refTree(names,kind,iconName,q,curName){
+  const root={c:{},leaf:[]};
+  names.filter(n=>match(q,n)).forEach(n=>{const parts=n.split('/');let node=root;parts.forEach((p,i)=>{if(i===parts.length-1){node.leaf.push({p,full:n});}else{node=node.c[p]=node.c[p]||{c:{},leaf:[]};}});});
+  let out='';
+  (function walk(node,lvl,path){
+    Object.keys(node.c).forEach(k=>{
+      const fkey=kind+'/'+path+k,closed=!q&&S.closedFold[fkey];
+      out+=row({key:'fold:'+fkey,lvl,icon:'folder',title:k,kind:'folder',folder:true,fkey,closed});
+      if(!closed)walk(node.c[k],lvl+1,path+k+'/');
+    });
+    node.leaf.forEach(l=>{
+      const cur=kind==='branch'&&l.full===curName;
+      out+=row({key:kind+':'+l.full,lvl,icon:iconName,title:l.p,kind,name:l.full,cur,
+        tip:kind==='branch'?(cur?'Current branch':'Click to select · double-click to check out'):kind==='worktree'?'':'Click to select · double-click to locate in Commits',
+        trail:cur?`${upstream.a?`<span>↑${upstream.a}</span>`:''}<span class="okm">${ico('check',12)}</span>`:''});
+    });
+  })(root,0,'');
+  return out;
+}
+function section(name,count,body,addTip){
+  if(!count)return '';
+  const closed=S.closedSec[name];
+  return `<div class="sh2 ${closed?'closed':''}" data-act="sec" data-arg="${name}">${ico('chevd',10,'chv')}<span>${name}</span><span class="cnt">${count}</span>${addTip?`<button class="ib add" data-act="add" data-arg="${name}"${tipAttr(addTip)}>${ico('plus',12)}</button>`:''}</div>${closed?'':body}`;
+}
+function tree(){
+  const q=S.sbQ;let h='';
+  const wt=REFS.worktrees.filter(w=>match(q,w.n,w.path)).map(w=>row({key:'worktree:'+w.n,icon:'branch',title:w.n,kind:'worktree',name:w.path,tip:w.path+'\nDouble-click to open in Finder'})).join('');
+  const bl=refTree(REFS.branches,'branch','branch',q,S.branch);
+  const rm=refTree(REFS.remotes,'remote','cloud',q);
+  const tg=refTree(REFS.tags,'tag','tag',q);
+  const st=REFS.stashes.filter(s=>match(q,s.n,s.s)).map(s=>row({key:'stash:'+s.n,icon:'archive',title:s.n+'  '+s.s,kind:'stash',name:s.n})).join('');
+  h+=section('Worktrees',wt?REFS.worktrees.length:0,wt);
+  h+=section('Branches',bl?REFS.branches.length:0,bl,'New branch…');
+  h+=section('Remotes',rm?REFS.remotes.length:0,rm);
+  h+=section('Tags',tg?REFS.tags.length:0,tg,'New tag…');
+  h+=section('Stashes',st?REFS.stashes.length:0,st,'Stash changes');
+  if(!h)h=`<div class="none" style="padding:14px 8px">No matching references</div>`;
+  return `<div id="m-tree" class="refs" data-scroll="refs">${h}</div>`;
+}
+
+/* ----- toolbar ----- */
+function searchCtl(){
+  if(S.toolSearch){
+    const ph=S.view==='changes'?'Filter changed files…':'Search subject, author or hash…';
+    return `<div class="sx" style="--sxw:230px">${ico('search',13)}<input id="in-tool" placeholder="${ph}" value="${esc(S.toolQ)}"/><span class="kbd">esc</span></div>`;
+  }
+  return ib('tool-search','search',S.view==='changes'?'Filter changed files':'Search commits');
+}
+function syncCluster(){
+  return ib('sync','fetch','Fetch origin','','Fetched origin')+ib('sync','down','Pull'+(upstream.d?` (${upstream.d} behind)`:''),'','Already up to date')+
+    `<button class="ib" data-act="sync" data-arg="Pushed ${upstream.a} commits to origin/${esc(S.branch)}"${tipAttr('Push · '+upstream.a+' ahead')}>${ico('up')}<span class="bd">${upstream.a}</span></button>`;
+}
+function tool(){
+  const nav=S.view==='changes'?ib('toggle-nav','panel',navIsOpen()?'Hide file list':'Show file list',navIsOpen()?'on':''):'';
+  let left='';
+  if(S.v==='B'){
+    const n=nChanges();
+    left=`<button class="ltab ${S.view==='changes'?'on':''}" data-act="view" data-arg="changes">${ico('diff',14)}<span>Changes</span>${n?`<span class="cnt">${n}</span>`:''}</button>
+      <button class="ltab ${S.view==='history'?'on':''}" data-act="view" data-arg="history">${ico('commit',14)}<span>Commits</span></button><span class="sepv" style="margin:0 6px"></span>${nav}`;
+  }else{
+    left=nav;
+  }
+  let stat='';
+  if(S.v!=='B'||true){
+    if(S.view==='changes'&&S.dirty){const a=FILES.unstaged.concat(FILES.staged).reduce((x,f)=>x+f.a,0),d=FILES.unstaged.concat(FILES.staged).reduce((x,f)=>x+f.d,0);
+      stat=`<span class="stat"><span class="lbl">${nChanges()} files</span><span class="a">+${a}</span><span class="d">−${d}</span></span>`;}
+    if(S.view==='history'){stat=`<span class="stat"><span>${S.toolQ?filteredCommits().length+' of ':''}${TOTAL} commits</span></span>`;}
+  }
+  const seg=S.view==='changes'?`<span class="segi" data-tip="Diff layout (unchanged)"><button class="${S.diffMode==='split'?'on':''}" data-act="diffmode" data-arg="split">${ico('cols',13)}</button><button class="${S.diffMode==='unified'?'on':''}" data-act="diffmode" data-arg="unified">${ico('rows',13)}</button></span>`:'';
+  return `<div id="m-tool" class="tool ${S.v==='B'?'tabs':''}">${left}${searchCtl()}${stat}<span class="grow"></span>${syncCluster()}${seg}<span class="sepv"></span>${ib('menu-more','more','Git actions')}</div>`;
+}
+
+/* ----- Local Changes ----- */
+function compactFolders(files){
+  // VS Code–style compact folders: a single-child chain renders as one row.
+  const groups={};files.forEach(f=>{const i=f.p.lastIndexOf('/');const d=i<0?'':f.p.slice(0,i);(groups[d]=groups[d]||[]).push(f);});
+  return groups;
+}
+function fileRows(files,side){
+  const g=compactFolders(files);let h='';
+  Object.keys(g).sort().forEach(d=>{
+    const key='ffold:'+side+'/'+d,closed=S.closedFold[key];
+    h+=row({key:'fold:'+key,icon:'folder',title:d,kind:'folder',folder:true,fkey:key,closed});
+    if(closed)return;
+    g[d].forEach(f=>{
+      const name=f.p.slice(d.length+1);
+      h+=`<div class="tr l1 ${S.selFile===f.p?'sel':''}" tabindex="0" data-kind="file" data-key="file:${esc(f.p)}" data-name="${esc(f.p)}"${tipAttr(f.p)}>
+        <span class="chvs"></span>${ico('file',14,'g')}<span class="t">${esc(name)}</span>
+        <span class="trail">${side==='c'?'':`<button class="rowact" data-act="stage" data-arg="${side==='s'?'Unstaged':'Staged'} ${esc(name)}"${tipAttr(side==='s'?'Unstage':'Stage')}>${ico(side==='s'?'x':'plus',12)}</button>`}<span class="pm"><span class="a">+${f.a}</span><span class="d">−${f.d}</span></span><span class="st ${f.st}">${f.st}</span></span></div>`;
+    });
+  });
+  return h;
+}
+function nav(){
+  const un=FILES.unstaged.filter(f=>match(S.toolQ,f.p)),sg=FILES.staged.filter(f=>match(S.toolQ,f.p));
+  let h='';
+  if(S.dirty){
+    const sec=(name,files,all,act)=>`<div class="sh2 ${S.closedSec['f'+name]?'closed':''}" data-act="sec" data-arg="f${name}">${ico('chevd',10,'chv')}<span>${name}</span><span class="cnt">${files.length}</span><button class="act" data-act="stage-all" data-arg="${act}">${act}</button></div>${S.closedSec['f'+name]?'':fileRows(files,name==='Staged'?'s':'u')}`;
+    h=(un.length?sec('Unstaged',un,0,'Stage All'):'')+(sg.length?sec('Staged',sg,0,'Unstage All'):'')+(!un.length&&!sg.length?`<div class="none" style="padding:14px 8px">No matching files</div>`:'');
+  }
+  return `<div id="m-nav" class="nav ${navIsOpen()?'':'off'}"><div class="nscroll" data-scroll="nav">${h}</div></div>`;
+}
+function hl(src){
+  return src.split(/(\/\/.*$|"(?:[^"\\]|\\.)*"|`[^`]*`)/).map((part,i)=>{
+    if(i%2){return part.startsWith('//')?`<i class="c">${esc(part)}</i>`:`<i class="s">${esc(part)}</i>`;}
+    return esc(part).replace(/\b(func|if|else|return|for|range|case|switch|nil|true|false|var|type|struct|go|defer|const)\b/g,'<i class="k">$1</i>')
+      .replace(/\b(\d+)\b/g,'<i class="n">$1</i>').replace(/\b([A-Za-z_]\w*)(?=\()/g,'<i class="f">$1</i>');
+  }).join('');
+}
+function diffCards(){
+  return DIFFS.map((f,fi)=>{
+    const i=f.p.lastIndexOf('/'),dir=f.p.slice(0,i+1),name=f.p.slice(i+1);
+    let body='';
+    f.hunks.forEach((hk,hi)=>{
+      body+=`<div class="hk"><span class="hno"></span><span class="t">${esc(hk.head)}</span><button class="ib hov" style="width:20px;height:18px" data-act="copy-hunk" data-arg="${fi}:${hi}"${tipAttr('Copy hunk')}>${ico('copy',12)}</button></div>`;
+      hk.lines.forEach(l=>{
+        const k=l[0];
+        body+=`<div class="ln ${k==='a'?'add':k==='d'?'del':''}"><span class="bar"></span><span class="no" data-act="pick-line">${l[1]||''}</span><span class="no" data-act="pick-line">${l[2]||''}</span><span class="cd" data-fi="${fi}">${hl(l[3])}</span></div>`;
+      });
+    });
+    if(f.hunks.length)body+=`<div class="gap" data-act="expand">${ico('chevd',11)}<span>Expand 24 unmodified lines</span></div>`;
+    return `<div class="fc ${f.closed?'closed':''}" data-card="${fi}"><div class="fch" data-act="card-toggle">${ico('chevd',12,'chv')}<span class="path t"><span class="dir">${esc(dir)}</span><b>${esc(name)}</b></span>
+      <button class="ib hov" style="width:20px;height:20px" data-act="copy-path" data-arg="${esc(f.p)}"${tipAttr('Copy path')}>${ico('copy',12)}</button><span class="grow"></span>
+      <span class="pill"><span class="a">+${f.a}</span><span class="d">−${f.d}</span></span>
+      <button class="ib hov" data-act="copy-patch" data-arg="${fi}"${tipAttr('Copy file patch')}>${ico('diff',13)}</button>
+      <button class="ib hov" data-act="toast" data-arg="Opening in editor…"${tipAttr('Open in editor')}>${ico('ext',13)}</button>
+      <span class="viewed" data-act="viewed"><i></i>Viewed</span></div><div class="fbody">${body}</div></div>`;
+  }).join('');
+}
+function composer(){
+  if(!S.dirty||S.view!=='changes')return '';
+  return `<div id="m-cmp" class="cmp ${S.composer?'open':''}"><div class="r1"><input class="fld" id="in-sub" placeholder="Commit message"/><button class="ib" data-act="ai"${tipAttr('Draft subject with Pi')}>${ico('spark')}</button>
+    <span class="split"><button class="btn pri" data-act="commit">Commit ${FILES.staged.length} file</button><button class="caret" data-act="menu-commit-opts"${tipAttr('Commit options')}>${ico('chevd',12)}</button></span></div>
+    <div class="more"><textarea class="fld" id="in-body" placeholder="Description (optional)"></textarea>
+    <div class="r3"><span class="ck"><i></i>Amend</span><span class="grow"></span><span>${FILES.staged.length} staged · ${FILES.unstaged.length} unstaged</span></div></div></div>`;
+}
+function changesBody(){
+  if(!S.dirty){
+    return `<div class="lc"><div class="empty">${ico('check',22)}<b>No local changes</b><span>${esc(S.branch)} is clean · ${upstream.a} commits ahead of origin</span><button class="btn" data-act="view" data-arg="history" style="margin-top:6px">${ico('commit',13)}View Commits</button></div></div>`;
+  }
+  return `<div class="lc">${nav()}<div class="rc"><div id="m-diff" class="dscroll" data-scroll="diff">${diffCards()}</div>${composer()}</div></div>`;
+}
+
+/* ----- History ----- */
+function filteredCommits(){return COMMITS.map((c,i)=>({c,i})).filter(({c})=>match(S.toolQ,c.s,c.a,c.h));}
+function pills(c){
+  return c.refs.map(r=>{
+    const isHead=r.k==='branch'&&r.n===S.branch;
+    const k=isHead?'head':r.k;
+    const ic=r.k==='tag'?'tag':r.k==='remote'?'cloud':'branch';
+    return `<span class="rp ${k}"${tipAttr(isHead?'HEAD → '+r.n:r.n)}>${ico(ic,10)}<span class="t">${esc(r.n)}</span></span>`;
+  }).join('');
+}
+function list(){
+  const two=S.list==='two',H=two?40:24,rows=filteredCommits();
+  const step=10,pad=6;
+  // While a search narrows the list the lanes no longer connect: show a plain dot per row, never orphaned wires.
+  const dot=`<svg class="gsvg" width="${pad*2+Math.max(1,MAXLANES)*step-step+8}" height="${H}"><circle cx="${pad+4}" cy="${H/2}" r="4" fill="${LANE[0]}"/></svg>`;
+  const html=rows.map(({c,i})=>{
+    const g=S.toolQ.trim()?dot:gsvg(GRAPH[i],H,step,pad);
+    const sha=`<button class="csha" data-act="copy-hash" data-arg="${c.h}"${tipAttr('Copy hash '+c.h)}><span>${c.h}</span>${ico('copy',11)}</button>`;
+    if(two){
+      return `<div class="crow two ${S.selCommit===i?'sel':''}" tabindex="0" data-commit="${i}" style="--rh:${H}px">${g}<div class="cmain"><div class="l1">${pills(c)}<span class="csubj" style="font-size:12.5px"${tipAttr(c.s)}>${esc(c.s)}</span></div>
+        <div class="l2">${av(c.a,14)}<span>${esc(c.a)}</span><span>·</span><span${tipAttr(c.abs)}>${c.t}</span></div></div>${sha}</div>`;
+    }
+    return `<div class="crow ${S.selCommit===i?'sel':''}" tabindex="0" data-commit="${i}" style="--rh:${H}px">${g}<div class="cmain">${pills(c)}<span class="csubj"${tipAttr(c.s+'\n'+c.a+' · '+c.abs)}>${esc(c.s)}</span></div>
+      <span class="cauth">${av(c.a)}<span class="t">${esc(c.a)}</span></span><span class="cdate"${tipAttr(c.abs)}>${c.t}</span>${sha}</div>`;
+  }).join('')||`<div class="empty"><b>No matching commits</b><span>Nothing matches “${esc(S.toolQ)}”</span></div>`;
+  return `<div id="m-list" class="hlist" data-scroll="list">${html}</div>`;
+}
+function review(){
+  const c=COMMITS[S.selCommit];
+  const body=c.body?`<div class="cbody" id="cbody">${esc(c.body)}</div><button class="more" data-act="more-body">Show more</button>`:'';
+  const files=COMMIT_FILES.filter(f=>match('',f.p));
+  return `<div id="m-review" class="review"><div class="cpane"><div class="chead">
+      <div class="csub">${esc(c.s)}</div>${body}
+      <div class="cmeta">${av(c.a)}<b>${esc(c.a)}</b><span${tipAttr(c.abs)}>committed ${c.t}</span><button class="shab" data-act="copy-hash" data-arg="${c.h}"${tipAttr('Copy full hash')}>${c.h}${ico('copy',11)}</button></div>
+      <div class="cact"><button class="btn" data-act="copy-msg">${ico('copy',12)}Copy message</button><button class="btn" data-act="toast" data-arg="Cherry-pick… (unchanged confirm flow)">Cherry-pick…</button><button class="btn" data-act="toast" data-arg="Revert… (unchanged confirm flow)">Revert…</button></div></div>
+    <div class="cfiles"><div class="cfh"><span>Changed files</span><span class="cnt">${files.length}</span>${ib('toast','search','Filter files','','Filter files')}</div>
+      <div class="nscroll" data-scroll="cfiles" style="padding-top:0">${fileRows(files.map(f=>f),'c')}</div></div></div>
+    <div class="rc"><div class="dscroll" data-scroll="rdiff">${diffCards()}</div></div></div>`;
+}
+function historyBody(){
+  return `<div class="hist" style="--revh:${S.revh}px">${list()}<div class="hsp" id="hsp" data-tip="Resize history and diff"></div>${review()}</div>`;
+}
+
+/* ----- window ----- */
+function sidebar(){
+  return `<aside class="sb">
+    <div class="sb-top"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="grow"></span><span class="mut">${ico('panel',14)}</span></div>
+    <div class="vtabs"><span class="vtab">${ico('term')}</span><span class="vtab on">${ico('git')}</span><span class="vtab">${ico('history')}</span><span class="vtab">${ico('folder')}</span><span class="vtab">${ico('globe')}</span></div>
+    ${hdr()}${sbsearch()}${viewSwitch()}${tree()}
+    <div class="foot"><span style="display:flex;align-items:center;gap:7px;flex:1;min-width:0">${ico('term',13)}<span class="t">Default</span></span>${ico('chevd',11)}${ico('gear',14)}</div>
+  </aside>`;
+}
+function main(){
+  return `<section class="main"><div class="tb"><h1>Changes</h1><span class="grow"></span><span class="mut">${ico('more',16)}</span></div>
+    ${tool()}${S.view==='changes'?changesBody():historyBody()}</section>`;
+}
+function full(){return `<div class="win" data-v="${S.v}" style="--sbw:${S.sbw}px;--winw:${S.winw}px">${sidebar()}${main()}</div>`;}
+
+function render(){
+  const r=root();if(!r)return;
+  const keep={};$$('[data-scroll]',r).forEach(e=>keep[e.dataset.scroll]=e.scrollTop);
+  r.dataset.theme=S.theme;r.innerHTML=full();
+  $$('[data-scroll]',r).forEach(e=>{if(keep[e.dataset.scroll]!=null)e.scrollTop=keep[e.dataset.scroll];});
+  bindSplitter();
+}
+const PART={hdr,tree,tool,list,review,nav,sbs:sbsearch};
+function up(...names){
+  names.forEach(n=>{const el=$('#m-'+(n==='sbs'?'sbs':n),root());if(!el)return;const keep=el.dataset?.scroll?el.scrollTop:null;
+    const t=document.createElement('div');t.innerHTML=PART[n]().trim();const nu=t.firstElementChild;el.replaceWith(nu);if(keep!=null)nu.scrollTop=keep;});
+}
+
+/* ======================================================================
+   OVERLAYS: toast / tooltip / menu / popover / dialog
+   ====================================================================== */
+function toast(msg,soft){const w=win();if(!w)return;$$('.toast',w).forEach(e=>e.remove());const t=document.createElement('div');t.className='toast'+(soft?' soft':'');t.innerHTML=`${ico(soft?'branch':'check',14)}<span>${esc(msg)}</span>`;w.appendChild(t);clearTimeout(toast.t);toast.t=setTimeout(()=>t.remove(),soft?2600:1900);}
+function closeOverlays(){const w=win();if(!w)return false;const had=$$('.menu,.pop,.ov-scrim,.tip',w).length>0;$$('.menu,.pop,.ov-scrim,.tip',w).forEach(e=>e.remove());$$('.chip.open,.selbtn.open',w).forEach(e=>e.classList.remove('open'));return had;}
+function place(el,anchorRect,where='below',w=win()){
+  const wr=w.getBoundingClientRect();
+  let x=anchorRect.left-wr.left,y=(where==='below'?anchorRect.bottom+4:anchorRect.top)-wr.top;
+  el.style.left=Math.max(6,Math.min(x,wr.width-el.offsetWidth-6))+'px';el.style.top=Math.max(6,Math.min(y,wr.height-el.offsetHeight-6))+'px';
+}
+function showMenu(x,y,items){
+  closeOverlays();const w=win(),wr=w.getBoundingClientRect(),m=document.createElement('div');m.className='menu';
+  m.innerHTML=items.map(i=>i==='-'?'<div class="msep"></div>':`<div class="mi ${i.dis?'dis':''}" data-do="${items.indexOf(i)}">${esc(i.t)}${i.k?`<span class="k">${i.k}</span>`:''}</div>`).join('');
+  w.appendChild(m);m.style.left=Math.min(x-wr.left,wr.width-m.offsetWidth-8)+'px';m.style.top=Math.min(y-wr.top,wr.height-m.offsetHeight-8)+'px';
+  m.addEventListener('click',e=>{const it=e.target.closest('[data-do]');if(!it)return;const item=items[+it.dataset.do];closeOverlays();item.run&&item.run();});
+}
+function clip(text,msg){
+  const done=()=>toast(msg||'Copied');
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,()=>{fb();});}else fb();
+  function fb(){const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}ta.remove();done();}
+}
+function selText(){return (getSelection()||'').toString();}
+function patchOf(fi){const f=DIFFS[fi];return `--- a/${f.p}\n+++ b/${f.p}\n`+f.hunks.map(h=>h.head+'\n'+h.lines.map(l=>({a:'+',d:'-',c:' '}[l[0]])+l[3]).join('\n')).join('\n');}
+function openSwitchDialog(name){
+  closeOverlays();
+  const w=win(),s=document.createElement('div');s.className='ov-scrim';
+  s.innerHTML=`<div class="dlg" role="alertdialog"><h3>Switch Branch With Local Changes?</h3><p>Your uncommitted changes come along to <b style="color:var(--text)">${esc(name)}</b>. Git refuses if they conflict.</p>
+    <div class="foot2"><button class="btn" data-act="dlg-cancel">Cancel <span class="kbd">esc</span></button><button class="btn pri" data-act="dlg-switch" data-arg="${esc(name)}">Switch Branch <span class="kbd" style="border-color:rgba(255,255,255,.4);color:#fff">↵</span></button></div></div>`;
+  w.appendChild(s);$('.btn.pri',s).focus();
+}
+function switchBranch(name){closeOverlays();S.branch=name;S.selRef='branch:'+name;up('hdr','tree');if(S.view==='history'){up('list','review');}toast('Switched to '+name);}
+function branchPop(){
+  closeOverlays();const w=win(),chip=$('[data-act="pop-branch"]',w);chip.classList.add('open');
+  const p=document.createElement('div');p.className='pop';
+  p.innerHTML=`<div class="sx full" style="animation:none">${ico('search',13)}<input id="in-pop" placeholder="Search branches"/></div><div class="plist" id="plist"></div><div class="msep" style="background:var(--line);margin:2px 0"></div><div class="pi" data-act="toast" data-arg="New Branch…">${ico('plus')}New Branch…</div>`;
+  w.appendChild(p);place(p,chip.getBoundingClientRect());
+  const fill=q=>{$('#plist',p).innerHTML=REFS.branches.filter(b=>match(q,b)).map(b=>`<div class="pi" data-act="pop-pick" data-arg="${esc(b)}">${ico('branch')}<span class="t">${esc(b)}</span>${b===S.branch?`<span class="okm">${ico('check',12)}</span>`:''}</div>`).join('')||'<div class="none">No matching branches</div>';};
+  fill('');$('#in-pop',p).focus();$('#in-pop',p).addEventListener('input',e=>fill(e.target.value));
+}
+function projPop(){
+  closeOverlays();const w=win(),chip=$('[data-act="pop-proj"]',w);chip.classList.add('open');
+  const p=document.createElement('div');p.className='pop';
+  p.innerHTML=`<div class="plist">${['solco','herdr-projects','magpie'].map((n,i)=>`<div class="pi" data-act="toast" data-arg="Switched project (unchanged flow)">${ico('folder')}<span class="t">${n}</span>${i===0?`<span class="okm">${ico('check',12)}</span>`:''}</div>`).join('')}</div>`;
+  w.appendChild(p);place(p,chip.getBoundingClientRect());
+}
+
+/* ----- tooltip (nova face) ----- */
+let tipT=null;
+document.addEventListener('mouseover',e=>{
+  const r=root();if(!r||!r.contains(e.target))return;const el=e.target.closest('[data-tip]');clearTimeout(tipT);
+  $$('.tip',r).forEach(t=>t.remove());if(!el)return;
+  tipT=setTimeout(()=>{const w=win();if(!w||!el.isConnected)return;const t=document.createElement('div');t.className='tip';t.textContent=el.dataset.tip;w.appendChild(t);
+    const wr=w.getBoundingClientRect(),ar=el.getBoundingClientRect();let x=ar.left-wr.left+ar.width/2-t.offsetWidth/2;x=Math.max(6,Math.min(x,wr.width-t.offsetWidth-6));
+    let y=ar.top-wr.top-t.offsetHeight-7,below=false;if(y<4){y=ar.bottom-wr.top+7;below=true;}
+    t.style.left=x+'px';t.style.top=y+'px';t.style.setProperty('--ax',(ar.left-wr.left+ar.width/2-x)+'px');
+    if(below){t.style.setProperty('--ay','-3px');t.style.setProperty('--by','auto');}
+  },el.closest('.tr,.crow')?650:450);
+});
+document.addEventListener('mousedown',()=>{clearTimeout(tipT);const r=root();r&&$$('.tip',r).forEach(t=>t.remove());},true);
+
+/* ======================================================================
+   ACTIONS
+   ====================================================================== */
+function selectRef(key,el){
+  S.selRef=key;$$('.tr.sel',root()).forEach(e=>e.classList.remove('sel'));el.classList.add('sel');
+  const kind=el.dataset.kind,name=el.dataset.name;
+  if(kind==='branch'&&name!==S.branch&&!S.hint){S.hint=true;toast('Double-click to check out '+name,true);}
+  if(S.view==='history'&&['branch','remote','tag'].includes(kind))locate(name,true);
+}
+function locate(name,quiet){
+  const i=COMMITS.findIndex(c=>c.refs.some(r=>r.n===name));
+  if(i<0){if(!quiet)toast('No commit for '+name+' in the loaded history',true);return false;}
+  S.selCommit=i;
+  if(S.view!=='history'){S.view='history';render();}
+  else{$$('.crow.sel',root()).forEach(e=>e.classList.remove('sel'));up('review');}
+  const row=$(`.crow[data-commit="${i}"]`,root());if(row){row.classList.add('sel','flash');row.scrollIntoView({block:'nearest'});setTimeout(()=>row.classList.remove('flash'),1000);}
+  return true;
+}
+function activateRef(el){
+  const kind=el.dataset.kind,name=el.dataset.name;
+  if(kind==='folder'){S.closedFold[el.dataset.fold]=!S.closedFold[el.dataset.fold];up('tree');return;}
+  if(kind==='branch'){if(name===S.branch){toast(name+' is already checked out',true);return;}
+    if(S.dirty)openSwitchDialog(name);else switchBranch(name);return;}
+  if(kind==='worktree'){toast('Opening '+name+' in Finder');return;}
+  if(kind==='remote'||kind==='tag'){locate(name);return;}
+  if(kind==='stash'){toast('Stash actions live in the context menu',true);return;}
+  if(kind==='file'){S.selFile=name;const idx=DIFFS.findIndex(d=>d.p===name);const card=$(`[data-card="${idx}"]`,root());if(card){card.scrollIntoView({block:'start',behavior:'smooth'});card.classList.add('flash');setTimeout(()=>card.classList.remove('flash'),1000);}}
+}
+function refMenu(e,el){
+  const kind=el.dataset.kind,name=el.dataset.name;e.preventDefault();
+  const items=[];
+  if(kind==='branch'){if(name!==S.branch){items.push({t:'Switch to Branch',run:()=>activateRef(el)},{t:'Merge into Current…',run:()=>toast('Merge… (unchanged flow)')},{t:'Delete Branch…',run:()=>toast('Delete… (unchanged flow)')},'-');}items.push({t:'Copy Branch Name',run:()=>clip(name,'Copied branch name')});}
+  else if(kind==='remote')items.push({t:'Copy Remote-Tracking Ref',run:()=>clip(name,'Copied ref')},{t:'Locate in Commits',run:()=>locate(name)});
+  else if(kind==='tag')items.push({t:'Locate in Commits',run:()=>locate(name)},{t:'Copy Tag Name',run:()=>clip(name,'Copied tag name')},{t:'Delete Tag…',run:()=>toast('Delete… (unchanged flow)')});
+  else if(kind==='stash')items.push({t:'Pop Stash',run:()=>toast('Pop… (unchanged flow)')},{t:'Drop Stash…',run:()=>toast('Drop… (unchanged flow)')},{t:'Copy Stash Ref',run:()=>clip(name,'Copied stash ref')});
+  else if(kind==='worktree')items.push({t:'Reveal in Finder',run:()=>toast('Opening in Finder')},{t:'Copy Path',run:()=>clip(name,'Copied path')});
+  else if(kind==='file')items.push({t:'Open in Editor',run:()=>toast('Opening in editor…')},{t:'Copy Path',run:()=>clip(name,'Copied path')});
+  else return;
+  showMenu(e.clientX,e.clientY,items);
+}
+function commitMenu(e,row){
+  e.preventDefault();const c=COMMITS[+row.dataset.commit];
+  showMenu(e.clientX,e.clientY,[{t:'Copy Commit Hash',run:()=>clip(c.h,'Copied hash')},{t:'Copy Subject',run:()=>clip(c.s,'Copied subject')},{t:'Copy Message',run:()=>clip(c.s+(c.body?'\n\n'+c.body:''),'Copied message')},'-',{t:'Cherry-pick Commit…',run:()=>toast('Cherry-pick… (unchanged flow)')},{t:'Revert Commit…',run:()=>toast('Revert… (unchanged flow)')}]);
+}
+function diffMenu(e,cd){
+  e.preventDefault();const fi=+cd.dataset.fi,ln=cd.textContent,sel=selText();
+  showMenu(e.clientX,e.clientY,[{t:'Copy Selection',k:'⌘C',dis:!sel,run:()=>clip(sel,'Copied '+(sel.split('\n').length)+' line'+(sel.split('\n').length>1?'s':''))},
+    {t:'Copy Line',run:()=>clip(ln,'Copied line')},{t:'Copy Hunk',run:()=>clip(DIFFS[fi].hunks[0].head+'\n'+DIFFS[fi].hunks[0].lines.map(l=>({a:'+',d:'-',c:' '}[l[0]])+l[3]).join('\n'),'Copied hunk')},
+    {t:'Copy File Patch',run:()=>clip(patchOf(fi),'Copied patch')},'-',{t:'Open in Editor',run:()=>toast('Opening in editor…')},{t:'Copy Path',run:()=>clip(DIFFS[fi].p,'Copied path')}]);
+}
+
+document.addEventListener('click',e=>{
+  const r=root();if(!r||!r.contains(e.target)){return;}
+  const w=win();
+  if(!e.target.closest('.menu')&&!e.target.closest('.pop')&&!e.target.closest('[data-act="pop-branch"],[data-act="pop-proj"]'))closeOverlays();
+  const a=e.target.closest('[data-act]');
+  if(a){
+    const act=a.dataset.act,arg=a.dataset.arg;
+    switch(act){
+      case 'view':S.view=arg;S.toolSearch=false;S.toolQ='';render();return;
+      case 'sb-search':S.sbSearch=!S.sbSearch;if(!S.sbSearch)S.sbQ='';up('hdr','sbs','tree');if(S.sbSearch)$('#in-sb',r).focus();return;
+      case 'sb-search-close':S.sbSearch=false;S.sbQ='';up('hdr','sbs','tree');return;
+      case 'tool-search':S.toolSearch=true;up('tool');$('#in-tool',r).focus();return;
+      case 'refresh':{a.classList.add('spin');setTimeout(()=>{a.classList.remove('spin');},900);return;}
+      case 'sync':{a.classList.add('spin');setTimeout(()=>{a.classList.remove('spin');toast(arg);},700);return;}
+      case 'sec':S.closedSec[arg]=!S.closedSec[arg];if(arg.startsWith('f'))up('nav');else up('tree');return;
+      case 'add':e.stopPropagation();toast(arg+' (unchanged flow)');return;
+      case 'toggle-nav':if((S.winw-S.sbw)<750)S.navNarrow=!S.navNarrow;else S.navWide=!S.navWide;up('tool','nav');return;
+      case 'diffmode':S.diffMode=arg;up('tool');return;
+      case 'pop-branch':if(a.classList.contains('open')){closeOverlays();}else branchPop();return;
+      case 'pop-proj':if(a.classList.contains('open')){closeOverlays();}else projPop();return;
+      case 'pop-pick':closeOverlays();if(arg!==S.branch){if(S.dirty)openSwitchDialog(arg);else switchBranch(arg);}return;
+      case 'dlg-cancel':closeOverlays();return;
+      case 'dlg-switch':switchBranch(arg);return;
+      case 'copy-hash':e.stopPropagation();clip(arg,'Copied hash '+arg);return;
+      case 'copy-msg':{const c=COMMITS[S.selCommit];clip(c.s+(c.body?'\n\n'+c.body:''),'Copied commit message');return;}
+      case 'copy-path':e.stopPropagation();clip(arg,'Copied path');return;
+      case 'copy-patch':e.stopPropagation();clip(patchOf(+arg),'Copied file patch');return;
+      case 'copy-hunk':{const [fi,hi]=arg.split(':').map(Number);const h=DIFFS[fi].hunks[hi];clip(h.head+'\n'+h.lines.map(l=>({a:'+',d:'-',c:' '}[l[0]])+l[3]).join('\n'),'Copied hunk');return;}
+      case 'card-toggle':if(e.target.closest('.hov,.viewed'))return;a.closest('.fc').classList.toggle('closed');return;
+      case 'viewed':e.stopPropagation();a.classList.toggle('on');a.querySelector('i').innerHTML=a.classList.contains('on')?ico('check',9):'';return;
+      case 'pick-line':{const cd=a.parentElement.querySelector('.cd');const rg=document.createRange();rg.selectNodeContents(cd);const s=getSelection();s.removeAllRanges();s.addRange(rg);return;}
+      case 'stage':e.stopPropagation();toast(arg);return;
+      case 'stage-all':e.stopPropagation();toast(arg+' (unchanged flow)');return;
+      case 'toast':e.stopPropagation();toast(arg||'Done');return;
+      case 'commit':toast('Commit dialog opens (unchanged flow)');return;
+      case 'ai':toast('Drafting subject with Pi…');return;
+      case 'expand':toast('Expanded 24 lines');return;
+      case 'more-body':{const b=$('#cbody',r);const o=b.classList.toggle('open');a.textContent=o?'Show less':'Show more';return;}
+      case 'menu-more':{const b=a.getBoundingClientRect();showMenu(b.left-120,b.bottom+4,[{t:'Stage All',run:()=>toast('Stage All')},{t:'Unstage All',run:()=>toast('Unstage All')},'-',{t:'Stash All Changes',run:()=>toast('Stash')},{t:'Undo Last Commit…',run:()=>toast('Undo…')},'-',{t:'Git Settings…',run:()=>toast('Settings')}]);e.stopPropagation();return;}
+      case 'menu-commit-opts':{const b=a.getBoundingClientRect();showMenu(b.left-130,b.top-60,[{t:'Draft Subject with Pi',run:()=>toast('Drafting subject with Pi…')}]);e.stopPropagation();return;}
+    }
+  }
+  const cr=e.target.closest('.crow');
+  if(cr&&!e.target.closest('[data-act]')){S.selCommit=+cr.dataset.commit;$$('.crow.sel',r).forEach(x=>x.classList.remove('sel'));cr.classList.add('sel');up('review');return;}
+  const tr=e.target.closest('.tr[data-kind]');
+  if(tr&&!e.target.closest('[data-act]')){
+    if(tr.dataset.kind==='folder'){activateRef(tr);return;}   // folders fold on a single click, like today
+    if(tr.dataset.kind==='file'){S.selFile=tr.dataset.name;$$('.tr.sel',r).forEach(x=>x.classList.remove('sel'));tr.classList.add('sel');activateRef(tr);return;}
+    selectRef(tr.dataset.key,tr);
+  }
+});
+document.addEventListener('dblclick',e=>{
+  const r=root();if(!r||!r.contains(e.target))return;
+  const tr=e.target.closest('.tr[data-kind]');if(tr&&!['folder','file'].includes(tr.dataset.kind)){activateRef(tr);}
+});
+document.addEventListener('contextmenu',e=>{
+  const r=root();if(!r||!r.contains(e.target))return;
+  const tr=e.target.closest('.tr[data-kind]');if(tr)return refMenu(e,tr);
+  const cr=e.target.closest('.crow');if(cr)return commitMenu(e,cr);
+  const cd=e.target.closest('.cd');if(cd)return diffMenu(e,cd);
+});
+document.addEventListener('input',e=>{
+  const r=root();if(!r||!r.contains(e.target))return;
+  if(e.target.id==='in-sb'){S.sbQ=e.target.value;up('tree');}
+  if(e.target.id==='in-tool'){S.toolQ=e.target.value;if(S.view==='history'){up('list','tool');$('#in-tool',r).focus();$('#in-tool',r).setSelectionRange(S.toolQ.length,S.toolQ.length);}else{up('nav');}}
+});
+document.addEventListener('focusin',e=>{const r=root();if(!r||!r.contains(e.target))return;if(e.target.id==='in-sub'||e.target.id==='in-body'){S.composer=true;$('#m-cmp',r)?.classList.add('open');}});
+document.addEventListener('focusout',e=>{const r=root();if(!r||!r.contains(e.target))return;
+  if(e.target.id==='in-sub'||e.target.id==='in-body'){setTimeout(()=>{const c=$('#m-cmp',r);if(!c)return;if(!c.contains(document.activeElement)&&!$('#in-sub',r).value&&!$('#in-body',r).value){S.composer=false;c.classList.remove('open');}},80);}
+  if(e.target.id==='in-tool'&&!e.target.value){setTimeout(()=>{if(document.activeElement&&document.activeElement.id==='in-tool')return;S.toolSearch=false;up('tool');},120);}
+});
+document.addEventListener('copy',()=>{const r=root();const s=selText();if(!r||!s)return;const sel=getSelection();if(!sel.anchorNode||!r.contains(sel.anchorNode))return;const n=s.split('\n').length;toast(n>1?`Copied ${n} lines`:'Copied');});
+document.addEventListener('keydown',e=>{
+  const r=root();if(!r)return;
+  if(e.key==='Escape'){
+    if(closeOverlays())return;
+    if(e.target.id==='in-tool'||S.toolSearch){S.toolSearch=false;S.toolQ='';up('tool');S.view==='history'?up('list'):up('nav');return;}
+    if(S.sbSearch){S.sbSearch=false;S.sbQ='';up('hdr','sbs','tree');return;}
+    $('#ideLayout').classList.toggle('panel-collapsed');return;
+  }
+  if(e.key==='Enter'&&!e.target.matches('input,textarea')){
+    const dlg=$('.dlg .btn.pri',r);if(dlg){dlg.click();return;}
+    const tr=e.target.closest&&e.target.closest('.tr[data-kind]');if(tr&&r.contains(tr)){e.preventDefault();activateRef(tr);}
+  }
+  if((e.key==='ArrowDown'||e.key==='ArrowUp')&&e.target.closest&&e.target.closest('.crow')){
+    e.preventDefault();const rows=$$('.crow',r),i=rows.indexOf(e.target.closest('.crow')),n=rows[i+(e.key==='ArrowDown'?1:-1)];if(n){n.focus();S.selCommit=+n.dataset.commit;$$('.crow.sel',r).forEach(x=>x.classList.remove('sel'));n.classList.add('sel');up('review');}
+  }
+  if((e.key==='ArrowDown'||e.key==='ArrowUp')&&e.target.closest&&e.target.closest('.tr')){
+    e.preventDefault();const rows=$$('.tr',e.target.closest('.refs,.nscroll')),i=rows.indexOf(e.target.closest('.tr')),n=rows[i+(e.key==='ArrowDown'?1:-1)];if(n)n.focus();
+  }
+  if(e.key==='Enter'&&e.target.id==='in-pop'){const first=$('#plist .pi',r);first&&first.click();}
+});
+
+/* ----- history splitter ----- */
+function bindSplitter(){
+  const sp=$('#hsp',root());if(!sp)return;
+  sp.addEventListener('mousedown',e=>{e.preventDefault();const y0=e.clientY,h0=S.revh;
+    const mv=ev=>{S.revh=Math.max(160,Math.min(520,h0-(ev.clientY-y0)));$('.hist',root()).style.setProperty('--revh',S.revh+'px');};
+    const upf=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',upf);};
+    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',upf);});
+}
+
+/* ======================================================================
+   SHELL WIRING
+   ====================================================================== */
+function setVariant(v){
+  S.v=v;$$('.ide-artboard').forEach(a=>a.classList.toggle('active',a.dataset.variant===v));
+  $$('.ide-variant-card').forEach(c=>c.classList.toggle('active',c.dataset.v===v));
+  $('#stageLabel').textContent='Git panel · Option '+v;render();
+}
+$$('.ide-variant-card').forEach(c=>c.addEventListener('click',()=>setVariant(c.dataset.v)));
+$$('[data-ctl]').forEach(g=>g.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;const k=g.dataset.ctl,v=b.dataset.val;
+  $$('button',g).forEach(x=>x.classList.toggle('on',x===b));
+  if(k==='view'){S.view=v;S.toolSearch=false;S.toolQ='';}
+  if(k==='list')S.list=v;if(k==='dirty')S.dirty=v==='1';if(k==='theme')S.theme=v;
+  if(k==='sbw')S.sbw=+v;if(k==='winw')S.winw=+v;
+  render();
+}));
+function syncCtl(k,v){const g=$(`[data-ctl="${k}"]`);if(g)$$('button',g).forEach(x=>x.classList.toggle('on',x.dataset.val==String(v)));}
+$$('.ide-state-card').forEach(c=>c.addEventListener('click',()=>{
+  $$('.ide-state-card').forEach(x=>x.classList.remove('active'));c.classList.add('active');
+  const s=c.dataset.state,r=root();closeOverlays();
+  if(s==='search-sb'){S.sbSearch=true;S.sbQ='';up('hdr','sbs','tree');$('#in-sb',r).focus();}
+  if(s==='search-center'){S.toolSearch=true;up('tool');$('#in-tool',r).focus();}
+  if(s==='dbl'){S.dirty=true;syncCtl('dirty',1);S.hint=false;if(S.view!=='changes'){S.view='changes';syncCtl('view','changes');}S.branch='main';S.sbSearch=false;S.sbQ='';S.closedSec.Branches=false;render();
+    const t=$('.tr[data-name="feat/editor"]',win());selectRef('branch:feat/editor',t);t.focus();setTimeout(()=>toast('Now double-click feat/editor →',true),50);}
+  if(s==='select-diff'){if(S.view!=='changes'){S.view='changes';syncCtl('view','changes');render();}
+    const cds=$$('.cd',win()).filter(x=>x.dataset.fi==='0');const rg=document.createRange();rg.setStartBefore(cds[3]);rg.setEndAfter(cds[6]);const sel=getSelection();sel.removeAllRanges();sel.addRange(rg);
+    cds[3].scrollIntoView({block:'center'});setTimeout(()=>toast('4 lines selected · ⌘C copies code only (line numbers excluded)',true),60);}
+  if(s==='menu-diff'){if(S.view!=='changes'){S.view='changes';syncCtl('view','changes');render();}
+    const cds=$$('.cd',win()).filter(x=>x.dataset.fi==='0');const rg=document.createRange();rg.setStartBefore(cds[3]);rg.setEndAfter(cds[5]);const sel=getSelection();sel.removeAllRanges();sel.addRange(rg);
+    const b=cds[4].getBoundingClientRect();diffMenu({preventDefault(){},clientX:b.left+160,clientY:b.bottom-6},cds[4]);}
+  if(s==='menu-commit'){if(S.view!=='history'){S.view='history';syncCtl('view','history');render();}
+    const row=$('.crow[data-commit="0"]',win()),b=row.getBoundingClientRect();commitMenu({preventDefault(){},clientX:b.left+260,clientY:b.bottom-4},row);}
+  if(s==='pop-branch'){S.dirty=true;syncCtl('dirty',1);render();branchPop();}
+}));
+$('#collapseBtn').addEventListener('click',()=>$('#ideLayout').classList.add('panel-collapsed'));
+$('#expandBtn').addEventListener('click',()=>$('#ideLayout').classList.remove('panel-collapsed'));
+$('#storyToggle').addEventListener('click',()=>{const l=$('#ideLayout');l.classList.toggle('story-collapsed');$('#storyCaret').textContent=l.classList.contains('story-collapsed')?'▸':'▾';});
+render();
+</script>
+</body>
+</html>

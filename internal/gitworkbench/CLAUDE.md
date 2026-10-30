@@ -29,6 +29,10 @@ Git workbench 是 Solco 的本地 Git 域服务：Runner 负责仓库读取与�
 - `mutation_matrix_test.go`：Git 操作拒绝/保护矩阵测试。
 - `operations.go`：同步、Stash、Tag、Worktree、含完整父 SHA 的历史提交及 sequencer 操作，供原生历史图谱使用。
 - `operations_test.go`：真实 Git 操作和保护回归。
+- `line_patch.go`：按所选行构造单 hunk 补丁并经 `git apply --cached --recount [--reverse] -`（Runner.Stdin）暂存/取消暂存部分行；未选中的删除行回退为上下文、未选中的新增行丢弃。
+- `line_patch_test.go`：真实 Git 回归（多 hunk 偏移、反向取消、无换行标记、空选区拒绝）。
+- `blob.go`：`BlobSize`/`ReadBlob`（`cat-file -s` / `cat-file blob`，带上限、拒绝选项形态的规格），供 diff 卡片预览二进制两侧。
+- `blob_test.go`：真实 Git 回归（HEAD/索引大小与字节、超限拒绝、非法规格拒绝）。
 - `commit_parents_test.go`：真实 Git 提交父 SHA 读取回归，支持历史图谱连接。
 - `patch.go`：Diff/hunk 补丁构建和应用。
 - `repository.go`：Git 仓库元数据读取。

@@ -148,7 +148,7 @@ func TestChangesFilterTakesItsKeysAsText(t *testing.T) {
 	shell, tester = newSurface()
 	was = shell.git.gdWordWrap
 	file, hunk = shell.git.gdSelFile, shell.git.gdSelHunk
-	if err := tester.Click("Filter files"); err != nil {
+	if err := tester.Click("Search files"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()

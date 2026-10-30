@@ -49,6 +49,8 @@ type gdFile struct {
 	loadGen uint64
 	// large is the on-demand state of a deferred file (idle when it is not).
 	large gdLarge
+	// media is the preview of a binary file's sides (gd_media.go).
+	media gdMedia
 	// expanded is how many lines of each gap of unchanged lines show, from
 	// its top and its bottom.
 	expanded map[int]gdGapShown
@@ -431,6 +433,10 @@ func (s *Shell) gdSetFiles() {
 				nf.adoptLarge(p.large.diff)
 			}
 			nf.view = p.view
+			// A binary file keeps its picture while the new snapshot's read runs
+			// (the fingerprint of a binary change does not see its bytes).
+			nf.media = p.media
+			nf.media.state = gdMediaIdle
 			nf.collapsed = p.collapsed
 			nf.expanded = p.expanded
 			nf.oldLines, nf.newLines = p.oldLines, p.newLines
