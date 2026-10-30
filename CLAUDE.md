@@ -14,13 +14,14 @@ designs/ - interactive design explorations (self-contained `exploration.html` + 
 </directory>
 
 <config>
-go.mod + go.sum + mygo.config.ts - Go toolchain (1.27.3), MyGo pin (v0.6.4 + replace ./third_party/mygo), packaging policy, and the chat WebView frontend (N19)
+go.mod + go.sum + mygo.config.ts - Go toolchain (1.27.3), MyGo pin (v0.6.4 + replace ./third_party/mygo), packaging policy, signed updater feed (thewei/solco), and the chat WebView frontend (N19)
 AGENTS.md - repository engineering rules and required reading
 README.md - developer setup, run, checks, packaging, and product scope
 docs/client-product-architecture.md - unique architecture source of truth
 docs/mygo-native-execution-rules.md - active migration execution contract
 docs/mygo-native-migration-roadmap.md - active migration roadmap and task order
 .github/workflows/pages.yml - GitHub Pages deployment for site/
+.github/workflows/release.yml - signed tag release / updater publishing for installed apps
 </config>
 
 Product rule: **Solco is the client and brand. Herdr is the backend/runtime.** Solco must not introduce a second Workspace registry, pane runtime, terminal authority, or process lifecycle owner. Herdr remains authoritative for workspaces, tabs, panes, layouts, agents, scrollback, persistence, terminal sessions, and process lifecycle. Solco owns native macOS presentation, local interaction state/preferences, and the read-only Agent-history browsing/index layer (plus its user-initiated, reversible Sessions Trash).

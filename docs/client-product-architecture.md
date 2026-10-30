@@ -285,9 +285,13 @@ Normative boundaries for this milestone:
   credentials or provider secrets. No diagnostic payload is uploaded
   automatically.
 - Application updates use MyGo's official signed updater/plugin rather than a
-  line-for-line port of the Rust platform installer. Signing secrets stay
-  outside the repository and development/unconfigured builds degrade to an
-  explicit unavailable state.
+  line-for-line port of the Rust platform installer. `mygo.config.ts` pins the
+  public key and `thewei/solco` release feed; CI signs with
+  `MYGO_UPDATER_PRIVATE_KEY`, and `.github/workflows/release.yml` uploads the
+  signed archives and platform manifests to the `v<version>` draft release.
+  Publishing that release is the activation point for installed apps. Signing
+  secrets stay outside the repository and development/unconfigured builds
+  degrade to an explicit unavailable state.
 - Solco keeps one canonical Sidebar. 0.9 may add density and high-contrast
   preferences, but it must not add titlebar Tabs or alternate navigation
   ownership. Magpie-style provider/model Profiles are adapted only as
