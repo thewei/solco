@@ -413,6 +413,7 @@ type Shell struct {
 	// and the last selection it scrolled to (tabbar.go).
 	tabBarScroll   ui.ScrollState
 	tabBarSelected string
+	tabBarReveal   int // frames left to keep the selected chip scrolled into view
 	subagentsBusy  bool
 	subagentsAt    time.Time
 

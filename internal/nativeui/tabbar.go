@@ -76,8 +76,13 @@ func selectTabKeycaps(n, count int) []string {
 
 const (
 	tabChipMaxWidth float32 = 180
-	tabChipMinWidth float32 = 84
-	tabScrollStep   float32 = 180
+	tabChipMinWidth float32 = 120
+	// The selected chip is allowed more, so its title survives the state
+	// slot and the close × that share its row (2026-10-30 UX audit 3).
+	tabChipSelectedMinWidth float32 = 160
+	tabChipSelectedMaxWidth float32 = 240
+	tabScrollStep           float32 = 180
+	tabRevealFrames                 = 3
 )
 
 // tabBarRow draws the title-bar Tab strip and reports whether it drew one.
@@ -90,8 +95,17 @@ func (s *Shell) tabBarRow(c *ui.Context) bool {
 		ui.Text(c, "Herdr").TextColor(t.TextMuted).Grow(1).SingleLine()
 		return false
 	}
-	selectionMoved := s.tabBarSelected != s.selectedTabID
+	// The strip's own ‹ › appear only once it overflows, which narrows it
+	// after the first scroll, so the selected chip is revealed again for a
+	// few frames until it settles whole in view.
+	if s.tabBarSelected != s.selectedTabID {
+		s.tabBarReveal = tabRevealFrames
+	}
 	s.tabBarSelected = s.selectedTabID
+	selectionMoved := s.tabBarReveal > 0
+	if selectionMoved && s.tabBarScroll.MaxX > 0 { // count frames once the overflow is known
+		s.tabBarReveal--
+	}
 
 	ui.Row(c).Grow(1).MinWidth(0).Gap(2).AlignItems(ui.Center).Children(func() {
 		overflowLeft := s.tabBarScroll.X > 1
@@ -142,9 +156,13 @@ func scrollButton(c *ui.Context, k *gorexColors, glyph *ui.SVG, label string, ca
 func (s *Shell) tabChip(c *ui.Context, k *gorexColors, tab titlebarTab, reveal bool) {
 	t := c.Theme()
 	glyph := Controls().IconRegular
+	minW, maxW := tabChipMinWidth, tabChipMaxWidth
+	if tab.Selected {
+		minW, maxW = tabChipSelectedMinWidth, tabChipSelectedMaxWidth
+	}
 	b := ui.ButtonBase(c.Key("tab:"+tab.ID)).
 		Height(Controls().RegularHeight).
-		MinWidth(tabChipMinWidth).MaxWidth(tabChipMaxWidth).Shrink(0).
+		MinWidth(minW).MaxWidth(maxW).Shrink(0).
 		Radius(Radius().Row).Padding(0, Spacing().S, 0, Spacing().M).Gap(Spacing().S).
 		AlignItems(ui.Center).Label(tab.Label)
 	gorexToggleFace(b, k, tab.Selected)
