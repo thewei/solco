@@ -298,22 +298,13 @@ func (s *Shell) loadHostEffective(alias string) {
 	}()
 }
 
-// registerHostMachine resolves the alias to a concrete target and hands it
-// to the existing Herdr machine flow (interactive `herdr machine add` in
-// Terminal). The profile stays Herdr-owned end to end.
+// registerHostMachine hands the alias to the Add Device sheet as it is:
+// Herdr's ssh reads the same ~/.ssh/config, so Port, identity and jump host
+// stay with the alias instead of being flattened into user@host.
 func (s *Shell) registerHostMachine(alias string) {
 	alias = strings.TrimSpace(alias)
 	if alias == "" || strings.HasPrefix(alias, "-") {
 		return
 	}
-	s.status = "Resolving ssh target…"
-	go func() {
-		target := alias
-		ctx, cancel := context.WithTimeout(context.Background(), sshconfig.EffectiveTimeout)
-		if resolved, err := sshconfig.ResolveTarget(ctx, alias); err == nil && resolved != "" {
-			target = resolved
-		}
-		cancel()
-		s.applyOnUI(func() { s.addRemoteMachine(target) })
-	}()
+	s.addRemoteMachine(alias)
 }

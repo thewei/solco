@@ -185,23 +185,28 @@ func (s *Shell) restoreSession() {
 }
 
 // preferredInstanceName resolves the startup instance: the session hint when
-// it is still listed, else the Herdr-flagged default, else the first
-// instance. A stale hint (renamed or removed instance) never blocks startup.
+// it is still a listed session of this Mac, else the Herdr-flagged default,
+// else the first local instance. Startup always opens this Mac — a hint that
+// names a saved device is ignored, because switching to a device is a
+// deliberate act (device_switch.go) that must never wait on the network at
+// launch — and a stale hint (renamed or removed instance) never blocks it.
 func preferredInstanceName(instances []herdr.Instance, hint string) string {
 	if hint != "" {
 		for _, instance := range instances {
-			if instance.Name == hint {
+			if instance.Name == hint && instance.Machine == nil {
 				return hint
 			}
 		}
 	}
 	for _, instance := range instances {
-		if instance.Default {
+		if instance.Default && instance.Machine == nil {
 			return instance.Name
 		}
 	}
-	if len(instances) > 0 {
-		return instances[0].Name
+	for _, instance := range instances {
+		if instance.Machine == nil {
+			return instance.Name
+		}
 	}
 	return ""
 }

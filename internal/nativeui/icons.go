@@ -38,6 +38,7 @@ var (
 	iconPlus        = icon(`<path d="M12 5v14M5 12h14"/>`)
 	iconEdit        = icon(`<path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>`)
 	iconServer      = icon(`<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01"/><path d="M7 17.5h.01"/>`)
+	iconLaptop      = icon(`<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>`)
 	iconRefresh     = icon(`<path d="M20 11a8 8 0 0 0-14.8-4L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.8 4L21 14"/><path d="M21 20v-6h-6"/>`)
 	iconSplit       = icon(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>`)
 	iconSplitDown   = icon(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/>`)

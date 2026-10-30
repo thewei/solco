@@ -184,3 +184,22 @@ func TestPreferredInstanceName(t *testing.T) {
 		t.Fatalf("empty instance list = %q, want empty", got)
 	}
 }
+
+// Startup always opens this Mac: a saved device is never the launch instance,
+// whether the session hint names it or Herdr lists it first.
+func TestPreferredInstanceNameSkipsDevices(t *testing.T) {
+	device := herdr.Instance{Name: herdr.MachineInstanceKey("0123456789abcdef0123456789abcdef"), DisplayName: "Build box", Machine: &herdr.Machine{ID: "0123456789abcdef0123456789abcdef", Label: "Build box", Enabled: true}}
+	instances := []herdr.Instance{device, {Name: "aux"}, {Name: "main", Default: true}}
+	if got := preferredInstanceName(instances, device.Name); got != "main" {
+		t.Fatalf("device hint = %q, want the local default main", got)
+	}
+	if got := preferredInstanceName(instances, ""); got != "main" {
+		t.Fatalf("empty hint = %q, want the local default main", got)
+	}
+	if got := preferredInstanceName([]herdr.Instance{device, {Name: "aux"}}, ""); got != "aux" {
+		t.Fatalf("no local default = %q, want the first local instance aux", got)
+	}
+	if got := preferredInstanceName([]herdr.Instance{device}, device.Name); got != "" {
+		t.Fatalf("devices only = %q, want empty: startup never dials a device", got)
+	}
+}

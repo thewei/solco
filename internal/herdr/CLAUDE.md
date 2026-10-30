@@ -12,15 +12,19 @@ rpc.go: socket RPC 请求/响应、超时与交付不确定性边界
 ref.go: Herdr runtime identity 归一化
 projection.go: session.snapshot 到客户端一次性投影的解码、Splits 分栏与布局结构；协议门共用 herdr.go 的 protocolError（旧协议错误可被 errors.Is 识别）
 projection_test.go: snapshot 数据与 runtime 标识映射回归
-bridge.go: SSH Unix socket 转发、远程 RPC 通道生命周期
+bridge.go: SSH Unix socket 转发、远程 RPC 通道生命周期；每台机器一座桥同时转发 API socket 与紧邻的 `<stem>-client.sock`（`herdr terminal attach` 按 API socket 推导 client socket，只转 API 则终端附着不上）；桥骑 sshcontrol.go 的共享连接（已登录时 ssh 把转发交给 master 后退出，关桥要在 master 里 cancel）；ConnectMachine 是设备切换的可取消前半（不碰 shell 状态），CloseBridge(id) 在设备被 Disable/Forget 后收掉该机器的桥（持机器自己的锁，进行中的拨号先落地再关），CloseBridges 在应用退出时全收
+sshcontrol.go: Solco 自有 OpenSSH ControlMaster（`~/.solco/ssh-ctl/<12 位 hash>`、ControlPersist=10m）——口令/MFA 只在用户终端里输入一次（signInShell 带 AddKeysToAgent），之后桥与 remoteHome 的非交互调用骑同一条共享连接；MasterLive/CloseMaster/ValidateTarget；FailureKind（auth/host-key/network/server/other）+ ClassifyFailure 把 ssh 原话分成可恢复类，BridgeError 携带类别；Herdr 自己的连接与凭据不碰，Solco 不存任何凭据
+sshcontrol_test.go: ControlPath 短、稳定且每目标一条；复用参数绝不创建 master；登录脚本替换死 socket 并留下 master、活 master 原样保留、目标被引号转义；失败分类表与 BridgeError 解包；目标校验；waitForward 的共享连接交接/ssh 失败/超时语义
+terminal_task.go: 必须由用户交互完成的三步（machine add / 登录 / Set Up）的唯一交接通道——RunInTerminal 写出自带退出码标记的脚本交给 Terminal.app（`open -a Terminal`），TerminalTask.Result 轮询退出码；StartMachineAdd/StartMachineSignIn/StartMachineSetup；别名原样交给 Herdr（它生成的 ssh 配置 Include 用户 ~/.ssh/config，Port/IdentityFile/ProxyJump 随别名走），Solco 只读退出码、不读终端输出、不存凭据
+terminal_task_test.go: Result 读退出码标记、脚本记录退出状态、machine add / Set Up 命令形状、坏目标在打开任何 Terminal 之前即被拒绝
 events.go: Herdr 增量事件订阅与投影校正触发
 events_test.go: 订阅事件字段与时序的协议回归
 launch_transport.go: Agent 启动与无焦点 Tab 创建的安全流程
 launch_transport_test.go: Agent 启动事务与远程边界契约
 process_info.go: Pane 前台进程元数据适配
 process_info_test.go: 前台进程元数据回归
-machines.go: 远程机管理及状态入口，启动 machine list 读取 6 秒 deadline、防止阻塞工作区
-machines_test.go: 机器配置与状态回归
+machines.go: 远程机管理及状态入口，启动 machine list 读取 6 秒 deadline、防止阻塞工作区；MachineStates/MachineStatus（`machine status`，Herdr 自己的探测；任一档案出错时 CLI 退出码为 1 但仍在 stdout 打印全部判定，所以有判定就照单全收，不因退出码丢掉其余设备）、Enable/Disable/Rename/RemoveMachine（只传 profile id）、ListAllInstances（本机 Session + 每台已保存机器一个实例）
+machines_test.go: 机器配置与状态回归；CLI 退出 1 仍保留全部判定（`TestMachineStatusKeepsTheVerdictsOfAnExitingCLI`，无判定时错误带 CLI 的 stderr）；桥 socket 路径、API/client 双转发（`TestBridgeForwardsCarryTheClientSocketBesideTheAPISocket`）、CloseBridge 只收被点名机器的桥（进程、两个 socket、登记项，不动别的机器）
 search_gate.go: 搜索、复制等 Herdr 搜索协议适配
 search_gate_test.go: 搜索消息边界回归
 scroll_contract_test.go: Herdr scroll 消息与状态协定

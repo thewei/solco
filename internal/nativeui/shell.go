@@ -68,6 +68,12 @@ type Shell struct {
 	pinsOpen             bool
 	tasksOpen            bool
 	foldedBoards         map[string]bool
+
+	// devices is the device switcher's local state (see device_state.go):
+	// panel/filter, per-machine failure/master/checking facts, the switch in
+	// flight, the lost-connection record, and the Add Device sheet's draft.
+	devices deviceUI
+
 	// crumbOpen toggles the three breadcrumb switcher popovers
 	// (project / tab / pane); at most one is open at a time.
 	crumbOpen        [3]bool
@@ -851,7 +857,8 @@ func (s *Shell) View(c *ui.Context) {
 					s.sidebarSlide(c)
 					ui.Column(c).Grow(1).MinWidth(0).Background(s.tokens(theme.Dark).Content).Children(func() {
 						s.titlebar(c)
-						s.routeView(c)
+						s.deviceBanner(c)
+						s.deviceRouteStage(c)
 					})
 					s.sidebarToggle(c)
 				})

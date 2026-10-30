@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -32,9 +29,12 @@ type Machine struct {
 // Reachable means the remote Herdr server answered during that fresh check,
 // not that any open client is connected. Attention means the check failed in
 // a way that needs user action (auth, changed host key, unreachable host).
+// Status is Herdr's own lowercase verdict word ("reachable", "auth required",
+// "error", …) and Message its detail; the zero value means no verdict yet.
 type MachineState struct {
 	Reachable bool
 	Attention bool
+	Status    string
 	Message   string
 }
 
@@ -72,14 +72,42 @@ func (m *Manager) ListMachines() ([]Machine, error) {
 // saved machines and keys the verdicts by profile ID. The SSH round trip is
 // slow (seconds); callers run it in the background and cache the result.
 func (m *Manager) MachineStates() (map[string]MachineState, error) {
+	return m.machineStatus("")
+}
+
+// MachineStatus re-checks one saved machine (the "Check Again" action) without
+// paying for the others.
+func (m *Manager) MachineStatus(id string) (MachineState, error) {
+	states, err := m.machineStatus(id)
+	if err != nil {
+		return MachineState{}, err
+	}
+	state, ok := states[id]
+	if !ok {
+		return MachineState{}, fmt.Errorf("herdr machine status returned no verdict for %s", id)
+	}
+	return state, nil
+}
+
+func (m *Manager) machineStatus(id string) (map[string]MachineState, error) {
 	cli, err := resolveCLI()
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(cli, "machine", "status", "--json")
+	args := []string{"machine", "status"}
+	if id != "" {
+		args = append(args, id)
+	}
+	cmd := exec.Command(cli, append(args, "--json")...)
 	cmd.Stdin = nil
 	out, err := cmd.Output()
 	if err != nil {
+		// `machine status` exits 1 while any profile is in error, yet still
+		// prints every verdict on stdout: one dead device must not hide the
+		// verdicts of the others.
+		if states := decodeMachineStates(out); len(states) > 0 {
+			return states, nil
+		}
 		var exit *exec.ExitError
 		if ok := asExitError(err, &exit); ok {
 			return nil, fmt.Errorf("herdr machine status: %s", strings.TrimSpace(string(exit.Stderr)))
@@ -94,6 +122,12 @@ func (m *Manager) MachineStates() (map[string]MachineState, error) {
 func (m *Manager) RemoveMachine(id string) error {
 	return m.runMachineCommand("remove", id)
 }
+
+// EnableMachine / DisableMachine switch a saved profile on or off without
+// forgetting it. Herdr's enable/disable take the profile ID (unlike status and
+// reconnect, which also accept the label).
+func (m *Manager) EnableMachine(id string) error  { return m.runMachineCommand("enable", id) }
+func (m *Manager) DisableMachine(id string) error { return m.runMachineCommand("disable", id) }
 
 // RenameMachine changes a profile's display label without reconnecting.
 func (m *Manager) RenameMachine(id, label string) error {
@@ -119,35 +153,6 @@ func (m *Manager) runMachineCommand(command string, args ...string) error {
 			message = err.Error()
 		}
 		return fmt.Errorf("herdr machine %s: %s", command, message)
-	}
-	return nil
-}
-
-// OpenMachineAddInTerminal hands `herdr machine add` to the user's terminal:
-// setup discovers remote sessions, may install/update the remote server, and
-// always asks before replacing anything, so Herdr documents it as an
-// interactive command ("non-interactive commands use default"). Solco
-// opens Terminal.app running the exact command and reports back; the profile
-// list refreshes when the user reopens the Session menu.
-func (m *Manager) OpenMachineAddInTerminal(target string) error {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return fmt.Errorf("SSH target is required")
-	}
-	cli, err := resolveCLI()
-	if err != nil {
-		return err
-	}
-	if runtime.GOOS != "darwin" {
-		return fmt.Errorf("opening a terminal is only supported on macOS; run: %s machine add %s", cli, target)
-	}
-	script := fmt.Sprintf("#!/bin/zsh\nprintf 'Adding remote machine to Herdr...\\n\\n'\n%s machine add %s\nprintf '\\nSetup finished — you can close this window.\\n'\n", shellQuote(cli), shellQuote(target))
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("solco-machine-add-%d.command", os.Getpid()))
-	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		return fmt.Errorf("write machine add script: %w", err)
-	}
-	if out, err := exec.Command("open", "-a", "Terminal", path).CombinedOutput(); err != nil {
-		return fmt.Errorf("open Terminal: %s", strings.TrimSpace(string(out)))
 	}
 	return nil
 }
@@ -201,7 +206,7 @@ func (m *Manager) machineByID(id string) (Machine, error) {
 			return machine, nil
 		}
 	}
-	return Machine{}, fmt.Errorf("remote machine profile %q is no longer saved in Herdr; re-add it from the Session menu", id)
+	return Machine{}, fmt.Errorf("remote machine profile %q is no longer saved in Herdr; re-add it from the device switcher", id)
 }
 
 // decodeMachineList parses `herdr machine list --json`. The exact wire shape
@@ -251,9 +256,12 @@ func decodeMachineStates(out []byte) map[string]MachineState {
 			state.Reachable = reachable
 		}
 		status := strings.ToLower(machineString(doc, "state", "status"))
+		state.Status = status
 		switch {
 		case status != "":
 			switch {
+			case strings.Contains(status, "unreach"):
+				state.Attention = true
 			case strings.Contains(status, "reach") || strings.Contains(status, "ok"):
 				state.Reachable = true
 			case strings.Contains(status, "attention") || strings.Contains(status, "auth") ||

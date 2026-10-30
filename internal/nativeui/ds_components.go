@@ -251,6 +251,19 @@ func loadingState(c *ui.Context, text string) {
 // inlineNotice is the shared one-line status notice; a non-nil onRetry adds
 // the retry action. It reports the element so callers can place it.
 func inlineNotice(c *ui.Context, tone StatusTone, text string, onRetry func()) ui.Element {
+	return inlineNoticeActions(c, tone, text, func() {
+		if onRetry != nil {
+			if regularButton(c, "Retry").Clicked() {
+				onRetry()
+			}
+		}
+	})
+}
+
+// inlineNoticeActions is inlineNotice with the actions at its trailing edge
+// left to the caller (the device banner's Sign In / Cancel pair); the face is
+// the same one.
+func inlineNoticeActions(c *ui.Context, tone StatusTone, text string, actions func()) ui.Element {
 	t := c.Theme()
 	dark := t.Dark
 	typ := Typography()
@@ -265,11 +278,7 @@ func inlineNotice(c *ui.Context, tone StatusTone, text string, onRetry func()) u
 			statusGlyph(c, tone)
 			ui.Text(c, text).FontSize(typ.BodySmall).
 				TextColor(designTokens(dark).StatusColor(tone, dark)).Grow(1).SingleLine()
-			if onRetry != nil {
-				if regularButton(c, "Retry").Clicked() {
-					onRetry()
-				}
-			}
+			actions()
 		})
 	})
 	return view

@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: 依赖 Shell.hosts 索引态与分组（hostGroups）、machineInstances/machineMenuSuffix、sidebarTreeRow/sidebarSectionHeader/sectionLabel
  * [OUTPUT]: /hosts 的侧栏导航：SSH Config 条目（配置自带分组时按组可折叠；行悬停连接、连接/注册机器/编辑文件上下文菜单 hostEntryMenu）+ Herdr Machines；列表头的图标刷新是该页唯一的 Refresh；列表是 listNav 的一个焦点组，光标移动即选中（分组头除外）
- * [POS]: 内页侧栏宿主（sidebar.go 按 routeHosts 分派到这里）；行与分组头与 Git/Files 共用同一套树网格；机器管理动作留在 Session selector，不复制第二实现
+ * [POS]: 内页侧栏宿主（sidebar.go 按 routeHosts 分派到这里）；行与分组头与 Git/Files 共用同一套树网格；机器管理动作留在侧栏设备切换器（device_switcher.go），不复制第二实现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -154,8 +154,8 @@ func (s *Shell) hostEntryMenu(m *ui.Menu, entry sshconfig.Entry) {
 	}
 }
 
-// machineNavLabel renders one saved machine row: display name plus the same
-// availability suffix the Session selector uses.
+// machineNavLabel renders one saved machine row: display name plus the
+// plain-text availability suffix (machineMenuSuffix).
 func (s *Shell) machineNavLabel(inst herdr.Instance) string {
 	label := inst.DisplayName
 	if label == "" && inst.Machine != nil {

@@ -2,7 +2,7 @@ package sshconfig
 
 /**
  * [INPUT]: 系统 ssh 客户端（`ssh -G`，不建连、不做认证）
- * [OUTPUT]: EffectiveConfig（某别名的生效配置展示）、ResolveTarget（别名→user@host）、parseEffectiveOutput
+ * [OUTPUT]: EffectiveConfig（某别名的生效配置展示）、parseEffectiveOutput
  * [POS]: 语义求值永远委托系统 ssh，本包绝不复刻其规则；以 "-" 开头的别名直接拒绝，杜绝参数注入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,40 +35,6 @@ func EffectiveConfig(ctx context.Context, alias string) ([]KV, error) {
 		return nil, fmt.Errorf("ssh -G failed: %w", err)
 	}
 	return parseEffectiveOutput(out), nil
-}
-
-// ResolveTarget resolves one alias to its "user@host" target (or bare host
-// when no user applies), for flows that need a concrete target — e.g.
-// registering a Herdr machine profile. Connection flows must not use this:
-// they pass the alias to ssh untouched.
-func ResolveTarget(ctx context.Context, alias string) (string, error) {
-	kvs, err := EffectiveConfig(ctx, alias)
-	if err != nil {
-		return "", err
-	}
-	host, user := "", ""
-	for _, kv := range kvs {
-		switch kv.Key {
-		case "hostname":
-			if host == "" {
-				host = kv.Value
-			}
-		case "user":
-			if user == "" {
-				user = kv.Value
-			}
-		}
-		if host != "" && user != "" {
-			break
-		}
-	}
-	if host == "" {
-		return "", fmt.Errorf("ssh -G reported no hostname")
-	}
-	if user == "" {
-		return host, nil
-	}
-	return user + "@" + host, nil
 }
 
 // validAlias rejects empty and option-like aliases before they reach argv.

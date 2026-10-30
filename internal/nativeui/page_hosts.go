@@ -324,7 +324,7 @@ func (s *Shell) hostMachineDetail(c *ui.Context) {
 			if known && state.Attention && state.Message != "" {
 				ui.Text(c, state.Message).FontSize(Typography().Caption).TextColor(t.TextMuted)
 			}
-			ui.Text(c, "Rename or forget this machine from the Session selector.").
+			ui.Text(c, "Rename or forget this machine from the device switcher.").
 				FontSize(Typography().Caption).TextColor(t.TextMuted)
 		})
 	})

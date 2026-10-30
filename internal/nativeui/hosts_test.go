@@ -519,12 +519,12 @@ func TestHostsMachineDetail(t *testing.T) {
 	s.machineStates = map[string]herdr.MachineState{"m1": {Reachable: true}}
 	s.hosts.selected = hostMachineKeyPrefix + "m1"
 	settleFrames(tester, 3)
-	for _, want := range []string{"workbox", "reachable", "Open Workspace", "SSH target", "deploy@workbox", "Profile", "enabled", "Rename or forget this machine from the Session selector."} {
+	for _, want := range []string{"workbox", "reachable", "Open Workspace", "SSH target", "deploy@workbox", "Profile", "enabled", "Rename or forget this machine from the device switcher."} {
 		if !tester.HasText(want) {
 			t.Errorf("machine detail lacks %q; texts=%q", want, tester.Texts())
 		}
 	}
-	if onScreen(tester, "Machines are Herdr-managed profiles — add, rename or forget them from the Session selector.") {
+	if onScreen(tester, "Machines are Herdr-managed profiles — add, rename or forget them from the device switcher.") {
 		t.Error("the long machine footnote is back")
 	}
 }

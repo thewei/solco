@@ -106,6 +106,11 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 		})
 	}
 
+	// Devices: the saved SSH machines and the way to add one, the same
+	// switcher the sidebar footer opens. Built from the instance list already
+	// in memory, so opening the palette stays free of network work.
+	actions = append(actions, s.deviceCommandActions()...)
+
 	// Recent History from the already-loaded management cache (no IO).
 
 	// App actions.
@@ -354,10 +359,16 @@ func (s *Shell) executeCommandCenterResult(result commandcenter.Result) {
 	case commandcenter.TargetHistory:
 		s.router.Push("/history/" + action.TargetID)
 	default:
+		if name, ok := strings.CutPrefix(action.TargetID, deviceActionPrefix); ok {
+			s.switchDeviceAction(name)
+			return
+		}
 		// Command actions have no Context during execution. The native window
 		// size supplies the same geometry that View gets from c.Size(); in
 		// headless mode a zero width means geometry is not yet established.
 		switch action.TargetID {
+		case "action:add-device":
+			s.openDeviceAdd("")
 		case "action:open-workspace":
 			s.showViewTerminal()
 		case "action:open-changes":
@@ -392,4 +403,52 @@ func (s *Shell) projectionHasProject(projectID string) bool {
 		}
 	}
 	return false
+}
+
+// deviceActionPrefix leads the target of a "switch to this device" action; the
+// rest is the instance key, or "local" for this Mac.
+const deviceActionPrefix = "action:switch-device:"
+
+// deviceCommandActions is the palette's Devices section. A device already in
+// use and answering is not offered (picking it would do nothing); one that was
+// lost is, as the way to reconnect. This Mac is offered only while a device is
+// in use.
+func (s *Shell) deviceCommandActions() []commandcenter.Action {
+	machines := s.machineInstances()
+	actions := make([]commandcenter.Action, 0, len(machines)+2)
+	if len(machines) > 0 && s.activeIsRemote() {
+		actions = append(actions, commandcenter.Action{
+			ID: "device.switch.local", Title: "Device: This Mac", Section: "Devices",
+			Keywords: []string{"switch device", "local", "mac"},
+			Kind:     commandcenter.TargetRoute, TargetID: deviceActionPrefix + "local", Available: true,
+		})
+	}
+	for _, instance := range machines {
+		inUse := instance.Name == s.activeInstance && s.devices.lostFor(instance.Name) == nil
+		actions = append(actions, commandcenter.Action{
+			ID: "device.switch." + instance.Name, Title: "Device: " + instance.DisplayName, Section: "Devices",
+			Keywords: []string{"switch device", "ssh", "remote", instance.Machine.Target},
+			Kind:     commandcenter.TargetRoute, TargetID: deviceActionPrefix + instance.Name,
+			Available: instance.Machine.Enabled && !inUse,
+		})
+	}
+	return append(actions, commandcenter.Action{
+		ID: "device.add", Title: "Add Device", Section: "Devices",
+		Keywords: []string{"ssh", "remote", "machine", "connect", "host"},
+		Kind:     commandcenter.TargetRoute, TargetID: "action:add-device", Available: true,
+	})
+}
+
+// switchDeviceAction runs a Devices action, revalidating its target against
+// the instance list first like every other palette target.
+func (s *Shell) switchDeviceAction(name string) {
+	if name == "local" {
+		s.returnToThisMac()
+		return
+	}
+	if inst := s.instanceByName(name); inst == nil || inst.Machine == nil {
+		s.status = "That device is gone — pick another from the Command Center."
+		return
+	}
+	s.switchToDevice(name)
 }

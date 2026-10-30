@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 internal/herdr 的 ListAllInstances、Projection、UpgradeRuntime、ErrProtocolTooOld、ParseRef 与 HerdrUpdateTimeout
- * [OUTPUT]: 提供 Shell 的实例加载/打开/mutation 编排、失败分类（本地旧协议 → 可就地升级，记入 herdrUpgradeInstance）、会话定域的升级入口（bootstrap 页与 Settings 运行时行共享 beginHerdrUpgrade）与 checkHerdrRuntime 在线探针
+ * [OUTPUT]: 提供 Shell 的实例加载/打开（远程设备键走 device_switch 的事务式切换，本地打开先取消在途切换）/enterInstance（本地会话打开与设备切换共用的激活提交）/mutation 编排、失败分类（本地旧协议 → 可就地升级，记入 herdrUpgradeInstance）、会话定域的升级入口（bootstrap 页与 Settings 运行时行共享 beginHerdrUpgrade）与 checkHerdrRuntime 在线探针
  * [POS]: nativeui 的运行时编排层，连接 bootstrap_page 启动门与 herdr 适配器；不持有任何 Herdr 运行时状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -79,6 +79,13 @@ func (s *Shell) openInstance(name string) {
 	if name == "" || s.win == nil {
 		return
 	}
+	if herdr.ParseRef(name).IsRemote() {
+		// A device is a transaction (device_switch.go): the window keeps what
+		// it has until the dial succeeds.
+		s.switchToDevice(name)
+		return
+	}
+	s.cancelDeviceSwitch()
 	generation := s.generation.Add(1)
 	s.loading = true
 	s.errText = ""
@@ -114,24 +121,32 @@ func (s *Shell) openInstanceAsync(name string, generation uint64) {
 			if generation != s.generation.Load() {
 				return
 			}
-			slog.Info("Herdr workspace ready", "instance", name, "protocol", projection.Protocol, "projects", len(projection.Projects), "tabs", len(projection.Tabs), "panes", len(projection.Panes), "agents", len(projection.Agents))
-			if s.activeInstance != name {
-				s.clearLocalSelection()
-				s.closeAllTerminals()
-				// Service activity is per-instance; the next scan rebuilds it.
-				s.serviceIndex = sidebarServiceIndex{}
-				s.paneBusyIndex = make(map[string]paneBusyInfo)
-				s.paneShellIdle = make(map[string]bool)
-			}
-			s.activeInstance = name
-			s.errText = ""
-			s.offline = false
-			s.status = ""
-			s.applyProjection(projection, true)
-			s.loading = false
-			s.bootstrapPending = false
+			s.enterInstance(name, projection)
 		})
 	}()
+}
+
+// enterInstance commits an opened instance's projection as the window's
+// active one: the commit shared by a local session open and a device switch
+// (device_switch.go). Entering a different instance first drops what belonged
+// to the previous one.
+func (s *Shell) enterInstance(name string, projection herdr.Projection) {
+	slog.Info("Herdr workspace ready", "instance", name, "protocol", projection.Protocol, "projects", len(projection.Projects), "tabs", len(projection.Tabs), "panes", len(projection.Panes), "agents", len(projection.Agents))
+	if s.activeInstance != name {
+		s.clearLocalSelection()
+		s.closeAllTerminals()
+		// Service activity is per-instance; the next scan rebuilds it.
+		s.serviceIndex = sidebarServiceIndex{}
+		s.paneBusyIndex = make(map[string]paneBusyInfo)
+		s.paneShellIdle = make(map[string]bool)
+	}
+	s.activeInstance = name
+	s.errText = ""
+	s.offline = false
+	s.status = ""
+	s.applyProjection(projection, true)
+	s.loading = false
+	s.bootstrapPending = false
 }
 
 func (s *Shell) mutate(fn func() (herdr.Projection, error)) {

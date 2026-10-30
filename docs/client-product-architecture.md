@@ -447,6 +447,41 @@ SSH Config Editor writes (`#SCE_GROUP:<id>:::<name>`, `#SCEGroup <id>`) and
 by `Include` file, with collapse state kept in memory only — Solco
 never writes the markers and keeps no group registry of its own.
 
+**Approved Next (2026-10-30) — Device & session switcher.** The sidebar
+footer is one chip and one panel: This Mac's Herdr sessions (switch, create,
+rename, delete) and the saved Herdr machines ("devices"). It replaces the old
+`Session: <name> ▾` menu; the design brief and options live in
+`designs/sidebar-footer-switcher/`.
+
+- *Authority.* A device is a Herdr machine profile (opaque id, label, SSH
+  target, one explicit remote session, enabled), created, renamed, enabled,
+  disabled and removed only through `herdr machine …`. Solco keeps in memory
+  only what it observed itself — the last verdict, whether its own shared
+  SSH connection is up, the last failure — so there is no second device
+  registry, no persisted device list and no credential of any kind.
+- *Add.* Terminal handoff: Solco opens the user's Terminal on
+  `herdr machine add …` (host-key, install and sign-in prompts stay Herdr's
+  and OpenSSH's) and polls the local `machine list --json` until a profile
+  that was not there before appears, reading the script's exit code to tell
+  failure from waiting. A `~/.ssh/config` alias is handed over as typed:
+  Herdr's generated ssh config `Include`s that file.
+- *Switch is a transaction.* The window keeps its current device while a
+  background dial brings up the SSH bridge (it forwards both the Herdr API
+  socket and the sibling `-client.sock` that `herdr terminal attach` derives)
+  and proves the remote Herdr answers; only success replaces the window's
+  instance. Failure, cancellation or a stale result changes nothing and
+  offers the recovery its kind asks for (Sign In, Set Up, Check Again). A
+  host that needs a password or MFA is signed in through Solco's own OpenSSH
+  ControlMaster started in Terminal; Solco never sees the secret.
+- *Lifecycle.* Launch always opens This Mac. A device in use that drops dims
+  the page, offers recovery and retries with backoff; bridges of devices the
+  window has left stay open for a quick return, close when the app quits, and
+  close when the device is disabled or forgotten (forgetting or disabling the
+  device in use returns to This Mac first). Automatic attach still never uses
+  `--takeover`, and hidden Tabs keep no attachment fleet.
+- *Entry points.* Footer panel, the Hosts page's register action (opens the
+  same Add sheet) and the Command Center's Devices section.
+
 Detailed execution/audit documents:
 
 - `docs/reference-godiff-solco-0.10-audit.md`

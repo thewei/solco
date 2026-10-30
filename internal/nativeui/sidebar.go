@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 Shell 当前 Router/Workspace/Agent 投影、共享 agentCardRow 和 native Quick Panel
- * [OUTPUT]: 提供 Sidebar 的顶部视图标签条（Terminal/Changes/Sessions/Files/Hosts 五个等宽图标标签，Settings 路由不渲染）、Workspace 树、Git 引用导航、Sessions（项目头 + 范围行）/Settings 导航、Settings 的底部 Back 与其余所有路由的底部标准页脚（Session 切换 + Settings 钮，Terminal/Sessions/Files/Hosts/Changes 共用）与 Agent 行点击/右键动作
+ * [OUTPUT]: 提供 Sidebar 的顶部视图标签条（Terminal/Changes/Sessions/Files/Hosts 五个等宽图标标签，Settings 路由不渲染）、Workspace 树、Git 引用导航、Sessions（项目头 + 范围行）/Settings 导航、Settings 的底部 Back 与其余所有路由的底部标准页脚（设备/会话切换芯片 deviceSwitcher + Settings 钮，Terminal/Sessions/Files/Hosts/Changes 共用）与 Agent 行点击/右键动作
  * [POS]: 唯一左栏宿主，Git 引用树由 git_sidebar_tree 负责，Agent 详情复用 Quick Panel；视图切换在栏顶标签条（Settings 无），除 Settings 外全部路由共用页脚
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -95,7 +95,7 @@ func (s *Shell) sidebar(c *ui.Context) {
 		}
 		standardFoot := func() {
 			foot(func() {
-				s.sessionSelector(c)
+				s.deviceSwitcher(c)
 				if gorexIconButton(c, gorexColorsOf(t.Dark), iconSettings, "Settings", "Settings", false, gorexIconBtn, gorexIconGlyph).Clicked() {
 					s.router.Push(routeSettings)
 				}

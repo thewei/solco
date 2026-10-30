@@ -129,6 +129,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 	s.newAutomationDialog(c)
 	s.delegateDialog(c)
 	s.pickDialog(c)
+	s.deviceAddDialog(c)
 	if s.confirmOpen {
 		// Destructive confirms must not default-focus the destructive
 		// button: AlertDialog focuses and Enter-clicks its LAST button, so
@@ -148,8 +149,6 @@ func (s *Shell) submitTextDialog(kind, target, value string) {
 		s.createWorkspace(value)
 	case "rename-workspace":
 		s.renameWorkspace(target, value)
-	case "add-machine":
-		s.addRemoteMachine(value)
 	case "rename-machine":
 		s.renameMachine(target, value)
 	case "rename-project":
