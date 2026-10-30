@@ -9,7 +9,7 @@ import (
 /**
  * [INPUT]: 依赖 mygo/ui 的 Context/Theme/Popover, gorex_style（gorexToggleFace 芯片脸）, tooltip.go 的 tipped（被截断祖先与末级目录的 tooltip）, design_system 的 Typography/Spacing/Radius/Controls, agent_visual, proc_brands, brands 的 agentProvider/agentMark 与 Herdr Pane layout 排序
  * [OUTPUT]: 对外提供 crumbSegment, Shell.breadcrumbSegments, Shell.breadcrumbSegmentsWithTheme, Shell.breadcrumbRow（shadcn Breadcrumb 结构的 ghost 芯片面包屑，返回是否画出路径）, crumbItemRow, crumbPathTip（末级 crumb 的目录悬停弹层）, switcherListMaxHeight（项目列表在切换弹层内的最高高度，超出后行在面板内滚动；crumb 弹层与侧栏项目切换器共用）
- * [POS]: nativeui 标题栏面包屑与快速切换弹层所有者，展示工作区/Tab/Pane层次并呈现 Agent 与进程品牌图标
+ * [POS]: nativeui 标题栏面包屑与快速切换弹层所有者，展示工作区/Tab/Pane层次并呈现 Agent 与进程品牌图标；活 Agent 的末级 crumb（多 Pane Tab 的 pane crumb、单 Pane Tab 的 tab crumb）显示 Agents 区同款标题（agentCardTitleForPane，会话标题优先，死绑定回落原标签）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -58,7 +58,11 @@ func (s *Shell) breadcrumbSegmentsWithTheme(dark bool) []crumbSegment {
 		if len(panes) == 1 {
 			if a := s.paneAgent(panes[0].ID); a != nil {
 				tabMark, _ = s.agentMarkForPane(panes[0].ID, dark)
-				if tabLabel == "" || tabLabel == "Tab" {
+				// A live agent's crumb speaks its conversation title, the
+				// same one the sidebar rows and Agents section carry.
+				if title, ok := s.agentCardTitleForPane(panes[0].ID); ok {
+					tabLabel = title
+				} else if tabLabel == "" || tabLabel == "Tab" {
 					tabLabel = a.Name
 					if tabLabel == "" {
 						if provider := agentProvider(a); provider != "" {
@@ -82,7 +86,11 @@ func (s *Shell) breadcrumbSegmentsWithTheme(dark bool) []crumbSegment {
 		paneLabel := p.Label
 		if a := s.paneAgent(p.ID); a != nil {
 			paneMark, _ = s.agentMarkForPane(p.ID, dark)
-			if paneLabel == "" || paneLabel == "Pane" || paneLabel == "Terminal" {
+			// A live agent's crumb speaks its conversation title, the
+			// same one the sidebar rows and Agents section carry.
+			if title, ok := s.agentCardTitleForPane(p.ID); ok {
+				paneLabel = title
+			} else if paneLabel == "" || paneLabel == "Pane" || paneLabel == "Terminal" {
 				paneLabel = a.Name
 				if paneLabel == "" {
 					if provider := agentProvider(a); provider != "" {
@@ -251,7 +259,11 @@ func (s *Shell) crumbTabRows(c *ui.Context, projectID string) {
 		if len(panes) == 1 {
 			if a := s.paneAgent(panes[0].ID); a != nil {
 				mark, _ = s.agentMarkForPane(panes[0].ID, dark)
-				if label == "" || label == "Tab" {
+				// Popover rows speak the same title as the crumb and the
+				// sidebar rows: the Agents section's card title.
+				if title, ok := s.agentCardTitleForPane(panes[0].ID); ok {
+					label = title
+				} else if label == "" || label == "Tab" {
 					label = a.Name
 					if label == "" {
 						if p := agentProvider(a); p != "" {
@@ -290,7 +302,11 @@ func (s *Shell) crumbPaneRows(c *ui.Context, tabID string) {
 				dot = normalizeRuntimeStatus(a.Status)
 			}
 		}
-		row := crumbItemRow(c, mark, pane.Label, dot, pane.ID == s.selectedPaneID)
+		label := pane.Label
+		if title, ok := s.agentCardTitleForPane(pane.ID); ok {
+			label = title
+		}
+		row := crumbItemRow(c, mark, label, dot, pane.ID == s.selectedPaneID)
 		if row.Clicked() {
 			s.crumbOpen = [3]bool{}
 			s.selectPane(pane.ID)

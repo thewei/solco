@@ -136,14 +136,17 @@ func (s *Shell) agentTitleFrom(runtimeAgent herdr.Agent) string {
 
 // agentCardTitleForPane resolves a pane's Agent title the way the Agents
 // section shows it (session title → agent name → provider name), gated on
-// a live agent: a dead binding or an untitled agent reports false so tree
-// rows keep the pane's own label.
+// a live agent. It is the ONE title utility for pane-bearing labels —
+// tree rows, crumb rows, the pane card header and the chat header all
+// route through it. A dead binding, an untitled agent, or a Solco-minted
+// plumbing name (kind-<6hex>) reports false so callers keep their own
+// label fallbacks.
 func (s *Shell) agentCardTitleForPane(paneID string) (string, bool) {
 	if s.paneAgent(paneID) == nil {
 		return "", false
 	}
 	card, has := s.agentCardForPane(paneID)
-	if !has || card.Title == "" {
+	if !has || card.Title == "" || agent.IsGeneratedAgentName(card.Title, string(card.Provider)) {
 		return "", false
 	}
 	return card.Title, true

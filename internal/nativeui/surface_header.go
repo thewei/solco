@@ -72,10 +72,10 @@ func (s *Shell) chatSurfaceHeader(c *ui.Context, k *gorexColors) {
 			if m, ok := s.agentMarkForPane(s.chatPaneID, dark); ok {
 				mark = m
 			}
-			if a := s.paneAgent(s.chatPaneID); a != nil && a.Name != "" {
+			if title, ok := s.agentCardTitleForPane(s.chatPaneID); ok {
+				title = title
+			} else if a := s.paneAgent(s.chatPaneID); a != nil && a.Name != "" {
 				title = a.Name
-			} else if card, hasCard := s.agentCardForPane(s.chatPaneID); hasCard {
-				title = card.Title
 			}
 		}
 		ui.Box(c).Size(15, 15).Shrink(0).Children(func() {

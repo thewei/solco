@@ -8,12 +8,15 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 /**
  * [INPUT]: 依赖 nativeui 的 Shell/breadcrumbSegments/breadcrumbSegmentsWithTheme/shortDir/tildePath, mygo/ui 的 Tester 无头渲染（Move/Advance 驱动悬停弹层）, herdr
  * [OUTPUT]: 对外提供 TestBreadcrumbPaneSegmentListsTabPanes, TestBreadcrumbSegmentsVisualMarks, TestLastCrumbHoverShowsDirectoryOneLine, TestBreadcrumbChipsAreGhostUntilTheyAreUsed, TestBreadcrumbGivesWayBeforeTheToolsDo, TestClippedAncestorCrumbNamesItselfInATooltip, TestCrumbPopoverRowsScrollInsideThePanel（crumbShell/crumbRect/settleHover 为其共用辅助）
+ * TestBreadcrumbCrumbSpeaksTheAgentTitle 钉住 2026-10-30 标题交接——活 Agent 的末级 crumb（多 Pane Tab 的 pane crumb、单 Pane Tab 的 tab crumb）取 Agents 区同款标题，死绑定回落原标签
  * [POS]: nativeui 标题栏面包屑与切换器合约测试；TestLastCrumbHoverShowsDirectoryOneLine 钉住 2026-10-28 单行头部——目录不再是第二行，只住在末级 crumb 的悬停弹层；2026-10-29 三项钉住 shadcn 形态——ghost 芯片（静止无底、悬停/弹层打开才有芯片脸）、分隔符不可点、窄栏先让祖先再让工具、截断 crumb 带 tooltip；同日实机复核补一项——crumb 弹层兄弟过多时行在面板内滚动（switcherListMaxHeight）而不是溢出面板
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -341,5 +344,110 @@ func TestBreadcrumbSegmentsVisualMarks(t *testing.T) {
 	}
 	if tabSeg.mark.bmp == nil && tabSeg.mark.svg == nil {
 		t.Fatalf("tabSeg.mark should carry agent mark")
+	}
+}
+
+// TestBreadcrumbCrumbSpeaksTheAgentTitle pins the title handoff: the last
+// crumb of a live agent's pane — the pane crumb of a multi-pane Tab and
+// the tab crumb of a single-pane Tab — shows the Agents section's card
+// title, and a dead binding falls back to the raw pane label.
+func TestBreadcrumbCrumbSpeaksTheAgentTitle(t *testing.T) {
+	s := NewShell()
+	s.workbench.directory = agent.NewAgentDirectory()
+	s.workbench.directory.Replace([]agent.AgentCardModel{{
+		Key:    agent.AgentKey{InstanceID: "default", TerminalID: "term-1"},
+		PaneID: "p1", Title: "Scout", Provider: history.AgentOMP,
+	}})
+	s.projection = herdr.Projection{
+		Projects: []herdr.Project{{ID: "w1", Label: "Solco", TabCount: 1}},
+		Tabs:     []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "3", PaneCount: 1}},
+		Panes:    []herdr.Pane{{ID: "p1", ProjectID: "w1", TabID: "t1", Label: "3"}},
+		Agents:   []herdr.Agent{{TerminalID: "term-1", PaneID: "p1", Kind: "omp", Status: "working"}},
+	}
+	s.selectedProjectID = "w1"
+	s.selectedTabID = "t1"
+	s.selectedPaneID = "p1"
+
+	segments := s.breadcrumbSegments()
+	if last := segments[len(segments)-1]; last.label != "Scout" {
+		t.Fatalf("single-pane tab crumb label = %q, want the agent title", last.label)
+	}
+
+	// Dead binding: the crumb falls back to the pane's own label.
+	s.paneShellIdle = map[string]bool{"p1": true}
+	if last := s.breadcrumbSegments()[len(s.breadcrumbSegments())-1]; last.label != "3" {
+		t.Fatalf("dead binding crumb label = %q, want the pane label", last.label)
+	}
+
+	// A multi-pane Tab's pane crumb carries the title too.
+	s.projection = herdr.Projection{
+		Projects: []herdr.Project{{ID: "w1", Label: "Solco", TabCount: 1}},
+		Tabs:     []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "main", PaneCount: 2}},
+		Panes: []herdr.Pane{
+			{ID: "p1", ProjectID: "w1", TabID: "t1", Label: "left"},
+			{ID: "p2", ProjectID: "w1", TabID: "t1", Label: "right"},
+		},
+		Agents: []herdr.Agent{{TerminalID: "term-1", PaneID: "p1", Kind: "omp", Status: "working"}},
+	}
+	s.paneShellIdle = nil
+	s.selectedTabID = "t1"
+	s.selectedPaneID = "p1"
+	segments = s.breadcrumbSegments()
+	if last := segments[len(segments)-1]; last.kind != "pane" || last.label != "Scout" {
+		t.Fatalf("pane crumb = %q kind %s, want the agent title", last.label, last.kind)
+	}
+}
+
+// TestCrumbPopoverRowsSpeakTheAgentTitle pins the popover side of the
+// title handoff: the switcher lists a live agent's pane — and the
+// single-pane tab presenting it — under the Agents section's card title,
+// matching the crumbs they open from.
+func TestCrumbPopoverRowsSpeakTheAgentTitle(t *testing.T) {
+	s := crumbShell("Solco", "main", "editor")
+	s.workbench.directory = agent.NewAgentDirectory()
+	s.workbench.directory.Replace([]agent.AgentCardModel{{
+		Key:    agent.AgentKey{InstanceID: "default", TerminalID: "term1"},
+		PaneID: "p1", Title: "Scout", Provider: history.AgentOMP,
+	}})
+	s.projection.Agents = []herdr.Agent{{TerminalID: "term1", PaneID: "p1", Kind: "omp", Status: "working"}}
+	// The sidebar's Agents rows would shadow the title bar crumb in the
+	// full-window render; collapse the section to isolate the crumb.
+	s.agentsOpen = false
+	tt := ui.NewTester(s.View, 1200, 800)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	settleFrames(tt, 3)
+
+	// Every rendered text exists twice (measure pass + paint), so the
+	// popover row is a count delta over the pre-click frame.
+	before := countTextExact(tt.Texts(), "Scout")
+	crumb := crumbRect(t, tt, "Scout")
+	tt.ClickAt(crumb.X+crumb.W/2, crumb.Y+crumb.H/2)
+	settleFrames(tt, 3)
+	if got := countTextExact(tt.Texts(), "Scout") - before; got != 2 {
+		t.Fatalf("pane popover added %d × %q, want one row; texts=%q", got, "Scout", tt.Texts())
+	}
+
+	// The tab switcher lists a single-pane agent tab under its title too.
+	s2 := crumbShell("Solco", "main", "editor")
+	s2.projection.Tabs = append(s2.projection.Tabs,
+		herdr.Tab{ID: "t2", Label: "3", ProjectID: "w1", PaneCount: 1})
+	s2.projection.Panes = append(s2.projection.Panes,
+		herdr.Pane{ID: "p3", TerminalID: "term3", Label: "3", TabID: "t2", ProjectID: "w1"})
+	s2.workbench.directory = agent.NewAgentDirectory()
+	s2.workbench.directory.Replace([]agent.AgentCardModel{{
+		Key:    agent.AgentKey{InstanceID: "default", TerminalID: "term3"},
+		PaneID: "p3", Title: "Scout", Provider: history.AgentOMP,
+	}})
+	s2.projection.Agents = []herdr.Agent{{TerminalID: "term3", PaneID: "p3", Kind: "omp", Status: "working"}}
+	// Same isolation for the tab switcher pass.
+	s2.agentsOpen = false
+	tt2 := ui.NewTester(s2.View, 1200, 800)
+	tt2.SetPreferences(ui.Preferences{ReduceMotion: true})
+	settleFrames(tt2, 3)
+	crumb = crumbRect(t, tt2, "main")
+	tt2.ClickAt(crumb.X+crumb.W/2, crumb.Y+crumb.H/2)
+	settleFrames(tt2, 3)
+	if !tt2.HasText("Scout") {
+		t.Fatalf("tab popover kept the raw label %q; texts=%q", "3", tt2.Texts())
 	}
 }

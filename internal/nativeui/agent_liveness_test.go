@@ -156,4 +156,15 @@ func TestAgentCardTitleForPane(t *testing.T) {
 	if title, ok := s.agentCardTitleForPane("p1"); ok {
 		t.Fatalf("dead binding title = %q %v, want false", title, ok)
 	}
+
+	// Solco-minted plumbing names never become row labels: the caller
+	// keeps its own fallback (provider name, pane label).
+	s.paneShellIdle = nil
+	s.workbench.directory.Replace([]agent.AgentCardModel{{
+		Key:    agent.AgentKey{InstanceID: "default", TerminalID: "term-1"},
+		PaneID: "p1", Title: "omp-3f2a1b", Provider: history.AgentOMP,
+	}})
+	if title, ok := s.agentCardTitleForPane("p1"); ok {
+		t.Fatalf("generated name %q escaped into labels", title)
+	}
 }

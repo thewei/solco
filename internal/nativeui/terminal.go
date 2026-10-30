@@ -528,19 +528,23 @@ func (s *Shell) paneCard(c *ui.Context, k *gorexColors, surface *terminalSurface
 // implementation.
 // paneHeaderVisuals resolves the visual mark, primary title, and subtitle/detail
 // for one attached terminal surface. If the pane runs an Agent, it prioritizes
-// the Agent's brand icon and name; if it runs a recognizable dev tool/server,
-// it uses the program's brand and friendly name; otherwise it defaults to the
-// terminal glyph, pane label, and shortened directory.
+// the Agent's brand icon and the shared agent title (agentCardTitleForPane:
+// session title first, generated names never); if it runs a recognizable dev
+// tool/server, it uses the program's brand and friendly name; otherwise it
+// defaults to the terminal glyph, pane label, and shortened directory.
 func (s *Shell) paneHeaderVisuals(surface *terminalSurface, dark bool) (visualMark, string, string) {
 	if a := s.paneAgent(surface.paneID); a != nil {
 		mark, _ := s.agentMarkForPane(surface.paneID, dark)
-		title := a.Name
-		if title == "" || agent.IsGeneratedAgentName(title, a.Kind) {
-			provider := agentProvider(a)
-			if provider != "" {
-				title = provider.DisplayName()
-			} else {
-				title = "Agent"
+		title, titled := s.agentCardTitleForPane(surface.paneID)
+		if !titled {
+			title = a.Name
+			if title == "" || agent.IsGeneratedAgentName(title, a.Kind) {
+				provider := agentProvider(a)
+				if provider != "" {
+					title = provider.DisplayName()
+				} else {
+					title = "Agent"
+				}
 			}
 		}
 		detail := shortDir(surface.cwd)
