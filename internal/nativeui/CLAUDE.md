@@ -102,6 +102,8 @@ quick_panel_quota.go: Header 浮层 Quota 页（2 列迷你卡，头条取计数
 quick_panel_quota_test.go: Quota 页迷你卡、头条、header 计数 waiting/total、migrateRoute
 subagents_state.go: Claude Code 子代理读取节流（4s、后台读、仅 Claude path 身份；变化才重建 workbench）
 tabbar.go: 设置「Show Tabs in Sidebar」（默认关）关闭时占据面包屑位置的标题栏 Tab 条（品牌图/标题/状态槽位/悬停 ×/溢出滚动 ‹ › 并让选中项入视/+ 新建；Tab 仍走 selectTab/close-tab 确认/newProjectTab；此时侧栏树只列 Workspace）
+shortcuts_sheet.go: Help ▸ Keyboard Shortcuts（⌘/）只读速查表模态（shortcutSections 取自菜单加速键与有效绑定，tipKeycaps 画键帽）；菜单加速键常量与 selectTabAccelerator/acceleratorKeycaps 在 shortcuts.go
+git_clean_state.go: Changes 干净态状态页（标题、分支 + ahead/behind、Push/Pull/Fetch 主动作、HEAD 第一父链最近 3 条提交 headCommits，未推送标注；不新增 Git 调用）
 tabbar_test.go: Tab 条模型、替换面包屑、溢出滚动到选中项
 usage_state.go: Quota（原 Usage）状态与动作——internal/usage.Service + history.DailyUsageReader + usageSecrets（Keychain，key `usage.<id>.token`；测试注入内存实现），refreshUsage(Ids)（只在页面打开/手动刷新时读，无定时器；无开关打开则连 Keychain 也不碰）、逐家开关 requestUsageProvider（读他人登录的 Claude/Cursor/Copilot 先弹同意框，已粘贴自有令牌则免）、首次启用 commitUsageFirstRun、令牌 save/remove、30 天活动异步加载
 page_usage.go: /quota 页（原 /usage，migrateRoute 迁移旧会话路由）——首次启用视图（仅 Codex 预勾，点 Show Usage 前什么都不读）、摘要行（Tightest limit / Next reset / Sources + Used|Left）、卡片网格（窗口条用 Painter 画，≥80% 警告/≥95% 危险，配速刻度与 Runs out 文案，过期数据不推配速；Claude/Codex 带 30 天活动条）、同一行卡片等高（Stretch + 底部来源行）、卡片错误态（保留旧值 + Set Up/Update Token/Retry Now；Antigravity 未获允许时给 Allow Sign-In…/Open Antigravity，打开后 8 s 自动重读）、按窗口特征分版式（计数额度=大数字 hero、模型组=带标题紧凑行、次要限额=紧凑行、其余=普通条、无条事实=chip）、同意对话框（含 Antigravity 的 Google 条款风险）；标题栏 Sessions › Usage 与 Actions（Show Used/Show Left/Usage Settings…）
