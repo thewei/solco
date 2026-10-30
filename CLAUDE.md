@@ -11,6 +11,7 @@ docs/ - architecture source of truth, MyGo migration contract/roadmap, interacti
 designs/ - interactive design explorations (self-contained `exploration.html` + `README.md` Decision record per topic; not built, not shipped; product code waits for the recorded Decision)
 .agents/skills/ - project-local engineering workflow/checklists
 .github/ - CI workflows, issue/PR templates
+docs/ - architecture source of truth, MyGo migration contract/roadmap, interaction/performance/audit documentation, release updater runbook
 </directory>
 
 <config>
@@ -22,6 +23,7 @@ docs/mygo-native-execution-rules.md - active migration execution contract
 docs/mygo-native-migration-roadmap.md - active migration roadmap and task order
 .github/workflows/pages.yml - GitHub Pages deployment for site/
 .github/workflows/release.yml - signed tag release / updater publishing for installed apps
+docs/github-release-updates.md - release tagging, draft review, publish, and first updater installation rules
 </config>
 
 Product rule: **Solco is the client and brand. Herdr is the backend/runtime.** Solco must not introduce a second Workspace registry, pane runtime, terminal authority, or process lifecycle owner. Herdr remains authoritative for workspaces, tabs, panes, layouts, agents, scrollback, persistence, terminal sessions, and process lifecycle. Solco owns native macOS presentation, local interaction state/preferences, and the read-only Agent-history browsing/index layer (plus its user-initiated, reversible Sessions Trash).

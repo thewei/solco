@@ -4,6 +4,7 @@
 Members:
 - `README.md` — documentation entry point.
 - `client-product-architecture.md` — unique architecture source of truth; defines Solco product ownership and Herdr runtime ownership.
+- `github-release-updates.md` — signed GitHub Releases updater publishing runbook and first-install migration limit.
 - `terminal-interaction-spec.md` — terminal interaction-quality contract and manual acceptance for the hosted Herdr TUI surface.
 - `performance-engineering.md` — measured performance contract, budgets, methodology, and known lessons.
 - `macos-packaging-and-development.md` — macOS `.app` packaging/install, Mobile Web composition, and the cross-repo debug loop.

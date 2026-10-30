@@ -4,7 +4,7 @@
 成员清单
 
 - `workflows/checks.yml` — macOS Go 门禁：`go test ./...`、`go tool mygo build`、app bundle 结构校验（vendored `third_party/mygo` replace 使 CI 自包含）。
-- `workflows/release.yml` — tag `v*` 触发：创建 draft release，构建 macOS/Windows/Linux 产物，生成并上传 MyGo 签名更新 manifest 与 archive。
+- `workflows/release.yml` — tag `v*` 触发：创建 draft release，串行构建 macOS/Windows/Linux 产物，生成并上传 MyGo 签名更新 manifest 与 archive；串行避免并发 draft-release ID 刷新竞态。
 - `workflows/pages.yml` — GitHub Pages 部署 `site/`（静态站点，无构建步骤）。
 - `ISSUE_TEMPLATE/` — issue forms for bug reports and feature requests.
 - `pull_request_template.md` — review checklist and required verification commands.
