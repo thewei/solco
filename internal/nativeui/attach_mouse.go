@@ -6,9 +6,9 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 terminalSurface 的 paneID/agent/scrollOffset/scrollMax、terminal_scroll 的 pane.scroll/send_text 派发通道
+ * [INPUT]: 依赖 terminalSurface 的 paneID/agent/agentStatus/scrollOffset/scrollMax、terminal_scroll 的 pane.scroll/send_text 派发通道
  * [OUTPUT]: 对外提供 sgrMouseSplitter（Write 侧 SGR 鼠标事件流式分离）、parseSGRMouse、Shell.routeAttachMouse（真终端语义路由）
- * [POS]: nativeui 的 attach 鼠标语义收口（F144 真终端改造）：客户端像真终端一样把指针事件交给程序/herdr——普通 pane 滚轮走 pane.scroll 权重视口，Agent TUI 的事件原样 pane.send_text
+ * [POS]: nativeui 的 attach 鼠标语义收口（F144 真终端改造）：客户端像真终端一样把指针事件交给程序/herdr——普通 pane 滚轮走 pane.scroll 权重视口，Agent TUI 的事件原样 pane.send_text；转发以 pane 状态已知（非 unknown，hook/OSC 7501 证明会话存活）为门（2026-10-30 回显修复）：boot 窗口与死 display_agent 标签的注入只会被启动 shell 的 canonical tty 回显成乱码
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -103,7 +103,13 @@ func parseSGRMouse(seq string) (button int, wheel bool, ok bool) {
 // pane.send_text — the attach channel drops such bytes. Presses and drags
 // follow the same split: only alt-screen Agent TUIs consume them
 // client-side, and the client does not fabricate pane semantics for
-// ordinary panes. Runs on the window's UI lane.
+// ordinary panes. altScreenAgent additionally requires a known pane
+// status (2026-10-30 echo fix): Herdr labels the pane at launch, before
+// the TUI process exists, and the daemon's forced tracking makes the view
+// report into that boot window, where the canonical tty of the booting
+// shell echoes the bytes back as visible garbage; status-unknown panes
+// (also the dead display_agent label of a failed coordinator) forward
+// nothing. Runs on the window's UI lane.
 func (s *Shell) routeAttachMouse(surface *terminalSurface, seq string) {
 	if surface == nil || surface.paneID == "" || s.activeInstance == "" {
 		return
@@ -112,7 +118,8 @@ func (s *Shell) routeAttachMouse(surface *terminalSurface, seq string) {
 	if !ok {
 		return
 	}
-	altScreenAgent := surface.agent != "" && surface.scrollMax == 0
+	altScreenAgent := surface.agent != "" && surface.scrollMax == 0 &&
+		surface.agentStatus != "" && surface.agentStatus != "unknown"
 	if !wheel {
 		if altScreenAgent {
 			s.queueAgentMouse(surface.paneID, seq)

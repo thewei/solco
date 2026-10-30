@@ -184,10 +184,12 @@ func TestRouteAttachMouseMovesHerdrViewport(t *testing.T) {
 // every reported mouse event (wheel, press, drag) goes to the program
 // verbatim via pane.send_text — the TUI tracks the mouse and the attach
 // channel drops such bytes — while Herdr's viewport path stays untouched.
+// The pane's status is known (session alive), the 2026-10-30 gate's
+// requirement on top of agent + empty scrollback range.
 func TestRouteAttachMouseForwardsAgentPaneEvents(t *testing.T) {
 	shell := NewShell()
 	shell.activeInstance = "inst"
-	surface := &terminalSurface{key: "t1", paneID: "w1:p1", agent: "pi"}
+	surface := &terminalSurface{key: "t1", paneID: "w1:p1", agent: "pi", agentStatus: "working"}
 	var sent []string
 	shell.agentMouseSink = func(paneID, text string) {
 		if paneID != "w1:p1" {
@@ -208,6 +210,40 @@ func TestRouteAttachMouseForwardsAgentPaneEvents(t *testing.T) {
 	}
 	if len(scrolls) != 0 {
 		t.Fatalf("agent pane must not move Herdr's viewport: %v", scrolls)
+	}
+}
+
+// TestRouteAttachMouseGatesUnreadyAgentPane pins the 2026-10-30 echo fix:
+// Herdr labels a pane with its agent at launch, before the TUI process
+// exists, and the daemon's forced mouse tracking makes the view report
+// every pointer event into that boot window — where the canonical tty of
+// the booting shell echoes the SGR bytes back as visible garbage
+// (^[[<35;…M + PROMPT_EOL_MARK). Until a status word (hook or OSC 7501)
+// proves an agent session is alive in the pane, the router forwards
+// nothing. The same gate covers the dead-label sibling: a pane that keeps
+// its display_agent with no live program (failed coordinator) stays
+// status-unknown and never forwards.
+func TestRouteAttachMouseGatesUnreadyAgentPane(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "inst"
+	surface := &terminalSurface{key: "t1", paneID: "w1:p1", agent: "pi", agentStatus: "unknown"}
+	var sent []string
+	shell.agentMouseSink = func(_ string, text string) { sent = append(sent, text) }
+	var scrolls []int
+	shell.paneScrollSink = func(_ string, offset int) { scrolls = append(scrolls, offset) }
+
+	for _, seq := range []string{"\x1b[<64;10;5M", "\x1b[<35;43;22M", "\x1b[<0;45;22m"} {
+		shell.routeAttachMouse(surface, seq)
+	}
+	if len(sent) != 0 || len(scrolls) != 0 {
+		t.Fatalf("unready agent pane must forward nothing: sent=%q scrolls=%v", sent, scrolls)
+	}
+
+	// A status arriving (hook or OSC 7501) opens the gate.
+	surface.agentStatus = "working"
+	shell.routeAttachMouse(surface, "\x1b[<0;45;22m")
+	if len(sent) != 1 || sent[0] != "\x1b[<0;45;22m" {
+		t.Fatalf("ready agent pane forwards = %q, want the press verbatim", sent)
 	}
 }
 
