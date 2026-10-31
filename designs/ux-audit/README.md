@@ -11,6 +11,7 @@
 | **Chosen** | 议题 1 = **A**（形状=种类，服务=圆角方块；Agent「待审阅」保持绿色圆点）；议题 2 = **A**（Scope 芯片，⇥ 轮换）；议题 3 = **B**（继续上次 + 建议；Changes 干净态合一）；议题 4 = **A**（浮层 440 宽；分组 Needs you / Working / Idle）；小项一并做（陈旧条、空 Projects 折叠） |
 | **实现授权** | 是（2026-10-30，「授权，直接实现并覆盖安装」） |
 | **实现偏差** | ⌘K 芯片只做 All / Agents / Workspaces / Commands：Files、Sessions 要读文件系统/目录，违背「打开面板零 IO」，保留各自页面的搜索框；行内「Agent:」等标题前缀改为行尾种类标签 |
+| **2026-10-31 修订** | 议题 4 改选 **C**（用户拍板）：Agents 为主——页签名居左，Agents/Quota/Services/Tasks 四枚图标常驻右上角（点 Agents 即回列表），Needs you/Working/Idle 过滤芯片带计数单选可取消；浮层宽 440 → 340；Quota 页签迷你卡改一行一张（已实现，`quick_panel.go`/`quick_panel_quota.go`） |
 
 ## 调研（真机巡检 + 代码取证）
 

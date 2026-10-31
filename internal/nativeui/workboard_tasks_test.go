@@ -248,7 +248,7 @@ func TestTasksTabRendersGroupsAndOpensTheTasksProject(t *testing.T) {
 	}
 	s.quickPanelTab = quickPanelTasksTab
 	tt := ui.NewTester(s.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
-	for _, want := range []string{"Agents", "Services", "Tasks", "Needs you", "Ready to approve", "Working", "To do",
+	for _, want := range []string{"Services", "Tasks", "Needs you", "Ready to approve", "Working", "To do",
 		"Finished work", "Asks a question", "Busy", "Later", "r/2 · which db?"} {
 		if !tt.HasText(want) {
 			t.Fatalf("Tasks tab missing %q: %q", want, tt.Texts())

@@ -10,9 +10,9 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 usage_state 的 usageEnabled/Service.Result、page_usage 的 usageLookOf/usageBar/usageBadge/usageIn/usageMark（同一套读数外观与配速语义）、segmentTabs 所在的 quick_panel
- * [OUTPUT]: 对外提供 Shell.quickPanelQuota（浮层 Quota 页签：两列迷你卡片 + 页脚）、quotaHeadline（卡片的一个标题数字）、quickPanelQuotaHeight（内容驱动高度）
- * [POS]: Header 浮层的额度列（2026-10-30 用户拍板）：每家一张卡，只放最紧的那个窗口与重置时间，细节留在 /quota 页；页签打开时按 TTL 读一次（refreshUsage(false)），无定时器、不记录历史
+ * [INPUT]: 依赖 usage_state 的 usageEnabled/Service.Result、page_usage 的 usageLookOf/usageBar/usageBadge/usageIn/usageMark（同一套读数外观与配速语义）、quickPanelHeaderHeight 所在的 quick_panel
+ * [OUTPUT]: 对外提供 Shell.quickPanelQuota（浮层 Quota 页签：一行一张迷你卡片 + 页脚）、quotaHeadline（卡片的一个标题数字）、quickPanelQuotaHeight（内容驱动高度）
+ * [POS]: Header 浮层的额度列（2026-10-31 用户拍板改一行一张）：每家一张卡，只放最紧的那个窗口与重置时间，细节留在 /quota 页；页签打开时按 TTL 读一次（refreshUsage(false)），无定时器、不记录历史
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -33,14 +33,13 @@ func quotaHeadline(snap usage.Snapshot) (usage.Window, bool) {
 	return snap.Tightest()
 }
 
-// quickPanelQuotaHeight sizes the tab to its cards: two per line.
+// quickPanelQuotaHeight sizes the tab to its cards: one per line.
 func (s *Shell) quickPanelQuotaHeight() int {
 	n := len(s.usageEnabled())
 	if n == 0 {
-		return quickPanelChromeHeight + quickPanelEmptyHeight + quickPanelQuotaFooter
+		return quickPanelHeaderHeight + quickPanelEmptyHeight + quickPanelQuotaFooter
 	}
-	lines := (n + 1) / 2
-	h := quickPanelChromeHeight + lines*quotaCardHeight + (lines-1)*quotaCardGap + int(2*Spacing().S) + quickPanelQuotaFooter
+	h := quickPanelHeaderHeight + n*quotaCardHeight + (n-1)*quotaCardGap + int(2*Spacing().S) + quickPanelQuotaFooter
 	return min(max(h, quickPanelMinHeight), QuickPanelHeight)
 }
 
@@ -103,7 +102,7 @@ func (s *Shell) quotaMiniCard(c *ui.Context, id usage.ID, now time.Time) {
 	busy := s.usage.svc.Busy(id)
 	left := s.usageShowLeft()
 
-	ui.Column(c.Key("quota:"+string(id))).Grow(1).Basis(168).MinWidth(140).Height(quotaCardHeight).
+	ui.Column(c.Key("quota:"+string(id))).FillWidth().Height(quotaCardHeight).
 		Radius(Radius().Row).Background(tokens.Panel).Border(1, tokens.BorderSubtle).
 		Padding(sp.M, sp.M).Gap(sp.XS).Children(func() {
 		ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {

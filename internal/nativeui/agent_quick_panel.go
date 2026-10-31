@@ -9,44 +9,74 @@ import (
 )
 
 /**
- * [INPUT]: 依赖共享 StatusCenterSnapshot/StatusCenterEntry、agentCardRow、surface_header 的 Chat/Terminal 记忆与 quick panel 的 Flyout 关闭
- * [OUTPUT]: 提供 Agent 活动浮层的分组（quickPanelGroups）、分组标题（quickPanelGroupHeader）、条目行（quickPanelEntryRow：点击直达对应面板、行尾「标记已审阅」、右键菜单）与 openQuickPanelEntry/openAgentTerminal 直达动作；另保留历史遗留的可点击统计
+ * [INPUT]: 依赖共享 StatusCenterSnapshot/StatusCenterEntry、agentCardRow、gorexToggleFace（过滤芯片与图标按钮同一状态脸）、surface_header 的 Chat/Terminal 记忆与 quick panel 的 Flyout 关闭
+ * [OUTPUT]: 提供 Agent 活动浮层的分组表（quickPanelGroupSpecs/quickPanelBucketGroup）、过滤芯片（quickPanelChip/quickPanelChipCounts）、分组（quickPanelGroups）、分组标题（quickPanelGroupHeader）、条目行（quickPanelEntryRow：点击直达对应面板、行尾「标记已审阅」、右键菜单）与 openQuickPanelEntry/openAgentTerminal 直达动作
  * [POS]: quick_panel 的内容构件；状态由同一目录投影生成，点击不再进入第二层浮层，无第二套弹层窗口或运行时状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// quickPanelSummary turns passive counts into compact, actionable filters
-// without introducing new state classifiers. Every tile uses the same
-// StatusCenterSnapshot and filterChoice backing the segmented control.
-func (s *Shell) quickPanelSummary(c *ui.Context, snapshot StatusCenterSnapshot) {
-	sp := Spacing()
-	ui.Row(c).FillWidth().Padding(sp.M, sp.L, 0).Gap(sp.S).Children(func() {
-		s.quickPanelStat(c, "Attention", snapshot.NeedsAttention, ToneAttention, 1)
-		s.quickPanelStat(c, "Review", snapshot.ReviewPending, ToneWarning, 2)
-		s.quickPanelStat(c, "Working", snapshot.Working, ToneWorking, 3)
-	})
+// quickPanelGroupSpecs are the panel's status groups in priority order: the
+// Agents tab's filter chips and the list's section headers share these
+// labels and dot colours.
+var quickPanelGroupSpecs = []struct {
+	Label string
+	Tone  StatusTone
+}{
+	{"Needs you", ToneAttention},
+	{"Working", ToneWorking},
+	{"Idle", ToneMuted},
 }
 
-func (s *Shell) quickPanelStat(c *ui.Context, label string, count int, tone StatusTone, filter int) {
-	tokens := s.tokens(c.Theme().Dark)
-	selected := s.workbench.filterChoice() == filter
-	bg := tokens.Panel
-	if selected || count > 0 {
-		bg = tokens.StatusBackground(tone, c.Theme().Dark)
+// The group indexes of quickPanelGroupSpecs (the chip filter's values).
+const (
+	quickPanelNeedsYouGroup = 0
+	quickPanelWorkingGroup  = 1
+	quickPanelIdleGroup     = 2
+)
+
+// quickPanelBucketGroup places a directory bucket in its panel group: 0 is
+// "Needs you" (attention then review: the same set the header's waiting
+// count counts), 1 Working, 2 Idle.
+func quickPanelBucketGroup(bucket agent.AgentDirectoryBucket) int {
+	switch bucket {
+	case agent.BucketNeedsAttention, agent.BucketReadyForReview:
+		return quickPanelNeedsYouGroup
+	case agent.BucketWorking:
+		return quickPanelWorkingGroup
 	}
-	button := tipped(c, ui.ButtonBase(c).Grow(1).MinWidth(0).Radius(Radius().Row).
-		Padding(Spacing().M).Background(bg).
-		Border(1, tokens.BorderSubtle).Gap(4).
-		Label(fmt.Sprintf("%s (%d)", label, count)), "Show "+label+" agents")
-	button.Children(func() {
-		ui.Text(c, fmt.Sprintf("%d", count)).FontSize(Typography().Heading).
-			FontWeight(WeightSemibold).TextColor(tokens.StatusColor(tone, c.Theme().Dark))
-		ui.Text(c, label).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
+	return quickPanelIdleGroup
+}
+
+// quickPanelChipCounts counts every group's entries in a snapshot — the
+// chips show all three counts, the list drops the empty groups.
+func quickPanelChipCounts(entries []StatusCenterEntry) [3]int {
+	var counts [3]int
+	for _, entry := range entries {
+		counts[quickPanelBucketGroup(entry.Bucket)]++
+	}
+	return counts
+}
+
+// quickPanelChip is one filter chip: the group's name and its count in a
+// pill. The chosen chip wears the shared toggle face; the label names the
+// whole chip ("Working 2") so tests and readers click it as one.
+func quickPanelChip(c *ui.Context, group, count int, selected bool) bool {
+	t := c.Theme()
+	spec := quickPanelGroupSpecs[group]
+	label := fmt.Sprintf("%s %d", spec.Label, count)
+	b := ui.ButtonBase(c.Key("qp-chip:"+spec.Label)).Height(22).Padding(0, 9).
+		Radius(11).FocusRing(false).AlignItems(ui.Center).Gap(4).Label(label)
+	gorexToggleFace(b, gorexColorsOf(t.Dark), selected)
+	b.Border(1, designTokens(t.Dark).BorderSubtle)
+	col := t.TextMuted
+	if selected {
+		col = t.Text
+	}
+	b.Children(func() {
+		ui.Text(c, spec.Label).FontSize(Typography().BodySmall).TextColor(col).SingleLine()
+		ui.Text(c, fmt.Sprintf("%d", count)).FontSize(Typography().BodySmall).TextColor(col).SingleLine()
 	})
-	if button.Clicked() {
-		s.workbench.setFilterChoice(filter)
-		s.fitQuickPanel()
-	}
+	return b.Clicked()
 }
 
 // quickPanelGroup is one status section of the Agents list: the entries of a
@@ -62,25 +92,22 @@ type quickPanelGroup struct {
 // the header's waiting count counts), Working, Idle — leaving out the empty
 // ones. Each section keeps the snapshot's own order.
 func quickPanelGroups(entries []StatusCenterEntry) []quickPanelGroup {
-	groups := []quickPanelGroup{
-		{Label: "Needs you", Tone: ToneAttention},
-		{Label: "Working", Tone: ToneWorking},
-		{Label: "Idle", Tone: ToneMuted},
-	}
-	groupOf := map[agent.AgentDirectoryBucket]int{
-		agent.BucketNeedsAttention: 0, agent.BucketReadyForReview: 0, agent.BucketWorking: 1,
+	groups := make([]quickPanelGroup, len(quickPanelGroupSpecs))
+	for i, spec := range quickPanelGroupSpecs {
+		groups[i] = quickPanelGroup{Label: spec.Label, Tone: spec.Tone}
 	}
 	// Attention rows lead Review rows inside "Needs you".
 	for _, bucket := range []agent.AgentDirectoryBucket{agent.BucketNeedsAttention, agent.BucketReadyForReview, agent.BucketWorking} {
+		g := quickPanelBucketGroup(bucket)
 		for _, entry := range entries {
 			if entry.Bucket == bucket {
-				groups[groupOf[bucket]].Entries = append(groups[groupOf[bucket]].Entries, entry)
+				groups[g].Entries = append(groups[g].Entries, entry)
 			}
 		}
 	}
 	for _, entry := range entries {
-		if _, listed := groupOf[entry.Bucket]; !listed {
-			groups[2].Entries = append(groups[2].Entries, entry)
+		if g := quickPanelBucketGroup(entry.Bucket); g == quickPanelIdleGroup {
+			groups[g].Entries = append(groups[g].Entries, entry)
 		}
 	}
 	kept := groups[:0]

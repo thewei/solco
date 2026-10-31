@@ -32,9 +32,11 @@ type workbenchState struct {
 	// session file's modification time (Shell.agentSessionMod).
 	lastActive map[agent.AgentKey]time.Time
 
-	// /agents + header popover client-local filter state.
+	// Header popover Agents chip filter (2026-10-31): filterAll lists every
+	// status group; otherwise filter is a quickPanel group index
+	// (quickPanelNeedsYouGroup…).
 	filterAll  bool
-	filter     agent.AgentDirectoryBucket
+	filter     int
 	headerOpen bool
 
 	// switcher is the MRU overlay state (0.5 §13).
@@ -215,21 +217,6 @@ func (s *Shell) workbenchCards() []agent.AgentCardModel {
 		return nil
 	}
 	return s.workbench.directory.All()
-}
-
-// workbenchFiltered returns the cards for the /agents workbench filter.
-func (s *Shell) workbenchFiltered() []agent.AgentCardModel {
-	cards := s.workbenchCards()
-	if s.workbench.filterAll {
-		return cards
-	}
-	filtered := make([]agent.AgentCardModel, 0, len(cards))
-	for _, card := range cards {
-		if agent.BucketOf(card) == s.workbench.filter {
-			filtered = append(filtered, card)
-		}
-	}
-	return filtered
 }
 
 // openAgentCard navigates client-locally to the Agent's owning pane (which

@@ -11,20 +11,21 @@ import (
 	"github.com/thewei/solco/internal/herdr"
 )
 
-// TestQuickPanelHeightFor pins the content-driven height: the panel grows with
-// its group, row and usage-caption counts up to the fixed cap, sizes to the
-// empty state when there are no rows, and never exceeds the cap (the list
-// scrolls inside beyond it).
+// TestQuickPanelHeightFor pins the content-driven height: the panel grows
+// with its group, row and usage-caption counts up to the fixed cap, sizes to
+// the empty state when there are no rows, and never exceeds the cap (the
+// list scrolls inside beyond it). The Agents tab's chip row rides on the
+// shared list budget; the Tasks tab reuses the budget without the chips.
 func TestQuickPanelHeightFor(t *testing.T) {
-	empty := max(quickPanelChromeHeight+quickPanelEmptyHeight, quickPanelMinHeight)
+	empty := quickPanelListHeight(0, 0, 0) + quickPanelChipsHeight
 	if got := QuickPanelHeightFor(0, 0, 0); got != empty {
 		t.Fatalf("empty height = %d, want %d", got, empty)
 	}
-	one := max(quickPanelChromeHeight+quickPanelGroupHeight+quickPanelRowHeight, quickPanelMinHeight)
-	if got := QuickPanelHeightFor(1, 1, 0); got != one {
-		t.Fatalf("one-row height = %d, want %d", got, one)
+	if got := QuickPanelHeightFor(1, 1, 0); got != quickPanelListHeight(1, 1, 0)+quickPanelChipsHeight {
+		t.Fatalf("one-row height = %d", got)
 	}
-	five := quickPanelChromeHeight + 2*quickPanelGroupHeight + 5*quickPanelRowHeight + 2*quickPanelUsageHeight
+	five := quickPanelHeaderHeight + quickPanelChipsHeight + 2*quickPanelGroupHeight +
+		5*quickPanelRowHeight + 2*quickPanelUsageHeight
 	if got := QuickPanelHeightFor(5, 2, 2); got != five {
 		t.Fatalf("five-row height = %d, want %d", got, five)
 	}
@@ -39,6 +40,9 @@ func TestQuickPanelHeightFor(t *testing.T) {
 	}
 	if !(QuickPanelHeightFor(5, 2, 0) < QuickPanelHeightFor(5, 2, 3)) {
 		t.Fatal("height must grow with the usage-caption count")
+	}
+	if got := quickPanelListHeight(2, 1, 0); got != max(quickPanelHeaderHeight+quickPanelGroupHeight+2*quickPanelRowHeight, quickPanelMinHeight) {
+		t.Fatalf("tasks list height = %d, want header + one group + two rows (min-clamped)", got)
 	}
 }
 
@@ -69,10 +73,11 @@ func quickPanelShell(t *testing.T) *Shell {
 	return shell
 }
 
-// TestQuickPanelViewGroupsAgentsByState pins the 2026-10-14 panel contract:
-// no title, a two-tab switch on top, and the sidebar's compact agent cards
-// under one header per state — no complex per-row action buttons, no status
-// words in the rows themselves.
+// TestQuickPanelViewGroupsAgentsByState pins the panel contract (the chrome
+// is Agents-first since 2026-10-31): the tab's name leads, the other tabs
+// are trailing icons, filter chips carry the group labels, and the sidebar's
+// compact agent cards keep the group order — no complex per-row action
+// buttons, no status words in the rows themselves.
 func TestQuickPanelViewGroupsAgentsByState(t *testing.T) {
 	shell := quickPanelShell(t)
 	tester := ui.NewTester(shell.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
@@ -89,7 +94,8 @@ func TestQuickPanelViewGroupsAgentsByState(t *testing.T) {
 	if tester.HasText("No active agents") {
 		t.Fatalf("panel shows the empty state despite live agents; texts=%q", tester.Texts())
 	}
-	// Each row sits under its own state header, the headers in priority order.
+	// The chips lead (they carry the labels first in tree order), the rows
+	// follow in group order — the fixture has one row per group.
 	y := func(text string) float32 {
 		rect, ok := tester.Find(text)
 		if !ok {
@@ -97,9 +103,35 @@ func TestQuickPanelViewGroupsAgentsByState(t *testing.T) {
 		}
 		return rect.Y
 	}
-	if !(y("Needs you") < y("Ranger") && y("Ranger") < y("Working") &&
-		y("Working") < y("Scout") && y("Scout") < y("Idle") && y("Idle") < y("Sleeper")) {
+	if !(y("Needs you") < y("Ranger") && y("Ranger") < y("Scout") && y("Scout") < y("Sleeper")) {
 		t.Fatalf("rows are not grouped Needs you › Working › Idle; texts=%q", tester.Texts())
+	}
+}
+
+// TestQuickPanelChipsFilterTheList pins the filter chips: a chip narrows the
+// list to its group, clicking it again lists every group.
+func TestQuickPanelChipsFilterTheList(t *testing.T) {
+	shell := quickPanelShell(t)
+	tester := ui.NewTester(shell.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
+	if err := tester.Click("Working 1"); err != nil {
+		t.Fatal(err)
+	}
+	settleFrames(tester, 2)
+	if !tester.HasText("Scout") || tester.HasText("Ranger") || tester.HasText("Sleeper") {
+		t.Fatalf("the Working chip did not narrow the list: %q", tester.Texts())
+	}
+	if shell.workbench.filterAll || shell.workbench.filter != quickPanelWorkingGroup {
+		t.Fatalf("chip state = all=%v group=%d", shell.workbench.filterAll, shell.workbench.filter)
+	}
+	if err := tester.Click("Working 1"); err != nil {
+		t.Fatal(err)
+	}
+	settleFrames(tester, 2)
+	if !tester.HasText("Ranger") || !tester.HasText("Sleeper") {
+		t.Fatalf("re-clicking the chip did not restore the list: %q", tester.Texts())
+	}
+	if !shell.workbench.filterAll {
+		t.Fatal("the re-clicked chip must clear the filter")
 	}
 }
 
@@ -319,22 +351,31 @@ func TestQuickPanelToggleCloses(t *testing.T) {
 	}
 }
 
-// TestFilterStatusEntries keeps a direct pin on the tab-group projection:
-// snapshot order survives, the bucket filter narrows it.
+// TestFilterStatusEntries keeps a direct pin on the chip projection:
+// snapshot order survives, the chosen chip group narrows it, and "Needs
+// you" spans both the attention and review buckets.
 func TestFilterStatusEntries(t *testing.T) {
+	entry := func(name string, bucket agent.AgentDirectoryBucket) StatusCenterEntry {
+		return StatusCenterEntry{Card: agent.AgentCardModel{Title: name}, Bucket: bucket}
+	}
 	shell := quickPanelShell(t)
 	snapshot := shell.BuildStatusCenterSnapshot()
 	if got := len(shell.filterStatusEntries(snapshot)); got != 3 {
 		t.Fatalf("all entries = %d, want 3", got)
 	}
-	shell.workbench.setFilterChoice(1) // Attention
+	snapshot.Entries = append(snapshot.Entries, entry("done-1", agent.BucketReadyForReview))
+	shell.workbench.filterAll, shell.workbench.filter = false, quickPanelNeedsYouGroup
 	entries := shell.filterStatusEntries(snapshot)
-	if len(entries) != 1 || entries[0].Card.Title != "Ranger" {
-		t.Fatalf("attention entries = %+v", entries)
+	if len(entries) != 2 || entries[0].Card.Title != "Ranger" || entries[1].Card.Title != "done-1" {
+		t.Fatalf("needs-you entries = %+v", entries)
 	}
-	shell.workbench.setFilterChoice(4) // Idle
+	shell.workbench.filter = quickPanelIdleGroup
 	entries = shell.filterStatusEntries(snapshot)
 	if len(entries) != 1 || entries[0].Card.Title != "Sleeper" {
 		t.Fatalf("idle entries = %+v", entries)
+	}
+	shell.workbench.filterAll = true
+	if got := len(shell.filterStatusEntries(snapshot)); got != 4 {
+		t.Fatalf("all entries = %d, want 4", got)
 	}
 }

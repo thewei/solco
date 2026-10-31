@@ -37,7 +37,7 @@ func (s *Shell) quickPanelTasksHeight() int {
 	for _, group := range groups {
 		rows += len(group.Tasks)
 	}
-	return min(QuickPanelHeightFor(rows, len(groups), 0)+quickPanelTasksFooterHeight, QuickPanelHeight)
+	return min(quickPanelListHeight(rows, len(groups), 0)+quickPanelTasksFooterHeight, QuickPanelHeight)
 }
 
 // quickPanelTasksFooterHeight is the New Task button row under the list.

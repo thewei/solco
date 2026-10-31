@@ -10,28 +10,31 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 mygo 的 Flyout（Tray/Parent 锚定、Popover 系统材质、菜单式关闭与 Escape）、segmentTabs（Git 侧栏 Changes/Commits 同款页签）、agent_card 共享卡片、agent_quick_panel 的分组与条目行
- * [OUTPUT]: 对外提供 Shell.QuickPanelView（页签 Agents 按状态分组的列表 / Quota 额度卡片 / Services / Tasks——仅 herdr-projects 门打开时）、Shell.selectQuickPanelTab、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
+ * [INPUT]: 依赖 mygo 的 Flyout（Tray/Parent 锚定、Popover 系统材质、菜单式关闭与 Escape）、gorexIconButton（右上角页签图标）、agent_card 共享卡片、agent_quick_panel 的分组/过滤芯片与条目行
+ * [OUTPUT]: 对外提供 Shell.QuickPanelView（Agents 为主：标题 + 右上 Agents/Quota/Services/Tasks 四枚图标页签，Agents 列表按状态分组带过滤芯片；Quota 额度卡片 / Services / Tasks——仅 herdr-projects 门打开时）、Shell.selectQuickPanelTab、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
  * [POS]: Agent 活动的唯一浮层：托盘/标题栏打开，一层到底——点击 Agent 直达其面板并收起浮层，没有第二层详情；同一 Flyout 生命周期，锚定/贴边/翻转/关闭归框架
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// Floating Agent activity panel (0.7 §17.1/§17.2, 2026-10-14 revision): one
-// MyGo flyout at a time — a system Popover on macOS — anchored beneath the
-// menu-bar item or the titlebar's agent button. It takes the keyboard while
-// shown and closes like a menu: outside click, focus moving away, app
-// deactivation, or Escape. One shared StatusCenterSnapshot, a two-tab switch
-// (Agents, Services) and, under Agents, the sidebar's compact agent cards
-// grouped by state. There is one layer: a click lands on the Agent's own
-// panel and closes the flyout. The height follows the content up to the
-// fixed cap — beyond it the list scrolls inside.
+// Floating Agent activity panel (0.7 §17.1/§17.2, 2026-10-14 revision; the
+// chrome is Agents-first since 2026-10-31): one MyGo flyout at a time — a
+// system Popover on macOS — anchored beneath the menu-bar item or the
+// titlebar's agent button. It takes the keyboard while shown and closes
+// like a menu: outside click, focus moving away, app deactivation, or
+// Escape. One shared StatusCenterSnapshot; the tab's name leads and every
+// tab — Agents included — is a trailing icon; on Agents the sidebar's
+// compact agent cards appear grouped by state behind filter chips. There is
+// one layer: a click lands on the Agent's own panel and closes the flyout.
+// The height follows the content up to the fixed cap — beyond it the list
+// scrolls inside.
 
-// QuickPanelWidth is 440 DIP so the four tab labels (Agents / Quota / Services /
-// Tasks) and a `waiting/total` trigger fit unclipped (2026-10-30 UX audit; was 400).
-const QuickPanelWidth = 440
+// QuickPanelWidth is 340 DIP (2026-10-31, ux-audit option C): the
+// Agents-first chrome — tab name, three trailing tab icons, filter chips —
+// leaves the agent cards ample room; the four-label strip needed 440.
+const QuickPanelWidth = 340
 
-// The panel's tabs are named by a stable id (s.quickPanelTab), shown in the
-// order Agents, Quota, Services, Tasks. Tasks exists only while the
+// The panel's tabs are named by a stable id (s.quickPanelTab): Agents leads
+// the header, the others are trailing icons. Tasks exists only while the
 // herdr-projects plugin gate is open.
 const (
 	quickPanelAgentsTab   = 0
@@ -40,23 +43,40 @@ const (
 	quickPanelQuotaTab    = 3
 )
 
-// quickPanelTabItem is one tab of the strip.
+// quickPanelTabItem is one tab: its stable id and the icon that stands for
+// it (the label names the button for readers and its tooltip).
 type quickPanelTabItem struct {
-	id  int
-	tab segmentTab
+	id    int
+	label string
+	svg   *ui.SVG
 }
 
-// quickPanelTabItems lists the tabs in display order.
+// quickPanelTabItems lists the tabs in display order. Agents has no icon
+// button — it is the panel itself; its count lives in the filter chips.
 func (s *Shell) quickPanelTabItems() []quickPanelTabItem {
 	items := []quickPanelTabItem{
-		{quickPanelAgentsTab, segmentTab{"Agents", iconAgent}},
-		{quickPanelQuotaTab, segmentTab{"Quota", iconQuota}},
-		{quickPanelServicesTab, segmentTab{"Services", iconServer}},
+		{quickPanelAgentsTab, "Agents", iconAgent},
+		{quickPanelQuotaTab, "Quota", iconQuota},
+		{quickPanelServicesTab, "Services", iconServer},
 	}
 	if s.workboardAvailable() {
-		items = append(items, quickPanelTabItem{quickPanelTasksTab, segmentTab{"Tasks", iconTask}})
+		items = append(items, quickPanelTabItem{quickPanelTasksTab, "Tasks", iconTask})
 	}
 	return items
+}
+
+// quickPanelTabTitle names the tab the panel currently shows; it leads the
+// header where the four-label strip used to.
+func quickPanelTabTitle(tab int) string {
+	switch tab {
+	case quickPanelQuotaTab:
+		return "Quota"
+	case quickPanelServicesTab:
+		return "Services"
+	case quickPanelTasksTab:
+		return "Tasks"
+	}
+	return "Agents"
 }
 
 // QuickPanelHeight caps the content-driven height; the rows scroll inside
@@ -66,14 +86,16 @@ const QuickPanelHeight = 480
 // quickPanelGap keeps breathing room between the anchor and the panel.
 const quickPanelGap = 8
 
-// quickPanelChromeHeight budgets the tab switch plus the list's own padding;
-// quickPanelGroupHeight is one status header; quickPanelRowHeight is one
-// agent card; quickPanelUsageHeight is the usage caption under a card that
-// has one; quickPanelEmptyHeight is the empty state's budget;
+// quickPanelHeaderHeight budgets the title row and the list's own top
+// padding (every tab); quickPanelChipsHeight adds the Agents tab's filter
+// chip row. quickPanelGroupHeight is one status header; quickPanelRowHeight
+// is one agent card; quickPanelUsageHeight is the usage caption under a
+// card that has one; quickPanelEmptyHeight is the empty state's budget;
 // quickPanelOfflineHeight is the Reconnect row's. They are measured from the
 // rendered layout (TestQuickPanelHeightHoldsTheContent keeps them honest).
 const (
-	quickPanelChromeHeight  = 52
+	quickPanelHeaderHeight  = 46
+	quickPanelChipsHeight   = 32
 	quickPanelGroupHeight   = 25
 	quickPanelRowHeight     = 38
 	quickPanelUsageHeight   = 17
@@ -86,32 +108,34 @@ const (
 // quickPanelMinHeight keeps the panel presentable when it is nearly empty.
 const quickPanelMinHeight = 160
 
-// QuickPanelHeightFor returns the content-driven panel height: chrome plus
-// one header per status group, one row per listed agent and one caption per
-// row that carries a usage line, clamped between the minimum and the fixed
-// cap (the panel sizes to content, it is not a fixed-height window).
-func QuickPanelHeightFor(rows, groups, captions int) int {
-	budget := quickPanelChromeHeight + groups*quickPanelGroupHeight +
+// quickPanelListHeight is the grouped-list budget without the chip row: the
+// header, one status header per group, one row per listed agent and one
+// caption per row that carries a usage line, clamped between the minimum
+// and the fixed cap (the panel sizes to content, it is not a fixed-height
+// window). The Tasks tab shares it for its own groups.
+func quickPanelListHeight(rows, groups, captions int) int {
+	budget := quickPanelHeaderHeight + groups*quickPanelGroupHeight +
 		rows*quickPanelRowHeight + captions*quickPanelUsageHeight
 	if rows == 0 {
-		budget = quickPanelChromeHeight + quickPanelEmptyHeight
+		budget = quickPanelHeaderHeight + quickPanelEmptyHeight
 	}
-	if budget < quickPanelMinHeight {
-		budget = quickPanelMinHeight
-	}
-	if budget > QuickPanelHeight {
-		budget = QuickPanelHeight
-	}
-	return budget
+	return min(max(budget, quickPanelMinHeight), QuickPanelHeight)
+}
+
+// QuickPanelHeightFor is the Agents tab's budget: the list plus its filter
+// chip row, never beyond the fixed cap.
+func QuickPanelHeightFor(rows, groups, captions int) int {
+	return min(quickPanelListHeight(rows, groups, captions)+quickPanelChipsHeight, QuickPanelHeight)
 }
 
 // QuickPanelView renders the floating panel content (§17.2): over the
 // popover's material on macOS the content draws no background of its own;
 // elsewhere it draws the panel (Windows 11 rounds and outlines the flyout,
-// so no radius or border there). A two-tab switch sits on top — the tabs name
-// the panel, so it has no title of its own — over the Agents list grouped by
-// state or the Services tab. Escape closes through the flyout itself
-// (§17.1) — the view deliberately does not take it.
+// so no radius or border there). The chrome is Agents-first (2026-10-31,
+// ux-audit option C): the tab's name leads, all four tabs are icon buttons
+// at the trailing edge, and on Agents a chip row filters by status group.
+// Escape closes through the flyout itself (§17.1) — the view deliberately
+// does not take it.
 func (s *Shell) QuickPanelView(c *ui.Context) {
 	t := c.Theme()
 	sp := Spacing()
@@ -125,27 +149,7 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 		}
 	}
 	body.Children(func() {
-		ui.Row(c).FillWidth().Padding(sp.M, sp.M, sp.XS).Children(func() {
-			// The same tab face as the Git sidebar's Changes | Commits.
-			items := s.quickPanelTabItems()
-			tabs := make([]segmentTab, len(items))
-			chosen := 0
-			for i, item := range items {
-				tabs[i] = item.tab
-				if item.id == s.quickPanelTabIndex() {
-					chosen = i
-				}
-			}
-			agents := len(s.filterStatusEntries(s.BuildStatusCenterSnapshot()))
-			if segmentTabs(c, "Panel view", &chosen, tabs, func(i int) int {
-				if items[i].id == quickPanelAgentsTab {
-					return agents
-				}
-				return 0
-			}) {
-				s.selectQuickPanelTab(items[chosen].id)
-			}
-		})
+		s.quickPanelChrome(c)
 		switch s.quickPanelTabIndex() {
 		case quickPanelServicesTab:
 			s.quickPanelServices(c)
@@ -189,6 +193,39 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 	})
 }
 
+// quickPanelChrome draws the panel's header: the tab's name, then every tab
+// — Agents included — as a trailing icon button, so the way back to the
+// Agents list is always on the screen. On the Agents tab a chip per status
+// group follows, each with its live count; the chosen chip narrows the
+// list, clicking it again lists every group.
+func (s *Shell) quickPanelChrome(c *ui.Context) {
+	t := c.Theme()
+	sp := Spacing()
+	k := gorexColorsOf(t.Dark)
+	tab := s.quickPanelTabIndex()
+	ui.Row(c).FillWidth().Padding(sp.L, sp.M, 0).Gap(sp.XS).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, quickPanelTabTitle(tab)).FontSize(Typography().Section).FontWeight(WeightSemibold).Grow(1).SingleLine()
+		for _, item := range s.quickPanelTabItems() {
+			if gorexIconButton(c, k, item.svg, item.label+" tab", item.label, item.id == tab, gorexPaneBtn, gorexPaneGlyph).Clicked() {
+				s.selectQuickPanelTab(item.id)
+			}
+		}
+	})
+	if tab != quickPanelAgentsTab {
+		return
+	}
+	counts := quickPanelChipCounts(s.BuildStatusCenterSnapshot().Entries)
+	ui.Row(c).FillWidth().Padding(sp.XS, sp.M, sp.XS).Gap(sp.XS).Children(func() {
+		for g := range quickPanelGroupSpecs {
+			selected := !s.workbench.filterAll && s.workbench.filter == g
+			if quickPanelChip(c, g, counts[g], selected) {
+				s.workbench.filterAll, s.workbench.filter = selected, g
+				s.fitQuickPanel()
+			}
+		}
+	})
+}
+
 // selectQuickPanelTab switches the tab and loads what it needs: Tasks reads
 // the board, Quota reads the switched-on providers once (the service's own
 // TTL makes a quick return a cache hit; no timer).
@@ -212,8 +249,8 @@ func (s *Shell) quickPanelTabIndex() int {
 	return s.quickPanelTab
 }
 
-// filterStatusEntries narrows the shared snapshot to the active tab-group
-// choice; the snapshot order (interactions first, then attention > review >
+// filterStatusEntries narrows the shared snapshot to the chosen chip group;
+// the snapshot order (interactions first, then attention > review >
 // working > idle) is kept.
 func (s *Shell) filterStatusEntries(snapshot StatusCenterSnapshot) []StatusCenterEntry {
 	if s.workbench.filterAll {
@@ -221,7 +258,7 @@ func (s *Shell) filterStatusEntries(snapshot StatusCenterSnapshot) []StatusCente
 	}
 	entries := make([]StatusCenterEntry, 0, len(snapshot.Entries))
 	for _, entry := range snapshot.Entries {
-		if entry.Bucket == s.workbench.filter {
+		if quickPanelBucketGroup(entry.Bucket) == s.workbench.filter {
 			entries = append(entries, entry)
 		}
 	}

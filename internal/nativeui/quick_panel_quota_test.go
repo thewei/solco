@@ -21,7 +21,7 @@ func TestQuickPanelQuotaTabShowsMiniCards(t *testing.T) {
 	if !tester.HasText("Quota") {
 		t.Fatalf("popover strip lacks the Quota tab; texts=%q", tester.Texts())
 	}
-	if err := tester.Click("Quota"); err != nil {
+	if err := tester.Click("Quota tab"); err != nil {
 		t.Fatal(err)
 	}
 	settleFrames(tester, 3)

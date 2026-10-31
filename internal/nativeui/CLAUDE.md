@@ -43,11 +43,11 @@ page_files.go: Header Files 独立页面：左树/中预览（查看条 + 分级
 files_native_preview.go: Files 预览分级计划与原生层——选中后离 UI lane 探测 size×flavor×偏好：文本/代码/Markdown 源码进只读 editor.View（Buffer 离 UI lane 构建，8 MiB 上限、截断胶囊、散文自动换行），Markdown 渲染与网页图片交 WebView 页，解码得了的图片原生位图，其余给真实失败态；查看条（名称/大小/截断/Rendered⇄Source 分段）横跨所有层级；重命名、偏好切换、Source 切换都重新计划
 code_theme.go: codeEditorTheme——把 Git 评审的语法色/代码色/行号色（gd_palette 调色板，经 codehl.KindClasses 这张 token→类表）穿到框架 editor 上，同一份代码在 Files 与 Git 评审里同色
 files_preview_test.go: 预览分级回归（文本/代码原生、Markdown 渲染⇄源码与超限、网页图片与「Rich file preview」关闭、截断/二进制/空文件/CJK、重命名重新计划、桥只放行页面拥有的文件、语法配色单一来源且 Files/评审逐字符同色）
-quick_panel.go: 托盘与顶栏 Agent 快捷浮层宿主：顶部 Agents/Services 分段（浮层无标题），Agents 列表按状态分组，一层到底——点击行直达面板并收起浮层；高度随内容增长（预算常数取自真实布局）
+quick_panel.go: 托盘与顶栏 Agent 快捷浮层宿主（2026-10-31 Agents 为主）：页签名在左，Agents/Quota/Services/Tasks 四枚图标常驻右上角（点 Agents 即回列表），Agents 列表按状态分组、其上一行过滤芯片（Needs you/Working/Idle 带计数，单选可取消复原），一层到底——点击行直达面板并收起浮层；高度随内容增长（预算常数取自真实布局）
 program_status.go: OSC 7501 接线层：终端 OnProgramStatus 回调喂入 statusStore，仲裁后的状态写回投影并驱动 blocked 交互检测；applyPaneStatus 是两条状态源（协议流/hook 流）共用的唯一落地路径——每事件恰好一次 upsertProjectionAgent（Revision 每事件 +1）
 quick_panel_services.go: Agent 浮层里的 Services 内容：当前 Tab Scripts 与观测端口（分区标题与 Agents 分组同一构件）
-quick_panel_test.go: QuickPanel 高度预算（纯函数 + 真实布局贴合含用量行）、状态分组、点击直达（Terminal/Chat/记忆面板/从 Diff 返回）、右键菜单与行尾标记已审阅回归
-agent_quick_panel.go: 浮层的状态分组（quickPanelGroups）、分组标题（quickPanelGroupHeader）、条目行（点击直达、行尾标记已审阅、右键菜单）与直达动作 openQuickPanelEntry/openAgentTerminal；另保留历史遗留的统计 tile（无调用方）
+quick_panel_test.go: QuickPanel 高度预算（纯函数 + 真实布局贴合含用量行）、状态分组、过滤芯片（筛选与再点复原）、点击直达（Terminal/Chat/记忆面板/从 Diff 返回）、右键菜单与行尾标记已审阅回归
+agent_quick_panel.go: 浮层的状态分组表（quickPanelGroupSpecs/quickPanelBucketGroup，芯片与分组头同一来源）、过滤芯片（quickPanelChip/quickPanelChipCounts）、分组（quickPanelGroups）、分组标题（quickPanelGroupHeader）、条目行（点击直达、行尾标记已审阅、右键菜单）与直达动作 openQuickPanelEntry/openAgentTerminal
 agent_quick_panel_test.go: 状态分组的优先级顺序、空组省略与组内保序回归
 agent_card.go: 侧栏与 Agent 浮层共用的紧凑 Agent 卡片 agentCardRow（标记/状态点/两行文字，可选行尾槽）；2026-10-30 用户拍板推翻 F118：第一行 = 会话标题（agentCardLabel 以标题为主名，多卡同项目 a11y 标签追项目消歧 F169），第二行 = 项目名 + git 事实同 muted 样式
 right_panel_git_test.go: Diff/历史 Commit 保留左导航/中预览而不绘制旧 Review Inspector
@@ -107,7 +107,7 @@ status_indicator.go: 全局唯一状态指示（16pt 右侧槽位：working 旋�
 files_start.go: /files 未选文件时的起始页（2026-10-30 UX audit）：最近文件（Session.RecentFiles，MRU，只列仍在当前根下的）、Changed in git、README；渲染零 IO，按根缓存
 hosts_start.go: Hosts 起始页与过滤（2026-10-30）：Recently connected 卡片（Session.RecentHosts，Connect/Edit）、user@host 副标题、Filter hosts；只读 sshconfig 索引
 status_indicator_test.go: 形状与 state→tone 映射回归
-quick_panel_quota.go: Header 浮层 Quota 页（2 列迷你卡，头条取计数额度否则最紧窗口；页脚 Updated/Open Quota）
+quick_panel_quota.go: Header 浮层 Quota 页（2026-10-31 改一行一张迷你卡，头条取计数额度否则最紧窗口；页脚 Updated/Open Quota）
 quick_panel_quota_test.go: Quota 页迷你卡、头条、header 计数 waiting/total、migrateRoute
 subagents_state.go: 三家（Claude/omp/Codex）子代理读取节流（合并刷新、后台读、身份→路径缓存；变化才重建 workbench）
 chat_subagents.go: Chat 子代理桥（attachSubagents 给步骤盖 SubagentIDs、抽屉 OpenSubagent、Shell 绑定的合并刷新与静默退化；读取/链接/卡片投影在 internal/chatsession）
