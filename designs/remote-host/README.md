@@ -1,0 +1,162 @@
+# Remote Host (Go) — 手机客户端的服务端
+
+> 本目录是 **Decision + 协议草案 + P1 任务清单**,不含探索 HTML(没有视觉分歧可选;视觉在 `designs/mobile-shell/`)。
+> 上游:`designs/mobile-shell/README.md`(手机壳 Decision = C 窥视条 + 终端层)。
+
+## Decision (2026-10-31)
+
+| 项 | 结论 |
+| --- | --- |
+| **Status** | `Approved`(设计);**产品代码尚未开工**,下一句「开始 P1」才进入实现 |
+| **形态** | App 进程内挂载的 `internal/remotehost`;**包本身不 import MyGo**(日后可原样搬进无头二进制) |
+| **分期** | P1 列表 + 终端 + 窥视行 → P2 Chat 只读 → P3 Chat 发送与交互 → P4 余下(`/` `$` 目录、附件、语音、通知另议);**每期独立可合并** |
+| **传输(首期交付)** | loopback → LAN HTTPS/WSS + QR 配对 → **Tailscale 同期交付**(沿用旧 `remote-client-architecture.md` §10 的顺序;Relay / WebRTC / QUIC 不做) |
+| **终端模型(2026-10-31 探针后修订)** | **observe + API 输入,不 attach**:输出走 `herdr terminal session observe <terminal_id> --cols N --rows M`(Herdr 以手机自己的栅格渲染 VT 帧,可与桌面的 controller 并存,**不 resize、不重排 Mac 上的窗格、不需要 `--takeover`**);输入走 Herdr 既有的 `pane.send_input` / `pane.send_keys`(同桌面 `launch_transport.go` 的路径)。用户原先选的「接受 Mac 端重排」因此**不再需要**(探针证明 attach 路线根本不可行,见「实测」) |
+| **授权** | `AGENTS.md` 已追加 Product decision(默认 off、配对、可撤销、无云账号、无遥测);`remote-client-architecture.md` §7 已改写为 observe + API 输入 |
+| **拒绝的备选** | ① 手机直接驱动桌面 Shell 的选中状态(= 遥控 GUI,违背「导航客户端本地」);② 整机一个共享 TUI session(旧 §7);③ 手机 `terminal attach`(**探针实锤不可行**:一个终端同一时刻只允许一个 attached client,桌面可见窗格已占用,第二个会被拒并要求 `--takeover`,而自动 attach 永不 takeover);④ 手机 `--takeover`(会把桌面挤下线,桌面的 MyGo 终端对被挤的反应未验证,且违反既有规则);⑤ 只放进 `nativeui`(Chat 无法脱离 Shell 复用与测试) |
+
+## 事实依据(调研,可复核)
+
+| 事实 | 出处 |
+| --- | --- |
+| Go 版无任何监听服务;`solco-mobile` 的 `/api/v2` 与 golden fixtures 对着已退役的 Rust Host | `rg "net.Listen\|http.Server" internal` 仅 services/preview/apphook(均非 Host) |
+| 桌面终端 = 每 pane 一个 `herdr terminal attach <terminal_id>`,**永不 `--takeover`**;同一终端只允许 1 个 attached client | `internal/herdr/herdr.go` `TerminalAttachCommand`;探针(下) |
+| `herdr terminal session observe <id> --cols --rows`:多观察者、自带栅格、输出 JSON 行 `terminal.frame`(base64 ANSI,首帧 `full:true`,之后增量) | 探针(下),herdr 0.9.5 |
+| 窥视行所需的「最后一行」= `Manager.ReadPane(visible)`,不解析 ANSI,不新增 Herdr 方法 | `internal/herdr/launch_transport.go:351` |
+| Chat 投影 `ChatBridgeState` 是 `*Shell` 方法,绑定窗口当前选中的那一个 pane,且须上 UI lane(`callOnWindow`) | `internal/nativeui/chat_bridge.go`、`shell.go`(`chatTurns/chatPaneID`) |
+| 可脱离 Shell 复用的底座:`history/live.go` tail + `conversation.DeriveTimeline` + 投影 JSON 形状 | `internal/history`、`internal/conversation` |
+| go.mod 目前无 PTY 与 WebSocket 库 | `rg "pty\|websocket" go.mod` 无命中 |
+
+## 约束
+
+- Herdr 仍是唯一运行时:Host **只经 Herdr API/CLI 与既有域包取数**,不建第二套 workspace/pane/终端/进程生命周期。
+- 手机的 Workspace/Tab/Pane/Agent 选择**完全客户端本地**,Host 绝不移动 Mac 用户的导航。
+- Host 从不 attach、从不 `--takeover`:每个终端 WS 起一个 `terminal session observe` 子进程(只读),连接关闭即回收;不为未打开的终端保留 observe。输入只走 Herdr API。
+- 日志只记操作名、稳定 ID、错误、计数、耗时;**不记终端字节、prompt/会话正文、令牌、配对码**。
+- 无云账号、无遥测、无 Solco 自营 Relay。
+- 默认 `off`;监听模式只在用户于 Settings 显式选择后生效,网卡变化不静默放宽暴露面。
+
+## 监听与信任
+
+```text
+Settings → Remote Access
+  Mode: Off | Loopback | Local network | Tailscale
+  Devices: name · paired · last seen · [Revoke]
+  [Pair a phone…]  → 弹出 QR(6 分钟、单次有效)
+```
+
+- **证书**:首次开启时生成自签 ECDSA 证书,存 `<userDataDir>/RemoteHost/`;私钥权限 0600。手机端**按指纹固定**(pin),不依赖 CA。
+- **QR 负载**(只含引导元数据,不含可复用持久凭据):
+  `solco://pair?h=<host>&p=<port>&fp=<sha256 指纹>&c=<一次性配对码>&n=<Mac 名>`
+- **配对**:`POST /api/v3/pair {code, deviceName}` → 校验指纹已在 TLS 层被手机固定 + 配对码未过期未使用 → 返回 `{deviceId, token}`(256 位随机)。Host **只存 `sha256(token)`**、名称、创建/最后见时间(`<userDataDir>/RemoteHost/devices.json`);手机存 SecureStore / Keystore。
+- **鉴权**:HTTP `Authorization: Bearer <token>`;WebSocket 用子协议对 `['solco.bearer', token]`(浏览器不能设头;沿用手机端既有规则,前缀由 `shardlane.bearer` 改为 `solco.bearer`,手机端同步改)。
+- **授权域**:V1 单一「owner」权限,但所有端点过同一个 `authorize(scope)` 入口,保留日后拆 `view / prompt / terminal-input / manage` 的缝(终端输入比 prompt 权力更大,单独成 scope)。
+- **撤销**:Settings 的 Revoke 删除记录并**立刻**关闭该设备的所有 WS。
+
+## 协议草案(P1,`/api/v3`;v2 随 Rust Host 退役)
+
+| 端点 | 作用 |
+| --- | --- |
+| `POST /api/v3/pair` | 见上,无需 Bearer |
+| `GET /api/v3/bootstrap` | `{hostId, hostName, version, capabilities:{terminal:true, chat:false}, instances:[…]}` |
+| `GET /api/v3/tree?instance=` | Herdr 投影的只读形:`workspaces[] → tabs[] → panes[]`,每 pane 带 `paneId`、`terminalId`、`label`、`agent?{provider,status}`、`cwd`;全是不透明 ID,**不含任何「聚焦」字段**。带 `revision`(仅内容变化才递增;分支名 Herdr 投影里没有,P1 不给) |
+| `WS /api/v3/events` | 首帧 `hello{revision}`;之后只推 `tree.changed{revision}`(不做 diff,客户端重取 `/tree`,用 `If-None-Match` 省流量;树内容没变(如 Mac 上换了聚焦)就不推)。状态槽的变化已在树里(`agent.status`/`blocked` 等),不另设事件 |
+| `WS /api/v3/terminals/{terminalId}/stream?cols=&rows=` | **下行**:二进制帧 = observe 的 `terminal.frame.bytes` 解 base64 后的 ANSI(`full` 帧与增量帧原样转发,另有一条 JSON 文本帧 `{"t":"frame","seq":n,"full":bool,"w":51,"h":19}` 先于其字节,供手机核对栅格);**上行**文本帧 JSON:`{"t":"input","text":"ls","keys":["enter"]}`(先字面文本、后具名键,一次 `pane.send_input {pane_id,text,keys}`;文本 ≤ 64 KiB、键 ≤ 32 个且只许 `[A-Za-z0-9+_-]{1,32}`;被拒回 `{"t":"input.error","code":"bad_input|refused|forbidden"}`,`refused` 带 Herdr 原话)、`{"t":"resize","cols":60,"rows":22}`(合法范围 10–400 × 3–200,爆发式只算最后一次,去抖 100 ms)、`{"t":"ping"}`(回 `{"t":"pong"}`)。**resize = 用新栅格重启 observe**(observe 的 stdin 不接受 resize 消息,探针已验证),新子进程首帧是整屏 `full:true`,所以软键盘弹起/收起代价只是 ~1 KB |
+| `GET /api/v3/panes/{paneId}/peek` | 窥视行:`ReadPane(visible)` 的最后一条非空行,≤ 200 字节,纯文本;Host 侧每 pane 节流 1 s |
+
+要点:
+- **键行/修饰键**不在 Host 编码:手机端(沿用 `tui-virtual-keyboard-design.md`)直接上行字节,Host 不做 `tui_input` 语义翻译。
+- 每设备最多 2 个并发终端流(超出返回 `429`);observe 起不来(终端已不存在、Herdr 拒绝)以 WS 关闭码 + 机读 `reason` 返回,手机显示 Blocked/Offline。
+- 重连 = 新 observe,首帧即整屏;Host 不缓存终端内容。
+- 手机端渲染器必须吃 Herdr 的 ANSI 帧(含 `?2026` 同步输出、OSC 8 序列):沿用 `tui-virtual-keyboard-design.md` 的键行,输出端用真 VT 渲染器(不再需要手机自己解码 PTY 字节语义)。
+- 输入受 Herdr 对 `send_input`/`send_keys` 的身份与就绪门约束:拒绝原样回传给手机(不绕过);窗格里**不是 Agent** 也能收键(`pane.*` 路径,不是 `agent.*`)。
+- `capabilities.chat` 在 P2 之前恒为 `false`,手机据此隐藏 Chat 入口(退化成纯 Terminal 手机,仍可用)。
+
+## 包布局(P1;已落地部分见 `internal/remotehost/CLAUDE.md`)
+
+```text
+internal/remotehost/
+  CLAUDE.md            L2 头(成员清单 + [PROTOCOL])
+  config.go            Mode / 端口 / 允许网卡 的纯数据与校验
+  tls.go               自签证书的生成、加载、指纹
+  pairing.go           一次性配对码(6 分钟、单次、常量时间比较)
+  devices.go           设备库(token 哈希、撤销、last seen),原子写盘
+  server.go            监听器生命周期、路由、authorize(scope)+guard、pair/bootstrap/tree、撤销→关 WS
+  tree.go              herdr 投影 → /tree 形状(纯函数)
+  events.go            herdr 事件 → /events 帧
+  backend.go           Backend 接口(Instances/Projection/Subscribe/SendPaneInput/ObserveCommand)+ Manager 适配
+  terminal.go          observe 子进程(stdout JSON 行)↔ WS 桥 + 输入经 Herdr API(无 PTY)
+  peek.go              ReadPane → 最后非空行(纯函数 + 节流)
+  *_test.go
+internal/nativeui/
+  page_settings_remote.go   Settings → Remote Access(开关、Mode、配对 QR、设备与 Revoke)
+  settings_search.go        追加索引(TestSettingsIndexCoversEveryRow 守卫)
+```
+
+接口缝:`remotehost` 只依赖一个小接口(`Tree(ctx) / Events() / AttachCommand(session, terminalID) / ReadPane(…)`),由 `internal/herdr.Manager` 的薄适配实现;**不 import `nativeui`、不 import MyGo**。
+
+### 新依赖(待实现时确认版本;当前 go.mod 均没有)
+
+| 依赖 | 用途 | 为什么不用更省的 |
+| --- | --- | --- |
+| `github.com/coder/websocket` | WS 服务端(二进制帧、子协议、关闭码) | 标准库无 WS;`x/net/websocket` 已被官方标为不推荐 |
+| 二维码生成(一个小库,如 `github.com/skip2/go-qrcode`) | 配对 QR | 仅在设置页绘制;MyGo 若已有 QR 能力则优先用它(实现前先查) |
+
+## P1 任务清单(`[步骤] → [验证点]`)
+
+1. **探针 ✅ 已完成**(2026-10-31,隔离 session `probe-p1`,用后已删除,默认 session 未动):见「实测」。结论使终端模型由 attach 改为 observe + API 输入。
+2. ✅ **`config` + `tls` + `devices` + `pairing`**(2026-10-31 已实现)→ `go test ./internal/remotehost/...`:配对码过期/重复使用被拒、token 只存哈希、指纹稳定、设备库原子写与撤销。
+3. ✅ **`auth` + `server`(loopback)**(已实现:`server.go` 含 pair/bootstrap/tree/授权/撤销)→ 无 token 401;错误子协议被拒;撤销后既有 WS 被关;`off` 模式不监听端口。
+4. ✅ **`tree` + `events`**(已实现)→ 用 `internal/herdr` 现成夹具驱动:ID 全不透明、`revision` 递增、`If-None-Match` 304、事件触发 `tree.changed`。
+5. ✅ **`terminal`**(已实现,另有真 herdr 的可选契约测试)→ 假 observe 子进程(打印 `terminal.frame` JSON 行的脚本)驱动:帧有序转发、`resize` = 重启并换栅格、关闭回收子进程、每设备并发上限、argv 恒为 `terminal session observe <id> --cols --rows`(断言无 `attach`/`--takeover`/`control`)、输入只调 Herdr API(假 Manager 断言)。
+6. ✅ **`peek`**(已实现)→ ReadPane 夹具:空屏/ANSI 残留/超长行的截断与节流。
+7. ✅ **LAN / Tailscale 绑定**(已实现:`Candidates` + `Server.Reconfigure`)→ 只绑所选网卡地址;Mode 变更时重绑;`0.0.0.0` 永不默认(单测断言)。
+8. **Settings → Remote Access 页** + 搜索索引 → `TestSettingsIndexCoversEveryRow` 绿;默认关;配对 QR 6 分钟后失效。
+9. **文档同步**:`internal/remotehost/CLAUDE.md`、`internal/CLAUDE.md`/根 `CLAUDE.md` 的目录清单。
+10. **总验**:`GOTOOLCHAIN=auto go test ./...` · `GOTOOLCHAIN=auto go tool mygo vet .` · `GOTOOLCHAIN=auto go tool mygo build` · `git diff --check`;真机:手机配对 → 列表 → 点开终端 → 输入 → 回显 → Revoke 后断开。
+
+## P2–P4 轮廓(不在本期)
+
+- **P2 Chat 只读**:从 `nativeui` 抽出与 Shell 无关的 `internal/chatsession`(一个 Agent 的 tail + `DeriveTimeline` + plan + working + changes 的投影构造),**桌面 `ChatBridge` 与 Host 共用同一投影函数**;抽取过程以桌面测试(`chat_*_test.go`)零改动通过为护栏。`capabilities.chat=true`,新增 `GET /api/v3/agents/{ref}/chat` + 事件流。
+- **P3 发送与交互**:`Send/Stop/Queue`、Question/Blocked 卡、picker;逻辑沿用 `chat_hooks/ask/picker` 抽出的纯逻辑;投递仍是 Herdr `agent.prompt/send_keys`(含既有两类身份拒绝回退),不新增 Herdr 方法。
+- **P4**:composer 目录与附件、语音、通知(另议)。
+
+## 风险与最脆弱假设
+
+- **本方案假设**:`terminal session observe` 在 Herdr 0.9.x 之后的版本里保持「可并存、自带栅格、不影响 controller」的语义,且其 JSON 行格式不变。它是 Herdr 的 CLI 子命令而非文档化的稳定 API——若将来改动 → 降级为 `ReadPane` 轮询渲染的只读终端层;Host 把 observe 隔在 `terminal.go` 一处,并在 P1 加一条针对真实 herdr 的**可选契约测试**(有 `herdr` 就跑,没有则跳过)。
+- 自签证书 + 指纹固定的 UX:iOS/Android 对自签 WSS 的支持需在手机端用原生 pin 而非系统信任库(RN 端要走 `fetch` 之外的实现);**这是手机端的工作量,不是 Host 的**,但会拖 P1 的端到端验收。若代价过高 → loopback + SSH 转发作为开发期路径,先不阻塞 Host。
+- Tailscale 路径下机器名/地址由用户选择;Host 只绑所选地址,不探测、不记录 tailnet 信息。
+- 抽 `chatsession` 是本计划里最大的重构(P2);P1 完全不依赖它,所以不会被它拖住。
+
+## 实测(2026-10-31,herdr 0.9.5,隔离 session `probe-p1`)
+
+脚本 `/tmp/probe_attach.py` 等(一次性,未入库);默认 session 全程未动,探针 session 已 `server stop` + `session delete`。
+
+| # | 操作 | 结果 |
+| --- | --- | --- |
+| 1 | 控制端 A `terminal attach` 140×42 → 窗格里 `stty size` | `42 140`:窗格 PTY 跟随 **attach 客户端**的栅格 |
+| 2 | 第二个 `terminal attach`(51×19,无 `--takeover`) | **被拒**:`terminal … already has an attached client; retry with --takeover`,进程退出码 1。**一个终端同时只允许 1 个 attached client** |
+| 3 | `terminal session control` 无 takeover,A 仍在 | 同样被拒(`terminal.closed` + 同一原因) |
+| 4 | `terminal session observe <id> --cols 51 --rows 19`,A 仍在 | **成功**;窗格 `stty size` 仍是 `42 140`(**不重排**);输出为 JSON 行 `{"type":"terminal.frame","encoding":"ansi","bytes":<base64>,"full":bool,"seq":n,"width":51,"height":19}` |
+| 5 | 两个 observer 并存(51×19 与 40×15) | 均成功 |
+| 6 | observe 期间经 `pane send-text` 输入 | 增量帧(`full:false`,约 80–120 字节,含 `?2026` 同步输出)实时到达;`pane send-text` 的字符进入窗格 |
+| 7 | 向 observe 的 stdin 写 `{"type":"resize",…}` | 无效果(无新帧)→ 改栅格要重启 observe |
+
+后果:
+- 手机 attach 路线**不可行**(桌面可见窗格已占 controller 位),takeover 又违反既有规则 → 终端模型改为 observe + API 输入,上文已全部改写。
+- 原本需要用户拍板的「是否接受 Mac 端重排」不再成立:observe 完全不影响桌面窗格尺寸,手机端栅格独立。
+- 仍未验证(P1 任务内补):`send_keys` 的键名表(`up`/`ctrl+c`/`esc`…)与手机键行的映射全集;大量输出时的帧率与背压;窗格关闭时 observe 的收尾帧;observe 对「隐藏 Tab 的终端」(桌面没有 attach)是否同样可用。
+
+## 进度(2026-10-31)
+
+- ✅ 任务 1–5 已实现并通过 `GOTOOLCHAIN=auto go test -race ./internal/remotehost/`(连续三次)。
+- ✅ **真 herdr 契约测试**(`SOLCO_REMOTEHOST_CONTRACT=1 go test -run RealHerdr ./internal/remotehost/`):隔离 session 里 WS 打开终端 → 首帧是 51×19 整屏 → 经 Host 输入 `echo HELLO_FROM_$((1+1))PHONE` → observe 帧里回显 `HELLO_FROM_2PHONE`;测试结束 session 已删除。
+- 新增依赖:`github.com/coder/websocket v1.8.15`(用户 2026-10-31 同意);未引入 pty 库(observe 不需要 PTY)。`go mod tidy` 在本机因网络卡住,go.mod 手工置为直接依赖,联网后请补跑一次 `go mod tidy` 复核。
+- ✅ 任务 6 `peek`(`GET /api/v3/panes/{paneId}/peek`,每 pane 1 s 节流)、任务 7 地址候选 + `Reconfigure`(换模式/地址/端口即重绑、作废配对码、失败保持停止)、任务 8 Settings → Remote Access(`internal/nativeui/remote_settings.go`)与 App 挂载(启动时仅在上次选了模式才监听,退出时停)。二维码依赖 `github.com/skip2/go-qrcode`(MyGo 无二维码能力,用户 2026-10-31 同意引入);界面渲染出的二维码用 macOS CIDetector 解码,内容与配对 URL 逐字一致。
+- 剩余 P1:任务 9 文档收尾(L2 已同步)、任务 10 总验与真机(扫码配对 → 列表 → 终端 → 窥视行)。
+
+![Remote Access 设置页与配对二维码](settings-pairing-sheet.png)
+
+## 后续候选(用户 2026-10-31 提问:手机端能否操作 Herdr TUI?)
+
+可以,但不在 P1–P4:Herdr 的 TUI 本体(侧栏 + 多窗格界面,`herdr session attach <name>`)不是某个 `terminal_id`,`observe` 帮不上;要给手机一个「Herdr TUI」面,只能由 Host 在 PTY 里跑一个 Herdr TUI client 并转发(= 旧 Rust Host 的「共享 TUI session」模型)。代价:Herdr 的焦点/布局是全局的,手机在 TUI 里的操作会**改动 Mac 上同一 session 的焦点与 resize**,与「手机导航客户端本地」冲突,所以只能是一个明确标注「会影响 Mac」的高级入口,另起一期(P5)并重新评估(那时才需要 `creack/pty`)。日常的「看 + 打字进某个终端」已由 P1 覆盖,Agent 的结构化操作走 P2/P3 的 Chat。

@@ -3,6 +3,14 @@
 Status: **As-built semantic Conversation/History slice + shared Herdr TUI source landed; live/native acceptance in progress**
 Baseline: 2026-08-22
 Architecture source of truth: `client-product-architecture.md`
+
+> **2026-10-31 — Go era.** The Rust Host this document describes was retired
+> with the Rust implementation; the Go app has no Remote Host yet. The Go plan,
+> API (`/api/v3`) and phases live in `designs/remote-host/README.md`. Sections
+> that still describe the Rust Host's `/api/v2` and its single shared TUI
+> session are historical; §7 below is rewritten for the Go plan. Transport and
+> pairing sections (§9–§12) remain the reference.
+
 Implementation sequencing and acceptance gates live in the internal engineering archive (not published).
 
 This document defines the approved remote/mobile direction for Solco. The
@@ -221,21 +229,23 @@ Terminal key simulation is a secondary escape hatch, not the normal way to talk 
 
 ## 7. Terminal remote model
 
-Remote TUI uses one Host-owned shared session because the installed Herdr
-protocol has global focus/resize rather than client-local isolation. `herdr_tui`
-is advertised only with the Host lifecycle implementation; Mobile has no normal
-Pane-terminal product path and must not use a per-Pane terminal as a fallback.
-The remaining acceptance is attach/stream/input/resize/reconnect/close plus a
-real VT renderer on Android.
+*(Rewritten 2026-10-31. The earlier text — one Host-owned shared TUI session,
+no per-Pane terminal for Mobile — described the Rust Host against Herdr 0.8.2
+and is superseded.)*
 
-The installed Herdr 0.8.2 CLI still exposes the historical
-`terminal session observe` and `terminal session control --takeover` commands,
-but the current Remote adapter does not expose them as a generic Pane API. It
-owns one shared TUI bridge/PTY, and every authenticated viewer attaches to that
-same session. This avoids a second takeover controller per Pane while preserving
-Herdr's global focus/resize semantics. The implementation must still be
-operator-tested against the live runtime before claiming the lifecycle gate
-complete.
+A Herdr terminal accepts exactly one attached client, and the desktop already
+holds that slot for every visible Pane (`herdr terminal attach`, never
+`--takeover`; a second attach is refused). The Host therefore never attaches.
+It runs one read-only `herdr terminal session observe <terminal_id> --cols N
+--rows M` child per authenticated WebSocket
+(`WS /api/v3/terminals/{terminalId}/stream`): Herdr renders the terminal in the
+phone's own grid, alongside the desktop's controller, without resizing the Mac
+Pane. Output frames (`terminal.frame`, base64 ANSI, first frame full, then
+deltas) are forwarded as bytes; input goes through Herdr's `pane.send_input` /
+`pane.send_keys`; a new size restarts the observe child. Semantic navigation
+stays client-local and the Host never moves the Mac user's selection. The Chat
+peek line is `pane.read` visible text, not parsed ANSI. Evidence, limits and
+the P1 checklist: `designs/remote-host/README.md`.
 
 ## 8. Remote protocol shape
 

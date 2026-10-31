@@ -3,7 +3,7 @@
 Current implementation: Go 1.27.3 + MyGo Native UI (pinned v0.6.4, patched fork vendored under `third_party/mygo`) + official MyGo Terminal/Ghostty; Herdr remains the runtime authority. The previous Rust/GPUI implementation lives only on `rewrite/mygo`/`main`.
 
 <directory>
-internal/ - Go application/domain packages (nativeui presentation, apphook in-app IPC engine, agenthooks Hook Doctor provisioning, agentstatus OSC 7501 status arbitration, herdr adapter, agent/history/usage/sessiontrash/gitworkbench domains, workboard herdr-projects plugin capability gate, settings, applog, agentcatalog Chat composer catalog, voice ChatGPT-sign-in transcription, ...)
+internal/ - Go application/domain packages (nativeui presentation, apphook in-app IPC engine, agenthooks Hook Doctor provisioning, agentstatus OSC 7501 status arbitration, herdr adapter, agent/history/usage/sessiontrash/gitworkbench domains, workboard herdr-projects plugin capability gate, settings, applog, agentcatalog Chat composer catalog, voice ChatGPT-sign-in transcription, remotehost optional phone-client Host (off by default; TLS pin, QR pairing, device store, tree/events, observe-based terminal stream, peek; mounted from Settings → Remote Access), ...)
 resources/ - MyGo packaging resources (app icon)
 third_party/ - vendored patched MyGo framework fork (go.mod replace target; see third_party/mygo/LOCAL-PATCH.md)
 site/ - GitHub Pages landing site (static HTML/CSS, no build step); assets/app-icon holds the icon prompt and Apple safe-margin export rule
