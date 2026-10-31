@@ -10,9 +10,9 @@ import (
 )
 
 /**
- * [INPUT]: 一个 Claude Code 会话 transcript 的路径（Herdr agent_session.value 的 path 身份）
- * [OUTPUT]: Subagent、ClaudeSubagents（该会话派出的子代理清单：类型/说明/最近写入时间）、Subagent.Active（最近写入够新）
- * [POS]: 侧栏 Agents 树的只读数据源（2026-10-30 用户拍板，design: designs/agent-surfaces）：Claude Code 把子代理落在 `<会话>/subagents/agent-<id>.jsonl` + `.meta.json`，Herdr 没有父子关系，所以只读这两个文件；布局是 Claude Code 的未文档化实现细节——变了就读不到、静默退化为平铺，不影响其他功能。只读、不落盘、不解析对话内容（只读 meta 的三个字段与文件 mtime）
+ * [INPUT]: 一个会话 transcript 的路径（Herdr agent_session 身份解析出的 path）与 Provider
+ * [OUTPUT]: Subagent、SubagentsFor（该会话派出的子代理清单：类型/说明/子 transcript 路径/父调用链接键/最近写入时间）、ClaudeSubagents、Subagent.Active
+ * [POS]: 侧栏 Agents 树、Header 弹层、Chat 子代理卡片与抽屉的只读数据源（2026-10-30 用户拍板，2026-10-31 扩到 omp/Codex，design: designs/agent-surfaces、designs/subagents）：Herdr 没有父子关系，只读各 Provider 自己落盘的文件——Claude `<会话>/subagents/agent-*.jsonl|.meta.json`、omp `<会话目录>/<名>.jsonl`（头部 parentSession）、Codex 独立 rollout（session_meta.source.subagent.thread_spawn）；三种布局都是未文档化实现细节，变了就读不到、静默退化为平铺。只读、不落盘、清单本身不解析对话内容
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -25,23 +25,85 @@ const SubagentActiveWindow = 20 * time.Second
 // hundreds); the most recent ones are kept.
 const maxSubagents = 24
 
-// Subagent is one agent a Claude Code session spawned.
+// Subagent is one agent a session spawned.
 type Subagent struct {
 	ID          string
-	Type        string // "Explore", "general-purpose"
-	Description string // the task the parent gave it
+	Provider    AgentID
+	Type        string // Claude "Explore"; omp "task"; Codex the agent's nickname
+	Description string // the task the parent gave it ("" until the transcript is read)
 	Started     time.Time
 	UpdatedAt   time.Time
+	// Path is the sub-agent's own transcript (drill-down reads it).
+	Path string
+	// CallID links it to the parent's tool call: Claude's tool_use id.
+	CallID string
+	// Name links it where the parent names it in the call's input: omp
+	// `tasks[].name`, Codex `spawn_agent.task_name`.
+	Name  string
+	Depth int
+	// Ended is the provider's own end marker (omp's session_exit); without
+	// one, liveness is the recent-write window.
+	Ended bool
+	// Busy is set by the caller from SubagentDetail.PendingTool: the last tool
+	// call has no result yet, so a quiet file does not mean finished.
+	Busy bool
 }
 
-// Active reports a sub-agent still writing.
+// SubagentBusyWindow bounds how long a pending tool call keeps a quiet
+// sub-agent "running" (a `sleep 20` or a build writes nothing meanwhile).
+const SubagentBusyWindow = 10 * time.Minute
+
+// Active reports a sub-agent still working: it wrote within the active
+// window, or it is waiting on a tool call that has not returned (Busy) and
+// wrote within the busy window.
 func (s Subagent) Active(now time.Time) bool {
-	return !s.UpdatedAt.IsZero() && now.Sub(s.UpdatedAt) < SubagentActiveWindow
+	if s.Ended || s.UpdatedAt.IsZero() {
+		return false
+	}
+	age := now.Sub(s.UpdatedAt)
+	return age < SubagentActiveWindow || (s.Busy && age < SubagentBusyWindow)
+}
+
+// NeedsBusyCheck reports a sub-agent whose quiet time makes the pending-tool
+// check worth a read: not ended, past the active window, inside the busy one.
+func (s Subagent) NeedsBusyCheck(now time.Time) bool {
+	if s.Ended || s.UpdatedAt.IsZero() {
+		return false
+	}
+	age := now.Sub(s.UpdatedAt)
+	return age >= SubagentActiveWindow && age < SubagentBusyWindow
+}
+
+// SubagentsFor lists the sub-agents of the session whose transcript is at
+// sessionPath, oldest first. Providers without a sub-agent layout, a session
+// without any, or a layout it does not recognise yield nil.
+func SubagentsFor(provider AgentID, sessionPath string) []Subagent {
+	switch provider {
+	case AgentClaudeCode:
+		return ClaudeSubagents(sessionPath)
+	case AgentOMP:
+		return ompSubagents(sessionPath)
+	case AgentCodex:
+		return codexSubagents(sessionPath)
+	default:
+		return nil
+	}
+}
+
+// finishSubagents orders a listing by spawn time and keeps the newest ones.
+func finishSubagents(list []Subagent) []Subagent {
+	sort.SliceStable(list, func(i, j int) bool { return list[i].Started.Before(list[j].Started) })
+	if len(list) > maxSubagents {
+		list = list[len(list)-maxSubagents:]
+	}
+	return list
 }
 
 type subagentMeta struct {
 	AgentType   string `json:"agentType"`
 	Description string `json:"description"`
+	ToolUseID   string `json:"toolUseId"`
+	SpawnDepth  int    `json:"spawnDepth"`
 }
 
 // ClaudeSubagents lists the sub-agents of the Claude Code session whose
@@ -73,19 +135,30 @@ func ClaudeSubagents(sessionPath string) []Subagent {
 		id := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(metaPath), "agent-"), ".meta.json")
 		sub := Subagent{
 			ID:          id,
+			Provider:    AgentClaudeCode,
 			Type:        strings.TrimSpace(meta.AgentType),
 			Description: strings.TrimSpace(meta.Description),
 			Started:     info.ModTime(),
 			UpdatedAt:   info.ModTime(),
+			CallID:      strings.TrimSpace(meta.ToolUseID),
+			Depth:       meta.SpawnDepth,
 		}
-		if transcript, err := os.Stat(filepath.Join(dir, "agent-"+id+".jsonl")); err == nil {
-			sub.UpdatedAt = transcript.ModTime()
+		transcript := filepath.Join(dir, "agent-"+id+".jsonl")
+		if info, err := os.Stat(transcript); err == nil {
+			sub.UpdatedAt = info.ModTime()
+			sub.Path = transcript
 		}
 		list = append(list, sub)
 	}
-	sort.SliceStable(list, func(i, j int) bool { return list[i].Started.Before(list[j].Started) })
-	if len(list) > maxSubagents {
-		list = list[len(list)-maxSubagents:]
+	return finishSubagents(list)
+}
+
+// HasSubagents reports whether a provider has a sub-agent layout Solco reads
+// (pi has none).
+func HasSubagents(provider AgentID) bool {
+	switch provider {
+	case AgentClaudeCode, AgentOMP, AgentCodex:
+		return true
 	}
-	return list
+	return false
 }

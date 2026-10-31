@@ -2100,3 +2100,269 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- sub-agents: card (1-2), roster (3+), drawer (designs/subagents) ---- */
+
+.subs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 0.9em;
+}
+
+.sub-card,
+.sub-roster {
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0;
+}
+
+.sub-roster {
+  margin: 4px 0 0.9em;
+}
+
+.sub-card.on,
+.sub-rrow.on {
+  background: var(--tint);
+}
+
+.sub-head,
+.sub-rrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sub-head:hover,
+.sub-rrow:hover {
+  background: var(--tint);
+}
+
+.sub-rrow {
+  padding: 6px 12px;
+  border-top: 1px solid var(--hair);
+}
+
+.sub-kind {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--i1);
+  background: var(--tint2);
+  padding: 1px 8px;
+  border-radius: 999px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-desc {
+  flex: 1;
+  min-width: 0;
+  color: var(--i2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-time {
+  flex: none;
+  color: var(--i3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sub-slot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+}
+
+.sub-slot.ring {
+  border-radius: 50%;
+  border: 1.5px solid var(--i3);
+}
+
+.sub-slot.dot {
+  width: 8px;
+  height: 8px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.sub-tail,
+.sub-result,
+.sub-prompt {
+  padding: 0 12px 6px;
+  font-size: 12.5px;
+  color: var(--i3);
+  overflow-wrap: anywhere;
+}
+
+.sub-tail {
+  font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-result {
+  color: var(--i2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
+.sub-prompt {
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+  border-top: 1px solid var(--hair);
+  padding-top: 8px;
+}
+
+.sub-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 8px;
+  font-size: 12px;
+  color: var(--i3);
+}
+
+.sub-foot > span {
+  margin-right: auto;
+}
+
+.sub-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--i2);
+}
+
+.sub-link:hover {
+  color: var(--i1);
+}
+
+.sub-card.failed {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--hair));
+}
+
+.sub-rhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--tint);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sub-rhead .o {
+  font-weight: 400;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--content);
+  border-left: 1px solid var(--hair2);
+}
+
+.dhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 4px 16px;
+}
+
+.dtitle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dsub {
+  min-width: 0;
+  color: var(--i2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer .pill {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--i2);
+  background: var(--tint2);
+  padding: 1px 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.dmeta {
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--i3);
+  border-bottom: 1px solid var(--hair);
+}
+
+.dbody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+
+/* A wide window shows the drawer beside the conversation; a narrow one lets
+   it cover the column. */
+@media (min-width: 1000px) {
+  .chat.with-drawer > .chat-log,
+  .chat.with-drawer > .composer {
+    margin-right: 420px;
+  }
+}
+
+/* Sub-agent rows inside the Tasks tray */
+.tasks .titem.sub {
+  padding: 0;
+}
+
+.tasks .tsub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 0;
+  border-radius: 6px;
+}
+
+.tasks .tsub:hover {
+  background: var(--tint);
+}
+
+.tasks .tsub .tg::before,
+.tasks .tsub .tg::after {
+  display: none;
+}

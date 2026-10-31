@@ -2,6 +2,7 @@ package nativeui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
@@ -128,6 +129,15 @@ func (s *Shell) quickPanelEntryRow(c *ui.Context, entry StatusCenterEntry, dupPr
 				s.fitQuickPanel()
 			}
 		})
+		// Sub-agents hang under the agent that spawned them while any runs
+		// (the sidebar's rows; a click lands where the parent's click does).
+		if subs := openSubagents(card, time.Now()); len(subs) > 0 {
+			for i, sub := range subs {
+				if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
+					s.openQuickPanelEntry(entry)
+				}
+			}
+		}
 		// §17.2: the usage caption renders under the card when the cached
 		// History-meta projection has facts, lined up with the card's text.
 		if usage := s.usageLineFor(card.Key); usage != "" {
@@ -199,4 +209,14 @@ func (s *Shell) openAgentTerminal(card agent.AgentCardModel) {
 	s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceTerminal)
 	s.openAgentCard(card)
 	s.showViewTerminal()
+}
+
+// quickPanelSubagentRows counts the nested sub-agent rows the entries show
+// (the height budget of the rows quickPanelEntryRow hangs under them).
+func quickPanelSubagentRows(entries []StatusCenterEntry, now time.Time) int {
+	rows := 0
+	for _, entry := range entries {
+		rows += len(openSubagents(entry.Card, now))
+	}
+	return rows
 }

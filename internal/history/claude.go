@@ -46,6 +46,9 @@ type claudeParseState struct {
 	unknownLines  uint32
 	pending       *claudePending
 	toolIndex     map[string][2]int
+	// sidechain admits rows marked isSidechain: a sub-agent's own transcript
+	// is written entirely as sidechain rows (NewSubagentDecoder).
+	sidechain bool
 }
 
 func newClaudeParseState() *claudeParseState {
@@ -229,7 +232,7 @@ func (s *claudeParseState) feedClaudeLine(line string) {
 			s.updatedAt = timestamp
 		}
 	}
-	if sidechain, _ := row["isSidechain"].(bool); sidechain {
+	if sidechain, _ := row["isSidechain"].(bool); sidechain && !s.sidechain {
 		return
 	}
 

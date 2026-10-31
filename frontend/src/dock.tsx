@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import type { ChatBridgeInteraction, ChatBridgeLink, ChatBridgePlan, ChatBridgePlanItem } from "./mygo";
+import type { ChatBridgeInteraction, ChatBridgeLink, ChatBridgePlan, ChatBridgePlanItem, ChatBridgeSubagent } from "./mygo";
 import { Icon } from "./icons";
+import { StateSlot } from "./subagents";
 
 /**
  * The docks above the composer, shaped by designs/chat-view (states, 2026-10-30):
@@ -43,26 +44,45 @@ function TaskGlyph({ status, live }: { status: string; live: boolean }) {
  * count and the item in progress, opening into the list. Open by default
  * while the list is short and unfinished; the user's toggle always wins.
  */
-export function TasksTray({ plan, live, compact }: { plan: ChatBridgePlan; live: boolean; compact: boolean }) {
+export function TasksTray({
+  plan,
+  subagents = [],
+  onOpenSubagent,
+  live,
+  compact,
+}: {
+  plan?: ChatBridgePlan;
+  /** Sub-agents of the conversation: a second section, never paired with plan items. */
+  subagents?: ChatBridgeSubagent[];
+  onOpenSubagent?: (id: string) => void;
+  live: boolean;
+  compact: boolean;
+}) {
   const [toggled, setToggled] = useState<boolean | null>(null);
-  const items = plan.items;
+  const items = plan?.items ?? [];
   const done = items.filter((item) => item.status === "done").length;
   const counted = items.filter((item) => item.status !== "dropped").length;
-  const finished = planFinished(plan);
+  const finished = plan ? planFinished(plan) : true;
+  const running = subagents.filter((sub) => sub.status === "running").length;
   // A card asking the user something takes the room: the list folds then.
-  const open = toggled ?? (!compact && !finished && items.length <= 7);
+  const open = toggled ?? (!compact && (!finished || running > 0) && items.length + subagents.length <= 7);
   const current = items.find((item) => item.status === "active") ?? items.find((item) => item.status === "pending");
+  const runningLabel = running > 0 ? `${running} sub-agent${running === 1 ? "" : "s"} running` : "";
 
   let phase = "";
   return (
-    <div className={`tasks${finished ? " finished" : ""}`}>
+    <div className={`tasks${finished && running === 0 ? " finished" : ""}`}>
       <button type="button" className="thead" aria-expanded={open} onClick={() => setToggled(!open)}>
-        <Icon name="tasks" size={15} />
-        <span className="ttl">Tasks</span>
-        <span className="cnt">
-          {done}/{counted}
+        <Icon name={plan ? "tasks" : "agent"} size={15} />
+        <span className="ttl">{plan ? "Tasks" : "Sub-agents"}</span>
+        {plan ? (
+          <span className="cnt">
+            {done}/{counted}
+          </span>
+        ) : null}
+        <span className="cur">
+          {[plan ? (finished ? "All done" : (current?.text ?? "")) : "", runningLabel].filter(Boolean).join(" · ")}
         </span>
-        <span className="cur">{finished ? "All done" : current?.text ?? ""}</span>
         <span className={`chev${open ? " open" : ""}`}>
           <Icon name="chev" size={13} />
         </span>
@@ -82,6 +102,22 @@ export function TasksTray({ plan, live, compact }: { plan: ChatBridgePlan; live:
               </React.Fragment>
             );
           })}
+          {subagents.length > 0 ? (
+            <>
+              {plan ? <li className="tphase">Sub-agents</li> : null}
+              {subagents.slice(-8).map((sub) => (
+                <li key={sub.id} className="titem sub">
+                  <button type="button" className="tsub" onClick={() => onOpenSubagent?.(sub.id)} title="Open the sub-agent's conversation">
+                    <span className="tg">
+                      <StateSlot status={sub.status} />
+                    </span>
+                    <span className="sub-kind">{sub.type || "Sub-agent"}</span>
+                    <span className="tx">{sub.description}</span>
+                  </button>
+                </li>
+              ))}
+            </>
+          ) : null}
         </ol>
       ) : null}
     </div>

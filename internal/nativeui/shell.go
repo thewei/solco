@@ -513,6 +513,14 @@ type Shell struct {
 	// until the first chat build with General.WebViewChat on, and
 	// chatWebviewBroken latches a failed creation so the native chat stays.
 	chatWebview       *mygo.WebView
+	// chatLiveProvider is the provider of the live-bound transcript;
+	// chatSubagents are that conversation's sub-agents (chat_subagents.go),
+	// refreshed in the background and cleared with the binding.
+	chatLiveProvider    history.AgentID
+	chatSubagents       []chatSubagentView
+	chatSubagentsTimer  *time.Timer
+	chatSubagentsBusy   bool
+	chatSubagentsActive bool
 	chatWebviewBroken bool
 	// filesWebview is the Files preview page's embedded WebView (product
 	// decision 2026-10-13); nil until the first /files build with

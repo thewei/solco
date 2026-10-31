@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<!--
+  Solco · Sub-agent views —— Design Storybook（think → interactive-design-exploration）
+
+  直接用浏览器打开（file://），无外部依赖、无构建。只有一个推荐方案，外加关键状态稿（右栏 Scenes）。
+  Tokens 来自真实实现：frontend/src/theme.css 与 designs/chat-view 的墨色四档（--i1..--i4）、
+  design_system.go（Radius Control 6 / Row 8 / Card 10 / Pill 999；无投影、hairline 边）、
+  status_indicator.go（working=转圈 / idle·resolved=空心环 / 其余=实心点；16pt 槽位）。
+  数据形状来自本机真实取证（见 README「Phase 0 取证」）：
+    Claude Code  <会话>/subagents/agent-<id>.jsonl + .meta.json（toolUseId 与主 transcript 的 Agent tool_use 同 id）
+    omp          <会话目录>/<id>.jsonl（头部 parentSession）+ <id>.md（最终产出）；主会话 task 工具结果的 details.progress[]
+    Codex        独立 rollout，session_meta.source.subagent.thread_spawn{parent_thread_id,depth,agent_path,agent_nickname}；
+                 主会话 spawn_agent / wait_agent 调用 + agent_message(FINAL_ANSWER)
+  URL hash 可预置：#scene=live&theme=light&prov=codex&w=1080
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Solco · Sub-agent views</title>
+<!-- ============================ SHELL (Design Storybook) ============================ -->
+<style>
+  [data-ide-shell]{--shell-bg:#0f0f10;--shell-panel:#18181b;--shell-border:#27272a;--shell-text:#fafafa;--shell-muted:#a1a1aa;--shell-accent:#71717a;--panel-w:324px;
+    box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--shell-bg);color:var(--shell-text);min-height:100vh;margin:0}
+  [data-ide-shell] *{box-sizing:border-box}
+  [data-ide-shell] .ide-layout{display:flex;min-height:100vh}
+  [data-ide-shell] .ide-stage{flex:1;position:relative;display:flex;flex-direction:column;min-height:100vh;min-width:0;background:#0b0b0c}
+  [data-ide-shell] .ide-stage-label{position:absolute;top:12px;left:14px;z-index:20;font-size:9px;font-weight:600;color:var(--shell-accent);text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+  [data-ide-shell] .ide-panel-collapse-btn{position:absolute;top:10px;right:10px;z-index:30;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer}
+  [data-ide-shell] .ide-artboard-wrap{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:34px 24px 14px}
+  [data-ide-shell] .ide-artboard{width:100%;display:flex;justify-content:center}
+  [data-ide-shell] .ide-story-panel{width:var(--panel-w);flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--shell-border);background:var(--shell-panel);transition:width .2s;overflow:hidden;height:100vh;position:sticky;top:0}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel{width:0;border-left:none}
+  [data-ide-shell] .ide-panel-expand-btn{display:none;position:fixed;top:10px;right:10px;z-index:40;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn{display:grid;place-items:center}
+  [data-ide-shell] .ide-panel-header{padding:12px 14px 8px;border-bottom:1px solid var(--shell-border);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--shell-muted);white-space:nowrap}
+  [data-ide-shell] .ide-panel-controls{flex:1;overflow-y:auto;padding:12px 14px;min-height:0}
+  [data-ide-shell] .ide-section-title{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--shell-accent);margin:0 0 6px}
+  [data-ide-shell] .ide-section-title:not(:first-child){margin-top:14px}
+  [data-ide-shell] .ide-state-card{padding:8px 10px;border-radius:6px;border:1px solid var(--shell-border);margin-bottom:5px;cursor:pointer;transition:border-color .12s,background .12s;font-size:10px;line-height:1.4;color:var(--shell-muted)}
+  [data-ide-shell] .ide-state-card:hover{border-color:#3f3f46}
+  [data-ide-shell] .ide-state-card.active{border-color:var(--shell-accent);background:rgba(113,113,122,.1)}
+  [data-ide-shell] .ide-state-card strong{display:block;color:var(--shell-text);font-size:10.5px}
+  [data-ide-shell] .ctl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px;font-size:10.5px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--shell-border);border-radius:7px;flex-wrap:wrap;justify-content:flex-end}
+  [data-ide-shell] .shell-seg button{all:unset;cursor:pointer;padding:3px 8px;border-radius:5px;font-size:10px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg button.on{background:#2c2c31;color:var(--shell-text)}
+  [data-ide-shell] .ide-panel-story{border-top:1px solid var(--shell-border);flex-shrink:0}
+  [data-ide-shell] .ide-story-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:none;background:rgba(255,255,255,.02);color:var(--shell-muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+  [data-ide-shell] .ide-story-toggle:hover{color:var(--shell-text);background:rgba(255,255,255,.04)}
+  [data-ide-shell] .ide-story-body{padding:0 14px 14px;font-size:11px;line-height:1.55;color:var(--shell-muted);max-height:260px;overflow-y:auto}
+  [data-ide-shell] .ide-layout.story-collapsed .ide-story-body{display:none}
+  [data-ide-shell] .ide-story-body h1{font-size:13px;font-weight:600;color:var(--shell-text);margin:0 0 6px}
+  [data-ide-shell] .ide-story-body p{margin:0 0 8px}
+  [data-ide-shell] .ide-story-body ul{margin:0 0 8px;padding-left:16px}
+  [data-ide-shell] .ide-story-body li{margin-bottom:4px}
+  [data-ide-shell] .ide-story-body b{color:var(--shell-text);font-weight:600}
+  [data-ide-shell] .ide-story-body code{font:10.5px ui-monospace,Menlo,monospace;background:#232327;padding:0 4px;border-radius:4px;color:#d4d4d8}
+  [data-ide-shell] .src{font:10px/1.6 ui-monospace,Menlo,monospace;color:var(--shell-muted);margin:2px 0 0}
+  [data-ide-shell] .src b{color:var(--shell-text);font-weight:500}
+</style>
+
+<!-- ============================ DESIGN (Solco window mock) ============================ -->
+<style id="design-styles">
+  .design-root{position:relative;width:var(--w,1080px);max-width:100%;height:calc(100vh - 54px);min-height:620px;display:grid;grid-template-columns:236px minmax(0,1fr) auto;grid-template-rows:38px minmax(0,1fr);
+    background:var(--bg);color:var(--i1);border:1px solid var(--hair2);border-radius:12px;overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Helvetica Neue",sans-serif;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
+  .design-root *{box-sizing:border-box}
+  .design-root :where(button){font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}
+  .design-root .ic{flex:none;display:block}
+  .design-root .spin{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--i4);border-top-color:var(--i2);animation:spin .8s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .design-root .shim{background:linear-gradient(90deg,var(--i3) 0%,var(--i1) 50%,var(--i3) 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.7s linear infinite}
+  @keyframes shim{from{background-position:220% 0}to{background-position:-120% 0}}
+  @media (prefers-reduced-motion:reduce){.design-root .spin,.design-root .shim{animation:none}.design-root .shim{color:var(--i2);background:none}}
+
+  /* ---- title bar ---- */
+  .design-root .bar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 12px 0 78px;border-bottom:1px solid var(--hair);font-size:12px;color:var(--i2);position:relative}
+  .design-root .bar .lights{position:absolute;left:14px;display:flex;gap:7px}
+  .design-root .bar .lights i{width:11px;height:11px;border-radius:50%;background:var(--i4)}
+  .design-root .chip{padding:3px 8px;border-radius:7px;color:var(--i2)}
+  .design-root .chip.cur{color:var(--i1)}
+  .design-root .bar .sep{color:var(--i4)}
+  .design-root .bar .tools{margin-left:auto;display:flex;align-items:center;gap:6px}
+  .design-root .trig{display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:8px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--i2)}
+  .design-root .trig:hover,.design-root .trig.on{background:var(--tint2);color:var(--i1)}
+  .design-root .trig b{font-weight:500;color:var(--i1)}
+
+  /* ---- indicator slot (status_indicator.go): 16pt slot at the row's right end ---- */
+  .design-root .slot{width:16px;height:16px;display:grid;place-items:center;flex:none}
+  .design-root .ring{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--i3)}
+  .design-root .dot{width:7px;height:7px;border-radius:50%}
+  .design-root .dot.warn{background:#e0a23a}.design-root .dot.bad{background:var(--bad)}.design-root .dot.ok{background:var(--ok)}
+
+  /* ---- sidebar ---- */
+  .design-root .side{border-right:1px solid var(--hair);padding:10px 8px;overflow:auto;font-size:12.5px}
+  .design-root .side h6{margin:12px 8px 5px;font-size:11px;font-weight:500;color:var(--i3);letter-spacing:.01em;display:flex;align-items:center;gap:6px}
+  .design-root .side h6:first-child{margin-top:2px}
+  .design-root .ws{margin:6px 8px 2px;font-size:11px;color:var(--i4);display:flex;gap:6px;align-items:center}
+  .design-root .ws .git{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--i3)}
+  .design-root .arow{display:flex;align-items:center;gap:8px;min-height:30px;padding:0 6px 0 8px;border-radius:8px;color:var(--i2)}
+  .design-root .arow.sel{background:var(--tint2);color:var(--i1)}
+  .design-root .arow:hover{background:var(--tint)}
+  .design-root .arow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .design-root .arow .when{color:var(--i3);font-size:11px;font-variant-numeric:tabular-nums}
+  .design-root .brand{width:16px;height:16px;border-radius:5px;display:grid;place-items:center;font-size:9px;font-weight:600;flex:none;background:var(--tint2);color:var(--i2)}
+  .design-root .nest{position:relative;margin-left:15px;padding-left:9px;border-left:1px solid var(--hair2)}
+  .design-root .srow{display:flex;align-items:center;gap:7px;min-height:26px;padding:0 6px 0 4px;border-radius:7px;color:var(--i2);font-size:12px}
+  .design-root .srow:hover{background:var(--tint)}
+  .design-root .srow.sel{background:var(--tint2);color:var(--i1)}
+  .design-root .srow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .design-root .ty{font-size:10.5px;color:var(--i3);padding:0 5px;border-radius:5px;background:var(--tint);flex:none;line-height:16px}
+  .design-root .sink{display:flex;align-items:center;gap:6px;min-height:24px;padding:0 6px 0 4px;color:var(--i3);font-size:11.5px;border-radius:7px}
+  .design-root .sink:hover{background:var(--tint);color:var(--i2)}
+  .design-root .sink .chev{transition:transform .15s}.design-root .sink.open .chev{transform:rotate(90deg)}
+  .design-root .sinklist{opacity:.9}
+
+  /* ---- chat column ---- */
+  .design-root .main{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
+  .design-root .log{flex:1;overflow-y:auto;padding:22px 0 14px;min-height:0}
+  .design-root .col{max-width:720px;margin:0 auto;padding:0 24px}
+  .design-root .uB{margin:0 0 20px auto;width:fit-content;max-width:80%;background:var(--tint2);padding:9px 14px;border-radius:18px;font-size:14px;line-height:1.55}
+  .design-root .prose{font-size:14.5px;line-height:1.7;color:var(--i1);margin:0 0 .9em}
+  .design-root .prose code{font:.86em ui-monospace,"SF Mono",Menlo,monospace;background:var(--tint2);padding:.12em .38em;border-radius:5px}
+  .design-root .trow{display:flex;align-items:center;gap:8px;min-height:25px;font-size:13px;color:var(--i2);border-radius:6px}
+  .design-root .trow .lead{width:14px;display:grid;place-items:center;color:var(--i3);flex:none}
+  .design-root .trow .verb{flex:none}
+  .design-root .trow .q{color:var(--i3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .design-root .trow .meta{margin-left:auto;padding-left:12px;color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .design-root .path{color:var(--i3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .design-root .path b{font-weight:500;color:var(--i1)}
+  .design-root .v{color:var(--i2)}.design-root .o{color:var(--i3)}
+  .design-root .sum{display:flex;align-items:center;gap:6px;font-size:13px;min-height:26px;color:var(--i2)}
+  .design-root .sum .chev{color:var(--i3);transition:transform .15s}.design-root .sum.open .chev{transform:rotate(90deg)}
+  .design-root .stack{margin:2px 0 14px}
+  .design-root .nudge{margin-left:2px}
+
+  /* ---- THE SUB-AGENT CARD (new) ---- */
+  .design-root .sa{position:relative;margin:6px 0 10px;border:1px solid var(--hair2);border-radius:10px;background:var(--panel);overflow:hidden}
+  .design-root .sa.failed{border-color:color-mix(in srgb,var(--bad) 40%,var(--hair2))}
+  .design-root .sa-h{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 8px 0 12px;width:100%}
+  .design-root .sa-h .brand{background:transparent;color:var(--i3)}
+  .design-root .sa-h .ds{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--i1);font-weight:500}
+  .design-root .sa-h .meta{color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .design-root .sa-b{padding:0 12px 10px 34px;display:flex;flex-direction:column;gap:6px}
+  .design-root .sa .live{display:flex;align-items:center;gap:8px;min-height:22px;font-size:12.5px;color:var(--i2);min-width:0}
+  .design-root .sa .live .spin{width:11px;height:11px}
+  .design-root .sa .res{color:var(--i2);font-size:13px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .design-root .sa .res.err{color:var(--bad)}
+  .design-root .sa-f{display:flex;align-items:center;gap:10px;color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums}
+  .design-root .sa-f .sp{flex:1}
+  .design-root .btn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:8px;font-size:12px;color:var(--i2);border:1px solid var(--hair2)}
+  .design-root .btn:hover{background:var(--tint);color:var(--i1)}
+  .design-root .btn.ghost{border-color:transparent}
+  .design-root .sa .ask{display:none;margin:0 12px 10px 34px;padding:8px 10px;border-radius:8px;background:var(--tint);font-size:12.5px;color:var(--i2);line-height:1.55;white-space:pre-wrap}
+  .design-root .sa.open .ask{display:block}
+  .design-root .sa .ask b{display:block;font-weight:500;color:var(--i3);font-size:11px;margin-bottom:2px}
+  .design-root .rost{margin:6px 0 10px;border:1px solid var(--hair2);border-radius:10px;background:var(--panel);overflow:hidden}
+  .design-root .rost .rh{display:flex;align-items:center;gap:8px;min-height:34px;padding:0 12px;font-size:12.5px;color:var(--i2);border-bottom:1px solid var(--hair)}
+  .design-root .rost .rh b{font-weight:500;color:var(--i1)}
+  .design-root .rost .rr{display:flex;align-items:center;gap:9px;min-height:36px;padding:0 8px 0 12px;width:100%;border-top:1px solid var(--hair)}
+  .design-root .rost .rr:first-of-type{border-top:0}
+  .design-root .rost .rr:hover{background:var(--tint)}
+  .design-root .rr .ds{color:var(--i1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
+  .design-root .rr .tail{color:var(--i3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+  .design-root .rr .meta{color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .design-root .plain{display:flex;align-items:center;gap:8px;min-height:25px;font-size:13px;color:var(--i2)}
+
+  /* ---- dock stack + composer ---- */
+  .design-root .dockw{max-width:720px;width:100%;margin:0 auto;padding:0 24px}
+  .design-root .dock{border:1px solid var(--hair2);border-bottom:0;border-radius:12px 12px 0 0;background:var(--panel);overflow:hidden}
+  .design-root .dock .dh{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;font-size:12.5px;color:var(--i2);width:100%}
+  .design-root .dock .dh b{font-weight:500;color:var(--i1)}
+  .design-root .dock .dh .chev{color:var(--i3);margin-left:auto}
+  .design-root .dock .dsec{padding:2px 12px 6px}
+  .design-root .dock .dlab{font-size:11px;color:var(--i3);margin:6px 0 2px;display:flex;align-items:center;gap:6px}
+  .design-root .titem{display:flex;align-items:center;gap:8px;min-height:24px;font-size:12.5px;color:var(--i2)}
+  .design-root .titem .box{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--i4);display:grid;place-items:center;flex:none}
+  .design-root .titem.done{color:var(--i3)}.design-root .titem.done .box{background:var(--i3);border-color:var(--i3);color:var(--bg)}
+  .design-root .titem.now{color:var(--i1)}.design-root .titem.now .box{border-color:var(--i2)}
+  .design-root .titem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+  .design-root .titem .meta{color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums}
+  .design-root .titem.sub{cursor:pointer;border-radius:6px;margin:0 -6px;padding:0 6px}
+  .design-root .titem.sub:hover{background:var(--tint)}
+  .design-root .cmp{margin:0 auto;max-width:720px;width:100%;padding:0 24px 16px}
+  .design-root .cmpbox{border:1px solid var(--hair2);border-radius:16px;background:var(--panel);min-height:74px;padding:12px 14px;color:var(--i4);font-size:13.5px;display:flex;flex-direction:column;justify-content:space-between}
+  .design-root .cmpbox.joined{border-top-left-radius:0;border-top-right-radius:0}
+  .design-root .cmpbox .row2{display:flex;align-items:center;color:var(--i3);font-size:12px}
+  .design-root .working{max-width:720px;margin:0 auto;width:100%;padding:0 24px 8px;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--i2)}
+  .design-root .working .t{margin-left:auto;color:var(--i3);font-variant-numeric:tabular-nums}
+
+  /* ---- drawer (drill-down) ---- */
+  .design-root .drawer{width:0;overflow:hidden;border-left:1px solid var(--hair);display:flex;flex-direction:column;background:var(--bg);transition:width .24s cubic-bezier(.32,.72,0,1)}
+  .design-root.drawer-open .drawer{width:420px}
+  .design-root .drawer .in{width:420px;display:flex;flex-direction:column;height:100%;min-height:0}
+  .design-root.narrow.drawer-open .drawer{position:absolute;left:236px;right:0;top:38px;bottom:0;width:auto;z-index:20}
+  .design-root.narrow .drawer .in{width:100%}
+  .design-root .dr-h{padding:12px 14px 10px;border-bottom:1px solid var(--hair)}
+  .design-root .dr-h .l1{display:flex;align-items:center;gap:8px}
+  .design-root .dr-h .ttl{font-weight:500;font-size:13.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .design-root .dr-h .l2{display:flex;align-items:center;gap:8px;margin-top:6px;color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums;flex-wrap:wrap}
+  .design-root .pill{font-size:11px;color:var(--i2);background:var(--tint2);padding:1px 8px;border-radius:999px}
+  .design-root .dr-body{flex:1;overflow:auto;padding:14px 16px;min-height:0}
+  .design-root .dr-body .prose{font-size:13.5px;line-height:1.65}
+  .design-root .dr-ask{border:1px solid var(--hair2);border-radius:10px;padding:8px 10px;margin-bottom:14px;font-size:12.5px;color:var(--i2);line-height:1.55}
+  .design-root .dr-ask b{display:block;font-weight:500;color:var(--i3);font-size:11px;margin-bottom:2px}
+  .design-root .dr-ask .clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .design-root .dr-f{border-top:1px solid var(--hair);padding:9px 14px;display:flex;align-items:center;gap:8px;color:var(--i3);font-size:11.5px}
+  .design-root .dr-f .sp{flex:1}
+  .design-root .caret::after{content:"";display:inline-block;width:.46em;height:.46em;border-radius:50%;background:var(--i1);margin-left:.4em;vertical-align:.04em;animation:blink 1.1s ease-in-out infinite}
+  @keyframes blink{50%{opacity:.25}}
+
+  /* ---- header popover (Agents tab) ---- */
+  .design-root .pop{position:absolute;top:40px;right:12px;width:440px;z-index:30;background:var(--panel);border:1px solid var(--hair2);border-radius:12px;padding:10px;display:none;box-shadow:none}
+  .design-root.pop-open .pop{display:block}
+  .design-root .seg{display:flex;gap:2px;padding:2px;border:1px solid var(--hair2);border-radius:9px;margin-bottom:8px}
+  .design-root .seg button{flex:1;text-align:center;padding:4px 0;border-radius:7px;font-size:12px;color:var(--i3)}
+  .design-root .seg button.on{background:var(--tint2);color:var(--i1)}
+  .design-root .pop .grp{margin:8px 4px 3px;font-size:11px;color:var(--i3)}
+  .design-root .pop .arow{min-height:32px}
+  .design-root .pop .nest{margin-left:19px}
+  .design-root .pop .more{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--i3);padding:2px 4px 2px 8px;margin-left:19px}
+  .design-root .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--i2);background:var(--tint2);padding:0 7px;border-radius:999px;line-height:17px;flex:none}
+  .design-root .badge .spin{width:9px;height:9px;border-width:1.3px}
+
+  .design-root .flag{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;z-index:40;font:11px/1.4 ui-monospace,Menlo,monospace;color:var(--i2);background:var(--panel);border:1px solid var(--hair2);padding:4px 10px;border-radius:999px;pointer-events:none}
+</style>
+</head>
+
+<body data-ide-shell>
+<div class="ide-layout" id="layout">
+  <main class="ide-stage">
+    <div class="ide-stage-label" id="stageLabel">Sub-agent views · A (recommended)</div>
+    <button type="button" class="ide-panel-collapse-btn" id="collapse" title="Collapse panel (Esc)">›</button>
+    <div class="ide-artboard-wrap"><div class="ide-artboard"><div class="design-root" id="root"></div></div></div>
+  </main>
+  <button type="button" class="ide-panel-expand-btn" id="expand" title="Expand panel">‹</button>
+  <aside class="ide-story-panel">
+    <div class="ide-panel-header">Design Storybook · Sub-agent views</div>
+    <div class="ide-panel-controls" id="controls"></div>
+    <div class="ide-panel-story">
+      <button type="button" class="ide-story-toggle" id="storyToggle"><span>Story</span><span>▾</span></button>
+      <div class="ide-story-body">
+        <h1>One model, five surfaces</h1>
+        <p>A sub-agent is one read-only record — <code>id · provider · type · description · status · started/ended · last line · result</code> — read from the provider's own files. Every surface below draws that same record; none invents state.</p>
+        <ul>
+          <li><b>Chat card</b> replaces the plain <code>Delegated …</code> tool row: live line while it runs, a 3-line result when it ends, <code>Open</code> to drill in. Several at once become one roster.</li>
+          <li><b>Drawer</b> is the drill-down: the child's own transcript, read-only, beside the chat (full-width page in a narrow window).</li>
+          <li><b>Sidebar / Header popover</b> nest under the parent: running ones show, finished ones sink into <code>N done</code>. The popover gets no fifth tab — a Working parent carries a badge and its children.</li>
+          <li><b>Tasks tray</b> keeps plan items and sub-agents as two sections of one tray; they are <b>not</b> matched by text.</li>
+          <li><b>Degraded</b>: unreadable layout → the plain tool row, nothing else changes.</li>
+        </ul>
+        <p>Status uses the one indicator: spinner = running, hollow ring = finished, amber/red dot = stopped/failed. Counts in the header trigger stay <code>waiting/total</code> of addressable agents — sub-agents are not.</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ===================== state ===================== */
+const H=new URLSearchParams(location.hash.slice(1));
+const S={scene:H.get('scene')||'live',theme:H.get('theme')||'dark',prov:H.get('prov')||'claude',w:+(H.get('w')||1080)};
+const SCENES=[
+  ['live','Chat · running','One sub-agent: live line, elapsed clock, expandable prompt'],
+  ['parallel','Chat · parallel','Three spawned at once → one roster; rows open the drawer'],
+  ['settled','Chat · settled','Result summary, tool count, duration, Open'],
+  ['failed','Chat · stopped / failed','Amber/red dot, error line, nothing hidden'],
+  ['drawer','Drawer · drill-down','Child transcript, read-only, beside the chat'],
+  ['sidebar','Sidebar + Header popover','Nested rows for all three providers; done sink'],
+  ['tasks','Tasks tray','Plan items + sub-agents in one tray'],
+  ['degraded','Degraded layout','Layout unreadable → plain tool row (today\'s behaviour)'],
+];
+const PROV={
+  claude:{brand:'C',name:'Claude Code',type:'Explore',type2:'general-purpose',id:'agent-af67…',src:['<b>Claude Code</b> · <code>&lt;session&gt;/subagents/agent-&lt;id&gt;.jsonl</code>','link: meta.toolUseId = parent tool_use id','live = jsonl written &lt;20 s (existing rule) + task-notification','result = last assistant text of the child file']},
+  omp:{brand:'π',name:'omp',type:'scout',type2:'task',id:'proxSourceScout',src:['<b>omp</b> · <code>&lt;session dir&gt;/&lt;id&gt;.jsonl</code> + <code>&lt;id&gt;.md</code>','link: parent <code>task</code> result details.progress[].id','parent: first line <code>parentSession</code>','result = <code>&lt;id&gt;.md</code>; status from progress[].status']},
+  codex:{brand:'X',name:'Codex',type:'Nietzsche',type2:'Hegel',id:'Nietzsche',src:['<b>Codex</b> · separate rollout file','parent: session_meta.source.subagent.thread_spawn.parent_thread_id','link: spawn_agent{task_name} ↔ agent_path <code>/root/&lt;task_name&gt;</code>','no type: chip = agent_nickname, description = spawn_agent.message (first line)','result: agent_message FINAL_ANSWER in the parent']},
+};
+const T0=Date.now();
+const fmt=s=>s>=60?`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`:`${s}s`;
+const since=(s)=>fmt(Math.max(0,Math.floor((Date.now()-T0)/1000))+s);
+setInterval(()=>document.querySelectorAll('[data-base]').forEach(n=>n.textContent=since(+n.dataset.base)),1000);
+
+/* ===================== tokens (same ramp as designs/chat-view) ===================== */
+const BASE={dark:{bg:'#161618',panel:'#1f1f22',ink:'244,244,245',ok:'#6fc29b',bad:'#ff6b61',hair:.08,i:[.92,.66,.52,.34]},
+  light:{bg:'#f5f5f7',panel:'#ffffff',ink:'24,24,27',ok:'#1f7a52',bad:'#d92d20',hair:.09,i:[.90,.70,.60,.38]}};
+function applyVars(root){
+  const b=BASE[S.theme],st=root.style;
+  st.setProperty('--bg',b.bg);st.setProperty('--panel',b.panel);st.setProperty('--ok',b.ok);st.setProperty('--bad',b.bad);
+  b.i.forEach((a,i)=>st.setProperty('--i'+(i+1),`rgba(${b.ink},${a})`));
+  st.setProperty('--hair',`rgba(${b.ink},${b.hair})`);st.setProperty('--hair2',`rgba(${b.ink},${b.hair*1.9})`);
+  st.setProperty('--tint',`rgba(${b.ink},.04)`);st.setProperty('--tint2',`rgba(${b.ink},.07)`);
+  st.setProperty('--w',S.w+'px');
+}
+
+/* ===================== icons ===================== */
+const P={chev:'M6 4l4 4-4 4',x:'M4 4l8 8M12 4l-8 8',up:'M5 11l6-6M6 5h5v5',check:'M3.5 8.5l3 3 6-7',read:'M4 2.5h5l3 3v8H4z M9 2.5v3h3',search:'M7 12a5 5 0 100-10 5 5 0 000 10zM11 11l3 3',cmd:'M3 4l4 4-4 4M8 12h5',agent:'M4 3v10M4 8h5a3 3 0 013 3M4 5h8',edit:'M10 3l3 3-7 7H3v-3z',plan:'M3 4h10M3 8h10M3 12h6',lock:'M4 7h8v6H4zM6 7V5a2 2 0 014 0v2'};
+const ic=(n,s=14)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${P[n]}"/></svg>`;
+const slot=k=>`<span class="slot">${k==='run'?'<span class="spin"></span>':k==='done'?'<span class="ring"></span>':k==='fail'?'<span class="dot bad"></span>':k==='stop'?'<span class="dot warn"></span>':''}</span>`;
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const pathHtml=p=>{const i=p.lastIndexOf('/');return i<0?`<b>${esc(p)}</b>`:`<span>${esc(p.slice(0,i+1))}</span><b>${esc(p.slice(i+1))}</b>`};
+
+/* ===================== sample data ===================== */
+const ASK1='Investigate in the Solco repo and report conclusions with file:line only, no code dumps:\n1. Where terminal.Options is set and which fields are set.\n2. Whether terminal scrollback search exists and what ⌘F is bound to.\n3. Any hand-rolled spinner/loading component under internal/nativeui.';
+const subs=()=>{const p=PROV[S.prov];return {
+  a:{ds:'Scan terminal Options usage',ty:p.type,st:'run',el:134,tools:11,tail:['Read','internal/nativeui/terminal.go'],ask:ASK1},
+  b:{ds:'Find hand-rolled spinners',ty:p.type,st:'run',el:41,tools:4,tail:['Searched','Spinner|spinner in internal/nativeui'],ask:ASK1},
+  c:{ds:'Check ⌘F scrollback search',ty:p.type,st:'done',el:96,tools:7,res:'No terminal scrollback search is wired: ⌘F is bound only in the editor find bar (internal/nativeui/files_view.go:212). Terminal.Options sets LocalDragSelect and OnProgramStatus only (terminal.go:88).',ask:ASK1},
+  d:{ds:'Verify OSC 7501 arbitration',ty:p.type2,st:'stop',el:58,tools:5,res:'Stopped by the user before reporting.',ask:ASK1},
+  e:{ds:'Read herdr plugin list schema',ty:p.type2,st:'fail',el:12,tools:2,res:'Tool call failed: herdr plugin list --json exited 1 (no such plugin namespace).',ask:ASK1},
+};};
+
+/* ===================== chat pieces ===================== */
+const tl=(verb,obj,cat='read')=>`<div class="trow"><span class="lead">${ic(cat,13)}</span><span class="verb">${verb}</span><span class="path">${pathHtml(obj)}</span></div>`;
+function card(x,{open=false,id=''}={}){
+  const run=x.st==='run';
+  const head=`<button type="button" class="sa-h" data-open="${id}">
+      <span class="brand">${ic('agent',14)}</span><span class="ty">${esc(x.ty)}</span><span class="ds">${esc(x.ds)}</span>
+      ${run?`<span class="meta" data-base="${x.el}">${fmt(x.el)}</span>`:`<span class="meta">${fmt(x.el)}</span>`}${slot(x.st==='run'?'run':x.st==='done'?'done':x.st==='stop'?'stop':'fail')}</button>`;
+  const body=run
+    ?`<div class="sa-b"><div class="live"><span class="spin"></span><span class="shim">${x.tail[0]}</span><span class="path">${pathHtml(x.tail[1])}</span></div>
+       <div class="sa-f"><span>${x.tools} tool calls</span><span class="sp"></span><button type="button" class="btn ghost" data-toggle="${id}">Prompt</button><button type="button" class="btn" data-drill="${id}">Open ${ic('up',11)}</button></div></div>`
+    :`<div class="sa-b"><div class="res ${x.st==='fail'?'err':''}">${esc(x.res)}</div>
+       <div class="sa-f"><span>${x.tools} tool calls · ${fmt(x.el)}</span><span class="sp"></span><button type="button" class="btn ghost" data-toggle="${id}">Prompt</button><button type="button" class="btn" data-drill="${id}">Open ${ic('up',11)}</button></div></div>`;
+  return `<div class="sa ${x.st==='fail'?'failed':''} ${open?'open':''}" data-card="${id}">${head}${body}<div class="ask"><b>Prompt the parent gave</b>${esc(x.ask)}</div></div>`;
+}
+function roster(list){
+  const n=list.length,r=list.filter(([,x])=>x.st==='run').length;
+  return `<div class="rost"><div class="rh"><span class="brand">${ic('agent',14)}</span><span><b>Delegated ${n} tasks</b> <span class="o">· ${r} running</span></span></div>
+    ${list.map(([id,x])=>`<button type="button" class="rr" data-drill="${id}"><span class="ty">${esc(x.ty)}</span><span class="ds">${esc(x.ds)}</span>
+      <span class="tail">${x.st==='run'?`<span class="shim">${x.tail[0]}</span> ${esc(x.tail[1])}`:esc((x.res||'').slice(0,64))}</span>
+      ${x.st==='run'?`<span class="meta" data-base="${x.el}">${fmt(x.el)}</span>`:`<span class="meta">${fmt(x.el)}</span>`}${slot(x.st==='run'?'run':x.st==='done'?'done':x.st==='fail'?'fail':'stop')}</button>`).join('')}</div>`;
+}
+function summaryLine(parts,live){return `<div class="sum open"><span class="chev">${ic('chev',12)}</span>${parts.map(([v,o],i)=>`<span class="${live&&i===parts.length-1?'shim':'v'}">${v}</span> <span class="o">${o}</span>`).join('<span class="o">, </span>')}</div>`}
+function turn(inner,{user='Where is terminal scrollback search handled, and is there any hand-rolled spinner left?'}={}){
+  return `<div class="uB">${esc(user)}</div>${inner}`;
+}
+function chat(s){
+  const S_=subs();let body='',dock='',working='';
+  if(s==='live'){
+    body=turn(`<p class="prose">I'll hand the investigation to a sub-agent and keep going on the rest.</p>
+      <div class="stack">${summaryLine([['Explored','3 files'],['Delegating','1 task']],true)}${card(S_.a,{id:'a'})}</div>`);
+    working=`<div class="working"><span class="spin"></span><span class="shim">Working</span><span class="t" data-base="150">2m 30s</span></div>`;
+  }else if(s==='parallel'){
+    body=turn(`<p class="prose">Three independent questions — I'll fan them out.</p>
+      <div class="stack">${summaryLine([['Explored','2 files'],['Delegating','3 tasks']],true)}${roster([['a',S_.a],['b',S_.b],['c',S_.c]])}</div>`);
+    working=`<div class="working"><span class="spin"></span><span class="shim">Working</span><span class="t" data-base="160">2m 40s</span></div>`;
+  }else if(s==='settled'){
+    body=turn(`<div class="stack">${summaryLine([['Explored','3 files'],['Delegated','1 task']],false)}${card(S_.c,{id:'c'})}</div>
+      <p class="prose">There is no scrollback search in the terminal: <code>⌘F</code> only reaches the editor's find bar. <code>terminal.Options</code> sets <code>LocalDragSelect</code> and <code>OnProgramStatus</code>, nothing else.</p>`);
+  }else if(s==='failed'){
+    body=turn(`<div class="stack">${summaryLine([['Delegated','2 tasks']],false)}${card(S_.d,{id:'d'})}${card(S_.e,{id:'e'})}</div>
+      <p class="prose">One sub-agent failed; I'll read the schema myself instead.</p>`);
+  }else if(s==='degraded'){
+    body=turn(`<p class="prose">Delegating the scan.</p><div class="stack">${summaryLine([['Delegated','1 task']],false)}
+      <div class="plain"><span class="lead" style="width:14px;display:grid;place-items:center;color:var(--i3)">${ic('agent',13)}</span><span class="v">Delegated</span><span class="path">Scan terminal Options usage</span></div></div>
+      <p class="prose o">The session's sub-agent files are missing or in a layout Solco does not recognise, so the call stays a plain tool row — exactly today's behaviour. No error, no empty card.</p>`);
+  }
+  if(s==='tasks')return null;
+  return {body,dock,working};
+}
+function tasksView(){
+  const S_=subs();
+  const dock=`<div class="dockw"><div class="dock">
+    <button type="button" class="dh"><b>Tasks</b><span class="o">2/5</span><span class="o">·</span><span class="o">2 sub-agents running</span><span class="chev">${ic('chev',12)}</span></button>
+    <div class="dsec">
+      <div class="titem done"><span class="box">${ic('check',9)}</span><span class="nm">Read terminal.go</span></div>
+      <div class="titem done"><span class="box">${ic('check',9)}</span><span class="nm">Locate Options</span></div>
+      <div class="titem now"><span class="box"><span class="spin" style="width:7px;height:7px;border-width:1.2px"></span></span><span class="nm">Check scrollback search</span></div>
+      <div class="titem"><span class="box"></span><span class="nm">Sweep for hand-rolled spinners</span></div>
+      <div class="titem"><span class="box"></span><span class="nm">Write the report</span></div>
+      <div class="dlab">Sub-agents <span>· read from the transcript, not matched to the items above</span></div>
+      <div class="titem sub" data-drill="a"><span class="ty">${esc(S_.a.ty)}</span><span class="nm">${esc(S_.a.ds)}</span><span class="meta" data-base="${S_.a.el}">${fmt(S_.a.el)}</span>${slot('run')}</div>
+      <div class="titem sub" data-drill="b"><span class="ty">${esc(S_.b.ty)}</span><span class="nm">${esc(S_.b.ds)}</span><span class="meta" data-base="${S_.b.el}">${fmt(S_.b.el)}</span>${slot('run')}</div>
+      <div class="titem sub done" data-drill="c"><span class="ty">${esc(S_.c.ty)}</span><span class="nm">${esc(S_.c.ds)}</span><span class="meta">${fmt(S_.c.el)}</span>${slot('done')}</div>
+    </div></div></div>`;
+  return {body:turn(`<p class="prose">Fanning the three checks out; the tray below tracks both my plan and the delegated work.</p><div class="stack">${summaryLine([['Delegating','3 tasks']],true)}${roster([['a',S_.a],['b',S_.b],['c',S_.c]])}</div>`),dock,working:'',joined:true};
+}
+
+/* ===================== sidebar + popover ===================== */
+function agentRow(brand,title,when,state,sel){return `<div class="arow ${sel?'sel':''}"><span class="brand">${brand}</span><span class="nm">${esc(title)}</span><span class="when">${when}</span>${slot(state)}</div>`}
+function subRow(x,state,sel){return `<div class="srow ${sel?'sel':''}"><span class="ty">${esc(x.ty)}</span><span class="nm">${esc(x.ds)}</span>${state==='run'?`<span class="when o" style="font-size:11px;color:var(--i3)" data-base="${x.el}">${fmt(x.el)}</span>`:''}${slot(state)}</div>`}
+let sinkOpen=false;
+function sideHtml(){
+  const S_=subs();const P_=PROV[S.prov];
+  const done=`<button type="button" class="sink ${sinkOpen?'open':''}" data-sink><span class="chev">${ic('chev',11)}</span>3 done</button>${sinkOpen?`<div class="sinklist">${subRow(S_.c,'done')}${subRow({...S_.d,ds:'Verify OSC 7501 arbitration'},'done')}${subRow({...S_.e,ds:'Read plugin schema'},'done')}</div>`:''}`;
+  return `<aside class="side">
+    <h6>Agents</h6>
+    <div class="ws">solco <span class="git">main · 6 · +184 −32</span></div>
+    ${agentRow('C','Trace scrollback search','just now','run',true)}
+    <div class="nest">${subRow(S_.a,'run')}${subRow(S_.b,'run')}${done}</div>
+    ${agentRow('X','Refactor attachments','5m','done')}
+    <div class="nest">${subRow({ty:'Hegel',ds:'Check ping reply',el:0},'done')}</div>
+    ${agentRow('π','Extract secret token','27m','done')}
+    <div class="nest"><div class="srow"><span class="ty">scout</span><span class="nm">proxSourceScout</span>${slot('done')}</div></div>
+    <h6>Workspace</h6>
+    <div class="arow"><span class="brand">S</span><span class="nm">solco</span>${slot('')}</div>
+    <div class="arow"><span class="brand">G</span><span class="nm">getaipages</span>${slot('')}</div>
+  </aside>`;
+}
+function popHtml(){
+  const S_=subs();
+  return `<div class="pop"><div class="seg"><button class="on">Agents</button><button>Quota</button><button>Services</button><button>Tasks</button></div>
+    <div class="grp">Needs you</div>
+    ${agentRow('X','Approve migration plan','2m','')}
+    <div class="grp">Working</div>
+    <div class="arow"><span class="brand">C</span><span class="nm">Trace scrollback search</span><span class="badge"><span class="spin"></span>2 sub-agents</span>${slot('run')}</div>
+    <div class="nest">${subRow(S_.a,'run')}${subRow(S_.b,'run')}</div>
+    <div class="more">3 done ${ic('chev',10)}</div>
+    <div class="grp">Idle</div>
+    ${agentRow('π','Extract secret token','27m','done')}
+  </div>`;
+}
+
+/* ===================== drawer ===================== */
+function drawerHtml(id){
+  const S_=subs();const x=S_[id]||S_.a;const run=x.st==='run';const P_=PROV[S.prov];
+  return `<div class="in">
+    <div class="dr-h"><div class="l1"><span class="brand">${ic('agent',14)}</span><span class="ttl">${esc(x.ds)}</span><button type="button" class="ib" data-close title="Close (Esc)">${ic('x',14)}</button></div>
+      <div class="l2"><span class="ty">${esc(x.ty)}</span><span>${P_.name}</span><span>${slot(run?'run':x.st==='done'?'done':x.st==='stop'?'stop':'fail')}</span><span ${run?`data-base="${x.el}"`:''}>${fmt(x.el)}</span><span>${x.tools} tool calls</span><span class="pill">Read-only</span></div></div>
+    <div class="dr-body">
+      <div class="dr-ask"><b>Prompt the parent gave</b><div class="clamp">${esc(x.ask)}</div></div>
+      <p class="prose">Starting with where <code>terminal.Options</code> is built.</p>
+      ${tl('Read','internal/nativeui/terminal.go')}
+      ${tl('Read','internal/nativeui/terminal_options.go')}
+      <div class="trow"><span class="lead">${ic('search',13)}</span><span class="verb">Searched</span><span class="q">OnProgramStatus|LocalDragSelect</span><span class="meta">4 matches</span></div>
+      <p class="prose" style="margin-top:12px">Options sets two fields: <code>LocalDragSelect</code> (terminal.go:88) and <code>OnProgramStatus</code> (terminal.go:91).${run?'':''}</p>
+      ${run?`<div class="trow"><span class="lead"><span class="spin"></span></span><span class="shim">Reading</span><span class="path">${pathHtml('internal/nativeui/files_view.go')}</span></div><p class="prose caret" style="margin-top:10px">Checking where ⌘F is bound</p>`
+           :`<p class="prose" style="margin-top:12px">${esc(x.res||'')}</p>`}
+    </div>
+    <div class="dr-f">${ic('lock',12)}<span>Read-only · Solco never writes ${P_.name}'s file</span><span class="sp"></span><button type="button" class="btn ghost" data-close>Back to call</button></div>
+  </div>`;
+}
+
+/* ===================== assembly ===================== */
+let drillId='a',popOpen=false;
+function render(){
+  const root=document.getElementById('root');applyVars(root);
+  const sc=S.scene;
+  popOpen=sc==='sidebar'?true:false;
+  const drawer=sc==='drawer';
+  root.classList.toggle('drawer-open',drawer);root.classList.toggle('narrow',S.w<1000);root.classList.toggle('pop-open',popOpen);
+  let view=sc==='tasks'?tasksView():chat(sc==='drawer'?'settled':sc==='sidebar'?'live':sc);
+  if(sc==='drawer'){view=chat('live');}
+  const trig=`<button type="button" class="trig ${popOpen?'on':''}" data-pop>${ic('agent',13)}<span><b>1</b>/4</span></button>`;
+  root.innerHTML=`<div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="chip">solco</span><span class="sep">›</span><span class="chip">Tab 1</span><span class="sep">›</span><span class="chip cur">Chat</span><div class="tools">${trig}<button type="button" class="ib" style="width:28px;height:24px;display:grid;place-items:center;color:var(--i3)">⋯</button></div></div>
+    ${sideHtml()}
+    <div class="main"><div class="log"><div class="col">${view.body}</div></div>${view.working||''}${view.dock||''}
+      <div class="cmp"><div class="cmpbox ${view.joined?'joined':''}"><span>Send a message… (@ file · / commands · $ skills)</span><div class="row2"><span>+</span><span style="margin-left:auto">claude-sonnet</span></div></div></div></div>
+    <aside class="drawer">${drawer?drawerHtml(drillId):''}</aside>
+    ${popHtml()}
+`;
+  bind(root);
+  document.getElementById('stageLabel').textContent='Sub-agent views · A (recommended) · '+SCENES.find(s=>s[0]===sc)[1];
+  renderControls();
+  history.replaceState(null,'',`#scene=${S.scene}&theme=${S.theme}&prov=${S.prov}&w=${S.w}`);
+}
+function bind(root){
+  root.querySelectorAll('[data-drill]').forEach(n=>n.addEventListener('click',e=>{e.stopPropagation();drillId=n.dataset.drill;S.scene='drawer';render()}));
+  root.querySelectorAll('[data-toggle]').forEach(n=>n.addEventListener('click',e=>{e.stopPropagation();root.querySelector(`[data-card="${n.dataset.toggle}"]`).classList.toggle('open')}));
+  root.querySelectorAll('.sa-h').forEach(n=>n.addEventListener('click',()=>root.querySelector(`[data-card="${n.dataset.open}"]`).classList.toggle('open')));
+  root.querySelectorAll('[data-close]').forEach(n=>n.addEventListener('click',()=>{S.scene='live';render()}));
+  root.querySelectorAll('[data-sink]').forEach(n=>n.addEventListener('click',()=>{sinkOpen=!sinkOpen;render()}));
+  root.querySelectorAll('[data-pop]').forEach(n=>n.addEventListener('click',()=>{S.scene=S.scene==='sidebar'?'live':'sidebar';render()}));
+}
+function seg(label,key,opts){return `<div class="ctl"><span>${label}</span><div class="shell-seg">${opts.map(([v,t])=>`<button type="button" class="${String(S[key])===String(v)?'on':''}" data-k="${key}" data-v="${v}">${t}</button>`).join('')}</div></div>`}
+function renderControls(){
+  const c=document.getElementById('controls');
+  c.innerHTML=`<div class="ide-section-title">Scenes</div>${SCENES.map(([k,t,d])=>`<div class="ide-state-card ${S.scene===k?'active':''}" data-scene="${k}"><strong>${t}</strong>${d}</div>`).join('')}
+    <div class="ide-section-title">Controls</div>
+    ${seg('Provider','prov',[['claude','Claude'],['omp','omp'],['codex','Codex']])}
+    ${seg('Theme','theme',[['dark','Dark'],['light','Light']])}
+    ${seg('Width','w',[[1080,'1080'],[900,'900'],[760,'760']])}
+    <div class="ide-section-title">Data source (this provider)</div>
+    <div class="src">${PROV[S.prov].src.join('<br>')}</div>
+    <div class="ide-section-title">Rejected</div>
+    <div class="src">· fifth Header tab (440 wide, 4 already)<br>· matching plan items to sub-agents by text<br>· controlling sub-agents (stop/send) — read-only only</div>`;
+  c.querySelectorAll('[data-scene]').forEach(n=>n.addEventListener('click',()=>{S.scene=n.dataset.scene;render()}));
+  c.querySelectorAll('[data-k]').forEach(n=>n.addEventListener('click',()=>{S[n.dataset.k]=n.dataset.k==='w'?+n.dataset.v:n.dataset.v;render()}));
+}
+document.getElementById('collapse').onclick=()=>document.getElementById('layout').classList.add('panel-collapsed');
+document.getElementById('expand').onclick=()=>document.getElementById('layout').classList.remove('panel-collapsed');
+document.getElementById('storyToggle').onclick=()=>document.getElementById('layout').classList.toggle('story-collapsed');
+addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(S.scene==='drawer'){S.scene='live';render()}else if(S.scene==='sidebar'){S.scene='live';render()}else document.getElementById('layout').classList.toggle('panel-collapsed')});
+if(!SCENES.some(s=>s[0]===S.scene))S.scene='live';
+render();
+</script>
+</body>
+</html>

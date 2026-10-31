@@ -60,6 +60,9 @@ type ChatBridgeStep struct {
 	// TsMS is the provider timestamp of the item that opened the step
 	// (presentation only: the page derives "Thought for Ns" from gaps).
 	TsMS *int64 `json:"tsMs,omitempty"`
+	// SubagentIDs lists the sub-agents this tool call spawned (chat_subagents.go);
+	// the page draws their card/roster in place of the plain tool row.
+	SubagentIDs []string `json:"subagentIds,omitempty"`
 }
 
 // ChatBridgeChange is one file row of a turn's changes card. Counted is set
@@ -157,8 +160,10 @@ type ChatBridgeState struct {
 	// (our hook layer's feed): approval/question cards above the composer.
 	Interactions []ChatBridgeInteraction `json:"interactions,omitempty"`
 	// Plan is the latest task list the agent published (Tasks panel).
-	Plan  *ChatBridgePlan  `json:"plan,omitempty"`
-	Turns []ChatBridgeTurn `json:"turns"`
+	Plan *ChatBridgePlan `json:"plan,omitempty"`
+	// Subagents are the sub-agents the turns' tool calls spawned.
+	Subagents []ChatBridgeSubagent `json:"subagents,omitempty"`
+	Turns     []ChatBridgeTurn     `json:"turns"`
 }
 
 // ChatBridgeInteraction is one pending interaction card.
@@ -784,7 +789,6 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		VoiceSource:    voiceSourceName(s.settings.Voice),
 		SerifProse:     s.settings.General.ChatSerif,
 		Outline:        s.settings.General.ChatOutline,
-		Turns:          make([]ChatBridgeTurn, 0, len(s.chatTurns)),
 	}
 	state.EchoPending = s.chatPendingEcho != nil
 	if s.chatAwaitingBind() {
@@ -837,13 +841,24 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		root, snap = s.git.root, s.gitSnapshot()
 		state.Root, state.CanReview = root, true
 	}
+	state.Turns = bridgeTurns(s.chatTurns, root, snap)
+	state.attachSubagents(s.chatSubagents, s.chatTurns, s.chatLiveProvider, time.Now())
+	state.Plan = chatPlan(s.chatTurns)
+	return state
+}
+
+// bridgeTurns maps derived timeline rows onto the page's turns. root/snap
+// feed the changes card (both empty for a sub-agent transcript, which has
+// no working-tree card).
+func bridgeTurns(turns []conversation.TimelineTurn, root string, snap *gitworkbench.ChangesSnapshot) []ChatBridgeTurn {
+	out := make([]ChatBridgeTurn, 0, len(turns))
 	lastAssistant := -1
-	for index, turn := range s.chatTurns {
+	for index, turn := range turns {
 		if !turn.UserRow {
 			lastAssistant = index
 		}
 	}
-	for index, turn := range s.chatTurns {
+	for index, turn := range turns {
 		bridgeTurn := ChatBridgeTurn{
 			User:      turn.UserRow,
 			Text:      turn.Text,
@@ -877,10 +892,9 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		if !turn.UserRow && !turn.Live && !turn.Failed {
 			bridgeTurn.Changes = chatTurnChanges(turn.Steps, root, snap, index == lastAssistant)
 		}
-		state.Turns = append(state.Turns, bridgeTurn)
+		out = append(out, bridgeTurn)
 	}
-	state.Plan = chatPlan(s.chatTurns)
-	return state
+	return out
 }
 
 // chatBridgeTheme reports the app-resolved appearance for the page. The

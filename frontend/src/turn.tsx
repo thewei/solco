@@ -1,10 +1,11 @@
-import React, { memo, useEffect, useRef, useState } from "react";
+import React, { memo, useContext, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import type { ChatBridgeChange, ChatBridgeStep, ChatBridgeTurn } from "./mygo";
 import { Icon, type IconName } from "./icons";
 import { WorkingLine } from "./dock";
+import { SubagentBlock, SubagentContext } from "./subagents";
 
 /**
  * One transcript row, shaped by designs/chat-view (A+B, chosen 2026-10-30):
@@ -96,14 +97,16 @@ export function OutboxRow({
 
 function AssistantRow({ turn, startMs, root, canReview, onReview, isLast }: TurnProps) {
   const steps = effectiveSteps(turn);
-  const segs = segments(steps);
+  const { byId } = useContext(SubagentContext);
+  const segs = segments(steps, byId);
   const lastSeg = segs[segs.length - 1];
   // Between steps the agent is busy but nothing is visibly running: the
   // Working line stands in, after a short grace so it never flashes.
   const idle =
     !!turn.live &&
     (segs.length === 0 ||
-      (lastSeg.kind === "run" && !runIsActive(lastSeg.items)));
+      (lastSeg.kind === "run" && !runIsActive(lastSeg.items)) ||
+      (lastSeg.kind === "agents" && !lastSeg.ids.some((id) => byId.get(id)?.status === "running")));
   const showWorking = useDelayed(idle, 250, steps.length);
 
   let boundary = startMs;
@@ -113,6 +116,7 @@ function AssistantRow({ turn, startMs, root, canReview, onReview, isLast }: Turn
       const streaming = !!turn.live && index === segs.length - 1;
       return <Markdown key={seg.at} text={seg.step.text ?? ""} caret={streaming} />;
     }
+    if (seg.kind === "agents") return <SubagentBlock key={seg.at} ids={seg.ids} />;
     const from = boundary;
     boundary = seg.items[seg.items.length - 1].tsMs ?? boundary;
     const live = !!turn.live && index === segs.length - 1;
@@ -165,13 +169,28 @@ function effectiveSteps(turn: Turn): Step[] {
 
 type Seg =
   | { kind: "text"; step: Step; at: number }
+  | { kind: "agents"; ids: string[]; at: number }
   | { kind: "run"; items: Step[]; at: number };
 
-/** Narration stays on its own; consecutive thinking/tool steps form one run. */
-function segments(steps: Step[]): Seg[] {
+/** Narration stays on its own; consecutive thinking/tool steps form one run.
+ *  Tool calls that spawned sub-agents leave the run: all of a turn's agents
+ *  gather into one block at the first spawn, so a running one is never folded
+ *  away (unknown ids stay ordinary tool rows). */
+function segments(steps: Step[], known: ReadonlyMap<string, unknown>): Seg[] {
   const out: Seg[] = [];
   let run: Extract<Seg, { kind: "run" }> | null = null;
+  let agents: Extract<Seg, { kind: "agents" }> | null = null;
   steps.forEach((step, at) => {
+    const spawned = step.kind === "tool" ? (step.subagentIds ?? []).filter((id) => known.has(id)) : [];
+    if (spawned.length > 0) {
+      if (!agents) {
+        agents = { kind: "agents", ids: [], at };
+        out.push(agents);
+      }
+      for (const id of spawned) if (!agents.ids.includes(id)) agents.ids.push(id);
+      run = null;
+      return;
+    }
     if (step.kind === "thinking" || step.kind === "tool") {
       if (!run) {
         run = { kind: "run", items: [], at };
@@ -583,6 +602,9 @@ function plainText(markdown: string): string {
 export function userDisplay(text: string): { text: string; output: boolean } {
   const out = /^\s*<local-command-std(?:out|err)>([\s\S]*?)<\/local-command-std(?:out|err)>\s*$/.exec(text);
   if (out) return { text: out[1].trim() || "(no output)", output: true };
+  // Claude Code's own "a sub-agent finished" message: its summary line, muted.
+  const note = /^\s*<task-notification>[\s\S]*?<summary>([\s\S]*?)<\/summary>[\s\S]*<\/task-notification>\s*$/.exec(text);
+  if (note) return { text: note[1].trim(), output: true };
   const name = /<command-name>([\s\S]*?)<\/command-name>/.exec(text);
   if (name) {
     const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(text)?.[1].trim();

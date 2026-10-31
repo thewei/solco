@@ -161,6 +161,8 @@ export interface ChatBridgeState {
   interactions?: ChatBridgeInteraction[];
   /** Plan is the latest task list the agent published (Tasks panel). */
   plan?: ChatBridgePlan;
+  /** Subagents are the sub-agents the turns' tool calls spawned. */
+  subagents?: ChatBridgeSubagent[];
   turns: ChatBridgeTurn[];
 }
 
@@ -185,6 +187,43 @@ export interface ChatBridgeStep {
    * (presentation only: the page derives "Thought for Ns" from gaps).
    */
   tsMs?: number;
+  /**
+   * SubagentIDs lists the sub-agents this tool call spawned (chat_subagents.go);
+   * the page draws their card/roster in place of the plain tool row.
+   */
+  subagentIds?: string[];
+}
+
+/** ChatBridgeSubagent is one sub-agent card/roster row. */
+export interface ChatBridgeSubagent {
+  id: string;
+  provider: string;
+  /** Type is the agent kind (Claude agentType, omp agent, Codex nickname). */
+  type?: string;
+  description?: string;
+  /**
+   * Status is "running", "done" or "failed" (the parent's tool result said
+   * so). "Stopped by user" is not derivable from the files and not claimed.
+   */
+  status: string;
+  startedMs?: number;
+  updatedMs?: number;
+  toolCalls: number;
+  /**
+   * Tail is the last tool call (the live line); Result the last assistant
+   * text (clipped); Prompt the task the parent gave.
+   */
+  tail?: string;
+  result?: string;
+  prompt?: string;
+}
+
+/** ChatBridgeSubagentView is the drawer's read-only conversation. */
+export interface ChatBridgeSubagentView {
+  subagent: ChatBridgeSubagent;
+  turns: ChatBridgeTurn[];
+  /** Error is a short reason the transcript cannot be shown ("" = fine). */
+  error?: string;
 }
 
 /** ChatBridgeTool is one tool run rendered inside an assistant turn. */
@@ -427,6 +466,13 @@ export const chat = {
    */
   openMicrophoneSettings(): Promise<void> {
     return call("chat.OpenMicrophoneSettings");
+  },
+  /**
+   * OpenSubagent returns one sub-agent's own transcript for the drawer. The id
+   * must be one the current chat listed; the page never names a path.
+   */
+  openSubagent(id: string): Promise<ChatBridgeSubagentView> {
+    return call("chat.OpenSubagent", id);
   },
   /**
    * OpenTerminal switches the workspace surface to Terminal, for the page's

@@ -181,6 +181,8 @@ func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path,
 	s.chatLivePump = pump
 	s.chatLiveFingerprint = fingerprint
 	s.chatLivePath = path
+	s.chatLiveProvider = provider
+	s.clearChatSubagents()
 	s.chatConversationID = "live:" + string(provider) + ":" + key.TerminalID
 	s.chatLoading = true
 	s.chatTurns = nil
@@ -248,6 +250,8 @@ func (s *Shell) stopLiveTail() {
 	s.chatLivePump = nil
 	s.chatLiveFingerprint = ""
 	s.chatLivePath = ""
+	s.chatLiveProvider = ""
+	s.clearChatSubagents()
 	s.chatLiveCommitted = 0
 	s.chatLiveDecoder = nil
 }
@@ -303,6 +307,7 @@ func (s *Shell) applyLiveSync(decoder *history.LiveDecoder) {
 	s.appendPendingEchoTurn()
 	s.reconcileChatQuestion()
 	s.publishChatBridge()
+	s.pokeChatSubagents()
 }
 
 // chatLiveLoadOlder pulls the previous page of a live-followed chat out of

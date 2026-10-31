@@ -79,6 +79,8 @@ const (
 	quickPanelUsageHeight   = 17
 	quickPanelEmptyHeight   = 72
 	quickPanelOfflineHeight = 36
+	// quickPanelSubagentHeight is one nested sub-agent row (subagentRow's 24).
+	quickPanelSubagentHeight = 24
 )
 
 // quickPanelMinHeight keeps the panel presentable when it is nearly empty.
@@ -367,6 +369,9 @@ func (s *Shell) quickPanelContentHeight() int {
 		}
 	}
 	height := QuickPanelHeightFor(len(entries), len(quickPanelGroups(entries)), captions)
+	if len(entries) > 0 {
+		height += quickPanelSubagentRows(entries, time.Now()) * quickPanelSubagentHeight
+	}
 	if s.offline {
 		height += quickPanelOfflineHeight
 	}

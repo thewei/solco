@@ -12,6 +12,8 @@ import { selectContents, useLinkHint } from "./native";
 import { OutboxRow, TurnRow, userDisplay, type Outbox } from "./turn";
 import { ContextControl } from "./context";
 import { TocRail } from "./toc";
+import { SubagentContext, type SubagentContextValue } from "./subagents";
+import { SubagentDrawer } from "./drawer";
 import { turnText, useTurnList } from "./turnlist";
 import { AttachChips, IMAGE_EXT, ModelPanel, PlusPanel, SlashPanel, fileToBase64, slashMatches } from "./composer";
 import { BlockedDock, QuestionDock, SessionState, TasksTray, WorkingLine, isFreeTextOption, planFinished } from "./dock";
@@ -322,6 +324,7 @@ export function App() {
   );
   // The task list stays while work remains; once it is finished it retires
   // at the next user message (it belonged to the work before it).
+  const runningSubagents = Boolean(state?.subagents?.some((sub) => sub.status === "running"));
   const planVisible = Boolean(
     state?.plan &&
       !(
@@ -955,6 +958,19 @@ export function App() {
 
   const turns = state?.turns ?? [];
   const keys = useMemo(() => turnKeys(turns), [turns]);
+  // Sub-agent cards open one drawer; it closes with the conversation it
+  // belonged to or when the sub-agent leaves the list.
+  const [openSub, setOpenSub] = useState<string | null>(null);
+  const subCtx = useMemo<SubagentContextValue>(
+    () => ({
+      byId: new Map((state?.subagents ?? []).map((sub) => [sub.id, sub])),
+      open: (id) => setOpenSub((current) => (current === id ? null : id)),
+      openId: openSub ?? undefined,
+    }),
+    [state?.subagents, openSub],
+  );
+  const subOpen = openSub !== null && subCtx.byId.has(openSub);
+  useEffect(() => setOpenSub(null), [conversationId]);
   const listRef = useRef<HTMLDivElement>(null);
   const [listMargin, setListMargin] = useState(0);
   const list = useTurnList(logRef, turns.length, (index) => keys[index], listMargin);
@@ -1035,8 +1051,9 @@ export function App() {
   };
 
   return (
+    <SubagentContext.Provider value={subCtx}>
     <div
-      className="chat"
+      className={subOpen ? "chat with-drawer" : "chat"}
       onContextMenu={onContextMenu}
       onDragOver={(event) => {
         if (readOnly || voiceBusy || !hasFiles(event)) return;
@@ -1179,7 +1196,15 @@ export function App() {
       {readOnly ? null : (
         <div className="composer">
           <div className="col">
-            {planVisible && state?.plan ? <TasksTray plan={state.plan} live={working} compact={Boolean(state.interactions?.length)} /> : null}
+            {planVisible || runningSubagents ? (
+              <TasksTray
+                plan={planVisible ? state?.plan : undefined}
+                subagents={state?.subagents}
+                onOpenSubagent={subCtx.open}
+                live={working}
+                compact={Boolean(state?.interactions?.length)}
+              />
+            ) : null}
             {state?.interactions?.length ? (
               state.interactions.map((interaction) => (
                 <QuestionDock
@@ -1407,7 +1432,9 @@ export function App() {
           </div>
         </div>
       )}
+      {subOpen && openSub ? <SubagentDrawer id={openSub} onClose={() => setOpenSub(null)} /> : null}
     </div>
+    </SubagentContext.Provider>
   );
 }
 

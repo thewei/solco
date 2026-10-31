@@ -108,9 +108,15 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 			if card.Unread {
 				ui.Box(c).Size(6, 6).Radius(3).Background(tokens.StatusColor(ToneAttention, t.Dark)).Shrink(0)
 			}
-			if n := len(card.Subagents); n > 0 && len(openSubagents(card, time.Now())) == 0 {
-				tipped(c, ui.Text(c, "⤷"+itoa(n)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0),
-					pluralUnits(n, "sub-agent")+" ran")
+			if n := len(card.Subagents); n > 0 {
+				if open := openSubagents(card, time.Now()); len(open) == 0 {
+					tipped(c, ui.Text(c, "⤷"+itoa(n)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0),
+						pluralUnits(n, "sub-agent")+" ran")
+				} else {
+					running := runningSubagents(card, time.Now())
+					tipped(c, ui.Text(c, "⤷"+itoa(running)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0),
+						pluralUnits(running, "sub-agent")+" running")
+				}
 			}
 			// The row ends with when the Agent last worked and its state
 			// slot (2026-10-30): spinner, dot and ring are one indicator
@@ -209,6 +215,17 @@ func agentAgo(at, now time.Time) string {
 	default:
 		return itoa(int(d/(24*time.Hour))) + "d"
 	}
+}
+
+// runningSubagents counts the sub-agents still writing.
+func runningSubagents(card agent.AgentCardModel, now time.Time) int {
+	n := 0
+	for _, sub := range card.Subagents {
+		if sub.Active(now) {
+			n++
+		}
+	}
+	return n
 }
 
 // subagentRowsShown caps the nested rows under one agent.
