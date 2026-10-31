@@ -51,3 +51,64 @@ body {
   background: var(--content);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Chat ink ramp: one ink colour at four alphas (reading text i1, secondary
+   i2, quiet i3, placeholder/decoration i4) plus hairlines and tints, so every
+   shade follows the theme. Increase contrast (data-contrast="high", set from
+   the bridge) lifts i2-i4 and the hairlines; i4 reaches 4.5:1 there.
+   Contrast was computed against --content and --panel (designs/chat-view). */
+
+:root {
+  --ink: 24, 24, 27;
+  --i1: rgba(var(--ink), 0.9);
+  --i2: rgba(var(--ink), 0.7);
+  --i3: rgba(var(--ink), 0.6);
+  --i4: rgba(var(--ink), 0.38);
+  --hair: rgba(var(--ink), 0.09);
+  --hair2: rgba(var(--ink), 0.17);
+  --hair3: rgba(var(--ink), 0.34);
+  --tint: rgba(var(--ink), 0.04);
+  --tint2: rgba(var(--ink), 0.07);
+  --link: #0a6bd6;
+  --r-bubble: 18px;
+  --r-composer: 24px;
+  --col: 748px;
+  --ff-prose: inherit;
+}
+
+:root[data-theme="dark"] {
+  --ink: 244, 244, 245;
+  --i1: rgba(var(--ink), 0.92);
+  --i2: rgba(var(--ink), 0.66);
+  --i3: rgba(var(--ink), 0.52);
+  --i4: rgba(var(--ink), 0.34);
+  --hair: rgba(var(--ink), 0.08);
+  --hair2: rgba(var(--ink), 0.152);
+  --link: #6cb2ff;
+}
+
+:root:not([data-theme="dark"])[data-contrast="high"] {
+  --i1: rgba(var(--ink), 1);
+  --i2: rgba(var(--ink), 0.8);
+  --i3: rgba(var(--ink), 0.7);
+  --i4: rgba(var(--ink), 0.62);
+  --hair: rgba(var(--ink), 0.22);
+  --hair2: rgba(var(--ink), 0.34);
+  --hair3: rgba(var(--ink), 0.55);
+}
+
+:root[data-theme="dark"][data-contrast="high"] {
+  --i1: rgba(var(--ink), 1);
+  --i2: rgba(var(--ink), 0.78);
+  --i3: rgba(var(--ink), 0.64);
+  --i4: rgba(var(--ink), 0.52);
+  --hair: rgba(var(--ink), 0.22);
+  --hair2: rgba(var(--ink), 0.34);
+  --hair3: rgba(var(--ink), 0.55);
+}
+
+/* Serif reading text (Settings -> General -> "Serif chat text"): assistant
+   prose only; code, rows and controls keep the sans stack. */
+:root[data-prose="serif"] {
+  --ff-prose: ui-serif, "New York", "Iowan Old Style", "Songti SC", Georgia, serif;
+}

@@ -8,7 +8,7 @@
 export default {
   name: "Solco",
   identifier: "com.whstudio.solco",
-  version: "0.10.0",
+  version: "0.11.0",
   // solco://reveal?session=&workspace=&tab= — see internal/nativeui/external_reveal.go.
   urlSchemes: ["solco"],
   out: "build",

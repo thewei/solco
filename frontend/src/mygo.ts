@@ -4,12 +4,63 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/**
+ * ChatBridgeChange is one file row of a turn's changes card. Counted is set
+ * only when Additions/Deletions come from the live working-tree snapshot
+ * (latest settled turn, local repository); otherwise the row is a name alone.
+ */
+export interface ChatBridgeChange {
+  path: string;
+  additions?: number;
+  deletions?: number;
+  counted?: boolean;
+}
+
 /** ChatBridgeInteraction is one pending interaction card. */
 export interface ChatBridgeInteraction {
   id: string;
   kind: string;
   prompt: string;
   options: string[];
+  /**
+   * Header is the provider's short question label; Descriptions explain
+   * each option (parallel to Options, "" when none).
+   */
+  header?: string;
+  descriptions?: string[];
+  /** Progress is "2/3" inside a multi-question ask ("" otherwise). */
+  progress?: string;
+  /**
+   * Multi marks a multi-select question: the page ticks any subset and
+   * submits them together through AnswerInteractionMulti.
+   */
+  multi?: boolean;
+}
+
+/** ChatBridgeLink is one suggested session for the invitation's link row. */
+export interface ChatBridgeLink {
+  key: string;
+  title: string;
+  updatedMs: number;
+  messages: number;
+}
+
+/** ChatBridgePlan is the latest task list the session published. */
+export interface ChatBridgePlan {
+  items: ChatBridgePlanItem[];
+  /**
+   * Turn is the timeline index of the turn that last wrote the list; the
+   * page retires a finished list once a later user turn exists.
+   */
+  turn: number;
+}
+
+/** ChatBridgePlanItem is one row of the Tasks panel. */
+export interface ChatBridgePlanItem {
+  text: string;
+  status: string;
+  /** Phase is the provider's own group label (omp phases); "" when flat. */
+  phase?: string;
 }
 
 /**
@@ -21,7 +72,30 @@ export interface ChatBridgeState {
   conversationId: string;
   title?: string;
   provider?: string;
+  /**
+   * VoiceSource is "chatgpt" while dictation goes through the ChatGPT
+   * sign-in Codex holds, else "api" (the mic tooltip names it).
+   */
+  voiceSource?: string;
   loading: boolean;
+  /**
+   * Waiting reports a live agent that has not opened a conversation yet
+   * (fresh pane) and nothing is sent yet: the page shows its invitation and
+   * keeps the composer — the first prompt opens the conversation.
+   */
+  waiting?: boolean;
+  /**
+   * EchoPending reports a just-sent prompt shown as a temporary User row
+   * that the provider transcript has not confirmed yet: the page stands in
+   * a Working line until the agent's own rows arrive.
+   */
+  echoPending?: boolean;
+  /**
+   * LinkCandidates are recent sessions of this agent's provider in its
+   * folder, offered only while the agent has not reported a session of its
+   * own (Waiting): the invitation can then say "show this one instead".
+   */
+  linkCandidates?: ChatBridgeLink[];
   disposition: string;
   outcome?: string;
   queuedText?: string;
@@ -31,6 +105,23 @@ export interface ChatBridgeState {
    * system preference.
    */
   theme: string;
+  /**
+   * HighContrast mirrors Settings -> General -> Increase contrast so the
+   * page lifts its faintest ink level to the 4.5:1 floor.
+   */
+  highContrast?: boolean;
+  /**
+   * SerifProse mirrors Settings -> General -> "Serif chat text": assistant
+   * reading text only; code, tool rows and controls stay sans.
+   */
+  serifProse?: boolean;
+  /**
+   * Root is the local repository root the changes card resolves paths
+   * against ("" for read-only sessions and non-repository panes).
+   */
+  root?: string;
+  /** CanReview reports "Review changes" can open Diff Review for Root. */
+  canReview?: boolean;
   /**
    * Model is the provider model the transcript last recorded, when known
    * (presentation pill only; never a runtime fact source).
@@ -56,6 +147,8 @@ export interface ChatBridgeState {
    * (our hook layer's feed): approval/question cards above the composer.
    */
   interactions?: ChatBridgeInteraction[];
+  /** Plan is the latest task list the agent published (Tasks panel). */
+  plan?: ChatBridgePlan;
   turns: ChatBridgeTurn[];
 }
 
@@ -70,6 +163,16 @@ export interface ChatBridgeStep {
   toolInput?: string;
   toolOutput?: string;
   toolError?: boolean;
+  /**
+   * ToolDone reports that the call's result has landed (an empty result
+   * still counts); false means the call is still running.
+   */
+  toolDone?: boolean;
+  /**
+   * TsMS is the provider timestamp of the item that opened the step
+   * (presentation only: the page derives "Thought for Ns" from gaps).
+   */
+  tsMs?: number;
 }
 
 /** ChatBridgeTool is one tool run rendered inside an assistant turn. */
@@ -97,6 +200,36 @@ export interface ChatBridgeTurn {
   tsMs?: number;
   tools?: ChatBridgeTool[];
   steps?: ChatBridgeStep[];
+  /**
+   * Changes lists the files this settled turn's edit tools touched (the
+   * changes card); see chatTurnChanges for the data-source contract.
+   */
+  changes?: ChatBridgeChange[];
+}
+
+/** ChatCatalog is the composer's menu for the bound Agent. */
+export interface ChatCatalog {
+  commands: ChatCatalogEntry[];
+  skills: ChatCatalogEntry[];
+  models: ChatCatalogModel[];
+  /** CanSwitchModel: a typed command or a structured picker can switch it. */
+  canSwitchModel: boolean;
+  /** ModelPicker is the command ("/model") that opens the picker card, "" if none. */
+  modelPicker?: string;
+}
+
+/** ChatCatalogEntry is one `/` or `$` popover row. */
+export interface ChatCatalogEntry {
+  name: string;
+  insert: string;
+  detail?: string;
+  /** Kind is text | picker | terminal | skill | prompt (agentcatalog.Kind). */
+  kind: string;
+}
+
+/** ChatCatalogModel is one model the chip can switch to. */
+export interface ChatCatalogModel {
+  id: string;
 }
 
 /**
@@ -146,6 +279,13 @@ export const chat = {
     return call("chat.AnswerInteraction", interactionID, option);
   },
   /**
+   * AnswerInteractionMulti answers a multi-select question: from the first row
+   * the rows to tick are walked with down/space, then enter submits.
+   */
+  answerInteractionMulti(interactionID: string, options: string[]): Promise<ChatBridgeState> {
+    return call("chat.AnswerInteractionMulti", interactionID, options);
+  },
+  /**
    * AnswerInteractionText answers a free-text option: the option is selected
    * by the same arrow navigation, then the typed answer is pasted and
    * submitted through the canonical agent.prompt once the TUI's text field
@@ -163,6 +303,14 @@ export const chat = {
     return call("chat.CancelQueued");
   },
   /**
+   * Catalog lists the Skills, commands and models the composer can offer. It
+   * reads the provider's own files (and pi/omp's read-only model listing, cached
+   * ten minutes) and executes no command.
+   */
+  catalog(): Promise<ChatCatalog> {
+    return call("chat.Catalog");
+  },
+  /**
    * InterruptAndSend is the explicit "cut in" path (the moshi barge-in analog):
    * one Escape stops the running turn, a short settle lets the TUI land on its
    * input box, then the prompt delivers via the canonical agent.prompt
@@ -172,6 +320,14 @@ export const chat = {
    */
   interruptAndSend(text: string): Promise<ChatBridgeState> {
     return call("chat.InterruptAndSend", text);
+  },
+  /**
+   * LinkSession follows the suggested session's transcript, after the user's
+   * click. The key must be one of the offered candidates; the projection after
+   * the attempt is returned either way.
+   */
+  linkSession(key: string): Promise<ChatBridgeState> {
+    return call("chat.LinkSession", key);
   },
   /**
    * ListFiles lists the chat pane's project directory entries matching the
@@ -190,12 +346,42 @@ export const chat = {
     return call("chat.Older");
   },
   /**
+   * OpenMicrophoneSettings opens System Settings at Privacy → Microphone, the
+   * one place a denied dictation can be re-enabled (the page cannot ask the
+   * system again once it said no). The pane holds nothing: it is a local door.
+   */
+  openMicrophoneSettings(): Promise<void> {
+    return call("chat.OpenMicrophoneSettings");
+  },
+  /**
+   * OpenTerminal switches the workspace surface to Terminal, for the page's
+   * "Waiting for you in the terminal" card. Local surface switch only.
+   */
+  openTerminal(): Promise<void> {
+    return call("chat.OpenTerminal");
+  },
+  /**
    * PickAttachment opens the native file picker and returns the chosen path,
    * empty when the user canceled. The path goes into the draft as an @mention
    * the agent's own CLI understands — files are local, nothing is uploaded.
    */
   pickAttachment(): Promise<string> {
     return call("chat.PickAttachment");
+  },
+  /**
+   * ReviewChanges opens Diff Review (the WorkspacePrimarySurface Diff state)
+   * for the card's repository, selecting path when it names a changed file.
+   * It only switches the local surface: no Git runner call, no Herdr method.
+   */
+  reviewChanges(path: string): Promise<void> {
+    return call("chat.ReviewChanges", path);
+  },
+  /**
+   * SaveAttachment stores a pasted or dropped file under the cache dir's ChatAttachments (kept
+   * 14 days, 200 MB) and returns its absolute path for the `@path` mention.
+   */
+  saveAttachment(dataBase64: string, mime: string, name: string): Promise<string> {
+    return call("chat.SaveAttachment", dataBase64, mime, name);
   },
   /**
    * Send routes the prompt through the same disposition decision as the
@@ -222,8 +408,17 @@ export const chat = {
     return call("chat.Stop");
   },
   /**
-   * Transcribe sends a recorded clip to the configured OpenAI-compatible
-   * transcription endpoint (local proxies included) and returns the text.
+   * SwitchModel sends the provider's own typed model command (pi `/model`, omp
+   * `/switch`: both session-only) through the ordinary prompt path.
+   */
+  switchModel(id: string): Promise<ChatBridgeState> {
+    return call("chat.SwitchModel", id);
+  },
+  /**
+   * Transcribe sends a recorded clip to the configured source — an
+   * OpenAI-compatible transcription endpoint (local proxies included) or, when
+   * the user consented in Settings → Voice, the ChatGPT sign-in Codex holds —
+   * and returns the text.
    * The API key never reaches the page and is never logged.
    */
   transcribe(audioBase64: string, mime: string): Promise<string> {
