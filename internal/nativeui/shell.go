@@ -139,19 +139,26 @@ type Shell struct {
 	commitAIResponse           string
 	commitAIError              string
 	commitAIReplaceConfirm     bool
-	piQuickRunning             bool
-	piQuickError               string
-	piQuickGen                 uint64
-	piQuickCancel              context.CancelFunc
-	piCommitRunning            bool
-	piCommitError              string
-	piCommitCancel             context.CancelFunc
-	piCommitGeneration         uint64
-	piCommitExecutor           func(context.Context, agent.PiCommitRequest) (agent.PiCommitResponse, error)
-	mergeDialogOpen            bool
-	mergeTarget                string
-	mergeRepoRoot              string
-	mergeStrategy              int // 0: FF-only, 1: create merge commit
+	commitQuickRunning         bool
+	commitQuickError           string
+	commitQuickGen             uint64
+	commitQuickCancel          context.CancelFunc
+	commitGenRunning           bool
+	commitGenError             string
+	commitGenCancel            context.CancelFunc
+	commitGenGeneration        uint64
+	commitGenExecutor          func(context.Context, agent.CommitRequest) (agent.CommitResponse, error)
+	// commitAPI backs the one AI commit channel: the credential handle
+	// (tests inject memory), the cached key presence for render paths and
+	// the Settings → Git test-request state.
+	commitSecrets        usageSecrets
+	commitAPIKeySet      bool
+	commitAPITestRunning bool
+	commitAPITestResult  string
+	mergeDialogOpen      bool
+	mergeTarget          string
+	mergeRepoRoot        string
+	mergeStrategy        int // 0: FF-only, 1: create merge commit
 
 	terminals map[string]*terminalSurface
 	// statusStore arbitrates the pane status lane between the native
@@ -193,8 +200,10 @@ type Shell struct {
 	// its listener choice feedback and the pairing sheet.
 	remote remoteState
 
-	settingsGitPromptDraft string
-	settingsPiBinaryDraft  string
+	settingsGitPromptDraft      string
+	settingsCommitEndpointDraft string
+	settingsCommitModelDraft    string
+	settingsCommitKeyDraft      string
 
 	// hist owns the Native History presentation state over the read-only
 	// HistoryService.
@@ -592,7 +601,8 @@ func WithSettings(service *app.SettingsService) ShellOption {
 			// The saved appearance applies at AttachWindow (SetSource waits
 			// on the main loop, which does not exist before the window).
 			s.settingsGitPromptDraft = commitPromptPreference(s.settings.Workbench.CommitPrompt)
-			s.settingsPiBinaryDraft = s.settings.Workbench.PiExecutable
+			s.settingsCommitEndpointDraft = s.settings.Workbench.CommitAPI.Endpoint
+			s.settingsCommitModelDraft = s.settings.Workbench.CommitAPI.Model
 			// A corrupt or unreadable store silently runs on defaults —
 			// surface it once through the status toast (F154) so the user
 			// knows why their preferences did not stick.
@@ -654,7 +664,8 @@ func NewShell(opts ...ShellOption) *Shell {
 	s.settingsFontDraft = s.settings.Terminal.FontFamily
 	s.settingsThemeDraft = terminalThemeDisplay(s.settings.Terminal.ThemeName)
 	s.settingsGitPromptDraft = commitPromptPreference(s.settings.Workbench.CommitPrompt)
-	s.settingsPiBinaryDraft = s.settings.Workbench.PiExecutable
+	s.settingsCommitEndpointDraft = s.settings.Workbench.CommitAPI.Endpoint
+	s.settingsCommitModelDraft = s.settings.Workbench.CommitAPI.Model
 	s.providers.integrations = agent.NewIntegrationHealthServiceWithRunner(herdr.RunCLI)
 	s.providers.hooks = agenthooks.NewManager()
 	s.launch = app.NewLaunchService(s.runtime)
@@ -773,6 +784,10 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	// Appearance changes (system or Settings) re-publish the chat
 	// projection and the Files preview target, whose theme fields carry
 	// the resolved appearance to their WebView pages.
+	// The one startup Keychain read: the app's own credential item, in the
+	// production window path only. Render paths only ever check the cached
+	// presence flag; tests never reach here, so they stay Keychain-free.
+	s.commitAPIKeySet = s.commitKeyPresent()
 	s.syncThemeSource()
 	s.syncWindowOpacity()
 	mygo.Theme.OnUpdated(func() {
@@ -853,7 +868,7 @@ func (s *Shell) Close() {
 	// Quit path (the close button hides the window without closing it).
 	s.SaveSession()
 	s.cancelQuickAICommit()
-	s.cancelPiCommitSuggestion()
+	s.cancelCommitAISuggestion()
 	if s.hooksStop != nil {
 		s.hooksStop()
 		s.hooksStop = nil

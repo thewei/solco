@@ -47,8 +47,8 @@ UI 规范：和 Workspace / History / Settings 复用 `Spacing / Typography / Ra
 | Workspace changes + Diff | 已有 | 左侧 Stage/Unstage、中心 Godiff | hunk/line 快捷键真实设备验收 |
 | Right Review Inspector | **本轮新增（headless）** | 左 Stage/Unstaged Tree 对应右侧仓库/选中文件/历史 Commit 元信息；Terminal 保留 Changes | 实机检查窗口过渡和键盘焦点 |
 | Stage All / Unstage All | **第八轮完成操作层级统一** | 中心 Toolbar 常用批量暂存、Diff 布局、Refresh、Commit，低频 Fetch/Pull/Push/Stash/Undo/历史/Git Settings 收入 More…；窄窗 Stage/Unstage 也进入 More…；底部只显示汇总，不再重复 Commit | 实机测宽屏/窄窗/菜单键盘操作 |
-| Commit / Amend | **第九轮固定操作栏** | 原生 Modal 主体区独立滚动，Cancel / Commit 和编辑草稿的 Keep/Discard 固定在底部；显示已选数、Select all / Clear selection；不改变 Commit Preflight 事务，长路径完整 Tooltip；Pi 生成中禁止提交 | headless 960×640 / 1200×800 主操作区位置固定；真实设备焦点/IME 待验 |
-| AI Commit Message | **第九轮减少默认表单密度** | Commit 内 AI 辅助为折叠区：展开只显示 Generate with Pi / Include excerpt / Review prompt / Paste suggestion；Prompt 文本和手动输入框均需再次主动展开，Pi 生成返回后才自动显示候选消息；运行中禁止 Commit；根目录、快照、选择集合及 excerpt/规则偏好变动后的旧建议拒绝 | Pi Auth/模型沿用本机安装，需要用户 Pi 可用；真实 Provider 操作验证待做 |
+| Commit / Amend | **第九轮固定操作栏** | 原生 Modal 主体区独立滚动，Cancel / Commit 和编辑草稿的 Keep/Discard 固定在底部；显示已选数、Select all / Clear selection；不改变 Commit Preflight 事务，长路径完整 Tooltip；AI 生成中禁止提交 | headless 960×640 / 1200×800 主操作区位置固定；真实设备焦点/IME 待验 |
+| AI Commit Message | **第九轮减少默认表单密度；2026-10-31 起唯一通道 = OpenAI 兼容 API** | Commit 内 AI 辅助为折叠区：展开只显示 Generate with AI / Include excerpt / Review prompt / Paste suggestion；Prompt 文本和手动输入框均需再次主动展开，API 返回后才自动显示候选消息；运行中禁止 Commit；根目录、快照、选择集合及 excerpt/规则偏好变动后的旧建议拒绝；endpoint/model/key 未配置齐（key 在 Keychain）时生成入口禁用 | 需要用户自备 OpenAI 兼容 provider 的 endpoint/model/key；真实 Provider 操作验证待做 |
 | Branch Switch/Create/Delete | **第九轮加搜索与可滚动列表** | Branch Popover：当前分支优先，输入即过滤（大小写不敏感）、无匹配提示、240 DIP 高列表单独滚动；Create 始终显示在底部；每行仅 Switch + More…，Merge/Delete 在 More；切仓库清理旧过滤 | Remote 和高级分组仍待做 |
 | Merge | **已支持两种显式策略（第六轮）** | 分支 Merge… → 策略 Modal（FF-only 默认 / Create merge commit）→ Confirm → clean check；非 FF 允许产生冲突但不会自动提交解决结果 | 非 Git 原生命令的 3-way 冲突可视编辑器仍待做 |
 | Commit History / Review | 已有 | 左栏 All Commits；点击展示只读 Commit Diff | 增加 graph、日期/作者/分支过滤、全量搜索 |
@@ -139,8 +139,8 @@ Commit Row Context Menu:
 | GIT-UX-16 | P1 | 第七轮已实现（pure/headless） | AI Preview excludes .env/key/credentials; default no source; reviewed clipboard, optional paste response and accept with replace confirmation; independent generation API gap documented |
 | GIT-UX-17 | P1 | 第七轮已实现（scratch/headless） | SequencerStatus 保留精确总数和前 24 条唯一文件路径，Inspector 可定位 Diff，无法展示的文件按钮禁用，支持 Revert/Merge/Cherry-pick |
 | GIT-UX-18 | P1 | 第八轮实现（headless） | Git 中心一个主操作条；底部无重复 Commit；分支行仅 Switch/More，长分支提示全名；不再单独显示 Fetch/Pull/Push 第二排；右侧 Inspector 只展示上下文 |
-| GIT-UX-19 | P1 | 第八轮实现（fake Pi CLI + headless） | Settings → Git & AI 可修改默认 Conventional Commits 规范、Pi 路径；Pi 单次 stdin 生成，禁止 tools/session/extensions/context，取消和 stale fence，候选文本需用户接受后才进入现有 Commit 事务 |
-| GIT-UX-20 | P1 | 第九轮实现（headless） | Commit 滚动正文与固定 CTA 分离；长文件列表 / Pi 展开前后按钮 y 位置稳定（960×640 / 1200×800），Select all / Clear selection 和完整路径 Tooltip；Pi 选项独立披露 |
+| GIT-UX-19 | P1 | 第八轮实现（headless）；2026-10-31 改为 API 唯一通道 | Settings → Git & AI 可修改默认 Conventional Commits 规范、AI 通道（endpoint/model/key）；OpenAI 兼容 chat/completions 单次调用，无 tools/session，取消和 stale fence，候选文本需用户接受后才进入现有 Commit 事务，key 只进 Keychain |
+| GIT-UX-20 | P1 | 第九轮实现（headless） | Commit 滚动正文与固定 CTA 分离；长文件列表 / AI 展开前后按钮 y 位置稳定（960×640 / 1200×800），Select all / Clear selection 和完整路径 Tooltip；AI 选项独立披露 |
 | GIT-UX-21 | P1 | 第九轮实现（headless） | Branch 可搜索、当前分支优先、无匹配空态、创建入口常驻、240 DIP 独立滚动；切仓库清理过滤条件 |
 
 **测试事实与限制**：scratch Git integration、Native UI headless、Go/MyGo 静态门禁能证明动作边界和控件有响应，但**不能证明真实 macOS 里弹窗锚点、IME、焦点、冲突场景视觉已全部通过**。本方案不允许对正在运行的用户仓库做实验性 Merge/Revert/Reset，也不会自动 git add/commit/push 工程代码。

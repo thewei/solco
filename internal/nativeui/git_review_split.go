@@ -183,7 +183,7 @@ func (s *Shell) gitQuickCommitForm(c *ui.Context, snap *gitworkbench.ChangesSnap
 		len(snap.Files) == 0 || (s.git.sequencerChecked && s.git.sequencer.Active())
 	form := ui.Column(c).FillWidth().Gap(5)
 	open := s.gitQuickSubject != "" || s.gitQuickBody != "" || s.gitQuickAmend ||
-		s.piQuickRunning || s.piQuickError != "" || form.FocusWithin()
+		s.commitQuickRunning || s.commitQuickError != "" || form.FocusWithin()
 	form.Children(func() {
 		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 			textField(c.Key("git-quick-subject"), &s.gitQuickSubject).Grow(1).MinWidth(0).Height(Controls().RegularHeight).
@@ -199,7 +199,7 @@ func (s *Shell) gitQuickCommitForm(c *ui.Context, snap *gitworkbench.ChangesSnap
 			Placeholder("Description (optional)").Label("Commit description draft")
 		ui.Row(c).FillWidth().Height(28).AlignItems(ui.Center).Gap(6).Children(func() {
 			ui.Checkbox(c, &s.gitQuickAmend, "Amend")
-			if s.piQuickRunning {
+			if s.commitQuickRunning {
 				ui.Spinner(c).Size(13, 13)
 				ui.Text(c, "Generating subject…").FontSize(Typography().Micro).TextColor(t.TextMuted)
 				if compactButton(c, "Cancel").Clicked() {
@@ -210,8 +210,8 @@ func (s *Shell) gitQuickCommitForm(c *ui.Context, snap *gitworkbench.ChangesSnap
 			ui.Text(c, pluralFiles(len(snap.Files))).FontSize(Typography().Micro).TextColor(t.TextMuted)
 			s.gitQuickCommitActions(c, blocked)
 		})
-		if s.piQuickError != "" {
-			ui.Text(c, s.piQuickError).FontSize(Typography().BodySmall).TextColor(t.Warning).MaxWidth(600)
+		if s.commitQuickError != "" {
+			ui.Text(c, s.commitQuickError).FontSize(Typography().BodySmall).TextColor(t.Warning).MaxWidth(600)
 		}
 	})
 }
@@ -220,7 +220,7 @@ func (s *Shell) gitQuickCommitForm(c *ui.Context, snap *gitworkbench.ChangesSnap
 func (s *Shell) gitQuickCommitActions(c *ui.Context, blocked bool) {
 	t := c.Theme()
 	button := compactPrimaryButton(c, "Commit")
-	button.Disabled(blocked || s.piQuickRunning)
+	button.Disabled(blocked || s.commitQuickRunning)
 	if button.Clicked() {
 		s.openCommitSurface()
 		s.surface.commit.Subject = s.gitQuickSubject
@@ -230,12 +230,12 @@ func (s *Shell) gitQuickCommitActions(c *ui.Context, blocked bool) {
 		s.surface.commit.AmendPrefilled = s.gitQuickAmend &&
 			(s.gitQuickSubject != "" || s.gitQuickBody != "")
 	}
-	// The dropdown is independent of Commit: it only requests a Pi
+	// The dropdown is independent of Commit: it only requests an AI
 	// candidate and fills Subject after root/snapshot/draft checks.
 	dropdown := gorexIconButton(c, gorexColorsOf(t.Dark), iconChevronDown, "Commit options", "Commit options",
 		false, gorexPaneBtn, gorexPaneGlyph)
 	dropdown.Menu(func(m *ui.Menu) {
-		if m.Item("Draft Subject with Pi").Disabled(blocked || s.piQuickRunning).Chosen() {
+		if m.Item("Draft Subject with AI").Disabled(blocked || s.commitQuickRunning || !s.commitGeneratorUsable()).Chosen() {
 			s.startQuickAICommit()
 		}
 	})

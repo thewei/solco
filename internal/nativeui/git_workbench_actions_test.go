@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/commandcenter"
 	"github.com/thewei/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/settings"
 )
 
 /**
@@ -71,6 +72,9 @@ func TestCommitAIPromptRequiresPreviewAndExplicitOptIn(t *testing.T) {
 	s.git.snapshot.Files = append(s.git.snapshot.Files, gitworkbench.ChangeFile{Path: ".env", Status: gitworkbench.StatusModified, Additions: 1, Hunks: []gitworkbench.Hunk{{Lines: []gitworkbench.DiffLine{{Kind: gitworkbench.KindAdd, Text: "SECRET_KEY=leak"}}}}})
 	s.showSurface(WorkspaceSurfaceDiff)
 	s.openCommitSurface()
+	s.commitSecrets = commitMapSecrets{commitAPIKeyName: "test-key-123"}
+	s.settings.Workbench.CommitAPI = settings.CommitAPI{Endpoint: "https://commit.test/v1", Model: "test-model"}
+	s.commitAPIKeySet = true
 	tester := ui.NewTester(s.View, 1200, 800)
 	tester.Frame()
 	if tester.HasText("Copy Prompt") || s.commitPromptIncludeExcerpt {
@@ -80,7 +84,7 @@ func TestCommitAIPromptRequiresPreviewAndExplicitOptIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	for _, want := range []string{"Commit message draft", "Include code excerpts", "Generate with Pi", "Review Prompt"} {
+	for _, want := range []string{"Commit message draft", "Include code excerpts", "Generate with AI", "Review Prompt"} {
 		if !tester.HasText(want) {
 			t.Fatalf("preview lacks %q: %q", want, tester.Texts())
 		}

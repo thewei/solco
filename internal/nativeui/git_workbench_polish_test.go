@@ -1,7 +1,7 @@
 package nativeui
 
 /**
- * [INPUT]: MyGo Git controls, folder changed paths, fake asynchronous Pi suggestion
+ * [INPUT]: MyGo Git controls, folder changed paths, fake asynchronous AI suggestion over the configured channel
  * [OUTPUT]: Layout switching, nonduplicated refresh, folder staging selection, AI composer handoff
  * [POS]: Git polish regression and no-automatic-commit contract
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -16,6 +16,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/settings"
 )
 
 func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
@@ -216,15 +217,18 @@ func TestGitQuickAICommitFillsSubjectButNeverCommits(t *testing.T) {
 	s.git.rootOf[s.git.root] = s.git.root
 	s.git.refreshing = true
 	s.showSurface(WorkspaceSurfaceDiff)
+	s.commitSecrets = commitMapSecrets{commitAPIKeyName: "test-key-123"}
+	s.settings.Workbench.CommitAPI = settings.CommitAPI{Endpoint: "https://commit.test/v1", Model: "test-model"}
+	s.commitAPIKeySet = true
 	s.gitQuickBody = "Keep manually written body"
 	queue := make(chan func(), 2)
 	s.uiApplyOverride = func(fn func()) { queue <- fn }
-	s.piCommitExecutor = func(ctx context.Context, req agent.PiCommitRequest) (agent.PiCommitResponse, error) {
-		if req.Root != s.git.root || !strings.Contains(req.Prompt, "File: src/main.go") || !strings.Contains(req.Prompt, "Do NOT stage, commit, push") ||
+	s.commitGenExecutor = func(ctx context.Context, req agent.CommitRequest) (agent.CommitResponse, error) {
+		if req.Endpoint != "https://commit.test/v1" || !strings.Contains(req.Prompt, "File: src/main.go") || !strings.Contains(req.Prompt, "Do NOT stage, commit, push") ||
 			strings.Contains(req.Prompt, "fmt.Println") {
-			return agent.PiCommitResponse{}, context.Canceled
+			return agent.CommitResponse{}, context.Canceled
 		}
-		return agent.PiCommitResponse{Message: "feat: refine Git operations\n\nGenerated details"}, nil
+		return agent.CommitResponse{Message: "feat: refine Git operations\n\nGenerated details"}, nil
 	}
 	tt := ui.NewTester(s.View, 1200, 800)
 	tt.Frame()
@@ -232,23 +236,23 @@ func TestGitQuickAICommitFillsSubjectButNeverCommits(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if err := tt.ChooseMenuItem("Draft Subject with Pi"); err != nil {
+	if err := tt.ChooseMenuItem("Draft Subject with AI"); err != nil {
 		t.Fatal(err)
 	}
-	if !s.piQuickRunning {
-		t.Fatal("Pi was not started by split button")
+	if !s.commitQuickRunning {
+		t.Fatal("AI was not started by split button")
 	}
 	deadline := time.After(3 * time.Second)
-	for s.piQuickRunning {
+	for s.commitQuickRunning {
 		select {
 		case apply := <-queue:
 			apply()
 		case <-deadline:
-			t.Fatal("Pi completion timeout")
+			t.Fatal("AI completion timeout")
 		}
 	}
 	if s.gitQuickSubject != "feat: refine Git operations" || s.gitQuickBody != "Keep manually written body" || s.git.committing || s.surface.current() != WorkspaceSurfaceDiff {
-		t.Fatalf("AI must fill Subject only and never commit: subject=%q body=%q error=%q mode=%v", s.gitQuickSubject, s.gitQuickBody, s.piQuickError, s.surface.current())
+		t.Fatalf("AI must fill Subject only and never commit: subject=%q body=%q error=%q mode=%v", s.gitQuickSubject, s.gitQuickBody, s.commitQuickError, s.surface.current())
 	}
 }
 
@@ -257,23 +261,26 @@ func TestGitQuickAIRejectsStaleDraft(t *testing.T) {
 	s.git.rootOf[s.git.root] = s.git.root
 	s.git.refreshing = true
 	s.showSurface(WorkspaceSurfaceDiff)
+	s.commitSecrets = commitMapSecrets{commitAPIKeyName: "test-key-123"}
+	s.settings.Workbench.CommitAPI = settings.CommitAPI{Endpoint: "https://commit.test/v1", Model: "test-model"}
+	s.commitAPIKeySet = true
 	queue := make(chan func(), 1)
 	s.uiApplyOverride = func(fn func()) { queue <- fn }
-	s.piCommitExecutor = func(context.Context, agent.PiCommitRequest) (agent.PiCommitResponse, error) {
-		return agent.PiCommitResponse{Message: "feat: obsolete"}, nil
+	s.commitGenExecutor = func(context.Context, agent.CommitRequest) (agent.CommitResponse, error) {
+		return agent.CommitResponse{Message: "feat: obsolete"}, nil
 	}
 	s.startQuickAICommit()
 	s.gitQuickSubject = "feat: my newer draft"
 	deadline := time.After(3 * time.Second)
-	for s.piQuickRunning {
+	for s.commitQuickRunning {
 		select {
 		case f := <-queue:
 			f()
 		case <-deadline:
-			t.Fatal("Pi timeout")
+			t.Fatal("AI timeout")
 		}
 	}
-	if s.gitQuickSubject != "feat: my newer draft" || s.piQuickError == "" || s.git.committing {
+	if s.gitQuickSubject != "feat: my newer draft" || s.commitQuickError == "" || s.git.committing {
 		t.Fatal("stale AI result overwrote user draft")
 	}
 }

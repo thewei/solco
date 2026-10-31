@@ -87,13 +87,13 @@ func (s *Shell) commitSurface(c *ui.Context) {
 							for _, file := range snap.Files {
 								s.surface.commit.Selected[file.Path] = true
 							}
-							s.cancelPiCommitSuggestion()
+							s.cancelCommitAISuggestion()
 						}
 						if compactButton(c, "Clear Selection").Clicked() {
 							for _, file := range snap.Files {
 								s.surface.commit.Selected[file.Path] = false
 							}
-							s.cancelPiCommitSuggestion()
+							s.cancelCommitAISuggestion()
 						}
 					})
 					for i := range snap.Files {
@@ -159,7 +159,7 @@ func (s *Shell) commitActionFooter(c *ui.Context) {
 				label = "Amend " + label
 			}
 			ready := len(selected) > 0 && strings.TrimSpace(s.surface.commit.Subject) != "" &&
-				!s.surface.commit.InFlight && s.surface.commit.Captured && !s.piCommitRunning
+				!s.surface.commit.InFlight && s.surface.commit.Captured && !s.commitGenRunning
 			ui.Textf(c, "%d selected", len(selected)).FontSize(Typography().Caption).TextColor(t.TextMuted)
 			ui.Box(c).Grow(1)
 			if compactButton(c, "Cancel Commit").Clicked() {

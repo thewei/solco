@@ -45,7 +45,9 @@ var settingsLabels = map[string][][2]string{
 		{"", "Integration"}, {"", "Status hook"},
 	},
 	"/settings/git": {
-		{"Commit message rules", "Commit message rules"}, {"Commit message generator", "Pi path"},
+		{"Commit message rules", "Commit message rules"}, {"Commit message generator", "Status"},
+		{"Commit message generator", "Endpoint"}, {"Commit message generator", "Model"},
+		{"Commit message generator", "API key"}, {"Commit message generator", "Check"},
 	},
 	"/settings/diagnostics": {
 		{"About", "Solco"}, {"About", "System"}, {"About", "Herdr"}, {"About", "Session"}, {"About", "Log file"},

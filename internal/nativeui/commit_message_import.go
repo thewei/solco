@@ -48,7 +48,7 @@ func parseCommitCandidate(text string) (subject, body string, err error) {
 }
 
 func (s *Shell) resetCommitAIFlow() {
-	s.resetPiCommitSuggestion()
+	s.resetCommitAISuggestion()
 	s.commitPromptPreviewOpen = false
 	s.commitPromptIncludeExcerpt = false
 	s.commitPromptTextVisible = false

@@ -50,8 +50,8 @@ func TestMatchSettings(t *testing.T) {
 		t.Fatalf("an empty query matched %d entries", len(got))
 	}
 	hits := matchSettings(entries, "ENDPOINT")
-	if len(hits) != 1 || hits[0].Path != "/settings/voice" {
-		t.Fatalf("endpoint hits = %+v, want the Voice page's row", hits)
+	if len(hits) != 2 || hits[0].Path != "/settings/voice" || hits[1].Path != "/settings/git" {
+		t.Fatalf("endpoint hits = %+v, want the Voice row first and the Git generator's row second", hits)
 	}
 	// A group name finds its rows; a page name finds the page and its rows.
 	if hits := matchSettings(entries, "behavior"); len(hits) != 4 {

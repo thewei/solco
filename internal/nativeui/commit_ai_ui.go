@@ -1,10 +1,9 @@
 package nativeui
 
 /**
- * [INPUT]: selected reviewed Git snapshot, Pi suggestion state and privacy preference
- * [OUTPUT]: compact disclosure-based Pi drafting UI within the Commit editor
- * [POS]: one optional Commit subsection; no duplicate modal, Git task or provider runtime
- * [PROTOCOL]: update this header on change, then check CLAUDE.md
+ * [INPUT]: selected reviewed Git snapshot, the configured API channel's suggestion state and privacy preference
+ * [OUTPUT]: compact disclosure-based AI drafting UI within the Commit editor
+ * [POS]: one optional Commit subsection; no duplicate modal, Git task or provider runtime; disabled until endpoint, model and key are configured
  */
 
 import (
@@ -21,13 +20,17 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 	sp := Spacing()
 	t := c.Theme()
 	if !s.commitPromptPreviewOpen {
-		open := tipped(c, compactButton(c, "Draft Commit Message…"), "Write a commit message with Pi")
-		open.Disabled(len(s.selectedCommitPaths()) == 0)
+		open := tipped(c, compactButton(c, "Draft Commit Message…"), "Generate a commit message draft with the configured AI")
+		open.Disabled(len(s.selectedCommitPaths()) == 0 || !s.commitGeneratorUsable())
 		if open.Clicked() {
 			s.commitPromptPreviewOpen = true
 			s.commitPromptIncludeExcerpt = false
 			s.commitPromptTextVisible = false
 			s.commitAIManualEntryOpen = false
+		}
+		if !s.commitGeneratorUsable() && len(s.selectedCommitPaths()) > 0 {
+			ui.Text(c, "AI drafting is unavailable. Configure endpoint, model and API key in Settings → Git.").
+				FontSize(Typography().Caption).TextColor(t.TextMuted)
 		}
 		return
 	}
@@ -37,7 +40,7 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 		ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Commit message draft").FontSize(Typography().Section).FontWeight(WeightSemibold).Grow(1)
 			if compactButton(c, "Hide Draft").Clicked() {
-				s.cancelPiCommitSuggestion()
+				s.cancelCommitAISuggestion()
 				s.commitPromptPreviewOpen = false
 			}
 		})
@@ -55,18 +58,18 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 				TextColor(t.Warning)
 		}
 		ui.Row(c).FillWidth().Gap(sp.S).Wrap().AlignItems(ui.Center).Children(func() {
-			if s.piCommitRunning {
+			if s.commitGenRunning {
 				ui.Spinner(c).Size(14, 14)
-				ui.Text(c, "Generating with Pi…").FontSize(Typography().Caption).TextColor(t.TextMuted)
+				ui.Text(c, "Generating…").FontSize(Typography().Caption).TextColor(t.TextMuted)
 				if regularButton(c, "Cancel Generation").Clicked() {
-					s.cancelPiCommitSuggestion()
-					s.piCommitError = "Pi generation canceled."
+					s.cancelCommitAISuggestion()
+					s.commitGenError = "Generation canceled."
 				}
 			} else {
-				generate := regularPrimaryButton(c, "Generate with Pi")
-				generate.Disabled(preview.Text == "" || !s.surface.commit.Captured || s.surface.commit.InFlight)
+				generate := regularPrimaryButton(c, "Generate with AI")
+				generate.Disabled(preview.Text == "" || !s.surface.commit.Captured || s.surface.commit.InFlight || !s.commitGeneratorUsable())
 				if generate.Clicked() {
-					s.startPiCommitSuggestion()
+					s.startCommitAISuggestion()
 				}
 			}
 			review := regularButton(c, "Review Prompt")
@@ -80,8 +83,8 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 				}
 			}
 		})
-		if s.piCommitError != "" {
-			ui.Text(c, s.piCommitError).FontSize(Typography().Caption).TextColor(t.TextMuted)
+		if s.commitGenError != "" {
+			ui.Text(c, s.commitGenError).FontSize(Typography().Caption).TextColor(t.TextMuted)
 		}
 		if s.commitPromptTextVisible && preview.Text != "" {
 			ui.Column(c).FillWidth().Height(118).Clip().
@@ -109,14 +112,14 @@ func (s *Shell) commitAISection(c *ui.Context, snap *gitworkbench.ChangesSnapsho
 						s.commitAIReplaceConfirm = false
 					}
 					replace := regularButton(c, "Replace Message")
-					replace.Disabled(s.surface.commit.InFlight || s.piCommitRunning)
+					replace.Disabled(s.surface.commit.InFlight || s.commitGenRunning)
 					if replace.Clicked() {
 						s.replaceCommitMessageWithSuggestion()
 					}
 				})
 			} else {
 				use := regularButton(c, "Use Suggested Message")
-				use.Disabled(strings.TrimSpace(s.commitAIResponse) == "" || s.surface.commit.InFlight || s.piCommitRunning)
+				use.Disabled(strings.TrimSpace(s.commitAIResponse) == "" || s.surface.commit.InFlight || s.commitGenRunning)
 				if use.Clicked() {
 					s.applyManualAISuggestion()
 				}

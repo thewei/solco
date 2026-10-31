@@ -152,19 +152,29 @@ type TerminalSettings struct {
 }
 
 // WorkbenchSettings holds Git Workbench presentation preferences (0.10).
-// DefaultCommitPrompt is the editable half of the user's Pi commit-message
+// DefaultCommitPrompt is the editable half of the user's commit-message
 // request: style only. The safety rules are fixed in code
-// (agent.BuildPiCommitPrompt), so editing this can't drop them. Plain
+// (agent.BuildCommitPrompt), so editing this can't drop them. Plain
 // preference text, never a secret/API key.
 const DefaultCommitPrompt = `Use Conventional Commits: type(scope): imperative summary, maximum 72 characters.
 Choose type from feat, fix, refactor, perf, docs, test, build, ci, chore.
 Scope is optional. Prefer a concise English subject without a period.
 Add a body only if it explains WHY a change was needed or meaningful tradeoffs; use short bullet points.`
 
+// CommitAPI configures the AI commit-message generator. Endpoint is the
+// base URL of an OpenAI-compatible provider; "/chat/completions" is
+// appended unless already present. Model is the provider's model name.
+type CommitAPI struct {
+	Endpoint string `json:"endpoint,omitempty"`
+	Model    string `json:"model,omitempty"`
+}
+
 // WorkbenchSettings controls presentation and safe AI drafting preferences.
 type WorkbenchSettings struct {
-	// PiExecutable is an optional full path to the Pi CLI. Empty uses PATH.
-	PiExecutable string `json:"pi_executable,omitempty"`
+	// CommitAPI is the one AI commit-message channel: an OpenAI-compatible
+	// chat/completions endpoint. The API key is not stored here — it lives
+	// in the system credential store (mygo.Secrets, key git.commitapi.token).
+	CommitAPI CommitAPI `json:"commit_api,omitempty"`
 	// CommitPrompt overrides the default commit convention, never sent
 	// automatically. Per-app preferences are separate from Git operations.
 	CommitPrompt string `json:"commit_prompt,omitempty"`
