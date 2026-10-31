@@ -42,6 +42,14 @@ func (s *Shell) chatWebviewFor() *mygo.WebView {
 			slog.Warn("create chat webview failed; native chat stays", "error", err)
 			return nil
 		}
+		// The page never navigates away: a link click would replace the chat
+		// with a web page. Safe links go to the system browser instead.
+		view.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
+			e.PreventDefault()
+			if chatNavigationDecision(e.URL, e.UserInitiated) {
+				go func() { _ = mygo.Shell.OpenExternal(e.URL) }()
+			}
+		})
 		s.chatWebview = view
 	}
 	return s.chatWebview
