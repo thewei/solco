@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.24",
     "github-markdown-css": "^5.9.0",
     "mygo-runtime": "^0.6.4",
     "react": "^18.3.1",
