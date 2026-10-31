@@ -1128,7 +1128,7 @@ export function App() {
                 return (
                   <div
                     key={keys[index]}
-                    className={row ? "vrow" : "trow"}
+                    className={row ? "vrow" : undefined}
                     data-turn={index}
                     data-index={row ? index : undefined}
                     ref={row ? list.measure : undefined}
