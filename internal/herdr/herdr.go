@@ -1,7 +1,7 @@
 // Package herdr is the Go-side adapter for the Herdr runtime.
 //
 // [INPUT]: Herdr CLI/session disk layout and local session sockets.
-// [OUTPUT]: runtime instance discovery, bootstrap, native-TUI launch commands, the shared one-shot CLI runner (RunCLI), the typed old-protocol sentinel (ErrProtocolTooOld), the not-writable updater sentinel (ErrUpdateNotWritable + UpdateAsRootCommand), the live runtime probe (ProbeRuntime), and UpgradeRuntime (update → verify protocol → stop a stale server).
+// [OUTPUT]: runtime instance discovery, bootstrap, native-TUI launch commands (TerminalAttachCommand for the desktop's controller slot, TerminalObserveCommand for read-only observers such as the phone Host), the shared one-shot CLI runner (RunCLI), the typed old-protocol sentinel (ErrProtocolTooOld), the not-writable updater sentinel (ErrUpdateNotWritable + UpdateAsRootCommand), the live runtime probe (ProbeRuntime), and UpgradeRuntime (update → verify protocol → stop a stale server).
 // [POS]: migration-era runtime adapter; Herdr remains the sole runtime authority.
 package herdr
 
@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -192,6 +193,47 @@ func (m *Manager) TerminalAttachCommand(session, terminalID string) ([]string, e
 }
 
 func terminalAttachArgs(cli, socketPath, configPath, terminalID string) []string {
+	return herdrChildArgs(cli, socketPath, configPath, "terminal", "attach", terminalID)
+}
+
+// TerminalObserveCommand builds the child command that renders one Herdr
+// terminal read-only in the caller's own grid (`herdr terminal session observe
+// <terminal_id> --cols N --rows M`). Unlike attach it takes no controller slot,
+// so it coexists with the desktop's attached client without resizing the Pane
+// and never needs --takeover (probed on Herdr 0.9.5, 2026-10-31). It emits one
+// JSON `terminal.frame` per line on stdout.
+func (m *Manager) TerminalObserveCommand(session, terminalID string, cols, rows int) ([]string, error) {
+	session = strings.TrimSpace(session)
+	terminalID = strings.TrimSpace(terminalID)
+	if terminalID == "" {
+		return nil, errors.New("Herdr terminal id is empty")
+	}
+	if cols < 1 || rows < 1 {
+		return nil, fmt.Errorf("terminal grid %dx%d is empty", cols, rows)
+	}
+	socket, err := m.socketFor(session)
+	if err != nil {
+		return nil, err
+	}
+	cli, err := resolveCLI()
+	if err != nil {
+		return nil, err
+	}
+	if runtime.GOOS == "windows" {
+		return nil, errors.New("native Herdr terminal command is not ported to Windows yet")
+	}
+	return terminalObserveArgs(cli, socket, ConfigPath(), terminalID, cols, rows), nil
+}
+
+func terminalObserveArgs(cli, socketPath, configPath, terminalID string, cols, rows int) []string {
+	return herdrChildArgs(cli, socketPath, configPath,
+		"terminal", "session", "observe", terminalID, "--cols", strconv.Itoa(cols), "--rows", strconv.Itoa(rows))
+}
+
+// herdrChildArgs is the shared environment wrapper of every Herdr terminal
+// child: nested-TUI variables unset, Solco's hook socket and the session's
+// Herdr socket/config pinned.
+func herdrChildArgs(cli, socketPath, configPath string, tail ...string) []string {
 	args := []string{"/usr/bin/env"}
 	for _, key := range nestedTUIEnvKeys {
 		args = append(args, "-u", key)
@@ -206,11 +248,8 @@ func terminalAttachArgs(cli, socketPath, configPath, terminalID string) []string
 		// The pre-rebrand name too: hook scripts the old name installed read it.
 		args = append(args, "SOLCO_SOCKET_PATH="+solcoSock, "SHARDLANE_SOCKET_PATH="+solcoSock)
 	}
-	return append(args,
-		"HERDR_SOCKET_PATH="+socketPath,
-		"HERDR_CONFIG_PATH="+configPath,
-		cli, "terminal", "attach", terminalID,
-	)
+	args = append(args, "HERDR_SOCKET_PATH="+socketPath, "HERDR_CONFIG_PATH="+configPath, cli)
+	return append(args, tail...)
 }
 
 // SocketPath returns Herdr's canonical per-session local socket path.

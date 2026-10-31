@@ -1,0 +1,36 @@
+{
+  "instance": "default",
+  "revision": 1,
+  "workspaces": [
+    {
+      "id": "w1",
+      "label": "solco",
+      "status": "working",
+      "cwd": "/work/solco",
+      "tabs": [
+        {
+          "id": "w1:t1",
+          "label": "main",
+          "status": "working",
+          "panes": [
+            {
+              "paneId": "w1:p1",
+              "terminalId": "term_a",
+              "label": "claude",
+              "cwd": "/work/solco",
+              "agent": {
+                "provider": "claude",
+                "status": "working"
+              }
+            },
+            {
+              "paneId": "w1:p2",
+              "terminalId": "term_b",
+              "label": "zsh"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

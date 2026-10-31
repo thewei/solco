@@ -182,3 +182,32 @@ func TestTerminalAttachArgsTargetsPaneWithoutTakeover(t *testing.T) {
 		t.Fatalf("attach args must never take over an unrelated controller: %q", joined)
 	}
 }
+
+func TestTerminalObserveArgsAreReadOnlyAndSized(t *testing.T) {
+	args := terminalObserveArgs("/usr/local/bin/herdr", "/tmp/herdr.sock", "/tmp/config.toml", "term-42", 51, 19)
+	joined := strings.Join(args, " ")
+	for _, want := range []string{
+		"HERDR_SOCKET_PATH=/tmp/herdr.sock",
+		"HERDR_CONFIG_PATH=/tmp/config.toml",
+		"/usr/local/bin/herdr terminal session observe term-42 --cols 51 --rows 19",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("observe args %q missing %q", joined, want)
+		}
+	}
+	for _, banned := range []string{"--takeover", " attach ", " control "} {
+		if strings.Contains(joined, banned) {
+			t.Fatalf("observe args must stay a read-only observer, found %q in %q", banned, joined)
+		}
+	}
+}
+
+func TestTerminalObserveCommandRejectsEmptyTargetAndGrid(t *testing.T) {
+	m := &Manager{}
+	if _, err := m.TerminalObserveCommand("", "  ", 51, 19); err == nil {
+		t.Fatal("an empty terminal id must be refused")
+	}
+	if _, err := m.TerminalObserveCommand("", "term-42", 0, 19); err == nil {
+		t.Fatal("an empty grid must be refused")
+	}
+}
