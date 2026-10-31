@@ -197,6 +197,25 @@ func TestSubagentStoppedNeedsTheProviderInterruptMarker(t *testing.T) {
 		t.Fatalf("only a closing marker stops a run: resumed=%v plain=%v", got["resumed"].Stopped, got["plain"].Stopped)
 	}
 
+	// omp: an aborted assistant row last before session_exit stops the run;
+	// an earlier abort that was followed by more conversation does not.
+	omproot := filepath.Join(t.TempDir(), "p")
+	ompParent := omproot + ".jsonl"
+	writeFile(t, ompParent, "{}\n")
+	ompHeader := fmt.Sprintf(`{"type":"session","timestamp":"2026-10-31T02:00:00.000Z","parentSession":%q}`+"\n", ompParent)
+	aborted := `{"type":"message","message":{"role":"assistant","stopReason":"aborted"}}` + "\n"
+	exit := `{"type":"custom","customType":"session_exit"}` + "\n"
+	writeFile(t, filepath.Join(omproot, "cut.jsonl"), ompHeader+aborted+`{"type":"custom","customType":"todo_hud_state"}`+"\n"+exit)
+	writeFile(t, filepath.Join(omproot, "retried.jsonl"), ompHeader+aborted+`{"type":"message","message":{"role":"assistant","stopReason":"stop"}}`+"\n"+exit)
+	writeFile(t, filepath.Join(omproot, "alive.jsonl"), ompHeader+aborted)
+	byOMP := map[string]Subagent{}
+	for _, sub := range SubagentsFor(AgentOMP, ompParent) {
+		byOMP[sub.Name] = sub
+	}
+	if !byOMP["cut"].Stopped || byOMP["retried"].Stopped || byOMP["alive"].Stopped {
+		t.Fatalf("omp cut=%v retried=%v alive=%v", byOMP["cut"].Stopped, byOMP["retried"].Stopped, byOMP["alive"].Stopped)
+	}
+
 	cdir := filepath.Join(root, "sessions", time.Now().Format("2006/01/02"))
 	ts := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano)
 	parent := filepath.Join(cdir, "rollout-p.jsonl")

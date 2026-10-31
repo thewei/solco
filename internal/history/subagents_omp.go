@@ -56,6 +56,7 @@ func ompSubagents(sessionPath string) []Subagent {
 		if at, err := time.Parse(time.RFC3339Nano, header.Timestamp); err == nil {
 			started = at
 		}
+		ended := tailContains(file, info.Size(), ompTailBytes, `"customType":"session_exit"`)
 		list = append(list, Subagent{
 			ID:        name,
 			Provider:  AgentOMP,
@@ -64,10 +65,35 @@ func ompSubagents(sessionPath string) []Subagent {
 			UpdatedAt: info.ModTime(),
 			Path:      file,
 			Name:      name,
-			Ended:     tailContains(file, info.Size(), ompTailBytes, `"customType":"session_exit"`),
+			Ended:     ended,
+			Stopped:   ended && ompLastMessageAborted(file, info.Size()),
 		})
 	}
 	return finishSubagents(list)
+}
+
+// ompAbortTail covers an aborted assistant row plus the rows after it.
+const ompAbortTail = 32 << 10
+
+// ompLastMessageAborted reports whether the last conversation row (custom
+// rows such as session_exit and tool_execution_* are skipped) is an assistant
+// message omp itself marked `"stopReason":"aborted"` — what a child that was
+// cut short ends on (checked on real sessions, 2026-10-31). A row longer than
+// the tail is only partly seen and never matches.
+func ompLastMessageAborted(path string, size int64) bool {
+	tail := readTail(path, size, ompAbortTail)
+	lines := bytes.Split(bytes.TrimRight(tail, "\r\n"), []byte("\n"))
+	for i := len(lines) - 1; i >= 0; i-- {
+		if i == 0 && size > ompAbortTail {
+			return false // the first line of a mid-file tail is cut
+		}
+		line := lines[i]
+		if !bytes.HasPrefix(line, []byte(`{"type":"message"`)) {
+			continue
+		}
+		return bytes.Contains(line, []byte(`"role":"assistant"`)) && bytes.Contains(line, []byte(`"stopReason":"aborted"`))
+	}
+	return false
 }
 
 // ompHeader reads the `session` row out of a file's first lines.

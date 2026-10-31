@@ -27,8 +27,8 @@ type SubagentCard struct {
 	Description string `json:"description,omitempty"`
 	// Status is "running", "done", "stopped" or "failed". "failed" is the parent's
 	// tool result; "stopped" only the provider's own interruption marker in the
-	// child's file (Claude "[Request interrupted by user]", Codex turn_aborted) —
-	// omp has none, so it never reads "stopped".
+	// child's file (Claude "[Request interrupted by user]", Codex turn_aborted,
+	// omp's aborted last assistant row before session_exit).
 	Status    string `json:"status"`
 	StartedMS int64  `json:"startedMs,omitempty"`
 	UpdatedMS int64  `json:"updatedMs,omitempty"`

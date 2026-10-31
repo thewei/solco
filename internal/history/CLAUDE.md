@@ -20,7 +20,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `codex.go`：Codex rollout 会话流解析器。
 - `codex_blocks.go`：Codex 工具与内容块映射。
 - `usage.go`：按需流式读取单个会话文件的 token 用量（输入/输出/缓存读写）与按模型×思考档位的路由聚合（Pi/OMP、Claude Code 按消息 id 去重、Codex 取累计 total，并带回它自己 rollout 里的 `model_context_window`→`SessionUsage.Window`）；不进目录库、只读、256 MiB/8 MiB 行上限，不支持的 Provider 返回 ErrNoUsage。
-- `subagents.go`：子代理清单统一记录 `Subagent`（Claude `<session>/subagents/agent-*`、omp、Codex；`SubagentsFor` 分派；Active=20s 内写过或末个工具调用挂起(Busy,10min)且未 Ended；Stopped=Provider 自己的中断标记（Claude 子文件末行 `[Request interrupted by user]`、Codex `turn_aborted`；omp 无）；布局缺失即空，Herdr 无父子关系）
+- `subagents.go`：子代理清单统一记录 `Subagent`（Claude `<session>/subagents/agent-*`、omp、Codex；`SubagentsFor` 分派；Active=20s 内写过或末个工具调用挂起(Busy,10min)且未 Ended；Stopped=Provider 自己的中断标记（Claude 子文件末行 `[Request interrupted by user]`、Codex `turn_aborted`、omp 末条对话行为 `stopReason:"aborted"` 且已 session_exit）；布局缺失即空，Herdr 无父子关系）
 - `subagents_codex.go` / `subagents_omp.go`：Codex 子 rollout（`thread_spawn`↔`spawn_agent`）与 omp 子会话（`parentSession`↔`task`）的只读识别与缓存
 - `subagents_read.go`：`ReadSubagent`/`SubagentDetail`（抽屉与卡片摘要、handback 结果、FirstTs）
 - `usage_daily.go`：Quota（原 Usage）页的 30 天活动条数据——按本地日汇总 Claude Code / Codex 会话文件里的 token（每个文件按 (mtime,size) 只解析一次，缓存只在内存；不落盘、不记录历史、日期补零到今天）。
