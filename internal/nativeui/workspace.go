@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 mygo/ui, internal/agent, WorkspacePrimarySurface 状态
  * [OUTPUT]: 对外提供 workspacePage, agentCardForPane, workspaceHomeCenter, submitHomePrompt
- * [POS]: Terminal/Chat/Diff/Commit 唯一主表面切换中心
+ * [POS]: Terminal/Chat/Diff/Commit 唯一主表面切换中心；选中回跳按 paneSurfaceMemo 记忆回 Chat/Terminal（2026-10-31 窗格表面记忆）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 package nativeui
@@ -161,13 +161,14 @@ func (s *Shell) showSurface(kind WorkspaceSurfaceKind) {
 	}
 	switch kind {
 	case WorkspaceSurfaceTerminal:
-		s.surface.resetToTerminal(s.workspaceContext())
-		if err := s.syncTerminals(s.projection); err != nil {
-			s.errText = err.Error()
-		}
-		s.syncGitContext()
+		s.enterTerminalSurface()
+		// The pane is on its Terminal now; navigation back to it must
+		// return here (2026-10-31 pane-surface memory).
+		s.rememberPaneSurface(s.selectedPaneID, WorkspaceSurfaceTerminal)
 	case WorkspaceSurfaceChat:
-		s.openWorkspaceChat()
+		if s.openWorkspaceChat() {
+			s.rememberPaneSurface(s.selectedPaneID, WorkspaceSurfaceChat)
+		}
 	case WorkspaceSurfaceDiff:
 		if s.surface.current() == WorkspaceSurfaceTerminal {
 			s.surface.openDiff(s.workspaceContext(), s.surface.diff.SelectedPath)
@@ -178,6 +179,17 @@ func (s *Shell) showSurface(kind WorkspaceSurfaceKind) {
 	case WorkspaceSurfaceCommit:
 		s.openCommitSurface()
 	}
+}
+
+// enterTerminalSurface is the Terminal entry shared by showSurface and the
+// selection sync: reset the surface state machine onto the current context,
+// re-attach the Tab's terminals and refresh Git facts.
+func (s *Shell) enterTerminalSurface() {
+	s.surface.resetToTerminal(s.workspaceContext())
+	if err := s.syncTerminals(s.projection); err != nil {
+		s.errText = err.Error()
+	}
+	s.syncGitContext()
 }
 
 // workspaceChatAvailable fences user-triggered Chat navigation to an
@@ -194,14 +206,17 @@ func (s *Shell) chatUnavailableNotice() {
 
 // openWorkspaceChat activates Chat only for an Agent-backed pane. The
 // ordinary shell remains on its current surface; no stale Chat draft or
-// conversation may be projected as though it belongs to that shell.
-func (s *Shell) openWorkspaceChat() {
+// conversation may be projected as though it belongs to that shell. It
+// reports whether Chat opened, so the pane-surface memory only records
+// panes that really showed Chat.
+func (s *Shell) openWorkspaceChat() bool {
 	if !s.workspaceChatAvailable() {
 		s.chatUnavailableNotice()
-		return
+		return false
 	}
 	s.surface.openChat(s.workspaceContext())
 	s.rebindWorkspaceChat()
+	return true
 }
 
 // rebindWorkspaceChat reconciles the active chat session with the selected pane.
@@ -323,12 +338,25 @@ func (s *Shell) agentCardForPane(targetPaneID string) (agent.AgentCardModel, boo
 }
 
 // syncWorkspaceForSelection rebinds everything that follows the selected
-// Tab: Git context, terminal sync and surface validity (GWB-031/033).
+// Tab: Git context, terminal sync and surface validity (GWB-031/033). The
+// surface follows the pane-surface memory (2026-10-31): navigation back to
+// a pane lands on the surface it was last used on — Chat when remembered
+// and still bindable, Terminal otherwise. Diff/Commit are workspace-level
+// and are never flipped here (TestSidebarWayHomeDoesNotRestoreDiff).
 func (s *Shell) syncWorkspaceForSelection() {
 	ctx := s.workspaceContext()
 	if !s.surface.isValid(ctx) {
-		// Context changed (project/tab/pane/instance): Terminal, per §6.
-		s.surface.resetToTerminal(ctx)
+		// Context changed (project/tab/instance): the new pane's remembered
+		// surface, else Terminal (§6 with the pane-surface memory). No
+		// terminal sync here — applyProjection and syncSelectionPresentation
+		// own it around every selection change.
+		if s.paneSurfaceMemo[s.selectedPaneID] == WorkspaceSurfaceChat && s.workspaceChatAvailable() {
+			s.openWorkspaceChat()
+		} else {
+			s.surface.resetToTerminal(ctx)
+		}
+	} else {
+		s.reconcilePaneSurface()
 	}
 	s.syncGitContext()
 	if s.surface.current() == WorkspaceSurfaceDiff || s.surface.current() == WorkspaceSurfaceCommit {
@@ -336,5 +364,21 @@ func (s *Shell) syncWorkspaceForSelection() {
 	}
 	if s.surface.current() == WorkspaceSurfaceChat {
 		s.rebindWorkspaceChat()
+	}
+}
+
+// reconcilePaneSurface keeps an unchanged context honest with the selected
+// pane's remembered view: switching panes inside a Tab lands each pane
+// where it was last used (2026-10-31 pane-surface memory).
+func (s *Shell) reconcilePaneSurface() {
+	switch s.surface.current() {
+	case WorkspaceSurfaceChat:
+		if s.paneSurfaceMemo[s.selectedPaneID] != WorkspaceSurfaceChat {
+			s.showSurface(WorkspaceSurfaceTerminal)
+		}
+	case WorkspaceSurfaceTerminal:
+		if s.paneSurfaceMemo[s.selectedPaneID] == WorkspaceSurfaceChat && s.workspaceChatAvailable() {
+			s.showSurface(WorkspaceSurfaceChat)
+		}
 	}
 }

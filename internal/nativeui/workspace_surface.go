@@ -68,9 +68,10 @@ func (w *workspaceSurfaceState) current() WorkspaceSurfaceKind {
 	return w.kind
 }
 
-// resetToTerminal applies the "startup / workspace selection / Project/Tab/
-// Pane click → Terminal" family of transitions. A Tab/repo context change
-// always lands on Terminal (plan §6 last row) and drops prior diff state.
+// resetToTerminal applies the startup and explicit switch-to-Terminal
+// transitions. A context change drops prior diff state; whether a context
+// change lands on Terminal or a remembered Chat is the Shell's selection
+// sync call (2026-10-31 pane-surface memory), not the state machine's.
 func (w *workspaceSurfaceState) resetToTerminal(ctx WorkspaceContextKey) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -182,7 +183,3 @@ func (w *workspaceSurfaceState) isValid(ctx WorkspaceContextKey) bool {
 	defer w.mu.Unlock()
 	return w.context == ctx && w.kind != ""
 }
-
-// surfaceForNavigation maps sidebar navigation intents (Project/Tab/Pane/
-// Agent-to-Pane) to the center surface: always Terminal (plan §6).
-func surfaceForNavigation() WorkspaceSurfaceKind { return WorkspaceSurfaceTerminal }

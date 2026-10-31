@@ -727,7 +727,7 @@ func (s *Shell) paneCardHeader(c *ui.Context, k *gorexColors, surface *terminalS
 			if s.paneAgent(surface.paneID) != nil {
 				// N19 #7: the single Terminal⇄Chat switch lives here, in the
 				// card header, not in the window header.
-				s.surfaceToggle(c, k, WorkspaceSurfaceTerminal, surface.paneID)
+				s.surfaceToggle(c, k, WorkspaceSurfaceTerminal)
 			}
 			if gorexIconButton(c, k, iconSplit, "Split Right", "Split Right", false, gorexPaneBtn, gorexPaneGlyph).Clicked() {
 				s.selectPane(surface.paneID)

@@ -368,7 +368,7 @@ func TestChatSwitchTooltipNamesItsFixedShortcut(t *testing.T) {
 	tt := ui.NewTester(func(c *ui.Context) {
 		k := gorexColorsOf(c.Theme().Dark)
 		ui.Row(c).Absolute().Left(300).Top(300).Children(func() {
-			s.surfaceToggle(c, k, WorkspaceSurfaceTerminal, "p1")
+			s.surfaceToggle(c, k, WorkspaceSurfaceTerminal)
 		})
 	}, 800, 600)
 	settleFrames(tt, 3)

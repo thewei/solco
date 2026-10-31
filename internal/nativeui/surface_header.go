@@ -7,18 +7,19 @@ import (
 
 /**
  * [INPUT]: 依赖 gorex 图标按钮、showViewTerminal/showViewChat 切换、pane 卡头范式（paneCardHeader）、tooltip.go 的 tipped 与 shortcuts.go 的 chatSwitchBinding（Chat 切换钮的键帽）
- * [OUTPUT]: 提供 surfaceToggle（Terminal⇄Chat 单一形态切换）、chatSurfaceHeader（Chat 卡统一头：agent 图标/名/状态点/双击 zoom）、paneSurfaceMemo 记忆与 openAgentFromSidebar 直跳
- * [POS]: N19 UI 批：切换按钮从窗口头移入两种卡片头并合一；侧栏 Agent 点击按记忆的表面直跳
+ * [OUTPUT]: 提供 surfaceToggle（Terminal⇄Chat 单一形态切换，落点经 showSurface 记入 paneSurfaceMemo）、chatSurfaceHeader（Chat 卡统一头：agent 图标/名/状态点/双击 zoom）、paneSurfaceMemo 记忆与 openAgentFromSidebar 直跳
+ * [POS]: N19 UI 批：切换按钮从窗口头移入两种卡片头并合一；侧栏 Agent 点击按记忆的表面直跳；2026-10-31 起选中回跳（树/Tab/Agent）一律恢复窗格记忆的表面
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 // surfaceToggle renders the single Terminal⇄Chat switch — one button, two
 // shapes (N19 #7): the icon names the surface it lands on. It replaced the
 // Terminal/Chat pair in the window header and lives in both card headers.
-func (s *Shell) surfaceToggle(c *ui.Context, k *gorexColors, from WorkspaceSurfaceKind, paneID string) {
+// The switch lands through showSurface, which records the pane-surface
+// memory.
+func (s *Shell) surfaceToggle(c *ui.Context, k *gorexColors, from WorkspaceSurfaceKind) {
 	if from == WorkspaceSurfaceChat {
 		if gorexIconButton(c, k, iconTerminal, "Terminal", "Switch to Terminal", false, gorexIconBtn, gorexIconGlyph).Clicked() {
-			s.rememberPaneSurface(paneID, WorkspaceSurfaceTerminal)
 			s.showViewTerminal()
 		}
 		return
@@ -26,13 +27,14 @@ func (s *Shell) surfaceToggle(c *ui.Context, k *gorexColors, from WorkspaceSurfa
 	chat := gorexIconButton(c, k, iconChat, "Chat", "", false, gorexIconBtn, gorexIconGlyph)
 	tipped(c, chat, "Switch to Chat", tipKeys(chatSwitchBinding.keycaps()))
 	if chat.Clicked() {
-		s.rememberPaneSurface(paneID, WorkspaceSurfaceChat)
 		s.showViewChat()
 	}
 }
 
-// rememberPaneSurface records which surface a pane was last used on, so a
-// sidebar Agent click lands where the user left it (N19 #4).
+// rememberPaneSurface records which surface a pane was last used on. The
+// selection sync restores it whenever navigation lands back on the pane
+// (tree click, Tab switch, Agent jump), and SaveSession persists it, so the
+// view survives restarts (2026-10-31 pane-surface memory).
 func (s *Shell) rememberPaneSurface(paneID string, kind WorkspaceSurfaceKind) {
 	if paneID == "" {
 		return
@@ -87,7 +89,7 @@ func (s *Shell) chatSurfaceHeader(c *ui.Context, k *gorexColors) {
 			statusPill(c, s.chatDispositionSummary(), dispositionTone(s.chatDispositionNow()))
 		}
 		ui.Spacer(c)
-		s.surfaceToggle(c, k, WorkspaceSurfaceChat, s.chatPaneID)
+		s.surfaceToggle(c, k, WorkspaceSurfaceChat)
 		if a := s.paneAgent(s.chatPaneID); a != nil && a.Status != "" {
 			statusIndicator(c, normalizeRuntimeStatus(a.Status))
 		}
