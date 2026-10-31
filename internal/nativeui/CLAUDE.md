@@ -235,6 +235,7 @@ chat_changes.go: 回合改动卡的文件行：edit 类工具白名单（含 app
 chat_changes_test.go: 白名单、去重、仓库内相对化、JSON 预览嗅探、apply_patch 多文件头与 hashline 头（含被截断入参）回归
 chat_plan.go: Tasks 托盘数据：Claude TodoWrite（及整窗重放 TaskCreate/TaskUpdate，未经真机转录验证）/ Codex update_plan / omp todo（解析工具结果文本的 Phase 与 [ ]/[X] 行）只读自 transcript，归一成 pending/active/done/blocked/dropped
 chat_link.go: 无 source 窗格的自愈——邀请态列出同 provider、同 cwd、24h 内、未归档的历史会话（≤3，`LinkCandidates`），用户点选后经共享 `bindLiveFile` 跟随该文件（指纹前缀 `linked:`）；Agent 之后上报了实测身份即让位（`rebindWorkspaceChat`）。只读 History，不新增 Herdr 方法
+chat_menu.go: WebView Chat 的原生感——`ChatBridge.ShowContextMenu` 用 `mygo.Menu.Popup` 弹 macOS 右键菜单（Copy / Open·Copy Link / Quick Look·Copy Path / Copy Message / Select All / Find…；选中文字、链接、消息源文本、路径由页面带入，链接仅放行 http(s)/mailto，路径必须是 cwd/仓库根下已存在的普通文件）；`chat:menu` 事件承载只有页面能做的动作；`chatNavigationDecision` + `Page().OnWillNavigate` 让聊天页永不被链接导航带走，安全链接交系统浏览器。Quick Look 经 `qlmanage -p`（标题带 [DEBUG] 是它自带的）。只展示层，不读文件内容，无新增 Herdr 方法
 chat_plan_test.go: 三家清单解析与状态归一回归
 chat_ask.go: omp `ask` 提问的 transcript 来源：最后一个非用户回合的最后一步是未返回的 `ask`（每题 ≥2 选项、非 multi），逐题出卡（Step/Steps，`recommended` 为起始行），每题追加 Other 选项；multi 题为复选（无 Other，带 recommended 回落 Blocked）
 chat_picker.go: Claude/Codex 编号选择器（/model、/permissions）→ Question 卡：`detectPicker` 读可见屏（页脚可缺，缺时须有 ❯ 标记且行在屏尾；折叠重名标签；截断提示），`watchPicker` 有界轮询出卡并在选择器消失后退卡，`afterChatSend` 对 picker/terminal 类命令收尾（Claude 用 `s` 仅本会话）

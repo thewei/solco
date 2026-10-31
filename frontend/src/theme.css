@@ -15,6 +15,8 @@
   --ok: #2f7d5c;
   --working: #8a6d1f;
   --code-bg: rgba(0, 0, 0, 0.05);
+  /* macOS's own easing for sheets and popovers: fast out, soft landing. */
+  --spring: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 :root[data-theme="dark"] {

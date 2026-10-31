@@ -392,3 +392,21 @@ git diff --check
 | 前插定位 | `loadOlder` 记下视口顶端轮次的 key 与偏移；新页落地后按 key 找到新索引，连续 4 帧按虚拟器的 `start` 对齐（新行在上方陆续测量，估算值会被修正）。仅按 `scrollHeight` 差值对齐会偏出约一屏。 |
 
 验证（浏览器 + 桩桥接，200 轮合成会话）：只挂载 9–22 行；8 个滚动位置视口内无空洞；追加后粘底、上滚后出 pill；⌘↑×4/⌘↓×2、大纲点击首/中/末正确；前插 60 轮后锚点轮次偏移前后均为 −153；⌘F 命中未渲染的第 35 轮；30 轮会话仍为普通 DOM 且 ⌘↑/⌘↓ 对齐顶边。`tsc --noEmit` · `vite build` · `go test ./...`。
+
+## Decision 2026-10-31 · 更原生的 Chat（不像浏览器，0.11.1，presentation only）
+
+用户要求“增加更多原生体验，避免让人感觉是浏览器”，并在清单中选定 A/B/C/D/E/G/H（F 原生弹层不做）。落地与边界：
+
+| 项 | 落地 |
+|---|---|
+| A 选中 | `.chat` 整体 `user-select:none`，仅阅读文本、代码、工具输出、文件名、composer 字段可选（`:where` 清单，按钮内不可选）；⌘A / “Select All” 只选中对话正文。 |
+| B 右键 | 页面屏蔽浏览器菜单，调 `chat.showContextMenu`，Go 用 `mygo.Menu.Popup` 弹 macOS 菜单：Copy / Open·Copy Link / Quick Look·Copy Path / Copy Message / Select All / Find…。输入框保留系统自带编辑菜单（拼写、Writing Tools）。实现与测试在 `internal/nativeui/chat_menu.go`。 |
+| C 光标与焦点 | 按钮用箭头光标，链接手型，文字 I-beam；焦点环只在键盘聚焦出现（`:focus-visible` + `-webkit-focus-ring-color`）；去掉链接/路径的 hover 下划线（改为底色）。 |
+| D 滚动 | WKWebView 本身是系统弹性滚动与 overlay 滚动条，未覆盖；新增滚动后出现的标题栏下细分隔线（`.topline`）。 |
+| E 输入 | composer `spellCheck` / `autoCorrect` / `autoCapitalize` / `enterKeyHint`；拖入文件的投放提示改为系统式强调色环。Return 发送、⇧Return 换行保持不变。 |
+| G 链接 | `OnWillNavigate` 闸：聊天页任何导航都取消，用户点击的 http(s)/mailto 交系统浏览器（此前点击正文链接会把页面整个换掉）；悬停显示目标地址（Safari 式状态胶囊）；链接/图片不可拖。 |
+| H 动效 | 去掉入场位移，仅留 180ms 淡入，曲线统一为 `--spring: cubic-bezier(.32,.72,0,1)`（箭头旋转等同），减弱动态效果时过渡归零。 |
+
+未做/限制：**拖出为文件**——MyGo 的 `StartDataDrag` 只服务原生 UI 窗口的指针手势，WebView 内的 HTML5 拖拽无法产生文件拖拽，需要框架改动；**Quick Look** 走 `qlmanage -p`，窗口标题带 `[DEBUG]`（该工具自带）；原生 `NSMenu` 弹层（F）未做。
+
+验证：`go test ./internal/nativeui/`（菜单计划、URL 白名单、导航闸、路径解析）· `tsc --noEmit` · `vite build`；浏览器桩桥接核对计算样式（选择/光标/动画曲线/topline/链接胶囊/拼写属性/contextmenu 被拦截且编辑框不拦）；真机：右键弹出 macOS 菜单（Copy Message / Select All / Find…，有选区多出 Copy，文件行多出 Quick Look / Copy Path），Select All 不选中 “Thought / Ran N commands / Working” 等外壳，Find… 打开查找条，Quick Look 打开 index.html 预览。真机未覆盖：点击正文链接（现有会话里没有可点的链接，闸由单测与 MyGo 同款用法保证）。

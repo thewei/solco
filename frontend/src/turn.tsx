@@ -421,7 +421,7 @@ function relativeTo(path: string, root?: string): string {
 function PathLabel({ path }: { path: string }) {
   const at = path.lastIndexOf("/");
   return (
-    <span className="path">
+    <span className="path" data-path={path}>
       {at < 0 ? <b>{path}</b> : (
         <>
           <span>{path.slice(0, at + 1)}</span>
@@ -595,7 +595,7 @@ export function userDisplay(text: string): { text: string; output: boolean } {
 function mentions(text: string): React.ReactNode {
   return text.split(/(@"[^"\n]+"|@\S+)/g).map((part, index) =>
     part.startsWith("@") && part.length > 1 ? (
-      <span key={index} className="mention">{part.replace(/^@"(.*)"$/, "@$1")}</span>
+      <span key={index} className="mention" data-path={part.replace(/^@"?|"$/g, "")}>{part.replace(/^@"(.*)"$/, "@$1")}</span>
     ) : (
       part
     ),

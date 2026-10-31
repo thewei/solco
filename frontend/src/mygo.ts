@@ -240,6 +240,22 @@ export interface ChatCatalogModel {
 }
 
 /**
+ * ChatMenuInput is what the page knows about the right-click target. The
+ * bridge trusts none of it beyond the checks below: links must be http(s) or
+ * mailto, a path must name an existing regular file under the pane's folders.
+ */
+export interface ChatMenuInput {
+  /** Selection is the page's selected text ("" when nothing is selected). */
+  selection?: string;
+  /** Link is the href of the link under the pointer. */
+  link?: string;
+  /** Message is the Markdown source of the turn under the pointer. */
+  message?: string;
+  /** Path is a file path shown under the pointer (a chip or a changes row). */
+  path?: string;
+}
+
+/**
  * FilesPreviewContent is one read-only file the page renders. Flavor tells
  * the page which view to take: "markdown" (rendered) or "image" (DataURL);
  * text and code never reach the page.
@@ -400,6 +416,14 @@ export const chat = {
   send(text: string): Promise<ChatBridgeState> {
     return call("chat.Send", text);
   },
+  /**
+   * ShowContextMenu pops up the chat's macOS context menu at the pointer. The
+   * page calls it from its contextmenu handler (editable fields keep the
+   * system's own editing menu). It returns once the menu closes.
+   */
+  showContextMenu(in_: ChatMenuInput): Promise<void> {
+    return call("chat.ShowContextMenu", in_);
+  },
   /** Snapshot returns the current chat projection. */
   snapshot(): Promise<ChatBridgeState> {
     return call("chat.Snapshot");
@@ -481,6 +505,8 @@ export const events = {
    * also starts from Snapshot and stays current through this event alone.
    */
   chatUpdated: event<ChatBridgeState>("chat:updated"),
+  /** chatMenu is the page's own menu actions (the ones only the page can run). */
+  chatMenu: event<string>("chat:menu"),
   /**
    * filesPreviewSelected fires whenever the tree selection changes. Events
    * emitted before the page is ready are replayed by the runtime, so the

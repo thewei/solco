@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { chat, events, type ChatBridgeState, type ChatCatalog, type ChatCatalogEntry } from "./mygo";
 import { Icon, StopIcon } from "./icons";
-import { OutboxRow, TurnRow, type Outbox } from "./turn";
+import { OutboxRow, TurnRow, userDisplay, type Outbox } from "./turn";
 import { TocRail } from "./toc";
 import { turnText, useTurnList } from "./turnlist";
 import { AttachChips, IMAGE_EXT, ModelPanel, PlusPanel, SlashPanel, fileToBase64, slashMatches } from "./composer";
@@ -40,6 +40,10 @@ export function App() {
   // ⌘F: the in-conversation find bar (WebKit's own window.find does the work).
   const [finding, setFinding] = useState(false);
   const [findQuery, setFindQuery] = useState("");
+  // Native feel: a hairline under the title bar once the log has scrolled,
+  // and the target of the link under the pointer (Safari's status pill).
+  const [scrolled, setScrolled] = useState(false);
+  const [linkHint, setLinkHint] = useState("");
   const findRef = useRef<HTMLInputElement>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [completions, setCompletions] = useState<string[]>([]);
@@ -168,6 +172,7 @@ export function App() {
     const log = logRef.current;
     if (!log) return;
     const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+    setScrolled(log.scrollTop > 1);
     stickToBottom.current = atBottom;
     if (atBottom) {
       setShowJump(false);
@@ -867,19 +872,56 @@ export function App() {
   });
 
   // ⌘F opens the find bar (any session, read-only included); Esc closes it.
+  const openFind = useCallback(() => {
+    setFinding(true);
+    requestAnimationFrame(() => {
+      findRef.current?.focus();
+      findRef.current?.select();
+    });
+  }, []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        setFinding(true);
-        requestAnimationFrame(() => {
-          findRef.current?.focus();
-          findRef.current?.select();
-        });
+        openFind();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [openFind]);
+
+  // The context menu is the system's (chat.showContextMenu); the two actions
+  // only the page can run come back through chatMenu.
+  useEffect(
+    () =>
+      events.chatMenu.on((action) => {
+        if (action === "find") openFind();
+        if (action === "selectAll") {
+          const body = logRef.current?.querySelector(".col");
+          const selection = window.getSelection();
+          if (!body || !selection) return;
+          const range = document.createRange();
+          range.selectNodeContents(body);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }),
+    [openFind],
+  );
+
+  // Safari-style status pill: where the link under the pointer goes.
+  useEffect(() => {
+    const target = (event: MouseEvent) => (event.target as HTMLElement | null)?.closest?.("a[href]");
+    const over = (event: MouseEvent) => setLinkHint(target(event)?.getAttribute("href") ?? "");
+    const out = (event: MouseEvent) => {
+      if (target(event)) setLinkHint("");
+    };
+    document.addEventListener("mouseover", over);
+    document.addEventListener("mouseout", out);
+    return () => {
+      document.removeEventListener("mouseover", over);
+      document.removeEventListener("mouseout", out);
+    };
   }, []);
   const runFind = (query: string, backwards: boolean) => {
     if (query === "") return;
@@ -987,9 +1029,30 @@ export function App() {
             ? "Listening… ⏎ or ■ finishes · Esc cancels"
             : "");
 
+  // A browser's right-click menu (Reload, Inspect) has no place in an app:
+  // the system menu below is built from what is under the pointer. Editable
+  // fields keep the system's own editing menu (Cut/Copy/Paste, Spelling,
+  // Writing Tools).
+  const onContextMenu = (event: React.MouseEvent) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("textarea, input")) return;
+    event.preventDefault();
+    const row = target.closest<HTMLElement>("[data-turn]");
+    const turn = row ? turns[Number(row.dataset.turn)] : undefined;
+    void chat
+      .showContextMenu({
+        selection: window.getSelection()?.toString() ?? "",
+        link: target.closest("a[href]")?.getAttribute("href") ?? "",
+        message: turn ? (turn.user ? userDisplay(turn.text ?? "").text : (turn.narration ?? "")) : "",
+        path: target.closest<HTMLElement>("[data-path]")?.dataset.path ?? "",
+      })
+      .catch(() => {});
+  };
+
   return (
     <div
       className="chat"
+      onContextMenu={onContextMenu}
       onDragOver={(event) => {
         if (readOnly || voiceBusy || !hasFiles(event)) return;
         event.preventDefault();
@@ -1006,6 +1069,12 @@ export function App() {
       }}
     >
       {dragging ? <div className="dropveil">Drop to attach</div> : null}
+      <div className={`topline${scrolled ? " on" : ""}`} aria-hidden="true" />
+      {linkHint ? (
+        <div className="linkhint" aria-hidden="true">
+          {linkHint}
+        </div>
+      ) : null}
       {finding ? (
         <div className="findbar" role="search">
           <input
@@ -1221,6 +1290,10 @@ export function App() {
                           : "Send a message… (@ file · / commands · $ skills)"
                 }
                 aria-label="Chat prompt"
+                spellCheck
+                autoCorrect="on"
+                autoCapitalize="sentences"
+                enterKeyHint="send"
                 onChange={(event) => {
                   recallRef.current = null;
                   setDraft(event.target.value);
