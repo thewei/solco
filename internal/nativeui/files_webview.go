@@ -30,7 +30,7 @@ func (s *Shell) filesWebviewFor() *mygo.WebView {
 		return nil
 	}
 	if s.filesWebview == nil {
-		view, err := s.win.NewWebView(mygo.WebViewOptions{URL: "/files-viewer"})
+		view, err := s.win.NewWebView(mygo.WebViewOptions{URL: "/files-viewer", BackgroundColor: webviewBackground})
 		if err != nil {
 			s.filesWebviewBroken = true
 			slog.Warn("create files preview webview failed; preview states stay truthful", "error", err)

@@ -14,6 +14,12 @@ import (
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+// webviewBackground fills every Solco WebView until its page paints, so a
+// freshly shown page never flashes white. It is the pages' own --content
+// token pair (frontend/src/theme.css, light-dark follows the app's
+// appearance); TestWebviewBackgroundMatchesPageTokens keeps them in step.
+const webviewBackground = "light-dark(#f5f5f7, #161618)"
+
 // useWebviewChat reports the General.WebViewChat preference (the escape
 // hatch back to the Native chat surface).
 func (s *Shell) useWebviewChat() bool {
@@ -30,7 +36,7 @@ func (s *Shell) chatWebviewFor() *mygo.WebView {
 		return nil
 	}
 	if s.chatWebview == nil {
-		view, err := s.win.NewWebView(mygo.WebViewOptions{URL: "/chat"})
+		view, err := s.win.NewWebView(mygo.WebViewOptions{URL: "/chat", BackgroundColor: webviewBackground})
 		if err != nil {
 			s.chatWebviewBroken = true
 			slog.Warn("create chat webview failed; native chat stays", "error", err)
