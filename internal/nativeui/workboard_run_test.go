@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/thewei/solco/internal/herdr"
@@ -84,6 +85,35 @@ func TestChatTargetWaitingOnAPromptBeforeAnyConversation(t *testing.T) {
 	s.projection.Agents[0].Status = "idle"
 	if got := s.projectsView().Chat; got.Waiting {
 		t.Fatalf("an idle agent is not waiting on a prompt: %+v", got)
+	}
+}
+
+// A second click on Add, before the page has heard the sheet close, finds no
+// open draft: it must not add a duplicate task with no repository.
+func TestAddTaskNeedsTheOpenSheet(t *testing.T) {
+	var ran []string
+	s := pageShell(t, "approval_real_claude", &ran)
+	bridge := NewProjectsBridge(s)
+
+	s.workboard.newTask = newTaskDraft{}
+	bridge.AddTask(ComposeInput{Title: "Duplicate"})
+	for _, call := range ran {
+		if strings.HasPrefix(call, "add") {
+			t.Fatalf("a closed sheet still added a task: %q", call)
+		}
+	}
+
+	s.workboard.newTask = newTaskDraft{open: true, repo: "repo"}
+	bridge.AddTask(ComposeInput{Title: "Real"})
+	added := false
+	for _, call := range ran {
+		added = added || strings.HasPrefix(call, "add")
+	}
+	if !added {
+		t.Fatalf("an open sheet adds its task; ran = %v", ran)
+	}
+	if s.workboard.newTask.open {
+		t.Fatalf("the sheet closes once the task is submitted")
 	}
 }
 

@@ -71,7 +71,15 @@ func (b *ProjectsBridge) Act(kind, id string) {
 			return
 		}
 		group := b.shell.workboardTaskGroup(task)
-		for _, a := range workboardActionsForTask(task, group, b.shell.workboard.page.detail) {
+		// The open page's details belong to its own task only; a row of the
+		// Project home reads the board cache's copy of its task.
+		var detail *workboard.Detail
+		if page := b.shell.workboard.page; page.id == id && page.detail != nil {
+			detail = page.detail
+		} else if d, ok := b.shell.workboard.board.details[id]; ok {
+			detail = &d.detail
+		}
+		for _, a := range workboardActionsForTask(task, group, detail) {
 			if a.Kind == kind {
 				b.shell.startWorkboardAction(a, task)
 				return
@@ -171,6 +179,12 @@ func (b *ProjectsBridge) AddTask(in ComposeInput) {
 	b.on(func() {
 		s := b.shell
 		d := s.workboard.newTask
+		// The draft carries the repository the sheet was opened for. A second
+		// click before the page has heard the sheet close finds it empty, and
+		// would add a duplicate to no repository.
+		if !d.open {
+			return
+		}
 		kind := newTaskPlain
 		switch in.Kind {
 		case "research":
