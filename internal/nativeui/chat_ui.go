@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/agentcatalog"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
@@ -395,8 +396,8 @@ func (s *Shell) bindChatWindow(conversationID string, readOnly bool) {
 				s.chatHasOlder = window.Start > 0
 				items := conversation.ItemsFromTranscript(window.Messages)
 				s.chatTurns = conversation.DeriveTimeline(items)
-				s.chatModel = lastModelFromItems(items)
-				s.chatContextTokens = lastContextFromMessages(window.Messages)
+				s.chatModel = chatsession.LastModel(items)
+				s.chatContextTokens = chatsession.LastContext(window.Messages)
 				if readOnly {
 					meta := window.Meta
 					s.chatSession = &meta
@@ -456,7 +457,7 @@ func (s *Shell) chatDispositionNow() conversation.PromptDisposition {
 // UI state never holds an unbounded transcript).
 const (
 	chatOlderPage              = history.WindowLimit
-	chatMaxAccumulatedMessages = 4 * history.WindowLimit
+	chatMaxAccumulatedMessages = chatsession.MaxAccumulated
 )
 
 // chatLoadOlder fetches the previous history page and prepends it to the
@@ -511,7 +512,7 @@ func (s *Shell) chatLoadOlder() {
 			s.chatHasOlder = window.Start > 0 && len(s.chatWindowMessages) < chatMaxAccumulatedMessages
 			items := conversation.ItemsFromTranscript(s.chatWindowMessages)
 			s.chatTurns = conversation.DeriveTimeline(items)
-			s.chatModel = lastModelFromItems(items)
+			s.chatModel = chatsession.LastModel(items)
 			s.publishChatBridge()
 		})
 	})

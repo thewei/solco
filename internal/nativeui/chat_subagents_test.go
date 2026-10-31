@@ -27,7 +27,7 @@ func TestAttachSubagentsStampsStepsAndListsOnlyLinked(t *testing.T) {
 		{Kind: "tool", Tool: &conversation.ConversationToolCall{ID: "call_2", Name: "Agent", IsError: true}},
 		{Kind: "tool", Tool: &conversation.ConversationToolCall{ID: "t3", Name: "Bash"}},
 	}}}
-	state := ChatBridgeState{Turns: bridgeTurns(turns, "", nil)}
+	state := ChatBridgeState{Turns: chatsession.Turns(turns, "", nil)}
 	state.attachSubagents(views, turns, history.AgentClaudeCode, now)
 
 	if len(state.Subagents) != 2 || state.Subagents[0].ID != "a1" || state.Subagents[1].ID != "a2" {
@@ -43,7 +43,7 @@ func TestAttachSubagentsStampsStepsAndListsOnlyLinked(t *testing.T) {
 }
 
 func TestAttachSubagentsIsSilentWithoutData(t *testing.T) {
-	state := ChatBridgeState{Turns: []ChatBridgeTurn{}}
+	state := ChatBridgeState{Turns: []chatsession.ChatTurn{}}
 	state.attachSubagents(nil, nil, history.AgentClaudeCode, time.Now())
 	if state.Subagents != nil {
 		t.Fatalf("empty input listed %+v", state.Subagents)

@@ -2,7 +2,7 @@ import React, { memo, useContext, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
-import type { ChatBridgeChange, ChatBridgeStep, ChatBridgeTurn } from "./mygo";
+import type { ChatChange, ChatStep, ChatTurn } from "./mygo";
 import { Icon, type IconName } from "./icons";
 import { WorkingLine } from "./dock";
 import { SubagentBlock, SubagentContext } from "./subagents";
@@ -16,8 +16,8 @@ import { SubagentBlock, SubagentContext } from "./subagents";
  * bridge projection.
  */
 
-type Turn = ChatBridgeTurn;
-type Step = ChatBridgeStep;
+type Turn = ChatTurn;
+type Step = ChatStep;
 
 export interface TurnProps {
   turn: Turn;
@@ -470,7 +470,7 @@ function ChangesCard({
   canReview,
   onReview,
 }: {
-  changes: ChatBridgeChange[];
+  changes: ChatChange[];
   canReview: boolean;
   onReview: (path: string) => void;
 }) {

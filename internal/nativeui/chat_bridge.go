@@ -38,64 +38,6 @@ const (
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// ChatBridgeTool is one tool run rendered inside an assistant turn.
-type ChatBridgeTool struct {
-	Name    string `json:"name"`
-	Input   string `json:"input,omitempty"`
-	Output  string `json:"output,omitempty"`
-	IsError bool   `json:"isError,omitempty"`
-}
-
-// ChatBridgeStep is one ordered segment of a turn's time chain: the page
-// renders thinking / narration / tool calls in their original interleaving.
-type ChatBridgeStep struct {
-	Kind       string `json:"kind"`
-	Text       string `json:"text,omitempty"`
-	ToolName   string `json:"toolName,omitempty"`
-	ToolInput  string `json:"toolInput,omitempty"`
-	ToolOutput string `json:"toolOutput,omitempty"`
-	ToolError  bool   `json:"toolError,omitempty"`
-	// ToolDone reports that the call's result has landed (an empty result
-	// still counts); false means the call is still running.
-	ToolDone bool `json:"toolDone,omitempty"`
-	// TsMS is the provider timestamp of the item that opened the step
-	// (presentation only: the page derives "Thought for Ns" from gaps).
-	TsMS *int64 `json:"tsMs,omitempty"`
-	// SubagentIDs lists the sub-agents this tool call spawned (chat_subagents.go);
-	// the page draws their card/roster in place of the plain tool row.
-	SubagentIDs []string `json:"subagentIds,omitempty"`
-}
-
-// ChatBridgeChange is one file row of a turn's changes card. Counted is set
-// only when Additions/Deletions come from the live working-tree snapshot
-// (latest settled turn, local repository); otherwise the row is a name alone.
-type ChatBridgeChange struct {
-	Path      string `json:"path"`
-	Additions int    `json:"additions,omitempty"`
-	Deletions int    `json:"deletions,omitempty"`
-	Counted   bool   `json:"counted,omitempty"`
-}
-
-// ChatBridgeTurn is one derived timeline row (0.6 §13 contract): user rows
-// verbatim; assistant turns carry visible narration, consolidated thinking
-// and the (possibly grouped) tool activity. Steps preserves the original
-// interleaving for the timeline rendering.
-type ChatBridgeTurn struct {
-	User      bool             `json:"user"`
-	Text      string           `json:"text,omitempty"`
-	Narration string           `json:"narration,omitempty"`
-	Thinking  *string          `json:"thinking,omitempty"`
-	Failed    bool             `json:"failed,omitempty"`
-	Compacted bool             `json:"compacted,omitempty"`
-	Live      bool             `json:"live,omitempty"`
-	TsMS      *int64           `json:"tsMs,omitempty"`
-	Tools     []ChatBridgeTool `json:"tools,omitempty"`
-	Steps     []ChatBridgeStep `json:"steps,omitempty"`
-	// Changes lists the files this settled turn's edit tools touched (the
-	// changes card); see chatTurnChanges for the data-source contract.
-	Changes []ChatBridgeChange `json:"changes,omitempty"`
-}
-
 // ChatBridgeState is the full chat projection the page renders. It is
 // presentation state only: the conversation runtime, the send path and the
 // follow-up ledger stay in Go (internal/agent + internal/herdr).
@@ -161,10 +103,10 @@ type ChatBridgeState struct {
 	// (our hook layer's feed): approval/question cards above the composer.
 	Interactions []ChatBridgeInteraction `json:"interactions,omitempty"`
 	// Plan is the latest task list the agent published (Tasks panel).
-	Plan *ChatBridgePlan `json:"plan,omitempty"`
+	Plan *chatsession.ChatPlan `json:"plan,omitempty"`
 	// Subagents are the sub-agents the turns' tool calls spawned.
 	Subagents []chatsession.SubagentCard `json:"subagents,omitempty"`
-	Turns     []ChatBridgeTurn           `json:"turns"`
+	Turns     []chatsession.ChatTurn     `json:"turns"`
 }
 
 // ChatBridgeInteraction is one pending interaction card.
@@ -842,60 +784,10 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		root, snap = s.git.root, s.gitSnapshot()
 		state.Root, state.CanReview = root, true
 	}
-	state.Turns = bridgeTurns(s.chatTurns, root, snap)
+	state.Turns = chatsession.Turns(s.chatTurns, root, snap)
 	state.attachSubagents(s.chatSubagents, s.chatTurns, s.chatLiveProvider, time.Now())
-	state.Plan = chatPlan(s.chatTurns)
+	state.Plan = chatsession.PlanOf(s.chatTurns)
 	return state
-}
-
-// bridgeTurns maps derived timeline rows onto the page's turns. root/snap
-// feed the changes card (both empty for a sub-agent transcript, which has
-// no working-tree card).
-func bridgeTurns(turns []conversation.TimelineTurn, root string, snap *gitworkbench.ChangesSnapshot) []ChatBridgeTurn {
-	out := make([]ChatBridgeTurn, 0, len(turns))
-	lastAssistant := -1
-	for index, turn := range turns {
-		if !turn.UserRow {
-			lastAssistant = index
-		}
-	}
-	for index, turn := range turns {
-		bridgeTurn := ChatBridgeTurn{
-			User:      turn.UserRow,
-			Text:      turn.Text,
-			Narration: turn.Narration,
-			Thinking:  turn.Thinking,
-			Failed:    turn.Failed,
-			Compacted: turn.Compacted,
-			Live:      turn.Live,
-			TsMS:      turn.TsMS,
-		}
-		for _, run := range turn.ToolRuns {
-			tool := ChatBridgeTool{Name: run.Name, Input: run.InputPreview, IsError: run.IsError}
-			if run.Output != nil {
-				tool.Output = *run.Output
-			}
-			bridgeTurn.Tools = append(bridgeTurn.Tools, tool)
-		}
-		for _, step := range turn.Steps {
-			bridgeStep := ChatBridgeStep{Kind: step.Kind, Text: step.Text, TsMS: step.TsMS}
-			if step.Tool != nil {
-				bridgeStep.ToolName = step.Tool.Name
-				bridgeStep.ToolInput = step.Tool.InputPreview
-				bridgeStep.ToolError = step.Tool.IsError
-				if step.Tool.Output != nil {
-					bridgeStep.ToolOutput = *step.Tool.Output
-					bridgeStep.ToolDone = true
-				}
-			}
-			bridgeTurn.Steps = append(bridgeTurn.Steps, bridgeStep)
-		}
-		if !turn.UserRow && !turn.Live && !turn.Failed {
-			bridgeTurn.Changes = chatTurnChanges(turn.Steps, root, snap, index == lastAssistant)
-		}
-		out = append(out, bridgeTurn)
-	}
-	return out
 }
 
 // chatBridgeTheme reports the app-resolved appearance for the page. The
@@ -972,16 +864,4 @@ func (s *Shell) publishChatBridge() {
 func (s *Shell) emitChatBridge() {
 	// A closed window ends delivery; the page is gone with it.
 	_ = chatUpdated.Emit(s.win, s.chatBridgeState())
-}
-
-// lastContextFromMessages picks the latest provider-recorded context size.
-func lastContextFromMessages(messages []history.TranscriptMessage) *int64 {
-	var context *int64
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].ContextTokens != nil {
-			context = messages[i].ContextTokens
-			break
-		}
-	}
-	return context
 }

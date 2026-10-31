@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type { ChatBridgeInteraction, ChatBridgeLink, ChatBridgePlan, ChatBridgePlanItem, SubagentCard } from "./mygo";
+import type { ChatBridgeInteraction, ChatBridgeLink, ChatPlan, ChatPlanItem, SubagentCard } from "./mygo";
 import { Icon } from "./icons";
 import { StateSlot } from "./subagents";
 
@@ -16,7 +16,7 @@ import { StateSlot } from "./subagents";
 const OPEN_STATES = new Set(["pending", "active", "blocked"]);
 
 /** True once nothing is left to do (done / dropped only). */
-export function planFinished(plan: ChatBridgePlan): boolean {
+export function planFinished(plan: ChatPlan): boolean {
   return plan.items.every((item) => !OPEN_STATES.has(item.status));
 }
 
@@ -51,7 +51,7 @@ export function TasksTray({
   live,
   compact,
 }: {
-  plan?: ChatBridgePlan;
+  plan?: ChatPlan;
   /** Sub-agents of the conversation: a second section, never paired with plan items. */
   subagents?: SubagentCard[];
   onOpenSubagent?: (id: string) => void;
@@ -89,7 +89,7 @@ export function TasksTray({
       </button>
       {open ? (
         <ol className="tlist">
-          {items.map((item: ChatBridgePlanItem, index) => {
+          {items.map((item: ChatPlanItem, index) => {
             const heading = item.phase && item.phase !== phase ? item.phase : "";
             phase = item.phase ?? phase;
             return (

@@ -1,4 +1,4 @@
-package nativeui
+package chatsession
 
 import (
 	"testing"
@@ -25,8 +25,8 @@ func TestChatTurnChangesNamesAndCounts(t *testing.T) {
 		editStep("apply_patch", "*** Begin Patch\n*** Update File: x"),
 	}
 
-	got := chatTurnChanges(steps, "/repo", snap, true)
-	want := []ChatBridgeChange{
+	got := TurnChanges(steps, "/repo", snap, true)
+	want := []ChatChange{
 		{Path: "internal/a.go", Additions: 24, Deletions: 6, Counted: true},
 		{Path: "internal/b_test.go"},
 		{Path: "/elsewhere/c.go"},
@@ -41,12 +41,12 @@ func TestChatTurnChangesNamesAndCounts(t *testing.T) {
 	}
 
 	// An older turn (or a read-only/remote pane) never carries counts.
-	for _, change := range chatTurnChanges(steps, "/repo", snap, false) {
+	for _, change := range TurnChanges(steps, "/repo", snap, false) {
 		if change.Counted {
 			t.Fatalf("older turn must not be counted: %+v", change)
 		}
 	}
-	if got := chatTurnChanges(steps[:1], "/repo", snap, true); len(got) != 0 {
+	if got := TurnChanges(steps[:1], "/repo", snap, true); len(got) != 0 {
 		t.Fatalf("a read is not a change: %+v", got)
 	}
 }
@@ -55,11 +55,11 @@ func TestChatTurnChangesNamesAndCounts(t *testing.T) {
 // JSON, clipped. The card still finds the file.
 func TestChatTurnChangesSniffsJSONPreview(t *testing.T) {
 	preview := `{ "i": "Making tab row wear the pane agent brand", "input": "[internal/nativeui/project_tree.go#9F0A\n- old\n+ new` + "\"}"
-	got := chatTurnChanges([]conversation.TimelineStep{editStep("edit", preview)}, "/repo", nil, false)
+	got := TurnChanges([]conversation.TimelineStep{editStep("edit", preview)}, "/repo", nil, false)
 	if len(got) != 1 || got[0].Path != "internal/nativeui/project_tree.go" {
 		t.Fatalf("got %+v", got)
 	}
-	if got := chatTurnChanges([]conversation.TimelineStep{editStep("edit", `{ "i": "no path here" }`)}, "/repo", nil, false); len(got) != 0 {
+	if got := TurnChanges([]conversation.TimelineStep{editStep("edit", `{ "i": "no path here" }`)}, "/repo", nil, false); len(got) != 0 {
 		t.Fatalf("a pathless JSON preview must yield no row: %+v", got)
 	}
 }
@@ -72,7 +72,7 @@ func inputStep(name, input string) conversation.TimelineStep {
 // patch is several rows, a move names its destination too.
 func TestChatTurnChangesReadsApplyPatchHeaders(t *testing.T) {
 	patch := "*** Begin Patch\n*** Update File: /repo/a.go\n@@\n-x\n+y\n*** Add File: b.go\n+z\n*** Delete File: old.go\n*** Update File: c.go\n*** Move to: d.go\n*** End Patch"
-	got := chatTurnChanges([]conversation.TimelineStep{inputStep("apply_patch", patch)}, "/repo", nil, false)
+	got := TurnChanges([]conversation.TimelineStep{inputStep("apply_patch", patch)}, "/repo", nil, false)
 	var paths []string
 	for _, change := range got {
 		paths = append(paths, change.Path)
@@ -92,12 +92,12 @@ func TestChatTurnChangesReadsApplyPatchHeaders(t *testing.T) {
 // JSON; a relative path with no directory still counts.
 func TestChatTurnChangesReadsHashlineHeaders(t *testing.T) {
 	input := `{"i":"Adding helpers","input":"[calc.py#D111]\nPUT >2:\n+def f(): pass"}`
-	got := chatTurnChanges([]conversation.TimelineStep{inputStep("edit", input)}, "/repo", nil, false)
+	got := TurnChanges([]conversation.TimelineStep{inputStep("edit", input)}, "/repo", nil, false)
 	if len(got) != 1 || got[0].Path != "calc.py" {
 		t.Fatalf("got %+v", got)
 	}
 	clipped := `{"i":"Adding helpers","input":"[pkg/calc.py#D111]\nPUT >2:\n+def f(`
-	got = chatTurnChanges([]conversation.TimelineStep{inputStep("edit", clipped)}, "/repo", nil, false)
+	got = TurnChanges([]conversation.TimelineStep{inputStep("edit", clipped)}, "/repo", nil, false)
 	if len(got) != 1 || got[0].Path != "pkg/calc.py" {
 		t.Fatalf("clipped input: got %+v", got)
 	}

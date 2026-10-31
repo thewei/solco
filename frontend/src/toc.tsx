@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { ChatBridgeTurn } from "./mygo";
+import type { ChatTurn } from "./mygo";
 import { Icon } from "./icons";
 import { userDisplay } from "./turn";
 import type { TurnList } from "./turnlist";
@@ -45,7 +45,7 @@ function firstLine(text: string): string {
 }
 
 /** outline derives one entry per user turn from the settled transcript. */
-export function outline(turns: ChatBridgeTurn[]): Entry[] {
+export function outline(turns: ChatTurn[]): Entry[] {
   const entries: Entry[] = [];
   let at = 0;
   turns.forEach((turn, index) => {
@@ -81,7 +81,7 @@ export function TocRail({
   top,
   scrollTo,
 }: {
-  turns: ChatBridgeTurn[];
+  turns: ChatTurn[];
   logRef: RefObject<HTMLDivElement | null>;
   top: TurnList["top"];
   scrollTo: TurnList["scrollTo"];

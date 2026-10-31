@@ -1,4 +1,4 @@
-package nativeui
+package chatsession
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 
 /**
  * [INPUT]: 依赖 conversation.TimelineTurn（工具调用的完整 Input / Output 文本）
- * [OUTPUT]: 提供 chatPlan：把会话里最近一次任务清单工具调用折成页面的 Tasks 面板数据（只读投影）
+ * [OUTPUT]: 提供 PlanOf：把会话里最近一次任务清单工具调用折成页面的 Tasks 面板数据（只读投影）
  * [POS]: Chat 任务清单的唯一数据口：Claude TodoWrite / Codex update_plan 读 Input，Claude TaskCreate/TaskUpdate 整窗重放（未经真机转录验证），omp todo 读自己的结果文本；
  *        不回放操作、不持有第二份状态，找不到可解析的调用就没有面板
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -27,17 +27,17 @@ const (
 	planDropped = "dropped"
 )
 
-// ChatBridgePlanItem is one row of the Tasks panel.
-type ChatBridgePlanItem struct {
+// ChatPlanItem is one row of the Tasks panel.
+type ChatPlanItem struct {
 	Text   string `json:"text"`
 	Status string `json:"status"`
 	// Phase is the provider's own group label (omp phases); "" when flat.
 	Phase string `json:"phase,omitempty"`
 }
 
-// ChatBridgePlan is the latest task list the session published.
-type ChatBridgePlan struct {
-	Items []ChatBridgePlanItem `json:"items"`
+// ChatPlan is the latest task list the session published.
+type ChatPlan struct {
+	Items []ChatPlanItem `json:"items"`
 	// Turn is the timeline index of the turn that last wrote the list; the
 	// page retires a finished list once a later user turn exists.
 	Turn int `json:"turn"`
@@ -49,9 +49,9 @@ var (
 	ompPlanNote  = regexp.MustCompile(`\s+\((in progress|dropped|blocked(?::[^)]*)?)\)$`)
 )
 
-// chatPlan scans turns newest-first for a task-list tool call whose payload
+// PlanOf scans turns newest-first for a task-list tool call whose payload
 // parses; the first hit is the current list. nil when there is none.
-func chatPlan(turns []conversation.TimelineTurn) *ChatBridgePlan {
+func PlanOf(turns []conversation.TimelineTurn) *ChatPlan {
 	whole := latestPlan(turns)
 	// Claude Code's task tools build the list call by call, so they replay
 	// the whole window; the newer of the two writers wins.
@@ -62,7 +62,7 @@ func chatPlan(turns []conversation.TimelineTurn) *ChatBridgePlan {
 }
 
 // latestPlan is the newest single call that carries a whole list.
-func latestPlan(turns []conversation.TimelineTurn) *ChatBridgePlan {
+func latestPlan(turns []conversation.TimelineTurn) *ChatPlan {
 	for index := len(turns) - 1; index >= 0; index-- {
 		steps := turns[index].Steps
 		for at := len(steps) - 1; at >= 0; at-- {
@@ -70,7 +70,7 @@ func latestPlan(turns []conversation.TimelineTurn) *ChatBridgePlan {
 			if tool == nil {
 				continue
 			}
-			var items []ChatBridgePlanItem
+			var items []ChatPlanItem
 			switch strings.ToLower(tool.Name) {
 			case "todowrite", "todo_write":
 				items = claudePlanItems(deref(tool.Input))
@@ -80,7 +80,7 @@ func latestPlan(turns []conversation.TimelineTurn) *ChatBridgePlan {
 				items = ompPlanItems(deref(tool.Output))
 			}
 			if len(items) > 0 {
-				return &ChatBridgePlan{Items: items, Turn: index}
+				return &ChatPlan{Items: items, Turn: index}
 			}
 		}
 	}
@@ -94,7 +94,7 @@ var claudeTaskID = regexp.MustCompile(`#(\d+)`)
 // a pending task whose id the result text names ("Task #3 created …", the
 // next number otherwise); an update moves one task's status or subject, and
 // "deleted" removes it. Calls whose result reports a failure are skipped.
-func claudeTaskPlan(turns []conversation.TimelineTurn) *ChatBridgePlan {
+func claudeTaskPlan(turns []conversation.TimelineTurn) *ChatPlan {
 	type task struct {
 		id, text, status string
 	}
@@ -158,11 +158,11 @@ func claudeTaskPlan(turns []conversation.TimelineTurn) *ChatBridgePlan {
 	if len(tasks) == 0 {
 		return nil
 	}
-	items := make([]ChatBridgePlanItem, len(tasks))
+	items := make([]ChatPlanItem, len(tasks))
 	for at, t := range tasks {
-		items[at] = ChatBridgePlanItem{Text: t.text, Status: t.status}
+		items[at] = ChatPlanItem{Text: t.text, Status: t.status}
 	}
-	return &ChatBridgePlan{Items: items, Turn: last}
+	return &ChatPlan{Items: items, Turn: last}
 }
 
 func deref(value *string) string {
@@ -172,7 +172,7 @@ func deref(value *string) string {
 	return *value
 }
 
-func claudePlanItems(input string) []ChatBridgePlanItem {
+func claudePlanItems(input string) []ChatPlanItem {
 	var payload struct {
 		Todos []struct {
 			Content string `json:"content"`
@@ -182,16 +182,16 @@ func claudePlanItems(input string) []ChatBridgePlanItem {
 	if json.Unmarshal([]byte(input), &payload) != nil {
 		return nil
 	}
-	items := make([]ChatBridgePlanItem, 0, len(payload.Todos))
+	items := make([]ChatPlanItem, 0, len(payload.Todos))
 	for _, todo := range payload.Todos {
 		if text := strings.TrimSpace(todo.Content); text != "" {
-			items = append(items, ChatBridgePlanItem{Text: text, Status: normalizePlanStatus(todo.Status)})
+			items = append(items, ChatPlanItem{Text: text, Status: normalizePlanStatus(todo.Status)})
 		}
 	}
 	return items
 }
 
-func codexPlanItems(input string) []ChatBridgePlanItem {
+func codexPlanItems(input string) []ChatPlanItem {
 	var payload struct {
 		Plan []struct {
 			Step   string `json:"step"`
@@ -201,10 +201,10 @@ func codexPlanItems(input string) []ChatBridgePlanItem {
 	if json.Unmarshal([]byte(input), &payload) != nil {
 		return nil
 	}
-	items := make([]ChatBridgePlanItem, 0, len(payload.Plan))
+	items := make([]ChatPlanItem, 0, len(payload.Plan))
 	for _, step := range payload.Plan {
 		if text := strings.TrimSpace(step.Step); text != "" {
-			items = append(items, ChatBridgePlanItem{Text: text, Status: normalizePlanStatus(step.Status)})
+			items = append(items, ChatPlanItem{Text: text, Status: normalizePlanStatus(step.Status)})
 		}
 	}
 	return items
@@ -213,13 +213,13 @@ func codexPlanItems(input string) []ChatBridgePlanItem {
 // ompPlanItems reads the full list omp prints after every op: "Overall: …"
 // then `  Phase:` headers over `    - [X] task (note)` rows. A result without
 // the Overall line (an error, a refusal) carries no list.
-func ompPlanItems(output string) []ChatBridgePlanItem {
+func ompPlanItems(output string) []ChatPlanItem {
 	at := strings.Index(output, "\nOverall:")
 	if at < 0 {
 		return nil
 	}
 	phase := ""
-	var items []ChatBridgePlanItem
+	var items []ChatPlanItem
 	for _, line := range strings.Split(output[at:], "\n") {
 		if match := ompPlanPhase.FindStringSubmatch(line); match != nil {
 			phase = match[1]
@@ -244,7 +244,7 @@ func ompPlanItems(output string) []ChatBridgePlanItem {
 				status = planBlocked
 			}
 		}
-		items = append(items, ChatBridgePlanItem{Text: text, Status: status, Phase: phase})
+		items = append(items, ChatPlanItem{Text: text, Status: status, Phase: phase})
 	}
 	return items
 }

@@ -13,7 +13,7 @@ import (
 
 /**
  * [INPUT]: 依赖 history.SubagentsFor/ReadSubagent（各 Provider 自己的子代理文件，只读）、Shell 的 chatLivePath/chatLiveProvider/chatTurns、publishChatBridge
- * [OUTPUT]: chatsession.SubagentCard 与 ChatBridgeStep.SubagentIDs（Chat 卡片/名册的数据）、ChatBridge.OpenSubagent（下钻抽屉的只读对话）、Shell.pokeChatSubagents（合并的后台刷新）
+ * [OUTPUT]: chatsession.SubagentCard 与 ChatStep.SubagentIDs（Chat 卡片/名册的数据）、ChatBridge.OpenSubagent（下钻抽屉的只读对话）、Shell.pokeChatSubagents（合并的后台刷新）
  * [POS]: WebView Chat 的子代理表现层（2026-10-31，design: designs/subagents）：仅对 live 绑定的会话工作；父工具调用 → 子代理的链接来自工具自己的证据（Claude tool_use id == meta.toolUseId，omp `tasks[].name`，Codex `spawn_agent.task_name`），链接不上就当普通工具行，没有空卡片；刷新是 600ms 合并 + 运行期 1.5s 自重排的后台读取，渲染路径零 IO；不持久化、不记录对话内容
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -78,42 +78,15 @@ func (s *Shell) clearChatSubagents() {
 }
 
 // attachSubagents stamps SubagentIDs on the tool steps that spawned one and
-// lists exactly those sub-agents (page order = first appearance).
+// lists exactly those sub-agents (chatsession.AttachSubagents).
 func (state *ChatBridgeState) attachSubagents(views []chatsession.View, turns []conversation.TimelineTurn, provider history.AgentID, now time.Time) {
-	if len(views) == 0 || len(turns) != len(state.Turns) {
-		return
-	}
-	byID := make(map[string]chatsession.View, len(views))
-	for _, view := range views {
-		byID[view.Sub.ID] = view
-	}
-	seen := map[string]bool{}
-	for ti, turn := range turns {
-		if len(turn.Steps) != len(state.Turns[ti].Steps) {
-			continue
-		}
-		for si, step := range turn.Steps {
-			ids, types := chatsession.Linked(step.Tool, views)
-			if len(ids) == 0 {
-				continue
-			}
-			state.Turns[ti].Steps[si].SubagentIDs = ids
-			for _, id := range ids {
-				if seen[id] {
-					continue
-				}
-				seen[id] = true
-				view := byID[id]
-				state.Subagents = append(state.Subagents, chatsession.Card(view, types[id], step.Tool, now))
-			}
-		}
-	}
+	state.Subagents = chatsession.AttachSubagents(state.Turns, turns, views, now)
 }
 
 // ChatBridgeSubagentView is the drawer's read-only conversation.
 type ChatBridgeSubagentView struct {
 	Subagent chatsession.SubagentCard `json:"subagent"`
-	Turns    []ChatBridgeTurn         `json:"turns"`
+	Turns    []chatsession.ChatTurn   `json:"turns"`
 	// Error is a short reason the transcript cannot be shown ("" = fine).
 	Error string `json:"error,omitempty"`
 }
@@ -151,10 +124,10 @@ func (b *ChatBridge) OpenSubagent(ctx context.Context, id string) (ChatBridgeSub
 		if errors.Is(err, history.ErrSubagentTooLarge) {
 			out.Error = "This sub-agent's transcript is too large to preview."
 		}
-		out.Turns = []ChatBridgeTurn{}
+		out.Turns = []chatsession.ChatTurn{}
 		return out, nil
 	}
 	items := conversation.ItemsFromTranscript(detail.Messages)
-	out.Turns = bridgeTurns(conversation.DeriveTimeline(items), "", nil)
+	out.Turns = chatsession.Turns(conversation.DeriveTimeline(items), "", nil)
 	return out, nil
 }

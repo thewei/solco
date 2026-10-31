@@ -1,6 +1,6 @@
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useCallback, type RefObject } from "react";
-import type { ChatBridgeTurn } from "./mygo";
+import type { ChatTurn } from "./mygo";
 
 /**
  * [INPUT]: the chat scroller (`.chat-log`), the turns, a stable key per turn
@@ -82,6 +82,6 @@ export function useTurnList(
 }
 
 /** The prose a turn shows, for find to search turns that are not rendered. */
-export function turnText(turn: ChatBridgeTurn): string {
+export function turnText(turn: ChatTurn): string {
   return [turn.text, turn.narration, turn.thinking].filter(Boolean).join("\n");
 }

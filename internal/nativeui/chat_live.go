@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
@@ -277,33 +278,16 @@ func (s *Shell) applyLiveSync(decoder *history.LiveDecoder) {
 	if echo, consumed := conversation.ReconcilePendingEcho(projection, s.chatPendingEcho); consumed {
 		s.chatPendingEcho = echo
 	}
-	// The same window a history-bound chat opens with — the newest page, with
-	// the earlier ones behind "Earlier messages" — so one conversation reads
-	// alike whether it is followed live or opened from Sessions. The window's
-	// start is fixed once chosen (new messages extend it) until it outgrows
-	// the render bound.
-	if s.chatLiveStart < 0 {
-		s.chatLiveStart = max(0, len(projection)-chatOlderPage)
-	}
-	if limit := conversation.MaxBeforeAfter * 2; len(projection)-s.chatLiveStart > limit {
-		s.chatLiveStart = len(projection) - limit
-	}
-	s.chatLiveStart = min(s.chatLiveStart, len(projection))
-	messages := projection[s.chatLiveStart:]
-	s.chatWindowStart = s.chatLiveStart
-	s.chatHasOlder = s.chatLiveStart > 0 && len(messages) < chatMaxAccumulatedMessages
-	items := conversation.ItemsFromTranscript(messages)
-	if pending := decoder.PendingTail(); pending != nil {
-		items = append(items, conversation.ProvisionalItem(*pending))
-	}
-	s.chatTurns = conversation.DeriveTimeline(items)
-	// The provisional tail renders as the live turn (work-block headers
-	// show "Working…" until the next role boundary commits it).
-	if pending := decoder.PendingTail(); pending != nil && len(s.chatTurns) > 0 {
-		s.chatTurns[len(s.chatTurns)-1].Live = true
-	}
-	s.chatModel = lastModelFromItems(items)
-	s.chatContextTokens = lastContextFromMessages(messages)
+	// The same window a history-bound chat opens with (chatsession.Fold): the
+	// newest page, earlier ones behind "Earlier messages"; the start is fixed
+	// once chosen (new messages extend it) until it outgrows the render bound.
+	window := chatsession.Fold(projection, decoder.PendingTail(), s.chatLiveStart)
+	s.chatLiveStart = window.Start
+	s.chatWindowStart = window.Start
+	s.chatHasOlder = window.HasOlder
+	s.chatTurns = window.Turns
+	s.chatModel = window.Model
+	s.chatContextTokens = window.ContextTokens
 	s.appendPendingEchoTurn()
 	s.reconcileChatQuestion()
 	s.publishChatBridge()
@@ -319,17 +303,6 @@ func (s *Shell) chatLiveLoadOlder() {
 	}
 	s.chatLiveStart = max(0, s.chatLiveStart-chatOlderPage)
 	s.applyLiveSync(s.chatLiveDecoder)
-}
-
-// lastModelFromItems picks the last model the window's items recorded.
-func lastModelFromItems(items []conversation.ConversationItem) string {
-	model := ""
-	for _, item := range items {
-		if item.Model != nil && *item.Model != "" {
-			model = *item.Model
-		}
-	}
-	return model
 }
 
 // chatPaneSourceless reports a bound Agent pane that has no chat source yet

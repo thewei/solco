@@ -4,18 +4,6 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
-/**
- * ChatBridgeChange is one file row of a turn's changes card. Counted is set
- * only when Additions/Deletions come from the live working-tree snapshot
- * (latest settled turn, local repository); otherwise the row is a name alone.
- */
-export interface ChatBridgeChange {
-  path: string;
-  additions?: number;
-  deletions?: number;
-  counted?: boolean;
-}
-
 /** ChatBridgeInteraction is one pending interaction card. */
 export interface ChatBridgeInteraction {
   id: string;
@@ -43,24 +31,6 @@ export interface ChatBridgeLink {
   title: string;
   updatedMs: number;
   messages: number;
-}
-
-/** ChatBridgePlan is the latest task list the session published. */
-export interface ChatBridgePlan {
-  items: ChatBridgePlanItem[];
-  /**
-   * Turn is the timeline index of the turn that last wrote the list; the
-   * page retires a finished list once a later user turn exists.
-   */
-  turn: number;
-}
-
-/** ChatBridgePlanItem is one row of the Tasks panel. */
-export interface ChatBridgePlanItem {
-  text: string;
-  status: string;
-  /** Phase is the provider's own group label (omp phases); "" when flat. */
-  phase?: string;
 }
 
 /**
@@ -160,78 +130,18 @@ export interface ChatBridgeState {
    */
   interactions?: ChatBridgeInteraction[];
   /** Plan is the latest task list the agent published (Tasks panel). */
-  plan?: ChatBridgePlan;
+  plan?: ChatPlan;
   /** Subagents are the sub-agents the turns' tool calls spawned. */
   subagents?: SubagentCard[];
-  turns: ChatBridgeTurn[];
-}
-
-/**
- * ChatBridgeStep is one ordered segment of a turn's time chain: the page
- * renders thinking / narration / tool calls in their original interleaving.
- */
-export interface ChatBridgeStep {
-  kind: string;
-  text?: string;
-  toolName?: string;
-  toolInput?: string;
-  toolOutput?: string;
-  toolError?: boolean;
-  /**
-   * ToolDone reports that the call's result has landed (an empty result
-   * still counts); false means the call is still running.
-   */
-  toolDone?: boolean;
-  /**
-   * TsMS is the provider timestamp of the item that opened the step
-   * (presentation only: the page derives "Thought for Ns" from gaps).
-   */
-  tsMs?: number;
-  /**
-   * SubagentIDs lists the sub-agents this tool call spawned (chat_subagents.go);
-   * the page draws their card/roster in place of the plain tool row.
-   */
-  subagentIds?: string[];
+  turns: ChatTurn[];
 }
 
 /** ChatBridgeSubagentView is the drawer's read-only conversation. */
 export interface ChatBridgeSubagentView {
   subagent: SubagentCard;
-  turns: ChatBridgeTurn[];
+  turns: ChatTurn[];
   /** Error is a short reason the transcript cannot be shown ("" = fine). */
   error?: string;
-}
-
-/** ChatBridgeTool is one tool run rendered inside an assistant turn. */
-export interface ChatBridgeTool {
-  name: string;
-  input?: string;
-  output?: string;
-  isError?: boolean;
-}
-
-/**
- * ChatBridgeTurn is one derived timeline row (0.6 §13 contract): user rows
- * verbatim; assistant turns carry visible narration, consolidated thinking
- * and the (possibly grouped) tool activity. Steps preserves the original
- * interleaving for the timeline rendering.
- */
-export interface ChatBridgeTurn {
-  user: boolean;
-  text?: string;
-  narration?: string;
-  thinking?: string;
-  failed?: boolean;
-  compacted?: boolean;
-  live?: boolean;
-  tsMs?: number;
-  tools?: ChatBridgeTool[];
-  steps?: ChatBridgeStep[];
-  /**
-   * Changes lists the files this settled turn's edit tools touched (the
-   * changes card); see chatTurnChanges for the data-source contract.
-   */
-  changes?: ChatBridgeChange[];
 }
 
 /** ChatCatalog is the composer's menu for the bound Agent. */
@@ -262,6 +172,18 @@ export interface ChatCatalogEntry {
 /** ChatCatalogModel is one model the chip can switch to. */
 export interface ChatCatalogModel {
   id: string;
+}
+
+/**
+ * ChatChange is one file row of a turn's changes card. Counted is set
+ * only when Additions/Deletions come from the live working-tree snapshot
+ * (latest settled turn, local repository); otherwise the row is a name alone.
+ */
+export interface ChatChange {
+  path: string;
+  additions?: number;
+  deletions?: number;
+  counted?: boolean;
 }
 
 /**
@@ -303,6 +225,84 @@ export interface ChatMenuInput {
   message?: string;
   /** Path is a file path shown under the pointer (a chip or a changes row). */
   path?: string;
+}
+
+/** ChatPlan is the latest task list the session published. */
+export interface ChatPlan {
+  items: ChatPlanItem[];
+  /**
+   * Turn is the timeline index of the turn that last wrote the list; the
+   * page retires a finished list once a later user turn exists.
+   */
+  turn: number;
+}
+
+/** ChatPlanItem is one row of the Tasks panel. */
+export interface ChatPlanItem {
+  text: string;
+  status: string;
+  /** Phase is the provider's own group label (omp phases); "" when flat. */
+  phase?: string;
+}
+
+/**
+ * ChatStep is one ordered segment of a turn's time chain: the page
+ * renders thinking / narration / tool calls in their original interleaving.
+ */
+export interface ChatStep {
+  kind: string;
+  text?: string;
+  toolName?: string;
+  toolInput?: string;
+  toolOutput?: string;
+  toolError?: boolean;
+  /**
+   * ToolDone reports that the call's result has landed (an empty result
+   * still counts); false means the call is still running.
+   */
+  toolDone?: boolean;
+  /**
+   * TsMS is the provider timestamp of the item that opened the step
+   * (presentation only: the page derives "Thought for Ns" from gaps).
+   */
+  tsMs?: number;
+  /**
+   * SubagentIDs lists the sub-agents this tool call spawned (internal/nativeui/chat_subagents.go);
+   * the page draws their card/roster in place of the plain tool row.
+   */
+  subagentIds?: string[];
+}
+
+/** ChatTool is one tool run rendered inside an assistant turn. */
+export interface ChatTool {
+  name: string;
+  input?: string;
+  output?: string;
+  isError?: boolean;
+}
+
+/**
+ * ChatTurn is one derived timeline row (0.6 §13 contract): user rows
+ * verbatim; assistant turns carry visible narration, consolidated thinking
+ * and the (possibly grouped) tool activity. Steps preserves the original
+ * interleaving for the timeline rendering.
+ */
+export interface ChatTurn {
+  user: boolean;
+  text?: string;
+  narration?: string;
+  thinking?: string;
+  failed?: boolean;
+  compacted?: boolean;
+  live?: boolean;
+  tsMs?: number;
+  tools?: ChatTool[];
+  steps?: ChatStep[];
+  /**
+   * Changes lists the files this settled turn's edit tools touched (the
+   * changes card); see chatTurnChanges for the data-source contract.
+   */
+  changes?: ChatChange[];
 }
 
 /**

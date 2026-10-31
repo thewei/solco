@@ -1,4 +1,4 @@
-package nativeui
+package chatsession
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 
 /**
  * [INPUT]: 依赖 conversation.TimelineStep（edit 类工具路径预览）、gitworkbench.ChangesSnapshot（工作树 +/−）
- * [OUTPUT]: 对外提供 chatTurnChanges：回合改动卡的文件行
+ * [OUTPUT]: 对外提供 TurnChanges：回合改动卡的文件行
  * [POS]: Chat 桥的改动卡投影；只读现有快照，不新增 Git 调用、不解析 Provider 私有 diff 形状
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -78,7 +78,7 @@ func editedPaths(tool *conversation.ConversationToolCall) []string {
 	return []string{path}
 }
 
-// chatTurnChanges lists the files one settled turn's edit tools touched, in
+// TurnChanges lists the files one settled turn's edit tools touched, in
 // first-touch order. Data-source contract (user decision 2026-10-30):
 //
 //   - file names come from the edit tools' own path previews (provider
@@ -92,8 +92,8 @@ func editedPaths(tool *conversation.ConversationToolCall) []string {
 //     non-repository panes, files already committed) is a name alone.
 //
 // Paths are repo-relative when they sit under root, otherwise kept as given.
-func chatTurnChanges(steps []conversation.TimelineStep, root string, snap *gitworkbench.ChangesSnapshot, counted bool) []ChatBridgeChange {
-	var out []ChatBridgeChange
+func TurnChanges(steps []conversation.TimelineStep, root string, snap *gitworkbench.ChangesSnapshot, counted bool) []ChatChange {
+	var out []ChatChange
 	seen := map[string]bool{}
 	for _, step := range steps {
 		if step.Kind != conversation.StepTool || step.Tool == nil || !editToolName.MatchString(step.Tool.Name) {
@@ -109,7 +109,7 @@ func chatTurnChanges(steps []conversation.TimelineStep, root string, snap *gitwo
 				continue
 			}
 			seen[path] = true
-			change := ChatBridgeChange{Path: path}
+			change := ChatChange{Path: path}
 			if counted && snap != nil && snap.Root == root && !filepath.IsAbs(path) {
 				if file, ok := snap.ByPath(path); ok {
 					change.Additions, change.Deletions, change.Counted = file.Additions, file.Deletions, true
