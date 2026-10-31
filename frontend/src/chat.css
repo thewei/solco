@@ -35,6 +35,7 @@
   min-height: 0;
   overflow-y: auto;
   padding: 22px 0 14px;
+  position: relative;
 }
 
 .col {
@@ -1816,10 +1817,23 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Long conversations: turns far above the viewport skip layout and paint. */
-.far {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 140px;
+/* Long conversations (turnlist.ts): only the turns near the viewport are in
+   the DOM. Rows are absolutely placed and measured; the gap between turns is
+   the row's padding because margins do not count in a measured height. */
+.vlist {
+  position: relative;
+  width: 100%;
+}
+.vrow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding-bottom: 12px;
+}
+.vrow .turn {
+  margin: 0;
+  animation: none;
 }
 
 /* ⌘F */

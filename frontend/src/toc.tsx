@@ -3,6 +3,7 @@ import type { RefObject } from "react";
 import type { ChatBridgeTurn } from "./mygo";
 import { Icon } from "./icons";
 import { userDisplay } from "./turn";
+import type { TurnList } from "./turnlist";
 
 /**
  * TocRail is the turn outline in the left gutter (designs/chat-composer, T):
@@ -12,8 +13,10 @@ import { userDisplay } from "./turn";
  */
 
 interface Entry {
-  /** Index into the user-turn list (the DOM order of `.turn.user`). */
+  /** Index into the user-turn list. */
   at: number;
+  /** Index of that turn in the whole transcript (what the turn list scrolls by). */
+  index: number;
   title: string;
   heading: string;
   point: string;
@@ -59,6 +62,7 @@ export function outline(turns: ChatBridgeTurn[]): Entry[] {
     const size = text.length + reply.length;
     entries.push({
       at: at++,
+      index,
       title: firstLine(text.replace(/@"[^"\n]+"|@\S+/g, "").trim() || text),
       heading: plain(heading),
       point: plain(point),
@@ -71,7 +75,17 @@ export function outline(turns: ChatBridgeTurn[]): Entry[] {
 
 const WIDTH = [14, 18, 22, 26];
 
-export function TocRail({ turns, logRef }: { turns: ChatBridgeTurn[]; logRef: RefObject<HTMLDivElement | null> }) {
+export function TocRail({
+  turns,
+  logRef,
+  top,
+  scrollTo,
+}: {
+  turns: ChatBridgeTurn[];
+  logRef: RefObject<HTMLDivElement | null>;
+  top: TurnList["top"];
+  scrollTo: TurnList["scrollTo"];
+}) {
   const entries = useMemo(() => outline(turns), [turns]);
   const [active, setActive] = useState(0);
   const [hover, setHover] = useState<{ at: number; top: number } | null>(null);
@@ -84,11 +98,11 @@ export function TocRail({ turns, logRef }: { turns: ChatBridgeTurn[]; logRef: Re
     if (!log) return;
     const update = () => {
       frame.current = 0;
-      const nodes = log.querySelectorAll<HTMLElement>(".turn.user");
-      const line = log.getBoundingClientRect().top + log.clientHeight * 0.33;
+      const line = log.scrollTop + log.clientHeight * 0.33;
       let current = 0;
-      nodes.forEach((node, index) => {
-        if (node.getBoundingClientRect().top <= line) current = index;
+      entries.forEach((entry, at) => {
+        const start = top(entry.index);
+        if (start !== null && start <= line) current = at;
       });
       setActive(current);
     };
@@ -101,7 +115,7 @@ export function TocRail({ turns, logRef }: { turns: ChatBridgeTurn[]; logRef: Re
       log.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(frame.current);
     };
-  }, [logRef, entries.length]);
+  }, [logRef, entries, top]);
 
   if (entries.length < 3) return null;
 
@@ -111,12 +125,8 @@ export function TocRail({ turns, logRef }: { turns: ChatBridgeTurn[]; logRef: Re
   const activeGroup = Math.floor(Math.min(active, entries.length - 1) / step);
 
   const jump = (at: number) => {
-    const log = logRef.current;
-    const node = log?.querySelectorAll<HTMLElement>(".turn.user")[at];
-    if (!log || !node) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const top = node.getBoundingClientRect().top - log.getBoundingClientRect().top + log.scrollTop - 24;
-    log.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
+    scrollTo(entries[at].index, !reduced);
   };
 
   const shown = hover ? entries[hover.at] : null;

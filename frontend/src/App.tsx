@@ -2,6 +2,7 @@ import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -9,6 +10,7 @@ import { chat, events, type ChatBridgeState, type ChatCatalog, type ChatCatalogE
 import { Icon, StopIcon } from "./icons";
 import { OutboxRow, TurnRow, type Outbox } from "./turn";
 import { TocRail } from "./toc";
+import { turnText, useTurnList } from "./turnlist";
 import { AttachChips, IMAGE_EXT, ModelPanel, PlusPanel, SlashPanel, fileToBase64, slashMatches } from "./composer";
 import { BlockedDock, QuestionDock, SessionState, TasksTray, WorkingLine, isFreeTextOption, planFinished } from "./dock";
 import "./chat.css";
@@ -532,8 +534,22 @@ export function App() {
     if (next) setState(next);
   };
 
+  // The turn at the viewport's top edge before an older page lands: the page
+  // that follows is realigned to it (see the layout effect after `list`).
+  const anchorRef = useRef<{ key: string; index: number; offset: number; at: number } | null>(null);
   const loadOlder = async () => {
     if (loadingOlder) return;
+    const log = logRef.current;
+    if (log) {
+      const top = log.getBoundingClientRect().top;
+      for (const row of log.querySelectorAll<HTMLElement>("[data-turn]")) {
+        const box = row.getBoundingClientRect();
+        if (box.bottom <= top + 1) continue;
+        const index = Number(row.dataset.turn);
+        anchorRef.current = { key: keys[index], index, offset: box.top - top, at: Date.now() };
+        break;
+      }
+    }
     setLoadingOlder(true);
     try {
       await chat.older();
@@ -824,14 +840,13 @@ export function App() {
       }
       if (!event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown") && draft === "" && !voiceBusy) {
         const log = logRef.current;
-        const nodes = Array.from(log?.querySelectorAll<HTMLElement>(".turn.user") ?? []);
-        if (!log || nodes.length === 0) return;
+        const prompts = turns.flatMap((turn, index) => (turn.user ? [index] : []));
+        if (!log || prompts.length === 0) return;
         event.preventDefault();
-        const top = log.getBoundingClientRect().top;
         const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         // ↑ lands on the nearest prompt above the viewport's top edge, ↓ on the
         // nearest below it; past the last one ↓ is "back to the latest".
-        const offsets = nodes.map((node) => node.getBoundingClientRect().top - top);
+        const offsets = prompts.map((index) => (list.top(index) ?? 0) - log.scrollTop);
         const above = offsets.map((offset) => offset < -8).lastIndexOf(true);
         const below = offsets.findIndex((offset) => offset > 8);
         const at = event.key === "ArrowUp" ? above : below;
@@ -841,7 +856,7 @@ export function App() {
           jumpToLatest();
         } else {
           stickToBottom.current = false;
-          nodes[at].scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+          list.scrollTo(prompts[at], !reduced);
         }
       }
     };
@@ -869,7 +884,40 @@ export function App() {
   const runFind = (query: string, backwards: boolean) => {
     if (query === "") return;
     // window.find is WebKit's own search: it scrolls to and selects the match.
-    (window as unknown as { find: (...args: unknown[]) => boolean }).find(query, false, backwards, true, false, false, false);
+    const find = (wrap: boolean) => {
+      // The search box holds the query itself and find-in-page matches form
+      // text, so it is hidden for the duration of the call.
+      const box = findRef.current;
+      if (box) box.style.visibility = "hidden";
+      try {
+        return (window as unknown as { find: (...args: unknown[]) => boolean }).find(query, false, backwards, wrap, false, false, false);
+      } finally {
+        if (box) box.style.visibility = "";
+      }
+    };
+    if (list.virtual && !find(false)) {
+      // No further match among the rendered turns. A long chat renders only
+      // the turns near the viewport, so look through the rest by their text,
+      // bring the nearest one in, and search again from there.
+      const needle = query.toLowerCase();
+      const hits = turns.flatMap((turn, index) => (turnText(turn).toLowerCase().includes(needle) ? [index] : []));
+      const first = list.rows[0]?.index ?? 0;
+      const last = list.rows[list.rows.length - 1]?.index ?? 0;
+      const outside = hits.filter((index) => index < first || index > last);
+      const target = backwards
+        ? (outside.filter((index) => index < first).pop() ?? outside.pop())
+        : (outside.find((index) => index > last) ?? outside[0]);
+      if (target === undefined) {
+        find(true);
+      } else {
+        stickToBottom.current = false;
+        list.scrollTo(target, false);
+        window.getSelection()?.removeAllRanges();
+        requestAnimationFrame(() => requestAnimationFrame(() => find(true)));
+      }
+    } else if (!list.virtual) {
+      find(true);
+    }
     findRef.current?.focus();
   };
   const closeFind = () => {
@@ -879,6 +927,44 @@ export function App() {
   };
 
   const turns = state?.turns ?? [];
+  const keys = useMemo(() => turnKeys(turns), [turns]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [listMargin, setListMargin] = useState(0);
+  const list = useTurnList(logRef, turns.length, (index) => keys[index], listMargin);
+  // Older turns landed: keep the turn the user was reading where it was. Rows
+  // that mount above it are measured over the next frames, so the alignment
+  // is repeated until the sizes settle.
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    const log = logRef.current;
+    if (!anchor || !log) return;
+    if (Date.now() - anchor.at > 3000) {
+      anchorRef.current = null;
+      return;
+    }
+    const index = keys.indexOf(anchor.key);
+    if (index < 0 || index === anchor.index) return; // the page has not landed yet
+    let frames = 0;
+    const settle = () => {
+      const at = list.top(index);
+      if (at !== null) log.scrollTop = at - anchor.offset;
+      if (++frames < 4) requestAnimationFrame(settle);
+      else anchorRef.current = null;
+    };
+    settle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keys]);
+  // The windowed list starts below the "Earlier messages" button.
+  useLayoutEffect(() => {
+    const margin = listRef.current?.offsetTop ?? 0;
+    setListMargin((prev) => (prev === margin ? prev : margin));
+  });
+  // Rows are measured after they mount; keep the latest turn pinned as the
+  // measured height settles.
+  useLayoutEffect(() => {
+    const log = logRef.current;
+    if (log && stickToBottom.current) log.scrollTop = log.scrollHeight;
+  }, [list.total]);
   const reviewChanges = (path: string) => {
     void chat.reviewChanges(path).catch(() => {});
   };
@@ -955,7 +1041,7 @@ export function App() {
           </button>
         </div>
       ) : null}
-      {!state?.loading && !state?.waiting ? <TocRail turns={turns} logRef={logRef} /> : null}
+      {!state?.loading && !state?.waiting ? <TocRail turns={turns} logRef={logRef} top={list.top} scrollTo={list.scrollTo} /> : null}
       <div className="chat-log" ref={logRef} onScroll={onLogScroll}>
         <div className="col">
           {state?.hasOlder ? (
@@ -980,23 +1066,41 @@ export function App() {
             // only) reads the same as a fresh pane: type to start.
             <SessionState kind="waiting" provider={state?.provider} onPick={fillDraft} onOpenTerminal={openTerminal} />
           ) : (
-            turns.map((turn, index) => (
-              // Older turns skip layout and paint until they scroll near the
-              // viewport (content-visibility), so a long chat stays light.
-              <TurnBoundary key={turnKey(turn, index)} far={index < turns.length - RECENT_TURNS}>
-                <TurnRow
-                  // Only Claude's streaming tail marks a turn live; the agent
-                  // card's working phase covers every provider (omp, Codex),
-                  // so the last assistant turn shimmers while it works.
-                  turn={working && index === turns.length - 1 && !turn.user && !turn.live ? { ...turn, live: true } : turn}
-                  startMs={index > 0 && turns[index - 1].user ? turns[index - 1].tsMs : undefined}
-                  root={state?.root}
-                  canReview={state?.canReview === true}
-                  onReview={reviewChanges}
-                  isLast={index === turns.length - 1}
-                />
-              </TurnBoundary>
-            ))
+            <div
+              ref={listRef}
+              className={list.virtual ? "vlist" : undefined}
+              style={list.virtual ? { height: list.total - listMargin } : undefined}
+            >
+              {(list.virtual ? list.rows.map((row) => row.index) : turns.map((_, index) => index)).map((index) => {
+                const turn = turns[index];
+                if (!turn) return null;
+                const row = list.virtual ? list.rows.find((item) => item.index === index) : undefined;
+                return (
+                  <div
+                    key={keys[index]}
+                    className={row ? "vrow" : "trow"}
+                    data-turn={index}
+                    data-index={row ? index : undefined}
+                    ref={row ? list.measure : undefined}
+                    style={row ? { transform: `translateY(${row.start - listMargin}px)` } : undefined}
+                  >
+                    <TurnBoundary>
+                      <TurnRow
+                        // Only Claude's streaming tail marks a turn live; the agent
+                        // card's working phase covers every provider (omp, Codex),
+                        // so the last assistant turn shimmers while it works.
+                        turn={working && index === turns.length - 1 && !turn.user && !turn.live ? { ...turn, live: true } : turn}
+                        startMs={index > 0 && turns[index - 1].user ? turns[index - 1].tsMs : undefined}
+                        root={state?.root}
+                        canReview={state?.canReview === true}
+                        onReview={reviewChanges}
+                        isLast={index === turns.length - 1}
+                      />
+                    </TurnBoundary>
+                  </div>
+                );
+              })}
+            </div>
           )}
           {outbox ? (
             <OutboxRow outbox={outbox} onRetry={retryOutbox} onEdit={editOutbox} onDiscard={() => setOutbox(null)} />
@@ -1230,8 +1334,17 @@ export function App() {
   );
 }
 
-function turnKey(turn: ChatBridgeState["turns"][number], index: number): string {
-  return `${index}:${turn.user ? "u" : "a"}`;
+// turnKeys names each turn by its role and timestamp, so a row keeps its
+// identity (and its measured height) when "Earlier messages" prepends turns;
+// repeats of the same name are numbered in order.
+function turnKeys(turns: ChatBridgeState["turns"]): string[] {
+  const seen = new Map<string, number>();
+  return turns.map((turn) => {
+    const base = `${turn.user ? "u" : "a"}:${turn.tsMs ?? "x"}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}#${n}`;
+  });
 }
 
 // composeText is what goes to the agent: the typed text, then one @path
@@ -1255,7 +1368,7 @@ function draftKey(conversationId: string): string {
 // TurnBoundary contains one turn's render failures: a bad turn renders as
 // an inline notice and the rest of the transcript keeps working.
 class TurnBoundary extends React.Component<
-  { children: React.ReactNode; far?: boolean },
+  { children: React.ReactNode },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -1268,12 +1381,9 @@ class TurnBoundary extends React.Component<
     if (this.state.failed) {
       return <div className="turn-error">This message can't be shown.</div>;
     }
-    return this.props.far ? <div className="far">{this.props.children}</div> : this.props.children;
+    return this.props.children;
   }
 }
-
-// The newest turns always render in full; older ones are paint-skipped.
-const RECENT_TURNS = 24;
 
 // ContextRing shows the provider-recorded context fill against the
 // standard window, switching to the long window past it (web-ui's
