@@ -165,3 +165,52 @@ func TestSubagentActiveHonoursBusyWindow(t *testing.T) {
 		t.Fatal("ended is never active")
 	}
 }
+
+// TestSubagentStoppedNeedsTheProviderInterruptMarker pins the two markers
+// checked on real runs (2026-10-31): Claude Code ends a stopped child's file
+// with a user row "[Request interrupted by user]" (TaskStop and Esc alike);
+// Codex records `turn_aborted` after the last task event. A marker followed
+// by more rows is a resumed run, not a stopped one.
+func TestSubagentStoppedNeedsTheProviderInterruptMarker(t *testing.T) {
+	root := t.TempDir()
+	session := filepath.Join(root, "s.jsonl")
+	writeFile(t, session, "{}\n")
+	dir := filepath.Join(root, "s", "subagents")
+	interrupted := `{"isSidechain":true,"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}` + "\n"
+	meta := `{"agentType":"general-purpose","description":"d","toolUseId":"toolu_1"}`
+	for id, body := range map[string]string{
+		"stopped": `{"type":"assistant"}` + "\n" + interrupted,
+		"resumed": interrupted + `{"type":"assistant"}` + "\n",
+		"plain":   `{"type":"assistant"}` + "\n",
+	} {
+		writeFile(t, filepath.Join(dir, "agent-"+id+".meta.json"), meta)
+		writeFile(t, filepath.Join(dir, "agent-"+id+".jsonl"), body)
+	}
+	got := map[string]Subagent{}
+	for _, sub := range ClaudeSubagents(session) {
+		got[sub.ID] = sub
+	}
+	if !got["stopped"].Stopped || !got["stopped"].Ended || got["stopped"].Active(time.Now()) {
+		t.Fatalf("interrupted child = %+v", got["stopped"])
+	}
+	if got["resumed"].Stopped || got["plain"].Stopped {
+		t.Fatalf("only a closing marker stops a run: resumed=%v plain=%v", got["resumed"].Stopped, got["plain"].Stopped)
+	}
+
+	cdir := filepath.Join(root, "sessions", time.Now().Format("2006/01/02"))
+	ts := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano)
+	parent := filepath.Join(cdir, "rollout-p.jsonl")
+	writeFile(t, parent, codexMeta("P1", `"exec"`, ts))
+	spawn := func(id string) string {
+		return codexMeta(id, `{"subagent":{"thread_spawn":{"parent_thread_id":"P1","depth":1,"agent_path":"/root/`+id+`"}}}`, ts)
+	}
+	writeFile(t, filepath.Join(cdir, "rollout-a.jsonl"), spawn("A")+`{"type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted"}}`+"\n")
+	writeFile(t, filepath.Join(cdir, "rollout-d.jsonl"), spawn("D")+`{"type":"event_msg","payload":{"type":"task_complete"}}`+"\n")
+	byName := map[string]Subagent{}
+	for _, sub := range SubagentsFor(AgentCodex, parent) {
+		byName[sub.Name] = sub
+	}
+	if !byName["A"].Stopped || !byName["A"].Ended || byName["D"].Stopped || !byName["D"].Ended {
+		t.Fatalf("codex A=%+v D=%+v", byName["A"], byName["D"])
+	}
+}

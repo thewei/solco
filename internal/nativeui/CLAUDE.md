@@ -101,7 +101,7 @@ status_indicator_test.go: 形状与 state→tone 映射回归
 quick_panel_quota.go: Header 浮层 Quota 页（2 列迷你卡，头条取计数额度否则最紧窗口；页脚 Updated/Open Quota）
 quick_panel_quota_test.go: Quota 页迷你卡、头条、header 计数 waiting/total、migrateRoute
 subagents_state.go: 三家（Claude/omp/Codex）子代理读取节流（合并刷新、后台读、身份→路径缓存；变化才重建 workbench）
-chat_subagents.go: Chat 子代理桥（卡片/roster/抽屉 OpenSubagent、父子 link 规则、刷新与静默退化）
+chat_subagents.go: Chat 子代理桥（attachSubagents 给步骤盖 SubagentIDs、抽屉 OpenSubagent、Shell 绑定的合并刷新与静默退化；读取/链接/卡片投影在 internal/chatsession）
 tabbar.go: 设置「Show Tabs in Sidebar」（默认关）关闭时占据面包屑位置的标题栏 Tab 条（品牌图/标题/状态槽位/悬停 ×/溢出滚动 ‹ › 并让选中项入视/+ 新建；Tab 仍走 selectTab/close-tab 确认/newProjectTab；此时侧栏树只列 Workspace）
 shortcuts_sheet.go: Help ▸ Keyboard Shortcuts（⌘/）只读速查表模态（shortcutSections 取自菜单加速键与有效绑定，tipKeycaps 画键帽）；菜单加速键常量与 selectTabAccelerator/acceleratorKeycaps 在 shortcuts.go
 git_clean_state.go: Changes 干净态状态页（标题、分支 + ahead/behind、Push/Pull/Fetch 主动作、HEAD 第一父链最近 3 条提交 headCommits，未推送标注；不新增 Git 调用）

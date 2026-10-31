@@ -1,17 +1,17 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import type { ChatBridgeSubagent } from "./mygo";
+import type { SubagentCard } from "./mygo";
 import { Icon } from "./icons";
 
 /**
  * Sub-agents in the conversation (designs/subagents, 2026-10-31): the tool
  * call that spawned them becomes a card (1-2) or a roster (3+) with the same
- * three states everywhere — running spinner, done ring, failed dot. The
+ * states everywhere — running spinner, done/stopped ring, failed dot. The
  * bridge lists only sub-agents a tool call provably spawned; everything here
  * is presentation of that read-only list.
  */
 
 export interface SubagentContextValue {
-  byId: Map<string, ChatBridgeSubagent>;
+  byId: Map<string, SubagentCard>;
   open: (id: string) => void;
   openId?: string;
 }
@@ -30,7 +30,7 @@ function useNow(active: boolean): number {
   return now;
 }
 
-export function elapsedLabel(sub: ChatBridgeSubagent, now: number): string {
+export function elapsedLabel(sub: SubagentCard, now: number): string {
   if (!sub.startedMs) return "";
   const end = sub.status === "running" ? now : (sub.updatedMs ?? now);
   const seconds = Math.max(0, Math.round((end - sub.startedMs) / 1000));
@@ -40,21 +40,22 @@ export function elapsedLabel(sub: ChatBridgeSubagent, now: number): string {
 
 export function StateSlot({ status }: { status: string }) {
   if (status === "running") return <span className="spin sub-slot" aria-label="Running" />;
-  return <span className={`sub-slot ${status === "failed" ? "dot" : "ring"}`} role="img" aria-label={status === "failed" ? "Failed" : "Done"} />;
+  const label = status === "failed" ? "Failed" : status === "stopped" ? "Stopped" : "Done";
+  return <span className={`sub-slot ${status === "failed" ? "dot" : "ring"}`} role="img" aria-label={label} />;
 }
 
-function kindLabel(sub: ChatBridgeSubagent): string {
+function kindLabel(sub: SubagentCard): string {
   return sub.type || "Sub-agent";
 }
 
-function toolCallsLabel(sub: ChatBridgeSubagent): string {
+function toolCallsLabel(sub: SubagentCard): string {
   return `${sub.toolCalls} tool call${sub.toolCalls === 1 ? "" : "s"}`;
 }
 
 /** The agents of one turn: cards up to two, a roster from three. */
 export function SubagentBlock({ ids }: { ids: string[] }) {
   const { byId } = useContext(SubagentContext);
-  const subs = ids.map((id) => byId.get(id)).filter((sub): sub is ChatBridgeSubagent => !!sub);
+  const subs = ids.map((id) => byId.get(id)).filter((sub): sub is SubagentCard => !!sub);
   const running = subs.some((sub) => sub.status === "running");
   const now = useNow(running);
   if (subs.length === 0) return null;
@@ -68,11 +69,11 @@ export function SubagentBlock({ ids }: { ids: string[] }) {
   );
 }
 
-function Card({ sub, now }: { sub: ChatBridgeSubagent; now: number }) {
+function Card({ sub, now }: { sub: SubagentCard; now: number }) {
   const { open, openId } = useContext(SubagentContext);
   const [showPrompt, setShowPrompt] = useState(false);
   return (
-    <div className={`sub-card ${sub.status}${openId === sub.id ? " on" : ""}`}>
+    <div className={`sub-card sub-${sub.status}${openId === sub.id ? " on" : ""}`}>
       <button type="button" className="sub-head" onClick={() => open(sub.id)} title="Open the sub-agent's conversation">
         <span className="sub-kind">{kindLabel(sub)}</span>
         <span className="sub-desc">{sub.description}</span>
@@ -83,7 +84,7 @@ function Card({ sub, now }: { sub: ChatBridgeSubagent; now: number }) {
       {sub.status !== "running" && sub.result ? <div className="sub-result">{sub.result}</div> : null}
       <div className="sub-foot">
         <span>
-          {sub.status === "failed" ? "Failed · " : ""}
+          {sub.status === "failed" ? "Failed · " : sub.status === "stopped" ? "Stopped · " : ""}
           {toolCallsLabel(sub)}
         </span>
         {sub.prompt ? (
@@ -101,24 +102,31 @@ function Card({ sub, now }: { sub: ChatBridgeSubagent; now: number }) {
   );
 }
 
-function Roster({ subs, now }: { subs: ChatBridgeSubagent[]; now: number }) {
+function Roster({ subs, now }: { subs: SubagentCard[]; now: number }) {
   const { open, openId } = useContext(SubagentContext);
   const running = subs.filter((sub) => sub.status === "running").length;
   const failed = subs.filter((sub) => sub.status === "failed").length;
+  const stopped = subs.filter((sub) => sub.status === "stopped").length;
   return (
     <div className="sub-roster">
       <div className="sub-rhead">
         <Icon name="agent" size={13} />
         <span>{subs.length} sub-agents</span>
         <span className="o">
-          {running > 0 ? `${running} running` : failed > 0 ? `${failed} failed` : "all done"}
+          {running > 0
+            ? `${running} running`
+            : failed > 0
+              ? `${failed} failed`
+              : stopped > 0
+                ? `${stopped} stopped`
+                : "all done"}
         </span>
       </div>
       {subs.map((sub) => (
         <button
           key={sub.id}
           type="button"
-          className={`sub-rrow ${sub.status}${openId === sub.id ? " on" : ""}`}
+          className={`sub-rrow sub-${sub.status}${openId === sub.id ? " on" : ""}`}
           onClick={() => open(sub.id)}
           title="Open the sub-agent's conversation"
         >

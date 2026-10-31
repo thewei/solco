@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 )
@@ -63,9 +64,9 @@ func (s *Shell) refreshSubagents() {
 				continue
 			}
 			if subs := history.SubagentsFor(t.provider, path); len(subs) > 0 {
-				markBusy(subs, time.Now())
+				chatsession.MarkBusy(subs, time.Now())
 				for i := range subs {
-					subs[i].Description = subagentHeadline(subs[i])
+					subs[i].Description = chatsession.Headline(subs[i])
 				}
 				found[t.key] = subs
 			}
@@ -76,8 +77,29 @@ func (s *Shell) refreshSubagents() {
 				s.agentSubagents = found
 				s.reconcileWorkbench()
 			}
+			// "Running" flips with the clock (20 s quiet, then the pending-tool
+			// check), so keep reading while any listed sub-agent is running.
+			if s.subagentsTick == nil && anySubagentActive(found, time.Now()) {
+				s.subagentsTick = time.AfterFunc(subagentsThrottle, func() {
+					s.applyOnWindow(func() {
+						s.subagentsTick = nil
+						s.refreshSubagents()
+					})
+				})
+			}
 		})
 	}()
+}
+
+func anySubagentActive(found map[agent.AgentKey][]history.Subagent, now time.Time) bool {
+	for _, subs := range found {
+		for _, sub := range subs {
+			if sub.Active(now) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // subagentsChanged compares two cached listings.

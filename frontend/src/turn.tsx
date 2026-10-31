@@ -364,6 +364,8 @@ export type Category = "plan" | "agent" | "web" | "edit" | "read" | "search" | "
 // "web_search" is not a code search.
 export function toolCategory(name: string): Category {
   if (/todo|plan/i.test(name)) return "plan";
+  // Codex's wait/close/resume_agent only manage an agent already delegated.
+  if (/^(wait|close|resume)_agent$/i.test(name)) return "step";
   if (/task|agent|dispatch|spawn/i.test(name)) return "agent";
   if (/web|fetch|http|browse/i.test(name)) return "web";
   if (/edit|write|patch|apply|replace/i.test(name)) return "edit";

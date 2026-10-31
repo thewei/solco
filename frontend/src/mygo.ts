@@ -162,7 +162,7 @@ export interface ChatBridgeState {
   /** Plan is the latest task list the agent published (Tasks panel). */
   plan?: ChatBridgePlan;
   /** Subagents are the sub-agents the turns' tool calls spawned. */
-  subagents?: ChatBridgeSubagent[];
+  subagents?: SubagentCard[];
   turns: ChatBridgeTurn[];
 }
 
@@ -194,33 +194,9 @@ export interface ChatBridgeStep {
   subagentIds?: string[];
 }
 
-/** ChatBridgeSubagent is one sub-agent card/roster row. */
-export interface ChatBridgeSubagent {
-  id: string;
-  provider: string;
-  /** Type is the agent kind (Claude agentType, omp agent, Codex nickname). */
-  type?: string;
-  description?: string;
-  /**
-   * Status is "running", "done" or "failed" (the parent's tool result said
-   * so). "Stopped by user" is not derivable from the files and not claimed.
-   */
-  status: string;
-  startedMs?: number;
-  updatedMs?: number;
-  toolCalls: number;
-  /**
-   * Tail is the last tool call (the live line); Result the last assistant
-   * text (clipped); Prompt the task the parent gave.
-   */
-  tail?: string;
-  result?: string;
-  prompt?: string;
-}
-
 /** ChatBridgeSubagentView is the drawer's read-only conversation. */
 export interface ChatBridgeSubagentView {
-  subagent: ChatBridgeSubagent;
+  subagent: SubagentCard;
   turns: ChatBridgeTurn[];
   /** Error is a short reason the transcript cannot be shown ("" = fine). */
   error?: string;
@@ -364,6 +340,32 @@ export interface FilesPreviewTarget {
   path: string;
   name?: string;
   theme: string;
+}
+
+/** SubagentCard is one sub-agent card/roster row (the page's wire shape). */
+export interface SubagentCard {
+  id: string;
+  provider: string;
+  /** Type is the agent kind (Claude agentType, omp agent, Codex nickname). */
+  type?: string;
+  description?: string;
+  /**
+   * Status is "running", "done", "stopped" or "failed". "failed" is the parent's
+   * tool result; "stopped" only the provider's own interruption marker in the
+   * child's file (Claude "[Request interrupted by user]", Codex turn_aborted) —
+   * omp has none, so it never reads "stopped".
+   */
+  status: string;
+  startedMs?: number;
+  updatedMs?: number;
+  toolCalls: number;
+  /**
+   * Tail is the last tool call (the live line); Result the last assistant
+   * text (clipped); Prompt the task the parent gave.
+   */
+  tail?: string;
+  result?: string;
+  prompt?: string;
 }
 
 // ---- Services ----

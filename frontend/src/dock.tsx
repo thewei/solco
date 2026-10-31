@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type { ChatBridgeInteraction, ChatBridgeLink, ChatBridgePlan, ChatBridgePlanItem, ChatBridgeSubagent } from "./mygo";
+import type { ChatBridgeInteraction, ChatBridgeLink, ChatBridgePlan, ChatBridgePlanItem, SubagentCard } from "./mygo";
 import { Icon } from "./icons";
 import { StateSlot } from "./subagents";
 
@@ -53,7 +53,7 @@ export function TasksTray({
 }: {
   plan?: ChatBridgePlan;
   /** Sub-agents of the conversation: a second section, never paired with plan items. */
-  subagents?: ChatBridgeSubagent[];
+  subagents?: SubagentCard[];
   onOpenSubagent?: (id: string) => void;
   live: boolean;
   compact: boolean;

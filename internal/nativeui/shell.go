@@ -21,6 +21,7 @@ import (
 	"github.com/thewei/solco/internal/agentstatus"
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/apphook"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/commandcenter"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/gitworkbench"
@@ -425,6 +426,7 @@ type Shell struct {
 	// inspector owns the 0.8 read-only Agent inspector state.
 	inspector inspectorState
 
+	subagentsTick     *time.Timer // re-read while a listed sub-agent is running
 	// diagnostics state (0.9 P16/P17)
 	diagLogLevelFilter string
 	diagSearchQuery    string
@@ -509,15 +511,11 @@ type Shell struct {
 	chatLivePump        *history.LivePump
 	chatLiveFingerprint string
 	chatLivePath        string
-	// chatWebview is the chat page's embedded WebView (N19 Phase 2); nil
-	// until the first chat build with General.WebViewChat on, and
-	// chatWebviewBroken latches a failed creation so the native chat stays.
-	chatWebview       *mygo.WebView
 	// chatLiveProvider is the provider of the live-bound transcript;
 	// chatSubagents are that conversation's sub-agents (chat_subagents.go),
 	// refreshed in the background and cleared with the binding.
 	chatLiveProvider    history.AgentID
-	chatSubagents       []chatSubagentView
+	chatSubagents       []chatsession.View
 	chatSubagentsTimer  *time.Timer
 	chatSubagentsBusy   bool
 	chatSubagentsActive bool
@@ -525,6 +523,10 @@ type Shell struct {
 	// filesWebview is the Files preview page's embedded WebView (product
 	// decision 2026-10-13); nil until the first /files build with
 	// General.WebViewFilesPreview on, and filesWebviewBroken latches a
+	// chatWebview is the chat page's embedded WebView (N19 Phase 2); nil
+	// until the first chat build with General.WebViewChat on, and
+	// chatWebviewBroken latches a failed creation so the native chat stays.
+	chatWebview       *mygo.WebView
 	// failed creation so the page shows truthful empty states.
 	filesWebview       *mygo.WebView
 	filesWebviewBroken bool

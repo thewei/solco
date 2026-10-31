@@ -2,6 +2,7 @@ package history
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -157,6 +158,9 @@ func codexSubagents(parentPath string) []Subagent {
 			if started.IsZero() {
 				started = info.ModTime()
 			}
+			tail := readTail(file, info.Size(), codexTailBytes)
+			complete := bytes.LastIndex(tail, []byte(`"type":"task_complete"`))
+			aborted := bytes.LastIndex(tail, []byte(`"type":"turn_aborted"`))
 			list = append(list, Subagent{
 				ID:        class.id,
 				Provider:  AgentCodex,
@@ -166,7 +170,8 @@ func codexSubagents(parentPath string) []Subagent {
 				Path:      file,
 				Name:      class.name,
 				Depth:     class.depth,
-				Ended:     tailContains(file, info.Size(), codexTailBytes, `"type":"task_complete"`),
+				Ended:     complete >= 0 || aborted >= 0,
+				Stopped:   aborted > complete,
 			})
 		}
 	}

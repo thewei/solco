@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/history"
@@ -162,8 +163,8 @@ type ChatBridgeState struct {
 	// Plan is the latest task list the agent published (Tasks panel).
 	Plan *ChatBridgePlan `json:"plan,omitempty"`
 	// Subagents are the sub-agents the turns' tool calls spawned.
-	Subagents []ChatBridgeSubagent `json:"subagents,omitempty"`
-	Turns     []ChatBridgeTurn     `json:"turns"`
+	Subagents []chatsession.SubagentCard `json:"subagents,omitempty"`
+	Turns     []ChatBridgeTurn           `json:"turns"`
 }
 
 // ChatBridgeInteraction is one pending interaction card.

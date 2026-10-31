@@ -42,7 +42,7 @@ Claude 的 `subagents/` 样本来自 2026-10-25 的 `herdr-client` 会话。
 
 ## 方案 A(推荐)
 
-**统一记录:** `id · provider · type · description · status(running/done/failed;“stopped by user”无法从文件推出,不声称) · started/ended · lastLine · result · parentCallId · depth`,由 `internal/history` 的只读 reader 按 Provider 产出,缓存、有界(沿用 24 条上限)、无写入。
+**统一记录:** `id · provider · type · description · status(running/done/stopped/failed) · started/ended · lastLine · result · parentCallId · depth`,由 `internal/history` 的只读 reader 按 Provider 产出,缓存、有界(沿用 24 条上限)、无写入。
 
 | 呈现 | 要点 |
 |---|---|
@@ -102,8 +102,9 @@ Claude 的 `subagents/` 样本来自 2026-10-25 的 `herdr-client` 会话。
 - Header 弹层:子代理嵌套在父 Agent 下并带 `N sub-agents` 徽标,不加第五个 tab,不计入 `waiting/total`。
 - Tasks tray:两段(计划项 / Sub-agents),不做文字配对。
 - Codex 子 rollout 随侧栏刷新常驻读取(合并刷新 600 ms / 活跃 1.5 s,渲染路径零 IO)。
-- 状态:running = 近 20 s 有写入,或最后一个工具调用仍挂起(10 min 内);done/failed 由 `Ended`/handback 推出。
-- 未验证:Codex 的 UI 路径需要 Herdr 会话身份(本机用户 hook 失败),仅文件级验证。
+- 状态:running = 近 20 s 有写入,或最后一个工具调用仍挂起(10 min 内);done/failed 由 `Ended`/父工具结果推出;**stopped(2026-10-31 追加,真机核验)** 只认 Provider 自己的中断标记——Claude 子文件末行 user 行 `[Request interrupted by user]`(TaskStop 与 Esc 同一标记,父会话 task-notification 同时写 `<status>killed</status>`)、Codex `turn_aborted`;omp 没有对应标记,永不显示 stopped。
+- Codex UI 路径已真机验证(卡片 / tray / 侧栏 ↳N / 完成态);性能基准 `go test -bench CodexSubagents ./internal/history`:3 天 × 400 个 rollout 冷扫 ≈ 110 ms(仅首次),之后每次刷新 ≈ 4 ms(只 stat)。
+- 读取/链接/卡片投影放在 Shell 无关的 `internal/chatsession`,与将来的 Remote Host P2 共用。
 
 ## 文件
 

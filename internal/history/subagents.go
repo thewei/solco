@@ -44,6 +44,10 @@ type Subagent struct {
 	// Ended is the provider's own end marker (omp's session_exit); without
 	// one, liveness is the recent-write window.
 	Ended bool
+	// Stopped is the provider's own interruption marker (Claude's
+	// "[Request interrupted by user]" closing the child file, Codex's
+	// turn_aborted): the run was cut short, not finished. Implies Ended.
+	Stopped bool
 	// Busy is set by the caller from SubagentDetail.PendingTool: the last tool
 	// call has no result yet, so a quiet file does not mean finished.
 	Busy bool
@@ -99,6 +103,14 @@ func finishSubagents(list []Subagent) []Subagent {
 	return list
 }
 
+// claudeInterruptMarker is the user row Claude Code appends to a sub-agent's
+// file when it is stopped (TaskStop or Esc); claudeInterruptTail bounds the
+// bytes read to find the file's last line.
+const (
+	claudeInterruptMarker = "[Request interrupted by user"
+	claudeInterruptTail   = 8 << 10
+)
+
 type subagentMeta struct {
 	AgentType   string `json:"agentType"`
 	Description string `json:"description"`
@@ -147,6 +159,9 @@ func ClaudeSubagents(sessionPath string) []Subagent {
 		if info, err := os.Stat(transcript); err == nil {
 			sub.UpdatedAt = info.ModTime()
 			sub.Path = transcript
+			if lastLineContains(transcript, info.Size(), claudeInterruptTail, claudeInterruptMarker) {
+				sub.Stopped, sub.Ended = true, true
+			}
 		}
 		list = append(list, sub)
 	}

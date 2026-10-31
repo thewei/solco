@@ -93,20 +93,35 @@ func ompHeader(path string) (ompSessionHeader, bool) {
 	return ompSessionHeader{}, false
 }
 
-// tailContains reports whether a provider's own end marker sits in the
-// file's last n bytes.
-func tailContains(path string, size, n int64, marker string) bool {
+// readTail returns the file's last n bytes.
+func readTail(path string, size, n int64) []byte {
 	file, err := os.Open(path)
 	if err != nil {
-		return false
+		return nil
 	}
 	defer file.Close()
 	if _, err := file.Seek(max(0, size-n), io.SeekStart); err != nil {
-		return false
+		return nil
 	}
 	tail, err := io.ReadAll(io.LimitReader(file, n))
 	if err != nil {
-		return false
+		return nil
+	}
+	return tail
+}
+
+// tailContains reports whether a provider's own end marker sits in the
+// file's last n bytes.
+func tailContains(path string, size, n int64, marker string) bool {
+	return bytes.Contains(readTail(path, size, n), []byte(marker))
+}
+
+// lastLineContains reports whether the file's final line holds marker. A
+// last line longer than the tail is only partly seen and never matches.
+func lastLineContains(path string, size, n int64, marker string) bool {
+	tail := bytes.TrimRight(readTail(path, size, n), "\r\n")
+	if i := bytes.LastIndexByte(tail, '\n'); i >= 0 {
+		tail = tail[i+1:]
 	}
 	return bytes.Contains(tail, []byte(marker))
 }

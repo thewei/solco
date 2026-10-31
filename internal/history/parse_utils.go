@@ -172,7 +172,7 @@ func injectedUserContent(text string) bool {
 		"IMPORTANT: Do NOT read",
 		"Caveat: The messages below",
 		"# Files pasted by the user",
-		"# AGENTS.md instructions for",
+		"# AGENTS.md instructions", // Codex 0.164+ drops the " for <dir>" tail
 		"<external_codex_apps_",
 	}
 	for _, prefix := range prefixes {

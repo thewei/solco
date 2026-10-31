@@ -2256,7 +2256,7 @@
   color: var(--i1);
 }
 
-.sub-card.failed {
+.sub-card.sub-failed {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--hair));
 }
 

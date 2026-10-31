@@ -34,6 +34,10 @@ func TestAgentsInstructionsInjectionIsMetaNotTitle(t *testing.T) {
 	if userKind(injected) != MessageMeta {
 		t.Fatalf("AGENTS.md injection kind = %v, want MessageMeta", userKind(injected))
 	}
+	// Codex 0.164 writes the heading without the " for <dir>" tail.
+	if bare := "# AGENTS.md instructions\n\n<INSTRUCTIONS>…</INSTRUCTIONS>"; userKind(bare) != MessageMeta {
+		t.Fatalf("bare AGENTS.md injection kind = %v, want MessageMeta", userKind(bare))
+	}
 	appPage := `<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>`
 	if userKind(appPage) != MessageMeta {
 		t.Fatalf("Codex app page marker kind = %v, want MessageMeta", userKind(appPage))
