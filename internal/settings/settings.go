@@ -46,9 +46,15 @@ type UsageSettings struct {
 // /audio/transcriptions endpoint. An empty API key falls back to the
 // OPENAI_API_KEY environment variable.
 type VoiceSettings struct {
-	EndpointURL string `json:"endpoint_url,omitempty"`
-	APIKey      string `json:"api_key,omitempty"`
-	Model       string `json:"model,omitempty"`
+	// Source is "" / "api" (the endpoint below) or "chatgpt" (the sign-in
+	// Codex already holds). "chatgpt" only takes effect with ChatGPTConsent.
+	Source string `json:"source,omitempty"`
+	// ChatGPTConsent records the user's explicit yes to using that sign-in;
+	// switching back to the API endpoint clears it.
+	ChatGPTConsent bool   `json:"chatgpt_consent,omitempty"`
+	EndpointURL    string `json:"endpoint_url,omitempty"`
+	APIKey         string `json:"api_key,omitempty"`
+	Model          string `json:"model,omitempty"`
 }
 
 type GeneralSettings struct {
@@ -58,6 +64,9 @@ type GeneralSettings struct {
 	Density string `json:"density,omitempty"`
 	// HighContrast enables accessible higher-contrast borders and text tones (0.9 P19).
 	HighContrast bool `json:"high_contrast,omitempty"`
+	// ChatSerif sets the Chat reading text (assistant prose) in a serif face;
+	// code, tool rows and the interface stay sans. Default off.
+	ChatSerif bool `json:"chat_serif,omitempty"`
 	// WebViewChat renders the /workspace Chat surface in the official MyGo
 	// ui.WebView over the presentation-only chat bridge (N19, product
 	// decision 2026-10-11). Off keeps the Native chat surface; the native
@@ -197,6 +206,20 @@ type SessionSettings struct {
 	RecentFiles []string `json:"recent_files,omitempty"`
 	// RecentHosts are the ssh aliases last connected from Hosts (newest first).
 	RecentHosts []string `json:"recent_hosts,omitempty"`
+	// HookSessions remember, per "<instance>/<pane>", the session identity an
+	// Agent's hooks announced: Herdr's own agent list carries none for some
+	// providers (Claude Code), and without it Chat cannot rebind after a
+	// restart until the next hook event. No conversation content.
+	HookSessions map[string]HookSessionSettings `json:"hook_sessions,omitempty"`
+}
+
+// HookSessionSettings is one remembered hook-reported session identity.
+type HookSessionSettings struct {
+	Agent      string `json:"agent"`
+	Kind       string `json:"kind"`
+	Source     string `json:"source,omitempty"`
+	Value      string `json:"value"`
+	TerminalID string `json:"terminal_id,omitempty"`
 }
 
 func Default() Settings {
