@@ -550,7 +550,8 @@ type Shell struct {
 	projectsPublishing    bool
 	projectsSubject       string
 	projectsBinding       bool
-	projectsChatFailed    string // the pane whose Chat bind failed (page says so)
+	projectsChatFailed    string // projectsChatKey of the bind that failed
+	projectsChatBound     string // projectsChatKey of the bind that succeeded
 	// chatLiveCommitted is the committed live projection length at the last	// applied sync — the pending-echo baseline coordinate (0.6 §12).
 	chatLiveCommitted int
 	// chatLiveStart is the projection index the live chat window starts at

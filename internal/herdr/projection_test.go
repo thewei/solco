@@ -116,3 +116,25 @@ func TestProjectSnapshotMapsAgentSessionIdentity(t *testing.T) {
 		t.Fatalf("identity must stay absent without agent_session: %#v", plain.Agents[0].AgentSession)
 	}
 }
+
+// A plugin may label an agent through display_agent ("<project> coordinator ·
+// idle"); the projection's Kind must stay the provider so brand, Chat binding
+// and the hook-identity re-stamp still know it is Claude Code.
+func TestProjectSnapshotKindIsTheProviderNotTheDisplayLabel(t *testing.T) {
+	provider, label := "claude", "pv coordinator · idle"
+	projection := projectSnapshot(sessionSnapshot{
+		Version: "0.9.3", Protocol: 22,
+		Workspaces: []workspaceInfo{{ID: "w1", Label: "project", ActiveTabID: "t1", AgentStatus: "idle"}},
+		Panes:      []paneInfo{{ID: "p1", TerminalID: "term-1", WorkspaceID: "w1", TabID: "t1", Agent: &provider, DisplayAgent: &label}},
+		Agents: []agentInfo{{
+			TerminalID: "term-1", WorkspaceID: "w1", TabID: "t1", PaneID: "p1",
+			Agent: &provider, DisplayAgent: &label, AgentStatus: "idle",
+		}},
+	})
+	if got := projection.Agents[0].Kind; got != "claude" {
+		t.Fatalf("agent Kind = %q, want the provider", got)
+	}
+	if len(projection.Panes) == 1 && projection.Panes[0].Agent != "claude" {
+		t.Fatalf("pane Agent = %q, want the provider", projection.Panes[0].Agent)
+	}
+}

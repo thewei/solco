@@ -377,19 +377,40 @@ func (s *Shell) projectsChatSync() {
 	}
 	project, found := s.workboardProjectByName(fallbackText(s.projectsProject(), workboardOtherProject))
 	pane, _, _ := s.projectsChatTarget(project, found)
-	if pane == "" || s.chatPaneID == pane || s.projectsChatFailed == pane {
+	if pane == "" {
+		return
+	}
+	// The key carries the agent's session identity: a coordinator that has
+	// not reported its session yet fails once, and retries when the identity
+	// (hook or Herdr) arrives, instead of staying unbound for good.
+	key := s.projectsChatKey(pane)
+	if s.projectsChatFailed == key || (s.chatPaneID == pane && s.projectsChatBound == key) {
 		return
 	}
 	s.projectsBinding = true
 	s.win.Update(func() {
 		s.projectsBinding = false
 		if !s.bindProjectsChat() {
-			s.projectsChatFailed = pane
+			s.projectsChatFailed = key
 			s.projectsPublish()
-		} else if s.projectsChatFailed == pane {
-			s.projectsChatFailed = ""
+			return
 		}
+		s.projectsChatFailed = ""
+		s.projectsChatBound = key
 	})
+}
+
+// projectsChatKey names one bind attempt: the pane and its session identity.
+func (s *Shell) projectsChatKey(pane string) string {
+	card, ok := s.agentCardForPane(pane)
+	if !ok {
+		return pane
+	}
+	_, identity := s.agentSessionIdentity(card.Key)
+	if identity == nil {
+		return pane
+	}
+	return pane + "|" + identity.Kind + "|" + identity.Source + "|" + identity.Value
 }
 
 // sortedIDs is the ticked ids in a stable order.

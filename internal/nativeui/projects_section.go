@@ -262,6 +262,12 @@ func (s *Shell) projectTaskRow(c *ui.Context, r boardRow, last bool) {
 // own program over another agent. False until the task has a worktree.
 func (s *Shell) taskAgentPane(id string) (string, bool) {
 	d, ok := s.workboard.board.details[id]
+	// The open task page reads its details afresh after every write, so its
+	// copy knows the worktree of a task delegated from that very page before
+	// the board's own cache does.
+	if page := s.workboard.page; page.id == id && page.detail != nil && page.detail.Worktree != "" {
+		d, ok = workboardDetail{detail: *page.detail}, true
+	}
 	root := cleanPath(d.detail.Worktree)
 	if !ok || root == "" {
 		return "", false

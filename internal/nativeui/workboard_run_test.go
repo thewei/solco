@@ -87,4 +87,40 @@ func TestChatTargetWaitingOnAPromptBeforeAnyConversation(t *testing.T) {
 	}
 }
 
+// Delegating from the task page: the page's own freshly read details name the
+// worktree before the board's cache does, and the Chat follows at once.
+func TestTaskAgentPaneUsesTheOpenPagesDetails(t *testing.T) {
+	var ran []string
+	s := pageShell(t, "approval_real_claude", &ran)
+	const wt = "/scratch/worktrees/repo/work-2-add-hello-file"
+	s.workboard.board.details = nil
+	s.projection = herdr.Projection{
+		Panes:  []herdr.Pane{{ID: "p1", TerminalID: "t1", CWD: wt, Agent: "claude"}},
+		Agents: []herdr.Agent{{PaneID: "p1", TerminalID: "t1", Name: "claude", Status: "idle"}},
+	}
+	if s.workboard.page.detail == nil || s.workboard.page.detail.Worktree != wt {
+		t.Fatalf("fixture page detail has no worktree: %+v", s.workboard.page.detail)
+	}
+	if pane, ok := s.taskAgentPane(s.workboard.page.id); !ok || pane != "p1" {
+		t.Fatalf("pane = %q %v, want p1 from the page's details", pane, ok)
+	}
+}
+
+// A coordinator that has not reported its session fails its first bind; the
+// identity arriving changes the key, so the page binds again.
+func TestProjectsChatKeyChangesWhenTheSessionIdentityArrives(t *testing.T) {
+	var ran []string
+	s := pageShell(t, "approval_real_claude", &ran)
+	s.projection = herdr.Projection{
+		Panes:  []herdr.Pane{{ID: "p1", TerminalID: "t1", Agent: "claude"}},
+		Agents: []herdr.Agent{{PaneID: "p1", TerminalID: "t1", Name: "claude", Status: "idle"}},
+	}
+	before := s.projectsChatKey("p1")
+	s.projection.Agents[0].AgentSession = &herdr.AgentSessionIdentity{Agent: "claude-code", Kind: "id", Value: "abc"}
+	after := s.projectsChatKey("p1")
+	if before == after || after == "" {
+		t.Fatalf("key must change with the identity: %q → %q", before, after)
+	}
+}
+
 var _ = workboard.Task{}
