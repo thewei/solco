@@ -221,7 +221,9 @@ func (s *Shell) rebindWorkspaceChat() {
 			// The latch holds only while the pane still has no chat source:
 			// once the agent establishes a session (card carries the
 			// conversation identity), rebind for real.
-			if provider, _ := s.agentSessionIdentity(card.Key); card.ConversationID == "" && provider == "" {
+			// An identity whose transcript is not on disk yet (a fresh
+			// session) is no source either.
+			if provider, _ := s.agentSessionIdentity(card.Key); card.ConversationID == "" && (provider == "" || s.liveSourcePending(card.Key)) {
 				return
 			}
 			s.chatSourcelessPaneID = ""

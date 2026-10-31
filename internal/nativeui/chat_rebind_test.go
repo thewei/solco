@@ -1,6 +1,8 @@
 package nativeui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/thewei/solco/internal/agent"
@@ -154,4 +156,51 @@ func TestBridgeStepToolDone(t *testing.T) {
 	if len(steps) != 2 || !steps[0].ToolDone || steps[1].ToolDone {
 		t.Fatalf("toolDone = %+v", steps)
 	}
+}
+
+// A fresh omp reports the session file it is about to write, but the file
+// appears only with the first prompt. Chat must open on its invitation (not
+// "Loading conversation…" forever), keep the latch across renders, and bind
+// for real once the file exists.
+func TestFreshAgentWithUnwrittenSessionFileOpensOnInvitation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, "session.jsonl")
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p-fresh"
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{
+			TerminalID:   "term-fresh",
+			PaneID:       "p-fresh",
+			Status:       "idle",
+			AgentSession: &herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Source: "herdr:omp", Value: path},
+		}},
+	}
+
+	shell.rebindWorkspaceChat()
+	state := shell.chatBridgeState()
+	if state.Loading || !state.Waiting || !shell.chatPaneSourceless() {
+		t.Fatalf("fresh session: Loading=%v Waiting=%v sourceless=%v, want false/true/true", state.Loading, state.Waiting, shell.chatPaneSourceless())
+	}
+
+	// The render path re-enters every frame: the latch must survive it.
+	shell.rebindWorkspaceChat()
+	if !shell.chatPaneSourceless() {
+		t.Fatal("latch lost on re-entry while the file is still missing")
+	}
+
+	// The first prompt creates the file; the next rebind binds the tail.
+	header := "{\"type\":\"session\",\"version\":3,\"id\":\"s1\",\"timestamp\":\"2026-10-31T05:00:00Z\",\"cwd\":\"/tmp\"}\n"
+	if err := os.WriteFile(path, []byte(header), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	shell.rebindWorkspaceChat()
+	if shell.chatPaneSourceless() || shell.chatConversationID == "" {
+		t.Fatalf("file exists but chat did not bind: id=%q", shell.chatConversationID)
+	}
+	if shell.chatBridgeState().Loading {
+		t.Fatal("a header-only session must not stay Loading")
+	}
+	shell.stopLiveTail()
 }

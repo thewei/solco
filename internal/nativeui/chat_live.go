@@ -2,6 +2,8 @@ package nativeui
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"time"
 
@@ -60,6 +62,16 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 		s.surface.openChat(s.workspaceContext())
 		return
 	}
+	// A fresh agent whose session file is not written yet opens Chat on its
+	// own invitation: the first prompt is what creates the session.
+	if s.liveSourcePending(card.Key) {
+		if s.router.Path() != routeWorkspace {
+			s.router.Push(routeWorkspace)
+		}
+		s.surface.openChat(s.workspaceContext())
+		s.rebindWorkspaceChat()
+		return
+	}
 	// No live session identity and no history conversation: navigating to
 	// /chat would render its empty state behind the user's back (2026-10-06
 	// F58). Land on the agent's Terminal with a hint instead.
@@ -101,7 +113,33 @@ func (s *Shell) bindLiveAgent(key agent.AgentKey) bool {
 	if err != nil {
 		return false
 	}
+	// A fresh omp/pi reports the session file it is about to write; the file
+	// appears with the first prompt. Binding a tail to a file that is not
+	// there would wait on it forever (Loading conversation…), so the pane
+	// stays sourceless until it exists.
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
 	return s.bindLiveFile(key, provider, path, fingerprint)
+}
+
+// liveSourcePending reports an agent that named its session transcript but
+// has not written it yet (a fresh session before the first prompt).
+func (s *Shell) liveSourcePending(key agent.AgentKey) bool {
+	provider, identity := s.agentSessionIdentity(key)
+	if provider == "" || identity == nil {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	path, err := history.ResolveLiveSource(home, provider, identity.Kind, identity.Source, identity.Value)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return errors.Is(err, fs.ErrNotExist)
 }
 
 // bindLiveFile starts the incremental tail of one provider transcript file
