@@ -226,6 +226,14 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 				})
 			}
 		}),
+		row("Chat outline", "Shows a tick rail beside the conversation that jumps between your messages. It appears once a chat has three or more of them.", func() {
+			if on, changed := settingSwitch(c, "Chat outline", s.settings.General.ChatOutline); changed {
+				s.applySettings(func(v *settings.Settings) error {
+					v.General.ChatOutline = on
+					return nil
+				})
+			}
+		}),
 		row("Window opacity", "", func() {
 			pct := math.Round(s.settings.General.EffectiveOpacity() * 100)
 			ui.Row(c).AlignItems(ui.Center).Gap(Spacing().M).Children(func() {

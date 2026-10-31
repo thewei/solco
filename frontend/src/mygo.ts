@@ -123,6 +123,11 @@ export interface ChatBridgeState {
    */
   serifProse?: boolean;
   /**
+   * Outline mirrors Settings -> General -> "Chat outline": the tick rail
+   * that jumps between the user's messages.
+   */
+  outline: boolean;
+  /**
    * Root is the local repository root the changes card resolves paths
    * against ("" for read-only sessions and non-repository panes).
    */
@@ -223,6 +228,11 @@ export interface ChatCatalog {
   canSwitchModel: boolean;
   /** ModelPicker is the command ("/model") that opens the picker card, "" if none. */
   modelPicker?: string;
+  /**
+   * DefaultModel is the model a fresh session starts on (the agent's own
+   * config); the chip shows it until a transcript records a model.
+   */
+  defaultModel?: string;
 }
 
 /** ChatCatalogEntry is one `/` or `$` popover row. */

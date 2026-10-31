@@ -133,6 +133,9 @@ type ChatBridgeState struct {
 	// SerifProse mirrors Settings -> General -> "Serif chat text": assistant
 	// reading text only; code, tool rows and controls stay sans.
 	SerifProse bool `json:"serifProse,omitempty"`
+	// Outline mirrors Settings -> General -> "Chat outline": the tick rail
+	// that jumps between the user's messages.
+	Outline bool `json:"outline"`
 	// Root is the local repository root the changes card resolves paths
 	// against ("" for read-only sessions and non-repository panes).
 	Root string `json:"root,omitempty"`
@@ -780,6 +783,7 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		HighContrast:   s.settings.General.HighContrast,
 		VoiceSource:    voiceSourceName(s.settings.Voice),
 		SerifProse:     s.settings.General.ChatSerif,
+		Outline:        s.settings.General.ChatOutline,
 		Turns:          make([]ChatBridgeTurn, 0, len(s.chatTurns)),
 	}
 	state.EchoPending = s.chatPendingEcho != nil

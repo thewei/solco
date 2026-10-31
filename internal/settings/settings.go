@@ -67,6 +67,11 @@ type GeneralSettings struct {
 	// ChatSerif sets the Chat reading text (assistant prose) in a serif face;
 	// code, tool rows and the interface stay sans. Default off.
 	ChatSerif bool `json:"chat_serif,omitempty"`
+	// ChatOutline shows the Chat's conversation outline (the tick rail in the
+	// left gutter that jumps between your messages). Default on; always
+	// persisted (no omitempty) so an omitted key reads as the default and an
+	// explicit off survives, like WebViewChat.
+	ChatOutline bool `json:"chat_outline"`
 	// WebViewChat renders the /workspace Chat surface in the official MyGo
 	// ui.WebView over the presentation-only chat bridge (N19, product
 	// decision 2026-10-11). Off keeps the Native chat surface; the native
@@ -230,6 +235,7 @@ func Default() Settings {
 			RestoreWindow:       true,
 			Density:             "default",
 			HighContrast:        false,
+			ChatOutline:         true,
 			WebViewChat:         true,
 			WebViewFilesPreview: true,
 			Opacity:             1.0,

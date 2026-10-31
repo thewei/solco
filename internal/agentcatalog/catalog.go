@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,6 +62,10 @@ type Catalog struct {
 	ModelVerb string
 	// ModelPicker is the picker command ("/model") Chat can structure, "" if none.
 	ModelPicker string
+	// DefaultModel is the model a fresh session starts on, read from the
+	// agent's own config ("" when it names none): what the composer shows
+	// before any transcript records a model.
+	DefaultModel string
 }
 
 // maxSkills bounds a runaway skills folder.
@@ -257,7 +262,7 @@ func ModelVerb(provider history.AgentID) string {
 // Load builds the catalog for a provider. root is the project root ("" when unknown).
 func Load(ctx context.Context, provider history.AgentID, root string) Catalog {
 	home, _ := os.UserHomeDir()
-	cat := Catalog{Commands: builtins(provider)}
+	cat := Catalog{Commands: builtins(provider), DefaultModel: defaultModel(provider, home)}
 	switch provider {
 	case history.AgentClaudeCode:
 		cat.Commands = append(cat.Commands, prompts(filepath.Join(home, ".claude", "commands"), "/")...)
@@ -485,4 +490,81 @@ func parseOmpModels(out string) []Model {
 		}
 	}
 	return models
+}
+
+// defaultModel reads the model a new session of provider starts on from the
+// agent's own config, in the spelling its transcripts use.
+func defaultModel(provider history.AgentID, home string) string {
+	read := func(path string) string {
+		data, err := os.ReadFile(path)
+		if err != nil || len(data) > 1<<20 {
+			return ""
+		}
+		return string(data)
+	}
+	switch provider {
+	case history.AgentOMP:
+		return ompDefaultModel(read(filepath.Join(home, ".omp", "agent", "config.yml")))
+	case history.AgentCodex:
+		return codexDefaultModel(read(filepath.Join(codexHome(home), "config.toml")))
+	case history.AgentClaudeCode:
+		return claudeDefaultModel(read(filepath.Join(home, ".claude", "settings.json")))
+	}
+	return ""
+}
+
+// ompDefaultModel reads modelRoles.default ("provider/id[:level]") and returns
+// "id": the transcript names the model without its provider or level.
+func ompDefaultModel(config string) string {
+	inRoles := false
+	for _, line := range strings.Split(config, "\n") {
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			inRoles = strings.HasPrefix(line, "modelRoles:")
+			continue
+		}
+		if !inRoles {
+			continue
+		}
+		key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if !ok || strings.TrimSpace(key) != "default" {
+			continue
+		}
+		value = strings.Trim(strings.TrimSpace(value), `"'`)
+		if cut := strings.LastIndex(value, ":"); cut > strings.LastIndex(value, "/") {
+			value = value[:cut]
+		}
+		if _, id, ok := strings.Cut(value, "/"); ok {
+			return id
+		}
+		return value
+	}
+	return ""
+}
+
+// codexDefaultModel reads the top-level `model = "…"` of config.toml.
+func codexDefaultModel(config string) string {
+	for _, line := range strings.Split(config, "\n") {
+		text := strings.TrimSpace(line)
+		if strings.HasPrefix(text, "[") {
+			return ""
+		}
+		if key, value, ok := strings.Cut(text, "="); ok && strings.TrimSpace(key) == "model" {
+			return strings.Trim(strings.TrimSpace(value), `"'`)
+		}
+	}
+	return ""
+}
+
+// claudeDefaultModel reads the top-level "model" of settings.json.
+func claudeDefaultModel(config string) string {
+	var settings struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal([]byte(config), &settings) != nil {
+		return ""
+	}
+	return settings.Model
 }

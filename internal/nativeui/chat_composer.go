@@ -36,6 +36,9 @@ type ChatCatalog struct {
 	CanSwitchModel bool `json:"canSwitchModel"`
 	// ModelPicker is the command ("/model") that opens the picker card, "" if none.
 	ModelPicker string `json:"modelPicker,omitempty"`
+	// DefaultModel is the model a fresh session starts on (the agent's own
+	// config); the chip shows it until a transcript records a model.
+	DefaultModel string `json:"defaultModel,omitempty"`
 }
 
 // chatProvider reports the bound pane's Agent and the project root.
@@ -76,6 +79,7 @@ func (b *ChatBridge) Catalog(ctx context.Context) (ChatCatalog, error) {
 		out.Models = append(out.Models, ChatCatalogModel{ID: model.ID})
 	}
 	out.ModelPicker = cat.ModelPicker
+	out.DefaultModel = cat.DefaultModel
 	out.CanSwitchModel = (cat.ModelVerb != "" && len(cat.Models) > 0) || cat.ModelPicker != ""
 	return out, nil
 }

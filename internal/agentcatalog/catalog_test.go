@@ -95,3 +95,28 @@ func TestBuiltinsNeverEndTheAgent(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultModelFromTheAgentsOwnConfig(t *testing.T) {
+	omp := "theme:\n  dark: titanium\nmodelRoles:\n  plan: openai/gpt-5.6-luna:high\n  default: magpie/group/glm-flash:high\ndev:\n  default: nope\n"
+	if got := ompDefaultModel(omp); got != "group/glm-flash" {
+		t.Errorf("omp default = %q, want group/glm-flash", got)
+	}
+	if got := ompDefaultModel("modelRoles:\n  default: openai/gpt-5.6-luna\n"); got != "gpt-5.6-luna" {
+		t.Errorf("omp default without level = %q", got)
+	}
+	if got := ompDefaultModel("dev:\n  default: x\n"); got != "" {
+		t.Errorf("a default outside modelRoles must not count: %q", got)
+	}
+	if got := codexDefaultModel("model_reasoning_effort = \"max\"\nmodel = \"group/glm-flash\"\n[profiles.x]\nmodel = \"other\"\n"); got != "group/glm-flash" {
+		t.Errorf("codex default = %q", got)
+	}
+	if got := codexDefaultModel("[profiles.x]\nmodel = \"other\"\n"); got != "" {
+		t.Errorf("a table's model is not the default: %q", got)
+	}
+	if got := claudeDefaultModel(`{"model":"haiku","other":1}`); got != "haiku" {
+		t.Errorf("claude default = %q", got)
+	}
+	if got := claudeDefaultModel("not json"); got != "" {
+		t.Errorf("bad json = %q", got)
+	}
+}

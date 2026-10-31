@@ -303,6 +303,9 @@ export function App() {
   }, [draft]);
 
   const disposition = state?.disposition ?? "unknown";
+  // A fresh session has no transcript yet, so the chip shows the model the
+  // agent's own config starts it on.
+  const shownModel = state?.model || catalog?.defaultModel || "";
   // A fresh pane (nothing sent yet) is "starting", never "working": its
   // composer holds Send until the agent is ready and shows no Stop.
   const starting = Boolean(state?.waiting) && disposition !== "ready";
@@ -1091,7 +1094,7 @@ export function App() {
           </button>
         </div>
       ) : null}
-      {!state?.loading && !state?.waiting ? <TocRail turns={turns} logRef={logRef} top={list.top} scrollTo={list.scrollTo} /> : null}
+      {state?.outline !== false && !state?.loading && !state?.waiting ? <TocRail turns={turns} logRef={logRef} top={list.top} scrollTo={list.scrollTo} /> : null}
       <div className="chat-log" ref={logRef} onScroll={onLogScroll}>
         <div className="col">
           {state?.hasOlder ? (
@@ -1228,7 +1231,7 @@ export function App() {
             {panel === "model" ? (
               <ModelPanel
                 catalog={catalog}
-                current={state?.model ?? ""}
+                current={shownModel}
                 busy={switching || disposition !== "ready"}
                 onSwitch={(id) => void switchModel(id)}
                 onPicker={() => void openModelPicker()}
@@ -1334,10 +1337,10 @@ export function App() {
                     disabled={voiceBusy}
                     onClick={() => setPanel(panel === "model" ? null : "model")}
                   >
-                    {state?.model || "Model"} <span aria-hidden>▾</span>
+                    {shownModel || "Model"} <span aria-hidden>▾</span>
                   </button>
-                ) : state?.model ? (
-                  <span className="chip mono">{state.model}</span>
+                ) : shownModel ? (
+                  <span className="chip mono">{shownModel}</span>
                 ) : null}
                 {working && hasContent ? (
                   <button

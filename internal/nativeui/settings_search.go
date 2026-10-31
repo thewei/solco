@@ -27,7 +27,7 @@ type settingsEntry struct {
 var settingsLabels = map[string][][2]string{
 	"/settings/general": {
 		{"Appearance", "Theme"}, {"Appearance", "Sidebar density"}, {"Appearance", "Increase contrast"},
-		{"Appearance", "Serif chat text"}, {"Appearance", "Window opacity"},
+		{"Appearance", "Serif chat text"}, {"Appearance", "Chat outline"}, {"Appearance", "Window opacity"},
 		{"Window", "Show Tabs in Sidebar"}, {"Window", "Restore window position"},
 	},
 	"/settings/terminal": {
