@@ -23,6 +23,20 @@ type Settings struct {
 	// Usage is the Usage page's switches. Tokens are never kept here: they
 	// live in the system credential store (mygo.Secrets).
 	Usage UsageSettings `json:"usage,omitempty"`
+	// Remote is the phone-client Host's listener choice (product decision
+	// 2026-10-31). The zero value is off: nothing listens until the user
+	// picks a mode in Settings → Remote Access.
+	Remote RemoteAccessSettings `json:"remote_access,omitempty"`
+}
+
+// RemoteAccessSettings is the Remote Access page's choice. Mode is "" / "off",
+// "loopback", "lan" or "tailscale" (internal/remotehost.Mode); Address is the
+// single interface address picked for lan/tailscale. Pairing codes, device
+// tokens and the TLS key never live here (internal/remotehost owns them).
+type RemoteAccessSettings struct {
+	Mode    string `json:"mode,omitempty"`
+	Port    int    `json:"port,omitempty"`
+	Address string `json:"address,omitempty"`
 }
 
 // UsageSettings are the Usage page preferences (product decision 2026-10-30):

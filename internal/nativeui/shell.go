@@ -189,6 +189,10 @@ type Shell struct {
 	voiceStatusAt    time.Time
 	voiceConsentOpen bool
 
+	// remote backs Settings → Remote Access: the optional phone-client Host,
+	// its listener choice feedback and the pairing sheet.
+	remote remoteState
+
 	settingsGitPromptDraft string
 	settingsPiBinaryDraft  string
 
@@ -422,11 +426,11 @@ type Shell struct {
 	tabBarRevealUntil time.Time // the selected chip is kept scrolled into view until then
 	subagentsBusy     bool
 	subagentsAt       time.Time
+	subagentsTick     *time.Timer // re-read while a listed sub-agent is running
 
 	// inspector owns the 0.8 read-only Agent inspector state.
 	inspector inspectorState
 
-	subagentsTick     *time.Timer // re-read while a listed sub-agent is running
 	// diagnostics state (0.9 P16/P17)
 	diagLogLevelFilter string
 	diagSearchQuery    string
@@ -519,14 +523,14 @@ type Shell struct {
 	chatSubagentsTimer  *time.Timer
 	chatSubagentsBusy   bool
 	chatSubagentsActive bool
-	chatWebviewBroken bool
-	// filesWebview is the Files preview page's embedded WebView (product
-	// decision 2026-10-13); nil until the first /files build with
-	// General.WebViewFilesPreview on, and filesWebviewBroken latches a
 	// chatWebview is the chat page's embedded WebView (N19 Phase 2); nil
 	// until the first chat build with General.WebViewChat on, and
 	// chatWebviewBroken latches a failed creation so the native chat stays.
 	chatWebview       *mygo.WebView
+	chatWebviewBroken bool
+	// filesWebview is the Files preview page's embedded WebView (product
+	// decision 2026-10-13); nil until the first /files build with
+	// General.WebViewFilesPreview on, and filesWebviewBroken latches a
 	// failed creation so the page shows truthful empty states.
 	filesWebview       *mygo.WebView
 	filesWebviewBroken bool
@@ -674,6 +678,7 @@ func NewShell(opts ...ShellOption) *Shell {
 		opt(s)
 	}
 	s.restoreSession()
+	s.startRemoteHostAtLaunch()
 	return s
 }
 
@@ -857,6 +862,7 @@ func (s *Shell) Close() {
 	}
 	s.stopLiveTail()
 	s.stopHistory()
+	s.stopRemoteHost()
 	s.closeAllTerminals()
 	// Kill the SSH socket bridges of saved-machine instances: they are
 	// process-global children that would otherwise outlive the app.

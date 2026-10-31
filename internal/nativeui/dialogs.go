@@ -132,6 +132,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 	s.deviceAddDialog(c)
 	s.usageConsentDialog(c)
 	s.voiceConsentDialog(c)
+	s.remotePairDialog(c)
 	s.shortcutsSheet(c)
 	if s.confirmOpen {
 		// Destructive confirms must not default-focus the destructive

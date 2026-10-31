@@ -38,6 +38,9 @@ var settingsLabels = map[string][][2]string{
 	"/settings/voice": {
 		{"Transcription", "Source"}, {"Transcription", "Account"}, {"Transcription", "What is sent"}, {"Transcription", "Endpoint"}, {"Transcription", "API key"}, {"Transcription", "Model"},
 	},
+	"/settings/remote": {
+		{"Listener", "Access"}, {"Listener", "Address"}, {"Listener", "Port"}, {"Phones", "Pair a phone"},
+	},
 	"/settings/providers": {
 		{"", "Integration"}, {"", "Status hook"},
 	},
