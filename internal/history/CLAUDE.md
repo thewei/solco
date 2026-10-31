@@ -28,6 +28,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `legacy_test.go`：旧 SQLite 目录清理（只删 history.sqlite3 家族、幂等）。
 - `claude_test.go`：Claude 会话解析行为。
 - `codex_test.go`：Codex 会话解析行为。
+- `live_parity_test.go`：live 增量解码（一次灌入 / 逐行追加）的投影必须与整文件解析的 Mainline 逐字段一致——Chat 的三条入口（新会话 / 已有 Agent 窗格 live tail / 历史记录）共用同一份转录的守卫。
 - `history_test.go`：跨 Provider 解析与历史模型语义。
 - `live_test.go`：增量读取/解码的边界行为。
 - `pi_test.go`：Pi Provider 解析和 live 增量回归；`TestPiTitleRowWinsOverFirstMessage` 钉 agent 自生成标题优先（含空 title 行不清除、title 行不计 unknown）。

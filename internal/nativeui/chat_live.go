@@ -149,6 +149,8 @@ func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path,
 	s.chatWindowMessages = nil
 	s.chatWindowStart = 0
 	s.chatHasOlder = false
+	s.chatLiveStart = -1
+	s.chatLiveDecoder = decoder
 	s.chatContextTokens = nil
 	// A same-pane rebind preserves the pending submission (0.6 §12); any
 	// other pane's rebind dropped it at openChat's pane assignment.
@@ -209,6 +211,7 @@ func (s *Shell) stopLiveTail() {
 	s.chatLiveFingerprint = ""
 	s.chatLivePath = ""
 	s.chatLiveCommitted = 0
+	s.chatLiveDecoder = nil
 }
 
 // retainPendingEchoForPane keeps a pending submission across a rebind only
@@ -232,10 +235,21 @@ func (s *Shell) applyLiveSync(decoder *history.LiveDecoder) {
 	if echo, consumed := conversation.ReconcilePendingEcho(projection, s.chatPendingEcho); consumed {
 		s.chatPendingEcho = echo
 	}
-	messages := projection
-	if limit := conversation.MaxBeforeAfter * 2; len(messages) > limit {
-		messages = messages[len(messages)-limit:]
+	// The same window a history-bound chat opens with — the newest page, with
+	// the earlier ones behind "Earlier messages" — so one conversation reads
+	// alike whether it is followed live or opened from Sessions. The window's
+	// start is fixed once chosen (new messages extend it) until it outgrows
+	// the render bound.
+	if s.chatLiveStart < 0 {
+		s.chatLiveStart = max(0, len(projection)-chatOlderPage)
 	}
+	if limit := conversation.MaxBeforeAfter * 2; len(projection)-s.chatLiveStart > limit {
+		s.chatLiveStart = len(projection) - limit
+	}
+	s.chatLiveStart = min(s.chatLiveStart, len(projection))
+	messages := projection[s.chatLiveStart:]
+	s.chatWindowStart = s.chatLiveStart
+	s.chatHasOlder = s.chatLiveStart > 0 && len(messages) < chatMaxAccumulatedMessages
 	items := conversation.ItemsFromTranscript(messages)
 	if pending := decoder.PendingTail(); pending != nil {
 		items = append(items, conversation.ProvisionalItem(*pending))
@@ -251,6 +265,17 @@ func (s *Shell) applyLiveSync(decoder *history.LiveDecoder) {
 	s.appendPendingEchoTurn()
 	s.reconcileChatQuestion()
 	s.publishChatBridge()
+}
+
+// chatLiveLoadOlder pulls the previous page of a live-followed chat out of
+// the decoder's own projection (it already holds the whole transcript, so no
+// history read is needed) and refolds the window.
+func (s *Shell) chatLiveLoadOlder() {
+	if s.chatLiveDecoder == nil || s.chatLiveStart <= 0 {
+		return
+	}
+	s.chatLiveStart = max(0, s.chatLiveStart-chatOlderPage)
+	s.applyLiveSync(s.chatLiveDecoder)
 }
 
 // lastModelFromItems picks the last model the window's items recorded.

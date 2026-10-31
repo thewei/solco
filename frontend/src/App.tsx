@@ -23,7 +23,13 @@ import "./chat.css";
 // The bridge mirrors conversation.PromptDisposition as "ready" | "queue" |
 // "terminal" | "unknown"; the generated client types it as string.
 export function App() {
-  const [state, setState] = useState<ChatBridgeState | null>(null);
+  const [state, setStateRaw] = useState<ChatBridgeState | null>(null);
+  // A projection built before the one on screen never replaces it (snapshot
+  // replies and chatUpdated events can arrive out of order).
+  const setState = useCallback(
+    (next: ChatBridgeState) => setStateRaw((prev) => (prev && next.seq < prev.seq ? prev : next)),
+    [],
+  );
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [showJump, setShowJump] = useState(false);
@@ -118,8 +124,10 @@ export function App() {
   }, [state?.highContrast, state?.serifProse]);
 
   // Sticky bottom: follow the tail until the user scrolls up; turns added
-  // while scrolled up raise the "New messages" pill instead.
-  useEffect(() => {
+  // while scrolled up raise the "New messages" pill instead. A layout effect,
+  // so a conversation's first frame is already at its end — never painted at
+  // the top and then jumped.
+  useLayoutEffect(() => {
     const log = logRef.current;
     const count = state?.turns.length ?? 0;
     if (log && stickToBottom.current) {
@@ -520,7 +528,8 @@ export function App() {
   };
 
   const cancelQueued = async () => {
-    setState(await chat.cancelQueued().catch(() => state));
+    const next = await chat.cancelQueued().catch(() => state);
+    if (next) setState(next);
   };
 
   const loadOlder = async () => {

@@ -96,6 +96,11 @@ type ChatBridgeTurn struct {
 // presentation state only: the conversation runtime, the send path and the
 // follow-up ledger stay in Go (internal/agent + internal/herdr).
 type ChatBridgeState struct {
+	// Seq numbers every projection in the order it was built, so the page can
+	// drop one that arrives after a newer one (a slow snapshot reply landing
+	// behind a chatUpdated event would otherwise show a stale state until the
+	// next change).
+	Seq            uint64 `json:"seq"`
 	ConversationID string `json:"conversationId"`
 	Title          string `json:"title,omitempty"`
 	Provider       string `json:"provider,omitempty"`
@@ -742,9 +747,30 @@ func (s *Shell) callOnWindow(fn func()) {
 	<-done
 }
 
+// chatAwaitingBind reports a Chat state that has not been decided yet: no
+// conversation, no echo, no read-only transcript and no sourceless verdict,
+// while either the runtime has not described the selected pane (a restart's
+// first moments) or the pane's agent is known but the surface has not bound
+// it (the page is hidden behind Terminal). "No conversation" says nothing
+// about the agent then, so the page shows loading — never the new-session
+// invitation over an existing conversation. The Chat surface binds or latches
+// sourceless on its next frame, which ends the wait.
+func (s *Shell) chatAwaitingBind() bool {
+	if s.chatConversationID != "" || s.chatReadOnly || s.chatPendingEcho != nil || s.chatLoading || s.chatPaneSourceless() {
+		return false
+	}
+	if s.selectedPaneID != "" && len(s.projection.Panes) == 0 && len(s.projection.Agents) == 0 {
+		return true
+	}
+	_, known := s.agentCardForSelectedPane()
+	return known
+}
+
 // chatBridgeState projects the chat state (UI lane only).
 func (s *Shell) chatBridgeState() ChatBridgeState {
+	s.chatStateSeq++
 	state := ChatBridgeState{
+		Seq:            s.chatStateSeq,
 		ConversationID: s.chatConversationID,
 		Loading:        s.chatLoading,
 		Disposition:    chatBridgeDisposition(s.chatDispositionNow()),
@@ -757,7 +783,10 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		Turns:          make([]ChatBridgeTurn, 0, len(s.chatTurns)),
 	}
 	state.EchoPending = s.chatPendingEcho != nil
-	state.Waiting = s.chatConversationID == "" && !s.chatLoading && !s.chatReadOnly && !state.EchoPending
+	if s.chatAwaitingBind() {
+		state.Loading = true
+	}
+	state.Waiting = s.chatConversationID == "" && !state.Loading && !s.chatReadOnly && !state.EchoPending
 	if state.Waiting {
 		for _, summary := range s.chatLinkCandidates() {
 			state.LinkCandidates = append(state.LinkCandidates, ChatBridgeLink{

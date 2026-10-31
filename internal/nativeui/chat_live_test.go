@@ -3,6 +3,7 @@ package nativeui
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -439,5 +440,50 @@ func TestChatQueuedDispositionEnqueuesInLedger(t *testing.T) {
 	shell.sendChatPrompt()
 	if shell.chatQueuedText != "" || shell.chatOutcome == "" {
 		t.Fatalf("unresolved identity must refuse: chip %q outcome %q", shell.chatQueuedText, shell.chatOutcome)
+	}
+}
+
+// One conversation reads alike however it is opened: a live-followed chat
+// starts with the newest page and offers "Earlier messages" just as the
+// history-bound one does, the window growing with new messages and widening
+// a page at a time from the decoder's own projection.
+func TestLiveChatWindowMatchesHistoryPaging(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "long.jsonl")
+	total := chatOlderPage*2 + 10
+	var body string
+	for i := 0; i < total; i++ {
+		body += "{\"type\":\"user\",\"cwd\":\"/work/demo\",\"message\":{\"content\":\"msg " + strconv.Itoa(i) + "\"}}\n"
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	shell, card := liveBindShell(t, "claude-code", path)
+	shell.chatLiveBackstopOverride = 10 * time.Second
+	if !shell.bindLiveAgent(card.Key) {
+		t.Fatal("live bind must take over")
+	}
+	if len(shell.chatTurns) != chatOlderPage || !shell.chatHasOlder {
+		t.Fatalf("first window = %d turns, hasOlder %v; want one page and an Earlier control", len(shell.chatTurns), shell.chatHasOlder)
+	}
+	if got := shell.chatTurns[len(shell.chatTurns)-1].Text; got != "msg "+strconv.Itoa(total-1) {
+		t.Fatalf("the window must end at the newest message, ends at %q", got)
+	}
+
+	// New messages extend the window; they never slide the start.
+	file, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	file.WriteString("{\"type\":\"user\",\"message\":{\"content\":\"fresh\"}}\n")
+	file.Close()
+	shell.chatLivePump.PumpOnce()
+	if len(shell.chatTurns) != chatOlderPage+1 {
+		t.Fatalf("after one append: %d turns, want %d", len(shell.chatTurns), chatOlderPage+1)
+	}
+
+	shell.chatLoadOlder()
+	if len(shell.chatTurns) != chatOlderPage*2+1 || !shell.chatHasOlder {
+		t.Fatalf("after Earlier: %d turns, hasOlder %v", len(shell.chatTurns), shell.chatHasOlder)
+	}
+	shell.chatLoadOlder()
+	if len(shell.chatTurns) != total+1 || shell.chatHasOlder {
+		t.Fatalf("after the last Earlier: %d turns, hasOlder %v; want the whole transcript and no control", len(shell.chatTurns), shell.chatHasOlder)
 	}
 }

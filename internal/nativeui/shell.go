@@ -188,8 +188,8 @@ type Shell struct {
 	voiceStatusAt    time.Time
 	voiceConsentOpen bool
 
-	settingsGitPromptDraft     string
-	settingsPiBinaryDraft      string
+	settingsGitPromptDraft string
+	settingsPiBinaryDraft  string
 
 	// hist owns the Native History presentation state over the read-only
 	// HistoryService.
@@ -240,7 +240,7 @@ type Shell struct {
 	commandCenterOpen         bool
 	commandCenterScope        commandcenter.Scope
 	commandCenterQuery        string
-	commandCenterChip         int // index into commandCenterChips
+	commandCenterChip         int      // index into commandCenterChips
 	recentFiles               []string // files opened in Files, newest first (persisted in the session)
 	filesStartInfo            filesStartCache
 	recentHosts               []string // ssh aliases last connected from Hosts, newest first (persisted in the session)
@@ -372,8 +372,8 @@ type Shell struct {
 	gitRefsHinted                                                    bool
 	// gitRefsReveal is the sidebar ref row a commit chip asked to scroll to.
 	gitRefsReveal string
-	unstagedOpen                                                     bool
-	stagedOpen                                                       bool
+	unstagedOpen  bool
+	stagedOpen    bool
 	// commitsMode shows the All Commits pane instead of the split panes.
 	gitConflictFilesExpanded bool
 	commitsMode              bool
@@ -443,10 +443,10 @@ type Shell struct {
 	// hookSessions remembers, per pane, the session identity the hook layer
 	// last reported, so only a new one kicks a catalog scan.
 	hookIdentities map[string]hookIdentity
-	chatAskTool  string
-	chatAskStep  int
-	chatAskTotal int
-	chatAskDone  bool
+	chatAskTool    string
+	chatAskStep    int
+	chatAskTotal   int
+	chatAskDone    bool
 	// chatReadOnly marks a detached history transcript — the Sessions
 	// detail shows it through the same chat view with no pane, no live tail
 	// and no composer; chatSession is that session's meta for the header.
@@ -527,6 +527,13 @@ type Shell struct {
 	filesPublishPending bool
 	// chatLiveCommitted is the committed live projection length at the last	// applied sync — the pending-echo baseline coordinate (0.6 §12).
 	chatLiveCommitted int
+	// chatLiveStart is the projection index the live chat window starts at
+	// (-1 until the first sync picks it); chatLiveDecoder is the decoder it
+	// folds, kept so "Earlier messages" can widen the window.
+	chatLiveStart int
+	// chatStateSeq numbers the chat projections built (UI lane only).
+	chatStateSeq    uint64
+	chatLiveDecoder *history.LiveDecoder
 	// chatPendingEcho is the unconsumed pending submission echo; nil once
 	// the provider source confirmed it.
 	chatPendingEcho *conversation.PendingEcho

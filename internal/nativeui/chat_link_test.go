@@ -106,3 +106,44 @@ func TestLinkSessionBindsOnlyAnOfferedCandidate(t *testing.T) {
 		t.Fatal("a hand-linked session must yield to the measured identity")
 	}
 }
+
+// Right after a restart the pane is not in any projection yet: the page must
+// say "loading", not invite a new conversation over an existing one — and the
+// invitation returns once the runtime has described the pane and it truly has
+// no session.
+func TestChatLoadsInsteadOfInvitingBeforeTheFirstProjection(t *testing.T) {
+	shell := NewShell()
+	shell.selectedPaneID = "p1"
+	state := shell.chatBridgeState()
+	if !state.Loading || state.Waiting {
+		t.Fatalf("before any projection: loading=%v waiting=%v, want loading only", state.Loading, state.Waiting)
+	}
+
+	shell, _ = sourcelessLinkShell(t)
+	state = shell.chatBridgeState()
+	if state.Loading || !state.Waiting {
+		t.Fatalf("a described pane without a session: loading=%v waiting=%v, want the invitation", state.Loading, state.Waiting)
+	}
+}
+
+// A pane the surface has not bound yet (Terminal showing, or the first
+// frames after a restart) is undecided, not new: the page loads until the
+// surface binds or latches the pane sourceless, and every projection is
+// numbered so a late one can be dropped.
+func TestUnboundKnownPaneLoadsAndProjectionsAreNumbered(t *testing.T) {
+	shell, _ := sourcelessLinkShell(t)
+	shell.chatSourcelessPaneID = "" // never bound by a Chat frame
+	shell.chatPaneID = ""
+	first := shell.chatBridgeState()
+	if !first.Loading || first.Waiting {
+		t.Fatalf("unbound known pane: loading=%v waiting=%v, want loading only", first.Loading, first.Waiting)
+	}
+	shell.rebindWorkspaceChat() // the Chat frame binds: no source → the invitation is now true
+	second := shell.chatBridgeState()
+	if second.Loading || !second.Waiting {
+		t.Fatalf("after the bind: loading=%v waiting=%v, want the invitation", second.Loading, second.Waiting)
+	}
+	if second.Seq <= first.Seq {
+		t.Fatalf("seq did not increase: %d then %d", first.Seq, second.Seq)
+	}
+}

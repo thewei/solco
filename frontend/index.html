@@ -5,8 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>Solco</title>
-    <!-- First paint before the stylesheet loads: the same --content pair as
-         theme.css (and the native WebView fill), so no white flash. -->
+    <!-- First paint, before the stylesheet and the module script: the theme
+         is settled synchronously from the app-resolved appearance (the
+         page's own App code keeps it current afterwards), and html carries
+         the same --content pair as theme.css and the native WebView fill. -->
+    <script>
+      document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    </script>
     <style>
       html {
         background: #f5f5f7;

@@ -458,11 +458,14 @@ const (
 )
 
 // chatLoadOlder fetches the previous history page and prepends it to the
-// accumulated window, then re-derives the timeline. Live-bound chats have
-// no earlier page (their tail is bounded by design).
+// accumulated window, then re-derives the timeline. Live-bound chats page
+// out of their decoder's projection instead (chatLiveLoadOlder).
 func (s *Shell) chatLoadOlder() {
-	if s.hist.service == nil || !s.chatHasOlder || s.chatConversationID == "" ||
-		strings.HasPrefix(s.chatConversationID, "live:") {
+	if strings.HasPrefix(s.chatConversationID, "live:") {
+		s.chatLiveLoadOlder()
+		return
+	}
+	if s.hist.service == nil || !s.chatHasOlder || s.chatConversationID == "" {
 		return
 	}
 	service := s.hist.service

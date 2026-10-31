@@ -69,6 +69,13 @@ export interface ChatBridgePlanItem {
  * follow-up ledger stay in Go (internal/agent + internal/herdr).
  */
 export interface ChatBridgeState {
+  /**
+   * Seq numbers every projection in the order it was built, so the page can
+   * drop one that arrives after a newer one (a slow snapshot reply landing
+   * behind a chatUpdated event would otherwise show a stale state until the
+   * next change).
+   */
+  seq: number;
   conversationId: string;
   title?: string;
   provider?: string;

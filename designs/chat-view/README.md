@@ -361,3 +361,19 @@ git diff --check
 
 **验证**：`go test ./...`（含新增 `chat_link_test.go`：候选只含近期未归档同 provider 会话；未提供的 key 不绑定；绑定后实测身份到来即让位）· `go tool mygo vet .` · `cd frontend && npx tsc --noEmit && npx vite build` · `git diff --check`。真机（0.10.0 安装版，stable 签名）：⌘F 弹出查找条并聚焦、命中高亮、Esc 关闭且焦点回 composer；其余阶段 1/2 的页面态以单测与类型检查为准——真机未向他人 Agent 发消息，未复测 Retry/邀请链接行。
 **最脆弱的假设**：`content-visibility:auto` 的 `contain-intrinsic-size` 估值与真实高度差大时滚动条会有轻微跳动；若出现，缩小 `RECENT_TURNS` 之外的范围或改成虚拟列表。
+
+
+## Decision 2026-10-31 · 入口一致性与首帧稳定（0.11.1，presentation only）
+
+用户要求：新会话、从已有 Agent 窗格切入、从历史记录切入，Chat 的显示必须一致。实测与代码对照后的结论与修复：
+
+| 项 | 结论 |
+|---|---|
+| 内容 | **一致**。live 增量解码与整文件解析的投影逐字段相同（`history/live_parity_test.go`，claude/codex/pi 三家，一次灌入与逐行追加两种喂法）。 |
+| 窗口 | ❌→✅ live 窗格原先直接显示最近 400 条且没有 “Earlier messages”；历史入口是最近 60 条 + Earlier。现统一：live 也先开最近一页（`chatOlderPage`），新消息只延长窗口不滑动起点，Earlier 一次放宽一页，直接取 decoder 已持有的投影（`chatLiveLoadOlder`，不读 History）。`TestLiveChatWindowMatchesHistoryPaging`。 |
+| 邀请态误报 | ❌→✅ 已有会话的 Agent 在重启后、或 Chat 面板被 Terminal 盖住时，页面会先显示 “Start the conversation”（真机复现，约一分钟后才被下一次事件纠正）。根因：「尚未绑定」被当成「没有会话」。现 `chatAwaitingBind`：无会话/无回显/无只读/未判定 sourceless 且 pane 已知（或 projection 尚空）时发 `Loading`，Chat 帧绑定或判定 sourceless 后才可能出邀请。 |
+| 乱序覆盖 | 页面的 `snapshot()` 回复与 `chatUpdated` 事件可能乱序，旧状态覆盖新状态直到下一次变化。现每个投影带单调 `Seq`，页面丢弃比当前更旧的（`setState` 守卫）。 |
+| 首帧位置 | ❌→✅ 打开会话时先在顶部绘制一帧再跳到底。粘底部效应改为 `useLayoutEffect`，首帧即在末尾。 |
+| 首帧颜色 | ❌→✅ WebView 首次创建出现一帧浅色（真机逐帧抓取：`#f5f5f7`）：CSS 已应用而 `data-theme` 要等模块脚本执行。`index.html` 加同步内联脚本按应用解析的外观先定 `data-theme`；原生填充 `BackgroundColor` 与 `theme.css` 令牌由 `TestWebviewBackgroundMatchesPageTokens` 锁定。修复后连续 12 帧全为 `#161618`。 |
+
+验证：`go test ./...` · `mygo vet .` · `tsc --noEmit` · `vite build`；真机逐帧（`screencapture` 连抓）确认无浅色帧。未能真机覆盖：Codex/Claude 长会话的 live Earlier（单测覆盖）。
