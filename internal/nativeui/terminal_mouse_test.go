@@ -247,6 +247,50 @@ func TestRouteAttachMouseGatesUnreadyAgentPane(t *testing.T) {
 	}
 }
 
+// TestRouteAttachMouseGatesExitedAgentPane pins the 2026-10-31 exit-side
+// half of the echo gate. Herdr's binding outlives the agent process
+// (status hooks carry transitions, not exits), so an agent pane whose TUI
+// is gone still carries a known status — and the daemon's forced mouse
+// tracking keeps the view reporting into it, where the bytes land in the
+// cooked tty of whatever owns the pane now (a prompt, `omp update`'s bun)
+// and echo back as visible garbage. A `released` status (the hook
+// stream's session end) and the service scan's shell-idle measurement
+// each close the gate; unmeasured panes keep forwarding.
+func TestRouteAttachMouseGatesExitedAgentPane(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "inst"
+	surface := &terminalSurface{key: "t1", paneID: "w1:p1", agent: "pi", agentStatus: "released"}
+	var sent []string
+	shell.agentMouseSink = func(_ string, text string) { sent = append(sent, text) }
+	var scrolls []int
+	shell.paneScrollSink = func(_ string, offset int) { scrolls = append(scrolls, offset) }
+
+	for _, seq := range []string{"\x1b[<64;10;5M", "\x1b[<35;43;22M", "\x1b[<0;45;22m"} {
+		shell.routeAttachMouse(surface, seq)
+	}
+	if len(sent) != 0 {
+		t.Fatalf("released agent pane must forward nothing: %q", sent)
+	}
+	if len(scrolls) != 0 {
+		t.Fatalf("released agent pane without scrollback must not scroll: %v", scrolls)
+	}
+
+	// A measured shell-idle pane closes the gate too, status still known.
+	surface.agentStatus = "working"
+	shell.paneShellIdle = map[string]bool{"w1:p1": true}
+	shell.routeAttachMouse(surface, "\x1b[<0;45;22m")
+	if len(sent) != 0 {
+		t.Fatalf("shell-idle agent pane must forward nothing: %q", sent)
+	}
+
+	// Unmeasured liveness keeps today's forwarding (the live-TUI case).
+	delete(shell.paneShellIdle, "w1:p1")
+	shell.routeAttachMouse(surface, "\x1b[<0;45;22m")
+	if len(sent) != 1 || sent[0] != "\x1b[<0;45;22m" {
+		t.Fatalf("unmeasured agent pane forwards = %q, want the press verbatim", sent)
+	}
+}
+
 // TestRouteAttachMouseScrollbackTUIWinsTheViewport pins the 2026-10-06 agy
 // fix: the wheel follows Herdr's scroll reality, not the agent label. agy
 // is agent-classified but scrollback-backed (live probe: max_offset_from_

@@ -8,7 +8,7 @@ import (
 /**
  * [INPUT]: 依赖 terminalSurface 的 paneID/agent/agentStatus/scrollOffset/scrollMax、terminal_scroll 的 pane.scroll/send_text 派发通道
  * [OUTPUT]: 对外提供 sgrMouseSplitter（Write 侧 SGR 鼠标事件流式分离）、parseSGRMouse、Shell.routeAttachMouse（真终端语义路由）
- * [POS]: nativeui 的 attach 鼠标语义收口（F144 真终端改造）：客户端像真终端一样把指针事件交给程序/herdr——普通 pane 滚轮走 pane.scroll 权重视口，Agent TUI 的事件原样 pane.send_text；转发以 pane 状态已知（非 unknown，hook/OSC 7501 证明会话存活）为门（2026-10-30 回显修复）：boot 窗口与死 display_agent 标签的注入只会被启动 shell 的 canonical tty 回显成乱码
+ * [POS]: nativeui 的 attach 鼠标语义收口（F144 真终端改造）：客户端像真终端一样把指针事件交给程序/herdr——普通 pane 滚轮走 pane.scroll 权重视口，Agent TUI 的事件原样 pane.send_text；转发以 pane 状态已知（非 unknown，hook/OSC 7501 证明会话存活）为门（2026-10-30 回显修复），2026-10-31 起另以两个会话终结事实收口：status `released`（hook 的 session_end，进程退出镜像）与 service scan 的 shell-idle 实测（前台组只剩 shell，绑定活着而 TUI 已走）——退场 TUI 的注入只会被 cooked tty 回显成乱码
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -109,7 +109,15 @@ func parseSGRMouse(seq string) (button int, wheel bool, ok bool) {
 // report into that boot window, where the canonical tty of the booting
 // shell echoes the bytes back as visible garbage; status-unknown panes
 // (also the dead display_agent label of a failed coordinator) forward
-// nothing. Runs on the window's UI lane.
+// nothing. The exit side closes the same way (2026-10-31): a `released`
+// status — the hook stream's session end, which mirrors process exit —
+// and a measured shell-idle pane — the service scan's pane.process_info
+// fact that the foreground group holds only the shell, the one case where
+// Herdr's binding outlives a TUI that is gone — forward nothing either,
+// because the bytes would land in the cooked tty of whatever owns the
+// pane now (a prompt, a build) and echo back as the same garbage.
+// Unmeasured panes keep forwarding, per computeShellIdlePanes's absence
+// rule. Runs on the window's UI lane.
 func (s *Shell) routeAttachMouse(surface *terminalSurface, seq string) {
 	if surface == nil || surface.paneID == "" || s.activeInstance == "" {
 		return
@@ -119,7 +127,8 @@ func (s *Shell) routeAttachMouse(surface *terminalSurface, seq string) {
 		return
 	}
 	altScreenAgent := surface.agent != "" && surface.scrollMax == 0 &&
-		surface.agentStatus != "" && surface.agentStatus != "unknown"
+		surface.agentStatus != "" && surface.agentStatus != "unknown" &&
+		surface.agentStatus != "released" && !s.paneShellIdle[surface.paneID]
 	if !wheel {
 		if altScreenAgent {
 			s.queueAgentMouse(surface.paneID, seq)
