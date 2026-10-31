@@ -10,7 +10,7 @@ import (
 /**
  * [INPUT]: 依赖 net 标准库（接口枚举）与 config.go 的 Mode / Tailscale 网段
  * [OUTPUT]: 对外提供 Candidate 与 Candidates(mode)：Settings 在 lan/tailscale 模式下列给用户选的网卡地址
- * [POS]: 只列「Validate 会放行」的地址（lan = 私有网段、tailscale = 100.64/10 与 fd7a:115c:a1e0::/48），从不替用户选，也不探测/记录 tailnet 信息；枚举与过滤分开，过滤是纯函数
+ * [POS]: 只列「Validate 会放行」的地址（lan = 私有网段且非虚拟接口（bridge、feth、vmnet、utun 等 VM/容器/隧道网卡手机进不去）、en* 优先；tailscale = 100.64/10 与 fd7a:115c:a1e0::/48），从不替用户选，也不探测/记录 tailnet 信息；枚举与过滤分开，过滤是纯函数
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -63,6 +63,20 @@ func interfaceAddrs() ([]ifaceAddr, error) {
 	return out, nil
 }
 
+// virtualPrefixes are macOS interfaces a phone can never reach: the NAT
+// bridges and fake-ethernet pairs of VMs/containers (bridge100, feth*,
+// vmnet*, vboxnet*, vnic*), tunnels (utun*) and system links (awdl, llw, ap, anpi, gif, stf).
+var virtualPrefixes = []string{"bridge", "feth", "vmnet", "vboxnet", "vnic", "utun", "awdl", "llw", "ap", "anpi", "gif", "stf"}
+
+func isVirtualInterface(name string) bool {
+	for _, p := range virtualPrefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func isTailscale(a netip.Addr) bool { return tailscaleV4.Contains(a) || tailscaleV6.Contains(a) }
 
 func filterCandidates(mode Mode, all []ifaceAddr) []Candidate {
@@ -74,7 +88,7 @@ func filterCandidates(mode Mode, all []ifaceAddr) []Candidate {
 		}
 		switch mode {
 		case ModeLAN:
-			if !a.IsPrivate() || isTailscale(a) {
+			if !a.IsPrivate() || isTailscale(a) || isVirtualInterface(ia.name) {
 				continue
 			}
 		case ModeTailscale:
@@ -92,6 +106,12 @@ func filterCandidates(mode Mode, all []ifaceAddr) []Candidate {
 		case x4 != y4 && x4:
 			return -1
 		case x4 != y4:
+			return 1
+		}
+		if xe, ye := strings.HasPrefix(x.Interface, "en"), strings.HasPrefix(y.Interface, "en"); xe != ye {
+			if xe {
+				return -1
+			}
 			return 1
 		}
 		if c := strings.Compare(x.Interface, y.Interface); c != 0 {

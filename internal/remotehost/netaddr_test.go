@@ -23,6 +23,9 @@ var sampleAddrs = []ifaceAddr{
 	ia("lo0", "127.0.0.1"),
 	ia("bridge0", "169.254.3.4"),
 	ia("en1", "0.0.0.0"),
+	ia("bridge100", "192.168.139.3"), // VM NAT bridge: the phone can never reach it
+	ia("feth1893", "10.10.10.1"),
+	ia("utun5", "10.64.0.9"), // a VPN's private address
 }
 
 func addrs(cs []Candidate) []string {
@@ -56,6 +59,19 @@ func TestCandidatesListOnlyAddressesTheModeWouldAccept(t *testing.T) {
 				t.Errorf("%s offered %s but Validate refuses: %v", m, c.Address, err)
 			}
 		}
+	}
+}
+
+func TestLANPutsPhysicalInterfacesFirstAndHidesVirtualOnes(t *testing.T) {
+	got := addrs(filterCandidates(ModeLAN, []ifaceAddr{
+		ia("bridge100", "192.168.139.3"),
+		ia("pdp_ip0", "10.9.9.9"),
+		ia("en0", "192.168.5.59"),
+		ia("feth1893", "10.10.10.1"),
+	}))
+	want := []string{"en0=192.168.5.59", "pdp_ip0=10.9.9.9"}
+	if !equalStrings(got, want) {
+		t.Fatalf("lan = %v, want %v", got, want)
 	}
 }
 
