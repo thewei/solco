@@ -106,6 +106,8 @@ type chatBody struct {
 	// AgentStatus is Herdr's agent_status (idle/working/blocked/…): what the
 	// composer needs to know whether a send can land.
 	AgentStatus string `json:"agentStatus,omitempty"`
+	// Interaction is the Question/permission card of a blocked agent.
+	Interaction *chatInteraction `json:"interaction,omitempty"`
 	chatsession.State
 }
 
@@ -129,7 +131,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request, _ Device) {
 		writeError(w, http.StatusConflict, "no_conversation", "")
 		return
 	}
-	writeJSON(w, http.StatusOK, chatBody{PaneID: paneID, AgentStatus: target.Status, State: reader.State(s.opts.Now())})
+	writeJSON(w, http.StatusOK, chatBody{
+		PaneID: paneID, AgentStatus: target.Status,
+		Interaction: s.interactionFrame(r.Context(), instance, paneID, target.Status, reader),
+		State:       reader.State(s.opts.Now()),
+	})
 }
 
 func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev Device) {
@@ -174,7 +180,11 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 	var last [sha256.Size]byte
 	sent := false
 	push := func() bool {
-		raw, err := json.Marshal(map[string]any{"t": "chat", "paneId": paneID, "agentStatus": status, "state": reader.State(s.opts.Now())})
+		frame := map[string]any{"t": "chat", "paneId": paneID, "agentStatus": status, "state": reader.State(s.opts.Now())}
+		if card := s.interactionFrame(ctx, instance, paneID, status, reader); card != nil {
+			frame["interaction"] = card
+		}
+		raw, err := json.Marshal(frame)
 		if err != nil {
 			return false
 		}
@@ -198,7 +208,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 			return
 		case <-tick.C:
 		}
-		if n%chatRebindEvery == 0 {
+		if n%chatRebindEvery == 0 || status == "blocked" { // a blocked agent retires its card the moment it moves on
 			next := s.resolveChat(instance, paneID)
 			switch {
 			case next.Code == "unknown_pane":
@@ -223,7 +233,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 		if err != nil {
 			continue // a momentarily unreadable file is retried, not fatal
 		}
-		if (changed || n%chatRebindEvery == 0) && !push() {
+		// A blocked agent re-derives its card every poll (the frame is hashed, so only a change goes out).
+		if (changed || n%chatRebindEvery == 0 || status == "blocked") && !push() {
 			return
 		}
 	}

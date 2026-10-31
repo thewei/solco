@@ -54,6 +54,7 @@ type fakeBackend struct {
 	prompts   []sentInput
 	promptErr error
 	agentKeys []sentInput
+	keysErr   error
 	observe   func(terminalID string, cols, rows int) []string
 	observed  []grid
 	screen    string
@@ -121,7 +122,7 @@ func (b *fakeBackend) SendAgentKeys(_ context.Context, _, paneID string, keys []
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.agentKeys = append(b.agentKeys, sentInput{paneID, "", keys})
-	return nil
+	return b.keysErr
 }
 
 func (b *fakeBackend) ReadPane(_ context.Context, _, _ string) (string, error) {

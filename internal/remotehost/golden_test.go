@@ -201,6 +201,35 @@ func TestGoldenAPIv3(t *testing.T) {
 	}
 	golden(t, "chat-send-ok.json", bodyOf(t, sent))
 
+	// chat answer (P3): the card a blocked agent shows (screen prompt), the
+	// answer body and the named refusal for a stale card
+	chatProj.Panes[0].AgentStatus = "blocked"
+	h.back.set(chatProj)
+	h.back.mu.Lock()
+	h.back.screen = permissionScreen
+	h.back.mu.Unlock()
+	blocked, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawCard := readRaw(t, blocked)
+	golden(t, "chat-frame-interaction.json", rawCard)
+	var cardFrame struct {
+		Interaction struct{ ID string } `json:"interaction"`
+	}
+	if err := json.Unmarshal(rawCard, &cardFrame); err != nil || cardFrame.Interaction.ID == "" {
+		t.Fatalf("no card in the blocked frame: %v %s", err, rawCard)
+	}
+	rawAnswer, _ := json.Marshal(chatAnswerRequest{InteractionID: cardFrame.Interaction.ID, Option: "No"})
+	golden(t, "chat-client-answer.json", rawAnswer)
+	req, _ = http.NewRequest("POST", h.http.URL+"/api/v3/panes/w1:p1/chat/answer", strings.NewReader(`{"interactionId":"stale","option":"No"}`))
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	gone, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "error-interaction-gone.json", bodyOf(t, gone))
+
 	// the three upstream messages the phone sends (what the Host accepts)
 	for name, msg := range map[string]map[string]any{
 		"terminal-client-input.json":  {"t": "input", "text": "ls", "keys": []string{"enter"}},

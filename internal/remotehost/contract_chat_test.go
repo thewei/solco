@@ -110,6 +110,52 @@ func TestRealHerdrChatContract(t *testing.T) {
 		}
 		return false
 	})
+
+	// P3 Question card, for real: the agent parks on its own `ask` tool, the Host derives the card
+	// from the transcript, the phone's answer travels as arrow keys, and the agent carries on.
+	if code, got := h.post(base+"/chat/send"+q, token, `{"text":"Use your ask tool to ask me exactly one question: Pick a colour? with the two options red and blue. After I answer, reply with exactly: picked <colour>."}`); code != 200 {
+		t.Fatalf("ask prompt = %d %s", code, got)
+	}
+	var cardID string
+	waitForT(t, 120*time.Second, func() bool {
+		_, card, _ := realChatBody(h, base+"/chat"+q, token)
+		if card == nil {
+			return false
+		}
+		cardID, _ = card["id"].(string)
+		options, _ := card["options"].([]any)
+		t.Logf("card: %v", card)
+		return cardID != "" && len(options) >= 2
+	})
+	if code, got := h.post(base+"/chat/answer"+q, token, `{"interactionId":"`+cardID+`","option":"blue"}`); code != 200 {
+		t.Fatalf("answer = %d %s", code, got)
+	}
+	waitForT(t, 120*time.Second, func() bool {
+		_, _, narration := realChatBody(h, base+"/chat"+q, token)
+		return strings.Contains(strings.ToLower(narration), "picked blue")
+	})
+}
+
+func realChatBody(h *harness, url, token string) (status string, card map[string]any, narration string) {
+	resp := h.get(url, token, nil)
+	if resp.StatusCode != 200 {
+		return "", nil, ""
+	}
+	var b struct {
+		AgentStatus string         `json:"agentStatus"`
+		Interaction map[string]any `json:"interaction"`
+		Turns       []struct {
+			User      bool   `json:"user"`
+			Narration string `json:"narration"`
+		} `json:"turns"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&b)
+	for _, turn := range b.Turns {
+		if !turn.User {
+			narration += turn.Narration + "\n"
+		}
+	}
+	return b.AgentStatus, b.Interaction, narration
 }
 
 func waitForT(t *testing.T, d time.Duration, ok func() bool) {

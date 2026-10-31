@@ -65,6 +65,7 @@ Settings → Remote Access
 | `GET /api/v3/panes/{paneId}/chat` | **P2 只读 Chat**:窗格 → Herdr `agent_session` 身份 → Provider 自己的转录 → `chatsession.State`(`provider/model/contextTokens/hasOlder/working/plan/subagents/turns`,回合形状与桌面页完全相同);无 agent_session 或文件未写出 = `409 no_conversation`(手机退回 Terminal),未知 pane `404`。改动卡只有文件名(无 `+/−`:那来自 Mac 的工作树快照) |
 | `WS /api/v3/panes/{paneId}/chat/stream` | 首帧即 `{"t":"chat","paneId","state"}`,之后文件有增量(1 s 轮询,stat 级)或子代理目录变化(每 4 s)且序列化结果不同才再推;会话换了(新 session 文件)自动重绑,pane 没了 `4404`、会话没了 `4409`;每设备 ≤4 路 |
 | `POST /api/v3/panes/{paneId}/chat/send` | **P3 发送**:`{text, interrupt?}`(text ≤ 64 KiB)。与桌面同一门禁:Herdr 状态 idle/done 才发;working 回 `409 busy`,带 `interrupt:true` 才先 Esc → 600 ms → Ctrl-C → 200 ms → 再发;blocked/failed 回 `409 needs_terminal`(手机引导去 Terminal);unknown `409 not_ready`;shell 窗格 `409 no_agent`。投递 = Herdr `agent.prompt`(含它自带的两类身份拒绝回退),Herdr 的拒绝原样 `409 refused{message}`,`DeliveryUncertain` 回 `504 delivery_uncertain` 且 Host 永不重发。需要 `ScopeTerminalInput`;提示正文不进日志 |
+| `POST /api/v3/panes/{paneId}/chat/answer` | **P3 Question 卡作答**:blocked 的 agent 会在聊天读取/流帧里带 `interaction{id,kind,header?,prompt,options,descriptions?,multi?,textOptions?,step?,steps?}`(omp/pi 的 `ask` 来自转录;Claude 的 AskUserQuestion/权限页来自 `pane.read` 刮屏,≥1.2 s 节流)。请求 `{interactionId, option?, options?, text?}`:单选发 `option`,多选发 `options`(可空),文本行(`textOptions`)须带 `text`。`id` = pane+来源+步数+问题+选项的哈希,答题时 Host 重新派生并比对,过期/已答 `409 interaction_gone`;未知选项 `400 unknown_option`;非 blocked 同样 `interaction_gone`。按键与桌面共用 `conversation.AnswerKeys/MultiSelectKeys`(方向键+确认键,绝不发数字);投递 = Herdr `agent.send_keys`,文本答案 = 选中该行后 `agent.prompt`(被阻塞的输入框回退 `pane.send_input`),Herdr 拒绝原样 `409 refused`;刚答过的卡 2.5 s 内隐藏;答案正文不进日志 |
 | `POST /api/v3/panes/{paneId}/chat/stop` | 一次 Esc(`agent.send_keys`,与桌面 Stop 相同),回 `{ok:true}` |
 | `GET /api/v3/panes/{paneId}/peek` | 窥视行:`ReadPane(visible)` 的最后一条非空行,≤ 200 字节,纯文本;Host 侧每 pane 节流 1 s |
 
@@ -122,7 +123,7 @@ internal/nativeui/
 ## P2–P4 轮廓(不在本期)
 
 - **P2 Chat 只读(✅ Host 侧已实现 2026-10-31;手机 UI 另做)**:从 `nativeui` 抽出与 Shell 无关的 `internal/chatsession`(一个 Agent 的 tail + `DeriveTimeline` + plan + working + changes 的投影构造),**桌面 `ChatBridge` 与 Host 共用同一投影函数**;抽取过程以桌面测试(`chat_*_test.go`)零改动通过为护栏。`capabilities.chat=true`,新增 `GET /api/v3/agents/{ref}/chat` + 事件流。
-- **P3 发送与交互(✅ Send/Stop/interrupt 已实现 2026-10-31;❌ 未做:Queue 跟进账本、Question/Blocked 卡的作答、picker——它们的逻辑还绑在 `nativeui` 的 hook/broker 上,抽取是单独一步)**:`Send/Stop/Queue`、Question/Blocked 卡、picker;逻辑沿用 `chat_hooks/ask/picker` 抽出的纯逻辑;投递仍是 Herdr `agent.prompt/send_keys`(含既有两类身份拒绝回退),不新增 Herdr 方法。
+- **P3 发送与交互(✅ Send/Stop/interrupt 与 Question 卡作答已实现 2026-10-31(真 omp 回归:转录派生出卡 → 手机答 blue → omp 继续并回 `picked blue`;纯函数 `TranscriptQuestion`/`DetectScreenPrompt`/`AnswerKeys` 已抽到 chatsession/conversation,桌面改调同一份,桌面测试全绿);❌ 未做:Queue 跟进账本、picker(/model 等)——它们仍绑在 nativeui 的 broker/watcher 上)**:`Send/Stop/Queue`、Question/Blocked 卡、picker;逻辑沿用 `chat_hooks/ask/picker` 抽出的纯逻辑;投递仍是 Herdr `agent.prompt/send_keys`(含既有两类身份拒绝回退),不新增 Herdr 方法。
 - **P4**:composer 目录与附件、语音、通知(另议)。
 
 ## 风险与最脆弱假设

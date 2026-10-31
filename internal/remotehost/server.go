@@ -82,6 +82,7 @@ type Server struct {
 	conns       map[string]map[*liveConn]struct{} // deviceID → live sockets
 	terminals   map[string]int                    // deviceID → open terminal streams
 	chats       map[string]int                    // deviceID → open chat streams
+	asks        map[string]*askCursor             // instance\x00pane → Question state
 	trees       map[string]*treeState
 	peeks       peekCache
 }
@@ -256,6 +257,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat/stream", s.guard(ScopeView, s.handleChatStream))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/send", s.guard(ScopeTerminalInput, s.handleChatSend))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/stop", s.guard(ScopeTerminalInput, s.handleChatStop))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/answer", s.guard(ScopeTerminalInput, s.handleChatAnswer))
 	mux.Handle("GET "+apiPrefix+"/terminals/{terminalID}/stream", s.guard(ScopeView, s.handleTerminal))
 	return mux
 }
