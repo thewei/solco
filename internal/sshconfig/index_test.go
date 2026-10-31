@@ -185,9 +185,9 @@ func TestIndexUnreadableIncludeDegradesToWarning(t *testing.T) {
 
 func TestSplitKeywordVariants(t *testing.T) {
 	cases := []struct {
-		line            string
-		keyword, rest   string
-		comment         bool
+		line          string
+		keyword, rest string
+		comment       bool
 	}{
 		{"", "", "", true},
 		{"   # note", "", "", true},

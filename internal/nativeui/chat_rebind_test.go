@@ -90,8 +90,8 @@ func TestRebindWorkspaceChatUnlatchesWhenSourceAppears(t *testing.T) {
 	// The agent establishes a session: the card gains a conversation id.
 	shell.workbench.directory = agent.NewAgentDirectory()
 	shell.workbench.directory.Replace([]agent.AgentCardModel{{
-		Key:           agent.AgentKey{InstanceID: "inst", TerminalID: "term-new"},
-		PaneID:        "p-new",
+		Key:            agent.AgentKey{InstanceID: "inst", TerminalID: "term-new"},
+		PaneID:         "p-new",
 		ConversationID: "live:claude:term-new",
 	}})
 	shell.pendingToast = ""

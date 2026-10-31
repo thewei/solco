@@ -41,9 +41,9 @@ func TestAgentMarkAntigravity(t *testing.T) {
 
 func TestAgentProviderResolution(t *testing.T) {
 	cases := []struct {
-		name string
+		name  string
 		agent *herdr.Agent
-		want history.AgentID
+		want  history.AgentID
 	}{
 		{
 			name:  "nil agent",
@@ -68,7 +68,7 @@ func TestAgentProviderResolution(t *testing.T) {
 		{
 			name: "kind empty session agy",
 			agent: &herdr.Agent{
-				Kind: "",
+				Kind:         "",
 				AgentSession: &herdr.AgentSessionIdentity{Agent: "agy"},
 			},
 			want: history.AgentAntigravity,
@@ -76,7 +76,7 @@ func TestAgentProviderResolution(t *testing.T) {
 		{
 			name: "kind empty session antigravity-cli",
 			agent: &herdr.Agent{
-				Kind: "",
+				Kind:         "",
 				AgentSession: &herdr.AgentSessionIdentity{Agent: "antigravity-cli"},
 			},
 			want: history.AgentAntigravity,

@@ -104,11 +104,11 @@ type providersUIState struct {
 	integrations *agent.IntegrationHealthService
 	hooks        *agenthooks.Manager
 
-	loaded   bool
-	loading  bool
-	errText  string
-	rows     []providerRow
-	auditGen atomic.Uint64
+	loaded     bool
+	loading    bool
+	errText    string
+	rows       []providerRow
+	auditGen   atomic.Uint64
 	listCancel context.CancelFunc
 
 	// action tracking: one facet action in flight; its control is disabled

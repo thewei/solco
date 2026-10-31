@@ -74,9 +74,9 @@ func TestParseWholeReportDiscards(t *testing.T) {
 	}
 	// A syntactically valid but grammar-violating id discards the report.
 	for _, id := range []string{
-		"a//b",                                // empty segment
-		"a/b/c/d/e/f/g/h/i",   // 9 levels
-		"/leading",                            // empty first segment
+		"a//b",              // empty segment
+		"a/b/c/d/e/f/g/h/i", // 9 levels
+		"/leading",          // empty first segment
 		"thissegmentiswaytoolongtobeallowedbythespec", // 45 bytes
 	} {
 		if _, ok := Parse([]byte("state=done:id=" + id)); ok {
@@ -128,7 +128,7 @@ func TestParseFieldRules(t *testing.T) {
 	}
 
 	// app outside the character set or cap treated as absent.
-	rep = mustParse(t, "state=done:app=" + string(make([]byte, 0)) + "claude-code")
+	rep = mustParse(t, "state=done:app="+string(make([]byte, 0))+"claude-code")
 	if rep.App != "claude-code" {
 		t.Fatalf("app = %q", rep.App)
 	}

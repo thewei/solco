@@ -41,7 +41,7 @@ func EditHostBlock(lines []string, blockLine int, expectedHeader, header string,
 		return nil, ErrStaleBlock
 	}
 	end := blockEnd(lines, idx)
-	body := lines[idx+1:end]
+	body := lines[idx+1 : end]
 	// Appends land after the last content line, so a block's trailing
 	// blank lines stay between blocks instead of stranding a directive.
 	trailing := len(body)

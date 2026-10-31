@@ -102,4 +102,3 @@ func TestStorePaneClosed(t *testing.T) {
 		t.Fatalf("display = %q", st)
 	}
 }
-

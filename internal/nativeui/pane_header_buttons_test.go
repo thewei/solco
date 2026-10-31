@@ -203,7 +203,7 @@ func TestPaneHeaderDoubleClickZoom(t *testing.T) {
 	if !ok {
 		t.Fatalf("pane title 'p2' not found")
 	}
-	x2, y2 := r2.X + r2.W/2, r2.Y + r2.H/2
+	x2, y2 := r2.X+r2.W/2, r2.Y+r2.H/2
 	tt.ClickAt(x2, y2)
 	tt.ClickAt(x2, y2)
 	if shell.selectedPaneID != "p2" {

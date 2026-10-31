@@ -88,7 +88,9 @@ func workboardActionsForTask(task workboard.Task, g workboard.Group, d *workboar
 }
 
 // isPrimaryWrite marks the one verb that moves the task forward.
-func isPrimaryWrite(kind string) bool { return kind == "approve" || kind == "approve-plan" || kind == "pick" }
+func isPrimaryWrite(kind string) bool {
+	return kind == "approve" || kind == "approve-plan" || kind == "pick"
+}
 
 // startWorkboardAction is a row menu choice: Approve, Approve Plan, Start Now
 // and Stop ask first, everything else runs at once.

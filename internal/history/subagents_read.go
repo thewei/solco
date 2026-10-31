@@ -50,8 +50,8 @@ type SubagentDetail struct {
 	// FirstTs is the first provider timestamp (ms; 0 when the transcript
 	// records none): the true start, which a meta file's mtime only
 	// approximates. The end is the file's own last write.
-	FirstTs int64
-	Messages    []TranscriptMessage
+	FirstTs  int64
+	Messages []TranscriptMessage
 }
 
 // NewSubagentDecoder builds the line decoder for a sub-agent's own
