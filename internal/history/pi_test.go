@@ -209,3 +209,53 @@ func TestParseAgentIDAliases(t *testing.T) {
 		}
 	}
 }
+
+const testPiInterleavedJSONL = `{"type":"session","version":3,"id":"pi-order","timestamp":"2026-10-06T10:00:00.000Z","cwd":"/work/x"}
+{"type":"message","timestamp":"2026-10-06T10:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"go"}]}}
+{"type":"message","timestamp":"2026-10-06T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"First look."},{"type":"toolCall","id":"c1","name":"read","arguments":{"path":"a"}}]}}
+{"type":"message","timestamp":"2026-10-06T10:00:03.000Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"read","content":[],"isError":false}}
+{"type":"message","timestamp":"2026-10-06T10:00:09.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Now edit."},{"type":"toolCall","id":"c2","name":"edit","arguments":{"path":"a"}}]}}
+`
+
+// A merged Pi message keeps its blocks in written order (text → tool → text →
+// tool), each with its own row timestamp, and an empty tool result still marks
+// the call finished (Output non-nil) while an unanswered call stays nil.
+func TestPiMergedMessageKeepsBlockOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "2026-10-06T10-00-00-000Z_pi-order.jsonl")
+	if err := os.WriteFile(path, []byte(testPiInterleavedJSONL), 0644); err != nil {
+		t.Fatal(err)
+	}
+	transcript, err := ParsePiTranscript(SessionFileRef{Agent: AgentPi, NativeID: "pi-order", FilePath: path, SizeBytes: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transcript.Mainline) != 2 {
+		t.Fatalf("messages = %d, want user + merged assistant", len(transcript.Mainline))
+	}
+	msg := transcript.Mainline[1]
+	want := []struct {
+		kind MessagePartKind
+		tool int
+	}{{PartText, 0}, {PartTool, 0}, {PartText, 0}, {PartTool, 1}}
+	if len(msg.Parts) != len(want) {
+		t.Fatalf("parts = %+v", msg.Parts)
+	}
+	for i, w := range want {
+		if msg.Parts[i].Kind != w.kind || (w.kind == PartTool && msg.Parts[i].Tool != w.tool) {
+			t.Fatalf("part %d = %+v, want %+v", i, msg.Parts[i], w)
+		}
+	}
+	if msg.Parts[0].Timestamp == nil || msg.Parts[2].Timestamp == nil ||
+		*msg.Parts[2].Timestamp-*msg.Parts[0].Timestamp != 7000 {
+		t.Fatalf("part timestamps = %v / %v, want 7s apart", msg.Parts[0].Timestamp, msg.Parts[2].Timestamp)
+	}
+	if len(msg.ToolCalls) != 2 {
+		t.Fatalf("tool calls = %d", len(msg.ToolCalls))
+	}
+	if msg.ToolCalls[0].Output == nil {
+		t.Fatal("empty tool result must still set Output (finished)")
+	}
+	if msg.ToolCalls[1].Output != nil {
+		t.Fatal("unanswered call must keep Output nil (running)")
+	}
+}

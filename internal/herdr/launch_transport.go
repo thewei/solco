@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 )
 
 // Launch transport over the live Herdr socket API. Every request shape,
@@ -174,15 +176,59 @@ func (m *Manager) StartAgent(ctx context.Context, session string, params AgentSt
 // PromptAgent submits exactly one semantic prompt to an agent target
 // (agent.prompt {target, text}).
 func (m *Manager) PromptAgent(ctx context.Context, session, target, text string) error {
+	text = submitText(text)
 	socket, err := m.reachableSocket(session)
 	if err != nil {
 		return err
 	}
 	var raw json.RawMessage
 	if err := callRPCWithContext(ctx, socket, "agent.prompt", map[string]any{"target": target, "text": text}, true, &raw); err != nil {
-		return err
+		if !agentIdentityMismatch(err) {
+			return err
+		}
+		// pane.send_input: text then Enter in one pane-scoped write.
+		return m.SendPaneInput(ctx, session, target, text, []string{"enter"})
 	}
 	return decodeTypedResult(raw, "agent_prompted", nil)
+}
+
+// endsInMention matches a prompt whose last token is an @-mention, quoted
+// (@"a path") or not.
+var endsInMention = regexp.MustCompile(`(^|\s)@("[^"\n]*"|\S*)$`)
+
+// submitText keeps an @-mention from swallowing the submitting Enter: Claude
+// Code and omp open a file picker while the caret sits in an @token, and
+// their Enter then accepts a suggestion instead of submitting (seen on real
+// sessions; Herdr still reports the prompt as delivered). A trailing space
+// closes the picker. Every other prompt is delivered exactly as given.
+func submitText(text string) string {
+	if endsInMention.MatchString(text) {
+		return text + " "
+	}
+	return text
+}
+
+// SendPaneInput writes text then named keys into one Pane's input in a single
+// pane-scoped call (pane.send_input {pane_id, text, keys}). It is the typed
+// answer path of an interactive prompt: the agent is blocked on that very
+// prompt, which agent.prompt refuses by design.
+func (m *Manager) SendPaneInput(ctx context.Context, session, paneID, text string, keys []string) error {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return err
+	}
+	return callRPCWithContext(ctx, socket, "pane.send_input", map[string]any{"pane_id": paneID, "text": text, "keys": keys}, true, nil)
+}
+
+// agentIdentityMismatch reports Herdr's agent.* identity refusals — the
+// pane's foreground process is not the agent's canonical executable (an omp
+// launched through bun reports `bun.native`), so the pane is "not an active
+// named agent" although its hook-reported session is live. Only these two
+// refusals qualify; a busy or not-ready agent is never bypassed.
+func agentIdentityMismatch(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "not an active named agent") ||
+		strings.Contains(msg, "no longer the pane foreground process")
 }
 
 // WaitAgentState blocks until the agent target reaches one of the requested
@@ -294,7 +340,10 @@ func (m *Manager) SendAgentKeys(ctx context.Context, session, target string, key
 	}
 	var raw json.RawMessage
 	if err := callRPCWithContext(ctx, socket, "agent.send_keys", map[string]any{"target": target, "keys": keys}, true, &raw); err != nil {
-		return err
+		if !agentIdentityMismatch(err) {
+			return err
+		}
+		return callRPCWithContext(ctx, socket, "pane.send_keys", map[string]any{"pane_id": target, "keys": keys}, true, nil)
 	}
 	return decodeTypedResult(raw, "ok", nil)
 }

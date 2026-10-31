@@ -19,6 +19,10 @@ type TimelineStep struct {
 	Text string
 	// Tool is the invocation for kind tool.
 	Tool *ConversationToolCall
+	// TsMS is the provider timestamp of the item that opened this step, when
+	// recorded; merged text steps keep the first. Presentation only (step
+	// durations), never ordering.
+	TsMS *int64
 }
 
 // TimelineTurn is the ChatGPT-contract presentation row (0.6 §13): the
@@ -91,26 +95,34 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 			if current.TsMS == nil {
 				current.TsMS = item.TimestampMS
 			}
-			if item.Text != "" {
-				if current.Narration != "" {
-					current.Narration += "\n\n" + item.Text
-				} else {
-					current.Narration = item.Text
+			if len(item.Parts) > 0 {
+				// The source kept the provider's block order across a merged
+				// message: replay it, so replies and tool runs interleave as
+				// they happened instead of collapsing into one text block and
+				// one tool group.
+				addOrderedParts(current, item)
+			} else {
+				if item.Text != "" {
+					if current.Narration != "" {
+						current.Narration += "\n\n" + item.Text
+					} else {
+						current.Narration = item.Text
+					}
 				}
-			}
-			if item.Thinking != nil && *item.Thinking != "" {
-				merged := consolidateThinking(deref(current.Thinking), *item.Thinking)
-				current.Thinking = &merged
-				// Thinking precedes its narration inside one item: the model
-				// thinks, then writes.
-				addTimelineStep(current, TimelineStep{Kind: StepThinking, Text: *item.Thinking})
-			}
-			if item.Text != "" {
-				addTimelineStep(current, TimelineStep{Kind: StepNarration, Text: item.Text})
-			}
-			for _, call := range item.ToolCalls {
-				current.ToolRuns = append(current.ToolRuns, call)
-				addTimelineStep(current, TimelineStep{Kind: StepTool, Tool: &call})
+				if item.Thinking != nil && *item.Thinking != "" {
+					merged := consolidateThinking(deref(current.Thinking), *item.Thinking)
+					current.Thinking = &merged
+					// Thinking precedes its narration inside one item: the model
+					// thinks, then writes.
+					addTimelineStep(current, TimelineStep{Kind: StepThinking, Text: *item.Thinking, TsMS: item.TimestampMS})
+				}
+				if item.Text != "" {
+					addTimelineStep(current, TimelineStep{Kind: StepNarration, Text: item.Text, TsMS: item.TimestampMS})
+				}
+				for _, call := range item.ToolCalls {
+					current.ToolRuns = append(current.ToolRuns, call)
+					addTimelineStep(current, TimelineStep{Kind: StepTool, Tool: &call, TsMS: item.TimestampMS})
+				}
 			}
 			if strings.Contains(strings.ToLower(item.Text), "aborted") || item.Truncated && strings.Contains(item.Text, "stopped") {
 				current.Failed = true
@@ -126,7 +138,7 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 			}
 			for _, call := range item.ToolCalls {
 				current.ToolRuns = append(current.ToolRuns, call)
-				addTimelineStep(current, TimelineStep{Kind: StepTool, Tool: &call})
+				addTimelineStep(current, TimelineStep{Kind: StepTool, Tool: &call, TsMS: item.TimestampMS})
 			}
 			current.LastSeq = item.Seq
 		case KindMeta, KindCompactSummary, KindReasoning, KindActivity:
@@ -135,7 +147,7 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 			if current != nil && item.Kind == KindReasoning && item.Text != "" {
 				merged := consolidateThinking(deref(current.Thinking), item.Text)
 				current.Thinking = &merged
-				addTimelineStep(current, TimelineStep{Kind: StepThinking, Text: item.Text})
+				addTimelineStep(current, TimelineStep{Kind: StepThinking, Text: item.Text, TsMS: item.TimestampMS})
 			}
 		}
 	}
@@ -145,6 +157,44 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 		turns[index].Compacted = len(turns[index].ToolRuns) >= 2
 	}
 	return turns
+}
+
+// addOrderedParts appends one item's blocks to the turn in their written
+// order. A part's own timestamp wins over the item's (a merged message keeps
+// the first row's); a tool part whose index is out of range is skipped.
+func addOrderedParts(turn *TimelineTurn, item ConversationItem) {
+	for _, part := range item.Parts {
+		ts := part.TimestampMS
+		if ts == nil {
+			ts = item.TimestampMS
+		}
+		switch part.Kind {
+		case PartThinking:
+			if part.Text == "" {
+				continue
+			}
+			merged := consolidateThinking(deref(turn.Thinking), part.Text)
+			turn.Thinking = &merged
+			addTimelineStep(turn, TimelineStep{Kind: StepThinking, Text: part.Text, TsMS: ts})
+		case PartText:
+			if part.Text == "" {
+				continue
+			}
+			if turn.Narration != "" {
+				turn.Narration += "\n\n" + part.Text
+			} else {
+				turn.Narration = part.Text
+			}
+			addTimelineStep(turn, TimelineStep{Kind: StepNarration, Text: part.Text, TsMS: ts})
+		case PartTool:
+			if part.Tool < 0 || part.Tool >= len(item.ToolCalls) {
+				continue
+			}
+			call := item.ToolCalls[part.Tool]
+			turn.ToolRuns = append(turn.ToolRuns, call)
+			addTimelineStep(turn, TimelineStep{Kind: StepTool, Tool: &call, TsMS: ts})
+		}
+	}
 }
 
 func deref(value *string) string {

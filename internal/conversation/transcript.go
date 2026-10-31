@@ -41,11 +41,20 @@ func ItemFromTranscriptMessage(message history.TranscriptMessage) ConversationIt
 		Model:       message.Model,
 		Truncated:   message.Truncated,
 	}
+	for _, part := range message.Parts {
+		item.Parts = append(item.Parts, ItemPart{
+			Kind:        ItemPartKind(part.Kind),
+			Text:        part.Text,
+			Tool:        part.Tool,
+			TimestampMS: part.Timestamp,
+		})
+	}
 	for _, call := range message.ToolCalls {
 		item.ToolCalls = append(item.ToolCalls, ConversationToolCall{
 			ID:           call.ID,
 			Name:         call.Name,
 			InputPreview: call.InputPreview,
+			Input:        call.Input,
 			Output:       call.Output,
 			IsError:      call.IsError,
 		})

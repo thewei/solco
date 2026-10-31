@@ -25,11 +25,14 @@ const (
 
 // ConversationToolCall is one tool invocation inside an item.
 type ConversationToolCall struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	InputPreview string  `json:"input_preview"`
-	Output       *string `json:"output,omitempty"`
-	IsError      bool    `json:"is_error"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	InputPreview string `json:"input_preview"`
+	// Input is the provider's full tool input (JSON, bounded by the parser);
+	// presentation derives structured cards from it (task list, question).
+	Input   *string `json:"input,omitempty"`
+	Output  *string `json:"output,omitempty"`
+	IsError bool    `json:"is_error"`
 }
 
 // ConversationSummary is the list-page projection.
@@ -56,6 +59,28 @@ type ConversationItem struct {
 	TimestampMS *int64                 `json:"timestamp_ms,omitempty"`
 	Model       *string                `json:"model,omitempty"`
 	Truncated   bool                   `json:"truncated"`
+	// Parts is the item's blocks in provider order (text / thinking / tool
+	// interleaved) when the source merged several provider messages into one
+	// item and kept the order; empty means Text → Thinking → ToolCalls.
+	Parts []ItemPart `json:"parts,omitempty"`
+}
+
+// ItemPartKind names one ordered block of an item.
+type ItemPartKind string
+
+const (
+	PartText     ItemPartKind = "text"
+	PartThinking ItemPartKind = "thinking"
+	PartTool     ItemPartKind = "tool"
+)
+
+// ItemPart is one ordered block of a ConversationItem; tool parts index
+// into the item's ToolCalls.
+type ItemPart struct {
+	Kind        ItemPartKind `json:"kind"`
+	Text        string       `json:"text,omitempty"`
+	Tool        int          `json:"tool,omitempty"`
+	TimestampMS *int64       `json:"timestamp_ms,omitempty"`
 }
 
 // ConversationWindow bounds both History and Live reads (0.6 §6): the

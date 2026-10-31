@@ -288,3 +288,63 @@ func TestReadPaneDecodesTypedResult(t *testing.T) {
 		t.Fatalf("read text = %q", text)
 	}
 }
+
+// An omp launched through bun reports `bun.native` as its foreground
+// process, so agent.* refuses it by identity; only that refusal falls back
+// to the pane-scoped writes, and a different refusal never does.
+func TestAgentWritesFallBackToPaneScopeOnlyOnIdentityMismatch(t *testing.T) {
+	refusal := "agent pane-1 is not an active named agent"
+	server := startFakeHerdr(t, func(method string, params map[string]any) (json.RawMessage, error) {
+		switch method {
+		case "agent.send_keys", "agent.prompt":
+			if params["target"] == "pane-busy" {
+				return nil, errorsNew("agent pane-busy is not ready for input")
+			}
+			return nil, errorsNew(refusal)
+		case "pane.send_keys", "pane.send_input":
+			return json.RawMessage(`{"type":"ok"}`), nil
+		default:
+			return nil, errorsUnexpected(method)
+		}
+	})
+	manager := NewManager()
+	ctx := context.Background()
+	if err := manager.SendAgentKeys(ctx, "default", "pane-1", []string{"down", "enter"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.PromptAgent(ctx, "default", "pane-1", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.SendAgentKeys(ctx, "default", "pane-busy", []string{"enter"}); err == nil {
+		t.Fatal("a not-ready agent must not be bypassed")
+	}
+	got := map[string]map[string]any{}
+	for _, request := range server.recorded() {
+		got[request.Method] = request.Params
+	}
+	if got["pane.send_keys"]["pane_id"] != "pane-1" {
+		t.Fatalf("pane.send_keys params = %v", got["pane.send_keys"])
+	}
+	input := got["pane.send_input"]
+	if input["pane_id"] != "pane-1" || input["text"] != "hello" {
+		t.Fatalf("pane.send_input params = %v", input)
+	}
+}
+
+func TestSubmitTextClosesATrailingMention(t *testing.T) {
+	cases := map[string]string{
+		"@/tmp/a.png":                       "@/tmp/a.png ",
+		`look at @"/tmp/My Dir/a.png"`:      `look at @"/tmp/My Dir/a.png" `,
+		"describe\n@/tmp/a.png":             "describe\n@/tmp/a.png ",
+		"what is this? @/tmp/a.png and why": "what is this? @/tmp/a.png and why",
+		"mail me at wilson@example.com":     "mail me at wilson@example.com",
+		"/skill:tdd fix it":                 "/skill:tdd fix it",
+		"already closed @/tmp/a.png ":       "already closed @/tmp/a.png ",
+		"":                                  "",
+	}
+	for in, want := range cases {
+		if got := submitText(in); got != want {
+			t.Errorf("submitText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

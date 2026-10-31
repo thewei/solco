@@ -212,6 +212,33 @@ type TranscriptMessage struct {
 	// this message (input + cache + output of the last usage report), when
 	// the transcript states one. Presentation (context ring) only.
 	ContextTokens *int64 `json:"context_tokens,omitempty"`
+	// Parts is the message's blocks in the order the provider produced them
+	// (text / thinking / tool-call interleaved). Text, Thinking and ToolCalls
+	// above are the per-kind aggregates; a parser that merges several
+	// provider messages into one (Pi/OMP) fills Parts so presentation can
+	// keep the true order. Nil when the message order is already
+	// text → thinking → tools (Claude Code, Codex).
+	Parts []MessagePart `json:"parts,omitempty"`
+}
+
+// MessagePartKind names one block of an assistant message.
+type MessagePartKind string
+
+const (
+	PartText     MessagePartKind = "text"
+	PartThinking MessagePartKind = "thinking"
+	PartTool     MessagePartKind = "tool"
+)
+
+// MessagePart is one ordered block of a TranscriptMessage. Tool parts point
+// into ToolCalls by index (the call's output is backfilled in place there).
+type MessagePart struct {
+	Kind MessagePartKind `json:"kind"`
+	Text string          `json:"text,omitempty"`
+	// Tool is the ToolCalls index for PartTool.
+	Tool int `json:"tool,omitempty"`
+	// Timestamp is the provider timestamp of the row this block came from.
+	Timestamp *int64 `json:"timestamp,omitempty"`
 }
 
 type SidechainInfo struct {

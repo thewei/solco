@@ -271,3 +271,58 @@ func TestDeriveTimelineStepOrder(t *testing.T) {
 		t.Fatalf("tool steps must stay separate: %+v", toolTurns[0].Steps)
 	}
 }
+
+func TestDeriveTimelineStepsCarryTimestamps(t *testing.T) {
+	ts := func(v int64) *int64 { return &v }
+	think := "plan"
+	turns := DeriveTimeline([]ConversationItem{
+		{Seq: 1, Kind: KindUser, Text: "go", TimestampMS: ts(1000)},
+		{Seq: 2, Kind: KindAssistant, Thinking: &think, TimestampMS: ts(4000)},
+		{Seq: 3, Kind: KindAssistant, ToolCalls: []ConversationToolCall{{Name: "Read"}}, TimestampMS: ts(5000)},
+		{Seq: 4, Kind: KindAssistant, Text: "done", TimestampMS: ts(9000)},
+	})
+	steps := turns[1].Steps
+	if len(steps) != 3 {
+		t.Fatalf("steps = %+v", steps)
+	}
+	for i, want := range []int64{4000, 5000, 9000} {
+		if steps[i].TsMS == nil || *steps[i].TsMS != want {
+			t.Fatalf("step %d TsMS = %v, want %d", i, steps[i].TsMS, want)
+		}
+	}
+}
+
+// An item that carries Parts replays them in order: reply → tool → reply →
+// tool, instead of one merged narration followed by every tool.
+func TestDeriveTimelineReplaysItemParts(t *testing.T) {
+	ts := func(v int64) *int64 { return &v }
+	items := []ConversationItem{
+		{Seq: 1, Kind: KindUser, Text: "go"},
+		{
+			Seq: 2, Kind: KindAssistant, Text: "one\n\ntwo",
+			ToolCalls: []ConversationToolCall{{ID: "a", Name: "read"}, {ID: "b", Name: "edit"}},
+			Parts: []ItemPart{
+				{Kind: PartText, Text: "one", TimestampMS: ts(1000)},
+				{Kind: PartTool, Tool: 0, TimestampMS: ts(1000)},
+				{Kind: PartText, Text: "two", TimestampMS: ts(8000)},
+				{Kind: PartTool, Tool: 1, TimestampMS: ts(8000)},
+			},
+		},
+	}
+	steps := DeriveTimeline(items)[1].Steps
+	want := []string{StepNarration, StepTool, StepNarration, StepTool}
+	if len(steps) != len(want) {
+		t.Fatalf("steps = %+v", steps)
+	}
+	for i, kind := range want {
+		if steps[i].Kind != kind {
+			t.Fatalf("step %d = %q, want %q", i, steps[i].Kind, kind)
+		}
+	}
+	if steps[2].TsMS == nil || *steps[2].TsMS != 8000 {
+		t.Fatalf("second reply must carry its own timestamp: %v", steps[2].TsMS)
+	}
+	if steps[3].Tool == nil || steps[3].Tool.ID != "b" {
+		t.Fatalf("second tool = %+v", steps[3].Tool)
+	}
+}

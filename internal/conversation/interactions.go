@@ -2,6 +2,8 @@ package conversation
 
 import (
 	"errors"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -26,6 +28,32 @@ type PendingInteraction struct {
 	// Options are the provider's own labeled actions (e.g. Approve / Deny);
 	// resolving with anything outside them fails closed.
 	Options []string
+	// Header is the provider's short question label and Descriptions the
+	// per-option explanations (parallel to Options; "" when none). Both are
+	// presentation only — resolution still keys on the exact option label.
+	Header       string
+	Descriptions []string
+	// Start is the option row the provider's selector highlights when the
+	// prompt opens; arrow navigation is relative to it (0 = first row).
+	Start int
+	// Step/Steps place a question of a transcript `ask` call (Steps > 0,
+	// Step 0-based; Steps == 1 is the single-question ask). Zero for
+	// screen-scraped prompts. Presentation and answer bookkeeping only.
+	Step, Steps int
+	// EscapeOption names the option the provider has no row for but takes
+	// Escape as (omp's closing review sheet: Submit is a row, Cancel is ⎋).
+	// Answering with it sends Escape instead of arrow navigation.
+	EscapeOption string
+	// Multi marks a multi-select question: the user ticks any subset of
+	// Options and submits once (ResolveSetCAS), instead of picking one.
+	Multi bool
+	// Picker marks a card read off a Provider's list picker (/model, …)
+	// that Solco itself opened: it is not an agent prompt, so a card is not
+	// retired by the agent leaving `blocked` — only by the picker closing.
+	Picker bool
+	// Commit is the key that confirms the highlighted row ("" = enter).
+	// Claude Code's model picker takes `s` for "this session only".
+	Commit string
 }
 
 // InteractionResolution records the first-winner resolution.
@@ -122,6 +150,38 @@ func (b *InteractionBroker) ResolveCAS(interactionID, option string) (Interactio
 	resolution := InteractionResolution{
 		InteractionID: interactionID,
 		Option:        option,
+		ResolvedAtMS:  b.resolveClock(),
+	}
+	b.resolutions[interactionID] = resolution
+	delete(b.pending, interactionID)
+	return resolution, nil
+}
+
+// ResolveSetCAS is ResolveCAS for a multi-select interaction: every picked
+// option must be one of the provider's own, an empty pick is allowed (the
+// provider decides whether it accepts one), and the resolution records the
+// picks joined by newlines.
+func (b *InteractionBroker) ResolveSetCAS(interactionID string, picks []string) (InteractionResolution, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if resolution, ok := b.resolutions[interactionID]; ok {
+		return resolution, ErrInteractionResolved
+	}
+	interaction, ok := b.pending[interactionID]
+	if !ok {
+		return InteractionResolution{}, errors.New("unknown interaction")
+	}
+	if !interaction.Multi {
+		return InteractionResolution{}, errors.New("not a multi-select interaction")
+	}
+	for _, pick := range picks {
+		if !slices.Contains(interaction.Options, pick) {
+			return InteractionResolution{}, ErrUnknownOption
+		}
+	}
+	resolution := InteractionResolution{
+		InteractionID: interactionID,
+		Option:        strings.Join(picks, "\n"),
 		ResolvedAtMS:  b.resolveClock(),
 	}
 	b.resolutions[interactionID] = resolution

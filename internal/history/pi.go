@@ -211,6 +211,16 @@ func (s *piParseState) feedPiLine(line string) {
 			if s.model != nil {
 				last.Model = s.model
 			}
+			// Blocks keep the provider's order across merged messages: tool
+			// parts index into ToolCalls, so rebase them onto what is already
+			// in this merged message.
+			toolBase := len(last.ToolCalls)
+			for _, part := range piBlockParts(content, optionalTimestamp(timestamp)) {
+				if part.Kind == PartTool {
+					part.Tool += toolBase
+				}
+				last.Parts = append(last.Parts, part)
+			}
 			for _, tool := range tools {
 				if tool.ID != "" {
 					s.toolIndex[tool.ID] = [2]int{lastIdx, len(last.ToolCalls)}
@@ -227,11 +237,10 @@ func (s *piParseState) feedPiLine(line string) {
 				return
 			}
 			toolCall := &s.messages[pos[0]].ToolCalls[pos[1]]
-			text := piToolResultText(content)
-			if text != "" {
-				clipped, _ := clipText(text, MaxToolIO)
-				toolCall.Output = &clipped
-			}
+			// An empty result is still a result: Output stays non-nil so the
+			// call reads as finished (nil means "no result yet").
+			clipped, _ := clipText(piToolResultText(content), MaxToolIO)
+			toolCall.Output = &clipped
 			if isErr, ok := messageObj["isError"].(bool); ok && isErr {
 				toolCall.IsError = true
 			}
@@ -296,6 +305,45 @@ func piBlocksText(content any) string {
 	default:
 		return ""
 	}
+}
+
+// piBlockParts lists one assistant row's text / thinking / toolCall blocks
+// in their written order. Tool parts carry the call's index within this row
+// (the same order piBlocksTools yields); the caller rebases it.
+func piBlockParts(content any, ts *int64) []MessagePart {
+	switch value := content.(type) {
+	case string:
+		if text := strings.TrimSpace(value); text != "" {
+			clipped, _ := clipText(text, MaxMessageText)
+			return []MessagePart{{Kind: PartText, Text: clipped, Timestamp: ts}}
+		}
+	case []any:
+		var parts []MessagePart
+		tools := 0
+		for _, item := range value {
+			block, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			switch block["type"] {
+			case "text":
+				if text, _ := block["text"].(string); strings.TrimSpace(text) != "" {
+					clipped, _ := clipText(strings.TrimSpace(text), MaxMessageText)
+					parts = append(parts, MessagePart{Kind: PartText, Text: clipped, Timestamp: ts})
+				}
+			case "thinking":
+				if text, _ := block["thinking"].(string); strings.TrimSpace(text) != "" {
+					clipped, _ := clipText(strings.TrimSpace(text), MaxToolIO)
+					parts = append(parts, MessagePart{Kind: PartThinking, Text: clipped, Timestamp: ts})
+				}
+			case "toolCall":
+				parts = append(parts, MessagePart{Kind: PartTool, Tool: tools, Timestamp: ts})
+				tools++
+			}
+		}
+		return parts
+	}
+	return nil
 }
 
 func piBlocksThinking(content any) *string {

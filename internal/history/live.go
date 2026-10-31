@@ -363,6 +363,11 @@ func deepCopyMessages(messages []TranscriptMessage) []TranscriptMessage {
 			copy(copied, out[i].ToolCalls)
 			out[i].ToolCalls = copied
 		}
+		if out[i].Parts != nil {
+			copied := make([]MessagePart, len(out[i].Parts))
+			copy(copied, out[i].Parts)
+			out[i].Parts = copied
+		}
 	}
 	return out
 }
@@ -394,6 +399,9 @@ func transcriptMessageEqual(a, b TranscriptMessage) bool {
 		return false
 	}
 	if !int64PtrEqual(a.Timestamp, b.Timestamp) {
+		return false
+	}
+	if len(a.Parts) != len(b.Parts) {
 		return false
 	}
 	if len(a.ToolCalls) != len(b.ToolCalls) {
