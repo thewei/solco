@@ -58,10 +58,14 @@ Settings → Remote Access
 | 端点 | 作用 |
 | --- | --- |
 | `POST /api/v3/pair` | 见上,无需 Bearer |
-| `GET /api/v3/bootstrap` | `{hostId, hostName, version, capabilities:{terminal:true, chat:false}, instances:[…]}` |
+| `GET /api/v3/bootstrap` | `{hostId, hostName, version, capabilities:{terminal:true, chat:true}, instances:[…]}` |
 | `GET /api/v3/tree?instance=` | Herdr 投影的只读形:`workspaces[] → tabs[] → panes[]`,每 pane 带 `paneId`、`terminalId`、`label`、`agent?{provider,status}`、`cwd`;全是不透明 ID,**不含任何「聚焦」字段**。带 `revision`(仅内容变化才递增;分支名 Herdr 投影里没有,P1 不给) |
 | `WS /api/v3/events` | 首帧 `hello{revision}`;之后只推 `tree.changed{revision}`(不做 diff,客户端重取 `/tree`,用 `If-None-Match` 省流量;树内容没变(如 Mac 上换了聚焦)就不推)。状态槽的变化已在树里(`agent.status`/`blocked` 等),不另设事件 |
 | `WS /api/v3/terminals/{terminalId}/stream?cols=&rows=` | **下行**:二进制帧 = observe 的 `terminal.frame.bytes` 解 base64 后的 ANSI(`full` 帧与增量帧原样转发,另有一条 JSON 文本帧 `{"t":"frame","seq":n,"full":bool,"w":51,"h":19}` 先于其字节,供手机核对栅格);**上行**文本帧 JSON:`{"t":"input","text":"ls","keys":["enter"]}`(先字面文本、后具名键,一次 `pane.send_input {pane_id,text,keys}`;文本 ≤ 64 KiB、键 ≤ 32 个且只许 `[A-Za-z0-9+_-]{1,32}`;被拒回 `{"t":"input.error","code":"bad_input|refused|forbidden"}`,`refused` 带 Herdr 原话)、`{"t":"resize","cols":60,"rows":22}`(合法范围 10–400 × 3–200,爆发式只算最后一次,去抖 100 ms)、`{"t":"ping"}`(回 `{"t":"pong"}`)。**resize = 用新栅格重启 observe**(observe 的 stdin 不接受 resize 消息,探针已验证),新子进程首帧是整屏 `full:true`,所以软键盘弹起/收起代价只是 ~1 KB |
+| `GET /api/v3/panes/{paneId}/chat` | **P2 只读 Chat**:窗格 → Herdr `agent_session` 身份 → Provider 自己的转录 → `chatsession.State`(`provider/model/contextTokens/hasOlder/working/plan/subagents/turns`,回合形状与桌面页完全相同);无 agent_session 或文件未写出 = `409 no_conversation`(手机退回 Terminal),未知 pane `404`。改动卡只有文件名(无 `+/−`:那来自 Mac 的工作树快照) |
+| `WS /api/v3/panes/{paneId}/chat/stream` | 首帧即 `{"t":"chat","paneId","state"}`,之后文件有增量(1 s 轮询,stat 级)或子代理目录变化(每 4 s)且序列化结果不同才再推;会话换了(新 session 文件)自动重绑,pane 没了 `4404`、会话没了 `4409`;每设备 ≤4 路 |
+| `POST /api/v3/panes/{paneId}/chat/send` | **P3 发送**:`{text, interrupt?}`(text ≤ 64 KiB)。与桌面同一门禁:Herdr 状态 idle/done 才发;working 回 `409 busy`,带 `interrupt:true` 才先 Esc → 600 ms → Ctrl-C → 200 ms → 再发;blocked/failed 回 `409 needs_terminal`(手机引导去 Terminal);unknown `409 not_ready`;shell 窗格 `409 no_agent`。投递 = Herdr `agent.prompt`(含它自带的两类身份拒绝回退),Herdr 的拒绝原样 `409 refused{message}`,`DeliveryUncertain` 回 `504 delivery_uncertain` 且 Host 永不重发。需要 `ScopeTerminalInput`;提示正文不进日志 |
+| `POST /api/v3/panes/{paneId}/chat/stop` | 一次 Esc(`agent.send_keys`,与桌面 Stop 相同),回 `{ok:true}` |
 | `GET /api/v3/panes/{paneId}/peek` | 窥视行:`ReadPane(visible)` 的最后一条非空行,≤ 200 字节,纯文本;Host 侧每 pane 节流 1 s |
 
 要点:
@@ -70,7 +74,7 @@ Settings → Remote Access
 - 重连 = 新 observe,首帧即整屏;Host 不缓存终端内容。
 - 手机端渲染器必须吃 Herdr 的 ANSI 帧(含 `?2026` 同步输出、OSC 8 序列):沿用 `tui-virtual-keyboard-design.md` 的键行,输出端用真 VT 渲染器(不再需要手机自己解码 PTY 字节语义)。
 - 输入受 Herdr 对 `send_input`/`send_keys` 的身份与就绪门约束:拒绝原样回传给手机(不绕过);窗格里**不是 Agent** 也能收键(`pane.*` 路径,不是 `agent.*`)。
-- `capabilities.chat` 在 P2 之前恒为 `false`,手机据此隐藏 Chat 入口(退化成纯 Terminal 手机,仍可用)。
+- `capabilities.chat`:P2 起为 `true`;单个窗格没有可读会话时回 `409 no_conversation`,手机对该窗格隐藏 Chat(退化成 Terminal)。路径用 `panes/{paneId}` 而非规划时的 `agents/{ref}`:树里的不透明 ID 就是 paneId,Agent 没有独立 ref。
 
 ## 包布局(P1;已落地部分见 `internal/remotehost/CLAUDE.md`)
 
@@ -111,14 +115,14 @@ internal/nativeui/
 5. ✅ **`terminal`**(已实现,另有真 herdr 的可选契约测试)→ 假 observe 子进程(打印 `terminal.frame` JSON 行的脚本)驱动:帧有序转发、`resize` = 重启并换栅格、关闭回收子进程、每设备并发上限、argv 恒为 `terminal session observe <id> --cols --rows`(断言无 `attach`/`--takeover`/`control`)、输入只调 Herdr API(假 Manager 断言)。
 6. ✅ **`peek`**(已实现)→ ReadPane 夹具:空屏/ANSI 残留/超长行的截断与节流。
 7. ✅ **LAN / Tailscale 绑定**(已实现:`Candidates` + `Server.Reconfigure`)→ 只绑所选网卡地址;Mode 变更时重绑;`0.0.0.0` 永不默认(单测断言)。
-8. **Settings → Remote Access 页** + 搜索索引 → `TestSettingsIndexCoversEveryRow` 绿;默认关;配对 QR 6 分钟后失效。
-9. **文档同步**:`internal/remotehost/CLAUDE.md`、`internal/CLAUDE.md`/根 `CLAUDE.md` 的目录清单。
+8. ✅ **Settings → Remote Access 页** + 搜索索引 → `TestSettingsIndexCoversEveryRow` 绿;默认关;配对 QR 6 分钟后失效。
+9. ✅ **文档同步**:`internal/remotehost/CLAUDE.md`、`internal/CLAUDE.md`/根 `CLAUDE.md` 的目录清单。
 10. **总验**:`GOTOOLCHAIN=auto go test ./...` · `GOTOOLCHAIN=auto go tool mygo vet .` · `GOTOOLCHAIN=auto go tool mygo build` · `git diff --check`;真机:手机配对 → 列表 → 点开终端 → 输入 → 回显 → Revoke 后断开。
 
 ## P2–P4 轮廓(不在本期)
 
-- **P2 Chat 只读**:从 `nativeui` 抽出与 Shell 无关的 `internal/chatsession`(一个 Agent 的 tail + `DeriveTimeline` + plan + working + changes 的投影构造),**桌面 `ChatBridge` 与 Host 共用同一投影函数**;抽取过程以桌面测试(`chat_*_test.go`)零改动通过为护栏。`capabilities.chat=true`,新增 `GET /api/v3/agents/{ref}/chat` + 事件流。
-- **P3 发送与交互**:`Send/Stop/Queue`、Question/Blocked 卡、picker;逻辑沿用 `chat_hooks/ask/picker` 抽出的纯逻辑;投递仍是 Herdr `agent.prompt/send_keys`(含既有两类身份拒绝回退),不新增 Herdr 方法。
+- **P2 Chat 只读(✅ Host 侧已实现 2026-10-31;手机 UI 另做)**:从 `nativeui` 抽出与 Shell 无关的 `internal/chatsession`(一个 Agent 的 tail + `DeriveTimeline` + plan + working + changes 的投影构造),**桌面 `ChatBridge` 与 Host 共用同一投影函数**;抽取过程以桌面测试(`chat_*_test.go`)零改动通过为护栏。`capabilities.chat=true`,新增 `GET /api/v3/agents/{ref}/chat` + 事件流。
+- **P3 发送与交互(✅ Send/Stop/interrupt 已实现 2026-10-31;❌ 未做:Queue 跟进账本、Question/Blocked 卡的作答、picker——它们的逻辑还绑在 `nativeui` 的 hook/broker 上,抽取是单独一步)**:`Send/Stop/Queue`、Question/Blocked 卡、picker;逻辑沿用 `chat_hooks/ask/picker` 抽出的纯逻辑;投递仍是 Herdr `agent.prompt/send_keys`(含既有两类身份拒绝回退),不新增 Herdr 方法。
 - **P4**:composer 目录与附件、语音、通知(另议)。
 
 ## 风险与最脆弱假设

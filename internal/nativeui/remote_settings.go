@@ -12,6 +12,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	qrcode "github.com/skip2/go-qrcode"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/settings"
 )
@@ -88,6 +90,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		Config:   remoteConfigFrom(s.settings.Remote),
 		Dir:      filepath.Join(s.userDataDir, "RemoteHost"),
 		Backend:  remotehost.NewManagerBackend(s.runtime),
+		Identity: s.hostHookIdentity,
 		HostName: host,
 		Version:  mygo.App.Version(),
 	})
@@ -407,4 +410,28 @@ func (s *Shell) remoteQRView(c *ui.Context, dim bool) {
 			}
 		}
 	})
+}
+
+// hostHookIdentity lends the Remote Host the session identities this app's
+// hooks learned (Herdr's agent list has none for Claude Code/Codex). It runs
+// on the Host's goroutines, so it reads Shell state on the window lane, and it
+// applies the same provider/terminal rule as restampHookIdentities.
+func (s *Shell) hostHookIdentity(instance, paneID, terminalID, kind string) *herdr.AgentSessionIdentity {
+	var out *herdr.AgentSessionIdentity
+	s.callOnWindow(func() {
+		entry, found := s.hookIdentities[instance+"/"+paneID]
+		if !found {
+			return
+		}
+		if entry.terminalID != "" && terminalID != "" && entry.terminalID != terminalID {
+			return
+		}
+		have, ok := history.ParseAgentID(kind)
+		want, wantOK := history.ParseAgentID(entry.identity.Agent)
+		if ok && wantOK && have == want {
+			identity := entry.identity
+			out = &identity
+		}
+	})
+	return out
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -136,7 +137,7 @@ func startRealHerdr(t *testing.T) (string, *herdr.Manager, string) {
 
 // TestServeRealHerdrForClient keeps a real Host (real TLS, real Herdr session)
 // up for an external client — the phone app's own test suite — and stops when
-// that client creates <dir>/done (or after three minutes). The pairing link and
+// that client creates <dir>/done (or after three minutes, or SOLCO_REMOTEHOST_SERVE_MINUTES). The pairing link and
 // the throw-away session's name are written to <dir>/pair-url.txt and
 // <dir>/instance.txt. Opt-in for the same reason as the test above:
 //
@@ -170,7 +171,11 @@ func TestServeRealHerdrForClient(t *testing.T) {
 	if err := os.WriteFile(dir+"/pair-url.txt", []byte(offer.URL), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(3 * time.Minute)
+	hold := 3 * time.Minute
+	if m, err := strconv.Atoi(os.Getenv("SOLCO_REMOTEHOST_SERVE_MINUTES")); err == nil && m > 0 {
+		hold = time.Duration(m) * time.Minute
+	}
+	deadline := time.Now().Add(hold)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(dir + "/done"); err == nil {
 			return

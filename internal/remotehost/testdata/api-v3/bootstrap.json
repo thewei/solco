@@ -1,6 +1,6 @@
 {
   "capabilities": {
-    "chat": false,
+    "chat": true,
     "terminal": true
   },
   "hostId": "a1cc1d2af9c5a03e",

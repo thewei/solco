@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/thewei/solco/internal/herdr"
 )
 
 /**
@@ -44,9 +46,14 @@ const apiPrefix = "/api/v3"
 
 // Options builds a Server.
 type Options struct {
-	Config   Config
-	Dir      string // <userDataDir>/RemoteHost
-	Backend  Backend
+	Config  Config
+	Dir     string // <userDataDir>/RemoteHost
+	Backend Backend
+	// Identity supplies a session identity Herdr's agent list lacks (Claude
+	// Code and Codex report none; the desktop learns it from its own hooks).
+	// It must match provider and terminal itself; nil disables the fallback.
+	Identity func(instance, paneID, terminalID, kind string) *herdr.AgentSessionIdentity
+	Home     string // user home for provider transcript roots ("" = os.UserHomeDir)
 	HostName string
 	Version  string
 	Now      func() time.Time
@@ -74,6 +81,7 @@ type Server struct {
 	fingerprint string
 	conns       map[string]map[*liveConn]struct{} // deviceID → live sockets
 	terminals   map[string]int                    // deviceID → open terminal streams
+	chats       map[string]int                    // deviceID → open chat streams
 	trees       map[string]*treeState
 	peeks       peekCache
 }
@@ -244,6 +252,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/tree", s.guard(ScopeView, s.handleTree))
 	mux.Handle("GET "+apiPrefix+"/events", s.guard(ScopeView, s.handleEvents))
 	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/peek", s.guard(ScopeView, s.handlePeek))
+	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat", s.guard(ScopeView, s.handleChat))
+	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat/stream", s.guard(ScopeView, s.handleChatStream))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/send", s.guard(ScopeTerminalInput, s.handleChatSend))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/stop", s.guard(ScopeTerminalInput, s.handleChatStop))
 	mux.Handle("GET "+apiPrefix+"/terminals/{terminalID}/stream", s.guard(ScopeView, s.handleTerminal))
 	return mux
 }
@@ -385,7 +397,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 		"hostId":       hostID,
 		"hostName":     s.opts.HostName,
 		"version":      s.opts.Version,
-		"capabilities": map[string]bool{"terminal": true, "chat": false},
+		"capabilities": map[string]bool{"terminal": true, "chat": true},
 		"instances":    instances,
 	})
 }

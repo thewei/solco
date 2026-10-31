@@ -51,6 +51,9 @@ type fakeBackend struct {
 	subPanes  [][]string
 	inputs    []sentInput
 	inputErr  error
+	prompts   []sentInput
+	promptErr error
+	agentKeys []sentInput
 	observe   func(terminalID string, cols, rows int) []string
 	observed  []grid
 	screen    string
@@ -105,6 +108,20 @@ func (b *fakeBackend) SendPaneInput(_ context.Context, _, paneID, text string, k
 	defer b.mu.Unlock()
 	b.inputs = append(b.inputs, sentInput{paneID, text, keys})
 	return b.inputErr
+}
+
+func (b *fakeBackend) PromptAgent(_ context.Context, _, paneID, text string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.prompts = append(b.prompts, sentInput{paneID, text, nil})
+	return b.promptErr
+}
+
+func (b *fakeBackend) SendAgentKeys(_ context.Context, _, paneID string, keys []string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.agentKeys = append(b.agentKeys, sentInput{paneID, "", keys})
+	return nil
 }
 
 func (b *fakeBackend) ReadPane(_ context.Context, _, _ string) (string, error) {
@@ -309,7 +326,7 @@ func TestBootstrapNamesTheHostAndWhatItCanDo(t *testing.T) {
 	if err := json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body.HostName != "Test Mac" || !body.Capabilities["terminal"] || body.Capabilities["chat"] || len(body.Instances) != 1 || body.Instances[0].ID != "default" {
+	if body.HostName != "Test Mac" || !body.Capabilities["terminal"] || !body.Capabilities["chat"] || len(body.Instances) != 1 || body.Instances[0].ID != "default" {
 		t.Fatalf("bootstrap = %+v", body)
 	}
 }

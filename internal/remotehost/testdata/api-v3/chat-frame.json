@@ -1,0 +1,30 @@
+{
+  "agentStatus": "working",
+  "paneId": "w1:p1",
+  "state": {
+    "provider": "claude-code",
+    "model": "claude-sonnet-4-5",
+    "working": true,
+    "turns": [
+      {
+        "user": true,
+        "text": "Fix the parser",
+        "tsMs": 1785546000000
+      },
+      {
+        "user": false,
+        "narration": "I found it.",
+        "live": true,
+        "tsMs": 1785546001000,
+        "steps": [
+          {
+            "kind": "narration",
+            "text": "I found it.",
+            "tsMs": 1785546001000
+          }
+        ]
+      }
+    ]
+  },
+  "t": "chat"
+}

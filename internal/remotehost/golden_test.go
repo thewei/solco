@@ -160,6 +160,47 @@ func TestGoldenAPIv3(t *testing.T) {
 	writeClient(t, term, map[string]any{"t": "input", "text": "ls", "keys": []string{"enter"}})
 	golden(t, "terminal-input-error-refused.json", readRaw(t, term))
 
+	// chat (P2, read-only): the shared chatsession projection of a Claude
+	// transcript, as a one-shot read and as a stream frame
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(path, []byte(claudeFixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	chatProj := fixtureProjection()
+	chatProj.Agents = []herdr.Agent{{
+		TerminalID: "term_a", PaneID: "w1:p1", Kind: "claude", Status: "working",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "claude", Kind: "path", Value: path},
+	}}
+	h.back.set(chatProj)
+	golden(t, "chat.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat", h.token, nil)))
+	golden(t, "error-no-conversation.json", bodyOf(t, h.get("/api/v3/panes/w1:p2/chat", h.token, nil)))
+	chat, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "chat-frame.json", readRaw(t, chat))
+
+	// chat send/stop (P3): the request body, the ack and a named refusal
+	rawReq, _ := json.Marshal(chatSendRequest{Text: "run the tests", Interrupt: true})
+	golden(t, "chat-client-send.json", rawReq)
+	_, _ = h.post("/api/v3/panes/w1:p1/chat/stop", h.token, "")
+	req, _ := http.NewRequest("POST", h.http.URL+"/api/v3/panes/w1:p1/chat/send", strings.NewReader(`{"text":"x"}`))
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	busy, err := http.DefaultClient.Do(req) // the fixture agent is working → busy
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "error-busy.json", bodyOf(t, busy))
+	chatProj.Panes[0].AgentStatus = "idle"
+	h.back.set(chatProj)
+	req, _ = http.NewRequest("POST", h.http.URL+"/api/v3/panes/w1:p1/chat/send", strings.NewReader(`{"text":"x"}`))
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	sent, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "chat-send-ok.json", bodyOf(t, sent))
+
 	// the three upstream messages the phone sends (what the Host accepts)
 	for name, msg := range map[string]map[string]any{
 		"terminal-client-input.json":  {"t": "input", "text": "ls", "keys": []string{"enter"}},

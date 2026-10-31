@@ -32,6 +32,12 @@ type Backend interface {
 	// SendPaneInput writes literal text, then named keys, into one pane
 	// (Herdr pane.send_input). The Host never attaches to a terminal.
 	SendPaneInput(ctx context.Context, instance, paneID, text string, keys []string) error
+	// PromptAgent submits one semantic prompt (Herdr agent.prompt, with its own
+	// identity-refusal fallback); a busy/not-ready refusal comes back as an error.
+	PromptAgent(ctx context.Context, instance, paneID, text string) error
+	// SendAgentKeys sends named keys to an agent (Herdr agent.send_keys, with
+	// its pane-scoped fallback) — Stop is one "esc".
+	SendAgentKeys(ctx context.Context, instance, paneID string, keys []string) error
 	// ReadPane returns the pane's visible screen as plain text (pane.read).
 	ReadPane(ctx context.Context, instance, paneID string) (string, error)
 	// ObserveCommand builds the read-only `terminal session observe` child.
@@ -71,6 +77,14 @@ func (b managerBackend) SendPaneInput(ctx context.Context, instance, paneID, tex
 
 func (b managerBackend) ObserveCommand(instance, terminalID string, cols, rows int) ([]string, error) {
 	return b.m.TerminalObserveCommand(instance, terminalID, cols, rows)
+}
+
+func (b managerBackend) PromptAgent(ctx context.Context, instance, paneID, text string) error {
+	return b.m.PromptAgent(ctx, instance, paneID, text)
+}
+
+func (b managerBackend) SendAgentKeys(ctx context.Context, instance, paneID string, keys []string) error {
+	return b.m.SendAgentKeys(ctx, instance, paneID, keys)
 }
 
 func (b managerBackend) ReadPane(ctx context.Context, instance, paneID string) (string, error) {
