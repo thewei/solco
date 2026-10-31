@@ -17,8 +17,8 @@ import (
 
 /**
  * [INPUT]: internal/usage 的 Service（各家额度读取、缓存、节流）、history.DailyUsageReader（近 30 天本地 token）、mygo.Secrets（Keychain）与 settings.Usage 开关
- * [OUTPUT]: Shell.usage（usageState）、refreshUsage（页面打开/手动刷新时才读，无后台定时器）、setUsageEnabled/requestUsageProvider（逐家开启 + 读取他人登录前的同意）、saveUsageToken/removeUsageToken、loadUsageActivity、usageSecrets 接口
- * [POS]: Usage 页与设置页共用的展示状态与动作；只做调度与偏好持久化：额度语义在 internal/usage，token 只进 Keychain（key 为 usage.<id>.token），永不进 settings 文件或日志
+ * [OUTPUT]: Shell.usage（usageState）、refreshUsage（页面打开/手动刷新时才读，无后台定时器）、setUsageEnabled/requestUsageProvider（逐家开启 + 读取他人登录前的同意）、saveUsageToken/removeUsageToken、usageSigninKey/forgetUsageSignin（借用登录在同意读取一次后的副本，撤回同意或改用手填令牌即删）、loadUsageActivity、usageSecrets 接口
+ * [POS]: Usage 页与设置页共用的展示状态与动作；只做调度与偏好持久化：额度语义在 internal/usage，token 与副本只进 Keychain（key 为 usage.<id>.token / usage.<id>.signin），永不进 settings 文件或日志；副本让 Claude/Cursor 的读取不再逐次触碰对方应用的 Keychain 条目
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -45,6 +45,10 @@ func (keychainSecrets) Delete(key string) error     { return mygo.Secrets.Delete
 
 // usageTokenKey is the Keychain key of a provider's pasted token.
 func usageTokenKey(id usage.ID) string { return "usage." + string(id) + ".token" }
+
+// usageSigninKey is the Keychain key of a provider's cached copy of another
+// app's sign-in, written once after the consented read.
+func usageSigninKey(id usage.ID) string { return "usage." + string(id) + ".signin" }
 
 // usageActivityDays is the window of the activity strip.
 const usageActivityDays = 30
@@ -103,9 +107,9 @@ func newUsageState() *usageState {
 		return usage.ZhipuGlobal
 	}
 	st.svc = usage.NewService(
-		usage.NewClaude(),
+		usage.NewClaudeCached(st.secrets, usageSigninKey(usage.Claude)),
 		usage.NewCodex(),
-		usage.NewCursor(token(usage.Cursor)),
+		usage.NewCursorCached(st.secrets, usageSigninKey(usage.Cursor), token(usage.Cursor)),
 		usage.NewZhipu(token(usage.Zhipu), site),
 		usage.NewCopilot(token(usage.Copilot)),
 		usage.NewAntigravity(st.agySignIn.Load),
@@ -256,6 +260,7 @@ func (s *Shell) saveUsageToken(id usage.ID, value string) {
 			st.tokens[id] = true
 			delete(st.drafts, id)
 			st.svc.Clear(id)
+			s.forgetUsageSignin(id)
 			s.pendingToast = "Saved in the Keychain."
 			if s.usageEnabledFor(id) {
 				s.refreshUsage(true)
@@ -284,8 +289,31 @@ func (s *Shell) removeUsageToken(id usage.ID) {
 			}
 			delete(st.tokens, id)
 			st.svc.Clear(id)
+			s.forgetUsageSignin(id)
 			s.pendingToast = "Token removed."
 		})
+	}
+	if s.win == nil {
+		work()
+		return
+	}
+	go work()
+}
+
+// forgetUsageSignin drops the cached copy of another app's sign-in: the
+// consent was withdrawn, or the user pasted a token of their own.
+func (s *Shell) forgetUsageSignin(id usage.ID) {
+	switch id {
+	case usage.Claude, usage.Cursor:
+	default:
+		return
+	}
+	st := s.usage
+	secrets := st.secrets
+	work := func() {
+		if err := secrets.Delete(usageSigninKey(id)); err != nil {
+			slog.Warn("usage sign-in copy remove failed", "provider", string(id), "error", err)
+		}
 	}
 	if s.win == nil {
 		work()
@@ -365,6 +393,9 @@ func (s *Shell) setUsageEnabled(id usage.ID, on bool) {
 // setUsageSignIn records (or withdraws) the user's yes for reading another
 // app's saved sign-in.
 func (s *Shell) setUsageSignIn(id usage.ID, allowed bool) {
+	if !allowed {
+		s.forgetUsageSignin(id)
+	}
 	if s.settings.Usage.SignInAllowed[string(id)] == allowed {
 		return
 	}

@@ -16,7 +16,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Usage 页/设置页/状态（usage_state.go、page_usage.go、usage_settings.go）、internal/usage.Service 的假 Fetcher、内存 usageSecrets、ui.Tester 无头渲染
- * [OUTPUT]: 对外提供 Usage 页回归：路由归属与标题栏、首次启用视图不读任何东西、卡片读数与 Used|Left、读取他人登录前必须同意、令牌只进 secrets 不进设置文件、Settings 分组与 Sessions 侧栏入口
+ * [OUTPUT]: 对外提供 Usage 页回归：路由归属与标题栏、首次启用视图不读任何东西、卡片读数与 Used|Left、读取他人登录前必须同意、令牌只进 secrets 不进设置文件、借用登录副本的生命周期（撤回同意/手填令牌即删）、Settings 分组与 Sessions 侧栏入口
  * [POS]: 2026-10-30 Usage 决策的守卫测试；与 usage_*.go 同生共死；所有读取走假 Fetcher 与内存 secrets，绝不碰真实 Keychain/网络/子进程
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -307,6 +307,39 @@ func TestUsageTokensGoToSecretsNeverSettings(t *testing.T) {
 	s.removeUsageToken(usage.Zhipu)
 	if _, ok := secrets.data[usageTokenKey(usage.Zhipu)]; ok || s.usage.tokens[usage.Zhipu] {
 		t.Fatal("Remove must delete the stored token")
+	}
+}
+
+// TestUsageSigninCopyLifecycle pins the borrowed sign-in copy: withdrawing
+// the consent, or pasting or removing a token of one's own, drops the copy,
+// so the other app's Keychain item is never read behind the consent's back.
+func TestUsageSigninCopyLifecycle(t *testing.T) {
+	s, secrets := usageTestShell(t)
+	s.applySettings(func(v *settings.Settings) error { v.Usage.Configured = true; return nil })
+	if err := secrets.Set(usageSigninKey(usage.Claude), "borrowed-claude-blob"); err != nil {
+		t.Fatal(err)
+	}
+	s.requestUsageProvider(usage.Claude, false)
+	if _, ok := secrets.data[usageSigninKey(usage.Claude)]; ok {
+		t.Fatal("withdrawing the consent must drop the cached copy")
+	}
+
+	if err := secrets.Set(usageSigninKey(usage.Cursor), "borrowed-cursor-token"); err != nil {
+		t.Fatal(err)
+	}
+	s.saveUsageToken(usage.Cursor, "  pasted-cursor-token  ")
+	if _, ok := secrets.data[usageTokenKey(usage.Cursor)]; !ok {
+		t.Fatal("the pasted token must be stored")
+	}
+	if _, ok := secrets.data[usageSigninKey(usage.Cursor)]; ok {
+		t.Fatal("pasting a token of one's own must drop the cached copy")
+	}
+	s.removeUsageToken(usage.Cursor)
+	if _, ok := secrets.data[usageTokenKey(usage.Cursor)]; ok {
+		t.Fatal("Remove must delete the pasted token")
+	}
+	if _, ok := secrets.data[usageSigninKey(usage.Cursor)]; ok {
+		t.Fatal("removing the pasted token must leave the copy dropped")
 	}
 }
 

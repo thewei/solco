@@ -16,8 +16,8 @@ import (
 
 /**
  * [INPUT]: Claude Code 自己的登录凭据（登录 Keychain 条目 `Claude Code-credentials`，或 ~/.claude/.credentials.json）与 ANTHROPIC_BASE_URL（环境变量/~/.claude/settings.json）
- * [OUTPUT]: Claude Fetcher（GET api.anthropic.com/api/oauth/usage）、parseClaude/parseClaudeCredentials 纯函数、自定义端点识别
- * [POS]: 只读借用 Claude Code 的 OAuth access token，仅发往 api.anthropic.com；从不刷新 token（刷新会让 Claude Code 自己的登录失效），过期就如实报“请打开 Claude Code 续期”；走自定义端点的 Claude 没有套餐额度，返回 ErrCustomEndpoint
+ * [OUTPUT]: Claude Fetcher（GET api.anthropic.com/api/oauth/usage；NewClaudeCached 把取到的登录副本存进 SigninCache）、parseClaude/parseClaudeCredentials 纯函数、自定义端点识别
+ * [POS]: 只读借用 Claude Code 的 OAuth access token，仅发往 api.anthropic.com；从不刷新 token（刷新会让 Claude Code 自己的登录失效），过期就如实报“请打开 Claude Code 续期”；走自定义端点的 Claude 没有套餐额度，返回 ErrCustomEndpoint；有 SigninCache 时先读副本，Claude Code 的 Keychain 条目只在副本缺失/过期/被拒时重读一次
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -34,12 +34,25 @@ type claude struct {
 	getenv   func(string) string
 	// keychain returns the credential blob Claude Code stored, or ErrSetup.
 	keychain func(ctx context.Context) ([]byte, error)
+	// cache keeps the sourced sign-in in Solco's own store, so Claude Code's
+	// Keychain item — whose read makes macOS ask — is read once per copy.
+	cache    SigninCache
+	cacheKey string
 }
 
 // NewClaude reads Claude Code's plan limits with its own stored sign-in.
 func NewClaude() Fetcher {
 	home, _ := os.UserHomeDir()
 	return &claude{client: newHTTPClient(), endpoint: claudeUsageURL, home: home, getenv: os.Getenv, keychain: claudeKeychain}
+}
+
+// NewClaudeCached is NewClaude keeping the sign-in it sources in cache under
+// key: Claude Code's Keychain item is read once, and again only after the
+// copy expired, was rejected or was dropped.
+func NewClaudeCached(cache SigninCache, key string) Fetcher {
+	c := NewClaude().(*claude)
+	c.cache, c.cacheKey = cache, key
+	return c
 }
 
 func (*claude) ID() ID { return Claude }
@@ -50,7 +63,7 @@ func (c *claude) Fetch(ctx context.Context) (Snapshot, error) {
 			return Snapshot{}, fmt.Errorf("%w: Claude Code uses its own endpoint, so it has no plan limits", ErrCustomEndpoint)
 		}
 	}
-	cred, err := c.credentials(ctx)
+	cred, cached, err := c.credentials(ctx)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -64,6 +77,9 @@ func (c *claude) Fetch(ctx context.Context) (Snapshot, error) {
 		"User-Agent":     "claude-code/2.0",
 	}, &body)
 	if err != nil {
+		if cached && errors.Is(err, ErrUnauthorized) {
+			c.dropCached() // the copy is no longer accepted; re-source next read
+		}
 		return Snapshot{}, err
 	}
 	snap := parseClaude(body)
@@ -128,7 +144,31 @@ func parseClaudeCredentials(blob []byte) (claudeCred, error) {
 	return file.OAuth, nil
 }
 
-func (c *claude) credentials(ctx context.Context) (claudeCred, error) {
+// credentials returns the sign-in to read with and whether it came from the
+// cache. The cache is Solco's own credential entry: Claude Code's Keychain
+// item — whose read makes macOS ask — is touched only while no usable copy
+// exists.
+func (c *claude) credentials(ctx context.Context) (claudeCred, bool, error) {
+	if c.cache != nil && c.cacheKey != "" {
+		if blob, ok := c.cache.Get(c.cacheKey); ok {
+			var cred claudeCred
+			if json.Unmarshal([]byte(blob), &cred) == nil && cred.AccessToken != "" && !cred.expired() {
+				return cred, true, nil
+			}
+			c.dropCached() // corrupt or expired: re-source below
+		}
+	}
+	cred, err := c.sourceCredentials(ctx)
+	if err == nil && c.cache != nil && !cred.expired() {
+		if blob, merr := json.Marshal(cred); merr == nil {
+			c.cache.Set(c.cacheKey, string(blob)) // best effort; a failed copy only means macOS asks again
+		}
+	}
+	return cred, false, err
+}
+
+// sourceCredentials reads where Claude Code keeps its sign-in.
+func (c *claude) sourceCredentials(ctx context.Context) (claudeCred, error) {
 	blob, err := c.keychain(ctx)
 	if err != nil && errors.Is(err, ErrSetup) {
 		// Older installs and Linux-style setups keep the same JSON in a file.
@@ -140,6 +180,14 @@ func (c *claude) credentials(ctx context.Context) (claudeCred, error) {
 		return claudeCred{}, err
 	}
 	return parseClaudeCredentials(blob)
+}
+
+// dropCached forgets the stored copy, so the next read sources the sign-in
+// again.
+func (c *claude) dropCached() {
+	if c.cache != nil && c.cacheKey != "" {
+		c.cache.Delete(c.cacheKey)
+	}
 }
 
 // claudeKeychain reads Claude Code's Keychain item through /usr/bin/security;

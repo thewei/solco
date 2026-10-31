@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -16,11 +17,10 @@ import (
 
 /**
  * [INPUT]: Cursor 的 access token——手填覆盖值，否则 Cursor.app 自己的 state.vscdb（cursorAuth/accessToken），再否则 cursor-agent 的 Keychain 条目 cursor-access-token
- * [OUTPUT]: Cursor Fetcher（GET cursor.com/api/usage-summary；旧请求制套餐再 GET /api/usage?user=<sub> 取 gpt-4 请求数，以其为准）、parseCursor/applyCursorLegacy/cursorCookie 纯函数
- * [POS]: 只读借用 Cursor 自己的 user token，仅发往 cursor.com；用户 2026-10-30 批准读取 Cursor.app / cursor-agent 的 token；state.vscdb 通过只读 sqlite3 单键查询，不拷贝数据库
+ * [OUTPUT]: Cursor Fetcher（GET cursor.com/api/usage-summary；旧请求制套餐再 GET /api/usage?user=<sub> 取 gpt-4 请求数，以其为准；NewCursorCached 把取到的 token 副本存进 SigninCache）、parseCursor/applyCursorLegacy/cursorCookie 纯函数
+ * [POS]: 只读借用 Cursor 自己的 user token，仅发往 cursor.com；用户 2026-10-30 批准读取 Cursor.app / cursor-agent 的 token；state.vscdb 通过只读 sqlite3 单键查询，不拷贝数据库；有 SigninCache 且未手填令牌时先读副本，cursor-agent 的 Keychain 条目只在副本缺失/失效/被拒时重读一次，手填令牌永不入副本
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
 const (
 	cursorHost       = "cursor.com"
 	cursorUsageURL   = "https://" + cursorHost + "/api/usage-summary"
@@ -37,6 +37,10 @@ type cursor struct {
 	manual func() string
 	// auto finds the token Cursor itself keeps; ErrSetup when there is none.
 	auto func(ctx context.Context) (string, error)
+	// cache keeps the sign-in Cursor itself keeps in Solco's own store, so
+	// cursor-agent's Keychain item is read once per copy lifetime.
+	cache    SigninCache
+	cacheKey string
 }
 
 // NewCursor reads Cursor's plan usage; manual returns the token saved in
@@ -45,18 +49,21 @@ func NewCursor(manual func() string) Fetcher {
 	return &cursor{client: newHTTPClient(), endpoint: cursorUsageURL, legacyEndpoint: cursorLegacyURL, manual: manual, auto: cursorAutoToken}
 }
 
+// NewCursorCached is NewCursor keeping the sign-in Cursor itself keeps in
+// cache under key: cursor-agent's Keychain item is read once, and again only
+// after the copy went stale. A pasted token always wins and is never cached.
+func NewCursorCached(cache SigninCache, key string, manual func() string) Fetcher {
+	c := NewCursor(manual).(*cursor)
+	c.cache, c.cacheKey = cache, key
+	return c
+}
+
 func (*cursor) ID() ID { return Cursor }
 
 func (c *cursor) Fetch(ctx context.Context) (Snapshot, error) {
-	token := ""
-	if c.manual != nil {
-		token = strings.TrimSpace(c.manual())
-	}
-	if token == "" {
-		var err error
-		if token, err = c.auto(ctx); err != nil {
-			return Snapshot{}, err
-		}
+	token, cached, err := c.token(ctx)
+	if err != nil {
+		return Snapshot{}, err
 	}
 	cookie, err := cursorCookie(token)
 	if err != nil {
@@ -64,6 +71,9 @@ func (c *cursor) Fetch(ctx context.Context) (Snapshot, error) {
 	}
 	var body cursorBody
 	if err := getJSON(ctx, c.client, c.endpoint, map[string]string{"Cookie": cookie}, &body); err != nil {
+		if cached && errors.Is(err, ErrUnauthorized) {
+			c.dropCached() // the copy is no longer accepted; re-source next read
+		}
 		return Snapshot{}, err
 	}
 	snap, err := parseCursor(body)
@@ -77,6 +87,41 @@ func (c *cursor) Fetch(ctx context.Context) (Snapshot, error) {
 	}
 	snap.At = time.Now()
 	return snap, nil
+}
+
+// token returns the token to read with and whether it came from the cache:
+// the pasted one first, then Solco's copy of Cursor's own sign-in, then
+// where Cursor keeps it.
+func (c *cursor) token(ctx context.Context) (string, bool, error) {
+	if c.manual != nil {
+		if value := strings.TrimSpace(c.manual()); value != "" {
+			return value, false, nil
+		}
+	}
+	if c.cache != nil && c.cacheKey != "" {
+		if value, ok := c.cache.Get(c.cacheKey); ok {
+			if _, err := cursorCookie(value); err == nil {
+				return value, true, nil
+			}
+			c.dropCached() // stale or corrupt: re-source below
+		}
+	}
+	value, err := c.auto(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	if c.cache != nil && c.cacheKey != "" {
+		c.cache.Set(c.cacheKey, value) // best effort; a failed copy only means macOS asks again
+	}
+	return value, false, nil
+}
+
+// dropCached forgets the stored copy, so the next read sources the token
+// again.
+func (c *cursor) dropCached() {
+	if c.cache != nil && c.cacheKey != "" {
+		c.cache.Delete(c.cacheKey)
+	}
 }
 
 // fetchLegacy asks for the request counters of the old plans; nil when the
