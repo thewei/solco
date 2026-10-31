@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<!--
+  Solco · Chat View —— Design Storybook（think → interactive-design-exploration）
+
+  直接用浏览器打开（file://），无外部依赖、无构建。
+  Tokens 来自真实实现：frontend/src/theme.css（--content/--panel/--text/--text-muted 深浅两套）、
+  design_system.go（Radius Control 6 / Row 8 / Card 10 / Pill 999；无投影、hairline 边）、
+  components.go dockPanel（Composer：hairline 边、聚焦增亮）、status_indicator.go（working=转圈 / idle=空心环 / 其余=实心点）。
+  数据结构对齐 internal/nativeui/chat_bridge.go：turn.steps[kind=thinking|text|tool]、live、failed、interactions、model、contextTokens。
+  URL hash 可预置状态：#v=B&scene=live&theme=light&w=560&font=serif&ink=high
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Solco · Chat View</title>
+<!-- ============================ SHELL (Design Storybook) ============================ -->
+<style>
+  [data-ide-shell]{--shell-bg:#0f0f10;--shell-panel:#18181b;--shell-border:#27272a;--shell-text:#fafafa;--shell-muted:#a1a1aa;--shell-accent:#71717a;--panel-w:324px;
+    box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--shell-bg);color:var(--shell-text);min-height:100vh;margin:0}
+  [data-ide-shell] *{box-sizing:border-box}
+  [data-ide-shell] .ide-layout{display:flex;min-height:100vh}
+  [data-ide-shell] .ide-stage{flex:1;position:relative;display:flex;flex-direction:column;min-height:100vh;min-width:0;background:#0b0b0c}
+  [data-ide-shell] .ide-stage-label{position:absolute;top:12px;left:14px;z-index:20;font-size:9px;font-weight:600;color:var(--shell-accent);text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+  [data-ide-shell] .ide-panel-collapse-btn{position:absolute;top:10px;right:10px;z-index:30;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer;font-size:12px}
+  [data-ide-shell] .ide-artboard-wrap{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:34px 24px 14px}
+  [data-ide-shell] .ide-artboard{width:100%;display:flex;justify-content:center}
+  [data-ide-shell] .ide-story-panel{width:var(--panel-w);flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--shell-border);background:var(--shell-panel);transition:width .2s;overflow:hidden;height:100vh;position:sticky;top:0}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel{width:0;border-left:none}
+  [data-ide-shell] .ide-panel-expand-btn{display:none;position:fixed;top:10px;right:10px;z-index:40;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer;font-size:12px}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn{display:grid;place-items:center}
+  [data-ide-shell] .ide-panel-header{padding:12px 14px 8px;border-bottom:1px solid var(--shell-border);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--shell-muted);white-space:nowrap}
+  [data-ide-shell] .ide-panel-controls{flex:1;overflow-y:auto;padding:12px 14px;min-height:0}
+  [data-ide-shell] .ide-section-title{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--shell-accent);margin:0 0 6px}
+  [data-ide-shell] .ide-section-title:not(:first-child){margin-top:14px}
+  [data-ide-shell] .ide-variant-card,[data-ide-shell] .ide-state-card{padding:8px 10px;border-radius:6px;border:1px solid var(--shell-border);margin-bottom:5px;cursor:pointer;transition:border-color .12s,background .12s}
+  [data-ide-shell] .ide-variant-card:hover,[data-ide-shell] .ide-state-card:hover{border-color:#3f3f46}
+  [data-ide-shell] .ide-variant-card.active,[data-ide-shell] .ide-state-card.active{border-color:var(--shell-accent);background:rgba(113,113,122,.1)}
+  [data-ide-shell] .ide-variant-card h2{font-size:11px;font-weight:600;margin:0 0 2px}
+  [data-ide-shell] .ide-variant-card p{margin:0;color:var(--shell-muted);font-size:10px;line-height:1.4}
+  [data-ide-shell] .ide-state-card{font-size:10px;line-height:1.4;color:var(--shell-muted)}
+  [data-ide-shell] .ide-state-card strong{display:block;color:var(--shell-text);font-size:10.5px}
+  [data-ide-shell] .ctl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px;font-size:10.5px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--shell-border);border-radius:7px;flex-wrap:wrap;justify-content:flex-end}
+  [data-ide-shell] .shell-seg button{all:unset;cursor:pointer;padding:3px 8px;border-radius:5px;font-size:10px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg button.on{background:#2c2c31;color:var(--shell-text)}
+  [data-ide-shell] .ratio{font:10px ui-monospace,Menlo,monospace;color:var(--shell-muted);margin:2px 0 0;line-height:1.7}
+  [data-ide-shell] .ratio b{color:var(--shell-text);font-weight:500}
+  [data-ide-shell] .ratio .ok{color:#6fc29b}[data-ide-shell] .ratio .no{color:#ff6b61}
+  [data-ide-shell] .ide-panel-story{border-top:1px solid var(--shell-border);flex-shrink:0}
+  [data-ide-shell] .ide-story-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:none;background:rgba(255,255,255,.02);color:var(--shell-muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+  [data-ide-shell] .ide-story-toggle:hover{color:var(--shell-text);background:rgba(255,255,255,.04)}
+  [data-ide-shell] .ide-story-body{padding:0 14px 14px;font-size:11px;line-height:1.55;color:var(--shell-muted);max-height:236px;overflow-y:auto}
+  [data-ide-shell] .ide-layout.story-collapsed .ide-story-body{display:none}
+  [data-ide-shell] .ide-story-body h1{font-size:13px;font-weight:600;color:var(--shell-text);margin:0 0 6px}
+  [data-ide-shell] .ide-story-body p{margin:0 0 8px}
+  [data-ide-shell] .ide-story-body ul{margin:0 0 8px;padding-left:16px}
+  [data-ide-shell] .ide-story-body li{margin-bottom:4px}
+  [data-ide-shell] .ide-story-body b{color:var(--shell-text);font-weight:600}
+  [data-ide-shell] .ide-story-body code{font:10.5px ui-monospace,Menlo,monospace;background:#232327;padding:0 4px;border-radius:4px;color:#d4d4d8}
+  #spec{position:fixed;z-index:99;pointer-events:none;background:#fafafa;color:#18181b;font:11px/1.45 ui-monospace,Menlo,monospace;padding:5px 8px;border-radius:6px;display:none;max-width:320px;white-space:pre}
+</style>
+
+<!-- ============================ DESIGN (Solco Chat WebView) ============================ -->
+<style id="design-styles">
+  .design-root{--w:760px;position:relative;width:var(--w);max-width:100%;height:calc(100vh - 54px);min-height:560px;display:flex;flex-direction:column;
+    background:var(--bg);color:var(--i1);border:1px solid var(--hair);border-radius:12px;overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Helvetica Neue",sans-serif;font-size:13px;line-height:1.4;
+    -webkit-font-smoothing:var(--smooth,antialiased);text-rendering:optimizeLegibility}
+  .design-root *{box-sizing:border-box}
+  .design-root :where(button){font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}
+  .design-root.noauto .prose{text-autospace:no-autospace}
+  .design-root:not(.noauto) .prose,.design-root:not(.noauto) .bub,.design-root:not(.noauto) .uB,.design-root:not(.noauto) .think{text-autospace:ideograph-alpha ideograph-numeric}
+
+  /* ---- type scale: per-variant defaults, overridden by the Type lab ---- */
+  .design-root.vA{--fs-d:15px;--lh-d:1.72;--col:748px;--bub:18px}
+  .design-root.vB{--fs-d:14px;--lh-d:1.68;--col:820px}
+  .design-root.vC{--fs-d:13.5px;--lh-d:1.62;--col:860px}
+  .design-root .prose{font-family:var(--ff-prose,inherit);font-size:var(--fs,var(--fs-d));line-height:var(--lh,var(--lh-d));font-weight:var(--fw,400);color:var(--i1);overflow-wrap:anywhere}
+  .turn>.prose{margin-bottom:.9em}.turn>.prose:last-child{margin-bottom:0}
+  .prose p{margin:0 0 .85em}.prose p:last-child{margin-bottom:0}
+  .prose ul,.prose ol{margin:0 0 .85em;padding-left:1.4em}.prose li{margin:.28em 0}.prose li::marker{color:var(--i3)}
+  .prose strong{font-weight:600}
+  .prose h4{font-size:1em;font-weight:600;margin:1.15em 0 .4em;letter-spacing:0}
+  .prose code{font:.86em ui-monospace,"SF Mono",Menlo,monospace;background:var(--tint2);padding:.12em .38em;border-radius:5px}
+  .prose table{border-collapse:collapse;margin:.2em 0 .9em;font-size:.92em;font-variant-numeric:tabular-nums}
+  .prose th{font-weight:500;color:var(--i2);text-align:left;padding:5px 18px 5px 0;border-bottom:1px solid var(--hair2)}
+  .prose td{padding:5px 18px 5px 0;border-bottom:1px solid var(--hair)}
+  .prose td code{background:none;padding:0}
+  .prose a{color:var(--link);text-decoration:none}
+  .codeb{position:relative;margin:.2em 0 .95em;border-radius:10px;background:var(--tint);border:1px solid var(--hair);overflow:hidden}
+  .codeb .ch{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 0 14px;font-size:11.5px;color:var(--i3);font-family:-apple-system,"SF Pro Text",sans-serif}
+  .codeb pre{margin:0;padding:6px 14px 12px;overflow-x:auto;font:.84em/1.62 ui-monospace,"SF Mono",Menlo,monospace;color:var(--i1);tab-size:4}
+  .codeb .cp{opacity:0;transition:opacity .12s}.codeb:hover .cp{opacity:1}
+  .k{color:var(--c-k)}.s{color:var(--c-s)}.c{color:var(--i3);font-style:italic}.f{color:var(--c-f)}.n{color:var(--c-n)}
+
+  /* ---- chrome ---- */
+  .band{height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--hair);font-size:12px;color:var(--i2)}
+  .band .sep{color:var(--i4)}.band .ro{margin-left:auto;color:var(--i3)}
+  .log{flex:1;overflow-y:auto;padding:22px 0 14px;min-height:0}
+  .col{max-width:var(--col);margin:0 auto;padding:0 24px}
+  .older{display:block;margin:0 auto 18px;font-size:12px;color:var(--i3);padding:3px 12px;border:1px solid var(--hair);border-radius:999px}
+  .older:hover{color:var(--i1);background:var(--tint)}
+  .ic{flex:none;display:block}
+  .spin{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--i4);border-top-color:var(--i2);animation:spin .8s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .shim{background:linear-gradient(90deg,var(--i3) 0%,var(--i1) 50%,var(--i3) 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.7s linear infinite}
+  @keyframes shim{from{background-position:220% 0}to{background-position:-120% 0}}
+  .prose.caret>:last-child::after{content:"";display:inline-block;width:.46em;height:.46em;border-radius:50%;background:var(--i1);margin-left:.4em;vertical-align:.04em;animation:blink 1.1s ease-in-out infinite}
+  @keyframes blink{50%{opacity:.25}}
+  @media (prefers-reduced-motion:reduce){.spin,.shim,.prose.caret>:last-child::after{animation:none}.shim{color:var(--i2);background:none}}
+
+  /* ---- process rows (shared) ---- */
+  .trow{display:flex;align-items:center;gap:8px;min-height:25px;font-size:13px;color:var(--i2);line-height:1.4;border-radius:6px}
+  .trow .lead{width:14px;display:grid;place-items:center;color:var(--i3);flex:none}
+  .trow .verb{color:var(--i2);flex:none}
+  .trow .q{color:var(--i3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .path{color:var(--i3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .path b{font-weight:500;color:var(--i1)}
+  .cmd{font:12.5px ui-monospace,"SF Mono",Menlo,monospace;color:var(--i1);background:var(--tint2);padding:1px 7px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .trow .meta{margin-left:auto;padding-left:12px;color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .trow .meta.ok{color:var(--ok)}.trow .meta.err{color:var(--bad)}
+  .trow.err .verb{color:var(--bad)}
+  .delta{margin-left:auto;padding-left:12px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .delta i{font-style:normal;margin-left:7px}.add{color:var(--ok)}.del{color:var(--bad)}
+  .think{color:var(--i2);font-size:13px;line-height:1.65;margin:2px 0 8px;max-width:62ch}
+  .v{color:var(--i2)}.o{color:var(--i3)}
+  .chev{transition:transform .15s;color:var(--i3)}.open>.chev,.open .chev.cv{transform:rotate(90deg)}
+  .mention{font:.88em ui-monospace,"SF Mono",Menlo,monospace;background:var(--tint2);padding:.08em .42em;border-radius:5px}
+  .ib{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:var(--i3);flex:none}
+  .ib:hover{background:var(--tint);color:var(--i1)}
+  .stopped{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--bad);font-size:13px}
+  .foot{display:flex;align-items:center;gap:2px;margin-top:6px;height:26px;color:var(--i3);font-size:12px;opacity:0;transition:opacity .12s}
+  .turn:hover .foot,.turn.last .foot,.foot:focus-within{opacity:1}
+  .foot .t{padding:0 8px 0 0;font-variant-numeric:tabular-nums}
+  .foot .ib{font-size:11px}.foot .copied{color:var(--ok)}
+
+  /* ---- composer (shared markup, three skins) ---- */
+  .dock{flex:none;padding:6px 0 14px}
+  .cmp{position:relative;background:var(--panel);border:1px solid var(--hair2);transition:border-color .15s}
+  .cmp:focus-within{border-color:var(--hair3)}
+  .cmp textarea{display:block;width:100%;min-height:24px;max-height:200px;resize:none;border:0;outline:0;background:none;color:var(--i1);font:inherit;font-size:14px;line-height:1.55;padding:0}
+  .cmp textarea::placeholder{color:var(--i4)}
+  .cbar{display:flex;align-items:center;gap:4px}.cbar .sp{flex:1}
+  .chip{font-size:12px;color:var(--i2);padding:3px 8px;border-radius:999px;white-space:nowrap}
+  .chip:hover{background:var(--tint)}
+  .chip.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11.5px}
+  .send{width:30px;height:30px;border-radius:50%;background:var(--i1);color:var(--bg);display:grid;place-items:center;flex:none;transition:opacity .12s}
+  .send[disabled]{opacity:.22;cursor:default}
+  .send.stop{display:grid}.send.queue{display:none}
+  .cmp.typed .send.stop{display:none}.cmp.typed .send.queue{display:grid}
+  .cmp .intr{display:none;font-size:12px;color:var(--i2);padding:4px 9px;border-radius:999px;border:1px solid var(--hair2)}
+  .cmp.typed .intr{display:inline-block}.intr:hover{color:var(--bad);border-color:var(--bad)}
+  .hint{margin:6px 4px 0;font-size:12px;color:var(--i3);min-height:16px;display:flex;justify-content:space-between;gap:10px}
+  .ring{display:grid;place-items:center;width:20px;height:20px}
+  .ask{margin:0 0 8px;border:1px solid var(--hair2);border-radius:14px;background:var(--panel);padding:12px 14px}
+  .ask .ah{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13.5px;font-weight:500}
+  .ask .pill{font-size:11px;font-weight:400;color:var(--i2);background:var(--tint2);padding:1px 8px;border-radius:999px}
+  .ask .opt{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border-radius:8px;font-size:13px;color:var(--i1)}
+  .ask .opt:hover{background:var(--tint)}
+  .ask kbd{font:11px ui-monospace,Menlo,monospace;color:var(--i3);border:1px solid var(--hair2);border-radius:5px;padding:0 5px;min-width:18px;text-align:center}
+
+  /* ===================== A · Prose (ChatGPT) ===================== */
+  .vA .u{display:flex;justify-content:flex-end;margin:0 0 22px}
+  .vA .bub{max-width:82%;background:var(--tint2);padding:9px 16px;border-radius:var(--bub);font-size:var(--fs,var(--fs-d));line-height:1.62;white-space:pre-wrap;overflow-wrap:anywhere}
+  .vA .turn{margin:0 0 26px}
+  .vA .run{margin:0 0 .9em}
+  .vA .runbtn{display:inline-flex;align-items:center;gap:6px;color:var(--i2);font-size:13.5px;line-height:1.5;padding:2px 0}
+  .vA .runbtn:hover,.vA .runbtn:hover .v{color:var(--i1)}
+  .vA .runbody{margin:6px 0 4px 6px;padding-left:14px;border-left:1px solid var(--hair2);display:flex;flex-direction:column;gap:1px}
+  .vA .dock .col{padding-top:0}
+  .vA .cmp{border-radius:24px;padding:14px 12px 10px 18px}
+  .vA .cbar{margin-top:8px}
+  .vA .cmp textarea{font-size:15px}
+
+  /* ===================== B · Work ledger (Codex / Cursor) ===================== */
+  .vB .uB{border:1px solid var(--hair);background:var(--tint);border-radius:10px;padding:10px 14px;margin:0 0 18px;font-size:var(--fs,var(--fs-d));line-height:1.62;white-space:pre-wrap;overflow-wrap:anywhere}
+  .vB .turn{margin:0 0 30px}
+  .vB .work{display:flex;align-items:center;gap:10px;width:100%;color:var(--i3);font-size:12.5px;margin:2px 0 8px}
+  .vB .work .line{flex:1;height:1px;background:var(--hair)}
+  .vB .work:hover{color:var(--i2)}
+  .vB .work .lbl{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .vB .ledger{border:1px solid var(--hair);border-radius:10px;padding:5px;margin:0 0 14px}
+  .vB .ledger .trow{padding:0 8px}.vB .ledger .trow:hover{background:var(--tint)}
+  .vB .ledger .think{padding:4px 8px 0}
+  .vB .changes{border:1px solid var(--hair);border-radius:10px;overflow:hidden;margin:14px 0 0}
+  .vB .chead{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;background:var(--tint);font-size:13px}
+  .vB .chead .ttl{display:inline-flex;align-items:center;gap:8px}
+  .vB .chead .delta{margin-left:0;padding-left:0}
+  .vB .rev{margin-left:auto;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:8px;border:1px solid var(--hair2);font-size:12.5px;color:var(--i1)}
+  .vB .rev:hover{background:var(--tint2)}
+  .vB .crow{display:flex;align-items:center;padding:6px 12px;border-top:1px solid var(--hair);font-size:13px}
+  .vB .cmp{border-radius:14px;padding:12px 12px 8px 14px}
+  .vB .cbar{margin-top:6px}
+  .vB .live-tag{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--i2);margin:0 0 8px;font-variant-numeric:tabular-nums}
+
+  /* ===================== C · Rail / blocks (agent supervision) ===================== */
+  .vC .log{padding-top:0}
+  .vC .blk{margin:0 0 6px;border-bottom:1px solid var(--hair);padding-bottom:16px}
+  .vC .bh{position:sticky;top:0;z-index:3;background:var(--bg);display:flex;align-items:center;gap:10px;padding:10px 0 9px;margin:0 0 6px;border-bottom:1px solid transparent}
+  .vC .bh.stuck{border-bottom-color:var(--hair)}
+  .vC .bh .slot{width:16px;height:16px;display:grid;place-items:center;flex:none}
+  .vC .bh .pt{flex:1;min-width:0;font-size:13.5px;font-weight:500;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vC .bh.expand .pt{white-space:normal}
+  .vC .bh .tm{font-size:12px;color:var(--i3);font-variant-numeric:tabular-nums;flex:none}
+  .vC .rail{position:relative;padding-left:26px}
+  .vC .rail::before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:1px;background:var(--hair2)}
+  .vC .it{position:relative;padding:2px 0}
+  .vC .it .node{position:absolute;left:-26px;top:5px;width:15px;height:15px;display:grid;place-items:center;background:var(--bg);color:var(--i3)}
+  .vC .it .dotn{width:7px;height:7px;border-radius:50%;background:var(--i3)}
+  .vC .it.final .dotn{background:var(--i1);width:9px;height:9px}
+  .vC .it .ringn{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--i3)}
+  .vC .it.prosei{padding:4px 0 6px}.vC .it.prosei .node{top:9px}
+  .vC .runbtn{display:inline-flex;align-items:center;gap:6px;color:var(--i2);font-size:13px;line-height:1.5;padding:2px 0}
+  .vC .runbtn:hover,.vC .runbtn:hover .v{color:var(--i1)}
+  .vC .sub{margin:2px 0 4px;display:flex;flex-direction:column}
+  .vC .turnmap{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:7px;z-index:5}
+  .vC .turnmap button{width:12px;height:12px;display:grid;place-items:center}
+  .vC .turnmap i{display:block;width:6px;height:2px;border-radius:2px;background:var(--i4);transition:all .12s}
+  .vC .turnmap button:hover i,.vC .turnmap button.on i{width:12px;background:var(--i1)}
+  .vC .dock{padding:0}
+  .vC .dock .col{max-width:none;padding:10px 24px 12px;border-top:1px solid var(--hair)}
+  .vC .dock .col>*{max-width:var(--col);margin-left:auto;margin-right:auto}
+  .vC .cmp{border-radius:8px;padding:9px 10px 7px 12px}
+  .vC .cmp textarea{font-size:13.5px}
+  .vC .cbar{margin-top:4px}
+  .vC .hint{margin-top:5px}
+
+  /* ===================== Addendum 2 · fresh agent / order / running ===================== */
+  .invite{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:9vh 24px 0;color:var(--i2)}
+  .invite .mk{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--tint2);color:var(--i2)}
+  .invite h3{margin:4px 0 0;font-size:16px;font-weight:600;color:var(--i1);letter-spacing:0}
+  .invite p{margin:0;max-width:46ch;font-size:13.5px;line-height:1.65;color:var(--i3)}
+  .invite p b{font-weight:500;color:var(--i2)}
+  .sugg{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px;max-width:560px}
+  .sugg button{padding:6px 13px;border:1px solid var(--hair2);border-radius:999px;font-size:13px;color:var(--i2)}
+  .sugg button:hover{background:var(--tint);color:var(--i1)}
+  .ghostlink{font-size:12.5px;color:var(--i3);padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:6px}
+  .ghostlink:hover{background:var(--tint);color:var(--i1)}
+  .quietnote{margin:0 auto 10px;text-align:center;font-size:13px;color:var(--i3)}
+  .dock .cmp.armed{border-color:var(--hair3)}
+  .hint .kbdh{font:11px ui-monospace,Menlo,monospace;color:var(--i3);border:1px solid var(--hair2);border-radius:5px;padding:0 5px;margin:0 2px}
+  .workline{display:inline-flex;align-items:baseline;gap:10px;font-size:13.5px}
+  .workline .elapsed{color:var(--i3);font-variant-numeric:tabular-nums;font-size:12.5px}
+  .runbtn .el{color:var(--i3);font-variant-numeric:tabular-nums;font-size:12.5px;margin-left:2px}
+  .trow .meta.live{color:var(--i3)}
+  .indet{display:block;height:2px;width:132px;border-radius:2px;margin:5px 0 2px 0;background:var(--hair2);position:relative;overflow:hidden}
+  .indet::after{content:"";position:absolute;inset:0;width:38%;border-radius:2px;background:var(--i2);animation:indet 1.3s ease-in-out infinite}
+  @keyframes indet{from{transform:translateX(-110%)}to{transform:translateX(290%)}}
+  .ordtag{display:inline-block;margin:0 0 10px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--i3);border:1px solid var(--hair2);border-radius:999px;padding:1px 9px}
+  @media (prefers-reduced-motion:reduce){.indet::after{animation:none;width:100%;opacity:.4}}
+</style>
+</head>
+<body data-ide-shell>
+<div class="ide-layout story-collapsed" id="ideLayout">
+  <main class="ide-stage">
+    <span class="ide-stage-label" id="stageLabel">Variant A</span>
+    <button type="button" class="ide-panel-collapse-btn" id="panelCollapseBtn" title="收起面板，全画布演示">›</button>
+    <div class="ide-artboard-wrap">
+      <div class="ide-artboard"><div class="design-root" id="root"></div></div>
+    </div>
+  </main>
+  <button type="button" class="ide-panel-expand-btn" id="panelExpandBtn" title="展开面板">☰</button>
+  <aside class="ide-story-panel">
+    <div class="ide-panel-header">Design Storybook · Chat View</div>
+    <div class="ide-panel-controls" id="panel"></div>
+    <div class="ide-panel-story">
+      <button type="button" class="ide-story-toggle" id="storyToggleBtn"><span>Story</span><span id="storyChevron">▶</span></button>
+      <div class="ide-story-body" id="storyBody"></div>
+    </div>
+  </aside>
+</div>
+<div id="spec"></div>
+
+<script>
+/* ===================== icons (Lucide paths) ===================== */
+const I={
+  chev:'<path d="m9 18 6-6-6-6"/>',copy:'<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',plus:'<path d="M5 12h14M12 5v14"/>',up:'<path d="m5 12 7-7 7 7M12 19V5"/>',
+  mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
+  read:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',edit:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  cmd:'<path d="m4 17 6-6-6-6M12 19h8"/>',web:'<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/>',
+  agent:'<rect width="18" height="10" x="3" y="11" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/>',
+  spark:'<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
+  diff:'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/>',
+  warn:'<path d="m21.7 18-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3M12 9v4M12 17h.01"/>',
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/>'
+};
+const ic=(n,s=14,sw=1.75)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
+const stopIc='<svg class="ic" width="12" height="12" viewBox="0 0 12 12"><rect width="10" height="10" x="1" y="1" rx="2" fill="currentColor"/></svg>';
+
+/* ===================== sample data (shape mirrors ChatBridgeTurn) ===================== */
+const CODE=`<span class="k">func</span> <span class="f">parseTimestamp</span>(raw <span class="k">string</span>) (time.Time, <span class="k">error</span>) {
+    <span class="k">if</span> raw == <span class="s">""</span> {
+        <span class="k">return</span> time.Time{}, <span class="k">nil</span> <span class="c">// 空值沿用零值</span>
+    }
+    <span class="k">if</span> n, err := strconv.<span class="f">ParseInt</span>(raw, <span class="n">10</span>, <span class="n">64</span>); err == <span class="k">nil</span> {
+        <span class="k">if</span> n &gt;= <span class="n">1e11</span> { <span class="k">return</span> time.<span class="f">UnixMilli</span>(n), <span class="k">nil</span> }
+        <span class="k">return</span> time.<span class="f">Unix</span>(n, <span class="n">0</span>), <span class="k">nil</span>
+    }
+    <span class="k">return</span> time.<span class="f">Parse</span>(time.RFC3339Nano, raw)
+}`;
+const FINAL1=`<p>改好了。<code>parseTimestamp</code> 现在同时支持三种输入，对外函数签名没有变：</p>
+<ul><li>Unix <strong>毫秒</strong>，例如 <code>1730284800000</code></li><li><strong>ISO 8601</strong>，含时区偏移，例如 <code>2026-10-30T21:16:04+08:00</code></li><li>原来的<strong>秒级</strong>时间戳，行为不变</li></ul>
+<h4>判断规则</h4>
+<p>纯数字且不小于 <code>1e11</code> 视为毫秒，否则按秒处理；其余走 <code>time.RFC3339Nano</code>。核心实现：</p>
+<div class="codeb"><div class="ch"><span>go</span><button class="ib cp" data-copy="code" title="Copy">${ic('copy',13)}</button></div><pre>${CODE}</pre></div>
+<table><tr><th>输入</th><th>解析为</th><th>说明</th></tr><tr><td><code>1730284800</code></td><td>2024-10-30 10:40 UTC</td><td>秒</td></tr><tr><td><code>1730284800000</code></td><td>2024-10-30 10:40 UTC</td><td>毫秒</td></tr><tr><td><code>2026-10-30T21:16:04+08:00</code></td><td>2026-10-30 13:16 UTC</td><td>ISO 8601</td></tr></table>
+<p>测试 <code>go test ./internal/history/...</code> 通过，新增了 6 个用例。有一点需要你拍板：空 timestamp 现在返回零值而不是报错，要沿用吗？</p>`;
+const U1='帮我把 <span class="mention">@internal/history/parse_utils.go</span> 里的时间戳解析改成同时支持毫秒和 ISO 8601，再补上测试。别动对外函数签名。';
+const U2='空 timestamp 就沿用零值，不要报错。顺便把 Claude Code 的 sidechain 行也算进来。';
+const T1={user:false,ts:'14:32',dur:94,steps:[
+  {k:'think',sec:14,t:'需要先弄清现有的解析入口和调用方。毫秒和秒要靠数量级区分，1e11 以上基本不可能是秒级时间戳（那是公元 5138 年）。ISO 8601 直接走标准库的 RFC3339Nano 即可。'},
+  {k:'text',t:'<p>先看现有实现和调用方，再决定改动范围。</p>'},
+  {k:'tool',cat:'read',obj:'internal/history/parse_utils.go',meta:'218 lines',sec:1},
+  {k:'tool',cat:'search',obj:'parseTimestamp',meta:'7 matches in 3 files',sec:1},
+  {k:'tool',cat:'read',obj:'internal/history/parse_utils_test.go',meta:'96 lines',sec:1},
+  {k:'text',t:'<p>现状清楚了：只有 <code>parse_utils.go</code> 一处解析，调用方都走同一个函数，改它就够了。</p>'},
+  {k:'tool',cat:'edit',obj:'internal/history/parse_utils.go',add:24,del:6,sec:3},
+  {k:'tool',cat:'edit',obj:'internal/history/parse_utils_test.go',add:41,del:0,sec:4},
+  {k:'tool',cat:'cmd',obj:'go test ./internal/history/...',meta:'ok · 1.8s',okm:1,sec:2},
+  {k:'text',final:1,t:FINAL1}]};
+const FINAL2='<p>已改：<code>isSidechain</code> 行现在会进入列表，并带上 <code>Sidechain: true</code>；空 timestamp 返回零值，不再报错。<code>go test ./internal/history/...</code> 通过。</p>';
+const T2={user:false,ts:'14:41',dur:27,steps:[
+  {k:'think',sec:6,t:'两件事：空 timestamp 沿用零值；sidechain 行不再被跳过。先看 isSidechain 是在哪里被丢弃的。'},
+  {k:'tool',cat:'read',obj:'internal/history/claude_parse.go',meta:'342 lines',sec:1},
+  {k:'tool',cat:'search',obj:'isSidechain',meta:'4 matches in 2 files',sec:1},
+  {k:'tool',cat:'edit',obj:'internal/history/claude_parse.go',add:6,del:3,sec:2},
+  {k:'tool',cat:'cmd',obj:'go test ./internal/history/...',meta:'ok · 1.6s',okm:1,sec:2},
+  {k:'text',final:1,t:FINAL2}]};
+const U={user:true};
+/* ② 回复/工具交错：一个 omp 式长回合（修复后的顺序） */
+const rd=(o,m)=>({k:'tool',cat:'read',obj:o,meta:m||'',sec:1}),sr=(o,m)=>({k:'tool',cat:'search',obj:o,meta:m||'',sec:1});
+const ORDER_STEPS=[
+  {k:'think',sec:5,t:'用户说回复和工具挤成两坨。先看前端是不是把顺序丢了。'},
+  {k:'text',t:'<p>先看前端怎么渲染一个回合的步骤。</p>'},
+  rd('frontend/src/turn.tsx','592 lines'),rd('frontend/src/App.tsx','734 lines'),sr('segments','3 matches in 1 file'),
+  {k:'text',t:'<p>前端是按步骤顺序渲染的，问题不在这里。接着看 Go 侧的投影有没有保序。</p>'},
+  rd('internal/nativeui/chat_bridge.go','870 lines'),rd('internal/conversation/timeline.go','180 lines'),sr('Steps','9 matches in 4 files'),rd('internal/history/pi.go','412 lines'),
+  {k:'text',t:'<p>找到了：<code>pi.go</code> 把连续的 assistant 消息合并成一条，文字拼成一块、工具另成一组，顺序在解析层就丢了。</p>'},
+  {k:'tool',cat:'edit',obj:'internal/history/models.go',add:18,del:0,sec:2},{k:'tool',cat:'edit',obj:'internal/history/pi.go',add:34,del:6,sec:3},{k:'tool',cat:'edit',obj:'internal/conversation/timeline.go',add:29,del:11,sec:3},
+  {k:'tool',cat:'cmd',obj:'go test ./internal/history/... ./internal/conversation/...',meta:'ok · 2.4s',okm:1,sec:3},
+  {k:'text',final:1,t:'<p>已修好：每个 <code>text / thinking / tool</code> 块现在带着原始顺序一路传到页面，工具聚合夹在两段回复之间。</p>'}];
+/* 修复前：同一批步骤被拆成「思考 → 全部文字 → 全部工具」 */
+const orderClumped=()=>{const st=ORDER_STEPS,texts=st.filter(s=>s.k==='text'&&!s.final),tools=st.filter(s=>s.k==='tool');
+  return [st[0],{k:'text',t:texts.map(x=>x.t).join('')},...tools,st[st.length-1]]};
+const STREAM='<p>收到。先确认 <code>isSidechain</code> 现在是在哪一层被丢弃的，再决定是放开过滤还是单独标记，避免影响已有的会话列表计数。</p>';
+
+/* ===================== state ===================== */
+const H=Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+const S={v:H.v||'A',scene:H.scene||'settled',theme:H.theme||'dark',w:+(H.w||760),spec:H.spec==='on',
+  font:H.font||'sans',size:H.size||'auto',lh:H.lh||'auto',fw:+(H.fw||400),ink:H.ink||'std',autospace:H.auto||'on',smooth:H.smooth||'antialiased',
+  open:new Set(),tick:0,liveTick:+(H.tick||17),
+  fresh:H.fresh||'F1',ready:H.ready||'ready',order:H.order||'after',load:H.load||'L1',sentText:'',stage:0};const VARIANTS={A:{t:'A · Prose',d:'ChatGPT 本味：助手无容器全宽正文，用户中性圆泡，过程折成一行「Thought for 14s › Explored …」'},
+  B:{t:'B · Work ledger',d:'Codex / Cursor：用户整宽卡片；每段过程是带总时长的分隔线 + 类型化账本；回合末「改动卡」直通 Diff Review'},
+  C:{t:'C · Rail',d:'监督长任务：每回合一个块，粘性提示头 + 状态槽，左侧竖线把步骤串成时间线，右缘回合索引'}};
+const SCENES={settled:['Settled','两个回合，全部完成；hover 出操作行'],live:['Live · working','最后一回合进行中：工具运行（转圈 + 闪光标签），过程默认展开；Stop 按钮'],
+  replay:['Replay stream','从头回放一次流式过程（思考 → 工具 → 正文逐字），观察排版回流'],
+  ask:['Approval dock','Composer 上方的结构化审批；回合暂停在工具调用前'],stopped:['Stopped','回合被中断：保留已有内容 + Stopped 行'],
+  readonly:['Read-only (Sessions)','历史会话详情：无 Composer、无交互'],
+  fresh:['① Fresh agent','刚启动的 Agent（还没有会话）：不再干等，直接告诉用户可以在下面输入；Enter 即发给 Agent'],
+  freshsent:['① Fresh · sent','模拟发送：用户气泡立刻出现 → Working → 会话打开后接管（自动推进，再点一次重播）'],
+  order:['② Reply / tool order','回复与工具聚合严格按发生顺序交错；右栏切 Before / After 对比修复前后'],
+  running:['③ Tool run loading','工具运行中的「Exploring …」行：三种 Loading 表达，右栏切换']};
+const NEWSCENES=['fresh','freshsent','order','running'];
+if(NEWSCENES.includes(S.scene))S.v='A';
+
+/* ===================== theme / type variables ===================== */
+const BASE={dark:{bg:'#161618',panel:'#1f1f22',ink:'244,244,245',link:'#6cb2ff',ok:'#6fc29b',bad:'#ff6b61',k:'#c678dd',s:'#98c379',f:'#61afef',n:'#d19a66',hair:.08},
+  light:{bg:'#f5f5f7',panel:'#ffffff',ink:'24,24,27',link:'#0a6bd6',ok:'#1f7a52',bad:'#d92d20',k:'#8250df',s:'#1a7f37',f:'#0969da',n:'#953800',hair:.09}};
+const RAMP={dark:{soft:[.84,.60,.50,.32],std:[.92,.66,.52,.34],high:[1,.78,.64,.42]},light:{soft:[.80,.64,.60,.34],std:[.90,.70,.60,.38],high:[1,.80,.70,.46]}};
+const hex=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const lin=c=>{c/=255;return c<=.03928?c/12.92:((c+.055)/1.055)**2.4};
+const lum=([r,g,b])=>.2126*lin(r)+.7152*lin(g)+.0722*lin(b);
+const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+function applyVars(root){
+  const b=BASE[S.theme],r=RAMP[S.theme][S.ink],st=root.style;
+  const set=(k,v)=>st.setProperty(k,v), del=k=>st.removeProperty(k);
+  set('--bg',b.bg);set('--panel',b.panel);set('--link',b.link);set('--ok',b.ok);set('--bad',b.bad);
+  set('--c-k',b.k);set('--c-s',b.s);set('--c-f',b.f);set('--c-n',b.n);
+  r.forEach((a,i)=>set('--i'+(i+1),`rgba(${b.ink},${a})`));
+  set('--hair',`rgba(${b.ink},${b.hair})`);set('--hair2',`rgba(${b.ink},${b.hair*1.9})`);set('--hair3',`rgba(${b.ink},.34)`);
+  set('--tint',`rgba(${b.ink},.04)`);set('--tint2',`rgba(${b.ink},.07)`);
+  set('--w',S.w+'px');set('--smooth',S.smooth);
+  S.size==='auto'?del('--fs'):set('--fs',S.size+'px');S.lh==='auto'?del('--lh'):set('--lh',S.lh);
+  set('--fw',S.fw);
+  S.font==='serif'?set('--ff-prose','ui-serif,"New York","Iowan Old Style","Songti SC",Georgia,serif'):del('--ff-prose');
+  root.className='design-root v'+S.v+(S.autospace==='off'?' noauto':'');
+}
+
+/* ===================== process helpers ===================== */
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const pathHtml=p=>{const i=p.lastIndexOf('/');return i<0?`<b>${esc(p)}</b>`:`<span>${esc(p.slice(0,i+1))}</span><b>${esc(p.slice(i+1))}</b>`};
+const dl=(a,d)=>`<span class="delta">${a?`<i class="add">+${a}</i>`:''}${d?`<i class="del">−${d}</i>`:''}</span>`;
+const VERB={read:'Read',search:'Searched',edit:'Edited',cmd:'Ran',web:'Fetched',agent:'Delegated'};
+function trow(t){
+  const obj=t.cat==='read'||t.cat==='edit'?`<span class="path">${pathHtml(t.obj)}</span>`:t.cat==='cmd'?`<code class="cmd">${esc(t.obj)}</code>`:`<span class="q">${esc(t.obj)}</span>`;
+  const meta=t.cat==='edit'&&!t.running?dl(t.add,t.del):t.meta&&!t.running?`<span class="meta ${t.okm?'ok':''} ${t.err?'err':''}">${esc(t.meta)}</span>`:
+    t.running&&S.load==='L2'?`<span class="meta live" data-el="${tickBase()}">${elapsedNow(tickBase())}</span>`:'';
+  const lead=t.running?'<span class="spin"></span>':ic(t.cat,13);
+  return `<div class="trow ${t.err?'err':''}"><span class="lead">${lead}</span><span class="verb">${VERB[t.cat]}</span>${obj}${meta}</div>`;
+}
+/* ③ running clock: the elapsed counter starts when the preview first renders a running row */
+const T0=Date.now(),tickBase=()=>T0-9000;
+const elapsedNow=b=>{const s=Math.max(0,Math.floor((Date.now()-b)/1000));return s>=60?`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`:`${s}s`};
+setInterval(()=>document.querySelectorAll('[data-el]').forEach(n=>n.textContent=elapsedNow(+n.dataset.el)),1000);
+function summary(tools,live,shim){
+  const n={read:0,search:0,edit:0,cmd:0,web:0,agent:0};tools.forEach(t=>n[t.cat]++);
+  const parts=[],pl=(c,w)=>`${c} ${w}${c>1?(w==='search'?'es':'s'):''}`;
+  const ex=n.read+n.search;
+  if(ex){const bits=[];if(n.read)bits.push(pl(n.read,'file'));if(n.search)bits.push(pl(n.search,'search'));parts.push([live?'Exploring':'Explored',bits.join(', ')])}
+  if(n.edit)parts.push([live?'Editing':'Edited',pl(n.edit,'file')]);
+  if(n.cmd)parts.push([live?'Running':'Ran',pl(n.cmd,'command')]);
+  if(n.web)parts.push([live?'Fetching':'Fetched',pl(n.web,'page')]);
+  if(n.agent)parts.push([live?'Delegating':'Delegated',pl(n.agent,'task')]);
+  return parts.map(([v,o],i)=>`<span class="${shim?'shim':i?'o':'v'}">${i?v.toLowerCase():v}</span> <span class="o">${o}</span>`).join('<span class="o">, </span>');
+}
+function segments(steps){const out=[];let run=null;steps.forEach((s,i)=>{if(s.k==='text'){run=null;out.push({type:'text',s,i})}else{if(!run){run={type:'run',items:[],i};out.push(run)}run.items.push(s)}});return out}
+const fmtDur=s=>s>=60?`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`:`${s}s`;
+const runSec=run=>run.items.reduce((a,s)=>a+(s.sec||0),0);
+
+/* live script: which steps of T2 are visible at a given tick (replay) */
+function liveTurn(tick){
+  const base=T2.steps,steps=[];
+  if(tick>=1)steps.push({...base[0],t:base[0].t.slice(0,Math.max(8,(tick-1)*4)),sec:Math.min(6,Math.ceil(tick/3)),live:tick<8});
+  if(tick>=8)steps.push({...base[1],running:tick<14});
+  if(tick>=14)steps.push({...base[2],running:tick<20});
+  if(tick>=20){const full=STREAM.replace(/<\/?p>/g,'');const shown=Math.min(full.length,(tick-20)*3);
+    let cut=full.slice(0,shown);if(/<[^>]*$/.test(cut))cut=cut.replace(/<[^>]*$/,'');
+    const opens=(cut.match(/<code>/g)||[]).length-(cut.match(/<\/code>/g)||[]).length;if(opens>0)cut+='</code>';
+    steps.push({k:'text',t:`<p>${cut}</p>`,streaming:shown<full.length})}
+  return {user:false,live:true,ts:'14:41',steps};
+}
+function currentTurns(){
+  const sc=S.scene;
+  if(sc==='fresh')return [];
+  if(sc==='freshsent'){
+    const u={...U,text:esc(S.sentText||'帮我看看这个仓库的结构')};
+    if(S.stage<2)return [u];
+    const steps=[{k:'think',sec:S.stage>=3?3:1,live:S.stage<3,t:'先弄清仓库的目录结构和入口。'}];
+    if(S.stage>=3)steps.push({...rd('README.md','84 lines'),running:true});
+    return [u,{user:false,live:true,ts:'now',steps}];
+  }
+  if(sc==='order')return [{...U,text:'回复和工具调用的顺序有问题：回复挤在一起，工具也挤在一起。帮我查一下。'},{user:false,ts:'15:02',dur:71,steps:S.order==='after'?ORDER_STEPS:orderClumped()}];
+  if(sc==='running'){
+    const rn=(o,c)=>({k:'tool',cat:c,obj:o,sec:1});
+    return [{...U,text:'把 Chat 的步骤顺序和 Loading 一起修掉。'},{user:false,live:true,ts:'15:08',steps:[
+      {k:'think',sec:4,t:'先摸清渲染入口和数据来源。'},
+      rn('frontend/src/turn.tsx','read'),rn('frontend/src/App.tsx','read'),rn('RunBlock','search'),
+      {k:'text',t:'<p>前端是按步骤渲染的，再看 Go 侧的投影。</p>'},
+      rn('internal/nativeui/chat_bridge.go','read'),rn('internal/conversation/timeline.go','read'),rn('Steps','search'),
+      {k:'text',t:'<p>顺序在解析层丢了。把相关解析器和测试都过一遍，确认影响面。</p>'},
+      rn('internal/history/pi.go','read'),rn('internal/history/claude.go','read'),rn('internal/history/codex_blocks.go','read'),rn('ToolCalls','search'),rn('Live','search'),
+      {...rn('internal/history/live.go','read'),running:true}]}];
+  }
+  if(sc==='settled'||sc==='readonly')return [{...U,text:U1},T1,{...U,text:U2},T2];
+  if(sc==='live'||sc==='replay')return [{...U,text:U1},T1,{...U,text:U2},liveTurn(sc==='replay'?S.tick:S.liveTick)];
+  if(sc==='ask')return [{...U,text:U1},T1,{...U,text:U2},{user:false,live:true,ts:'14:41',paused:true,steps:[T2.steps[0],T2.steps[1],T2.steps[2],{k:'text',t:'<p>要跑一遍测试确认没有破坏已有用例，需要你批准这条命令。</p>'}]}];
+  if(sc==='stopped')return [{...U,text:U1},T1,{...U,text:U2},{user:false,failed:true,ts:'14:41',dur:11,steps:[T2.steps[0],T2.steps[1],T2.steps[2],{k:'text',t:'<p>先确认 <code>isSidechain</code> 现在是在哪一层被丢弃的……</p>'}]}];
+}
+const isLive=t=>t.live&&!t.paused;
+const runLive=(t,sg,idx,segs)=>isLive(t)&&idx===segs.length-1;
+
+/* ===================== footer / copy ===================== */
+function foot(t,id){return `<div class="foot"><span class="t">${t.ts}${t.dur?` · ${fmtDur(t.dur)}`:''}</span><button class="ib" data-copy="md" title="Copy">${ic('copy',14)}</button><button class="ib" data-copy="txt" title="Copy as text" style="width:auto;padding:0 7px">TXT</button></div>`}
+
+/* ===================== A · Prose ===================== */
+function renderA(turns){
+  return turns.map((t,ti)=>{
+    const last=ti===turns.length-1;
+    if(t.user)return `<div class="u"><div class="bub">${t.text}</div></div>`;
+    const segs=segments(t.steps);
+    const body=segs.map((sg,idx)=>{
+      if(sg.type==='text'){const caret=isLive(t)&&idx===segs.length-1&&(sg.s.streaming!==false);return `<div class="prose ${caret?'caret':''}">${sg.s.t}</div>`}
+      const id=`A${ti}.${sg.i}`,open=S.open.has(id)||(runLive(t,sg,idx,segs)&&!S.open.has('-'+id)),live=runLive(t,sg,idx,segs);
+      const think=sg.items.find(s=>s.k==='think'),tools=sg.items.filter(s=>s.k==='tool'),runningTool=tools.some(x=>x.running);
+      const thinkSec=think?think.sec:0;
+      const active=live&&runningTool,shimV=active&&S.load==='L1';
+      const head=(think?`<span class="${live&&think.live?'shim':'v'}">${live&&think.live?'Thinking…':`Thought for ${thinkSec}s`}</span>`:'')+
+        (tools.length?`${think?'<span class="o"> · </span>':''}${summary(tools,live&&runningTool,shimV)}`:'');
+      const rows=(think?`<div class="think">${think.t}</div>`:'')+tools.map(trow).join('');
+      const el=active&&S.load==='L2'?`<span class="el" data-el="${tickBase()}">${elapsedNow(tickBase())}</span>`:'';
+      const bar=active&&S.load==='L3'?'<span class="indet" aria-hidden="true"></span>':'';
+      return `<div class="run ${open?'open':''}"><button class="runbtn ${open?'open':''}" data-toggle="${id}">${active?'<span class="spin"></span>':''}<span>${head}</span>${el}<span class="chev">${ic('chev',13)}</span></button>${bar}${open?`<div class="runbody">${rows}</div>`:''}</div>`;
+    }).join('');
+    const pending=isLive(t)&&segs.length&&segs[segs.length-1].type==='run'&&!segs[segs.length-1].items.some(s=>s.running||s.live)?`<div class="run"><span class="shim" style="font-size:13.5px">Working…</span></div>`:'';
+    const stopped=t.failed?`<div class="stopped">${ic('warn',14)}Stopped</div>`:'';
+    return `<div class="turn ${last?'last':''}">${body}${pending}${stopped}${isLive(t)||t.paused?'':foot(t)}</div>`;
+  }).join('');
+}
+
+/* ===================== B · Work ledger ===================== */
+function renderB(turns){
+  return turns.map((t,ti)=>{
+    const last=ti===turns.length-1;
+    if(t.user)return `<div class="uB">${t.text}</div>`;
+    const segs=segments(t.steps);
+    const body=segs.map((sg,idx)=>{
+      if(sg.type==='text'){const caret=isLive(t)&&idx===segs.length-1&&(sg.s.streaming!==false);return `<div class="prose ${caret?'caret':''}" style="margin-bottom:.9em">${sg.s.t}</div>`}
+      const id=`B${ti}.${sg.i}`,live=runLive(t,sg,idx,segs),open=live?!S.open.has('-'+id):S.open.has(id);
+      const think=sg.items.find(s=>s.k==='think'),tools=sg.items.filter(s=>s.k==='tool');
+      const sec=runSec(sg);
+      const counts=(()=>{const c={};tools.forEach(x=>c[x.cat]=(c[x.cat]||0)+1);const p=[];if(c.read)p.push(`${c.read} read${c.read>1?'s':''}`);if(c.search)p.push(`${c.search} search${c.search>1?'es':''}`);if(c.edit)p.push(`${c.edit} edit${c.edit>1?'s':''}`);if(c.cmd)p.push(`${c.cmd} command${c.cmd>1?'s':''}`);return p.join(' · ')})();
+      const lbl=live?`<span class="shim">Working · ${sec}s</span>`:`Worked for ${fmtDur(sec)}${counts?` <span style="color:var(--i4)">·</span> ${counts}`:''}`;
+      const rows=(think?`<div class="think">${think.live?'<span class="shim">Thinking…</span> ':''}${think.t}</div>`:'')+tools.map(trow).join('');
+      return `<div class="run"><button class="work ${open?'open':''}" data-toggle="${id}"><span class="line"></span><span class="lbl">${lbl}<span class="chev cv">${ic('chev',12)}</span></span><span class="line"></span></button>${open?`<div class="ledger">${rows}</div>`:''}</div>`;
+    }).join('');
+    const edits={};t.steps.filter(s=>s.k==='tool'&&s.cat==='edit'&&!s.running).forEach(s=>{const e=edits[s.obj]||(edits[s.obj]={add:0,del:0});e.add+=s.add;e.del+=s.del});
+    const files=Object.keys(edits),ta=files.reduce((a,f)=>a+edits[f].add,0),td=files.reduce((a,f)=>a+edits[f].del,0);
+    const changes=files.length&&!isLive(t)&&!t.paused&&!t.failed?`<div class="changes"><div class="chead"><span class="ttl">${ic('edit',14)}Edited ${files.length} file${files.length>1?'s':''}${dl(ta,td)}</span><button class="rev" title="Opens Diff Review (⇧⌘D)">${ic('diff',13)}Review changes</button></div>${files.map(f=>`<div class="crow"><span class="path">${pathHtml(f)}</span>${dl(edits[f].add,edits[f].del)}</div>`).join('')}</div>`:'';
+    const stopped=t.failed?`<div class="stopped">${ic('warn',14)}Stopped</div>`:'';
+    return `<div class="turn ${last?'last':''}">${body}${changes}${stopped}${isLive(t)||t.paused?'':foot(t)}</div>`;
+  }).join('');
+}
+
+/* ===================== C · Rail ===================== */
+function slotHtml(state){return state==='working'?'<span class="spin"></span>':state==='idle'?`<span style="width:8px;height:8px;border-radius:50%;border:1.5px solid var(--i3)"></span>`:state==='attention'?`<span style="width:7px;height:7px;border-radius:50%;background:#e8a23a"></span>`:state==='failed'?`<span style="width:7px;height:7px;border-radius:50%;background:var(--bad)"></span>`:`<span style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span>`}
+function renderC(turns){
+  const blocks=[];
+  for(let i=0;i<turns.length;i++){
+    if(!turns[i].user)continue;
+    const u=turns[i],a=turns[i+1],bi=blocks.length;
+    const plain=u.text.replace(/<[^>]+>/g,'');
+    const state=!a?'idle':a.paused?'attention':isLive(a)?'working':a.failed?'failed':'done';
+    const segs=a?segments(a.steps):[];
+    const items=segs.map((sg,idx)=>{
+      if(sg.type==='text'){const caret=isLive(a)&&idx===segs.length-1&&(sg.s.streaming!==false);return `<div class="it prosei ${sg.s.final?'final':''}"><span class="node"><span class="dotn"></span></span><div class="prose ${caret?'caret':''}">${sg.s.t}</div></div>`}
+      const live=runLive(a,sg,idx,segs),think=sg.items.find(s=>s.k==='think'),tools=sg.items.filter(s=>s.k==='tool');
+      let out='';
+      if(think){const id=`C${bi}.t${sg.i}`,open=S.open.has(id);out+=`<div class="it"><span class="node"><span class="ringn"></span></span><button class="runbtn ${open?'open':''}" data-toggle="${id}"><span class="${think.live?'shim':'v'}">${think.live?'Thinking…':`Thought for ${think.sec}s`}</span><span class="chev">${ic('chev',13)}</span></button>${open?`<div class="think" style="margin-left:2px">${think.t}</div>`:''}</div>`}
+      if(tools.length===1){const t=tools[0];out+=`<div class="it"><span class="node">${t.running?'<span class="spin"></span>':ic(t.cat,13)}</span><div class="trow" style="min-height:22px"><span class="verb">${VERB[t.cat]}</span>${t.cat==='read'||t.cat==='edit'?`<span class="path">${pathHtml(t.obj)}</span>`:t.cat==='cmd'?`<code class="cmd">${esc(t.obj)}</code>`:`<span class="q">${esc(t.obj)}</span>`}${t.cat==='edit'?dl(t.add,t.del):t.meta&&!t.running?`<span class="meta ${t.okm?'ok':''}">${esc(t.meta)}</span>`:''}</div></div>`}
+      else if(tools.length>1){const id=`C${bi}.g${sg.i}`,open=S.open.has(id)||(live&&!S.open.has('-'+id)),rt=tools.some(x=>x.running);
+        out+=`<div class="it"><span class="node">${rt?'<span class="spin"></span>':ic(tools.some(x=>x.cat==='edit')?'edit':'search',13)}</span><button class="runbtn ${open?'open':''}" data-toggle="${id}"><span>${summary(tools,rt)}</span><span class="chev">${ic('chev',13)}</span></button>${open?`<div class="sub">${tools.map(trow).join('')}</div>`:''}</div>`}
+      return out;
+    }).join('');
+    const stopped=a&&a.failed?`<div class="it"><span class="node" style="color:var(--bad)">${ic('warn',13)}</span><div class="stopped" style="margin:0">Stopped</div></div>`:'';
+    const last=!turns[i+2];
+    blocks.push(`<section class="blk" id="blk${bi}"><header class="bh" data-ph="${bi}"><span class="slot">${slotHtml(state)}</span><span class="pt" data-expand="${bi}" title="Click to expand">${plain}</span><span class="tm">${a?a.ts:''}${a&&a.dur?` · ${fmtDur(a.dur)}`:''}</span></header><div class="rail">${items}${stopped}</div>${a&&!isLive(a)&&!a.paused?`<div class="turn ${last?'last':''}" style="padding-left:26px">${foot(a)}</div>`:''}</section>`);
+  }
+  return blocks.join('')+`<div class="turnmap" data-map>${blocks.map((_,i)=>`<button data-jump="${i}" title="Turn ${i+1}"><i></i></button>`).join('')}</div>`;
+}
+
+/* ===================== composer + docks ===================== */
+function ring(){return `<span class="ring" title="Context ~118k of 200k tokens"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--i4)" stroke-width="2.2"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--i2)" stroke-width="2.2" stroke-dasharray="${.59*44} 44" stroke-linecap="round" transform="rotate(-90 9 9)"/></svg></span>`}
+function composer(){
+  const sc=S.scene,working=sc==='live'||(sc==='replay')||sc==='running'||(sc==='freshsent'&&S.stage>=1);
+  const fresh=sc==='fresh';
+  const ph=fresh?(S.ready==='starting'?'Claude Code is starting…':'Tell Claude Code what to do…'):working?'Send a follow-up…':'Send a message… (@ to mention a file)';
+  const model=`<button class="chip mono" title="Model recorded by the transcript">claude-opus-4.5</button>`;
+  const ask=sc==='ask'?`<div class="ask" role="alert"><div class="ah">${ic('shield',15)}<span>Allow Claude Code to run <code class="cmd">go test ./...</code>?</span><span class="pill" style="margin-left:auto">Approval</span></div>
+    <button class="opt"><kbd>1</kbd>Yes</button><button class="opt"><kbd>2</kbd>Yes, and don’t ask again for <span class="mention">go test</span> in this project</button><button class="opt"><kbd>3</kbd>No, and tell Claude what to do differently</button></div>`:'';
+  const status='';
+  let hint=sc==='ask'?'Waiting for your input above.':working?(S.v==='C'?'Working · Enter queues, interrupt sends now':'Working — Enter queues the follow-up'):'';
+  if(fresh)hint=S.ready==='starting'?'The agent is still starting — you can type now; Send unlocks when it is ready.':'<span class="kbdh">⏎</span> sends it to the agent <span class="kbdh">⇧⏎</span> new line';
+  return `<div class="dock"><div class="col">${ask}${status}<div class="cmp ${fresh?'armed':''}" id="cmp"><textarea rows="1" id="ta" placeholder="${ph}" ${sc==='ask'?'':''}></textarea>
+    <div class="cbar"><button class="ib" title="Attach a file (@path)">${ic('plus',17)}</button><button class="ib" title="Dictate">${ic('mic',16)}</button><span class="sp"></span>${fresh?'':(S.v==='A'||S.v==='B'?model:'')+ring()}<button class="intr">Interrupt &amp; send</button>
+    ${working?`<button class="send stop" title="Stop" id="stopb">${stopIc}</button><button class="send queue" title="Queue" disabled>${ic('up',16,2.2)}</button>`:`<button class="send" id="sendb" title="Send" disabled>${ic('up',16,2.2)}</button>`}</div></div>
+    <div class="hint"><span>${hint}</span>${S.v==='C'?`<span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px">claude-opus-4.5 · 118k / 200k</span>`:''}</div></div></div>`;
+}
+
+/* ===================== ① fresh agent: invitation ===================== */
+const SUGGEST=['Explain this repository','Find and fix a failing test','Review my uncommitted changes'];
+function invite(){
+  if(S.fresh==='F2')return `<p class="quietnote" style="padding-top:34vh">No conversation yet — type below to start one.</p>`;
+  return `<div class="invite"><div class="mk">${ic('spark',18)}</div><h3>Start the conversation</h3>
+    <p>Claude Code is ready. <b>Type a prompt below</b> and Solco sends it to the agent — the conversation shows up here as soon as it opens one.</p>
+    <div class="sugg">${SUGGEST.map(s=>`<button data-sugg="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+    <button class="ghostlink" title="Switch to the agent's terminal">${ic('cmd',13)}Open Terminal</button></div>`;
+}
+/* simulated send: echo → Working → session opens → thinking → first tool */
+let sendTimers=[];
+function startFreshSend(text){
+  sendTimers.forEach(clearTimeout);S.sentText=text;S.scene='freshsent';S.stage=1;render();
+  [[1500,2],[3200,3]].forEach(([ms,st])=>sendTimers.push(setTimeout(()=>{if(S.scene==='freshsent'){S.stage=st;render(true)}},ms)));
+}
+
+/* ===================== render ===================== */
+const root=document.getElementById('root');
+function render(keepScroll){
+  applyVars(root);
+  const turns=currentTurns(),ro=S.scene==='readonly';
+  const prev=root.querySelector('.log');const st=prev?prev.scrollTop:0;const atBottom=prev?prev.scrollHeight-prev.scrollTop-prev.clientHeight<48:true;
+  if(NEWSCENES.includes(S.scene)&&S.v!=='A')S.v='A';
+  let body=S.v==='A'?renderA(turns):S.v==='B'?renderB(turns):renderC(turns);
+  if(S.scene==='fresh')body=invite();
+  if(S.scene==='freshsent'&&S.stage<2)body+=`<div class="turn last"><div class="run"><span class="workline"><span class="shim">Working…</span></span></div></div>`;
+  if(S.scene==='order')body=`<span class="ordtag">${S.order==='after'?'After · in the order it happened':'Before · replies together, tools together'}</span>`+body;
+  const working=['live','replay','running'].includes(S.scene)||(S.scene==='freshsent'&&S.stage>=1);
+  const band=`<div class="band"><span style="width:16px;display:grid;place-items:center">${slotHtml(working?'working':S.scene==='ask'?'attention':'idle')}</span><span style="color:var(--i1)">claude-code</span><span class="sep">›</span><span>herdr-client</span>${ro?'<span class="ro">Past session · read-only</span>':''}</div>`;
+  root.innerHTML=band+`<div class="log" id="log"><div class="${S.v==='C'?'':'col'}" ${S.v==='C'?'style="max-width:var(--col);margin:0 auto;padding:0 24px"':''}>${['fresh','freshsent','order','running'].includes(S.scene)?'':'<button class="older">Earlier messages</button>'}${body}</div></div>`+(ro?'':composer());
+  const log=root.querySelector('.log');
+  if(keepScroll&&!atBottom)log.scrollTop=st;else log.scrollTop=log.scrollHeight;
+  document.getElementById('stageLabel').textContent=`Variant ${S.v} · ${SCENES[S.scene][0]} · ${S.theme} · ${S.w}px`;
+  wireLog();renderPanel();
+}
+function wireLog(){
+  const log=root.querySelector('.log');if(!log)return;
+  const ta=root.querySelector('#ta'),cmp=root.querySelector('#cmp');
+  const canFresh=()=>S.scene==='fresh'&&S.ready==='ready';
+  if(ta)ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,200)+'px';const has=ta.value.trim()!=='';cmp.classList.toggle('typed',has);const sb=root.querySelector('#sendb');if(sb)sb.disabled=!has||(S.scene==='fresh'&&!canFresh());const q=root.querySelector('.send.queue');if(q)q.disabled=!has});
+  if(ta&&S.scene==='fresh'){
+    ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(canFresh()&&ta.value.trim())startFreshSend(ta.value.trim())}});
+    if(S.ready==='ready')setTimeout(()=>ta.focus(),0);else ta.disabled=false;
+  }
+  if(S.v==='C'){
+    const hs=[...root.querySelectorAll('.bh')],map=[...root.querySelectorAll('[data-jump]')];
+    const upd=()=>{const top=log.getBoundingClientRect().top;let cur=0;hs.forEach((h,i)=>{const r=h.parentElement.getBoundingClientRect();if(r.top<=top+4)cur=i;h.classList.toggle('stuck',h.getBoundingClientRect().top<=top+1&&r.top<top-2)});map.forEach((m,i)=>m.classList.toggle('on',i===cur))};
+    log.addEventListener('scroll',upd);upd();
+  }
+}
+root.addEventListener('click',e=>{
+  const tg=e.target.closest('[data-toggle]');
+  if(tg){const id=tg.dataset.toggle;
+    // live runs default open: "-id" records an explicit close, "id" an explicit open
+    if(tg.classList.contains('open')){S.open.delete(id);S.open.add('-'+id)}else{S.open.add(id);S.open.delete('-'+id)}
+    render(true);return}
+  const cp=e.target.closest('[data-copy]');
+  if(cp){const prose=cp.closest('.turn')?.querySelectorAll('.prose');const txt=prose?[...prose].map(p=>p.innerText).join('\n\n'):'';navigator.clipboard?.writeText(txt).catch(()=>{});const o=cp.innerHTML;cp.classList.add('copied');cp.innerHTML=ic('check',14);setTimeout(()=>{cp.classList.remove('copied');cp.innerHTML=o},1200);return}
+  const pt=e.target.closest('[data-expand]');if(pt){pt.closest('.bh').classList.toggle('expand');return}
+  const jm=e.target.closest('[data-jump]');if(jm){root.querySelector('#blk'+jm.dataset.jump)?.scrollIntoView({block:'start'});return}
+  const sg=e.target.closest('[data-sugg]');
+  if(sg){const ta=root.querySelector('#ta');ta.value=sg.dataset.sugg;ta.dispatchEvent(new Event('input'));ta.focus();return}
+  if(e.target.closest('#sendb')&&S.scene==='fresh'){const ta=root.querySelector('#ta');if(S.ready==='ready'&&ta.value.trim())startFreshSend(ta.value.trim());return}
+  if(e.target.closest('#stopb')){sendTimers.forEach(clearTimeout);S.scene='stopped';render();return}
+});
+
+/* ===================== replay ===================== */
+let timer=null;
+function startReplay(){clearInterval(timer);S.scene='replay';S.tick=0;render();
+  timer=setInterval(()=>{S.tick++;const full=STREAM.replace(/<\/?p>/g,'').length;if(S.tick>20+Math.ceil(full/3)+8){clearInterval(timer);S.scene='settled';render(true);return}render(true);const log=root.querySelector('.log');if(log)log.scrollTop=log.scrollHeight},90)}
+
+/* ===================== shell panel ===================== */
+const ctl=(id,label,opts)=>`<div class="ctl"><span>${label}</span><span class="shell-seg" data-ctl="${id}">${opts.map(([v,l])=>`<button data-val="${v}" class="${String(S[id])===String(v)?'on':''}">${l??v}</button>`).join('')}</span></div>`;
+function contrastRows(){
+  const b=BASE[S.theme],r=RAMP[S.theme][S.ink],ink=b.ink.split(',').map(Number),bg=hex(b.bg),panel=hex(b.panel);
+  const names=['i1 body','i2 process verb','i3 time · object','i4 placeholder'];
+  return r.map((a,i)=>{const mix=ink.map((c,j)=>c*a+bg[j]*(1-a));const ratioBg=ratio(mix,bg);const mixP=ink.map((c,j)=>c*a+panel[j]*(1-a));const rp=ratio(mixP,panel);
+    const ok=i===3?null:(ratioBg>=4.5&&rp>=4.5);
+    return `<div>${names[i]} α${a.toFixed(2)} → <b>${ratioBg.toFixed(1)}</b> / ${rp.toFixed(1)} ${ok===null?'<span class="no">decor</span>':ok?'<span class="ok">≥4.5</span>':'<span class="no">&lt;4.5</span>'}</div>`}).join('');
+}
+function renderPanel(){
+  const p=document.getElementById('panel');
+  p.innerHTML=`<div class="ide-section-title">Variants</div>`+Object.entries(VARIANTS).map(([k,v])=>`<div class="ide-variant-card ${S.v===k?'active':''}" data-variant="${k}"><h2>${v.t}</h2><p>${v.d}</p></div>`).join('')+
+  `<div class="ide-section-title">Scenes</div>`+Object.entries(SCENES).map(([k,v])=>`<div class="ide-state-card ${S.scene===k?'active':''}" data-scene="${k}"><strong>${v[0]}</strong>${v[1]}</div>`).join('')+
+  `<div class="ide-section-title">Addendum 2 · 变体</div>`+ctl('fresh','① Empty state',[['F1','Invitation'],['F2','Quiet']])+ctl('ready','① Agent',[['ready','Ready'],['starting','Starting']])+ctl('order','② Order',[['after','After'],['before','Before']])+ctl('load','③ Loading',[['L1','Shimmer'],['L2','Elapsed'],['L3','Bar']])+
+  `<div class="ide-section-title">Canvas</div>`+ctl('theme','Theme',[['dark'],['light']])+ctl('w','Window width',[[560,'560'],[760,'760'],[1040,'1040']])+ctl('spec','Spec overlay (hover)',[[false,'off'],[true,'on']])+
+  `<div class="ide-section-title">Type lab · 文字渲染</div>`+ctl('font','Prose font',[['sans','Sans'],['serif','Serif']])+ctl('size','Prose size',[['auto','Auto'],['13'],['14'],['15'],['16']])+ctl('lh','Leading',[['auto','Auto'],['1.5'],['1.65'],['1.8']])+ctl('fw','Body weight',[[400],[450],[500]])+ctl('ink','Ink contrast',[['soft'],['std'],['high']])+ctl('autospace','CJK/Latin autospace',[['on'],['off']])+ctl('smooth','Smoothing',[['antialiased'],['auto']])+
+  `<div class="ratio">contrast vs bg / vs panel<br>${contrastRows()}</div>`;
+  document.getElementById('storyBody').innerHTML=STORY;
+}
+document.getElementById('panel').addEventListener('click',e=>{
+  const vc=e.target.closest('[data-variant]');if(vc){S.v=vc.dataset.variant;render();return}
+  const sc=e.target.closest('[data-scene]');if(sc){clearInterval(timer);sendTimers.forEach(clearTimeout);const id=sc.dataset.scene;
+    if(id==='replay')startReplay();else if(id==='freshsent')startFreshSend('帮我看看这个仓库的结构，然后列出可以改进的地方');else{S.scene=id;render()}return}
+  const b=e.target.closest('[data-ctl] button');if(b){const id=b.parentElement.dataset.ctl;let v=b.dataset.val;if(id==='w'||id==='fw')v=+v;if(id==='spec')v=v==='true';S[id]=v;
+    const jump={ready:'fresh',fresh:'fresh',order:'order',load:'running'}[id];if(jump&&S.scene!==jump){sendTimers.forEach(clearTimeout);S.scene=jump}
+    render(true)}
+});
+/* spec overlay */
+const specEl=document.getElementById('spec');
+root.addEventListener('mousemove',e=>{
+  if(!S.spec){specEl.style.display='none';return}
+  const el=e.target.closest('.prose,.prose *,.bub,.uB,.trow,.trow *,.runbtn,.work,.think,.foot,.chip,.bh .pt,.stopped,.hint,.band');if(!el){specEl.style.display='none';return}
+  const cs=getComputedStyle(el),m=cs.color.match(/[\d.]+/g)||[];
+  specEl.textContent=`${el.tagName.toLowerCase()}${el.className&&typeof el.className==='string'?'.'+el.className.split(' ')[0]:''}\n${cs.fontSize} / ${cs.lineHeight} · wt ${cs.fontWeight}\ncolor ${m.length>3?`α${(+m[3]).toFixed(2)}`:'solid'} · ${cs.fontFamily.split(',')[0].replace(/"/g,'')}`;
+  specEl.style.display='block';specEl.style.left=Math.min(e.clientX+14,innerWidth-330)+'px';specEl.style.top=(e.clientY+16)+'px';
+});
+root.addEventListener('mouseleave',()=>specEl.style.display='none');
+
+/* ===================== story ===================== */
+const STORY=`<h1>Chat View · 重新设计</h1>
+<p><b>决策点</b>：Chat 的「角色 + 过程 + 文字」该用哪套语言？锚点是 ChatGPT，但 Solco 的 Chat 是 coding agent 的 Chat——过程（读/搜/改/跑）比对话本身重。</p>
+<ul><li><b>现状问题</b>：用户气泡是蓝色 accent、助手是带 <code>AGENT</code> 标签的描边卡、过程是三层 <code>details</code> 盒子，正文 13px/1.5 偏紧，CJK 行距不足。</li>
+<li><b>三个方向</b>：A 把过程压成一行（最像 ChatGPT）；B 把过程摊成可审计的账本并给出改动卡；C 用竖线时间线服务长任务监督。</li>
+<li><b>文字</b>：右栏 Type lab 可实时改字体/字号/行距/字重/墨色/CJK 间距；Spec overlay 悬停显示真实计算值；下方 contrast 行是按实际 α 混合出的比值。</li>
+<li><b>约束</b>：只改 <code>frontend/src</code> 表现层；不新增桥方法；无投影；中性色，accent 只给链接；「narration 永不折叠」。</li></ul>`;
+
+/* ===================== boot ===================== */
+document.getElementById('panelCollapseBtn').onclick=()=>ideLayout.classList.add('panel-collapsed');
+document.getElementById('panelExpandBtn').onclick=()=>ideLayout.classList.remove('panel-collapsed');
+document.getElementById('storyToggleBtn').onclick=()=>{const c=ideLayout.classList.toggle('story-collapsed');document.getElementById('storyChevron').textContent=c?'▶':'▼'};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')ideLayout.classList.add('panel-collapsed')});
+const ideLayout=document.getElementById('ideLayout');
+window.__chatProto={state:()=>({v:S.v,scene:S.scene,theme:S.theme,w:S.w}),set:(o)=>{Object.assign(S,o);render()}};
+render();
+if(S.scene==='replay')startReplay();
+if(S.scene==='freshsent'){S.stage=0;startFreshSend('帮我看看这个仓库的结构，然后列出可以改进的地方')}
+</script>
+</body>
+</html>

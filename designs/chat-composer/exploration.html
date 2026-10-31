@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<!--
+  Solco Chat — Composer capabilities · TOC rail · ChatGPT-subscription Voice
+  Design Storybook (proposal only; not built, not shipped). Open directly via file://.
+  Variants A/B/C = composer entry points. T = TOC rail. V = Voice source. M = evidence matrix.
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solco Chat · Composer / TOC / Voice</title>
+  <style>
+    [data-ide-shell]{--shell-bg:#0f0f10;--shell-panel:#18181b;--shell-border:#27272a;--shell-text:#fafafa;--shell-muted:#a1a1aa;--shell-accent:#71717a;--panel-w:300px;box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--shell-bg);color:var(--shell-text);min-height:100vh;margin:0}
+    [data-ide-shell] *{box-sizing:border-box}
+    [data-ide-shell] .ide-layout{display:flex;min-height:100vh}
+    [data-ide-shell] .ide-stage{flex:1;position:relative;display:flex;flex-direction:column;min-height:100vh;min-width:0;background:#111113}
+    [data-ide-shell] .ide-stage-label{position:absolute;top:12px;left:14px;z-index:20;font-size:10px;font-weight:600;color:var(--shell-accent);text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+    [data-ide-shell] .ide-panel-collapse-btn,[data-ide-shell] .ide-panel-expand-btn{width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer;font-size:12px}
+    [data-ide-shell] .ide-panel-collapse-btn{position:absolute;top:10px;right:10px;z-index:30}
+    [data-ide-shell] .ide-panel-expand-btn{display:none;position:fixed;top:10px;right:10px;z-index:40}
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn{display:grid;place-items:center}
+    [data-ide-shell] .ide-artboard-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:44px 24px 24px}
+    [data-ide-shell] .ide-artboard{display:none;width:100%;max-width:1040px}
+    [data-ide-shell] .ide-artboard.active{display:block}
+    [data-ide-shell] .ide-artboard .design-root{all:initial;display:block;font-family:inherit}
+    [data-ide-shell] .ide-story-panel{width:var(--panel-w);flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--shell-border);background:var(--shell-panel);transition:width .2s;overflow:hidden}
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel{width:0;border-left:none}
+    [data-ide-shell] .ide-panel-header{padding:12px 14px 8px;border-bottom:1px solid var(--shell-border);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--shell-muted)}
+    [data-ide-shell] .ide-panel-controls{flex:1;overflow-y:auto;padding:12px 14px;min-height:0}
+    [data-ide-shell] .ide-section-title{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--shell-accent);margin:0 0 6px}
+    [data-ide-shell] .ide-variant-card,[data-ide-shell] .ide-state-card{padding:8px 10px;border-radius:6px;border:1px solid var(--shell-border);margin-bottom:5px;cursor:pointer}
+    [data-ide-shell] .ide-variant-card:hover,[data-ide-shell] .ide-state-card:hover{border-color:#3f3f46}
+    [data-ide-shell] .ide-variant-card.active,[data-ide-shell] .ide-state-card.active{border-color:var(--shell-accent);background:rgba(113,113,122,.1)}
+    [data-ide-shell] .ide-variant-card h2{font-size:11px;font-weight:600;margin:0 0 2px}
+    [data-ide-shell] .ide-variant-card p{margin:0;color:var(--shell-muted);font-size:10px;line-height:1.4}
+    [data-ide-shell] .ide-state-card{font-size:10px;color:var(--shell-muted)}
+    [data-ide-shell] .ide-state-card strong{display:block;color:var(--shell-text);font-size:10px}
+    [data-ide-shell] .ide-panel-story{border-top:1px solid var(--shell-border);flex-shrink:0}
+    [data-ide-shell] .ide-story-toggle{width:100%;display:flex;justify-content:space-between;padding:10px 14px;border:none;background:rgba(255,255,255,.02);color:var(--shell-muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+    [data-ide-shell] .ide-story-body{padding:0 14px 14px;font-size:11px;line-height:1.55;color:var(--shell-muted);max-height:300px;overflow-y:auto}
+    [data-ide-shell] .ide-layout.story-collapsed .ide-story-body{display:none}
+    [data-ide-shell] .ide-story-body h1{font-size:13px;font-weight:600;color:var(--shell-text);margin:0 0 6px}
+    [data-ide-shell] .ide-story-body p{margin:0 0 8px}
+    [data-ide-shell] .ide-story-body ul{margin:0 0 8px;padding-left:16px}
+    [data-ide-shell] .ide-story-body li{margin-bottom:4px}
+    [data-ide-shell] .ide-story-body code{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:#d4d4d8}
+  </style>
+
+  <!-- Design area: Solco Chat tokens (frontend/src/theme.css + chat.css ink ramp) -->
+  <style id="design-styles">
+    [data-ide-shell] .ide-artboard .design-root{--content:#161618;--panel:#1f1f22;--ink:244,244,245;--i1:rgba(var(--ink),.9);--i2:rgba(var(--ink),.7);--i3:rgba(var(--ink),.6);--i4:rgba(var(--ink),.38);--hair:rgba(var(--ink),.09);--hair2:rgba(var(--ink),.17);--tint:rgba(var(--ink),.05);--tint2:rgba(var(--ink),.09);--ok:#6fc29b;--warn:#d4b45e;--bad:#ff453a;
+      font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;color:var(--i1);-webkit-font-smoothing:antialiased}
+    [data-ide-shell] .ide-artboard .design-root.light{--content:#f5f5f7;--panel:#ffffff;--ink:24,24,27;--ok:#2f7d5c;--warn:#8a6d1f;--bad:#ff3b30}
+    [data-ide-shell] .design-root *{box-sizing:border-box}
+    [data-ide-shell] .design-root button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+    [data-ide-shell] .design-root .mono{font-family:ui-monospace,Menlo,monospace}
+    [data-ide-shell] .design-root .ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+    /* canvas chrome: agent + theme switch */
+    [data-ide-shell] .design-root .bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:11px;color:var(--i3)}
+    [data-ide-shell] .design-root .seg{display:inline-flex;background:var(--tint);border-radius:8px;padding:2px}
+    [data-ide-shell] .design-root .seg button{padding:2px 9px;border-radius:6px;color:var(--i3);font-size:11px}
+    [data-ide-shell] .design-root .seg button.on{background:var(--panel);color:var(--i1);box-shadow:0 0 0 1px var(--hair)}
+    [data-ide-shell] .design-root .win{position:relative;background:var(--content);border:1px solid var(--hair);border-radius:12px;height:640px;overflow:hidden;display:flex;flex-direction:column}
+    [data-ide-shell] .design-root .head{color:var(--i1);height:38px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;padding:0 14px;font-size:12px;font-weight:600}
+    [data-ide-shell] .design-root .head .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+    [data-ide-shell] .design-root .thread{flex:1;overflow:hidden;position:relative}
+    [data-ide-shell] .design-root .col{width:min(100% - 48px,640px);margin:0 auto}
+    [data-ide-shell] .design-root .u{margin:22px 0 0 auto;max-width:78%;background:var(--tint2);border-radius:18px;padding:8px 14px;width:fit-content}
+    [data-ide-shell] .design-root .a{margin:14px 0;color:var(--i1)}
+    [data-ide-shell] .design-root .sum{margin:6px 0;font-size:12px;color:var(--i3)}
+
+    /* composer */
+    [data-ide-shell] .design-root .composer{position:relative;padding:0 0 16px}
+    [data-ide-shell] .design-root .cmp{background:var(--panel);border:1px solid var(--hair2);border-radius:24px;padding:10px 12px 8px}
+    [data-ide-shell] .design-root .cmp .ph{min-height:22px;padding:2px 6px;color:var(--i4)}
+    [data-ide-shell] .design-root .cmp .tx{min-height:22px;padding:2px 6px;color:var(--i1)}
+    [data-ide-shell] .design-root .cmp .tx .cur{display:inline-block;width:1px;height:14px;background:var(--i1);vertical-align:-2px;animation:bl 1s steps(2) infinite}
+    @keyframes bl{50%{opacity:0}}
+    [data-ide-shell] .design-root .tok{color:var(--i1);background:var(--tint2);border-radius:5px;padding:0 4px}
+    [data-ide-shell] .design-root .cbar{display:flex;align-items:center;gap:4px;margin-top:4px}
+    [data-ide-shell] .design-root .ib{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--i3)}
+    [data-ide-shell] .design-root .ib:hover,[data-ide-shell] .design-root .ib.on{background:var(--tint2);color:var(--i1)}
+    [data-ide-shell] .design-root .sp{flex:1}
+    [data-ide-shell] .design-root .chip{display:inline-flex;gap:5px;align-items:center;height:26px;padding:0 9px;border-radius:13px;font-size:11px;color:var(--i2);background:var(--tint)}
+    [data-ide-shell] .design-root .chip:hover,[data-ide-shell] .design-root .chip.on{background:var(--tint2);color:var(--i1)}
+    [data-ide-shell] .design-root .send{width:30px;height:30px;border-radius:50%;background:var(--i1);color:var(--content);display:grid;place-items:center}
+    [data-ide-shell] .design-root .atts{display:flex;gap:8px;flex-wrap:wrap;padding:2px 4px 8px}
+    [data-ide-shell] .design-root .att{position:relative;display:flex;gap:8px;align-items:center;height:44px;padding:4px 26px 4px 4px;background:var(--tint);border:1px solid var(--hair);border-radius:10px;font-size:11px;max-width:210px}
+    [data-ide-shell] .design-root .att .th{width:36px;height:36px;border-radius:7px;background:linear-gradient(135deg,#4b5563,#1f2937 60%,#6b7280);flex:none}
+    [data-ide-shell] .design-root .att .fi{width:36px;height:36px;border-radius:7px;background:var(--tint2);display:grid;place-items:center;color:var(--i3);flex:none}
+    [data-ide-shell] .design-root .att b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+    [data-ide-shell] .design-root .att i{font-style:normal;color:var(--i4);font-size:10px}
+    [data-ide-shell] .design-root .att .x{position:absolute;top:4px;right:4px;width:16px;height:16px;border-radius:50%;color:var(--i3);display:grid;place-items:center}
+    [data-ide-shell] .design-root .sends{margin:6px 10px 0;font-size:10.5px;color:var(--i4)}
+    [data-ide-shell] .design-root .sends code{color:var(--i3)}
+
+    /* popovers */
+    [data-ide-shell] .design-root .pop{position:absolute;left:0;right:0;bottom:calc(100% + 8px);background:var(--panel);border:1px solid var(--hair2);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.35);padding:6px;max-height:360px;overflow:hidden}
+    [data-ide-shell] .design-root .pop.sm{right:auto;width:260px}
+    [data-ide-shell] .design-root .pop.model{left:auto;right:36px;width:320px}
+    [data-ide-shell] .design-root .grp{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--i4);padding:6px 10px 3px;display:flex;justify-content:space-between}
+    [data-ide-shell] .design-root .row{display:flex;gap:10px;align-items:center;padding:6px 10px;border-radius:8px;font-size:12.5px}
+    [data-ide-shell] .design-root .row.hot{background:var(--tint2)}
+    [data-ide-shell] .design-root .row .n{font-family:ui-monospace,Menlo,monospace;color:var(--i1);white-space:nowrap}
+    [data-ide-shell] .design-root .row .d{color:var(--i3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:11.5px}
+    [data-ide-shell] .design-root .row .k{font-size:10px;color:var(--i4);border:1px solid var(--hair);border-radius:5px;padding:0 5px;white-space:nowrap}
+    [data-ide-shell] .design-root .row .ck{color:var(--i1);width:14px}
+    [data-ide-shell] .design-root .pf{border-top:1px solid var(--hair);margin-top:4px;padding:6px 10px 2px;font-size:10.5px;color:var(--i4);display:flex;gap:12px}
+    [data-ide-shell] .design-root .note{padding:6px 10px;font-size:11px;color:var(--i3)}
+    [data-ide-shell] .design-root .note b{color:var(--warn);font-weight:500}
+    [data-ide-shell] .design-root .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 8px);background:var(--i1);color:var(--content);border-radius:10px;padding:6px 12px;font-size:11.5px;white-space:nowrap}
+    [data-ide-shell] .design-root .drop{position:absolute;inset:8px;border:1.5px dashed var(--hair2);border-radius:14px;background:rgba(var(--ink),.04);display:grid;place-items:center;color:var(--i2);font-size:13px;z-index:5;backdrop-filter:blur(2px)}
+
+    /* TOC rail (reference: Codex turn outline) */
+    [data-ide-shell] .design-root .toc{position:absolute;left:14px;top:60px;bottom:140px;width:46px;display:flex;flex-direction:column;justify-content:center;gap:0;z-index:4}
+    [data-ide-shell] .design-root .tk{height:11px;display:flex;align-items:center;cursor:pointer}
+    [data-ide-shell] .design-root .tk i{display:block;height:2px;border-radius:2px;background:var(--i4);transition:width .12s,background .12s}
+    [data-ide-shell] .design-root .tk.on i{background:var(--i1);width:34px !important}
+    [data-ide-shell] .design-root .tk:hover i{background:var(--i2)}
+    [data-ide-shell] .design-root .tcard{position:absolute;left:58px;width:330px;background:var(--panel);border:1px solid var(--hair2);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.35);padding:10px 14px 12px;z-index:6}
+    [data-ide-shell] .design-root .tcard .t1{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    [data-ide-shell] .design-root .tcard .t2{margin-top:8px;color:var(--i3);font-weight:600;font-size:12px}
+    [data-ide-shell] .design-root .tcard .t3{color:var(--i3);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;padding-left:12px;position:relative}
+    [data-ide-shell] .design-root .tcard .t3::before{content:"";position:absolute;left:2px;top:8px;width:4px;height:4px;border-radius:50%;background:var(--i3)}
+    [data-ide-shell] .design-root .tcard .t4{display:flex;gap:10px;margin-top:8px;color:var(--i3);font-size:11px}
+    [data-ide-shell] .design-root .tcard .t4 span{display:flex;gap:5px;align-items:center;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    [data-ide-shell] .design-root .nar .toc{display:none}
+
+    /* settings / voice */
+    [data-ide-shell] .design-root .set{background:var(--content);border:1px solid var(--hair);border-radius:12px;min-height:640px;padding:28px 36px;position:relative}
+    [data-ide-shell] .design-root .set h3{margin:0 0 4px;font-size:20px;font-weight:600}
+    [data-ide-shell] .design-root .set .sub{color:var(--i3);margin-bottom:18px}
+    [data-ide-shell] .design-root .card{background:var(--panel);border:1px solid var(--hair);border-radius:12px;margin-bottom:14px;overflow:hidden}
+    [data-ide-shell] .design-root .card .r{display:flex;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid var(--hair)}
+    [data-ide-shell] .design-root .card .r:first-child{border-top:0}
+    [data-ide-shell] .design-root .card .r .l{flex:1}
+    [data-ide-shell] .design-root .card .r .l b{display:block;font-weight:500}
+    [data-ide-shell] .design-root .card .r .l span{color:var(--i3);font-size:11.5px}
+    [data-ide-shell] .design-root .btn{height:28px;padding:0 12px;border-radius:8px;border:1px solid var(--hair2);font-size:12px}
+    [data-ide-shell] .design-root .btn.pri{background:var(--i1);color:var(--content);border-color:transparent}
+    [data-ide-shell] .design-root .pill{display:inline-flex;gap:6px;align-items:center;font-size:11.5px}
+    [data-ide-shell] .design-root .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c,var(--i4))}
+    [data-ide-shell] .design-root .scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;border-radius:12px;z-index:9}
+    [data-ide-shell] .design-root .dlg{width:440px;background:var(--panel);border:1px solid var(--hair2);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+    [data-ide-shell] .design-root .dlg h4{margin:0 0 8px;font-size:15px}
+    [data-ide-shell] .design-root .dlg ul{margin:8px 0 14px;padding-left:18px;color:var(--i2);font-size:12px}
+    [data-ide-shell] .design-root .dlg li{margin-bottom:4px}
+    [data-ide-shell] .design-root .dlg .ft{display:flex;justify-content:flex-end;gap:8px}
+
+    /* matrix */
+    [data-ide-shell] .design-root table{width:100%;border-collapse:collapse;font-size:12px;background:var(--content);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+    [data-ide-shell] .design-root th,[data-ide-shell] .design-root td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+    [data-ide-shell] .design-root th{color:var(--i3);font-weight:500;font-size:11px;background:var(--panel)}
+    [data-ide-shell] .design-root td.cap{color:var(--i1);font-weight:500;white-space:nowrap}
+    [data-ide-shell] .design-root .s{display:inline-block;font-size:10px;border-radius:5px;padding:0 6px;margin-right:6px;border:1px solid var(--hair2)}
+    [data-ide-shell] .design-root .s.ok{color:var(--ok)} .design-root .s.tv{color:var(--warn)} .design-root .s.no{color:var(--i4)}
+  </style>
+</head>
+<body data-ide-shell>
+  <div class="ide-layout" id="ideLayout">
+    <main class="ide-stage">
+      <span class="ide-stage-label" id="stageLabel"></span>
+      <button type="button" class="ide-panel-collapse-btn" id="panelCollapseBtn" title="收起面板">›</button>
+      <div class="ide-artboard-wrap">
+        <div class="ide-artboard active" id="artboard"><div class="design-root" id="root"></div></div>
+      </div>
+    </main>
+    <button type="button" class="ide-panel-expand-btn" id="panelExpandBtn" title="展开面板">☰</button>
+    <aside class="ide-story-panel">
+      <div class="ide-panel-header">Design Storybook · Solco Chat</div>
+      <div class="ide-panel-controls">
+        <div class="ide-section-title">Variants</div><div id="variantList"></div>
+        <div class="ide-section-title" id="statesSectionTitle" style="margin-top:12px">Interaction states</div><div id="statesList"></div>
+      </div>
+      <div class="ide-panel-story">
+        <button type="button" class="ide-story-toggle" id="storyToggleBtn"><span>Story</span><span id="storyChevron">▼</span></button>
+        <div class="ide-story-body" id="storyBody"></div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+/* ============ data (real: skills/models read from this machine, 2026-10-31) ============ */
+const AGENTS = {
+  claude: { label:'Claude Code', skillTok:n=>'/'+n, ver:'2.1.308',
+    cmds:[['/compact','Summarise the conversation','text'],['/clear','Start a fresh context','text'],['/context','Show context usage','text'],['/cost','Show session cost','text'],['/review','Review a pull request','text'],['/model','Pick a model','picker'],['/resume','Resume a session','picker'],['/permissions','Edit tool permissions','picker']],
+    models:[['default','Recommended'],['opus','Most capable'],['sonnet','Everyday coding'],['haiku','Fast and light']], modelHow:'text', cur:'sonnet' },
+  codex:  { label:'Codex', skillTok:n=>'$'+n, ver:'0.164.0',
+    cmds:[['/new','Start a new chat','text'],['/compact','Summarise to free context','text'],['/review','Review changes','text'],['/diff','Show git diff','text'],['/status','Session status','text'],['/model','Pick model and effort','picker'],['/permissions','Approval policy','picker'],['/resume','Resume a chat','picker']],
+    models:[['gpt-6.1-sol','From models_cache.json'],['gpt-6-astra',''],['gpt-6.1-terra',''],['gpt-6-sol',''],['gpt-6-luna','']], modelHow:'picker', cur:'gpt-6.1-sol' },
+  pi:     { label:'pi', skillTok:n=>'/skill:'+n, ver:'1.4.0',
+    cmds:[['/compact','Compact the context','text'],['/new','New session','text'],['/name','Name this session','text'],['/copy','Copy last answer','text'],['/fork','Fork from a message','picker'],['/tree','Browse the session tree','picker'],['/model','Pick a model','picker'],['/settings','Settings','picker']],
+    models:[['claude-sonnet-4-6','antigravity · images no'],['gemini-3-8-flash','antigravity · thinking'],['deepseek-flash','deepseek · images yes'],['deepseek-v4-pro','deepseek']], modelHow:'verify', cur:'deepseek-flash' },
+  omp:    { label:'omp', skillTok:n=>'/skill:'+n, ver:'18.13.3',
+    cmds:[['/compact','Compact the context','text'],['/new','Start a new session','text'],['/handoff','Hand off to a fresh session','text'],['/plan','Plan mode','text'],['/usage','Usage','text'],['/model','Pick a model','picker'],['/skills','Skills','picker']],
+    models:[['glm-5.3-flash','z.ai'],['gpt-6-sol',''],['claude-sonnet-4-6','']], modelHow:'verify', cur:'glm-5.3-flash' }
+};
+const SKILLS = [['think','Turn a rough idea into an approved plan before coding'],['tdd','Test-driven development, red-green-refactor'],['hunt','Find root cause before any fix'],['check','Review diffs, PRs, release readiness'],['write','Rewrite and polish Chinese or English prose'],['design','Production-grade UI for pages and components'],['herdr','Control Herdr, a terminal multiplexer for agents'],['solco-install','Build and install the newest Solco.app']];
+const FILES = [['internal/nativeui/chat_bridge.go','M'],['frontend/src/dock.tsx','M'],['designs/chat-view/README.md','']];
+const TURNS = [
+  ['使用灰色的格调,灰白立体,不用参考以前的 logo','核心实现','已参考 Herdr 官方公羊 LOGO,保留螺旋角、侧脸轮廓和 >- 终端符号。',['call_975a695c4e…','call_a66c3e0a0fd…']],
+  ['Landing 页加一个下载区','下载区','按平台列出 3 个下载 ID,点击后走 GitHub release。',[]],
+  ['把更新日志合进首页','Changelog','内联脚本读取 releases,只取最近 5 条。',[]],
+  ['Windows 版本先隐藏','平台矩阵','macOS 与 Linux 保留;Windows 行暂时折叠。',[]],
+  ['为什么 build 慢了','定位','mygo build 的 bundle lint 占了 40% 时间。',['profile.json']],
+  ['修一下暗色下的 hover','样式','hover 层改用 --tint2。',[]],
+  ['加 favicon','资源','生成 32/180/512 三个尺寸。',['favicon.png']],
+  ['发布前检查清单','清单','go test、mygo vet、bundle lint。',[]],
+  ['补一个 FAQ','FAQ','5 条,折叠式。',[]],
+  ['SEO 描述改短','文案','控制在 155 字符内。',[]],
+  ['中文版翻译','i18n','先做首页和下载页。',[]],
+  ['收尾:部署','部署','Pages workflow 通过。',[]],
+];
+const VARIANTS = {
+  A:{title:'A · Type-first',desc:'输入 / 或 $ 弹出命令与 Skill 列表;+ 仍只是附件。最小增量。',states:['','slash','attach','model','drag']},
+  B:{title:'B · Menu-first',desc:'+ 菜单承载一切(附件/Skills/Commands);输入框不拦截任何字符。',states:['','plus','skills','attach','model']},
+  C:{title:'C · Both(推荐)',desc:'键入 / 或 $ 是引擎,+ 菜单是同一份列表的鼠标入口。',states:['','slash','plus','attach','model','drag']},
+  T:{title:'T · TOC 导航条',desc:'按截图:左侧刻度条,悬停出摘要卡,点击跳到该轮。',states:['','hover','imgs','long','narrow']},
+  V:{title:'V · Voice 来源',desc:'Settings → Voice:API 端点 | ChatGPT 订阅(读取 Codex 登录态)。',states:['api','ask','ready','expired','failed']},
+  M:{title:'M · 能力证据表',desc:'每个 Agent × 每项能力:已验证 / 待真机 / 不提供。',states:[]},
+};
+const STATE_LABELS = {'':'Default',slash:'/ 与 $ 弹层',plus:'+ 菜单',skills:'+ → Skills 子列表',attach:'附件(粘贴图片 + 文件)',model:'模型切换',drag:'拖拽文件',hover:'悬停 → 摘要卡',imgs:'悬停 → 带图片附件',long:'长对话(40 轮)',narrow:'窄窗(<960 隐藏)',api:'来源:API',ask:'选 ChatGPT → 同意弹窗',ready:'ChatGPT 就绪 + 测试',expired:'登录态过期',failed:'失败/限额'};
+const STORY = {
+  A:'<h1>A · Type-first</h1><p>零新增常驻控件;Codex 用户键入 <code>$</code>,其余键入 <code>/</code>。风险:不知道有 / 的人发现不了。</p>',
+  B:'<h1>B · Menu-first</h1><p>可发现性最好,但每次选 Skill 要点三下;且输入框里手敲 <code>/compact</code> 的肌肉记忆无反馈。</p>',
+  C:'<h1>C · Both</h1><p>A 的键入引擎 + B 的入口:<code>+ → Skills…</code> 只是向草稿写入 <code>/</code> 并打开同一个弹层。多一个菜单,零新逻辑。</p><p>模型 chip(右下)原来只读,改为弹层:Claude / pi / omp 直接发 <code>/model &lt;id&gt;</code>(待真机);Codex 的 /model 只有选择器,弹层里给“在终端选择”。</p>',
+  T:'<h1>T · TOC 导航条</h1><ul><li>数据全部来自已有 <code>state.turns</code>:用户消息文本 + 下一条助手回复的首个标题与首条要点 + 用户消息里的 <code>@</code> 附件。<b>零 Go 改动</b>。</li><li>不做截图里的书签图标(AGENTS.md 禁止 Bookmarks)。</li><li>点击 = 页内滚动,不写任何状态。</li><li>宽度 &lt; 748+2×96 时整条隐藏,避免挤正文。</li><li>刻度多于容器高度时按比例抽样(长对话态)。</li></ul>',
+  V:'<h1>V · Voice 来源</h1><p>实测:ChatGPT 桌面端听写 = <code>POST https://chatgpt.com/backend-api/transcribe</code>(multipart <code>file</code>),头 <code>Authorization: Bearer &lt;access_token&gt;</code> + <code>ChatGPT-Account-Id</code>,返回 <code>{text}</code>。用本机 Codex 的 <code>~/.codex/auth.json</code> 令牌已在 2026-10-31 实测 200。</p><ul><li>默认仍是 API 端点;ChatGPT 来源是第二个选项,需弹窗同意。</li><li>Solco <b>不刷新</b>令牌(刷新令牌会轮换,会把 Codex 自己登出);过期时让 <code>codex app-server</code> 自己刷新。</li><li>令牌只在内存,不写设置/日志。</li><li>服务端会保留音频资产(返回 <code>asset_ttl: 30d</code>),弹窗如实告知。</li></ul>',
+  M:'<h1>能力证据表</h1><p>绿 = 本机已核实;黄 = 方案成立但要真机验证;灰 = 不做。实现阶段每个黄项都要在真机上转绿或砍掉。</p>',
+};
+/* ============ helpers ============ */
+const I = {
+  plus:'<path d="M8 3v10M3 8h10"/>', mic:'<rect x="6" y="2" width="4" height="8" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/>', x:'<path d="M4 4l8 8M12 4l-8 8"/>',
+  img:'<rect x="2.5" y="3" width="11" height="10" rx="2"/><circle cx="6" cy="6.5" r="1"/><path d="M3 12l3.5-3.5 2.5 2.5 2-2 2.5 2.5"/>', file:'<path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/>',
+  up:'<path d="M8 13V3M4 7l4-4 4 4"/>', chev:'<path d="M6 4l4 4-4 4"/>', check:'<path d="M3.5 8.5l3 3 6-7"/>', slash:'<path d="M10.5 2.5l-5 11"/>', bolt:'<path d="M9 2L4 9h4l-1 5 5-7H8z"/>', term:'<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10M8.5 10h2.5"/>'
+};
+const ic = (n,s=16)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 16 16">${I[n]}</svg>`;
+let activeVariant='C', activeState='', agent='claude', light=false, query='';
+const $ = id=>document.getElementById(id);
+
+function thread(){return `<div class="thread"><div class="col">
+  <div class="u">把 Chat 的输入区补齐:附件、粘贴、Skill、切换模型</div>
+  <div class="a">我先看现有的 composer 与桥接,再列能做的项。</div>
+  <div class="sum">Thought for 6s · Explored 4 files</div>
+  <div class="a">目前已有 @ 文件补全和听写;缺的是粘贴图片、Skill 菜单和模型切换。</div></div></div>`}
+function tokFor(){const a=AGENTS[agent];return a.skillTok('think')}
+function popSlash(){
+  const a=AGENTS[agent];const dollar=agent==='codex';
+  const q=dollar?'$':'/';
+  const cmds=dollar?[]:a.cmds.slice(0,5);
+  return `<div class="pop">
+    ${dollar?'':`<div class="grp"><span>Commands</span><span>${a.label} · ${a.cmds.length} built-in + from disk</span></div>`+cmds.map((c,i)=>`<div class="row${i===0?' hot':''}"><span class="n">${c[0]}</span><span class="d">${c[1]}</span><span class="k">${c[2]==='picker'?'opens picker':'sends text'}</span></div>`).join('')}
+    <div class="grp"><span>Skills</span><span>${SKILLS.length} of 116 · type to filter</span></div>
+    ${SKILLS.slice(0,dollar?6:3).map((s,i)=>`<div class="row${dollar&&i===0?' hot':''}"><span class="n">${a.skillTok(s[0])}</span><span class="d">${s[1]}</span></div>`).join('')}
+    <div class="pf"><span>↑↓ choose</span><span>⏎ insert</span><span>esc dismiss</span>${dollar?'<span>Codex uses <b>$</b> for skills; its / list is typed too</span>':''}</div></div>`}
+function popPlus(sub){
+  if(sub) return `<div class="pop sm" style="width:340px"><div class="grp"><span>Skills</span><span>${AGENTS[agent].label}</span></div>${SKILLS.slice(0,6).map((s,i)=>`<div class="row${i===0?' hot':''}"><span class="n">${AGENTS[agent].skillTok(s[0])}</span><span class="d">${s[1]}</span></div>`).join('')}<div class="pf"><span>search…</span></div></div>`;
+  return `<div class="pop sm">
+    <div class="row hot">${ic('file')}<span class="n" style="font-family:inherit">Attach file…</span></div>
+    <div class="row">${ic('img')}<span class="n" style="font-family:inherit">Attach image…</span></div>
+    <div class="row">${ic('img')}<span class="n" style="font-family:inherit">Paste image from clipboard</span><span class="k">⌘V</span></div>
+    ${activeVariant==='B'||activeVariant==='C'?`<div class="grp"><span>Insert</span></div>
+    <div class="row">${ic('bolt')}<span class="n" style="font-family:inherit">Skills</span><span class="d"></span>${ic('chev',12)}</div>
+    <div class="row">${ic('slash')}<span class="n" style="font-family:inherit">Commands</span><span class="d"></span>${ic('chev',12)}</div>`:''}</div>`}
+function popModel(){
+  const a=AGENTS[agent];
+  const note=a.modelHow==='picker'?`<div class="note"><b>${a.label}'s /model is a picker</b> — no argument form. Solco opens it in the pane and you choose there.</div><div class="pf"><span>${ic('term',13)} Open picker in Terminal</span></div>`
+    :a.modelHow==='verify'?`<div class="note"><b>To verify on device:</b> whether a typed <code>/model &lt;id&gt;</code> is accepted. If not, this row degrades to the Codex form.</div>`
+    :`<div class="note">Sends <code>/model &lt;alias&gt;</code> to the agent as text. Takes effect on the next turn.</div>`;
+  return `<div class="pop model"><div class="grp"><span>Model</span><span>${a.label} ${a.ver}</span></div>${a.models.map(m=>`<div class="row${m[0]===a.cur?' hot':''}"><span class="ck">${m[0]===a.cur?ic('check',14):''}</span><span class="n">${m[0]}</span><span class="d">${m[1]}</span></div>`).join('')}${note}</div>`}
+function composer(st){
+  const a=AGENTS[agent];
+  const typed=activeVariant!=='B';
+  let text='<span class="ph">Send a message… (@ to mention file)</span>', atts='', pop='', toast='', sends='';
+  if(st==='slash'){text=`<div class="tx">${agent==='codex'?'$':'/'}<span class="cur"></span></div>`;pop=popSlash()}
+  if(st==='plus'){pop=popPlus(false)}
+  if(st==='skills'){pop=popPlus(true)}
+  if(st==='model'){pop=popModel()}
+  if(st==='attach'){
+    atts=`<div class="atts"><div class="att"><div class="th"></div><div><b>Screenshot 2026-10-31 at 08.28.png</b><i>PNG · 412 KB</i></div><span class="x">${ic('x',10)}</span></div>
+      <div class="att"><div class="fi">${ic('file',16)}</div><div><b>chat_bridge.go</b><i>internal/nativeui</i></div><span class="x">${ic('x',10)}</span></div></div>`;
+    text=`<div class="tx">看一下这张图里的 hover 卡,<span class="tok">@chat_bridge.go</span> 里怎么出的<span class="cur"></span></div>`;
+    toast=`<div class="toast">Image saved to ChatAttachments · 412 KB</div>`;
+    sends=`<div class="sends">Sends: <code>@~/…/Solco/ChatAttachments/shot-8f2c.png @internal/nativeui/chat_bridge.go</code> — ${agent==='codex'?'to verify: Codex turns a pasted image path into [Image #1]':agent==='claude'?'Claude Code reads image paths as images':'to verify: image path via @ mention'}</div>`;
+  }
+  if(st==='drag'){toast=''}
+  return `<div class="composer"><div class="col" style="position:relative">${pop}${toast}
+    <div class="cmp">${atts}${text}
+      <div class="cbar">
+        <button class="ib${st==='plus'||st==='skills'?' on':''}">${ic('plus')}</button>
+        <button class="ib">${ic('mic',15)}</button>
+        ${typed&&activeVariant==='A'?`<span class="chip" style="background:none;color:var(--i4)">${agent==='codex'?'$ skills':'/ commands'}</span>`:''}
+        <span class="sp"></span>
+        <button class="chip mono${st==='model'?' on':''}">${a.cur} ${ic('chev',11)}</button>
+        <button class="send">${ic('up',15)}</button>
+      </div></div>${sends}</div></div>`}
+function renderComposer(){
+  return `<div class="bar"><div class="seg" id="agentSeg">${Object.entries(AGENTS).map(([k,v])=>`<button data-a="${k}" class="${k===agent?'on':''}">${v.label}</button>`).join('')}</div>
+    <span>agent</span><span class="sp"></span><div class="seg" id="themeSeg"><button data-t="dark" class="${light?'':'on'}">Dark</button><button data-t="light" class="${light?'on':''}">Light</button></div></div>
+    <div class="win"><div class="head"><span class="dot"></span>Chat — FEAT: Composer capabilities <span style="margin-left:auto;font-weight:400;color:var(--i4)">${AGENTS[agent].label}</span></div>
+    ${thread()}${activeState==='drag'?`<div class="drop">${ic('file',18)}&nbsp; Drop to attach — files become @mentions, images are copied to ChatAttachments</div>`:''}
+    ${composer(activeState)}</div>`}
+function renderTOC(){
+  const st=activeState; const long=st==='long';
+  const n=long?40:TURNS.length;
+  const items=[...Array(n)].map((_,i)=>{const t=TURNS[i%TURNS.length];return {w:[14,22,18,26,16,20][i%6],t}});
+  const cur=st==='hover'||st==='imgs'||st===''?(st==='imgs'?0:3):9;
+  const hv=st==='hover'?3:st==='imgs'?0:-1;
+  const ticks=(long?items.slice(0,30):items).map((it,i)=>`<div class="tk${i===cur?' on':''}"><i style="width:${it.w}px"></i></div>`).join('');
+  let card='';
+  if(hv>=0){const t=TURNS[hv];
+    card=`<div class="tcard" style="top:${st==='imgs'?118:195}px"><div class="t1">${t[0]}</div><div class="t2">${t[1]}</div><div class="t3">${t[2]}</div>${t[3].length?`<div class="t4">${t[3].map(f=>`<span>${ic('img',13)}${f}</span>`).join('')}</div>`:''}</div>`}
+  return `<div class="bar"><span>Chat 左侧 gutter 内的刻度条 · 书签图标按 AGENTS.md 不做</span><span class="sp"></span></div>
+    <div class="win ${st==='narrow'?'nar':''}" style="${st==='narrow'?'width:560px':''}"><div class="head"><span class="dot"></span>Chat — Solco landing</div>
+      <div class="toc" style="${long?'justify-content:center':''}">${ticks}</div>${card}
+      ${thread()}${composer('')}</div>`}
+function renderVoice(){
+  const st=activeState;const chat=st!=='api';
+  const status={ask:['Not enabled','var(--i4)'],ready:['Signed in with ChatGPT · Plus','var(--ok)'],expired:['Sign-in expired — Codex refreshes it, or sign in again in Codex','var(--warn)'],failed:['Transcription limit reached — try again later','var(--bad)']}[st]||['','var(--i4)'];
+  return `<div class="bar"><span>Settings → Voice</span><span class="sp"></span></div>
+    <div class="set"><h3>Voice</h3><div class="sub">Dictation in Chat. Pick where the audio is transcribed.</div>
+      <div class="card"><div class="r"><div class="l"><b>Source</b><span>${chat?'Uses the ChatGPT sign-in Codex already holds on this Mac. No key to paste.':'Any OpenAI-compatible transcription endpoint, including local proxies.'}</span></div>
+        <div class="seg"><button class="${chat?'':'on'}">API endpoint</button><button class="${chat?'on':''}">ChatGPT subscription</button></div></div>
+        ${chat?`<div class="r"><div class="l"><b>Account</b><span>${st==='ask'?'Reads <code>~/.codex/auth.json</code> after you agree.':'From Codex · token stays in memory, never written or logged'}</span></div><span class="pill" style="--c:${status[1]}">${status[0]}</span>${st==='expired'?'<button class="btn">Check again</button>':''}</div>
+        <div class="r"><div class="l"><b>Test</b><span>Say a few words; the result is shown here and not inserted anywhere.</span></div>${st==='ready'?'<span class="mono" style="color:var(--i2)">“Solco voice test, one two three.”</span>':''}<button class="btn pri" ${st==='ask'?'style="opacity:.4"':''}>${st==='ready'?'Test again':'Record 3 s'}</button></div>`
+        :`<div class="r"><div class="l"><b>Endpoint</b><span>https://api.openai.com/v1</span></div></div><div class="r"><div class="l"><b>API key</b><span>Uses OPENAI_API_KEY</span></div></div><div class="r"><div class="l"><b>Model</b><span>whisper-1</span></div></div>`}
+      </div>
+      ${chat&&st!=='ask'?`<div class="card"><div class="r"><div class="l"><b>What is sent</b><span>The recorded clip goes to chatgpt.com (the same call the ChatGPT desktop app makes). OpenAI may keep the clip for about 30 days. Nothing else leaves this Mac; Chat text is never sent.</span></div></div></div>`:''}
+      ${st==='ask'?`<div class="scrim"><div class="dlg"><h4>Use your ChatGPT sign-in for dictation?</h4><div style="color:var(--i2);font-size:12px">Solco will read the sign-in that Codex stores on this Mac and use it only to transcribe your recordings.</div>
+        <ul><li>Audio is sent to <b>chatgpt.com</b>; OpenAI may retain it ~30 days.</li><li>The token stays in memory. Solco never saves it and never refreshes it.</li><li>It counts against your ChatGPT plan's limits.</li><li>You can switch back to an API endpoint at any time.</li></ul>
+        <div class="ft"><button class="btn">Cancel</button><button class="btn pri">Use ChatGPT sign-in</button></div></div></div>`:''}
+    </div>`}
+function renderMatrix(){
+  const S=(k,t)=>`<span class="s ${k}">${{ok:'verified',tv:'verify on device',no:'not offered'}[k]}</span>${t}`;
+  return `<div class="bar"><span>来源:本机 2026-10-31 探测(磁盘 / CLI / 二进制 / 官方文档)</span></div>
+  <table><tr><th>Capability</th><th>Claude Code 2.1.308</th><th>Codex 0.164.0</th><th>pi 1.4.0</th><th>omp 18.13.3</th></tr>
+  <tr><td class="cap">@ 文件提及</td><td colspan="4">${S('ok','已实现(ListFiles 补全 + PickAttachment);四家 CLI 都认 <code>@path</code>')}</td></tr>
+  <tr><td class="cap">粘贴/拖入图片</td><td>${S('tv','存到 ChatAttachments,发 @路径')}</td><td>${S('tv','路径→[Image #n];input_modalities 可判是否支持')}</td><td>${S('tv','pi --list-models 有 images 列')}</td><td>${S('tv','同 pi')}</td></tr>
+  <tr><td class="cap">Skill 发现</td><td>${S('ok','~/.claude/skills + 项目 .claude/skills')}</td><td>${S('ok','~/.agents/skills、~/.codex/skills')}</td><td>${S('ok','~/.pi/agent/skills')}</td><td>${S('ok','~/.omp/agent/skills')}</td></tr>
+  <tr><td class="cap">Skill 调用写法</td><td>${S('ok','/name')}</td><td>${S('ok','$name')}</td><td>${S('ok','/skill:name(官方文档)')}</td><td>${S('ok','/skill:name(源码)')}</td></tr>
+  <tr><td class="cap">文本型命令</td><td>${S('tv','/compact /clear /context /cost')}</td><td>${S('tv','/new /compact /review /diff /status')}</td><td>${S('ok','/compact /new /name /copy(slash-commands.md)')}</td><td>${S('ok','/compact /new /handoff /plan(源码)')}</td></tr>
+  <tr><td class="cap">选择器型命令</td><td colspan="4">${S('ok','/model /resume /permissions /settings /tree 等会在终端里开 TUI 面板 → 交给“Open Terminal”,不尝试在页内复刻')}</td></tr>
+  <tr><td class="cap">模型列表来源</td><td>${S('ok','固定别名 default/opus/sonnet/haiku')}</td><td>${S('ok','~/.codex/models_cache.json(10 项,含 input_modalities)')}</td><td>${S('ok','pi --list-models(含 images/thinking 列)')}</td><td>${S('tv','无 --list-models;读 ~/.omp/agent/models.yml')}</td></tr>
+  <tr><td class="cap">模型切换投递</td><td>${S('tv','/model &lt;alias&gt; 文本')}</td><td>${S('ok','只有选择器(二进制:choose what model and reasoning effort to use)')}</td><td>${S('tv','/model &lt;id&gt; 是否接受参数')}</td><td>${S('tv','同 pi')}</td></tr>
+  <tr><td class="cap">ChatGPT 听写</td><td colspan="4">${S('ok','POST chatgpt.com/backend-api/transcribe,实测 200;与 Agent 无关,属于 Settings → Voice')}</td></tr></table>`}
+function render(){
+  const body=activeVariant==='T'?renderTOC():activeVariant==='V'?renderVoice():activeVariant==='M'?renderMatrix():renderComposer();
+  const r=$('root');r.className='design-root'+(light?' light':'');r.innerHTML=body;
+  r.querySelectorAll('#agentSeg button').forEach(b=>b.onclick=()=>{agent=b.dataset.a;render()});
+  r.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>{light=b.dataset.t==='light';render()});
+}
+/* ============ shell ============ */
+function renderCards(){
+  const vl=$('variantList');vl.innerHTML='';
+  Object.entries(VARIANTS).forEach(([id,c])=>{const d=document.createElement('div');d.className='ide-variant-card'+(id===activeVariant?' active':'');d.innerHTML=`<h2>${c.title}</h2><p>${c.desc}</p>`;d.onclick=()=>setVariant(id);vl.appendChild(d)});
+  const sl=$('statesList');sl.innerHTML='';const states=VARIANTS[activeVariant].states;$('statesSectionTitle').hidden=!states.length;
+  states.forEach(s=>{const d=document.createElement('div');d.className='ide-state-card'+(s===activeState?' active':'');d.innerHTML=`<strong>${STATE_LABELS[s]||s}</strong>`;d.onclick=()=>setState(s);sl.appendChild(d)});
+}
+function paint(){$('stageLabel').textContent=`${VARIANTS[activeVariant].title} · ${STATE_LABELS[activeState]||'Default'}`;$('storyBody').innerHTML=STORY[activeVariant]||STORY.C;renderCards();render()}
+function setVariant(v){activeVariant=v;activeState=VARIANTS[v].states[0]??'';paint()}
+function setState(s){activeState=(activeState===s&&s!=='')?(VARIANTS[activeVariant].states[0]??''):s;paint()}
+$('panelCollapseBtn').onclick=()=>$('ideLayout').classList.add('panel-collapsed');
+$('panelExpandBtn').onclick=()=>$('ideLayout').classList.remove('panel-collapsed');
+$('storyToggleBtn').onclick=()=>{const c=$('ideLayout').classList.toggle('story-collapsed');$('storyChevron').textContent=c?'▶':'▼'};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(activeState&&activeState!==VARIANTS[activeVariant].states[0])setState(activeState);else $('ideLayout').classList.add('panel-collapsed')}});
+/* deep link: #variant/state/agent/theme  e.g. #C/slash/codex/light */
+(function(){const [v,st,ag,th]=location.hash.slice(1).split('/');
+  if(ag&&AGENTS[ag])agent=ag; if(th==='light')light=true;
+  setVariant(VARIANTS[v]?v:'C'); if(VARIANTS[activeVariant].states.includes(st||'slash')&&!(v&&!st))setState(st||'slash');
+  if(v&&VARIANTS[v]&&st!==undefined&&st!==''&&VARIANTS[v].states.includes(st)){activeState=st;paint()}
+  if(location.hash.includes('full'))document.getElementById('ideLayout').classList.add('panel-collapsed');})();
+</script>
+</body>
+</html>
