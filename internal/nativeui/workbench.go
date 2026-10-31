@@ -136,6 +136,7 @@ func (s *Shell) reconcileWorkbench() {
 		}
 	}
 	s.workbench.directory.Replace(cards)
+	s.publishRemoteAgentFacts()
 	s.pruneAgentMRU(live)
 }
 

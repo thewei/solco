@@ -199,6 +199,8 @@ type Shell struct {
 	// remote backs Settings → Remote Access: the optional phone-client Host,
 	// its listener choice feedback and the pairing sheet.
 	remote remoteState
+	// remoteFacts is the desktop's resolved agent titles/last-worked times, published for the Host's goroutines.
+	remoteFacts remoteAgentFacts
 
 	settingsGitPromptDraft      string
 	settingsCommitEndpointDraft string

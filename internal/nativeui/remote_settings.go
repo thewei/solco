@@ -90,13 +90,14 @@ func (s *Shell) remoteServer() *remotehost.Server {
 	host, _ := os.Hostname()
 	userDataDir := s.userDataDir // fixed at startup; the Host's goroutines must not touch the Shell
 	opts := remotehost.Options{
-		Config:   remoteConfigFrom(s.settings.Remote),
-		Dir:      filepath.Join(s.userDataDir, "RemoteHost"),
-		Backend:  remotehost.NewManagerBackend(s.runtime),
-		Identity: s.hostHookIdentity,
-		HostName: host,
-		Version:  mygo.App.Version(),
-		Git:      app.NewRemoteGit(),
+		Config:     remoteConfigFrom(s.settings.Remote),
+		Dir:        filepath.Join(s.userDataDir, "RemoteHost"),
+		Backend:    remotehost.NewManagerBackend(s.runtime),
+		Identity:   s.hostHookIdentity,
+		AgentFacts: s.hostAgentFacts,
+		HostName:   host,
+		Version:    mygo.App.Version(),
+		Git:        app.NewRemoteGit(),
 		Attach: func(data []byte, mime, name string) (string, error) {
 			dir, err := chatattach.Dir(userDataDir)
 			if err != nil {
