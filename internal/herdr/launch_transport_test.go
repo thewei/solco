@@ -253,6 +253,52 @@ func TestLaunchTransportShellReady(t *testing.T) {
 	}
 }
 
+func TestLaunchTransportShellSettled(t *testing.T) {
+	idle := `{"type":"pane_process_info","process_info":{"pane_id":"p","shell_pid":401,"foreground_processes":[{"pid":401,"name":"zsh"}]}}`
+	busy := `{"type":"pane_process_info","process_info":{"pane_id":"p","shell_pid":401,"foreground_processes":[{"pid":512,"name":"bun"}]}}`
+	pane := func(agent string) string {
+		if agent == "" {
+			return `{"type":"pane_info","pane":{"pane_id":"p","agent_status":"unknown"}}`
+		}
+		return `{"type":"pane_info","pane":{"pane_id":"p","agent":"` + agent + `","agent_status":"idle"}}`
+	}
+	read := func(text string) string {
+		return `{"type":"pane_read","read":{"text":` + string(mustJSON(text)) + `}}`
+	}
+	cases := []struct {
+		name                string
+		process, pane, text string
+		want                bool
+	}{
+		{"fresh pane, no prompt drawn yet", idle, pane(""), "", false},
+		{"prompt drawn but a helper is still the foreground", busy, pane(""), "% ", false},
+		{"Herdr still detects an agent from the rc files", idle, pane("omp"), "% ", false},
+		{"settled", idle, pane(""), "wilson@mac %", true},
+	}
+	for _, tc := range cases {
+		startFakeHerdr(t, func(method string, params map[string]any) (json.RawMessage, error) {
+			switch method {
+			case "pane.process_info":
+				return json.RawMessage(tc.process), nil
+			case "pane.get":
+				return json.RawMessage(tc.pane), nil
+			case "pane.read":
+				return json.RawMessage(read(tc.text)), nil
+			}
+			return nil, errorsUnexpected(method)
+		})
+		got, err := NewManager().ShellSettled(context.Background(), "default", "p")
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: ShellSettled = (%v, %v), want %v", tc.name, got, err, tc.want)
+		}
+	}
+}
+
+func mustJSON(v any) []byte {
+	data, _ := json.Marshal(v)
+	return data
+}
+
 func TestLaunchTransportRejectsWrongResultType(t *testing.T) {
 	startFakeHerdr(t, func(method string, params map[string]any) (json.RawMessage, error) {
 		return json.RawMessage(`{"type":"tab_list","tabs":[]}`), nil

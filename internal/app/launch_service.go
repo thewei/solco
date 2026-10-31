@@ -279,7 +279,7 @@ func (r *herdrLaunchRuntime) WorkspaceIDForPath(ctx context.Context, projectPath
 func (r *herdrLaunchRuntime) WaitShellReady(ctx context.Context, paneID string, timeoutMS int64) error {
 	deadline := time.Now().Add(time.Duration(timeoutMS) * time.Millisecond)
 	for {
-		ready, err := r.manager.ShellReady(ctx, r.session, paneID)
+		ready, err := r.manager.ShellSettled(ctx, r.session, paneID)
 		if err != nil {
 			return err
 		}
@@ -325,6 +325,7 @@ func (r *herdrLaunchRuntime) AgentByPane(ctx context.Context, paneID string) (*a
 		PaneID:           info.PaneID,
 		Agent:            kindOfHerdrAgent(info),
 		InteractiveReady: info.InteractiveReady,
+		Status:           info.AgentStatus,
 		Revision:         info.Revision,
 	}
 	if info.AgentSession != nil {

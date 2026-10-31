@@ -24,9 +24,16 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-func rpcTimeout(method string) time.Duration {
+func rpcTimeout(method string, params any) time.Duration {
 	if method == "ping" {
 		return 1 * time.Second
+	}
+	// agent.wait is a long poll: Herdr holds the call for the caller's own timeout_ms, so the socket deadline
+	// must outlast it (plus slack for the reply) or every wait longer than the ordinary budget fails mid-wait.
+	if p, ok := params.(map[string]any); ok && method == "agent.wait" {
+		if ms, ok := p["timeout_ms"].(int64); ok && ms > 0 {
+			return time.Duration(ms)*time.Millisecond + 10*time.Second
+		}
 	}
 	// Keep parity with the current Rust Herdr adapter for ordinary local RPCs.
 	// Mutating calls must not be declared uncertain merely because a cold shell
@@ -48,7 +55,7 @@ func callRPC(socketPath, method string, params any, mutating bool, result any) e
 		return fmt.Errorf("connect Herdr socket %s: %w", socketPath, err)
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(rpcTimeout(method)))
+	_ = conn.SetDeadline(time.Now().Add(rpcTimeout(method, params)))
 
 	request, err := json.Marshal(map[string]any{
 		"id":     "solco-next",

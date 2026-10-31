@@ -72,7 +72,9 @@ type StartedAgent struct {
 	Agent            string
 	AgentSession     string
 	InteractiveReady bool
-	Revision         int64
+	// Status is Herdr's agent_status ("blocked" = waiting on a human); empty from runtimes that do not report it.
+	Status   string
+	Revision int64
 }
 
 // LaunchRuntime is the Herdr transport seam of the transaction. Production
@@ -113,7 +115,7 @@ type TransactionTimings struct {
 
 func DefaultTimings() TransactionTimings {
 	return TransactionTimings{
-		ShellReadyTimeoutMS:     10_000,
+		ShellReadyTimeoutMS:     20_000,
 		AgentStartTimeoutMS:     30_000,
 		ReadinessTimeoutMS:      60_000,
 		IdentityVerifyTimeoutMS: 20_000,

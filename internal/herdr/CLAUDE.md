@@ -31,6 +31,9 @@ scroll_contract_test.go: Herdr scroll 消息与状态协定
 herdr_test.go: Manager/协议基础回归（含 ErrProtocolTooOld 哨兵与 EnsureRunning 对旧存活服务器只 ping 一次、绝不二次拉起的回归）
 run_cli_test.go: RunCLI 经解析出的二进制执行、失败时带上 stderr 的回归；UpgradeRuntime 决策表（兼容交接不动 stop、旧服务器存活则 stop、命名 session 定域、无服务器不 stop、更新失败浮出 stderr）
 actions_test.go: Herdr 操作基础测试
+agent_kinds.go: Manager.AgentKinds——读 `herdr agent start --help` 的 `--kind [possible values: …]`（可启动 agent 种类的唯一来源，版本精确；读不到返回错误由调用方降级）
+launch_transport.go: （另）Manager.ShellSettled——启动事务 agent.start 前的更严就绪门：ShellReady + pane.get 无 agent 检测 + 屏幕已画出提示符（rc 文件会拉起辅助进程的慢 zsh，进程表上出生即「就绪」，但 Herdr 要么 agent_pane_busy 拒绝，要么在最初一瞬接受后永不登记 agent——无 name、无 interactive_ready，事务永远验证不过；Herdr 0.9.5 实测）；ShellReady 本身语义不变，供脚本/Hosts 的忙判断沿用
+agent_kinds_test.go: 帮助文本解析与不可解析返回 nil
 plugin.go: Herdr 插件 CLI 边界——PluginListJSON（`herdr plugin list --json`，插件能力门的唯一数据源）与 Manager.InvokePluginAction（本机 session 内运行一个已声明的插件 action，经 sessionEnv 定域，之后回读权威投影供调用方采纳 Herdr 落点焦点；远程机器实例拒绝、不重试）与 FocusPluginPane（action 在 Herdr 客户端之外调用只开 Tab 不移焦点：按清单声明的 pane 标题在投影里找到它，未聚焦才调 Herdr 自己的 `plugin pane focus`）；HasPluginPane/ForceFocusPluginPane（已打开的插件 pane 只重新聚焦：投影里的焦点可能落后于 Herdr，`plugin pane focus` 对已聚焦 pane 是空操作）
 plugin_test.go: plugin list 的 argv、invoke 的 argv 形状与空 id 拒绝、远程实例在触达 CLI 之前即被拒绝的回归
 

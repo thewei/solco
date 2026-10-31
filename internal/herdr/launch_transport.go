@@ -330,6 +330,44 @@ func (m *Manager) ShellReady(ctx context.Context, session, paneID string) (bool,
 	return true, nil
 }
 
+// ShellSettled is the stricter gate before `agent.start`: ShellReady, plus
+// the shell has drawn its prompt and Herdr no longer detects an agent in the
+// pane. A shell whose rc files launch helpers is "ready" by process list at
+// birth, yet Herdr either rejects the start (agent_pane_busy) or — at the very
+// first instant — accepts it and never registers the agent (no name, no
+// interactive_ready), so the launch can never verify. Measured live on
+// Herdr 0.9.5 with a slow-starting zsh; the `herdr agent start` CLI avoids it
+// by retrying while the pane is busy.
+func (m *Manager) ShellSettled(ctx context.Context, session, paneID string) (bool, error) {
+	if ready, err := m.ShellReady(ctx, session, paneID); err != nil || !ready {
+		return false, err
+	}
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return false, err
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "pane.get", map[string]any{"pane_id": paneID}, false, &raw); err != nil {
+		return false, err
+	}
+	var pane struct {
+		Pane struct {
+			Agent *string `json:"agent"`
+		} `json:"pane"`
+	}
+	if err := decodeTypedResult(raw, "pane_info", &pane); err != nil {
+		return false, err
+	}
+	if pane.Pane.Agent != nil && *pane.Pane.Agent != "" {
+		return false, nil
+	}
+	text, err := m.ReadPane(ctx, session, paneID, "visible")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(text) != "", nil
+}
+
 // SendAgentKeys sends verified named keys to an agent target
 // (agent.send_keys {target, keys}) — the Plan-mode post-ready operation, a
 // named-key operation on an exact Agent target, never raw terminal text.

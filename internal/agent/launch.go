@@ -61,6 +61,9 @@ type LaunchOutcomeRecord struct {
 	Launched  bool   `json:"launched"`
 	// AgentKey identifies the created Agent once the transaction exists.
 	AgentKey string `json:"agent_key,omitempty"`
+	// PromptPending: the Agent exists but is blocked on a human (a first-run trust prompt) before
+	// it could take the initial prompt, which was therefore NOT delivered.
+	PromptPending bool `json:"prompt_pending,omitempty"`
 }
 
 // launchCall is the single in-flight owner for one RequestID. Duplicate
