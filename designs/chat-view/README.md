@@ -412,3 +412,5 @@ git diff --check
 验证：`go test ./internal/nativeui/`（菜单计划、URL 白名单、导航闸、路径解析）· `tsc --noEmit` · `vite build`；浏览器桩桥接核对计算样式（选择/光标/动画曲线/topline/链接胶囊/拼写属性/contextmenu 被拦截且编辑框不拦）；真机：右键弹出 macOS 菜单（Copy Message / Select All / Find…，有选区多出 Copy，文件行多出 Quick Look / Copy Path），Select All 不选中 “Thought / Ran N commands / Working” 等外壳，Find… 打开查找条，Quick Look 打开 index.html 预览。真机未覆盖：点击正文链接（现有会话里没有可点的链接，闸由单测与 MyGo 同款用法保证）。
 
 追加 2026-10-31 · Files 预览页同口径：`/files-viewer`（Markdown 渲染与图片）同样套用——整页 `user-select:none` 仅渲染文本可选、箭头光标、`:focus-visible` 系统焦点环、链接/图片不可拖、悬停地址胶囊（`native.ts` 的 `useLinkHint` 与 Chat 共用）、屏蔽浏览器菜单改弹 macOS 菜单（Copy / Open·Copy Link / Quick Look·Copy Path / Select All，`files_menu.go`）、`OnWillNavigate` 导航闸（拖入文件或点击链接不再把预览页换掉）。导航闸函数更名为 `pageNavigationDecision`，Chat 与 Files 共用。验证：`go test ./internal/nativeui`（`TestFilesMenuPlanFollowsTheTarget`）· `tsc` · `vite build` · 真机右键 .md 文件。
+
+追加 2026-10-31 · TOC 刻度条可见性：条件是 ≥3 条用户消息、会话已加载、页面宽度 >800px（页面宽度 = 窗口宽度 − 侧栏）。原先阈值 960px 在带侧栏的常规窗口里几乎永远隐藏，下调到 800px，并把刻度条收窄（左 10px、最长 26px）以不压到正文列（正文列在 800px 时从 50px 处开始）。
