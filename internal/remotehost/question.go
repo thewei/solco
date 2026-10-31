@@ -23,7 +23,7 @@ import (
  * [OUTPUT]: 对外提供聊天帧里的 `interaction`（chatInteraction）与 POST /api/v3/panes/{paneID}/chat/answer
  * [POS]: 手机 Chat 的 Question 卡（P3）：只在 agent 为 blocked 时派生，状态全在 Host 的每 pane 光标里（omp 多问题的步数、刚答过的卡），不碰桌面的 InteractionBroker；
  *        id 由 pane+来源+步数+问题+选项哈希而来（无状态可重派生），答题时重新派生并比对（过期/已答 → 409 interaction_gone），投递只走 Herdr agent.send_keys / agent.prompt（被阻塞的输入框走 pane.send_input），Herdr 拒绝原样回传；
- *        不含 picker（/model 等）与 Queue；提示正文、选项与答案永不进日志
+ *        picker（/model 等）在 picker.go 共用本文件的 derive/answer；不含 Queue；提示正文、选项与答案永不进日志
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -75,6 +75,13 @@ type askCursor struct {
 	screenAt    time.Time
 	screenInter conversation.PendingInteraction
 	screenOK    bool
+	// A picker command (/model, /permissions) the Host just sent: the screen is
+	// read until the picker shows (pickerUntil) and then while it stays (pickerLive).
+	pickerUntil time.Time
+	pickerSince time.Time
+	pickerAt    time.Time
+	pickerInter conversation.PendingInteraction
+	pickerLive  bool
 }
 
 func (s *Server) askFor(instance, paneID string) *askCursor {
@@ -107,8 +114,14 @@ func interactionID(paneID, toolID string, step int, p conversation.PendingIntera
 
 // derive reads the card the blocked agent is showing, or false. The caller
 // holds cur.mu and has already seen status == "blocked".
-func (s *Server) derive(ctx context.Context, instance, paneID string, cur *askCursor, reader *chatsession.Reader) (conversation.PendingInteraction, bool) {
+func (s *Server) derive(ctx context.Context, instance, paneID string, cur *askCursor, reader *chatsession.Reader, blocked bool) (conversation.PendingInteraction, bool) {
 	now := s.opts.Now()
+	if p, handled := s.derivePicker(ctx, instance, paneID, cur, now); handled {
+		return p, p.ID != ""
+	}
+	if !blocked {
+		return conversation.PendingInteraction{}, false
+	}
 	var found conversation.PendingInteraction
 	var toolID string
 	step := 0
@@ -175,13 +188,13 @@ func toWire(p conversation.PendingInteraction) *chatInteraction {
 
 // interactionFrame is the card to ship with a chat state, "" status = none.
 func (s *Server) interactionFrame(ctx context.Context, instance, paneID, status string, reader *chatsession.Reader) *chatInteraction {
-	if status != "blocked" {
+	if status != "blocked" && !s.pickerWatching(instance, paneID) {
 		return nil
 	}
 	cur := s.askFor(instance, paneID)
 	cur.mu.Lock()
 	defer cur.mu.Unlock()
-	p, ok := s.derive(ctx, instance, paneID, cur, reader)
+	p, ok := s.derive(ctx, instance, paneID, cur, reader, status == "blocked")
 	if !ok {
 		return nil
 	}
@@ -210,7 +223,7 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 	if !ok {
 		return
 	}
-	if target.Status != "blocked" {
+	if target.Status != "blocked" && !s.pickerWatching(instance, paneID) {
 		writeError(w, http.StatusConflict, "interaction_gone", "")
 		return
 	}
@@ -228,8 +241,8 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 	cur := s.askFor(instance, paneID)
 	cur.mu.Lock()
 	defer cur.mu.Unlock()
-	cur.screenAt = time.Time{} // the answer must match the screen as it is now
-	p, found := s.derive(ctx, instance, paneID, cur, reader)
+	cur.screenAt, cur.pickerAt = time.Time{}, time.Time{} // the answer must match the screen as it is now
+	p, found := s.derive(ctx, instance, paneID, cur, reader, target.Status == "blocked")
 	if !found || p.ID != req.InteractionID {
 		writeError(w, http.StatusConflict, "interaction_gone", "")
 		return
@@ -265,6 +278,9 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 		return
 	}
 	cur.resolvedID, cur.resolvedAt = p.ID, s.opts.Now()
+	if p.Picker {
+		s.armPicker(cur) // a picker may continue with a second list; re-read until it is gone
+	}
 	if p.Steps > 0 {
 		if cur.step++; cur.step >= p.Steps {
 			cur.done = true

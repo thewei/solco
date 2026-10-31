@@ -43,6 +43,9 @@ type QueueItem struct {
 // ErrNoQueueItem reports a missing queue entry.
 var ErrNoQueueItem = errors.New("no queued item for this conversation")
 
+// ErrQueueSlotTaken reports a second enqueue while the conversation holds a live follow-up.
+var ErrQueueSlotTaken = errors.New("a follow-up is already queued for this conversation")
+
 // ErrAlreadyDelivered reports a cancel/claim racing a completed delivery.
 var ErrAlreadyDelivered = errors.New("follow-up already delivered")
 
@@ -85,7 +88,7 @@ func (q *FollowUpQueue) Enqueue(item QueueItem) error {
 	existing, ok := q.items[item.ConversationID]
 	if ok && isActiveQueueState(existing.State) {
 		q.mu.Unlock()
-		return errors.New("a follow-up is already queued for this conversation")
+		return ErrQueueSlotTaken
 	}
 	if item.State == "" {
 		item.State = Queued

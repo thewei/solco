@@ -64,3 +64,41 @@ func TestFoldOpensTheNewestPageAndKeepsItsStart(t *testing.T) {
 		t.Fatalf("a new row must extend the window: start=%d turns=%d", w2.Start, len(w2.Turns))
 	}
 }
+
+func TestReaderOlderMovesTheWindowOnePageUpToTheTop(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	total := history.WindowLimit*2 + 10
+	var body []byte
+	for i := 0; i < total; i++ {
+		body = append(body, claudeUser(fmt.Sprint("m", i))...)
+	}
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Open(history.AgentClaudeCode, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	st := r.State(time.Now())
+	if len(st.Turns) != history.WindowLimit || !st.HasOlder {
+		t.Fatalf("newest page: turns=%d older=%v", len(st.Turns), st.HasOlder)
+	}
+	if !r.Older() {
+		t.Fatal("a page above must move")
+	}
+	if st = r.State(time.Now()); len(st.Turns) != history.WindowLimit*2 || !st.HasOlder {
+		t.Fatalf("second page: turns=%d older=%v", len(st.Turns), st.HasOlder)
+	}
+	if !r.Older() {
+		t.Fatal("the last page must still move")
+	}
+	if st = r.State(time.Now()); len(st.Turns) != total || st.HasOlder {
+		t.Fatalf("top: turns=%d older=%v", len(st.Turns), st.HasOlder)
+	}
+	if r.Older() {
+		t.Fatal("nothing above the top")
+	}
+}

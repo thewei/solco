@@ -12,6 +12,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	qrcode "github.com/skip2/go-qrcode"
+	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/chatattach"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/remotehost"
@@ -86,14 +88,28 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		return nil
 	}
 	host, _ := os.Hostname()
-	srv, err := remotehost.New(remotehost.Options{
+	userDataDir := s.userDataDir // fixed at startup; the Host's goroutines must not touch the Shell
+	opts := remotehost.Options{
 		Config:   remoteConfigFrom(s.settings.Remote),
 		Dir:      filepath.Join(s.userDataDir, "RemoteHost"),
 		Backend:  remotehost.NewManagerBackend(s.runtime),
 		Identity: s.hostHookIdentity,
 		HostName: host,
 		Version:  mygo.App.Version(),
-	})
+		Git:      app.NewRemoteGit(),
+		Attach: func(data []byte, mime, name string) (string, error) {
+			dir, err := chatattach.Dir(userDataDir)
+			if err != nil {
+				return "", err
+			}
+			return chatattach.Save(dir, data, mime, name, time.Now())
+		},
+	}
+	if s.launch != nil {
+		opts.Launcher = app.NewRemoteLauncher(s.launch)
+		opts.Queue = app.NewRemoteFollowUps(s.launch)
+	}
+	srv, err := remotehost.New(opts)
 	if err != nil {
 		slog.Warn("remote host unavailable", "error", err)
 		s.remote.err = "Remote access is unavailable: " + err.Error()

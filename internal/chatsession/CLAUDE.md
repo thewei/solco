@@ -12,8 +12,11 @@ Shell/MyGo 无关的 Chat 投影共享层：桌面 `ChatBridge` 与将来的手�
 - `window.go`：`Fold`（解码投影 → 一个渲染窗口：最新一页、新消息延长、超界前移）、`LastModel`/`LastContext`、`MaxAccumulated`。
 - `attach.go`：`AttachSubagents`（给步骤打 SubagentIDs，并列出被链接的卡片）。
 - `question.go`：`TranscriptQuestion`（omp/pi 转录里尚无结果的 `ask` 调用 → 结构化问题序列；自 nativeui/chat_ask.go 迁入）与 `Reader.Ask`。
+- `picker.go`：`DetectPicker`（Claude/Codex 编号选择器的可见屏纯解析，自 nativeui/chat_picker.go 迁入；桌面与手机 Host 共用）。
+- `subagent_view.go`：`OpenSubagent`/`Reader.Subagent`（抽屉：子代理卡 + 它自己的轮次，未知 id → ErrUnknownSubagent）。
 - `screenprompt.go`：`DetectScreenPrompt`/`IsOmpReviewSheet`（Claude AskUserQuestion / 权限页 / omp Review 页的可见屏纯解析；自 nativeui/chat_hooks.go 迁入）。
-- `reader.go`：`Reader`（`Open/Sync/State/Ask`：一个转录文件的增量解码器 + 与桌面相同的投影）与 `State` 只读线格式，供 Remote Host P2。
+- `reader.go`：`Reader`（`Open/Sync/State/Ask/Older`——Older 在解码器已持有的整份投影里上移一页，不重读文件：一个转录文件的增量解码器 + 与桌面相同的投影）与 `State` 只读线格式，供 Remote Host P2。
+- `files.go`：`ListFiles`（输入框 `@` 补全：窗格目录浅层、子目录前缀下钻、包含匹配、点文件仅在 token 以点开头、≤20 条；`contained` 把遍历限制在目录内，手机 Host 开、桌面不开；自 nativeui/chat_bridge.go 迁入）。
 - `question_test.go`：ask 读取规则（单问/多问/多选/带 recommended 拒绝/已有结果或后续用户回合不再出卡）。
 - `reader_test.go`/`plan_test.go`/`changes_test.go`：Reader 仅在文件变化时报变更、未知 Provider/空路径拒绝、窗口规则；任务清单与改动卡规则（自 nativeui 随代码迁入）。
 - `subagents_test.go`：三家链接规则与 stopped 仅来自 Provider 自己的中断标记。

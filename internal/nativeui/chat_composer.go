@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/thewei/solco/internal/agentcatalog"
+	"github.com/thewei/solco/internal/chatattach"
 	"github.com/thewei/solco/internal/history"
 )
 
@@ -93,17 +92,11 @@ func (b *ChatBridge) SaveAttachment(ctx context.Context, dataBase64, mime, name 
 	}
 	var dir string
 	b.shell.callOnWindow(func() { dir = b.shell.userDataDir })
-	if dir == "" {
-		return "", errors.New("attachments need the installed app")
-	}
-	// ~/Library/Caches/<app>/ChatAttachments, not Application Support: the
-	// path rides in an `@path` mention, which agents split at whitespace, and
-	// "Application Support" has a space.
-	cache, err := os.UserCacheDir()
+	cache, err := chatattach.Dir(dir)
 	if err != nil {
 		return "", err
 	}
-	return saveChatAttachment(filepath.Join(cache, filepath.Base(dir), chatAttachDir), data, mime, name, time.Now())
+	return chatattach.Save(cache, data, mime, name, time.Now())
 }
 
 // SwitchModel sends the provider's own typed model command (pi `/model`, omp

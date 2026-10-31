@@ -39,7 +39,8 @@ func (s *Shell) agentSessionIdentity(key agent.AgentKey) (history.AgentID, *herd
 // openChat routes to the Chat surface bound to one card through the single
 // bind path: live agents stream their provider transcript tail; history
 // conversations read through HistoryService. It activates WorkspaceSurfaceChat
-// inside the workspace for a seamless in-situ experience.
+// inside the workspace for a seamless in-situ experience and records the
+// pane-surface memory (Chat on success, Terminal on the fallback).
 func (s *Shell) openChat(card agent.AgentCardModel) {
 	if s.holdCommitNavigation() {
 		return
@@ -47,6 +48,7 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 	s.chatPaneID = card.PaneID
 	if card.PaneID != "" {
 		s.selectPane(card.PaneID)
+		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceChat)
 	}
 	if s.bindLiveAgent(card.Key) {
 		if s.router.Path() != routeWorkspace {
@@ -78,6 +80,9 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 	// F58). Land on the agent's Terminal with a hint instead.
 	s.status = "No chat source for this agent yet — opened its Terminal."
 	s.pendingToast = s.status // the status strip only renders on the empty-terminal branch
+	if card.PaneID != "" {
+		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceTerminal)
+	}
 	if s.router.Path() != routeWorkspace {
 		s.router.Push(routeWorkspace)
 	}

@@ -2,7 +2,6 @@ package nativeui
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"time"
 
@@ -95,39 +94,13 @@ type ChatBridgeSubagentView struct {
 // must be one the current chat listed; the page never names a path.
 func (b *ChatBridge) OpenSubagent(ctx context.Context, id string) (ChatBridgeSubagentView, error) {
 	var (
-		view  chatsession.View
-		found bool
-		call  *conversation.ConversationToolCall
-		kind  string
+		views  []chatsession.View
+		parent []conversation.TimelineTurn
 	)
-	b.shell.callOnWindow(func() {
-		for _, v := range b.shell.chatSubagents {
-			if v.Sub.ID == id {
-				view, found = v, true
-			}
-		}
-		for _, turn := range b.shell.chatTurns {
-			for _, step := range turn.Steps {
-				if ids, types := chatsession.Linked(step.Tool, []chatsession.View{view}); len(ids) > 0 && found {
-					call, kind = step.Tool, types[id]
-				}
-			}
-		}
-	})
-	if !found {
-		return ChatBridgeSubagentView{}, errors.New("sub-agent is not part of this conversation")
-	}
-	out := ChatBridgeSubagentView{Subagent: chatsession.Card(view, kind, call, time.Now())}
-	detail, err := history.ReadSubagent(view.Sub.Provider, view.Sub.Path)
+	b.shell.callOnWindow(func() { views, parent = b.shell.chatSubagents, b.shell.chatTurns })
+	view, err := chatsession.OpenSubagent(views, parent, id, time.Now())
 	if err != nil {
-		out.Error = "Can't show this sub-agent's transcript."
-		if errors.Is(err, history.ErrSubagentTooLarge) {
-			out.Error = "This sub-agent's transcript is too large to preview."
-		}
-		out.Turns = []chatsession.ChatTurn{}
-		return out, nil
+		return ChatBridgeSubagentView{}, err
 	}
-	items := conversation.ItemsFromTranscript(detail.Messages)
-	out.Turns = chatsession.Turns(conversation.DeriveTimeline(items), "", nil)
-	return out, nil
+	return ChatBridgeSubagentView{Subagent: view.Subagent, Turns: view.Turns, Error: view.Error}, nil
 }

@@ -90,6 +90,20 @@ func (r *Reader) Ask() (TranscriptAsk, bool) {
 	return TranscriptQuestion(Fold(r.decoder.Projection(), r.decoder.PendingTail(), r.start).Turns)
 }
 
+// Older moves the window one page up the decoder's own projection (it already
+// holds the whole transcript, so nothing is re-read) and reports whether it
+// moved; false at the top or once the render bound is reached.
+func (r *Reader) Older() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	window := Fold(r.decoder.Projection(), r.decoder.PendingTail(), r.start)
+	if !window.HasOlder {
+		return false
+	}
+	r.start = max(0, window.Start-history.WindowLimit)
+	return true
+}
+
 // State projects the current window. now stamps sub-agent durations.
 func (r *Reader) State(now time.Time) State {
 	r.mu.Lock()
@@ -111,4 +125,17 @@ func (r *Reader) State(now time.Time) State {
 	}
 	state.Subagents = AttachSubagents(state.Turns, window.Turns, r.views, now)
 	return state
+}
+
+// Subagent opens one of the conversation's sub-agents (the drawer). id must be
+// one State listed; the sub-agent's own file is read outside the Reader's lock.
+func (r *Reader) Subagent(id string, now time.Time) (SubagentView, error) {
+	r.mu.Lock()
+	window := Fold(r.decoder.Projection(), r.decoder.PendingTail(), r.start)
+	if r.viewsAt.IsZero() || now.Sub(r.viewsAt) >= subagentsEvery {
+		r.views, r.viewsAt = Read(r.provider, r.path, now), now
+	}
+	views := r.views
+	r.mu.Unlock()
+	return OpenSubagent(views, window.Turns, id, now)
 }

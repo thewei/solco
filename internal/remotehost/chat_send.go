@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/agentcatalog"
 	"github.com/thewei/solco/internal/herdr"
 )
 
@@ -33,6 +34,9 @@ type chatSendRequest struct {
 	// Interrupt cuts a running turn in: Esc, settle, Ctrl-C (clears the line a
 	// TUI restores), settle, then the prompt. Ignored when the agent is ready.
 	Interrupt bool `json:"interrupt,omitempty"`
+	// Queue parks the text behind the running turn (the desktop's follow-up
+	// queue) instead of refusing with `busy`. Ignored when the agent is ready.
+	Queue bool `json:"queue,omitempty"`
 }
 
 func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request, dev Device) {
@@ -56,6 +60,10 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request, dev Devi
 	switch agent.ClassifySendability(agent.ParseRuntimePhase(target.Status, false)) {
 	case agent.Sendable:
 	case agent.MidTurn:
+		if req.Queue && !req.Interrupt {
+			s.enqueueFollowUp(w, dev, instance, paneID, target, text)
+			return
+		}
 		if !req.Interrupt {
 			writeError(w, http.StatusConflict, "busy", "")
 			return
@@ -86,6 +94,12 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request, dev Devi
 	if err := backend.PromptAgent(ctx, instance, paneID, text); err != nil {
 		s.sendFailed(w, dev, paneID, "prompt", err)
 		return
+	}
+	if target.Provider != "" && agentcatalog.Classify(target.Provider, text) == agentcatalog.KindPicker {
+		cur := s.askFor(instance, paneID)
+		cur.mu.Lock()
+		s.armPicker(cur)
+		cur.mu.Unlock()
 	}
 	slog.Info("remote host chat prompt sent", "device", dev.ID, "pane", paneID)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

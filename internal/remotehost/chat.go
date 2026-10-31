@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"github.com/coder/websocket"
 	"github.com/thewei/solco/internal/chatsession"
+	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/history"
 )
 
@@ -35,6 +36,11 @@ type chatTarget struct {
 	Path     string
 	// Status is Herdr's agent_status for the pane ("" when the pane runs no agent).
 	Status string
+	// ConversationID ("live:<provider>:<terminal>", the desktop's own key) and
+	// Fingerprint (Herdr's agent_session only, never a hook identity) address the
+	// follow-up queue; empty when the conversation is not resolved.
+	ConversationID string
+	Fingerprint    string
 	// Code is "" on success, else the wire error code.
 	Code string
 }
@@ -90,6 +96,12 @@ func (s *Server) resolveChat(instance, paneID string) chatTarget {
 			break
 		}
 		target.Provider, target.Path, target.Code = provider, path, ""
+		target.ConversationID = "live:" + string(provider) + ":" + a.TerminalID
+		if a.AgentSession != nil {
+			target.Fingerprint = conversation.SessionIdentity{
+				Provider: string(provider), Kind: a.AgentSession.Kind, Source: a.AgentSession.Source, Value: a.AgentSession.Value,
+			}.Fingerprint()
+		}
 		break
 	}
 	return target
@@ -108,6 +120,8 @@ type chatBody struct {
 	AgentStatus string `json:"agentStatus,omitempty"`
 	// Interaction is the Question/permission card of a blocked agent.
 	Interaction *chatInteraction `json:"interaction,omitempty"`
+	// Queued is the follow-up waiting behind the running turn.
+	Queued *queuedFrame `json:"queued,omitempty"`
 	chatsession.State
 }
 
@@ -134,6 +148,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request, _ Device) {
 	writeJSON(w, http.StatusOK, chatBody{
 		PaneID: paneID, AgentStatus: target.Status,
 		Interaction: s.interactionFrame(r.Context(), instance, paneID, target.Status, reader),
+		Queued:      s.queuedFor(target),
 		State:       reader.State(s.opts.Now()),
 	})
 }
@@ -168,11 +183,24 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	defer s.trackConn(dev.ID, func() { _ = conn.Close(websocket.StatusPolicyViolation, "revoked"); cancel() })()
-	go func() { // the phone sends nothing; reading detects a close
+	// The phone sends one message: {"t":"older"} asks for the previous page of this stream's window. Anything
+	// else is ignored; reading also detects a close.
+	olderReq := make(chan struct{}, 1)
+	go func() {
 		for {
-			if _, _, err := conn.Read(ctx); err != nil {
+			_, data, err := conn.Read(ctx)
+			if err != nil {
 				cancel()
 				return
+			}
+			var msg struct {
+				T string `json:"t"`
+			}
+			if json.Unmarshal(data, &msg) == nil && msg.T == "older" {
+				select {
+				case olderReq <- struct{}{}:
+				default: // one page at a time; the pending request already covers this one
+				}
 			}
 		}
 	}()
@@ -183,6 +211,9 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 		frame := map[string]any{"t": "chat", "paneId": paneID, "agentStatus": status, "state": reader.State(s.opts.Now())}
 		if card := s.interactionFrame(ctx, instance, paneID, status, reader); card != nil {
 			frame["interaction"] = card
+		}
+		if queued := s.queuedFor(target); queued != nil {
+			frame["queued"] = queued
 		}
 		raw, err := json.Marshal(frame)
 		if err != nil {
@@ -206,9 +237,15 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 		select {
 		case <-ctx.Done():
 			return
+		case <-olderReq:
+			if reader.Older() && !push() {
+				return
+			}
+			continue
 		case <-tick.C:
 		}
-		if n%chatRebindEvery == 0 || status == "blocked" { // a blocked agent retires its card the moment it moves on
+		watching := status == "blocked" || s.pickerWatching(instance, paneID) || s.queuedFor(target) != nil
+		if n%chatRebindEvery == 0 || watching { // a blocked agent retires its card the moment it moves on
 			next := s.resolveChat(instance, paneID)
 			switch {
 			case next.Code == "unknown_pane":
@@ -218,7 +255,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 				_ = conn.Close(statusNoConversation, "no_conversation")
 				return
 			case next.Code == "":
-				status = next.Status // a status change alone changes the frame
+				status, target = next.Status, next // a status change alone changes the frame
 				if next.Path != reader.Path() {
 					fresh, err := chatsession.Open(next.Provider, next.Path)
 					if err != nil {
@@ -234,7 +271,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 			continue // a momentarily unreadable file is retried, not fatal
 		}
 		// A blocked agent re-derives its card every poll (the frame is hashed, so only a change goes out).
-		if (changed || n%chatRebindEvery == 0 || status == "blocked") && !push() {
+		if (changed || n%chatRebindEvery == 0 || watching) && !push() {
 			return
 		}
 	}

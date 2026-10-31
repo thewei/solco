@@ -1,0 +1,6 @@
+{
+  "requestId": "req_0123456789",
+  "workspaceId": "w1",
+  "kind": "claude-code",
+  "prompt": "fix the failing test"
+}

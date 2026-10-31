@@ -8,12 +8,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/thewei/solco/internal/chatattach"
 	"github.com/thewei/solco/internal/herdr"
 )
 
@@ -142,14 +144,56 @@ func startRealHerdr(t *testing.T) (string, *herdr.Manager, string) {
 // <dir>/instance.txt. Opt-in for the same reason as the test above:
 //
 //	SOLCO_REMOTEHOST_SERVE=/tmp/solco-e2e GOTOOLCHAIN=auto go test -run ServeRealHerdr ./internal/remotehost/
+//
+// SOLCO_REMOTEHOST_SERVE_PORT picks another loopback port (default 17788) and
+// SOLCO_REMOTEHOST_SERVE_AGENT=omp starts that real agent in the pane.
 func TestServeRealHerdrForClient(t *testing.T) {
 	dir := os.Getenv("SOLCO_REMOTEHOST_SERVE")
 	if dir == "" {
 		t.Skip("set SOLCO_REMOTEHOST_SERVE=<dir> to serve a real herdr to an external client")
 	}
 	session, m, _ := startRealHerdr(t)
+	if kind := os.Getenv("SOLCO_REMOTEHOST_SERVE_AGENT"); kind != "" {
+		// A real agent in the pane (omp/pi/claude/codex), for a phone to chat with.
+		proj, err := m.Projection(session)
+		if err != nil || len(proj.Panes) == 0 {
+			t.Fatalf("no pane: %v", err)
+		}
+		cmd := exec.Command("herdr", "agent", "start", "serve-agent", "--kind", kind, "--pane", proj.Panes[0].ID)
+		cmd.Env = append(os.Environ(), "HERDR_SESSION="+session)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("agent start: %v\n%s", err, out)
+		}
+	}
+	port := 17788
+	if v, err := strconv.Atoi(os.Getenv("SOLCO_REMOTEHOST_SERVE_PORT")); err == nil && v > 0 {
+		port = v
+	}
 
-	srv, err := New(Options{Config: Config{Mode: ModeLoopback, Port: 17788}, Dir: t.TempDir(), Backend: NewManagerBackend(m)})
+	opts := Options{Config: Config{Mode: ModeLoopback, Port: port}, Dir: t.TempDir(), Backend: NewManagerBackend(m)}
+	if ServeLauncher != nil {
+		opts.Launcher = ServeLauncher(m)
+	}
+	if ServeGit != nil {
+		opts.Git = ServeGit()
+	}
+	if ServeQueue != nil {
+		opts.Queue = ServeQueue()
+	}
+	// SOLCO_REMOTEHOST_SERVE_IDENTITY="codex=/path/rollout.jsonl" stands in for the Mac app's
+	// hook memory: Herdr's agent list carries no session identity for Claude Code/Codex.
+	if agent, path, ok := strings.Cut(os.Getenv("SOLCO_REMOTEHOST_SERVE_IDENTITY"), "="); ok {
+		opts.Identity = func(_, _, _, kind string) *herdr.AgentSessionIdentity {
+			if kind != agent {
+				return nil
+			}
+			return &herdr.AgentSessionIdentity{Agent: agent, Kind: "path", Value: path}
+		}
+	}
+	opts.Attach = func(data []byte, mime, name string) (string, error) {
+		return chatattach.Save(filepath.Join(dir, "attachments"), data, mime, name, time.Now())
+	}
+	srv, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}

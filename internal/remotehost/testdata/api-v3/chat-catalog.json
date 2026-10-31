@@ -1,0 +1,25 @@
+{
+  "commands": [
+    {
+      "name": "/compact",
+      "insert": "/compact ",
+      "detail": "Compact the conversation",
+      "kind": "text"
+    }
+  ],
+  "skills": [
+    {
+      "name": "/review",
+      "insert": "/review ",
+      "detail": "Review the diff",
+      "kind": "skill"
+    }
+  ],
+  "models": [
+    {
+      "id": "anthropic/sonnet"
+    }
+  ],
+  "modelVerb": "/model ",
+  "defaultModel": "sonnet"
+}

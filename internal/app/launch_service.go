@@ -36,6 +36,10 @@ type LaunchService struct {
 	// AttachLedgerPath, persisted on every queue mutation.
 	ledgerMu   sync.Mutex
 	ledgerPath string
+
+	// sessions is the shared new-session starter (session_launch.go).
+	sessionsOnce sync.Once
+	sessions     *SessionStarter
 }
 
 func NewLaunchService(manager *herdr.Manager) *LaunchService {

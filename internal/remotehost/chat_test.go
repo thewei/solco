@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+
 	"github.com/thewei/solco/internal/herdr"
 )
 
@@ -133,5 +135,57 @@ func TestChatFallsBackToTheAppsHookIdentity(t *testing.T) {
 	}
 	if resp := h.get("/api/v3/panes/w1:p1/chat?instance=default", h.token, nil); resp.StatusCode != 200 {
 		t.Fatalf("with the hook identity: %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestChatStreamOlderAsksForThePreviousPageOnlyOnThatSocket(t *testing.T) {
+	h := newHarness(t)
+	var body string
+	total := 130
+	for i := 0; i < total; i++ {
+		body += `{"type":"user","cwd":"/work/solco","timestamp":"2026-08-01T01:00:00Z","message":{"content":"m` + string(rune('a'+i%26)) + `"}}` + "\n"
+	}
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	proj := fixtureProjection()
+	proj.Agents = []herdr.Agent{{
+		TerminalID: "term_a", PaneID: "w1:p1", Kind: "claude", Status: "idle",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "claude", Kind: "path", Value: path},
+	}}
+	h.back.set(proj)
+	turns := func(frame map[string]any) (int, bool) {
+		state, _ := frame["state"].(map[string]any)
+		list, _ := state["turns"].([]any)
+		older, _ := state["hasOlder"].(bool)
+		return len(list), older
+	}
+	conn, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream?instance=default", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, older := turns(readJSON(t, conn)); n != 60 || !older {
+		t.Fatalf("first page: %d turns, hasOlder=%v", n, older)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"t":"older"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if n, older := turns(readJSON(t, conn)); n != 120 || !older {
+		t.Fatalf("after older: %d turns, hasOlder=%v", n, older)
+	}
+	// another socket still opens at the newest page: paging is per stream
+	other, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream?instance=default", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := turns(readJSON(t, other)); n != 60 {
+		t.Fatalf("a second stream opened at %d turns", n)
+	}
+	// noise is ignored
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`not json`)); err != nil {
+		t.Fatal(err)
 	}
 }

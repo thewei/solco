@@ -53,6 +53,18 @@ type Options struct {
 	// Code and Codex report none; the desktop learns it from its own hooks).
 	// It must match provider and terminal itself; nil disables the fallback.
 	Identity func(instance, paneID, terminalID, kind string) *herdr.AgentSessionIdentity
+	// Launcher starts new sessions for the phone (POST /launch); nil = the Host
+	// offers no launch and bootstrap says so.
+	Launcher Launcher
+	// Queue is the desktop's follow-up queue (POST .../chat/send {queue}, .../chat/queue/cancel); nil = no queueing.
+	Queue FollowUps
+	// Git reads a Workspace's working-tree changes for the phone (GET .../git); nil = no Git view.
+	Git GitReader
+	// Catalog lists a pane agent's own Skills, commands and models for the composer; nil = agentcatalog.Load.
+	Catalog catalogLoader
+	// Attach stores an uploaded Chat attachment and returns its absolute path (POST .../chat/attachments);
+	// nil = the Host takes no uploads and bootstrap says so.
+	Attach   func(data []byte, mime, name string) (string, error)
 	Home     string // user home for provider transcript roots ("" = os.UserHomeDir)
 	HostName string
 	Version  string
@@ -254,10 +266,18 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/events", s.guard(ScopeView, s.handleEvents))
 	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/peek", s.guard(ScopeView, s.handlePeek))
 	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat", s.guard(ScopeView, s.handleChat))
+	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat/catalog", s.guard(ScopeView, s.handleChatCatalog))
+	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat/files", s.guard(ScopeView, s.handleChatFiles))
+	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat/subagents/{subID}", s.guard(ScopeView, s.handleChatSubagent))
 	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat/stream", s.guard(ScopeView, s.handleChatStream))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/send", s.guard(ScopeTerminalInput, s.handleChatSend))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/queue/cancel", s.guard(ScopeTerminalInput, s.handleChatQueueCancel))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/attachments", s.guard(ScopeTerminalInput, s.handleChatAttach))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/stop", s.guard(ScopeTerminalInput, s.handleChatStop))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/answer", s.guard(ScopeTerminalInput, s.handleChatAnswer))
+	mux.Handle("POST "+apiPrefix+"/launch", s.guard(ScopeManage, s.handleLaunch))
+	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git", s.guard(ScopeView, s.handleGitStatus))
+	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git/diff", s.guard(ScopeView, s.handleGitDiff))
 	mux.Handle("GET "+apiPrefix+"/terminals/{terminalID}/stream", s.guard(ScopeView, s.handleTerminal))
 	return mux
 }
@@ -395,13 +415,28 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	if len(hostID) > 16 {
 		hostID = hostID[:16]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	capabilities := map[string]bool{"terminal": true, "chat": true}
+	body := map[string]any{
 		"hostId":       hostID,
 		"hostName":     s.opts.HostName,
 		"version":      s.opts.Version,
-		"capabilities": map[string]bool{"terminal": true, "chat": true},
+		"capabilities": capabilities,
 		"instances":    instances,
-	})
+	}
+	if s.opts.Launcher != nil {
+		capabilities["launch"] = true
+		body["launchKinds"] = s.opts.Launcher.Kinds()
+	}
+	if s.opts.Git != nil {
+		capabilities["git"] = true
+	}
+	if s.opts.Attach != nil {
+		capabilities["attachments"] = true
+	}
+	if s.opts.Queue != nil {
+		capabilities["queue"] = true
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) handleTree(w http.ResponseWriter, r *http.Request, _ Device) {

@@ -11,7 +11,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -35,6 +34,19 @@ const (
  * [POS]: WebView Chat 的唯一表现层桥：投影与动作编组到窗口 UI 通道，会话运行时/Herdr 方法零改动；页面只能通过此桥读取聊天投影
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+// ChatFeatures are the optional abilities of a page host (see
+// ChatBridgeState.Features). The page treats an absent field as "on".
+type ChatFeatures struct {
+	// Voice: the dictation button (chat.Transcribe).
+	Voice bool `json:"voice"`
+	// Attach: the file/image entries of the + menu, paste and drop.
+	Attach bool `json:"attach"`
+	// Queue: a follow-up can be queued behind a running turn.
+	Queue bool `json:"queue"`
+	// SubagentDrawer: a sub-agent's own transcript can be opened (chat.OpenSubagent).
+	SubagentDrawer bool `json:"subagentDrawer"`
+}
 
 // ChatBridgeState is the full chat projection the page renders. It is
 // presentation state only: the conversation runtime, the send path and the
@@ -80,6 +92,11 @@ type ChatBridgeState struct {
 	// Outline mirrors Settings -> General -> "Chat outline": the tick rail
 	// that jumps between the user's messages.
 	Outline bool `json:"outline"`
+	// Features names what this host of the page can do beyond reading and
+	// sending. The desktop offers all of them; the phone client's host (the
+	// same page, another bridge) turns off what its Host API does not serve
+	// yet, so the page hides those entries instead of failing on use.
+	Features ChatFeatures `json:"features"`
 	// Root is the local repository root the changes card resolves paths
 	// against ("" for read-only sessions and non-repository panes).
 	Root string `json:"root,omitempty"`
@@ -593,33 +610,7 @@ func (b *ChatBridge) ListFiles(ctx context.Context, token string) ([]string, err
 	if dir == "" {
 		return nil, nil
 	}
-	sub, name := "", strings.ToLower(strings.TrimPrefix(token, "./"))
-	if at := strings.LastIndex(name, "/"); at != -1 {
-		sub, name = name[:at], name[at+1:]
-	}
-	entries, err := os.ReadDir(filepath.Join(dir, filepath.FromSlash(sub)))
-	if err != nil {
-		return nil, nil // unreadable or gone: no suggestions, no error spam
-	}
-	found := make([]string, 0, 8)
-	for _, entry := range entries {
-		entryName := entry.Name()
-		if strings.HasPrefix(entryName, ".") && !strings.HasPrefix(name, ".") {
-			continue
-		}
-		if name != "" && !strings.Contains(strings.ToLower(entryName), name) {
-			continue
-		}
-		label := entryName
-		if entry.IsDir() {
-			label += "/"
-		}
-		found = append(found, label)
-		if len(found) >= 20 {
-			break
-		}
-	}
-	return found, nil
+	return chatsession.ListFiles(dir, token, false), nil
 }
 
 // callOnWindow runs fn on the window UI lane and waits for it; inline when
@@ -672,6 +663,7 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		VoiceSource:    voiceSourceName(s.settings.Voice),
 		SerifProse:     s.settings.General.ChatSerif,
 		Outline:        s.settings.General.ChatOutline,
+		Features:       ChatFeatures{Voice: true, Attach: true, Queue: true, SubagentDrawer: true},
 	}
 	state.EchoPending = s.chatPendingEcho != nil
 	if s.chatAwaitingBind() {

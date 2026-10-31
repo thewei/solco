@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/thewei/solco/internal/agentcatalog"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 // [INPUT]: server_test.go 的假 Backend 与 harness，真实的 handler / WebSocket 帧
@@ -229,6 +231,98 @@ func TestGoldenAPIv3(t *testing.T) {
 		t.Fatal(err)
 	}
 	golden(t, "error-interaction-gone.json", bodyOf(t, gone))
+
+	// launch (P4): a Host with a launcher advertises it in bootstrap; the
+	// request body, the answer and a named refusal
+	h.srv.opts.Launcher = &fakeLauncher{pane: "w1:p2"}
+	golden(t, "bootstrap-launch.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	rawLaunch, _ := json.Marshal(launchRequest{RequestID: "req_0123456789", WorkspaceID: "w1", Kind: "claude-code", Prompt: "fix the failing test"})
+	golden(t, "launch-client-request.json", rawLaunch)
+	golden(t, "launch-ok.json", bodyOf(t, h.launch("/api/v3/launch", h.token, string(rawLaunch))))
+	golden(t, "error-launch-bad-request.json", bodyOf(t, h.launch("/api/v3/launch", h.token, `{"requestId":"x","kind":"terminal"}`)))
+	h.srv.opts.Launcher = &fakeLauncher{pane: "w1:p2", pending: true}
+	golden(t, "launch-prompt-pending.json", bodyOf(t, h.launch("/api/v3/launch", h.token, string(rawLaunch))))
+	h.srv.opts.Git = sampleGit()
+	golden(t, "bootstrap-git.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "git-status.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git", h.token, nil)))
+	golden(t, "git-diff.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git/diff?path=a.go", h.token, nil)))
+	golden(t, "error-git-unknown-file.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git/diff?path=gone.go", h.token, nil)))
+	h.srv.opts.Catalog = func(context.Context, history.AgentID, string) agentcatalog.Catalog {
+		return agentcatalog.Catalog{
+			Commands:     []agentcatalog.Entry{{Name: "/compact", Insert: "/compact ", Detail: "Compact the conversation", Kind: agentcatalog.KindText}},
+			Skills:       []agentcatalog.Entry{{Name: "/review", Insert: "/review ", Detail: "Review the diff", Kind: agentcatalog.KindSkill}},
+			Models:       []agentcatalog.Model{{ID: "anthropic/sonnet"}},
+			ModelVerb:    "/model ",
+			DefaultModel: "sonnet",
+		}
+	}
+	golden(t, "chat-catalog.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat/catalog?instance=default", h.token, nil)))
+	folder := t.TempDir()
+	for _, name := range []string{"src/app.go", "README.md", ".env"} {
+		_ = os.MkdirAll(filepath.Join(folder, filepath.Dir(name)), 0o755)
+		_ = os.WriteFile(filepath.Join(folder, name), nil, 0o644)
+	}
+	h.back.mu.Lock()
+	for i := range h.back.proj.Panes {
+		if h.back.proj.Panes[i].ID == "w1:p1" {
+			h.back.proj.Panes[i].CWD = folder
+		}
+	}
+	h.back.mu.Unlock()
+	golden(t, "chat-files.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat/files?instance=default", h.token, nil)))
+	h.srv.opts.Attach = func([]byte, string, string) (string, error) {
+		return "/Users/me/Library/Caches/Solco/ChatAttachments/20261031-120000-a1b2c3.png", nil
+	}
+	golden(t, "bootstrap-attach.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	rawAttach := []byte(attachBody([]byte("png"), "image/png", "shot.png"))
+	golden(t, "attach-client-request.json", rawAttach)
+	golden(t, "attach-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/attachments?instance=default", h.token, string(rawAttach))))
+	golden(t, "error-attach-bad-request.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/attachments?instance=default", h.token, `{"dataBase64":"@@@"}`)))
+
+	// sub-agents: the card in the chat state, the drawer's own transcript and the refusal for an unlisted id
+	subSession, subDir := filepath.Join(t.TempDir(), "sub.jsonl"), ""
+	subDir = filepath.Join(strings.TrimSuffix(subSession, ".jsonl"), "subagents")
+	if err := os.MkdirAll(subDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	spawn := claudeFixture + `{"type":"assistant","cwd":"/work/solco","timestamp":"2026-08-01T01:00:02Z","message":{"id":"m2","content":[{"type":"tool_use","id":"call_1","name":"Agent","input":{"description":"Find the parser","subagent_type":"Explore","prompt":"find it"}}]}}` + "\n"
+	files := map[string]string{
+		subSession: spawn,
+		filepath.Join(subDir, "agent-abc123.meta.json"): `{"agentType":"Explore","description":"Find the parser","toolUseId":"call_1"}`,
+		filepath.Join(subDir, "agent-abc123.jsonl"):     subagentFixture,
+	}
+	stamp := time.Date(2026, 8, 1, 1, 0, 20, 0, time.UTC)
+	for file, body := range files {
+		if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(file, stamp, stamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.srv.opts.Now = func() time.Time { return stamp.Add(time.Hour) }
+	subProj := fixtureProjection()
+	subProj.Agents = []herdr.Agent{{
+		TerminalID: "term_a", PaneID: "w1:p1", Kind: "claude", Status: "idle",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "claude", Kind: "path", Value: subSession},
+	}}
+	h.back.set(subProj)
+	golden(t, "chat-with-subagent.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat", h.token, nil)))
+	golden(t, "chat-subagent.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat/subagents/abc123", h.token, nil)))
+	golden(t, "error-unknown-subagent.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat/subagents/nope", h.token, nil)))
+
+	// follow-up queue: parked behind a running turn, shown in the chat state, refused when full, withdrawn
+	h.srv.opts.Queue = &fakeQueue{}
+	golden(t, "bootstrap-queue.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	subProj.Panes[0].AgentStatus = "working"
+	h.back.set(subProj)
+	rawQueue := []byte(`{"text":"then run the tests","queue":true}`)
+	golden(t, "queue-client-request.json", rawQueue)
+	golden(t, "queue-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue))))
+	golden(t, "chat-queued.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat", h.token, nil)))
+	golden(t, "error-queue-full.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue))))
+	golden(t, "queue-cancel-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/cancel?instance=default", h.token, `{}`)))
+	golden(t, "error-queue-none.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/cancel?instance=default", h.token, `{}`)))
 
 	// the three upstream messages the phone sends (what the Host accepts)
 	for name, msg := range map[string]map[string]any{

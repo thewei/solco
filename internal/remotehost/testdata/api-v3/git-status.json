@@ -1,0 +1,23 @@
+{
+  "workspaceId": "w1",
+  "repo": true,
+  "branch": "main",
+  "head": "abc1234",
+  "upstream": {
+    "name": "origin/main",
+    "ahead": 1,
+    "behind": 0
+  },
+  "files": [
+    {
+      "path": "a.go",
+      "status": "modified",
+      "staged": false,
+      "unstaged": true,
+      "additions": 2,
+      "deletions": 1
+    }
+  ],
+  "additions": 2,
+  "deletions": 1
+}

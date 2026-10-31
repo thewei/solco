@@ -1,0 +1,60 @@
+{
+  "paneId": "w1:p1",
+  "agentStatus": "working",
+  "queued": {
+    "text": "then run the tests",
+    "state": "queued"
+  },
+  "provider": "claude-code",
+  "model": "claude-sonnet-4-5",
+  "working": true,
+  "subagents": [
+    {
+      "id": "abc123",
+      "provider": "claude-code",
+      "type": "Explore",
+      "description": "Find the parser",
+      "status": "done",
+      "startedMs": 1785546010000,
+      "updatedMs": 1785546020000,
+      "toolCalls": 0,
+      "result": "It is in parse.go.",
+      "prompt": "Find the parser"
+    }
+  ],
+  "turns": [
+    {
+      "user": true,
+      "text": "Fix the parser",
+      "tsMs": 1785546000000
+    },
+    {
+      "user": false,
+      "narration": "I found it.",
+      "live": true,
+      "tsMs": 1785546001000,
+      "tools": [
+        {
+          "name": "Agent",
+          "input": "Find the parser"
+        }
+      ],
+      "steps": [
+        {
+          "kind": "narration",
+          "text": "I found it.",
+          "tsMs": 1785546001000
+        },
+        {
+          "kind": "tool",
+          "toolName": "Agent",
+          "toolInput": "Find the parser",
+          "tsMs": 1785546002000,
+          "subagentIds": [
+            "abc123"
+          ]
+        }
+      ]
+    }
+  ]
+}
