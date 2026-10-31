@@ -382,3 +382,96 @@ func TestQueuedConversationsSnapshot(t *testing.T) {
 		t.Fatalf("queued snapshot = %v", ids)
 	}
 }
+
+// TestRunRetriesARetainedItemUntilTheTurnBoundary pins the long-turn case: the
+// first bounded wait times out (retained), nothing wakes the worker again, and
+// yet the follow-up is delivered once the boundary is reached.
+func TestRunRetriesARetainedItemUntilTheTurnBoundary(t *testing.T) {
+	id := ConversationID("live:omp:pane-7")
+	queue := NewFollowUpQueue()
+	if err := queue.Enqueue(queuedItem(id)); err != nil {
+		t.Fatal(err)
+	}
+	transport := &fakeDeliveryTransport{fingerprint: "fp-1", waitErr: errors.New("wait timed out")}
+	wake := make(chan struct{}, 1)
+	worker := NewDeliveryWorker(queue, transport, NewReservations(), wake)
+	worker.RetryAfter = 5 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go worker.Run(ctx)
+	wake <- struct{}{}
+
+	time.Sleep(40 * time.Millisecond) // several retained cycles
+	transport.mu.Lock()
+	calls := transport.deliverCalls
+	transport.waitErr = nil // the turn ended
+	transport.mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("delivered %d prompts before the turn boundary", calls)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if item, ok := queue.Get(id); ok && item.State == Delivered {
+			transport.mu.Lock()
+			defer transport.mu.Unlock()
+			if transport.deliverCalls != 1 {
+				t.Fatalf("deliverCalls = %d, want exactly 1", transport.deliverCalls)
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	item, _ := queue.Get(id)
+	t.Fatalf("never delivered; state %s", item.State)
+}
+
+// TestRetainedItemFailsClosedAfterTheCap pins the bound: a boundary that never
+// comes ends as recoverable text, not an endless silent queue.
+func TestRetainedItemFailsClosedAfterTheCap(t *testing.T) {
+	id := ConversationID("live:omp:pane-7")
+	queue := NewFollowUpQueue()
+	if err := queue.Enqueue(queuedItem(id)); err != nil {
+		t.Fatal(err)
+	}
+	transport := &fakeDeliveryTransport{fingerprint: "fp-1", waitErr: errors.New("pane gone")}
+	var states []QueueState
+	worker := deliveryWorker(queue, transport, &states)
+	for i := 1; i < MaxRetainedCycles; i++ {
+		if !worker.DrainAll(context.Background()) {
+			t.Fatalf("cycle %d: a retained item must ask for another cycle", i)
+		}
+	}
+	if worker.DrainAll(context.Background()) {
+		t.Fatal("the capped cycle must stop retrying")
+	}
+	item, _ := queue.Get(id)
+	if item.State != FailedRecoverable || transport.deliverCalls != 0 {
+		t.Fatalf("state %s, prompts %d", item.State, transport.deliverCalls)
+	}
+	if states[len(states)-1] != FailedRecoverable {
+		t.Fatalf("the UI never saw the failure: %v", states)
+	}
+}
+
+// TestCancelledItemStopsTheRetries: a withdrawn follow-up leaves nothing to retry.
+func TestCancelledItemStopsTheRetries(t *testing.T) {
+	id := ConversationID("live:omp:pane-7")
+	queue := NewFollowUpQueue()
+	if err := queue.Enqueue(queuedItem(id)); err != nil {
+		t.Fatal(err)
+	}
+	transport := &fakeDeliveryTransport{fingerprint: "fp-1", waitErr: errors.New("wait timed out")}
+	worker := deliveryWorker(queue, transport, nil)
+	if !worker.DrainAll(context.Background()) {
+		t.Fatal("first cycle must retain")
+	}
+	if _, err := queue.Cancel(id); err != nil {
+		t.Fatal(err)
+	}
+	if worker.DrainAll(context.Background()) {
+		t.Fatal("a cancelled item must not ask for another cycle")
+	}
+	if len(worker.retained) != 0 {
+		t.Fatalf("retained counters leaked: %v", worker.retained)
+	}
+}

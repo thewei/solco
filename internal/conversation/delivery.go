@@ -3,13 +3,16 @@ package conversation
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // Queue-worker delivery (0.6 §11.3/§11.4): the production owner of the
 // Delivering→Delivered/DeliveryUncertain state machine. The pipeline is
 // exact-target wait → occupant identity revalidation → atomic claim →
 // exactly one semantic prompt → reconcile result. Blocked and timeout
-// retain the queue; identity change and definite rejection fail closed
+// retain the queue (and Run retries a retained item on a timer, so a turn
+// longer than one bounded wait still gets its follow-up; after
+// MaxRetainedCycles the item fails closed into recoverable text); identity change and definite rejection fail closed
 // into recoverable text; uncertainty is a tombstone that never auto-retries
 // and never pretends the text was unsent; cancel-A/enqueue-B races cannot
 // let an old worker send B (claims are request-id keyed).
@@ -71,7 +74,19 @@ type DeliveryWorker struct {
 	// OnState observes every state transition for UI projection; the worker
 	// never blocks on it.
 	OnState func(item QueueItem)
+	// RetryAfter spaces the retries of a retained item (zero = DefaultRetryAfter).
+	RetryAfter time.Duration
+
+	retained map[ConversationID]int // consecutive retained cycles per conversation (Run's goroutine only)
 }
+
+const (
+	// DefaultRetryAfter is the pause between two cycles for a retained item.
+	DefaultRetryAfter = 5 * time.Second
+	// MaxRetainedCycles bounds how long a follow-up waits for its turn boundary: each cycle is at most one
+	// bounded wait plus RetryAfter, so a vanished pane or a stuck agent ends in a visible failure, not a silent queue.
+	MaxRetainedCycles = 120
+)
 
 func NewDeliveryWorker(queue *FollowUpQueue, transport DeliveryTransport, reservations *Reservations, wake <-chan struct{}) *DeliveryWorker {
 	return &DeliveryWorker{Queue: queue, Transport: transport, Reservations: reservations, Wake: wake}
@@ -83,26 +98,63 @@ func (w *DeliveryWorker) observe(item QueueItem) {
 	}
 }
 
-// Run drains on every wake until ctx is cancelled.
+// Run drains on every wake, and again after RetryAfter while an item stays
+// retained, until ctx is cancelled.
 func (w *DeliveryWorker) Run(ctx context.Context) {
+	var retry <-chan time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-w.Wake:
-			w.DrainAll(ctx)
+		case <-retry:
+		}
+		retry = nil
+		if w.DrainAll(ctx) {
+			after := w.RetryAfter
+			if after <= 0 {
+				after = DefaultRetryAfter
+			}
+			retry = time.After(after)
 		}
 	}
 }
 
-// DrainAll processes every currently-pending conversation once.
-func (w *DeliveryWorker) DrainAll(ctx context.Context) {
-	for _, id := range w.Queue.QueuedConversations() {
-		if ctx.Err() != nil {
-			return
-		}
-		w.DeliverOnce(ctx, id)
+// DrainAll processes every currently-pending conversation once and reports
+// whether any of them stays retained for another cycle.
+func (w *DeliveryWorker) DrainAll(ctx context.Context) (retained bool) {
+	if w.retained == nil {
+		w.retained = map[ConversationID]int{}
 	}
+	pending := w.Queue.QueuedConversations()
+	live := make(map[ConversationID]bool, len(pending))
+	for _, id := range pending {
+		live[id] = true
+	}
+	for id := range w.retained {
+		if !live[id] { // delivered, cancelled or replaced since the last cycle
+			delete(w.retained, id)
+		}
+	}
+	for _, id := range pending {
+		if ctx.Err() != nil {
+			return retained
+		}
+		outcome := w.DeliverOnce(ctx, id)
+		if !outcome.Retained {
+			delete(w.retained, id)
+			continue
+		}
+		if w.retained[id]++; w.retained[id] >= MaxRetainedCycles {
+			delete(w.retained, id)
+			if failed, err := w.Queue.Transition(id, FailedRecoverable, "the agent did not reach a turn boundary in time"); err == nil {
+				w.observe(failed)
+			}
+			continue
+		}
+		retained = true
+	}
+	return retained
 }
 
 // DeliverOnce runs one pipeline cycle for one conversation. It never sends
