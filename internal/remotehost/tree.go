@@ -4,8 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
+	"time"
 
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 /**
@@ -48,11 +51,26 @@ type TreePane struct {
 type TreeAgent struct {
 	Provider string `json:"provider"`
 	Status   string `json:"status"`
+	// Title is what the desktop sidebar calls this agent: its session title,
+	// else its name, else the provider's display name. LastActiveMs is the
+	// desktop's last-worked time (Unix ms), absent while unknown.
+	Title        string `json:"title,omitempty"`
+	LastActiveMs int64  `json:"lastActiveMs,omitempty"`
+}
+
+// AgentFact is the desktop's own resolved facts about one live agent, keyed by
+// terminal ID. The Host never re-derives a title: it forwards what the desktop
+// already worked out (nil for a Herdr session the desktop is not showing).
+type AgentFact struct {
+	Title      string
+	LastActive time.Time
 }
 
 // BuildTree maps a Herdr projection to the wire tree, keeping Herdr's order.
 // Revision is left 0: the server assigns it when the content changes.
-func BuildTree(instance string, p herdr.Projection) Tree {
+func BuildTree(instance string, p herdr.Projection) Tree { return buildTree(instance, p, nil) }
+
+func buildTree(instance string, p herdr.Projection, facts map[string]AgentFact) Tree {
 	tree := Tree{Instance: instance, Workspaces: []TreeWorkspace{}}
 	tabsByProject := map[string][]herdr.Tab{}
 	for _, t := range p.Tabs {
@@ -69,7 +87,11 @@ func BuildTree(instance string, p herdr.Projection) Tree {
 			for _, pane := range panesByTab[tab.ID] {
 				tp := TreePane{PaneID: pane.ID, TerminalID: pane.TerminalID, Label: pane.Label, CWD: pane.CWD}
 				if pane.Agent != "" {
-					tp.Agent = &TreeAgent{Provider: pane.Agent, Status: pane.AgentStatus}
+					fact := facts[pane.TerminalID]
+					tp.Agent = &TreeAgent{Provider: pane.Agent, Status: pane.AgentStatus, Title: agentTitle(fact.Title, pane.Agent)}
+					if !fact.LastActive.IsZero() {
+						tp.Agent.LastActiveMs = fact.LastActive.UnixMilli()
+					}
 				}
 				tt.Panes = append(tt.Panes, tp)
 			}
@@ -78,6 +100,18 @@ func BuildTree(instance string, p herdr.Projection) Tree {
 		tree.Workspaces = append(tree.Workspaces, ws)
 	}
 	return tree
+}
+
+// agentTitle is the desktop's fallback chain as far as the Host can follow it:
+// the desktop's resolved title, else the provider's display name.
+func agentTitle(resolved, kind string) string {
+	if title := strings.TrimSpace(resolved); title != "" {
+		return title
+	}
+	if id, ok := history.ParseAgentID(kind); ok {
+		return id.DisplayName()
+	}
+	return ""
 }
 
 // hash fingerprints the tree content (revision excluded) for change detection.

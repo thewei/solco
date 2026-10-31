@@ -20,7 +20,9 @@
               "cwd": "/work/solco",
               "agent": {
                 "provider": "claude",
-                "status": "working"
+                "status": "working",
+                "title": "Fix the parser",
+                "lastActiveMs": 1785546001000
               }
             },
             {

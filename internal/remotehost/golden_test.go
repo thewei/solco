@@ -102,6 +102,10 @@ func TestGoldenAPIv3(t *testing.T) {
 	h.srv.fingerprint, h.srv.listenHost, h.srv.listenPort = fp, "192.168.1.20", "7788"
 	h.srv.mu.Unlock()
 	h.srv.opts.HostName = "Test Mac"
+	// the desktop's resolved title and last-worked time for the agent pane (the shell pane has none)
+	h.srv.opts.AgentFacts = func(string) map[string]AgentFact {
+		return map[string]AgentFact{"term_a": {Title: "Fix the parser", LastActive: time.UnixMilli(1785546001000)}}
+	}
 
 	// pairing: the offer URL and the POST /pair answer
 	offer, err := h.srv.StartPairing()

@@ -53,6 +53,9 @@ type Options struct {
 	// Code and Codex report none; the desktop learns it from its own hooks).
 	// It must match provider and terminal itself; nil disables the fallback.
 	Identity func(instance, paneID, terminalID, kind string) *herdr.AgentSessionIdentity
+	// AgentFacts supplies the desktop's resolved title and last-worked time per agent terminal for the
+	// Herdr session it shows (nil map for any other); nil = the tree carries provider names only.
+	AgentFacts func(instance string) map[string]AgentFact
 	// Launcher starts new sessions for the phone (POST /launch); nil = the Host
 	// offers no launch and bootstrap says so.
 	Launcher Launcher
@@ -494,7 +497,11 @@ func (s *Server) currentTree(instance string) (Tree, error) {
 	if err != nil {
 		return Tree{}, err
 	}
-	tree := BuildTree(instance, p)
+	var facts map[string]AgentFact
+	if s.opts.AgentFacts != nil {
+		facts = s.opts.AgentFacts(instance)
+	}
+	tree := buildTree(instance, p, facts)
 	h := tree.hash()
 	s.mu.Lock()
 	st := s.trees[instance]
