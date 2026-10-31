@@ -377,3 +377,18 @@ git diff --check
 | 首帧颜色 | ❌→✅ WebView 首次创建出现一帧浅色（真机逐帧抓取：`#f5f5f7`）：CSS 已应用而 `data-theme` 要等模块脚本执行。`index.html` 加同步内联脚本按应用解析的外观先定 `data-theme`；原生填充 `BackgroundColor` 与 `theme.css` 令牌由 `TestWebviewBackgroundMatchesPageTokens` 锁定。修复后连续 12 帧全为 `#161618`。 |
 
 验证：`go test ./...` · `mygo vet .` · `tsc --noEmit` · `vite build`；真机逐帧（`screencapture` 连抓）确认无浅色帧。未能真机覆盖：Codex/Claude 长会话的 live Earlier（单测覆盖）。
+
+## Decision 2026-10-31 · 长会话虚拟滚动（0.11.1，presentation only）
+
+用户反馈：会话很长时页面会卡。原先靠 `content-visibility`（`.far`）只跳过绘制，DOM 与布局仍随轮次线性增长。现改为窗口化渲染：
+
+| 项 | 决定 |
+|---|---|
+| 阈值 | 轮次 ≥ `VIRTUAL_MIN`（40）才窗口化；更短的会话保持普通 DOM（无任何行为变化）。 |
+| 实现 | `@tanstack/react-virtual`，行高实测（`measureElement`），`overscan 8`；行 key = 角色 + `tsMs`（重复按序编号），所以 “Earlier messages” 前插后已测得的高度仍然有效。逻辑集中在 `frontend/src/turnlist.ts`（`useTurnList`）。 |
+| 导航 | ⌘↑/⌘↓、左侧大纲（`TocRail`）改为按轮次索引问 `useTurnList`（`top`/`scrollTo`），不再查 DOM，两种模式一致；滚动落点统一为目标轮次顶边。 |
+| ⌘F | `window.find` 只能搜到已渲染的轮次：先在 DOM 内向前/向后找；没有更多命中时，按轮次文本（`turnText`）找最近的未渲染命中，滚入后再搜。搜索框在调用期间 `visibility:hidden`，因为浏览器的页内查找会匹配表单里的查询词本身。 |
+| 粘底 | `getTotalSize()` 变化（行测量落定）时若处于粘底状态则重新贴底；“N new messages ↓” 逻辑不变。 |
+| 前插定位 | `loadOlder` 记下视口顶端轮次的 key 与偏移；新页落地后按 key 找到新索引，连续 4 帧按虚拟器的 `start` 对齐（新行在上方陆续测量，估算值会被修正）。仅按 `scrollHeight` 差值对齐会偏出约一屏。 |
+
+验证（浏览器 + 桩桥接，200 轮合成会话）：只挂载 9–22 行；8 个滚动位置视口内无空洞；追加后粘底、上滚后出 pill；⌘↑×4/⌘↓×2、大纲点击首/中/末正确；前插 60 轮后锚点轮次偏移前后均为 −153；⌘F 命中未渲染的第 35 轮；30 轮会话仍为普通 DOM 且 ⌘↑/⌘↓ 对齐顶边。`tsc --noEmit` · `vite build` · `go test ./...`。
