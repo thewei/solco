@@ -13,6 +13,7 @@ import (
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/herdrhooks"
+	"github.com/thewei/solco/internal/history"
 )
 
 /**
@@ -70,6 +71,17 @@ func (s *Shell) AttachHookSpool() {
 // current projection reports as blocked. Idempotent: panes with a pending
 // interaction are skipped, so repeated applies never duplicate cards.
 func (s *Shell) reconcileBlockedInteractions() {
+	// A card whose agent has moved on (answered in the terminal, finished,
+	// gone) must retire: only the OSC 7501 path cancelled before, so agents
+	// reporting through Herdr hooks left a stale question behind.
+	for _, pending := range s.interactionBroker.Pending() {
+		if pending.Picker {
+			continue // retired by watchPicker, not by the agent's status
+		}
+		if agent := s.paneAgent(pending.AgentPaneID); agent == nil || agent.Status != "blocked" {
+			s.interactionBroker.CancelForPane(pending.AgentPaneID)
+		}
+	}
 	for index := range s.projection.Agents {
 		agent := &s.projection.Agents[index]
 		if agent.Status != "blocked" || agent.PaneID == "" {
@@ -135,6 +147,54 @@ func chatSessionIdentity(appAgent, sessionID string) *herdr.AgentSessionIdentity
 	}
 }
 
+// hookIdentity is a hook-reported session identity with the terminal it was
+// reported for.
+type hookIdentity struct {
+	identity   herdr.AgentSessionIdentity
+	terminalID string
+}
+
+func (s *Shell) hookKey(paneID string) string { return s.activeInstance + "/" + paneID }
+
+// rememberHookIdentity keeps the newest hook-reported session identity of a
+// pane (call after the projection agent exists). Herdr's agent list carries
+// no session for some providers (Claude Code), so every projection refresh
+// would otherwise erase the only thing that binds Chat to the transcript;
+// applyProjection re-stamps it and the session file persists it.
+func (s *Shell) rememberHookIdentity(paneID string, identity *herdr.AgentSessionIdentity) {
+	if s.hookIdentities == nil {
+		s.hookIdentities = map[string]hookIdentity{}
+	}
+	entry := hookIdentity{identity: *identity}
+	if agent := s.paneAgent(paneID); agent != nil {
+		entry.terminalID = agent.TerminalID
+	}
+	s.hookIdentities[s.hookKey(paneID)] = entry
+}
+
+// restampHookIdentities gives agents the refreshed projection reports
+// without a session identity the one their hooks announced, as long as it
+// names the same provider and the same terminal (a pane reused by another
+// agent keeps nothing).
+func (s *Shell) restampHookIdentities() {
+	for i := range s.projection.Agents {
+		agent := &s.projection.Agents[i]
+		entry, found := s.hookIdentities[s.hookKey(agent.PaneID)]
+		if !found || agent.AgentSession != nil {
+			continue
+		}
+		if entry.terminalID != "" && agent.TerminalID != "" && entry.terminalID != agent.TerminalID {
+			continue
+		}
+		have, ok := history.ParseAgentID(agent.Kind)
+		want, wantOK := history.ParseAgentID(entry.identity.Agent)
+		if ok && wantOK && have == want {
+			identity := entry.identity
+			agent.AgentSession = &identity
+		}
+	}
+}
+
 func (s *Shell) handleAppHookStatus(evt apphook.StatusEvent) {
 	if evt.PaneID == "" {
 		return
@@ -165,6 +225,9 @@ func (s *Shell) handleAppHookStatus(evt apphook.StatusEvent) {
 			agent.AgentSession = session
 		}
 	})
+	if session != nil {
+		s.rememberHookIdentity(evt.PaneID, session)
+	}
 
 	if !applied {
 		s.scheduleProjectionRefresh()
@@ -209,15 +272,24 @@ func (s *Shell) handleAppHookSession(evt apphook.SessionEvent) {
 		}
 	})
 
-	// A fresh session identity may already have a catalog row (or gains one
-	// moments later): re-resolve the History-meta projection now so the
-	// Agent card title follows the session without waiting out the usage
-	// lane's one-minute throttle.
-	s.refreshUsageProjection(true)
-	// The fresh session's transcript lands on disk moments later, and a
-	// scan is the only thing that indexes it into the catalog the title
-	// lane reads; a no-op while a scan is already running.
-	s.startHistoryScan()
+	// Every tool call reports the same session; only a pane's new identity
+	// can have a fresh transcript to index. (The projection's own identity
+	// cannot tell: a status event may have stamped it first.)
+	previous, hadPrevious := s.hookIdentities[s.hookKey(evt.PaneID)]
+	s.rememberHookIdentity(evt.PaneID, sessionIdentity)
+	if !hadPrevious || previous.identity.Value != val {
+		// A fresh session identity may already have a catalog row (or gains
+		// one moments later): re-resolve the History-meta projection now so
+		// the Agent card title follows the session without waiting out the
+		// usage lane's one-minute throttle.
+		s.refreshUsageProjection(true)
+		// The fresh session's transcript lands on disk moments later, and a
+		// scan is the only thing that indexes it into the catalog the title
+		// and chat-binding lanes read; a no-op while a scan is running, so
+		// one more round follows once the first message is on disk.
+		s.startHistoryScan()
+		time.AfterFunc(8*time.Second, func() { s.applyOnWindow(s.startHistoryScan) })
+	}
 	s.publishChatBridge()
 }
 
@@ -306,6 +378,11 @@ func (s *Shell) detectPaneInteraction(paneID string) {
 	if len(s.interactionBroker.PendingForPane(paneID)) > 0 {
 		return
 	}
+	// A question the transcript already states (omp/pi `ask`) needs no
+	// screen read.
+	if s.publishTranscriptQuestion(paneID) {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	screen, err := s.runtime.ReadPane(ctx, s.activeInstance, paneID, "visible")
@@ -318,26 +395,89 @@ func (s *Shell) detectPaneInteraction(paneID string) {
 		slog.Info("interaction detect found no prompt shape", "pane", paneID)
 		return
 	}
+	interaction := conversation.PendingInteraction{Kind: kind, Prompt: prompt, Options: options}
+	if ompReviewSheet.MatchString(screen) {
+		interaction.EscapeOption = "Cancel"
+	}
+	s.publishInteraction(paneID, interaction)
+}
+
+// redetectAfterAnswer covers a screen-detected prompt whose answer leaves the
+// agent blocked on a follow-up (Claude Code's tabbed AskUserQuestion moves to
+// the next question, then to its Submit review): the status never changes, so
+// no projection edge would look again. One delayed read re-publishes it.
+func (s *Shell) redetectAfterAnswer(paneID string) {
+	time.AfterFunc(1500*time.Millisecond, func() {
+		s.applyOnWindow(func() {
+			if agent := s.paneAgent(paneID); agent != nil && agent.Status == "blocked" {
+				s.reconcileBlockedInteractions()
+			}
+		})
+	})
+}
+
+// publishTranscriptQuestion publishes the chat pane's unanswered `ask` call
+// as a structured question. Cheap (no pane read): the live tail also calls
+// it while the pane is blocked, because the call can land in the transcript
+// a beat after the blocked status. Reports whether one was published.
+func (s *Shell) publishTranscriptQuestion(paneID string) bool {
+	if s.chatPaneID != paneID || s.chatReadOnly || len(s.interactionBroker.PendingForPane(paneID)) > 0 {
+		return false
+	}
+	ask, ok := transcriptQuestion(s.chatTurns)
+	if !ok {
+		return false
+	}
+	if s.chatAskTool != ask.ToolID {
+		s.chatAskTool, s.chatAskStep, s.chatAskDone = ask.ToolID, 0, false
+	}
+	s.chatAskTotal = len(ask.Questions)
+	if s.chatAskDone || s.chatAskStep >= len(ask.Questions) {
+		return false
+	}
+	question := ask.Questions[s.chatAskStep]
+	interaction := conversation.PendingInteraction{
+		Kind:         conversation.InteractionQuestion,
+		Prompt:       question.Prompt,
+		Options:      question.Options,
+		Header:       question.Header,
+		Descriptions: question.Descriptions,
+		Start:        question.Start,
+		Multi:        question.Multi,
+	}
+	interaction.Step, interaction.Steps = s.chatAskStep, len(ask.Questions)
+	s.publishInteraction(paneID, interaction)
+	return true
+}
+
+// reconcileChatQuestion is the live tail's hook: a blocked chat pane whose
+// transcript just gained its `ask` call gets the question card.
+func (s *Shell) reconcileChatQuestion() {
+	if s.chatPaneID == "" {
+		return
+	}
+	if agent := s.paneAgent(s.chatPaneID); agent != nil && agent.Status == "blocked" {
+		s.publishTranscriptQuestion(s.chatPaneID)
+	}
+}
+
+// publishInteraction stamps the pane/conversation identity on a detected
+// interaction and registers it with the broker.
+func (s *Shell) publishInteraction(paneID string, interaction conversation.PendingInteraction) {
 	conversationID := conversation.ConversationID("pane:" + paneID)
 	if s.chatPaneID == paneID && s.chatConversationID != "" {
 		conversationID = conversation.ConversationID(s.chatConversationID)
 	}
-	fingerprint := s.liveFingerprintForPane(paneID)
-	err = s.interactionBroker.Publish(conversation.PendingInteraction{
-		ID:             fmt.Sprintf("ia-%s-%d", paneID, time.Now().UnixNano()),
-		ConversationID: conversationID,
-		AgentPaneID:    paneID,
-		Fingerprint:    fingerprint,
-		Kind:           kind,
-		Prompt:         prompt,
-		Options:        options,
-	})
-	if err == nil {
-		slog.Info("interaction published", "pane", paneID, "kind", string(kind), "prompt", prompt)
-		s.publishChatBridge()
-	} else {
+	interaction.ID = fmt.Sprintf("ia-%s-%d", paneID, time.Now().UnixNano())
+	interaction.ConversationID = conversationID
+	interaction.AgentPaneID = paneID
+	interaction.Fingerprint = s.liveFingerprintForPane(paneID)
+	if err := s.interactionBroker.Publish(interaction); err != nil {
 		slog.Warn("interaction publish rejected", "pane", paneID, "error", err)
+		return
 	}
+	slog.Info("interaction published", "pane", paneID, "kind", string(interaction.Kind), "options", len(interaction.Options))
+	s.publishChatBridge()
 }
 
 // optionLine matches Claude Code's numbered option rows ("❯ 1. Yes",
@@ -355,12 +495,19 @@ var dividerLine = regexp.MustCompile(`^─+\s*$`)
 // questionLine matches a prompt question in ASCII or full-width punctuation.
 var questionSuffix = regexp.MustCompile(`[?？]\s*$`)
 
+// ompReviewSheet matches omp's closing "Review answers" sheet of a
+// multi-question ask, whose only row is the highlighted Submit (Cancel is ⎋).
+var ompReviewSheet = regexp.MustCompile(`(?s)Review answers.*❯\s*Submit`)
+
 // detectClaudeInteraction parses Claude Code's visible TUI text for its
 // interactive prompts — AskUserQuestion (tabs + numbered options with
 // description rows) and the permission sheet ("Do you want …"). A minimal
 // port of the reference parser's core; the full provider table lives in
 // herdr-web-ui's prompt.ts and ports incrementally.
 func detectClaudeInteraction(screen string) (conversation.InteractionKind, string, []string, bool) {
+	if ompReviewSheet.MatchString(screen) {
+		return conversation.InteractionQuestion, "Submit your answers?", []string{"Submit", "Cancel"}, true
+	}
 	lines := strings.Split(strings.ReplaceAll(screen, "\r\n", "\n"), "\n")
 	// Drop trailing empties so the last row is meaningful.
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {

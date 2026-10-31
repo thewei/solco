@@ -119,6 +119,21 @@ func (s *Shell) captureSession() settings.SessionSettings {
 		RecentFiles:       s.recentFiles,
 		RecentHosts:       s.recentHosts,
 	}
+	livePrefix := s.activeInstance + "/"
+	for key, entry := range s.hookIdentities {
+		// Entries of this instance whose pane is gone from the loaded
+		// projection are dead weight; other instances' stay as saved.
+		if paneID, mine := strings.CutPrefix(key, livePrefix); mine && len(s.projection.Panes) > 0 && s.paneAgent(paneID) == nil {
+			continue
+		}
+		if snapshot.HookSessions == nil {
+			snapshot.HookSessions = map[string]settings.HookSessionSettings{}
+		}
+		snapshot.HookSessions[key] = settings.HookSessionSettings{
+			Agent: entry.identity.Agent, Kind: entry.identity.Kind, Source: entry.identity.Source,
+			Value: entry.identity.Value, TerminalID: entry.terminalID,
+		}
+	}
 	// N19 #4: the per-pane surface memory persists, so sidebar Agent clicks
 	// land where the user left them across launches.
 	for paneID, kind := range s.paneSurfaceMemo {
@@ -128,6 +143,19 @@ func (s *Shell) captureSession() settings.SessionSettings {
 		snapshot.PaneSurfaces[paneID] = string(kind)
 	}
 	return snapshot
+}
+
+// restoreSessionHooks reloads the remembered hook session identities.
+func (s *Shell) restoreSessionHooks(session settings.SessionSettings) {
+	for key, saved := range session.HookSessions {
+		if s.hookIdentities == nil {
+			s.hookIdentities = map[string]hookIdentity{}
+		}
+		s.hookIdentities[key] = hookIdentity{
+			identity:   herdr.AgentSessionIdentity{Agent: saved.Agent, Kind: saved.Kind, Source: saved.Source, Value: saved.Value},
+			terminalID: saved.TerminalID,
+		}
+	}
 }
 
 // SaveSession persists the current session snapshot through the settings
@@ -175,6 +203,7 @@ func (s *Shell) restoreSession() {
 	}
 	s.recentFiles = append([]string(nil), session.RecentFiles...)
 	s.recentHosts = append([]string(nil), session.RecentHosts...)
+	s.restoreSessionHooks(session)
 	s.projectsOpen = session.ProjectsOpen
 	s.agentsOpen = session.AgentsOpen
 	s.pinsOpen = session.PinsOpen

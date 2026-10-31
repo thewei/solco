@@ -13,12 +13,15 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/voice"
 )
 
 // Voice transcription defaults; both are overridable in Settings -> General.
@@ -29,7 +32,7 @@ const (
 
 /**
  * [INPUT]: 依赖 Shell 的 0.6 Chat 状态（chatTurns/chatDisposition/chatOutcome/chatQueuedText）、launch 发送路径、mygo Bind 事件
- * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued）与 chat:updated 事件、Shell.publishChatBridge、sendChatText 共享发送路径
+ * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/ReviewChanges）与 chat:updated 事件、Shell.publishChatBridge、sendChatText 共享发送路径
  * [POS]: WebView Chat 的唯一表现层桥：投影与动作编组到窗口 UI 通道，会话运行时/Herdr 方法零改动；页面只能通过此桥读取聊天投影
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,12 +48,28 @@ type ChatBridgeTool struct {
 // ChatBridgeStep is one ordered segment of a turn's time chain: the page
 // renders thinking / narration / tool calls in their original interleaving.
 type ChatBridgeStep struct {
-	Kind      string `json:"kind"`
-	Text      string `json:"text,omitempty"`
-	ToolName  string `json:"toolName,omitempty"`
-	ToolInput string `json:"toolInput,omitempty"`
+	Kind       string `json:"kind"`
+	Text       string `json:"text,omitempty"`
+	ToolName   string `json:"toolName,omitempty"`
+	ToolInput  string `json:"toolInput,omitempty"`
 	ToolOutput string `json:"toolOutput,omitempty"`
-	ToolError bool   `json:"toolError,omitempty"`
+	ToolError  bool   `json:"toolError,omitempty"`
+	// ToolDone reports that the call's result has landed (an empty result
+	// still counts); false means the call is still running.
+	ToolDone bool `json:"toolDone,omitempty"`
+	// TsMS is the provider timestamp of the item that opened the step
+	// (presentation only: the page derives "Thought for Ns" from gaps).
+	TsMS *int64 `json:"tsMs,omitempty"`
+}
+
+// ChatBridgeChange is one file row of a turn's changes card. Counted is set
+// only when Additions/Deletions come from the live working-tree snapshot
+// (latest settled turn, local repository); otherwise the row is a name alone.
+type ChatBridgeChange struct {
+	Path      string `json:"path"`
+	Additions int    `json:"additions,omitempty"`
+	Deletions int    `json:"deletions,omitempty"`
+	Counted   bool   `json:"counted,omitempty"`
 }
 
 // ChatBridgeTurn is one derived timeline row (0.6 §13 contract): user rows
@@ -68,6 +87,9 @@ type ChatBridgeTurn struct {
 	TsMS      *int64           `json:"tsMs,omitempty"`
 	Tools     []ChatBridgeTool `json:"tools,omitempty"`
 	Steps     []ChatBridgeStep `json:"steps,omitempty"`
+	// Changes lists the files this settled turn's edit tools touched (the
+	// changes card); see chatTurnChanges for the data-source contract.
+	Changes []ChatBridgeChange `json:"changes,omitempty"`
 }
 
 // ChatBridgeState is the full chat projection the page renders. It is
@@ -77,14 +99,40 @@ type ChatBridgeState struct {
 	ConversationID string `json:"conversationId"`
 	Title          string `json:"title,omitempty"`
 	Provider       string `json:"provider,omitempty"`
-	Loading        bool   `json:"loading"`
-	Disposition    string `json:"disposition"`
-	Outcome        string `json:"outcome,omitempty"`
-	QueuedText     string `json:"queuedText,omitempty"`
+	// VoiceSource is "chatgpt" while dictation goes through the ChatGPT
+	// sign-in Codex holds, else "api" (the mic tooltip names it).
+	VoiceSource string `json:"voiceSource,omitempty"`
+	Loading     bool   `json:"loading"`
+	// Waiting reports a live agent that has not opened a conversation yet
+	// (fresh pane) and nothing is sent yet: the page shows its invitation and
+	// keeps the composer — the first prompt opens the conversation.
+	Waiting bool `json:"waiting,omitempty"`
+	// EchoPending reports a just-sent prompt shown as a temporary User row
+	// that the provider transcript has not confirmed yet: the page stands in
+	// a Working line until the agent's own rows arrive.
+	EchoPending bool `json:"echoPending,omitempty"`
+	// LinkCandidates are recent sessions of this agent's provider in its
+	// folder, offered only while the agent has not reported a session of its
+	// own (Waiting): the invitation can then say "show this one instead".
+	LinkCandidates []ChatBridgeLink `json:"linkCandidates,omitempty"`
+	Disposition    string           `json:"disposition"`
+	Outcome        string           `json:"outcome,omitempty"`
+	QueuedText     string           `json:"queuedText,omitempty"`
 	// Theme is the app-resolved appearance ("light" or "dark"), following
 	// Settings -> General -> Appearance through mygo.Theme — not the bare
 	// system preference.
 	Theme string `json:"theme"`
+	// HighContrast mirrors Settings -> General -> Increase contrast so the
+	// page lifts its faintest ink level to the 4.5:1 floor.
+	HighContrast bool `json:"highContrast,omitempty"`
+	// SerifProse mirrors Settings -> General -> "Serif chat text": assistant
+	// reading text only; code, tool rows and controls stay sans.
+	SerifProse bool `json:"serifProse,omitempty"`
+	// Root is the local repository root the changes card resolves paths
+	// against ("" for read-only sessions and non-repository panes).
+	Root string `json:"root,omitempty"`
+	// CanReview reports "Review changes" can open Diff Review for Root.
+	CanReview bool `json:"canReview,omitempty"`
 	// Model is the provider model the transcript last recorded, when known
 	// (presentation pill only; never a runtime fact source).
 	Model string `json:"model,omitempty"`
@@ -100,7 +148,9 @@ type ChatBridgeState struct {
 	// Interactions are the bound pane's pending structured interactions
 	// (our hook layer's feed): approval/question cards above the composer.
 	Interactions []ChatBridgeInteraction `json:"interactions,omitempty"`
-	Turns        []ChatBridgeTurn        `json:"turns"`
+	// Plan is the latest task list the agent published (Tasks panel).
+	Plan  *ChatBridgePlan  `json:"plan,omitempty"`
+	Turns []ChatBridgeTurn `json:"turns"`
 }
 
 // ChatBridgeInteraction is one pending interaction card.
@@ -109,6 +159,15 @@ type ChatBridgeInteraction struct {
 	Kind    string   `json:"kind"`
 	Prompt  string   `json:"prompt"`
 	Options []string `json:"options"`
+	// Header is the provider's short question label; Descriptions explain
+	// each option (parallel to Options, "" when none).
+	Header       string   `json:"header,omitempty"`
+	Descriptions []string `json:"descriptions,omitempty"`
+	// Progress is "2/3" inside a multi-question ask ("" otherwise).
+	Progress string `json:"progress,omitempty"`
+	// Multi marks a multi-select question: the page ticks any subset and
+	// submits them together through AnswerInteractionMulti.
+	Multi bool `json:"multi,omitempty"`
 }
 
 // chatUpdated pushes the projection after every chat state mutation. Events
@@ -285,15 +344,26 @@ func (b *ChatBridge) PickAttachment(ctx context.Context) (string, error) {
 	return paths[0], nil
 }
 
-// Transcribe sends a recorded clip to the configured OpenAI-compatible
-// transcription endpoint (local proxies included) and returns the text.
+// Transcribe sends a recorded clip to the configured source — an
+// OpenAI-compatible transcription endpoint (local proxies included) or, when
+// the user consented in Settings → Voice, the ChatGPT sign-in Codex holds —
+// and returns the text.
 // The API key never reaches the page and is never logged.
 func (b *ChatBridge) Transcribe(ctx context.Context, audioBase64 string, mime string) (string, error) {
 	var endpoint, key, model string
+	var viaChatGPT bool
 	b.shell.callOnWindow(func() {
-		voice := b.shell.settings.Voice
-		endpoint, key, model = voice.EndpointURL, voice.APIKey, voice.Model
+		vs := b.shell.settings.Voice
+		endpoint, key, model = vs.EndpointURL, vs.APIKey, vs.Model
+		viaChatGPT = voiceChatGPTOn(vs)
 	})
+	if viaChatGPT {
+		audio, err := base64.StdEncoding.DecodeString(audioBase64)
+		if err != nil || len(audio) == 0 {
+			return "", errors.New("empty or malformed recording")
+		}
+		return (&voice.ChatGPT{}).Transcribe(ctx, audio, mime)
+	}
 	if key == "" {
 		key = os.Getenv("OPENAI_API_KEY")
 	}
@@ -379,7 +449,16 @@ var chatAboutOption = regexp.MustCompile(`(?i)^chat about`)
 // transport's rule). The interaction is consumed even if the delivery
 // fails: the agent stays blocked and may re-ask.
 func (b *ChatBridge) AnswerInteraction(ctx context.Context, interactionID, option string) (ChatBridgeState, error) {
-	return b.answerInteraction(ctx, interactionID, option, "")
+	return b.answerInteraction(ctx, interactionID, option, "", nil)
+}
+
+// AnswerInteractionMulti answers a multi-select question: from the first row
+// the rows to tick are walked with down/space, then enter submits.
+func (b *ChatBridge) AnswerInteractionMulti(ctx context.Context, interactionID string, options []string) (ChatBridgeState, error) {
+	if options == nil {
+		options = []string{}
+	}
+	return b.answerInteraction(ctx, interactionID, "", "", options)
 }
 
 // AnswerInteractionText answers a free-text option: the option is selected
@@ -392,15 +471,16 @@ func (b *ChatBridge) AnswerInteractionText(ctx context.Context, interactionID, o
 	if text == "" {
 		return b.shell.chatBridgeStateOnWindow(), errors.New("this option needs a typed answer")
 	}
-	return b.answerInteraction(ctx, interactionID, option, text)
+	return b.answerInteraction(ctx, interactionID, option, text, nil)
 }
 
 // answerInteraction is the shared delivery: locate the pending interaction,
 // claim it (CAS), navigate to the option, optionally paste the typed answer.
-func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, option, text string) (ChatBridgeState, error) {
+func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, option, text string, picks []string) (ChatBridgeState, error) {
 	var paneID string
 	var keys []string
 	var prepareErr error
+	var answered conversation.PendingInteraction
 	b.shell.callOnWindow(func() {
 		var chosen *conversation.PendingInteraction
 		for _, interaction := range b.shell.interactionBroker.PendingForPane(b.shell.chatPaneID) {
@@ -412,6 +492,16 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 		}
 		if chosen == nil {
 			prepareErr = errors.New("the interaction is no longer pending")
+			return
+		}
+		if picks != nil {
+			if _, err := b.shell.interactionBroker.ResolveSetCAS(interactionID, picks); err != nil {
+				prepareErr = err
+				return
+			}
+			paneID = chosen.AgentPaneID
+			answered = *chosen
+			keys = multiSelectKeys(chosen.Options, picks)
 			return
 		}
 		index := -1
@@ -430,6 +520,11 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 			return
 		}
 		paneID = chosen.AgentPaneID
+		answered = *chosen
+		if chosen.EscapeOption != "" && option == chosen.EscapeOption {
+			keys = []string{"esc"}
+			return
+		}
 		if text != "" && chatAboutOption.MatchString(option) {
 			// "Chat about this" declines the question and refocuses the
 			// ordinary input: Escape, then the answer pastes as a normal
@@ -438,11 +533,19 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 			keys = []string{"esc"}
 			return
 		}
-		keys = make([]string, 0, index+1)
-		for i := 0; i < index; i++ {
+		// Navigation is relative to the row the selector opens on.
+		keys = make([]string, 0, max(index, chosen.Start)+1)
+		for i := chosen.Start; i < index; i++ {
 			keys = append(keys, "down")
 		}
-		keys = append(keys, "enter")
+		for i := index; i < chosen.Start; i++ {
+			keys = append(keys, "up")
+		}
+		commit := "enter"
+		if chosen.Commit != "" {
+			commit = chosen.Commit
+		}
+		keys = append(keys, commit)
 	})
 	if prepareErr != nil {
 		return b.shell.chatBridgeStateOnWindow(), prepareErr
@@ -458,14 +561,127 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 			err = ctx.Err()
 		case <-time.After(settle):
 			err = b.shell.runtime.PromptAgent(ctx, b.shell.activeInstance, paneID, text)
+			if err != nil && strings.Contains(err.Error(), "blocked and requires interactive input") {
+				// The answer goes into the very prompt the agent is blocked
+				// on (omp's "Custom answer" editor): agent.prompt refuses
+				// that by design, so type it into the pane directly.
+				err = b.shell.runtime.SendPaneInput(ctx, b.shell.activeInstance, paneID, text, []string{"enter"})
+			}
 		}
 	}
 	var state ChatBridgeState
 	b.shell.callOnWindow(func() {
+		if err != nil {
+			// The agent is still blocked on its question: say so and put
+			// the card back (the transcript's unanswered `ask` re-derives
+			// it) instead of leaving a silent dead end.
+			b.shell.chatOutcome = "Answer not delivered: " + err.Error()
+			b.shell.reconcileChatQuestion()
+		} else {
+			b.shell.chatOutcome = ""
+			if answered.Steps > 0 {
+				// omp presents an ask's questions one after another: move to
+				// the next one, or mark the call answered so the still-blocked
+				// beat before its result lands cannot revive the card.
+				b.shell.chatAskStep = answered.Step + 1
+				if b.shell.chatAskStep >= answered.Steps {
+					b.shell.chatAskDone = true
+					// Newer omp ends an ask on a "Review answers" sheet that
+					// still waits for its Submit.
+					b.shell.redetectAfterAnswer(answered.AgentPaneID)
+				} else {
+					b.shell.publishTranscriptQuestion(answered.AgentPaneID)
+				}
+			} else if answered.Picker {
+				// A picker may continue on a second screen (Codex asks for the
+				// effort after the model); the watcher publishes it if so.
+				// Escape too: Codex's "esc back" returns to the previous list.
+				b.shell.watchPicker(answered.AgentPaneID, 700*time.Millisecond)
+			} else {
+				b.shell.redetectAfterAnswer(answered.AgentPaneID)
+			}
+		}
 		b.shell.publishChatBridge()
 		state = b.shell.chatBridgeState()
 	})
 	return state, err
+}
+
+// multiSelectKeys ticks the picked rows of a multi-select prompt whose
+// cursor opens on the first row: space on each picked row, down between
+// them, enter to submit.
+func multiSelectKeys(options, picks []string) []string {
+	last := -1
+	for index, option := range options {
+		if slices.Contains(picks, option) {
+			last = index
+		}
+	}
+	keys := make([]string, 0, 2*(last+1)+1)
+	for index := 0; index <= last; index++ {
+		if slices.Contains(picks, options[index]) {
+			keys = append(keys, "space")
+		}
+		if index < last {
+			keys = append(keys, "down")
+		}
+	}
+	return append(keys, "enter")
+}
+
+// OpenTerminal switches the workspace surface to Terminal, for the page's
+// "Waiting for you in the terminal" card. Local surface switch only.
+func (b *ChatBridge) OpenTerminal(ctx context.Context) error {
+	b.shell.callOnWindow(func() { b.shell.showSurface(WorkspaceSurfaceTerminal) })
+	return nil
+}
+
+// ChatBridgeLink is one suggested session for the invitation's link row.
+type ChatBridgeLink struct {
+	Key       string `json:"key"`
+	Title     string `json:"title"`
+	UpdatedMs int64  `json:"updatedMs"`
+	Messages  int64  `json:"messages"`
+}
+
+// LinkSession follows the suggested session's transcript, after the user's
+// click. The key must be one of the offered candidates; the projection after
+// the attempt is returned either way.
+func (b *ChatBridge) LinkSession(ctx context.Context, key string) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		if b.shell.linkChatSession(key) {
+			b.shell.chatOutcome = ""
+		} else {
+			b.shell.chatOutcome = "That session can no longer be linked."
+		}
+		b.shell.publishChatBridge()
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
+}
+
+// OpenMicrophoneSettings opens System Settings at Privacy → Microphone, the
+// one place a denied dictation can be re-enabled (the page cannot ask the
+// system again once it said no). The pane holds nothing: it is a local door.
+func (b *ChatBridge) OpenMicrophoneSettings(ctx context.Context) error {
+	return mygo.Shell.OpenExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+}
+
+// ReviewChanges opens Diff Review (the WorkspacePrimarySurface Diff state)
+// for the card's repository, selecting path when it names a changed file.
+// It only switches the local surface: no Git runner call, no Herdr method.
+func (b *ChatBridge) ReviewChanges(ctx context.Context, path string) error {
+	b.shell.callOnWindow(func() {
+		if b.shell.chatReadOnly || b.shell.git == nil || b.shell.git.root == "" {
+			return
+		}
+		if b.shell.holdCommitNavigation() {
+			return
+		}
+		b.shell.openChanges(path)
+	})
+	return nil
 }
 
 // ListFiles lists the chat pane's project directory entries matching the
@@ -535,7 +751,22 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		Outcome:        s.chatOutcome,
 		QueuedText:     s.chatQueuedText,
 		Theme:          s.chatBridgeTheme(),
+		HighContrast:   s.settings.General.HighContrast,
+		VoiceSource:    voiceSourceName(s.settings.Voice),
+		SerifProse:     s.settings.General.ChatSerif,
 		Turns:          make([]ChatBridgeTurn, 0, len(s.chatTurns)),
+	}
+	state.EchoPending = s.chatPendingEcho != nil
+	state.Waiting = s.chatConversationID == "" && !s.chatLoading && !s.chatReadOnly && !state.EchoPending
+	if state.Waiting {
+		for _, summary := range s.chatLinkCandidates() {
+			state.LinkCandidates = append(state.LinkCandidates, ChatBridgeLink{
+				Key:       summary.Meta.Key,
+				Title:     fallbackText(summary.Meta.Title, history.Untitled),
+				UpdatedMs: summary.Meta.UpdatedAt,
+				Messages:  summary.Meta.MessageCount,
+			})
+		}
 	}
 	if s.chatReadOnly {
 		state.ReadOnly = true
@@ -552,15 +783,34 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 	state.ContextTokens = s.chatContextTokens
 	if s.chatPaneID != "" {
 		for _, interaction := range s.interactionBroker.PendingForPane(s.chatPaneID) {
+			progress := ""
+			if interaction.Steps > 1 {
+				progress = fmt.Sprintf("%d/%d", interaction.Step+1, interaction.Steps)
+			}
 			state.Interactions = append(state.Interactions, ChatBridgeInteraction{
-				ID:      interaction.ID,
-				Kind:    string(interaction.Kind),
-				Prompt:  interaction.Prompt,
-				Options: interaction.Options,
+				ID:           interaction.ID,
+				Kind:         string(interaction.Kind),
+				Prompt:       interaction.Prompt,
+				Options:      interaction.Options,
+				Header:       interaction.Header,
+				Descriptions: interaction.Descriptions,
+				Progress:     progress,
+				Multi:        interaction.Multi,
 			})
 		}
 	}
-	for _, turn := range s.chatTurns {
+	root, snap := "", (*gitworkbench.ChangesSnapshot)(nil)
+	if !s.chatReadOnly && s.git != nil && s.git.root != "" {
+		root, snap = s.git.root, s.gitSnapshot()
+		state.Root, state.CanReview = root, true
+	}
+	lastAssistant := -1
+	for index, turn := range s.chatTurns {
+		if !turn.UserRow {
+			lastAssistant = index
+		}
+	}
+	for index, turn := range s.chatTurns {
 		bridgeTurn := ChatBridgeTurn{
 			User:      turn.UserRow,
 			Text:      turn.Text,
@@ -579,19 +829,24 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 			bridgeTurn.Tools = append(bridgeTurn.Tools, tool)
 		}
 		for _, step := range turn.Steps {
-			bridgeStep := ChatBridgeStep{Kind: step.Kind, Text: step.Text}
+			bridgeStep := ChatBridgeStep{Kind: step.Kind, Text: step.Text, TsMS: step.TsMS}
 			if step.Tool != nil {
 				bridgeStep.ToolName = step.Tool.Name
 				bridgeStep.ToolInput = step.Tool.InputPreview
 				bridgeStep.ToolError = step.Tool.IsError
 				if step.Tool.Output != nil {
 					bridgeStep.ToolOutput = *step.Tool.Output
+					bridgeStep.ToolDone = true
 				}
 			}
 			bridgeTurn.Steps = append(bridgeTurn.Steps, bridgeStep)
 		}
+		if !turn.UserRow && !turn.Live && !turn.Failed {
+			bridgeTurn.Changes = chatTurnChanges(turn.Steps, root, snap, index == lastAssistant)
+		}
 		state.Turns = append(state.Turns, bridgeTurn)
 	}
+	state.Plan = chatPlan(s.chatTurns)
 	return state
 }
 

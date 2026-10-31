@@ -30,6 +30,7 @@ import (
 	"github.com/thewei/solco/internal/scripts"
 	"github.com/thewei/solco/internal/services"
 	"github.com/thewei/solco/internal/settings"
+	"github.com/thewei/solco/internal/voice"
 )
 
 const (
@@ -180,6 +181,13 @@ type Shell struct {
 	settingsVoiceEndpointDraft string
 	settingsVoiceKeyDraft      string
 	settingsVoiceModelDraft    string
+
+	// voice* back Settings → Voice: the cached Codex sign-in status and the
+	// open "use my ChatGPT sign-in?" consent dialog.
+	voiceStatus      voice.Status
+	voiceStatusAt    time.Time
+	voiceConsentOpen bool
+
 	settingsGitPromptDraft     string
 	settingsPiBinaryDraft      string
 
@@ -277,10 +285,6 @@ type Shell struct {
 	// while true the slide width snaps to its target instead of easing
 	// after the moving drag target.
 	sidebarWDragging bool
-	// windowPinned mirrors the main window's always-on-top level for the
-	// titlebar pin's selected face: session-only presentation state, never
-	// persisted and only ever changed through toggleWindowPinned.
-	windowPinned bool
 
 	// scriptStore owns the user script definitions (persisted under
 	// PathUserData/scripts.json in production).
@@ -433,6 +437,16 @@ type Shell struct {
 	// disabled until 2026-10-11.
 	chatConversationID string
 	chatPaneID         string
+	// chatAsk tracks the transcript `ask` call being answered: its call id,
+	// the next question to present (omp asks them one after another) and
+	// whether the last answer went out, so a republish never revives it.
+	// hookSessions remembers, per pane, the session identity the hook layer
+	// last reported, so only a new one kicks a catalog scan.
+	hookIdentities map[string]hookIdentity
+	chatAskTool  string
+	chatAskStep  int
+	chatAskTotal int
+	chatAskDone  bool
 	// chatReadOnly marks a detached history transcript — the Sessions
 	// detail shows it through the same chat view with no pane, no live tail
 	// and no composer; chatSession is that session's meta for the header.
@@ -679,6 +693,8 @@ func (s *Shell) applySettings(mutate func(*settings.Settings) error) {
 		// have no main loop, so only apply with a window attached.
 		s.syncThemeSource()
 		s.syncWindowOpacity()
+		// Chat appearance flags (contrast, serif) ride the projection.
+		s.publishChatBridge()
 	}
 }
 

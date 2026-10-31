@@ -349,6 +349,7 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	slog.Debug("apply Herdr projection", "instance", s.activeInstance, "projects", len(projection.Projects), "tabs", len(projection.Tabs), "panes", len(projection.Panes), "agents", len(projection.Agents), "restart_watcher", restartWatcher)
 	s.reconcileLocalSelection(projection)
 	s.projection = projection
+	s.restampHookIdentities()
 	// A reconciled projection is the authority that the runtime is healthy
 	// again; the bootstrap page's update affordance retires with it.
 	s.herdrUpgradeable = false

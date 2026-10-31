@@ -40,8 +40,13 @@ func TestRebindWorkspaceChatSourcelessClearsStaleTranscript(t *testing.T) {
 	if shell.chatSourcelessPaneID != "p-new" {
 		t.Fatalf("sourceless latch = %q, want p-new", shell.chatSourcelessPaneID)
 	}
-	if shell.pendingToast == "" {
-		t.Fatal("the sourceless notice must be shown once")
+	// The page shows its own invitation (type the first prompt), so the
+	// toast that used to announce "no chat stream" is gone.
+	if shell.pendingToast != "" {
+		t.Fatalf("sourceless pane must not toast: %q", shell.pendingToast)
+	}
+	if !shell.chatBridgeState().Waiting {
+		t.Fatal("a sourceless pane projects the invitation (Waiting)")
 	}
 
 	// The render path re-enters for the same pane: the latch makes it a
@@ -91,5 +96,62 @@ func TestRebindWorkspaceChatUnlatchesWhenSourceAppears(t *testing.T) {
 	shell.rebindWorkspaceChat()
 	if shell.chatSourcelessPaneID == "p-new" && shell.pendingToast == "" {
 		t.Fatal("the rebind must retry once the pane has a chat source")
+	}
+}
+
+// The first prompt typed into a sourceless pane echoes at once (user row +
+// EchoPending, Waiting off), survives the latched re-entry, and a provider
+// row after the live bind consumes it exactly once.
+func TestSourcelessPaneEchoesFirstPrompt(t *testing.T) {
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p-new"
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{TerminalID: "term-new", PaneID: "p-new", Status: "idle"}},
+	}
+	shell.rebindWorkspaceChat()
+	if !shell.chatPaneSourceless() {
+		t.Fatal("setup: the pane must be sourceless")
+	}
+
+	shell.chatAfterPrompt("req-1", "hello agent", conversation.DispositionSentNow, nil)
+	if shell.chatPendingEcho == nil || shell.chatPendingEcho.Baseline != 0 || shell.chatPendingEcho.PaneID != "p-new" {
+		t.Fatalf("pending echo = %#v", shell.chatPendingEcho)
+	}
+	state := shell.chatBridgeState()
+	if state.Waiting || !state.EchoPending {
+		t.Fatalf("after send: Waiting=%v EchoPending=%v, want false/true", state.Waiting, state.EchoPending)
+	}
+	if len(state.Turns) != 1 || !state.Turns[0].User || state.Turns[0].Text != "hello agent" {
+		t.Fatalf("echo row = %+v", state.Turns)
+	}
+
+	// Latched re-entry (render path) keeps the single echo row.
+	shell.rebindWorkspaceChat()
+	if shell.chatPendingEcho == nil || countUserRows(shell.chatTurns, "hello agent") != 1 {
+		t.Fatalf("re-entry lost or duplicated the echo: %#v / %+v", shell.chatPendingEcho, shell.chatTurns)
+	}
+
+	// A different pane drops it.
+	shell.retainPendingEchoForPane("p-other")
+	if shell.chatPendingEcho != nil {
+		t.Fatal("echo must not follow a pane switch")
+	}
+}
+
+// ToolDone is the "result landed" flag: an empty result is still finished,
+// only a call whose Output was never set reads as running.
+func TestBridgeStepToolDone(t *testing.T) {
+	empty := ""
+	shell := NewShell()
+	shell.chatTurns = []conversation.TimelineTurn{{
+		Steps: []conversation.TimelineStep{
+			{Kind: conversation.StepTool, Tool: &conversation.ConversationToolCall{Name: "read", Output: &empty}},
+			{Kind: conversation.StepTool, Tool: &conversation.ConversationToolCall{Name: "edit"}},
+		},
+	}}
+	steps := shell.chatBridgeState().Turns[0].Steps
+	if len(steps) != 2 || !steps[0].ToolDone || steps[1].ToolDone {
+		t.Fatalf("toolDone = %+v", steps)
 	}
 }

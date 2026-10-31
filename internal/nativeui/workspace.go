@@ -208,16 +208,20 @@ func (s *Shell) openWorkspaceChat() {
 func (s *Shell) rebindWorkspaceChat() {
 	if card, ok := s.agentCardForSelectedPane(); ok {
 		if s.chatPaneID == card.PaneID && s.chatConversationID != "" {
-			// A later direct live bind (sidebar path) supersedes the
-			// sourceless latch.
-			s.chatSourcelessPaneID = ""
-			return
+			// A hand-linked session (chat_link.go) yields once the agent's
+			// measured identity arrives; anything else stays bound.
+			if provider, _ := s.agentSessionIdentity(card.Key); !(s.chatSessionLinked() && provider != "") {
+				// A later direct live bind (sidebar path) supersedes the
+				// sourceless latch.
+				s.chatSourcelessPaneID = ""
+				return
+			}
 		}
 		if s.chatPaneID == card.PaneID && s.chatSourcelessPaneID == card.PaneID {
 			// The latch holds only while the pane still has no chat source:
 			// once the agent establishes a session (card carries the
 			// conversation identity), rebind for real.
-			if card.ConversationID == "" {
+			if provider, _ := s.agentSessionIdentity(card.Key); card.ConversationID == "" && provider == "" {
 				return
 			}
 			s.chatSourcelessPaneID = ""
@@ -242,12 +246,16 @@ func (s *Shell) rebindWorkspaceChat() {
 		s.chatWindowStart = 0
 		s.chatHasOlder = false
 		s.chatSourcelessPaneID = card.PaneID
-		s.pendingToast = "No chat stream available for this session; use Terminal."
+		// The page shows its own invitation (type the first prompt below),
+		// so no toast; a prompt already sent from here keeps its echo.
+		s.retainPendingEchoForPane(card.PaneID)
+		s.appendPendingEchoTurn()
 		s.publishChatBridge()
 		return
 	} else if s.selectedPaneID != "" && s.selectedPaneID != s.chatPaneID {
 		s.chatPaneID = s.selectedPaneID
 		s.chatSourcelessPaneID = ""
+		s.retainPendingEchoForPane(s.selectedPaneID)
 		s.stopLiveTail()
 		s.chatConversationID = ""
 		s.chatTurns = nil

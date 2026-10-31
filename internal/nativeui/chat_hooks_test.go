@@ -180,6 +180,23 @@ func TestReconcileBlockedInteractionsDeduplicates(t *testing.T) {
 	}
 }
 
+// A card whose agent is no longer blocked (answered in the terminal or
+// finished) retires on the next projection apply.
+func TestReconcileBlockedInteractionsRetiresCardsOfAgentsThatMovedOn(t *testing.T) {
+	shell := NewShell()
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{TerminalID: "term-1", PaneID: "p1", Status: "idle"}},
+	}
+	shell.interactionBroker.Publish(conversation.PendingInteraction{
+		ID: "ia-stale", ConversationID: "live:omp:term-1", AgentPaneID: "p1",
+		Kind: conversation.InteractionQuestion, Prompt: "stale", Options: []string{"a", "b"},
+	})
+	shell.reconcileBlockedInteractions()
+	if pending := len(shell.interactionBroker.PendingForPane("p1")); pending != 0 {
+		t.Fatalf("a card of a finished agent must retire: %d", pending)
+	}
+}
+
 // TestReconcileBlockedInteractionsDispatchesSourceless pins the other side:
 // a blocked pane without a pending interaction is scheduled for detection
 // (headless: detect is a no-op on the nil runtime, but the reconcile must
@@ -282,5 +299,59 @@ func TestHandleAppHookSessionUpdatesSessionIdentity(t *testing.T) {
 	}
 	if agent.Revision != 6 {
 		t.Fatalf("agent revision = %d, want 6", agent.Revision)
+	}
+}
+
+// Herdr's agent list carries no session for Claude Code: the identity its
+// hooks announced must survive the next projection refresh and a restart,
+// or Chat could never bind to the transcript.
+func TestHookSessionIdentitySurvivesProjectionRefreshAndRestart(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "default"
+	shell.projection = herdr.Projection{
+		Panes: []herdr.Pane{{ID: "p1", TerminalID: "term-1"}},
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Kind: "claude"},
+			{TerminalID: "term-2", PaneID: "p2", Kind: "codex"},
+		},
+	}
+	shell.rememberHookIdentity("p1", &herdr.AgentSessionIdentity{Agent: "claude", Kind: "id", Source: "apphook", Value: "sess-1"})
+
+	// A restart: the identity round-trips through the session snapshot.
+	saved := shell.captureSession()
+	if got := saved.HookSessions["default/p1"]; got.Value != "sess-1" || got.TerminalID != "term-1" {
+		t.Fatalf("snapshot = %+v", got)
+	}
+	fresh := NewShell()
+	fresh.activeInstance = "default"
+	fresh.restoreSessionHooks(saved)
+	fresh.projection = shell.projection
+	fresh.projection.Agents = []herdr.Agent{
+		{TerminalID: "term-1", PaneID: "p1", Kind: "claude"},
+		{TerminalID: "term-2", PaneID: "p2", Kind: "codex"},
+	}
+	fresh.restampHookIdentities()
+	if got := fresh.projection.Agents[0].AgentSession; got == nil || got.Value != "sess-1" {
+		t.Fatalf("claude agent lost its hook identity: %+v", got)
+	}
+
+	// A pane reused by another provider, or a different terminal, inherits nothing.
+	fresh.hookIdentities["default/p2"] = hookIdentity{identity: herdr.AgentSessionIdentity{Agent: "claude", Kind: "id", Value: "stale"}}
+	fresh.hookIdentities["default/p1"] = hookIdentity{identity: herdr.AgentSessionIdentity{Agent: "claude", Kind: "id", Value: "old"}, terminalID: "term-other"}
+	fresh.projection.Agents[0].AgentSession = nil
+	fresh.restampHookIdentities()
+	if fresh.projection.Agents[1].AgentSession != nil {
+		t.Fatal("a pane reused by another provider must not inherit the old identity")
+	}
+	if fresh.projection.Agents[0].AgentSession != nil {
+		t.Fatal("a different terminal must not inherit the old identity")
+	}
+}
+
+func TestDetectInteractionRecognisesOmpReviewSheet(t *testing.T) {
+	screen := "╭─ Ask ─╮\n│ Review answers │\n│ 1. a: x │\n│ ❯ Submit │\n╰─╯"
+	kind, prompt, options, ok := detectClaudeInteraction(screen)
+	if !ok || kind != conversation.InteractionQuestion || prompt != "Submit your answers?" || len(options) != 2 || options[0] != "Submit" || options[1] != "Cancel" {
+		t.Fatalf("review sheet = %v %q %v %v", kind, prompt, options, ok)
 	}
 }

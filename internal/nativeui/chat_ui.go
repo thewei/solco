@@ -151,6 +151,13 @@ func (s *Shell) workspaceChatSurface(c *ui.Context) {
 				})
 			return
 		}
+		// N19 Phase 2: with the WebView chat enabled the body is the embedded
+		// page over the presentation-only bridge, including its loading and
+		// waiting states (SessionState); the header band and rebind logic
+		// stay native, and the native banners below are the no-WebView fallback.
+		if s.chatWebviewBody(c) {
+			return
+		}
 		if s.chatLoading {
 			loadingState(c, "Loading conversation…")
 			return
@@ -165,12 +172,6 @@ func (s *Shell) workspaceChatSurface(c *ui.Context) {
 			return
 		}
 
-		// N19 Phase 2: with the WebView chat enabled the body is the
-		// embedded page over the presentation-only bridge; the header band,
-		// rebind logic and empty/loading states above stay native.
-		if s.chatWebviewBody(c) {
-			return
-		}
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).FillWidth().Padding(sp.M, sp.XL).Gap(sp.S).Children(func() {
 				for i, turn := range s.chatTurns {
@@ -238,6 +239,9 @@ func (s *Shell) sendChatText(text string) ChatBridgeState {
 		requestID := fmt.Sprintf("chat-%s-%d", s.chatPaneID, time.Now().UnixNano())
 		err := s.launch.PromptLiveAgent(context.Background(), s.activeInstance, s.chatPaneID, text)
 		s.chatAfterPrompt(requestID, text, disposition, err)
+		if err == nil {
+			s.afterChatSend(text)
+		}
 	case conversation.DispositionQueuedAfterTurn:
 		s.enqueueChatFollowUp(text)
 	default:
@@ -306,10 +310,16 @@ func (s *Shell) chatAfterPrompt(requestID, text string, disposition conversation
 	s.chatOutcome = ""
 	s.chatLastRequestID = requestID
 	// Pending submission echo (0.6 §12): a temporary local User row bound to
-	// the pane and the live baseline. Only a bound live tail can reconcile
-	// it, so history-bound sends show no temporary row; a queued prompt is
-	// not a submission and creates none.
-	if s.chatLivePump != nil {
+	// the pane and the live baseline. Only a live tail can reconcile it, so
+	// history-bound sends show no temporary row; a queued prompt is not a
+	// submission and creates none. A fresh pane with no session yet (the
+	// sourceless latch) also echoes: the first prompt is what opens the
+	// session, and the echo carries over to the live bind that follows
+	// (same pane, baseline 0) until the provider row consumes it.
+	// A command the agent answers outside its transcript (a picker, or a
+	// dialog in Terminal) leaves no row to consume the echo: it would stay as
+	// a user bubble over a "Working" line that never ends.
+	if (s.chatLivePump != nil || s.chatPaneSourceless()) && s.chatCommandKind(text) == "" {
 		s.chatPendingEcho = &conversation.PendingEcho{
 			Text:     text,
 			Baseline: s.chatLiveCommitted,
@@ -510,6 +520,9 @@ func (s *Shell) chatDispositionSummary() string {
 	case conversation.DispositionQueuedAfterTurn:
 		return "Working — prompt will queue"
 	case conversation.DispositionNeedsTerminal:
+		if len(s.interactionBroker.PendingForPane(s.chatPaneID)) > 0 {
+			return "Waiting for your answer"
+		}
 		return "Blocked — use the terminal"
 	default:
 		return "Unknown state"

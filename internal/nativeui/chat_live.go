@@ -101,6 +101,14 @@ func (s *Shell) bindLiveAgent(key agent.AgentKey) bool {
 	if err != nil {
 		return false
 	}
+	return s.bindLiveFile(key, provider, path, fingerprint)
+}
+
+// bindLiveFile starts the incremental tail of one provider transcript file
+// for the card's pane. bindLiveAgent resolves the file from the measured
+// session identity; linkChatSession (chat_link.go) hands it a file the user
+// confirmed — the one tail path either way.
+func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path, fingerprint string) bool {
 	decoder, err := history.NewLiveDecoder(provider)
 	if err != nil {
 		return false
@@ -241,6 +249,7 @@ func (s *Shell) applyLiveSync(decoder *history.LiveDecoder) {
 	s.chatModel = lastModelFromItems(items)
 	s.chatContextTokens = lastContextFromMessages(messages)
 	s.appendPendingEchoTurn()
+	s.reconcileChatQuestion()
 	s.publishChatBridge()
 }
 
@@ -253,6 +262,12 @@ func lastModelFromItems(items []conversation.ConversationItem) string {
 		}
 	}
 	return model
+}
+
+// chatPaneSourceless reports a bound Agent pane that has no chat source yet
+// (a fresh agent before its first prompt).
+func (s *Shell) chatPaneSourceless() bool {
+	return s.chatPaneID != "" && s.chatSourcelessPaneID == s.chatPaneID && s.chatConversationID == ""
 }
 
 // appendPendingEchoTurn renders the unconsumed pending submission as the

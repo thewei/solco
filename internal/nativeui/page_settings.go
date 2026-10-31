@@ -259,25 +259,6 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 	)
 }
 
-// settingsVoice is Settings → Voice: the transcription endpoint behind the
-// Chat composer's Mic (2026-10-30 UX audit 3: it used to hang off General).
-func (s *Shell) settingsVoice(c *ui.Context) {
-	settingsGroup(c, "Transcription",
-		row("Endpoint", "", func() {
-			s.settingText(c, "Endpoint", "https://api.openai.com/v1", &s.settingsVoiceEndpointDraft, s.settings.Voice.EndpointURL, false,
-				func(v *settings.Settings, text string) { v.Voice.EndpointURL = text })
-		}),
-		row("API key", "", func() {
-			s.settingText(c, "API key", "Uses OPENAI_API_KEY", &s.settingsVoiceKeyDraft, s.settings.Voice.APIKey, true,
-				func(v *settings.Settings, text string) { v.Voice.APIKey = text })
-		}),
-		row("Model", "", func() {
-			s.settingText(c, "Model", "whisper-1", &s.settingsVoiceModelDraft, s.settings.Voice.Model, false,
-				func(v *settings.Settings, text string) { v.Voice.Model = text })
-		}),
-	)
-}
-
 func (s *Shell) settingsTerminal(c *ui.Context) {
 	settingsGroup(c, "Font",
 		row("Font family", "", func() {

@@ -54,6 +54,11 @@ func (s *Shell) shortcutSections() (left, right []shortcutSection) {
 		}},
 		{Title: "Chat", Rows: []shortcutRow{
 			row("Terminal ⇄ Chat", chatSwitchBinding.keycaps()),
+			row("Recall Previous Prompt", []string{"↑"}),
+			row("Stop the Turn", []string{"⌘", "."}),
+			row("Dictate", []string{"⇧", "⌘", "M"}),
+			row("Previous / Next Message", []string{"⌘", "↑", "↓"}),
+			row("Find in Conversation", []string{"⌘", "F"}),
 		}},
 	}
 	return left, right

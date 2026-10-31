@@ -36,7 +36,7 @@ var settingsLabels = map[string][][2]string{
 		{"Behavior", "Transparent background"}, {"Behavior", "Theme"},
 	},
 	"/settings/voice": {
-		{"Transcription", "Endpoint"}, {"Transcription", "API key"}, {"Transcription", "Model"},
+		{"Transcription", "Source"}, {"Transcription", "Account"}, {"Transcription", "What is sent"}, {"Transcription", "Endpoint"}, {"Transcription", "API key"}, {"Transcription", "Model"},
 	},
 	"/settings/providers": {
 		{"", "Integration"}, {"", "Status hook"},

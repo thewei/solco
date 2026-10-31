@@ -378,7 +378,12 @@ func (s *Shell) runHistoryScan(ctx context.Context) {
 	}
 	if err != nil && ctx.Err() == nil {
 		slog.Warn("history scan failed", "error", err)
-		s.applyOnWindow(func() { s.hist.scanning = false })
+		s.applyOnWindow(func() {
+			s.hist.scanning = false
+			if ctx.Err() == nil {
+				s.hist.cancel = nil
+			}
+		})
 		return
 	}
 	if err == nil {
@@ -386,6 +391,11 @@ func (s *Shell) runHistoryScan(ctx context.Context) {
 	}
 	s.applyOnWindow(func() {
 		if ctx.Err() == nil {
+			// A finished round releases the guard: the cancel func used to
+			// stay set forever, so every later startHistoryScan (a new
+			// agent session landing while the app runs) was a silent no-op
+			// and the new session never reached the catalog.
+			s.hist.cancel = nil
 			s.hist.scanning = false
 			s.hist.loaded = false
 			// The catalog just settled: re-resolve the History-meta
