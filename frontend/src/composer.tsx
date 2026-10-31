@@ -150,14 +150,17 @@ export function SlashPanel(props: {
 /** PlusPanel is the mouse entry to the same lists plus the file picker. */
 export function PlusPanel(props: {
   catalog: ChatCatalog | null;
+  /** False on a host with no way to take a file (the phone, for now). */
+  canAttach?: boolean;
   onAttach: () => void;
   onOpenList: (lead: string) => void;
   onClose: () => void;
 }) {
   const skillLead = props.catalog?.skills[0]?.name[0];
-  const items: { icon: "image" | "step" | "command"; name: string; detail: string; run: () => void }[] = [
-    { icon: "image", name: "Attach file or image…", detail: "or paste / drop onto the message", run: props.onAttach },
-  ];
+  const items: { icon: "image" | "step" | "command"; name: string; detail: string; run: () => void }[] = [];
+  if (props.canAttach !== false) {
+    items.push({ icon: "image", name: "Attach file or image…", detail: "or paste / drop onto the message", run: props.onAttach });
+  }
   if (skillLead) {
     items.push({
       icon: "step",

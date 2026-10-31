@@ -142,6 +142,13 @@ export interface ChatBridgeState {
    */
   outline: boolean;
   /**
+   * Features names what this host of the page can do beyond reading and
+   * sending. The desktop offers all of them; the phone client's host (the
+   * same page, another bridge) turns off what its Host API does not serve
+   * yet, so the page hides those entries instead of failing on use.
+   */
+  features: ChatFeatures;
+  /**
    * Root is the local repository root the changes card resolves paths
    * against ("" for read-only sessions and non-repository panes).
    */
@@ -253,6 +260,21 @@ export interface ChatContextUsage {
    * when no input was recorded.
    */
   cacheHitRate?: number;
+}
+
+/**
+ * ChatFeatures are the optional abilities of a page host (see
+ * ChatBridgeState.Features). The page treats an absent field as "on".
+ */
+export interface ChatFeatures {
+  /** Voice: the dictation button (chat.Transcribe). */
+  voice: boolean;
+  /** Attach: the file/image entries of the + menu, paste and drop. */
+  attach: boolean;
+  /** Queue: a follow-up can be queued behind a running turn. */
+  queue: boolean;
+  /** SubagentDrawer: a sub-agent's own transcript can be opened (chat.OpenSubagent). */
+  subagentDrawer: boolean;
 }
 
 /**

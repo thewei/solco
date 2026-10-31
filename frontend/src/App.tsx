@@ -308,6 +308,12 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   }, [draft]);
 
   const disposition = state?.disposition ?? "unknown";
+  // What this host of the page offers (the phone turns some off); an absent
+  // field means "on".
+  const canVoice = state?.features?.voice !== false;
+  const canAttach = state?.features?.attach !== false;
+  const canQueueFollowUp = state?.features?.queue !== false;
+  const canOpenSubagent = state?.features?.subagentDrawer !== false;
   // A fresh session has no transcript yet, so the chip shows the model the
   // agent's own config starts it on.
   const shownModel = state?.model || catalog?.defaultModel || "";
@@ -340,7 +346,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // draft at once. The transcript lands in the draft only when it is done.
   const voiceBusy = recording || transcribing;
   const canSend = disposition === "ready" && hasContent && !sending && !state?.loading && !voiceBusy;
-  const canQueue = working && hasContent && !sending && !voiceBusy;
+  const canQueue = working && canQueueFollowUp && hasContent && !sending && !voiceBusy;
   // One composer action, as in the reference chat: while the agent works
   // with an empty box it is Stop (one Escape through the bridge); typing
   // swaps it back to Queue/Send.
@@ -615,7 +621,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   };
   const onPaste = (event: React.ClipboardEvent) => {
     const list = Array.from(event.clipboardData.files);
-    if (list.length === 0) return;
+    if (list.length === 0 || !canAttach) return;
     event.preventDefault();
     void takeFiles(list);
   };
@@ -966,10 +972,10 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const subCtx = useMemo<SubagentContextValue>(
     () => ({
       byId: new Map((state?.subagents ?? []).map((sub) => [sub.id, sub])),
-      open: (id) => setOpenSub((current) => (current === id ? null : id)),
+      open: canOpenSubagent ? (id) => setOpenSub((current) => (current === id ? null : id)) : () => {},
       openId: openSub ?? undefined,
     }),
-    [state?.subagents, openSub],
+    [state?.subagents, openSub, canOpenSubagent],
   );
   const subOpen = openSub !== null && subCtx.byId.has(openSub);
   useEffect(() => setOpenSub(null), [conversationId]);
@@ -1025,7 +1031,9 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
         : state?.waiting
           ? "Your first message starts the conversation."
           : working
-        ? "Working • Queue appends a follow-up; Interrupt sends it now."
+        ? canQueueFollowUp
+          ? "Working • Queue appends a follow-up; Interrupt sends it now."
+          : "Working • Interrupt & send cuts in; Stop ends the turn."
         : transcribing
           ? "Transcribing…"
           : recording
@@ -1058,7 +1066,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
       className={subOpen ? "chat with-drawer" : "chat"}
       onContextMenu={onContextMenu}
       onDragOver={(event) => {
-        if (readOnly || voiceBusy || !hasFiles(event)) return;
+        if (readOnly || voiceBusy || !canAttach || !hasFiles(event)) return;
         event.preventDefault();
         setDragging(true);
       }}
@@ -1066,7 +1074,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
         if (event.currentTarget === event.target) setDragging(false);
       }}
       onDrop={(event) => {
-        if (readOnly || voiceBusy || !hasFiles(event)) return;
+        if (readOnly || voiceBusy || !canAttach || !hasFiles(event)) return;
         event.preventDefault();
         setDragging(false);
         void takeFiles(Array.from(event.dataTransfer.files));
@@ -1209,7 +1217,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
               <TasksTray
                 plan={planVisible ? state?.plan : undefined}
                 subagents={state?.subagents}
-                onOpenSubagent={subCtx.open}
+                onOpenSubagent={canOpenSubagent ? subCtx.open : undefined}
                 live={working}
                 compact={Boolean(state?.interactions?.length)}
               />
@@ -1251,6 +1259,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
             {panel === "plus" ? (
               <PlusPanel
                 catalog={catalog}
+                canAttach={canAttach}
                 onAttach={() => {
                   setPanel(null);
                   void attach();
@@ -1339,6 +1348,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                     <Icon name="x" size={15} />
                   </button>
                 ) : null}
+                {canVoice ? (
                 <button
                   type="button"
                   className={`ib${recording ? " recording" : ""}`}
@@ -1355,6 +1365,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 >
                   {recording ? <StopIcon size={11} /> : transcribing ? <span className="spin" aria-hidden /> : <Icon name="mic" size={15} />}
                 </button>
+                ) : null}
                 {recording ? <canvas ref={meterRef} className="mic-meter" width={44} height={28} aria-hidden /> : null}
                 {recording ? (
                   <span className="rec-time" aria-live="off">
@@ -1411,7 +1422,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                   <button type="button" className="send stop" title="Stop" aria-label="Stop" onClick={() => void stop()}>
                     <StopIcon />
                   </button>
-                ) : (
+                ) : working && !canQueueFollowUp ? null : (
                   <button
                     type="button"
                     className="send"
