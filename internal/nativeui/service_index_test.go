@@ -150,10 +150,11 @@ func TestBuildSidebarActivityAgentRollup(t *testing.T) {
 	}
 }
 
-// TestBuildSidebarActivityServiceBeatsAgent pins the precedence: a running
-// service keeps the corner dot green even when an agent below is working,
-// and both facts join in the tooltip.
-func TestBuildSidebarActivityServiceBeatsAgent(t *testing.T) {
+// TestBuildSidebarActivityWorkingAgentSpins pins the 2026-10-31 precedence:
+// an Agent actually running beneath a Tab/Project keeps the slot spinning —
+// the spinner outranks the green service square (shape says the kind, and
+// motion beats a quiet square), and both facts join in the tooltip.
+func TestBuildSidebarActivityWorkingAgentSpins(t *testing.T) {
 	projection := herdr.Projection{
 		Projects: []herdr.Project{{ID: "w1"}},
 		Tabs:     []herdr.Tab{{ID: "t1", ProjectID: "w1"}},
@@ -166,8 +167,12 @@ func TestBuildSidebarActivityServiceBeatsAgent(t *testing.T) {
 	}
 
 	for _, id := range []string{"t1", "w1"} {
-		if act := buildSidebarActivity(projection, svcs, nil)[id]; act.Tone != ToneSuccess {
-			t.Fatalf("activity[%s] = %+v (want green over agent)", id, act)
+		act := buildSidebarActivity(projection, svcs, nil)[id]
+		if !act.On || act.Tone != ToneWorking || act.Service {
+			t.Fatalf("activity[%s] = %+v (want the working spinner, not the square)", id, act)
+		}
+		if act.Detail != "node on :3000 · 1 agent running" {
+			t.Fatalf("activity[%s] detail = %q (want service + agent facts)", id, act.Detail)
 		}
 	}
 }
@@ -264,6 +269,32 @@ func TestBuildSidebarActivityProjectDaemonFallback(t *testing.T) {
 	act := buildSidebarActivity(projection, svcs, nil)["w2"]
 	if !act.On || act.Tone != ToneSuccess || act.Detail != "vite on :5173" {
 		t.Fatalf("project daemon dot = %+v", act)
+	}
+}
+
+// TestBuildSidebarActivityDaemonKeepsSpinner pins the project-level half of
+// the same rule: a daemon attributed to the Project must not stamp its green
+// square back over a working Agent's spinner; it joins the tooltip instead.
+// The no-agent fallback square stays pinned by
+// TestBuildSidebarActivityProjectDaemonFallback.
+func TestBuildSidebarActivityDaemonKeepsSpinner(t *testing.T) {
+	projection := herdr.Projection{
+		Projects: []herdr.Project{{ID: "w2", Label: "herdr-client", TabCount: 1}},
+		Tabs:     []herdr.Tab{{ID: "t3", ProjectID: "w2", Label: "shell", PaneCount: 1}},
+		Panes:    []herdr.Pane{{ID: "p4", ProjectID: "w2", TabID: "t3", Label: "zsh"}},
+		Agents:   []herdr.Agent{{PaneID: "p4", Status: "working"}},
+	}
+	svcs := sidebarServiceIndex{
+		Panes:    map[string]paneServiceActivity{},
+		Projects: map[string]paneServiceActivity{"w2": {Proc: "vite", Ports: []uint16{5173}}},
+	}
+
+	act := buildSidebarActivity(projection, svcs, nil)["w2"]
+	if !act.On || act.Tone != ToneWorking || act.Service {
+		t.Fatalf("project daemon over working agent = %+v (want spinner)", act)
+	}
+	if act.Detail != "1 agent running · vite on :5173" {
+		t.Fatalf("project detail = %q (want agent + daemon facts)", act.Detail)
 	}
 }
 

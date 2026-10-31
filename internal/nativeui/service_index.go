@@ -263,9 +263,11 @@ type sidebarActivity struct {
 // buildSidebarActivity rolls service and agent activity up the sidebar
 // hierarchy: Panes light for their own services (their Agent state already
 // owns the icon-corner dot), Tabs and Projects light for whatever runs
-// beneath them — services in green, otherwise the strongest Agent state.
-// shellIdle is the scan's measured shell-prompt fact; a binding on such a
-// pane is a dead leftover and must not count as a running agent.
+// beneath them — a working Agent keeps the slot spinning (the service fact
+// moves into the tooltip), otherwise services light green and the other
+// Agent states take the dot. shellIdle is the scan's measured shell-prompt
+// fact; a binding on such a pane is a dead leftover and must not count as
+// a running agent.
 func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIndex, shellIdle map[string]bool) map[string]sidebarActivity {
 	index := make(map[string]sidebarActivity, len(projection.Panes)+len(projection.Tabs)+len(projection.Projects))
 
@@ -303,9 +305,11 @@ func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIn
 		}
 		act, on := rollupActivity(index, agentStateByPane, paneIDs)
 		if daemon := services.Projects[project.ID]; len(daemon.Ports) > 0 {
-			act.On = true
-			act.Tone = ToneSuccess
-			act.Service = true
+			// A working Agent keeps the slot spinning (rollupActivity); the
+			// daemon joins the tooltip instead of stamping the square back.
+			if act.Tone != ToneWorking {
+				act.On, act.Tone, act.Service = true, ToneSuccess, true
+			}
 			act.Detail = joinDetails(act.Detail, serviceActivityDetail(daemon))
 			on = true
 		}
@@ -316,7 +320,10 @@ func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIn
 	return index
 }
 
-// rollupActivity aggregates descendant Panes for a Tab/Project row.
+// rollupActivity aggregates descendant Panes for a Tab/Project row: a
+// working Agent outranks a running service (the slot spins, the service
+// stays in the tooltip), otherwise a service lights the square green and
+// the strongest Agent state takes the dot.
 func rollupActivity(index map[string]sidebarActivity, agentStateByPane map[string]operationalState, paneIDs []string) (sidebarActivity, bool) {
 	act := sidebarActivity{}
 	serviceCount := 0
@@ -334,7 +341,15 @@ func rollupActivity(index map[string]sidebarActivity, agentStateByPane map[strin
 			}
 		}
 	}
+	agentDetail := pluralUnits(agentCount, "agent") + " running"
 	switch {
+	case strongest == opWorking:
+		// An Agent is actually running beneath this row (2026-10-31 user
+		// request): the slot spins even while a dev server is up — motion
+		// says "working" louder than a quiet green square, and the service
+		// facts stay in the tooltip.
+		act.On, act.Tone, act.Service = true, ToneWorking, false
+		act.Detail = joinDetails(act.Detail, agentDetail)
 	case serviceCount > 0:
 		act.On, act.Tone, act.Service = true, ToneSuccess, true
 	case agentCount > 0:
@@ -344,7 +359,7 @@ func rollupActivity(index map[string]sidebarActivity, agentStateByPane map[strin
 		} else {
 			act.Tone = operationalTone(strongest)
 		}
-		act.Detail = pluralUnits(agentCount, "agent") + " running"
+		act.Detail = agentDetail
 	default:
 		return sidebarActivity{}, false
 	}
