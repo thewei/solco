@@ -14,7 +14,7 @@ import (
 
 /**
  * [INPUT]: 页面右键目标（选中文本/链接/消息源文本/文件路径）、聊天 pane 的 cwd 与仓库根、mygo.Menu / Clipboard / Shell.OpenExternal
- * [OUTPUT]: 对外提供 ChatBridge.ShowContextMenu（原生 NSMenu 弹出）、chat:menu 事件（页内动作：selectAll/find）、chatNavigationDecision（WebView 导航闸）
+ * [OUTPUT]: 对外提供 ChatBridge.ShowContextMenu（原生 NSMenu 弹出）、chat:menu 事件（页内动作：selectAll/find）、pageNavigationDecision（WebView 导航闸）
  * [POS]: WebView Chat 的“原生感”：页面屏蔽浏览器默认右键菜单（Reload/Inspect），改由 macOS 菜单呈现；主框架永远不被链接导航带走，http(s)/mailto 交给系统浏览器。仅展示层：不读文件内容、不新增 Herdr 方法，Quick Look 只对本机存在的普通文件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -86,10 +86,10 @@ func safeExternalURL(raw string) bool {
 	return false
 }
 
-// chatNavigationDecision is the WebView's navigation gate. The chat page
+// pageNavigationDecision is the navigation gate of the chat and Files pages. A page
 // never navigates away: every main-frame navigation is cancelled, and a
 // link the user clicked opens in the system browser when it is safe to.
-func chatNavigationDecision(raw string, userInitiated bool) (open bool) {
+func pageNavigationDecision(raw string, userInitiated bool) (open bool) {
 	return userInitiated && safeExternalURL(raw)
 }
 

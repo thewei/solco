@@ -9,6 +9,54 @@
   min-width: 0;
   background: var(--content);
   color: var(--text);
+  /* Native feel (designs/chat-view 2026-10-31): the page is a document, not
+     a web page — only the rendered text selects, controls are arrows. */
+  position: relative;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.viewer :where(.markdown-body, .markdown-body *) {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+}
+
+.viewer :where(a[href], a[href] *) {
+  cursor: pointer;
+}
+
+/* Links and images are not drag sources: dropping one would load it. */
+.viewer :where(a, img) {
+  -webkit-user-drag: none;
+}
+
+.viewer :where(a, [tabindex]):focus {
+  outline: none;
+}
+.viewer :where(a, [tabindex]):focus-visible {
+  outline: 3px solid -webkit-focus-ring-color;
+  outline-offset: 1px;
+}
+
+/* Where the link under the pointer goes (Safari's status pill). */
+.viewer-linkhint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 2;
+  max-width: calc(100% - 20px);
+  padding: 3px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 .viewer-body {

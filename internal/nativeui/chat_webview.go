@@ -46,7 +46,7 @@ func (s *Shell) chatWebviewFor() *mygo.WebView {
 		// with a web page. Safe links go to the system browser instead.
 		view.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
 			e.PreventDefault()
-			if chatNavigationDecision(e.URL, e.UserInitiated) {
+			if pageNavigationDecision(e.URL, e.UserInitiated) {
 				go func() { _ = mygo.Shell.OpenExternal(e.URL) }()
 			}
 		})

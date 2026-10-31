@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { chat, events, type ChatBridgeState, type ChatCatalog, type ChatCatalogEntry } from "./mygo";
 import { Icon, StopIcon } from "./icons";
+import { selectContents, useLinkHint } from "./native";
 import { OutboxRow, TurnRow, userDisplay, type Outbox } from "./turn";
 import { TocRail } from "./toc";
 import { turnText, useTurnList } from "./turnlist";
@@ -43,7 +44,7 @@ export function App() {
   // Native feel: a hairline under the title bar once the log has scrolled,
   // and the target of the link under the pointer (Safari's status pill).
   const [scrolled, setScrolled] = useState(false);
-  const [linkHint, setLinkHint] = useState("");
+  const linkHint = useLinkHint();
   const findRef = useRef<HTMLInputElement>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [completions, setCompletions] = useState<string[]>([]);
@@ -897,32 +898,12 @@ export function App() {
       events.chatMenu.on((action) => {
         if (action === "find") openFind();
         if (action === "selectAll") {
-          const body = logRef.current?.querySelector(".col");
-          const selection = window.getSelection();
-          if (!body || !selection) return;
-          const range = document.createRange();
-          range.selectNodeContents(body);
-          selection.removeAllRanges();
-          selection.addRange(range);
+          selectContents(logRef.current?.querySelector(".col"));
         }
       }),
     [openFind],
   );
 
-  // Safari-style status pill: where the link under the pointer goes.
-  useEffect(() => {
-    const target = (event: MouseEvent) => (event.target as HTMLElement | null)?.closest?.("a[href]");
-    const over = (event: MouseEvent) => setLinkHint(target(event)?.getAttribute("href") ?? "");
-    const out = (event: MouseEvent) => {
-      if (target(event)) setLinkHint("");
-    };
-    document.addEventListener("mouseover", over);
-    document.addEventListener("mouseout", out);
-    return () => {
-      document.removeEventListener("mouseover", over);
-      document.removeEventListener("mouseout", out);
-    };
-  }, []);
   const runFind = (query: string, backwards: boolean) => {
     if (query === "") return;
     // window.find is WebKit's own search: it scrolls to and selects the match.

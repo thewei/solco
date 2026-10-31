@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import githubMarkdownDark from "github-markdown-css/github-markdown-dark.css?raw";
 import githubMarkdownLight from "github-markdown-css/github-markdown-light.css?raw";
 import hljsGithubDark from "highlight.js/styles/github-dark.css?raw";
+import { selectContents, useLinkHint } from "./native";
 import { filesPreview, events, type FilesPreviewContent, type FilesPreviewTarget } from "./mygo";
 import "./files-viewer.css";
 
@@ -88,6 +89,7 @@ export function FilesViewer() {
   const [loading, setLoading] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const generation = useRef(0);
+  const linkHint = useLinkHint();
 
   // The selection arrives through the bridge event; the page starts from
   // Current so a reload keeps showing what the tree shows. An empty path
@@ -149,8 +151,28 @@ export function FilesViewer() {
     setImageFailed(false);
   }, [content?.dataUrl]);
 
+  // The context menu is the system's (filesPreview.showContextMenu); the one
+  // action only the page can run comes back through filesMenu.
+  useEffect(
+    () =>
+      events.filesMenu.on((action) => {
+        if (action === "selectAll") selectContents(document.querySelector(".viewer-md"));
+      }),
+    [],
+  );
+  const onContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    const target = event.target as HTMLElement;
+    void filesPreview
+      .showContextMenu({
+        selection: window.getSelection()?.toString() ?? "",
+        link: target.closest("a[href]")?.getAttribute("href") ?? "",
+      })
+      .catch(() => {});
+  };
+
   return (
-    <div className="viewer">
+    <div className="viewer" onContextMenu={onContextMenu}>
       <div className="viewer-body">
         {showMarkdown ? <RenderedMarkdown content={content!} /> : null}
         {showImage ? (
@@ -186,6 +208,11 @@ export function FilesViewer() {
           </div>
         ) : null}
       </div>
+      {linkHint ? (
+        <div className="viewer-linkhint" aria-hidden="true">
+          {linkHint}
+        </div>
+      ) : null}
     </div>
   );
 }

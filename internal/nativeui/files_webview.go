@@ -36,6 +36,14 @@ func (s *Shell) filesWebviewFor() *mygo.WebView {
 			slog.Warn("create files preview webview failed; preview states stay truthful", "error", err)
 			return nil
 		}
+		// Dropping a file or following a link must not replace the preview
+		// with another page; safe links go to the system browser instead.
+		view.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
+			e.PreventDefault()
+			if pageNavigationDecision(e.URL, e.UserInitiated) {
+				go func() { _ = mygo.Shell.OpenExternal(e.URL) }()
+			}
+		})
 		s.filesWebview = view
 	}
 	return s.filesWebview

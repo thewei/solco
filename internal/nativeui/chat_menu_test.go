@@ -58,14 +58,14 @@ func TestSafeExternalURLAllowsOnlyWebAndMail(t *testing.T) {
 	}
 }
 
-func TestChatNavigationNeverFollowsTheLinkInPlace(t *testing.T) {
-	if !chatNavigationDecision("https://example.com", true) {
+func TestPageNavigationNeverFollowsTheLinkInPlace(t *testing.T) {
+	if !pageNavigationDecision("https://example.com", true) {
 		t.Fatal("a clicked https link opens in the browser")
 	}
-	if chatNavigationDecision("https://example.com", false) {
+	if pageNavigationDecision("https://example.com", false) {
 		t.Fatal("a navigation the user did not start opens nothing")
 	}
-	if chatNavigationDecision("mygo://localhost/other", true) {
+	if pageNavigationDecision("mygo://localhost/other", true) {
 		t.Fatal("an in-app URL is not handed to the system")
 	}
 }
@@ -92,5 +92,23 @@ func TestResolveChatPathFindsOnlyExistingRegularFiles(t *testing.T) {
 	}
 	if _, ok := resolveChatPath("sub/a.go"); ok {
 		t.Error("a relative path with no base must not resolve")
+	}
+}
+
+func TestFilesMenuPlanFollowsTheTarget(t *testing.T) {
+	cases := []struct {
+		in        FilesMenuInput
+		quickLook bool
+		want      []string
+	}{
+		{FilesMenuInput{}, false, []string{"selectAll"}},
+		{FilesMenuInput{Selection: "x", Link: "https://a.dev"}, true,
+			[]string{"copy", "openLink", "copyLink", "quickLook", "copyPath", "", "selectAll"}},
+		{FilesMenuInput{Link: "file:///etc/passwd"}, false, []string{"selectAll"}},
+	}
+	for _, c := range cases {
+		if got := menuIDs(filesMenuPlan(c.in, c.quickLook)); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("filesMenuPlan(%+v, %v) = %v, want %v", c.in, c.quickLook, got, c.want)
+		}
 	}
 }

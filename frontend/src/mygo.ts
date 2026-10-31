@@ -256,6 +256,15 @@ export interface ChatMenuInput {
 }
 
 /**
+ * FilesMenuInput is what the page knows about the right-click target. The
+ * file itself is never sent: the bridge uses the selection it owns.
+ */
+export interface FilesMenuInput {
+  selection?: string;
+  link?: string;
+}
+
+/**
  * FilesPreviewContent is one read-only file the page renders. Flavor tells
  * the page which view to take: "markdown" (rendered) or "image" (DataURL);
  * text and code never reach the page.
@@ -493,6 +502,13 @@ export const filesPreview = {
   openExternal(rawURL: string): Promise<void> {
     return call("filesPreview.OpenExternal", rawURL);
   },
+  /**
+   * ShowContextMenu pops up the Files preview's macOS context menu at the
+   * pointer; it returns once the menu closes.
+   */
+  showContextMenu(in_: FilesMenuInput): Promise<void> {
+    return call("filesPreview.ShowContextMenu", in_);
+  },
 } as const;
 
 // ---- Events ----
@@ -513,4 +529,6 @@ export const events = {
    * page also starts from Current and stays current through this event alone.
    */
   filesPreview: event<FilesPreviewTarget>("files:preview"),
+  /** filesMenu carries the one action only the page can run (selectAll). */
+  filesMenu: event<string>("files:menu"),
 } as const;
