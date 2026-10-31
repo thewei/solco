@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/thewei/solco/internal/apphook"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 )
@@ -42,7 +43,7 @@ const askUserQuestionScreen = `❯ hi
 Enter to select · Tab/Arrow keys to navigate · Esc to cancel`
 
 func TestDetectClaudeInteractionAskUserQuestion(t *testing.T) {
-	kind, prompt, options, ok := detectClaudeInteraction(askUserQuestionScreen)
+	kind, prompt, options, ok := chatsession.DetectScreenPrompt(askUserQuestionScreen)
 	if !ok {
 		t.Fatal("the AskUserQuestion screen must detect an interaction")
 	}
@@ -74,7 +75,7 @@ func TestDetectClaudeInteractionPermissionSheet(t *testing.T) {
 		"",
 		"Enter to select · Arrow keys to navigate · Esc to cancel",
 	}, "\n")
-	kind, prompt, options, ok := detectClaudeInteraction(screen)
+	kind, prompt, options, ok := chatsession.DetectScreenPrompt(screen)
 	if !ok {
 		t.Fatal("the permission sheet must detect an interaction")
 	}
@@ -100,7 +101,7 @@ func TestDetectClaudeInteractionIgnoresNumberedTranscript(t *testing.T) {
 		"",
 		"❯ done",
 	}, "\n")
-	if _, _, _, ok := detectClaudeInteraction(screen); ok {
+	if _, _, _, ok := chatsession.DetectScreenPrompt(screen); ok {
 		t.Fatal("plain numbered transcript must not detect")
 	}
 }
@@ -350,7 +351,7 @@ func TestHookSessionIdentitySurvivesProjectionRefreshAndRestart(t *testing.T) {
 
 func TestDetectInteractionRecognisesOmpReviewSheet(t *testing.T) {
 	screen := "╭─ Ask ─╮\n│ Review answers │\n│ 1. a: x │\n│ ❯ Submit │\n╰─╯"
-	kind, prompt, options, ok := detectClaudeInteraction(screen)
+	kind, prompt, options, ok := chatsession.DetectScreenPrompt(screen)
 	if !ok || kind != conversation.InteractionQuestion || prompt != "Submit your answers?" || len(options) != 2 || options[0] != "Submit" || options[1] != "Cancel" {
 		t.Fatalf("review sheet = %v %q %v %v", kind, prompt, options, ok)
 	}

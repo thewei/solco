@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -393,12 +391,6 @@ func (b *ChatBridge) Transcribe(ctx context.Context, audioBase64 string, mime st
 // must land in its text field first.
 const chatAnswerTextSettle = 500 * time.Millisecond
 
-// chatAboutOption matches the "discuss instead of picking" affordance.
-// Selecting it makes Claude Code tear the question down (resolved as
-// declined) and return to its normal input, so the typed answer delivers
-// as an ordinary prompt after an Escape — never as arrow navigation.
-var chatAboutOption = regexp.MustCompile(`(?i)^chat about`)
-
 // AnswerInteraction claims the interaction (CAS, first answer wins) and
 // delivers the choice as the option's arrow-navigation key sequence —
 // arrows, never digits, which would type into the TUI (the reference
@@ -457,18 +449,12 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 			}
 			paneID = chosen.AgentPaneID
 			answered = *chosen
-			keys = multiSelectKeys(chosen.Options, picks)
+			keys = conversation.MultiSelectKeys(chosen.Options, picks)
 			return
 		}
-		index := -1
-		for i, candidate := range chosen.Options {
-			if candidate == option {
-				index = i
-				break
-			}
-		}
-		if index < 0 {
-			prepareErr = conversation.ErrUnknownOption
+		planned, err := chosen.AnswerKeys(option, text != "")
+		if err != nil {
+			prepareErr = err
 			return
 		}
 		if _, err := b.shell.interactionBroker.ResolveCAS(interactionID, option); err != nil {
@@ -477,31 +463,7 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 		}
 		paneID = chosen.AgentPaneID
 		answered = *chosen
-		if chosen.EscapeOption != "" && option == chosen.EscapeOption {
-			keys = []string{"esc"}
-			return
-		}
-		if text != "" && chatAboutOption.MatchString(option) {
-			// "Chat about this" declines the question and refocuses the
-			// ordinary input: Escape, then the answer pastes as a normal
-			// prompt. Navigating to the row and pasting into the teardown
-			// swallows the text.
-			keys = []string{"esc"}
-			return
-		}
-		// Navigation is relative to the row the selector opens on.
-		keys = make([]string, 0, max(index, chosen.Start)+1)
-		for i := chosen.Start; i < index; i++ {
-			keys = append(keys, "down")
-		}
-		for i := index; i < chosen.Start; i++ {
-			keys = append(keys, "up")
-		}
-		commit := "enter"
-		if chosen.Commit != "" {
-			commit = chosen.Commit
-		}
-		keys = append(keys, commit)
+		keys = planned
 	})
 	if prepareErr != nil {
 		return b.shell.chatBridgeStateOnWindow(), prepareErr
@@ -561,28 +523,6 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 		state = b.shell.chatBridgeState()
 	})
 	return state, err
-}
-
-// multiSelectKeys ticks the picked rows of a multi-select prompt whose
-// cursor opens on the first row: space on each picked row, down between
-// them, enter to submit.
-func multiSelectKeys(options, picks []string) []string {
-	last := -1
-	for index, option := range options {
-		if slices.Contains(picks, option) {
-			last = index
-		}
-	}
-	keys := make([]string, 0, 2*(last+1)+1)
-	for index := 0; index <= last; index++ {
-		if slices.Contains(picks, options[index]) {
-			keys = append(keys, "space")
-		}
-		if index < last {
-			keys = append(keys, "down")
-		}
-	}
-	return append(keys, "enter")
 }
 
 // OpenTerminal switches the workspace surface to Terminal, for the page's

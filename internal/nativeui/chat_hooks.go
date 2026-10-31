@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/thewei/solco/internal/apphook"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/herdrhooks"
@@ -390,13 +390,13 @@ func (s *Shell) detectPaneInteraction(paneID string) {
 		slog.Warn("interaction detect read failed", "pane", paneID, "error", err)
 		return
 	}
-	kind, prompt, options, ok := detectClaudeInteraction(screen)
+	kind, prompt, options, ok := chatsession.DetectScreenPrompt(screen)
 	if !ok {
 		slog.Info("interaction detect found no prompt shape", "pane", paneID)
 		return
 	}
 	interaction := conversation.PendingInteraction{Kind: kind, Prompt: prompt, Options: options}
-	if ompReviewSheet.MatchString(screen) {
+	if chatsession.IsOmpReviewSheet(screen) {
 		interaction.EscapeOption = "Cancel"
 	}
 	s.publishInteraction(paneID, interaction)
@@ -424,7 +424,7 @@ func (s *Shell) publishTranscriptQuestion(paneID string) bool {
 	if s.chatPaneID != paneID || s.chatReadOnly || len(s.interactionBroker.PendingForPane(paneID)) > 0 {
 		return false
 	}
-	ask, ok := transcriptQuestion(s.chatTurns)
+	ask, ok := chatsession.TranscriptQuestion(s.chatTurns)
 	if !ok {
 		return false
 	}
@@ -478,103 +478,4 @@ func (s *Shell) publishInteraction(paneID string, interaction conversation.Pendi
 	}
 	slog.Info("interaction published", "pane", paneID, "kind", string(interaction.Kind), "options", len(interaction.Options))
 	s.publishChatBridge()
-}
-
-// optionLine matches Claude Code's numbered option rows ("❯ 1. Yes",
-// "  2. herdr adapter"), with or without the selector mark.
-var optionLine = regexp.MustCompile(`^[❯>•·\s]*(\d+)\.\s+(.+?)\s*$`)
-
-// promptFooter matches the AskUserQuestion/permission footer — the
-// strongest "an interactive prompt is showing" signal.
-var promptFooter = regexp.MustCompile(`Enter to select`)
-
-// dividerLine matches the full-width rule AskUserQuestion draws between
-// questions and extra options.
-var dividerLine = regexp.MustCompile(`^─+\s*$`)
-
-// questionLine matches a prompt question in ASCII or full-width punctuation.
-var questionSuffix = regexp.MustCompile(`[?？]\s*$`)
-
-// ompReviewSheet matches omp's closing "Review answers" sheet of a
-// multi-question ask, whose only row is the highlighted Submit (Cancel is ⎋).
-var ompReviewSheet = regexp.MustCompile(`(?s)Review answers.*❯\s*Submit`)
-
-// detectClaudeInteraction parses Claude Code's visible TUI text for its
-// interactive prompts — AskUserQuestion (tabs + numbered options with
-// description rows) and the permission sheet ("Do you want …"). A minimal
-// port of the reference parser's core; the full provider table lives in
-// herdr-web-ui's prompt.ts and ports incrementally.
-func detectClaudeInteraction(screen string) (conversation.InteractionKind, string, []string, bool) {
-	if ompReviewSheet.MatchString(screen) {
-		return conversation.InteractionQuestion, "Submit your answers?", []string{"Submit", "Cancel"}, true
-	}
-	lines := strings.Split(strings.ReplaceAll(screen, "\r\n", "\n"), "\n")
-	// Drop trailing empties so the last row is meaningful.
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
-	}
-	// Strong signal: the footer. Collect the numbered options between the
-	// footer (and its divider) and the question line above them.
-	if footer := lastLineIndex(lines, promptFooter); footer != -1 {
-		if kind, prompt, options, ok := parseOptionRun(lines, footer-1); ok {
-			return kind, prompt, options, true
-		}
-	}
-	// Fallback: the last numbered-option run anywhere, with a question line
-	// above it.
-	return parseOptionRun(lines, len(lines)-1)
-}
-
-// parseOptionRun walks up from `from`, collecting the numbered-option run —
-// description rows, blanks and dividers between options are part of the
-// block — and then picks the closest row below-reading-as-a-question: the
-// first candidate (bottom-up) ending in ?/？ or opening "Do you want".
-// Plain numbered transcript content never qualifies, so the fallback pass
-// cannot misfire on ordinary lists.
-func parseOptionRun(lines []string, from int) (conversation.InteractionKind, string, []string, bool) {
-	options := make([]string, 0, 4)
-	var candidates []string
-	for i := from; i >= 0 && i > from-40; i-- {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		if dividerLine.MatchString(trimmed) {
-			continue
-		}
-		if match := optionLine.FindStringSubmatch(line); match != nil {
-			options = append([]string{strings.TrimSpace(match[2])}, options...)
-			continue
-		}
-		if trimmed == "" {
-			continue
-		}
-		candidates = append(candidates, trimmed)
-	}
-	if len(options) < 2 {
-		return "", "", nil, false
-	}
-	prompt := ""
-	for _, candidate := range candidates {
-		if questionSuffix.MatchString(candidate) || strings.HasPrefix(candidate, "Do you want") {
-			prompt = candidate
-			break
-		}
-	}
-	if prompt == "" {
-		return "", "", nil, false
-	}
-	kind := conversation.InteractionQuestion
-	if strings.Contains(prompt, "Do you want") {
-		kind = conversation.InteractionPermission
-	}
-	return kind, prompt, options, true
-}
-
-// lastLineIndex returns the last line matching re, or -1.
-func lastLineIndex(lines []string, re *regexp.Regexp) int {
-	for i := len(lines) - 1; i >= 0; i-- {
-		if re.MatchString(lines[i]) {
-			return i
-		}
-	}
-	return -1
 }

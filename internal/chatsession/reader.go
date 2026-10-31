@@ -82,6 +82,14 @@ func (r *Reader) Sync() (bool, error) {
 	return first || sync.HasUpdates(), nil
 }
 
+// Ask returns the transcript's pending `ask` call (omp/pi), if the agent is
+// parked on one. It reads the same window State renders without moving it.
+func (r *Reader) Ask() (TranscriptAsk, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return TranscriptQuestion(Fold(r.decoder.Projection(), r.decoder.PendingTail(), r.start).Turns)
+}
+
 // State projects the current window. now stamps sub-agent durations.
 func (r *Reader) State(now time.Time) State {
 	r.mu.Lock()
