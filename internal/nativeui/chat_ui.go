@@ -14,6 +14,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/agentcatalog"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
@@ -318,8 +319,9 @@ func (s *Shell) chatAfterPrompt(requestID, text string, disposition conversation
 	// (same pane, baseline 0) until the provider row consumes it.
 	// A command the agent answers outside its transcript (a picker, or a
 	// dialog in Terminal) leaves no row to consume the echo: it would stay as
-	// a user bubble over a "Working" line that never ends.
-	if (s.chatLivePump != nil || s.chatPaneSourceless()) && s.chatCommandKind(text) == "" {
+	// a user bubble over a "Working" line that never ends. /compact is the
+	// same: the agent writes a summary entry, never a user row.
+	if (s.chatLivePump != nil || s.chatPaneSourceless()) && s.chatCommandKind(text) == "" && !agentcatalog.IsCompact(text) {
 		s.chatPendingEcho = &conversation.PendingEcho{
 			Text:     text,
 			Baseline: s.chatLiveCommitted,

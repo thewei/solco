@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<!--
+  exploration-shell.html — Design Storybook scaffold
+
+  Mental model: Storybook for design proposals (not product Storybook).
+  ┌─────────────────────────────────────────┬──────────────────┐
+  │ Canvas (full preview)                   │ Story panel      │
+  │                                         │ · Variants       │
+  │                                         │ · States         │
+  │                                         │ ─────────────    │
+  │                                         │ ▼ Story (docs)   │
+  └─────────────────────────────────────────┴──────────────────┘
+
+  Copy to: designs/<topic>/exploration.html
+  Prefer opening directly in a browser (file://). Use a static server only when the demo requires it.
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat · Context window</title>
+
+  <style>
+    [data-ide-shell] {
+      --shell-bg: #0f0f10;
+      --shell-panel: #18181b;
+      --shell-border: #27272a;
+      --shell-text: #fafafa;
+      --shell-muted: #a1a1aa;
+      --shell-accent: #71717a;
+      --panel-w: 280px;
+      box-sizing: border-box;
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: var(--shell-bg);
+      color: var(--shell-text);
+      min-height: 100vh;
+      margin: 0;
+    }
+    [data-ide-shell] * { box-sizing: border-box; }
+
+    [data-ide-shell] .ide-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ----- Canvas (left / main) ----- */
+    [data-ide-shell] .ide-stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+      background: #111113;
+    }
+    [data-ide-shell] .ide-stage-label {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      z-index: 20;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--shell-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      pointer-events: none;
+    }
+    [data-ide-shell] .ide-panel-collapse-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 30;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-collapse-btn { right: 10px; }
+    [data-ide-shell] .ide-artboard-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 32px 32px;
+    }
+    [data-ide-shell] .ide-artboard {
+      display: none;
+      width: 100%;
+      max-width: 960px;
+      max-height: calc(100vh - 80px);
+    }
+    [data-ide-shell] .ide-artboard.active { display: block; }
+    [data-ide-shell] .ide-artboard .design-root {
+      all: initial;
+      display: block;
+      font-family: inherit;
+    }
+
+    /* ----- Story panel (right — Controls + Story docs) ----- */
+    [data-ide-shell] .ide-story-panel {
+      width: var(--panel-w);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      transition: width 0.2s;
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel {
+      width: 0;
+      border-left: none;
+    }
+    [data-ide-shell] .ide-panel-expand-btn {
+      display: none;
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 40;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn { display: grid; place-items: center; }
+
+    [data-ide-shell] .ide-panel-header {
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid var(--shell-border);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--shell-muted);
+    }
+    [data-ide-shell] .ide-panel-controls {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      min-height: 0;
+    }
+    [data-ide-shell] .ide-section-title {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--shell-accent);
+      margin: 0 0 6px;
+    }
+    [data-ide-shell] .ide-section-title + .ide-section-title { margin-top: 14px; }
+    [data-ide-shell] .ide-variant-card,
+    [data-ide-shell] .ide-state-card {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      margin-bottom: 5px;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    [data-ide-shell] .ide-variant-card:hover,
+    [data-ide-shell] .ide-state-card:hover { border-color: #3f3f46; }
+    [data-ide-shell] .ide-variant-card.active,
+    [data-ide-shell] .ide-state-card.active {
+      border-color: var(--shell-accent);
+      background: rgba(113, 113, 122, 0.1);
+    }
+    [data-ide-shell] .ide-variant-card h2 { font-size: 11px; font-weight: 600; margin: 0 0 2px; }
+    [data-ide-shell] .ide-variant-card p { margin: 0; color: var(--shell-muted); font-size: 10px; line-height: 1.4; }
+    [data-ide-shell] .ide-state-card { font-size: 10px; color: var(--shell-muted); }
+    [data-ide-shell] .ide-state-card strong { display: block; color: var(--shell-text); font-size: 10px; }
+
+    /* Story docs — collapsible bottom (Storybook addons style) */
+    [data-ide-shell] .ide-panel-story {
+      border-top: 1px solid var(--shell-border);
+      flex-shrink: 0;
+    }
+    [data-ide-shell] .ide-story-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border: none;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--shell-muted);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+    }
+    [data-ide-shell] .ide-story-toggle:hover { color: var(--shell-text); background: rgba(255, 255, 255, 0.04); }
+    [data-ide-shell] .ide-story-body {
+      padding: 0 14px 14px;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--shell-muted);
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    [data-ide-shell] .ide-layout.story-collapsed .ide-story-body { display: none; }
+    [data-ide-shell] .ide-story-body h1 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--shell-text);
+      margin: 0 0 6px;
+    }
+    [data-ide-shell] .ide-story-body p { margin: 0 0 8px; }
+    [data-ide-shell] .ide-story-body ul { margin: 0; padding-left: 16px; }
+    [data-ide-shell] .ide-story-body li { margin-bottom: 4px; }
+  </style>
+
+
+  <style id="design-styles-common">
+    /* Tokens mirror frontend/src/theme.css (ink ramp, --content/--panel, accent) */
+    [data-ide-shell] .ide-artboard .design-root {
+      --content: #161618; --panel: #1f1f22; --accent: #0a84ff; --danger: #ff453a; --warn: #d4b45e; --ok: #6fc29b;
+      --ink: 244,244,245;
+      --i1: rgba(var(--ink),.92); --i2: rgba(var(--ink),.66); --i3: rgba(var(--ink),.52); --i4: rgba(var(--ink),.34);
+      --hair: rgba(var(--ink),.08); --hair2: rgba(var(--ink),.152); --tint: rgba(var(--ink),.04); --tint2: rgba(var(--ink),.07);
+      --spring: cubic-bezier(.32,.72,0,1);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+      font-size: 13px; line-height: 1.4; color: var(--i1);
+      background: var(--content);
+      border-radius: 10px; position: relative; overflow: hidden;
+      height: 560px; display: block;
+    }
+    [data-ide-shell] .ide-artboard .design-root.light {
+      --content: #f5f5f7; --panel: #ffffff; --ink: 24,24,27;
+      --i1: rgba(var(--ink),.9); --i2: rgba(var(--ink),.7); --i3: rgba(var(--ink),.6); --i4: rgba(var(--ink),.38);
+      --hair: rgba(var(--ink),.09); --hair2: rgba(var(--ink),.17); --tint: rgba(var(--ink),.04); --tint2: rgba(var(--ink),.07);
+      --warn: #8a6d1f; --ok: #2f7d5c; --danger: #d92d20;
+    }
+    [data-ide-shell] .design-root * { box-sizing: border-box; }
+    [data-ide-shell] .design-root button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+
+    /* faint chat above the composer, so the popover has context */
+    [data-ide-shell] .design-root .log { position: absolute; left: 0; right: 0; top: 0; bottom: 150px; padding: 26px 0 0; overflow: hidden; }
+    [data-ide-shell] .design-root .col { width: 640px; max-width: 100%; margin: 0 auto; padding: 0 24px; }
+    [data-ide-shell] .design-root .bubble { margin-left: auto; width: fit-content; max-width: 82%; background: var(--tint2); padding: 9px 16px; border-radius: 18px; font-size: 15px; line-height: 1.62; }
+    [data-ide-shell] .design-root .prose { margin-top: 22px; font-size: 15px; line-height: 1.62; color: var(--i1); }
+    [data-ide-shell] .design-root .prose p { margin: 0 0 12px; }
+    [data-ide-shell] .design-root .run { color: var(--i3); font-size: 13px; margin: 8px 0 14px; }
+
+    /* composer */
+    [data-ide-shell] .design-root .dock { position: absolute; left: 0; right: 0; bottom: 20px; }
+    [data-ide-shell] .design-root .composer { width: 640px; max-width: calc(100% - 48px); margin: 0 auto; background: var(--panel); border: 1px solid var(--hair2); border-radius: 24px; padding: 14px 16px 10px; }
+    [data-ide-shell] .design-root .composer .ph { color: var(--i4); font-size: 15px; min-height: 26px; }
+    [data-ide-shell] .design-root .cbar { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    [data-ide-shell] .design-root .cbar .sp { flex: 1; }
+    [data-ide-shell] .design-root .ib { width: 26px; height: 26px; border-radius: 8px; display: inline-grid; place-items: center; color: var(--i3); }
+    [data-ide-shell] .design-root .ib:hover { background: var(--tint); color: var(--i1); }
+    [data-ide-shell] .design-root .chip { height: 26px; padding: 0 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; font: 11.5px ui-monospace, "SF Mono", Menlo, monospace; color: var(--i2); }
+    [data-ide-shell] .design-root .chip:hover { background: var(--tint); }
+    [data-ide-shell] .design-root .send { width: 30px; height: 30px; border-radius: 50%; background: var(--i1); color: var(--panel); display: grid; place-items: center; opacity: .22; }
+
+    /* the ring (what ships today) */
+    [data-ide-shell] .design-root .ringbtn { position: relative; height: 26px; min-width: 26px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; }
+    [data-ide-shell] .design-root .ringbtn:hover, [data-ide-shell] .design-root .ringbtn.on { background: var(--tint); }
+    [data-ide-shell] .design-root .ringbtn svg { display: block; }
+    [data-ide-shell] .design-root .ringbtn .pct { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--i3); }
+    [data-ide-shell] .design-root .ringbtn.warn .pct { color: var(--warn); }
+    [data-ide-shell] .design-root .ringbtn.full .pct { color: var(--danger); }
+    [data-ide-shell] .design-root .hide { display: none !important; }
+
+    /* popover (shape of the TOC card: panel, hair2, r14, soft shadow) */
+    [data-ide-shell] .design-root .pop { position: absolute; z-index: 5; width: 300px; background: var(--panel); border: 1px solid var(--hair2); border-radius: 14px; box-shadow: 0 12px 36px rgba(0,0,0,.30); padding: 14px 16px 14px; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s var(--spring), transform .18s var(--spring); }
+    [data-ide-shell] .design-root .pop.show { opacity: 1; transform: none; pointer-events: auto; }
+    [data-ide-shell] .design-root .ph1 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    [data-ide-shell] .design-root .ph1 b { font-weight: 600; font-size: 14px; }
+    [data-ide-shell] .design-root .ph1 span { color: var(--i3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    [data-ide-shell] .design-root .bar { height: 6px; border-radius: 6px; background: var(--tint2); margin: 10px 0 12px; overflow: hidden; }
+    [data-ide-shell] .design-root .bar i { display: block; height: 100%; border-radius: 6px; background: var(--i1); transition: width .3s var(--spring); }
+    [data-ide-shell] .design-root .bar.warn i { background: var(--warn); }
+    [data-ide-shell] .design-root .bar.full i { background: var(--danger); }
+    [data-ide-shell] .design-root .row { display: flex; align-items: center; justify-content: space-between; color: var(--i3); font-size: 12.5px; padding: 2px 0; }
+    [data-ide-shell] .design-root .row b { color: var(--i1); font-weight: 500; font-variant-numeric: tabular-nums; }
+    [data-ide-shell] .design-root .note { margin-top: 8px; font-size: 11.5px; color: var(--i4); }
+    [data-ide-shell] .design-root .none { color: var(--i3); font-size: 12.5px; padding: 4px 0 2px; }
+
+    [data-ide-shell] .design-root .themebtn { position: absolute; right: 12px; top: 10px; z-index: 6; font-size: 11px; color: var(--i3); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--hair); }
+    [data-ide-shell] .design-root .themebtn:hover { color: var(--i1); }
+  </style>
+  <style id="design-styles-variant-a">
+    /* A · hover card: today's ring, plus the card of the reference screenshot */
+    [data-ide-shell] .ide-artboard[data-variant="A"] .design-root .pop { right: calc(50% - 320px + 16px + 128px); bottom: 124px; }
+  </style>
+  <style id="design-styles-variant-b">
+    /* B · click card with the session's token accounting and a Compact action */
+    [data-ide-shell] .ide-artboard[data-variant="B"] .design-root .pop { width: 320px; right: calc(50% - 320px + 16px + 118px); bottom: 124px; }
+    [data-ide-shell] .ide-artboard[data-variant="B"] .design-root .sec { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hair); }
+    [data-ide-shell] .ide-artboard[data-variant="B"] .design-root .cmp { margin-top: 12px; width: 100%; height: 32px; border-radius: 10px; border: 1px solid var(--hair2); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--i1); }
+    [data-ide-shell] .ide-artboard[data-variant="B"] .design-root .cmp:hover { background: var(--tint); }
+    [data-ide-shell] .ide-artboard[data-variant="B"] .design-root .cmp.hot { background: var(--i1); color: var(--panel); border-color: transparent; }
+    [data-ide-shell] .ide-artboard[data-variant="B"] .design-root .cmp small { color: inherit; opacity: .6; font-size: 11.5px; }
+  </style>
+  <style id="design-styles-variant-c">
+    /* C · meter in the bar (percent label + colour) and a banner when nearly full */
+    [data-ide-shell] .ide-artboard[data-variant="C"] .design-root .pop { right: calc(50% - 320px + 16px + 150px); bottom: 124px; }
+    [data-ide-shell] .ide-artboard[data-variant="C"] .design-root.has-banner .pop { bottom: 176px; }
+    [data-ide-shell] .ide-artboard[data-variant="C"] .design-root .banner { width: 640px; max-width: calc(100% - 48px); margin: 0 auto 8px; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 14px; border: 1px solid var(--hair2); background: var(--panel); font-size: 13px; color: var(--i2); }
+    [data-ide-shell] .ide-artboard[data-variant="C"] .design-root .banner.full { border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+    [data-ide-shell] .ide-artboard[data-variant="C"] .design-root .banner .t { flex: 1; }
+    [data-ide-shell] .ide-artboard[data-variant="C"] .design-root .banner button { height: 26px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--hair2); color: var(--i1); font-size: 12.5px; }
+    [data-ide-shell] .ide-artboard[data-variant="C"] .design-root .banner button.p { background: var(--i1); color: var(--panel); border-color: transparent; }
+  </style>
+</head>
+<body data-ide-shell>
+  <div class="ide-layout" id="ideLayout">
+    <main class="ide-stage">
+      <span class="ide-stage-label" id="stageLabel">Variant A</span>
+      <button type="button" class="ide-panel-collapse-btn" id="panelCollapseBtn" title="收起面板，全画布演示">›</button>
+
+      <div class="ide-artboard-wrap">
+        <div class="ide-artboard active" data-variant="A">
+          <div class="design-root" id="designRootA" data-v="A">
+            <button type="button" class="themebtn" data-theme-toggle>Light</button>
+            <div class="log"><div class="col">
+              <div class="bubble">Why does the sidebar flicker when I switch workspaces?</div>
+              <div class="prose"><p>The flicker comes from the sidebar remounting on every route change — the tree is rebuilt before the new selection is known.</p><p>I traced it to <code style="font:.88em ui-monospace,Menlo,monospace;background:var(--tint2);padding:.08em .42em;border-radius:5px">syncWorkspaceForSelection</code>, which clears the rows first and then refills them.</p></div>
+              <div class="run">Explored 4 files, ran 3 commands</div>
+            </div></div>
+            <div class="pop" data-pop role="dialog" aria-label="Context window"></div>
+            <div class="dock">
+              
+              <div class="composer">
+                <div class="ph">Send a message… (@ file · / commands · $ skills)</div>
+                <div class="cbar">
+                  <button type="button" class="ib" aria-label="Attach"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+                  <button type="button" class="ib" aria-label="Dictate"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="6" y="2" width="4" height="8" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/></svg></button>
+                  <span class="sp"></span>
+                  <button type="button" class="ringbtn" data-ring aria-label="Context window"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--hair2)" stroke-width="2.5"/><circle data-arc cx="9" cy="9" r="7" fill="none" stroke="var(--i3)" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90 9 9)" stroke-dasharray="0 44"/></svg></button>
+                  <button type="button" class="chip">group/glm-flash ▾</button>
+                  <button type="button" class="send" aria-label="Send"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12V2M3 6l4-4 4 4"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ide-artboard" data-variant="B">
+          <div class="design-root" id="designRootB" data-v="B">
+            <button type="button" class="themebtn" data-theme-toggle>Light</button>
+            <div class="log"><div class="col">
+              <div class="bubble">Why does the sidebar flicker when I switch workspaces?</div>
+              <div class="prose"><p>The flicker comes from the sidebar remounting on every route change — the tree is rebuilt before the new selection is known.</p><p>I traced it to <code style="font:.88em ui-monospace,Menlo,monospace;background:var(--tint2);padding:.08em .42em;border-radius:5px">syncWorkspaceForSelection</code>, which clears the rows first and then refills them.</p></div>
+              <div class="run">Explored 4 files, ran 3 commands</div>
+            </div></div>
+            <div class="pop" data-pop role="dialog" aria-label="Context window"></div>
+            <div class="dock">
+              
+              <div class="composer">
+                <div class="ph">Send a message… (@ file · / commands · $ skills)</div>
+                <div class="cbar">
+                  <button type="button" class="ib" aria-label="Attach"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+                  <button type="button" class="ib" aria-label="Dictate"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="6" y="2" width="4" height="8" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/></svg></button>
+                  <span class="sp"></span>
+                  <button type="button" class="ringbtn" data-ring aria-label="Context window"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--hair2)" stroke-width="2.5"/><circle data-arc cx="9" cy="9" r="7" fill="none" stroke="var(--i3)" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90 9 9)" stroke-dasharray="0 44"/></svg></button>
+                  <button type="button" class="chip">group/glm-flash ▾</button>
+                  <button type="button" class="send" aria-label="Send"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12V2M3 6l4-4 4 4"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ide-artboard" data-variant="C">
+          <div class="design-root" id="designRootC" data-v="C">
+            <button type="button" class="themebtn" data-theme-toggle>Light</button>
+            <div class="log"><div class="col">
+              <div class="bubble">Why does the sidebar flicker when I switch workspaces?</div>
+              <div class="prose"><p>The flicker comes from the sidebar remounting on every route change — the tree is rebuilt before the new selection is known.</p><p>I traced it to <code style="font:.88em ui-monospace,Menlo,monospace;background:var(--tint2);padding:.08em .42em;border-radius:5px">syncWorkspaceForSelection</code>, which clears the rows first and then refills them.</p></div>
+              <div class="run">Explored 4 files, ran 3 commands</div>
+            </div></div>
+            <div class="pop" data-pop role="dialog" aria-label="Context window"></div>
+            <div class="dock">
+              <div class="banner hide" data-banner><span class="t" data-banner-text></span><button type="button">New session</button><button type="button" class="p">Compact</button></div>
+              <div class="composer">
+                <div class="ph">Send a message… (@ file · / commands · $ skills)</div>
+                <div class="cbar">
+                  <button type="button" class="ib" aria-label="Attach"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+                  <button type="button" class="ib" aria-label="Dictate"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="6" y="2" width="4" height="8" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/></svg></button>
+                  <span class="sp"></span>
+                  <button type="button" class="ringbtn" data-ring aria-label="Context window"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--hair2)" stroke-width="2.5"/><circle data-arc cx="9" cy="9" r="7" fill="none" stroke="var(--i3)" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90 9 9)" stroke-dasharray="0 44"/></svg><span class="pct" data-pct></span></button>
+                  <button type="button" class="chip">group/glm-flash ▾</button>
+                  <button type="button" class="send" aria-label="Send"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12V2M3 6l4-4 4 4"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <button type="button" class="ide-panel-expand-btn" id="panelExpandBtn" title="展开面板">☰</button>
+
+    <aside class="ide-story-panel">
+      <div class="ide-panel-header">Design Storybook</div>
+      <div class="ide-panel-controls">
+        <div class="ide-section-title">Variants</div>
+        <div id="variantList"></div>
+        <div class="ide-section-title" id="statesSectionTitle" hidden>Interaction states</div>
+        <div id="statesList"></div>
+      </div>
+      <div class="ide-panel-story">
+        <button type="button" class="ide-story-toggle" id="storyToggleBtn">
+          <span>Story</span><span id="storyChevron">▼</span>
+        </button>
+        <div class="ide-story-body" id="storyBody">
+          <h1>Chat · Context window</h1>
+          <p>The composer already draws a context ring (<code>state.contextTokens</code> against a guessed 200k/1M window) with a browser <code>title</code> tooltip. The ask: a real popover like the reference — used / window with a bar and the average cache hit rate.</p>
+          <ul>
+            <li><b>Data that exists:</b> context tokens per message (Claude/Codex/omp transcripts) and <code>history.ReadUsage</code> (input, output, cache read, cache write — one streamed read of the session file, on open, nothing stored).</li>
+            <li><b>Cache hit rate</b> = cache read ÷ (input + cache read + cache write), whole session.</li>
+            <li><b>Window:</b> omp/pi list it per model (<code>omp models</code>); Claude/Codex are a guess → shown as “~200k (assumed)”.</li>
+            <li><b>Not a quota page:</b> no cost, no history, no polling.</li>
+            <li><b>Compact</b> = the existing <code>/compact</code> text command, sent through the normal prompt path.</li>
+          </ul>
+          <p>Hover the ring (A), click it (B, C). The “Light” button flips the theme.</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const IDE_CONFIG = {
+      variants: {
+        A: { label: 'Hover card', title: 'A · Hover card', desc: 'The reference: used / window, bar, average cache hit rate. Opens on hover.', states: ['open', 'warn', 'full', 'nolimit', 'fresh'] },
+        B: { label: 'Breakdown + Compact', title: 'B · Breakdown + Compact', desc: 'Click card adds the session token accounting and a Compact action (hot when ≥70%).', states: ['open', 'warn', 'full', 'nolimit', 'fresh'] },
+        C: { label: 'Meter + banner', title: 'C · Meter + banner', desc: 'Percent label in the bar, amber/red; banner above the composer when nearly full.', states: ['open', 'warn', 'full', 'nolimit', 'fresh'] },
+      },
+      stateLabels: { '': 'Closed (hover / click)', open: 'Open · 40%', warn: 'Open · 78% (warn)', full: 'Open · 94% (full)', nolimit: 'Open · window unknown (assumed)', fresh: 'Fresh session (no usage yet)' },
+    };
+
+    /* ---- mock data (what ReadUsage + the transcript's context size would give) ---- */
+    const CASES = {
+      '':      { used: 405000, win: 1000000, est: false, tot: { inp: 212000, out: 58000, cr: 6400000, cw: 410000 } },
+      open:    { used: 405000, win: 1000000, est: false, tot: { inp: 212000, out: 58000, cr: 6400000, cw: 410000 } },
+      warn:    { used: 780000, win: 1000000, est: false, tot: { inp: 301000, out: 96000, cr: 11200000, cw: 760000 } },
+      full:    { used: 940000, win: 1000000, est: false, tot: { inp: 388000, out: 131000, cr: 16900000, cw: 1100000 } },
+      nolimit: { used: 132000, win: 200000, est: true, tot: { inp: 95000, out: 31000, cr: 880000, cw: 140000 } },
+      fresh:   null,
+    };
+    const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
+    const fmtDec = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'k' : String(n);
+    const hitRate = (t) => (t.cr / (t.inp + t.cr + t.cw)) * 100;
+    const level = (f) => f >= 0.9 ? 'full' : f >= 0.7 ? 'warn' : '';
+
+    const C = 2 * Math.PI * 7;
+    function paint(v, mode) {
+      const root = document.getElementById('designRoot' + v);
+      const data = CASES[mode] ?? null;
+      const ring = root.querySelector('[data-ring]');
+      const pop = root.querySelector('[data-pop]');
+      const arc = root.querySelector('[data-arc]');
+      ring.classList.toggle('hide', !data);
+      if (!data) { pop.innerHTML = ''; pop.classList.remove('show'); setBanner(root, v, null); return; }
+      const f = Math.min(1, data.used / data.win), lv = level(f);
+      arc.setAttribute('stroke-dasharray', (f * C) + ' ' + C);
+      arc.setAttribute('stroke', lv === 'full' ? 'var(--danger)' : lv === 'warn' ? 'var(--warn)' : 'var(--i3)');
+      ring.className = 'ringbtn ' + lv;
+      const pct = root.querySelector('[data-pct]'); if (pct) pct.textContent = Math.round(f * 100) + '%';
+      const head = '<div class="ph1"><b>Context window</b><span>' + (data.est ? '~' : '') + fmtDec(data.used) + ' / ' + fmt(data.win) + ' (' + (f * 100).toFixed(1) + '%)</span></div><div class="bar ' + lv + '"><i style="width:' + (f * 100) + '%"></i></div>';
+      const hit = '<div class="row">Avg. cache hit rate<b>' + hitRate(data.tot).toFixed(1) + '%</b></div>';
+      const est = data.est ? '<div class="note">Window assumed (' + fmt(data.win) + ') — this agent does not report one.</div>' : '';
+      let html = head + hit + est;
+      if (v === 'B') {
+        html = head + hit +
+          '<div class="sec"><div class="row">Input<b>' + fmtDec(data.tot.inp) + '</b></div><div class="row">Output<b>' + fmtDec(data.tot.out) + '</b></div><div class="row">Cache read<b>' + fmtDec(data.tot.cr) + '</b></div><div class="row">Cache write<b>' + fmtDec(data.tot.cw) + '</b></div></div>' + est +
+          '<button type="button" class="cmp ' + (f >= 0.7 ? 'hot' : '') + '">Compact conversation <small>/compact</small></button>';
+      }
+      pop.innerHTML = html;
+      setBanner(root, v, { f, lv });
+    }
+    function setBanner(root, v, d) {
+      if (v !== 'C') return;
+      const b = root.querySelector('[data-banner]');
+      const show = d && d.f >= 0.85;
+      root.classList.toggle('has-banner', !!show);
+      b.classList.toggle('hide', !show);
+      if (show) { b.className = 'banner ' + d.lv; b.querySelector('[data-banner-text]').textContent = 'Context is ' + Math.round(d.f * 100) + '% full — the agent will start dropping early turns.'; }
+    }
+
+    /* ---- open/close: A hovers, B/C click; open states pin it ---- */
+    function wire(v) {
+      const root = document.getElementById('designRoot' + v);
+      const ring = root.querySelector('[data-ring]'), pop = root.querySelector('[data-pop]');
+      let pinned = false, over = false, timer = 0;
+      const show = (on) => { pop.classList.toggle('show', on || pinned); ring.classList.toggle('on', on || pinned); };
+      root.__pin = (on) => { pinned = on; show(false); };
+      if (v === 'A') {
+        const enter = () => { clearTimeout(timer); show(true); }, leave = () => { timer = setTimeout(() => show(false), 160); };
+        ring.addEventListener('mouseenter', enter); ring.addEventListener('mouseleave', leave);
+        pop.addEventListener('mouseenter', enter); pop.addEventListener('mouseleave', leave);
+        ring.addEventListener('focus', enter); ring.addEventListener('blur', leave);
+      } else {
+        ring.addEventListener('click', (e) => { e.stopPropagation(); over = !pop.classList.contains('show'); pinned = false; show(over); });
+        root.addEventListener('click', (e) => { if (!pop.contains(e.target)) { pinned = false; show(false); } });
+      }
+      root.querySelector('[data-theme-toggle]').addEventListener('click', (e) => { const light = root.classList.toggle('light'); e.target.textContent = light ? 'Dark' : 'Light'; });
+    }
+
+    /* ---- Design Storybook shell (unchanged logic, plus the paint hook) ---- */
+    let activeVariant = 'A';
+    let activeState = '';
+    const ideLayout = document.getElementById('ideLayout');
+    const stageLabel = document.getElementById('stageLabel');
+    const statesSection = document.getElementById('statesSectionTitle');
+    const statesList = document.getElementById('statesList');
+    const variantList = document.getElementById('variantList');
+    const artboards = document.querySelectorAll('.ide-artboard');
+
+    function renderVariantCards() {
+      variantList.innerHTML = '';
+      Object.entries(IDE_CONFIG.variants).forEach(([id, cfg]) => {
+        const card = document.createElement('div');
+        card.className = 'ide-variant-card' + (id === activeVariant ? ' active' : '');
+        card.innerHTML = '<h2>' + (cfg.title || id) + '</h2><p>' + (cfg.desc || '') + '</p>';
+        card.addEventListener('click', () => setVariant(id));
+        variantList.appendChild(card);
+      });
+    }
+    function renderStateCards() {
+      const states = IDE_CONFIG.variants[activeVariant]?.states ?? [];
+      statesList.innerHTML = '';
+      statesSection.hidden = !states.length;
+      states.forEach((s) => {
+        const card = document.createElement('div');
+        card.className = 'ide-state-card' + (s === activeState ? ' active' : '');
+        card.innerHTML = '<strong>' + ((IDE_CONFIG.stateLabels[s] ?? s) || 'Default') + '</strong>';
+        card.addEventListener('click', () => setState(s));
+        statesList.appendChild(card);
+      });
+    }
+    function applyInteractionClass() {
+      const root = document.getElementById('designRoot' + activeVariant);
+      paint(activeVariant, activeState);
+      root.__pin(!!activeState && activeState !== 'fresh');
+    }
+    function setVariant(v) {
+      activeVariant = v; activeState = '';
+      artboards.forEach((ab) => ab.classList.toggle('active', ab.dataset.variant === v));
+      const cfg = IDE_CONFIG.variants[v];
+      stageLabel.textContent = 'Variant ' + v + (cfg?.label ? ' — ' + cfg.label : '');
+      renderVariantCards(); renderStateCards(); applyInteractionClass();
+    }
+    function setState(s) {
+      activeState = activeState === s && s !== '' ? '' : s;
+      renderStateCards(); applyInteractionClass();
+      const name = (IDE_CONFIG.stateLabels[activeState] ?? activeState) || 'Closed';
+      stageLabel.textContent = 'Variant ' + activeVariant + ' · ' + name;
+    }
+    document.getElementById('panelCollapseBtn')?.addEventListener('click', () => ideLayout.classList.add('panel-collapsed'));
+    document.getElementById('panelExpandBtn')?.addEventListener('click', () => ideLayout.classList.remove('panel-collapsed'));
+    document.getElementById('storyToggleBtn')?.addEventListener('click', () => {
+      const collapsed = ideLayout.classList.toggle('story-collapsed');
+      document.getElementById('storyChevron').textContent = collapsed ? '▶' : '▼';
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { if (activeState) setState(activeState); else ideLayout.classList.add('panel-collapsed'); }
+    });
+    ['A', 'B', 'C'].forEach(wire);
+    // deep link: #B/warn
+    const [hv, hs] = location.hash.slice(1).split('/');
+    renderVariantCards();
+    setVariant(['A', 'B', 'C'].includes(hv) ? hv : 'A');
+    if (hs && CASES[hs] !== undefined) setState(hs);
+  </script>
+</body>
+</html>

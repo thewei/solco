@@ -175,9 +175,13 @@ func (s *piParseState) feedPiLine(line string) {
 			if modelStr, ok := messageObj["model"].(string); ok && modelStr != "" {
 				s.model = &modelStr
 			}
+			contextUsed := int64(0)
 			if usage, ok := messageObj["usage"].(map[string]any); ok {
 				if totalTokens, ok := usage["totalTokens"].(float64); ok && totalTokens > 0 {
 					s.tokensUsed = int64(totalTokens)
+					// One request's full accounting (cache included) is the
+					// context that request filled (context ring only).
+					contextUsed = int64(totalTokens)
 				}
 			}
 			// Consecutive assistant turns (interrupted only by toolResult) merge
@@ -210,6 +214,9 @@ func (s *piParseState) feedPiLine(line string) {
 			}
 			if s.model != nil {
 				last.Model = s.model
+			}
+			if contextUsed > 0 {
+				last.ContextTokens = &contextUsed
 			}
 			// Blocks keep the provider's order across merged messages: tool
 			// parts index into ToolCalls, so rebase them onto what is already

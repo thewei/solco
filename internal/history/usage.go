@@ -41,11 +41,14 @@ type UsageRoute struct {
 
 // SessionUsage is a session's token accounting.
 type SessionUsage struct {
-	Input      int64        `json:"input"`
-	Output     int64        `json:"output"`
-	CacheRead  int64        `json:"cache_read"`
-	CacheWrite int64        `json:"cache_write"`
-	Routes     []UsageRoute `json:"routes,omitempty"`
+	Input      int64 `json:"input"`
+	Output     int64 `json:"output"`
+	CacheRead  int64 `json:"cache_read"`
+	CacheWrite int64 `json:"cache_write"`
+	// Window is the context window the provider's own log states (Codex
+	// writes model_context_window); 0 when the log carries none.
+	Window int64        `json:"window,omitempty"`
+	Routes []UsageRoute `json:"routes,omitempty"`
 }
 
 // Total is the session's token total as the list shows it: input plus output.
@@ -288,24 +291,27 @@ func (c *claudeUsage) finish() SessionUsage {
 
 type codexUsage struct {
 	model, effort string
+	window        int64
 	total         *struct{ in, cached, out int64 }
 	book          routeBook
 }
 
 func (c *codexUsage) feed(line []byte) {
 	text := string(line)
-	if !strings.Contains(text, "token_count") && !strings.Contains(text, "turn_context") {
+	if !strings.Contains(text, "token_count") && !strings.Contains(text, "turn_context") && !strings.Contains(text, "task_started") {
 		return
 	}
 	var row struct {
 		Type    string `json:"type"`
 		Payload struct {
-			Type   string `json:"type"`
-			Model  string `json:"model"`
-			Effort string `json:"effort"`
+			Type   string   `json:"type"`
+			Model  string   `json:"model"`
+			Effort string   `json:"effort"`
+			Window *float64 `json:"model_context_window"`
 			Info   *struct {
-				Total *codexTokenUsage `json:"total_token_usage"`
-				Last  *codexTokenUsage `json:"last_token_usage"`
+				Total  *codexTokenUsage `json:"total_token_usage"`
+				Last   *codexTokenUsage `json:"last_token_usage"`
+				Window *float64         `json:"model_context_window"`
 			} `json:"info"`
 		} `json:"payload"`
 	}
@@ -318,8 +324,15 @@ func (c *codexUsage) feed(line []byte) {
 			c.model = row.Payload.Model
 		}
 		c.effort = row.Payload.Effort
+	case row.Type == "event_msg" && row.Payload.Type == "task_started":
+		if w := num(row.Payload.Window); w > 0 {
+			c.window = w
+		}
 	case row.Type == "event_msg" && row.Payload.Type == "token_count" && row.Payload.Info != nil:
 		info := row.Payload.Info
+		if w := num(info.Window); w > 0 {
+			c.window = w
+		}
 		if t := info.Total; t != nil {
 			c.total = &struct{ in, cached, out int64 }{num(t.Input), num(t.Cached), num(t.Output)}
 		}
@@ -344,6 +357,7 @@ func (c *codexUsage) finish() SessionUsage {
 		sum.CacheRead = t.cached
 		sum.Output = t.out
 	}
+	sum.Window = c.window
 	sum.Routes = c.book.routes()
 	return sum
 }

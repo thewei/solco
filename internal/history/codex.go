@@ -238,10 +238,17 @@ func (s *codexParseState) feedCodexLine(line string) {
 					if total, ok := usage["total_tokens"].(float64); ok {
 						s.tokensUsed = int64(total)
 					}
-					if last, ok := usage["last_token_usage"].(map[string]any); ok {
-						if total, ok := last["total_tokens"].(float64); ok && total > 0 {
-							used := int64(total)
-							s.lastContext = &used
+				}
+				// last_token_usage is a sibling of total_token_usage: the
+				// request that just ran, i.e. the context it filled. The
+				// report follows its assistant message, so that message
+				// takes it too (context ring only).
+				if last, ok := info["last_token_usage"].(map[string]any); ok {
+					if total, ok := last["total_tokens"].(float64); ok && total > 0 {
+						used := int64(total)
+						s.lastContext = &used
+						if n := len(s.messages); n > 0 && s.messages[n-1].Role == RoleAssistant {
+							s.messages[n-1].ContextTokens = &used
 						}
 					}
 				}

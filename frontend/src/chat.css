@@ -141,6 +141,7 @@
   .spin,
   .shim,
   .prose.caret > :last-child::after,
+  .ctxcard,
   .turn {
     animation: none;
   }
@@ -850,11 +851,173 @@
   font-size: 11.5px;
 }
 
-.ring-wrap {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
+/* context control (designs/chat-context, B): the ring opens a card above it */
+.ctx {
+  position: relative;
+  display: inline-flex;
+}
+
+.ringbtn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--i3);
+}
+
+.ringbtn:hover,
+.ringbtn.on {
+  background: var(--tint);
+}
+
+.ringbtn .pct {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ringbtn.warn .pct {
+  color: var(--working);
+}
+
+.ringbtn.full .pct {
+  color: var(--danger);
+}
+
+.ctxcard {
+  position: absolute;
+  z-index: 20;
+  right: -6px;
+  bottom: calc(100% + 14px);
+  width: 320px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--hair2);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+  animation: ctx-in 0.18s var(--spring);
+}
+
+@keyframes ctx-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.ctx-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ctx-h b {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ctx-h span {
+  color: var(--i3);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctx-bar {
+  height: 6px;
+  margin: 10px 0 12px;
+  border-radius: 6px;
+  background: var(--tint2);
+  overflow: hidden;
+}
+
+.ctx-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--i1);
+  transition: width 0.3s var(--spring);
+}
+
+.ctx-bar.warn i {
+  background: var(--working);
+}
+
+.ctx-bar.full i {
+  background: var(--danger);
+}
+
+.ctx-h + .ctx-row {
+  margin-top: 10px;
+}
+
+.ctx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: var(--i3);
+  font-size: 12.5px;
+}
+
+.ctx-row b {
+  color: var(--i1);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctx-sec {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hair);
+}
+
+.ctx-note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--i4);
+}
+
+.ctx-cmp {
+  margin-top: 12px;
+  width: 100%;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--hair2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--i1);
+}
+
+.ctx-cmp:hover:not(:disabled) {
+  background: var(--tint);
+}
+
+.ctx-cmp:disabled {
+  opacity: 0.4;
+}
+
+.ctx-cmp.hot {
+  background: var(--i1);
+  color: var(--panel);
+  border-color: transparent;
+}
+
+.ctx-cmp.hot:hover:not(:disabled) {
+  background: var(--i1);
+  opacity: 0.88;
+}
+
+.ctx-cmp small {
+  color: inherit;
+  opacity: 0.6;
+  font-size: 11.5px;
 }
 
 .send {

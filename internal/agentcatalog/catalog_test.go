@@ -1,9 +1,11 @@
 package agentcatalog
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/thewei/solco/internal/history"
 )
@@ -51,6 +53,45 @@ func TestParseModelListings(t *testing.T) {
 	omp := parseOmpModels("google-antigravity (2)\n┌──┬──┐\n│ model │ context │\n├──┼──┤\n│ gemini-3.8-flash │ 1M │\n│ claude-x │ 1M │\n└──┴──┘\nmagpie (1)\n│ a/b │ 1M │\n")
 	if len(omp) != 3 || omp[0].ID != "google-antigravity/gemini-3.8-flash" || omp[2].ID != "magpie/a/b" {
 		t.Fatalf("omp %+v", omp)
+	}
+}
+
+func TestModelListingsCarryTheContextWindow(t *testing.T) {
+	pi := parsePiModels("provider model context max-out\nantigravity claude-sonnet-4-6 1M 65.5K\nx y 131K 33K\nz w - -\n")
+	if pi[0].Window != 1_000_000 || pi[1].Window != 131_000 || pi[2].Window != 0 {
+		t.Fatalf("pi windows %+v", pi)
+	}
+	omp := parseOmpModels("g (2)\n│ model │ context │ max-out │\n│ a │ 250K │ 64K │\n│ b │ 1M │ 66K │\n")
+	if omp[0].Window != 250_000 || omp[1].Window != 1_000_000 {
+		t.Fatalf("omp windows %+v", omp)
+	}
+	if parseTokenCount("65.5K") != 65_500 || parseTokenCount("junk") != 0 || parseTokenCount("") != 0 {
+		t.Fatal("token count spellings")
+	}
+}
+
+func TestModelWindowMatchesFullAndUniqueBareIds(t *testing.T) {
+	modelMu.Lock()
+	modelCache["omp"] = modelEntry{at: time.Now(), models: []Model{
+		{ID: "g/claude-opus", Window: 250_000}, {ID: "g/gemini", Window: 1_000_000}, {ID: "h/gemini", Window: 2_000_000},
+		{ID: "magpie/group/glm-flash", Window: 1_000_000},
+	}}
+	modelMu.Unlock()
+	ctx := context.Background()
+	if got := ModelWindow(ctx, history.AgentOMP, "g/gemini"); got != 1_000_000 {
+		t.Fatalf("full id = %d", got)
+	}
+	if got := ModelWindow(ctx, history.AgentOMP, "claude-opus"); got != 250_000 {
+		t.Fatalf("unique bare id = %d", got)
+	}
+	if got := ModelWindow(ctx, history.AgentOMP, "group/glm-flash"); got != 1_000_000 {
+		t.Fatalf("a slash-bearing id without its provider = %d", got)
+	}
+	if got := ModelWindow(ctx, history.AgentOMP, "gemini"); got != 0 {
+		t.Fatalf("ambiguous bare id must not guess, got %d", got)
+	}
+	if ModelWindow(ctx, history.AgentCodex, "g/gemini") != 0 || ModelWindow(ctx, history.AgentOMP, "") != 0 {
+		t.Fatal("only pi/omp list windows, and an empty id has none")
 	}
 }
 
@@ -118,5 +159,13 @@ func TestDefaultModelFromTheAgentsOwnConfig(t *testing.T) {
 	}
 	if got := claudeDefaultModel("not json"); got != "" {
 		t.Errorf("bad json = %q", got)
+	}
+}
+
+func TestIsCompactTakesTheCommandAndItsInstructionsOnly(t *testing.T) {
+	for text, want := range map[string]bool{"/compact": true, " /compact keep the tests ": true, "/compaction": false, "compact it": false, "/init": false} {
+		if IsCompact(text) != want {
+			t.Fatalf("IsCompact(%q) = %v", text, !want)
+		}
 	}
 }

@@ -230,3 +230,32 @@ func TestListJSONLRefsMissingRootIsEmpty(t *testing.T) {
 		t.Fatalf("references = %d", len(references))
 	}
 }
+
+func TestCodexLastRequestFillsTheContextOfItsAssistantMessage(t *testing.T) {
+	rollout := `{"timestamp":"2026-08-02T09:15:00Z","type":"session_meta","payload":{"cwd":"/work/c"}}
+{"timestamp":"2026-08-02T09:15:02Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"go"}]}}
+{"timestamp":"2026-08-02T09:15:05Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}}
+{"timestamp":"2026-08-02T09:15:06Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":900},"last_token_usage":{"total_tokens":42916},"model_context_window":258400}}}
+`
+	dir := t.TempDir()
+	sessions := filepath.Join(dir, "sessions", "2026", "08", "02")
+	if err := os.MkdirAll(sessions, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id := "33333333-aaaa-bbbb-cccc-000000000003"
+	if err := os.WriteFile(filepath.Join(sessions, "rollout-2026-08-02T09-15-00-"+id+".jsonl"), []byte(rollout), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	references, err := listJSONLRefs(filepath.Join(dir, "sessions"), AgentCodex, rolloutNativeID)
+	if err != nil || len(references) != 1 {
+		t.Fatalf("refs %v %v", references, err)
+	}
+	parsed, err := ParseCodexTranscript(references[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := parsed.Mainline[len(parsed.Mainline)-1]
+	if last.Role != RoleAssistant || last.ContextTokens == nil || *last.ContextTokens != 42916 {
+		t.Fatalf("the assistant message must take last_token_usage (a sibling of the total), got %+v", last.ContextTokens)
+	}
+}

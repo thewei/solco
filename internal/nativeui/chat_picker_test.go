@@ -160,6 +160,11 @@ func TestTerminalCommandLeavesNoEcho(t *testing.T) {
 	if shell.chatPendingEcho != nil {
 		t.Fatalf("a Terminal command left an echo: %#v", shell.chatPendingEcho)
 	}
+	shell.chatAfterPrompt("req-c", "/compact", conversation.DispositionSentNow, nil)
+	shell.chatAfterPrompt("req-c2", "/compact keep the tests", conversation.DispositionSentNow, nil)
+	if shell.chatPendingEcho != nil {
+		t.Fatalf("/compact answers with a summary entry, not a user row; it left an echo: %#v", shell.chatPendingEcho)
+	}
 	shell.chatAfterPrompt("req-2", "explain this repo", conversation.DispositionSentNow, nil)
 	if shell.chatPendingEcho == nil {
 		t.Fatal("an ordinary prompt must still echo")

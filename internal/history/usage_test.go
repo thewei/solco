@@ -85,6 +85,21 @@ func TestReadUsageCodexUsesTheRunningTotal(t *testing.T) {
 	}
 }
 
+func TestReadUsageCodexReportsItsContextWindow(t *testing.T) {
+	path := writeUsageFile(t,
+		`{"type":"event_msg","payload":{"type":"task_started","model_context_window":258400}}`,
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":1},"model_context_window":272000}}}`,
+	)
+	u, err := ReadUsage(context.Background(), AgentCodex, path)
+	if err != nil || u.Window != 272000 {
+		t.Fatalf("window = %d err = %v (the latest report wins)", u.Window, err)
+	}
+	none, _ := ReadUsage(context.Background(), AgentCodex, writeUsageFile(t, `{"type":"turn_context","payload":{"model":"x"}}`))
+	if none.Window != 0 {
+		t.Fatalf("no report must stay 0, got %d", none.Window)
+	}
+}
+
 func TestReadUsageSkipsHugeLinesAndRefusesUnsupported(t *testing.T) {
 	huge := `{"type":"message","message":{"role":"assistant","usage":{"input":999999},"pad":"` + strings.Repeat("x", maxUsageLineBytes+10) + `"}}`
 	path := writeUsageFile(t, huge,

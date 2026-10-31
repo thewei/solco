@@ -250,6 +250,31 @@ export interface ChatCatalogModel {
 }
 
 /**
+ * ChatContextUsage is what the context card shows. Window is 0 when the
+ * agent states none (Claude Code, and Codex before its first report): the
+ * page then draws no bar and no percentage, only the used count.
+ */
+export interface ChatContextUsage {
+  /** Used is the provider-recorded size of the current request context. */
+  used: number;
+  window: number;
+  /**
+   * The session's token totals (history.ReadUsage); all 0 when the source
+   * is unsupported or unreadable.
+   */
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /**
+   * CacheHitRate is cache read over every input token the model was billed
+   * for the session (input + cache read + cache write), in percent; nil
+   * when no input was recorded.
+   */
+  cacheHitRate?: number;
+}
+
+/**
  * ChatMenuInput is what the page knows about the right-click target. The
  * bridge trusts none of it beyond the checks below: links must be http(s) or
  * mailto, a path must name an existing regular file under the pane's folders.
@@ -351,6 +376,14 @@ export const chat = {
    */
   catalog(): Promise<ChatCatalog> {
     return call("chat.Catalog");
+  },
+  /**
+   * ContextUsage reads the bound live session's usage once (the card's open)
+   * and returns it with the window the agent states. Read-only; a source
+   * without usage yields the used count alone.
+   */
+  contextUsage(): Promise<ChatContextUsage> {
+    return call("chat.ContextUsage");
   },
   /**
    * InterruptAndSend is the explicit "cut in" path (the moshi barge-in analog):

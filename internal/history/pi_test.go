@@ -259,3 +259,26 @@ func TestPiMergedMessageKeepsBlockOrder(t *testing.T) {
 		t.Fatal("unanswered call must keep Output nil (running)")
 	}
 }
+
+func TestPiAssistantCarriesTheContextItsRequestFilled(t *testing.T) {
+	jsonl := `{"type":"session","id":"pi-ctx","cwd":"/work"}
+{"type":"message","timestamp":"2026-10-06T10:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}
+{"type":"message","timestamp":"2026-10-06T10:00:02.000Z","message":{"role":"assistant","model":"m","content":[{"type":"text","text":"a"}],"usage":{"input":10,"cacheRead":90,"totalTokens":100}}}
+{"type":"message","timestamp":"2026-10-06T10:00:03.000Z","message":{"role":"assistant","model":"m","content":[{"type":"text","text":"b"}],"usage":{"input":10,"cacheRead":190,"totalTokens":200}}}
+`
+	path := filepath.Join(t.TempDir(), "2026-10-06T10-00-00-000Z_pi-ctx.jsonl")
+	if err := os.WriteFile(path, []byte(jsonl), 0644); err != nil {
+		t.Fatal(err)
+	}
+	transcript, err := ParsePiTranscript(SessionFileRef{Agent: AgentPi, NativeID: "pi-ctx", FilePath: path, SizeBytes: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := transcript.Mainline[len(transcript.Mainline)-1]
+	if last.Role != RoleAssistant || last.ContextTokens == nil || *last.ContextTokens != 200 {
+		t.Fatalf("merged assistant must carry the latest request's 200, got %+v", last.ContextTokens)
+	}
+	if transcript.Mainline[0].ContextTokens != nil {
+		t.Fatal("a user message has no context report")
+	}
+}

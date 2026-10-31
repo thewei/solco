@@ -10,6 +10,7 @@ import { chat, events, type ChatBridgeState, type ChatCatalog, type ChatCatalogE
 import { Icon, StopIcon } from "./icons";
 import { selectContents, useLinkHint } from "./native";
 import { OutboxRow, TurnRow, userDisplay, type Outbox } from "./turn";
+import { ContextControl } from "./context";
 import { TocRail } from "./toc";
 import { turnText, useTurnList } from "./turnlist";
 import { AttachChips, IMAGE_EXT, ModelPanel, PlusPanel, SlashPanel, fileToBase64, slashMatches } from "./composer";
@@ -70,7 +71,7 @@ export function App() {
   const [textAnswer, setTextAnswer] = useState("");
   const [answering, setAnswering] = useState(false);
   const [catalog, setCatalog] = useState<ChatCatalog | null>(null);
-  const [panel, setPanel] = useState<"plus" | "model" | null>(null);
+  const [panel, setPanel] = useState<"plus" | "model" | "context" | null>(null);
   const [slashPick, setSlashPick] = useState(0);
   const [slashOff, setSlashOff] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
@@ -1327,7 +1328,26 @@ export function App() {
                   </span>
                 ) : null}
                 <span className="sp" />
-                {state?.contextTokens ? <ContextRing used={state.contextTokens} /> : null}
+                {state?.contextTokens ? (
+                  <ContextControl
+                    used={state.contextTokens}
+                    open={panel === "context"}
+                    onToggle={() => setPanel(panel === "context" ? null : "context")}
+                    onClose={() => setPanel(null)}
+                    canCompact={disposition === "ready" && !sending && (catalog?.commands ?? []).some((c) => c.name === "/compact")}
+                    compactHint={
+                      (catalog?.commands ?? []).some((c) => c.name === "/compact")
+                        ? disposition === "ready"
+                          ? ""
+                          : "Compact when the agent is idle"
+                        : ""
+                    }
+                    onCompact={() => {
+                      setPanel(null);
+                      void send("/compact");
+                    }}
+                  />
+                ) : null}
                 {catalog?.canSwitchModel ? (
                   <button
                     type="button"
@@ -1440,33 +1460,4 @@ class TurnBoundary extends React.Component<
     }
     return this.props.children;
   }
-}
-
-// ContextRing shows the provider-recorded context fill against the
-// standard window, switching to the long window past it (web-ui's
-// heuristic; hidden when the transcript records no usage).
-function ContextRing({ used }: { used: number }) {
-  const window = used > 200000 ? 1000000 : 200000;
-  const fraction = Math.min(1, used / window);
-  const low = fraction > 0.8;
-  const radius = 7;
-  const circumference = 2 * Math.PI * radius;
-  return (
-    <span
-      className="ring-wrap"
-      title={`Context ~${Math.round(used / 1000)}k of ${window / 1000}k tokens`}
-    >
-      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-        <circle cx="9" cy="9" r={radius} fill="none" stroke="var(--hair2)" strokeWidth="2.5" />
-        <circle
-          cx="9" cy="9" r={radius} fill="none"
-          stroke={low ? "var(--danger)" : "var(--i3)"}
-          strokeWidth="2.5"
-          strokeDasharray={`${fraction * circumference} ${circumference}`}
-          strokeLinecap="round"
-          transform="rotate(-90 9 9)"
-        />
-      </svg>
-    </span>
-  );
 }

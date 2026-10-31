@@ -414,3 +414,21 @@ git diff --check
 追加 2026-10-31 · Files 预览页同口径：`/files-viewer`（Markdown 渲染与图片）同样套用——整页 `user-select:none` 仅渲染文本可选、箭头光标、`:focus-visible` 系统焦点环、链接/图片不可拖、悬停地址胶囊（`native.ts` 的 `useLinkHint` 与 Chat 共用）、屏蔽浏览器菜单改弹 macOS 菜单（Copy / Open·Copy Link / Quick Look·Copy Path / Select All，`files_menu.go`）、`OnWillNavigate` 导航闸（拖入文件或点击链接不再把预览页换掉）。导航闸函数更名为 `pageNavigationDecision`，Chat 与 Files 共用。验证：`go test ./internal/nativeui`（`TestFilesMenuPlanFollowsTheTarget`）· `tsc` · `vite build` · 真机右键 .md 文件。
 
 追加 2026-10-31 · TOC 刻度条可见性：条件是 ≥3 条用户消息、会话已加载、页面宽度 >800px（页面宽度 = 窗口宽度 − 侧栏）。原先阈值 960px 在带侧栏的常规窗口里几乎永远隐藏，后改为刻度条住在正文列自带的 24px 侧边距里（左 4px、最长 18px），任何宽度都不压正文，仅 ≤520px 隐藏。
+
+追加 2026-10-31 · Chat outline 设置：Settings → Appearance → *Chat outline*（`General.ChatOutline`，默认开）。关闭后页面不画 TOC 刻度条（`ChatBridgeState.Outline` 驱动）；打开时规则不变（≥3 条用户消息）。
+
+追加 2026-10-31 · 全新会话不再卡在 Loading：Herdr 在 omp 写出会话文件之前就报告 `agent_session`（`kind:"path"`），旧逻辑把“有身份但文件不存在”当作可绑定而永远 Loading、发不出消息。现在 `bindLiveAgent` 在文件不存在时不绑定，`liveSourcePending` 让 Chat 直接停在邀请态（sourceless 闩锁），首条消息发出、文件出现后下一次 rebind 绑上。邀请态的模型 chip 读 agent 自己的配置（omp `config.yml` 的 default 角色、Codex `config.toml`、Claude `settings.json`；`agentcatalog.Catalog.DefaultModel`，只读），transcript 记下模型后以 transcript 为准。测试：`TestFreshAgentWithUnwrittenSessionFileOpensOnInvitation`、`TestDefaultModelFromTheAgentsOwnConfig`。
+
+## Decision 2026-10-31 · Chat 上下文容量（presentation only；设计见 `designs/chat-context/`）
+
+用户选定方案 **B（点击环打开：容量条 + 缓存命中率 + 会话 token 明细 + Compact）**，并规定窗口未知时只显示已用量，不画进度条与百分比。
+
+| 项 | 落地 |
+|---|---|
+| 入口 | 输入区工具栏的环（`frontend/src/context.tsx` 的 `ContextControl`，取代只有 `title` 的旧 `ContextRing` 与 200k/1M 猜测）。≥70% 环旁出现琥珀百分比、≥90% 红；窗口未知时环是中性圆。 |
+| 数据 | `ChatBridge.ContextUsage`（`chat_context.go`）：已用量 = 转录里最近一次请求的上下文大小；会话 input/output/cache read/cache write = `history.ReadUsage` 流式读一次（只读、不落盘、上下文变化时才再读，不轮询）；**缓存命中率 = cache read ÷ (input + cache read + cache write)**，整个会话。 |
+| 窗口来源 | Codex：自己的 rollout 里 `model_context_window`（`SessionUsage.Window`）；omp/pi：自己的模型表 `context` 列（`agentcatalog.ModelWindow`，复用 10 分钟缓存，转录里的 `group/x` 可对上列表里的 `provider/group/x`，歧义时不猜）；Claude Code 不报告 → 0 → 无条无百分比，卡片注明 *This agent does not report its window size*。 |
+| Compact | 卡片里的按钮发送 `/compact`（走普通 prompt 通道，仅当 agent 的目录里有该命令且空闲时可点；≥70% 实心强调）。`/compact` 在任何 agent 都不会写出 user 行（omp 写 `compaction` 条目），所以不再创建待确认回显（`agentcatalog.IsCompact`），否则会永远停在 “Working”。 |
+| 顺带修的数据洞 | pi/omp 的 assistant 行从未带 `ContextTokens`（环对它们从不出现）：现取该请求 `usage.totalTokens`；Codex 把 `last_token_usage` 当成 `total_token_usage` 的子键读，实际是兄弟键，环对 Codex 同样从不出现：已改读 `info.last_token_usage`，并写到它所属的 assistant 行。 |
+
+验证：`go test ./...`（`TestContextUsageCardData` / `…WindowPrefersTheLogsOwnReport` / `…UnknownWindowAndNoInputStayHonest`、`TestModelListingsCarryTheContextWindow`、`TestModelWindowMatchesFullAndUniqueBareIds`、`TestReadUsageCodexReportsItsContextWindow`、`TestPiAssistantCarriesTheContextItsRequestFilled`、`TestCodexLastRequestFillsTheContextOfItsAssistantMessage`、`TestIsCompactTakesTheCommandAndItsInstructionsOnly`、`TestTerminalCommandLeavesNoEcho`）· `tsc --noEmit` · `mygo vet` · 真机（omp `group/glm-flash`）：点环出卡片 `22k / 1M (2.2%)`，与 omp 自己状态栏的 `2.2%/1M` 一致；点 Compact → omp 写出 `compaction` 条目（终端显示 `soft-compacted`），Chat 回到 Ready、无残留 `/compact` 气泡。真机未覆盖：Claude Code / Codex 的卡片与 `/compact`（本机无活跃会话）；浅色主题下的卡片仅在原型里核对。

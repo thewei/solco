@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,9 @@ type Entry struct {
 type Model struct {
 	ID     string
 	Detail string
+	// Window is the context window the agent's own model listing states
+	// (pi, omp); 0 when it states none.
+	Window int64
 }
 
 // Catalog is the composer's menu for one Agent.
@@ -243,6 +247,14 @@ func Classify(provider history.AgentID, text string) Kind {
 		}
 	}
 	return ""
+}
+
+// IsCompact reports text is the /compact command (optionally with the
+// instructions Claude Code accepts). Every agent answers it with a summary
+// entry of its own, not with a user row, so Chat has nothing to confirm it by.
+func IsCompact(text string) bool {
+	first, _, _ := strings.Cut(strings.TrimSpace(text), " ")
+	return first == "/compact"
 }
 
 // ModelVerb is the typed command that switches model for provider, "" when
@@ -459,9 +471,66 @@ func parsePiModels(out string) []Model {
 		if index == 0 || len(fields) < 2 || len(models) >= maxSkills {
 			continue
 		}
-		models = append(models, Model{ID: fields[0] + "/" + fields[1]})
+		window := int64(0)
+		if len(fields) >= 3 {
+			window = parseTokenCount(fields[2])
+		}
+		models = append(models, Model{ID: fields[0] + "/" + fields[1], Window: window})
 	}
 	return models
+}
+
+// parseTokenCount reads a listing's "250K" / "1M" / "65.5K" (decimal, as the
+// listings print them); 0 when the cell is not a count.
+func parseTokenCount(cell string) int64 {
+	cell = strings.ToUpper(strings.TrimSpace(cell))
+	scale := 1.0
+	switch {
+	case strings.HasSuffix(cell, "K"):
+		scale, cell = 1e3, strings.TrimSuffix(cell, "K")
+	case strings.HasSuffix(cell, "M"):
+		scale, cell = 1e6, strings.TrimSuffix(cell, "M")
+	}
+	value, err := strconv.ParseFloat(cell, 64)
+	if err != nil || value <= 0 {
+		return 0
+	}
+	return int64(value*scale + 0.5)
+}
+
+// ModelWindow is the context window the agent lists for the model id as its
+// transcripts spell it, 0 when the agent lists none (only pi and omp list one;
+// Claude Code and Codex state theirs in their own logs or not at all). Listed
+// ids are "provider/model"; omp's transcripts may drop the provider ("group/glm-flash"
+// for the listed "magpie/group/glm-flash"), so a shorter id matches when
+// exactly one row ends with it. Uses the same ten-minute cache as the model list.
+func ModelWindow(ctx context.Context, provider history.AgentID, id string) int64 {
+	var models []Model
+	switch provider {
+	case history.AgentPi:
+		models = piModels(ctx)
+	case history.AgentOMP:
+		models = ompModels(ctx)
+	default:
+		return 0
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return 0
+	}
+	var found, matches int64
+	for _, model := range models {
+		if model.ID == id {
+			return model.Window
+		}
+		if strings.HasSuffix(model.ID, "/"+id) {
+			found, matches = model.Window, matches+1
+		}
+	}
+	if matches == 1 {
+		return found
+	}
+	return 0
 }
 
 // ompModels lists `omp models`.
@@ -475,13 +544,25 @@ func ompModels(ctx context.Context) []Model {
 func parseOmpModels(out string) []Model {
 	var models []Model
 	provider := ""
+	contextAt := -1
 	for _, line := range strings.Split(out, "\n") {
 		text := strings.TrimSpace(line)
 		if strings.HasPrefix(text, "│") {
 			cells := strings.Split(strings.Trim(text, "│"), "│")
 			id := strings.TrimSpace(cells[0])
-			if id != "" && id != "model" && provider != "" && len(models) < maxSkills {
-				models = append(models, Model{ID: provider + "/" + id})
+			if id == "model" {
+				contextAt = -1
+				for at, cell := range cells {
+					if strings.TrimSpace(cell) == "context" {
+						contextAt = at
+					}
+				}
+			} else if id != "" && provider != "" && len(models) < maxSkills {
+				window := int64(0)
+				if contextAt > 0 && contextAt < len(cells) {
+					window = parseTokenCount(cells[contextAt])
+				}
+				models = append(models, Model{ID: provider + "/" + id, Window: window})
 			}
 			continue
 		}
