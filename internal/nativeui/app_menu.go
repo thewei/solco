@@ -59,9 +59,14 @@ func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 		{Role: mygo.RoleEditMenu},
 		// Custom Window menu (F103): Minimize/Zoom without the stock
 		// "Close Window ⌘W" item so the accelerator stays tab-scoped.
+		// Keep Window on Top (2026-10-31) is the titlebar pin's successor;
+		// no accelerator, so it can never double-fire with the state it
+		// toggles.
 		{Label: "Window", Submenu: []*mygo.MenuItem{
 			{Role: mygo.RoleMinimize},
 			{Role: mygo.RoleZoom},
+			mygo.Separator(),
+			{Label: "Keep Window on Top", Type: mygo.MenuItemCheckbox, Click: s.KeepWindowOnTopFromMenu},
 		}},
 		{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{
 			do("Keyboard Shortcuts", accelShortcuts, s.ShowShortcutsFromMenu),

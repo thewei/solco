@@ -303,7 +303,10 @@ func TestLongSessionTitleCannotPushTheBarsToolsOut(t *testing.T) {
 	if !ok {
 		t.Fatalf("Actions pull-down missing; texts=%q", tester.Texts())
 	}
-	tools, ok := tester.Find(windowPinLabel)
+	tools, ok := tester.Find("Agents & Services")
+	if !ok {
+		tools, ok = tester.Find("Agents & Services · Disconnected")
+	}
 	if !ok {
 		t.Fatalf("trailing tools missing; texts=%q", tester.Texts())
 	}
@@ -342,17 +345,13 @@ func TestActionsIsTheFirstOfTheTrailingTools(t *testing.T) {
 			return s
 		}},
 	}
-	var wantY, wantToPin float32
+	const width = 1200
+	var wantY, wantToActivity float32
 	for i, route := range routes {
-		tester := ui.NewTester(route.setup(t).View, 1200, 800)
-		settleFrames(tester, 12)
+		tester := ui.NewTester(route.setup(t).View, width, 800)
 		actions, ok := tester.Find("Actions")
 		if !ok {
 			t.Fatalf("%s: no Actions button; texts=%q", route.name, tester.Texts())
-		}
-		pin, ok := tester.Find(windowPinLabel)
-		if !ok {
-			t.Fatalf("%s: no trailing tools; texts=%q", route.name, tester.Texts())
 		}
 		activity, ok := tester.Find("Agents & Services")
 		if !ok {
@@ -364,9 +363,9 @@ func TestActionsIsTheFirstOfTheTrailingTools(t *testing.T) {
 		if math.Abs(float64(actions.W-gorexIconBtn)) > 0.5 || math.Abs(float64(actions.H-gorexIconBtn)) > 0.5 {
 			t.Errorf("%s: Actions is %.1f×%.1f, want the bare %.0f-point icon button (no chevron beside it)", route.name, actions.W, actions.H, float32(gorexIconBtn))
 		}
-		if actions.X+actions.W > activity.X+0.5 || activity.X+activity.W > pin.X+0.5 {
-			t.Errorf("%s: the trailing tools read Actions %.1f–%.1f, activity %.1f–%.1f, pin from %.1f; want them in that order",
-				route.name, actions.X, actions.X+actions.W, activity.X, activity.X+activity.W, pin.X)
+		if actions.X+actions.W > activity.X+0.5 || activity.X+activity.W > width {
+			t.Errorf("%s: the trailing tools read Actions %.1f–%.1f, activity %.1f–%.1f; want Actions first and the tools inside the %d-point window",
+				route.name, actions.X, actions.X+actions.W, activity.X, activity.X+activity.W, width)
 		}
 		// Moving it out of a pull-down must not cost the keyboard: the menu
 		// still opens from a Tab stop.
@@ -379,14 +378,14 @@ func TestActionsIsTheFirstOfTheTrailingTools(t *testing.T) {
 		if !reached {
 			t.Errorf("%s: Tab never reaches Actions; the page menu is no longer keyboard-reachable", route.name)
 		}
-		toPin := pin.X - actions.X
+		toActivity := activity.X - actions.X
 		if i == 0 {
-			wantY, wantToPin = actions.Y, toPin
+			wantY, wantToActivity = actions.Y, toActivity
 			continue
 		}
-		if math.Abs(float64(actions.Y-wantY)) > 0.5 || math.Abs(float64(toPin-wantToPin)) > 0.5 {
-			t.Errorf("%s: Actions sits %.1f left of the pin at y=%.1f; the Workspace's is %.1f at y=%.1f — it must not move between routes",
-				route.name, toPin, actions.Y, wantToPin, wantY)
+		if math.Abs(float64(actions.Y-wantY)) > 0.5 || math.Abs(float64(toActivity-wantToActivity)) > 0.5 {
+			t.Errorf("%s: Actions sits %.1f left of the activity button at y=%.1f; the Workspace's is %.1f at y=%.1f — it must not move between routes",
+				route.name, toActivity, actions.Y, wantToActivity, wantY)
 		}
 	}
 }

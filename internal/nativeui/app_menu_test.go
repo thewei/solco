@@ -123,6 +123,29 @@ func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 	}
 }
 
+// TestWindowMenuCarriesTheAlwaysOnTopCheckbox pins the 2026-10-31 move: the
+// titlebar pin is gone and the Window menu holds the toggle. MyGo's checkbox
+// flips its own check before the Click runs, so the test replays that order;
+// the headless session's nil window keeps the platform call a guarded no-op.
+func TestWindowMenuCarriesTheAlwaysOnTopCheckbox(t *testing.T) {
+	s := NewShell()
+	item := menuItemNamed(menuNamed(t, s.MenuBar(nil), "Window").Submenu, "Keep Window on Top")
+	if item == nil {
+		t.Fatal("no Keep Window on Top in the Window menu")
+	}
+	if item.Type != mygo.MenuItemCheckbox {
+		t.Fatalf("Keep Window on Top is %q, want a checkbox", item.Type)
+	}
+	if item.IsChecked() {
+		t.Fatal("window must start unpinned")
+	}
+	item.SetChecked(true)
+	item.Click(item, nil)
+	if !item.IsChecked() {
+		t.Fatal("click lost the checked state")
+	}
+}
+
 // homeDestination pairs the strip's Terminal tab with the name the other two
 // launchers give the same page: the Go menu and the palette say Workspace, the
 // tab (icon and tooltip) says Terminal. The naming is an open product

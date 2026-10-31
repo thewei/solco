@@ -13,8 +13,8 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo/ui 的 Context/TitleBar（窗口控件带几何）、gorex_style 的图标按钮与配色、tooltip.go 的 tipped/tipKeys 与 shortcuts.go 的 sidebarToggleBinding/Shell.shortcutKeycaps（tooltip 键帽取自有效绑定）、commandcenter 的面板作用域、router 路由态、runtime/time
- * [OUTPUT]: 对外提供 Shell.titlebar（窗口标题栏：红绿灯对齐、身份区——Terminal/Chat 为面包屑单行，选中 Pane 的目录住在末级 crumb 的悬停弹层 breadcrumb_switcher.go crumbPathTip，Changes 与各内页为 route_header.go 的单行 Title 大字标题、工具区、Windows 控件）、titlebarHeight（灯带对齐的行高纯函数，所有路由同一 42 下限）、showViewTerminal/showViewChat/showViewChanges/showViewHistory（四个视图的唯一切换入口）、toggleWindowPinned（窗口置顶的唯一入口）、sidebarToggle（侧栏顶带悬浮 chrome 的左右分布：左组=侧栏收起钮+Search（⌘K 的 Command Center 搜索面板）固定在红绿灯右侧，右组=Router Back/Forward 贴侧栏右缘随滑动移动，收起后并入左组右侧）、chromeHistoryButton（历史按钮的无历史灭活态）
- * [POS]: nativeui 的窗口 chrome 所有者，被 shell.View 顶部消费；高度与 MyGo 红灯带对齐（F142），页面标题与页面动作的唯一归属（2026-10-14：内页只画内容）；页面历史与 Search 收口在侧栏顶带的悬浮 chrome（2026-10-29 用户要求：左右分布——左组侧栏钮+搜索钮居左，右组历史钮居右贴侧栏缘），右侧工具簇 titlebarTools 只剩页面 Actions、Agent 活动浮层入口与窗口置顶；内容列让位宽度 sidebarToggleClearance 覆盖收起态最宽的四钮行
+ * [OUTPUT]: 对外提供 Shell.titlebar（窗口标题栏：红绿灯对齐、身份区——Terminal/Chat 为面包屑单行，选中 Pane 的目录住在末级 crumb 的悬停弹层 breadcrumb_switcher.go crumbPathTip，Changes 与各内页为 route_header.go 的单行 Title 大字标题、工具区、Windows 控件）、titlebarHeight（灯带对齐的行高纯函数，所有路由同一 42 下限）、showViewTerminal/showViewChat/showViewChanges/showViewHistory（四个视图的唯一切换入口）、sidebarToggle（侧栏顶带悬浮 chrome 的左右分布：左组=侧栏收起钮+Search（⌘K 的 Command Center 搜索面板）固定在红绿灯右侧，右组=Router Back/Forward 贴侧栏右缘随滑动移动，收起后并入左组右侧）、chromeHistoryButton（历史按钮的无历史灭活态）
+ * [POS]: nativeui 的窗口 chrome 所有者，被 shell.View 顶部消费；高度与 MyGo 红灯带对齐（F142），页面标题与页面动作的唯一归属（2026-10-14：内页只画内容）；页面历史与 Search 收口在侧栏顶带的悬浮 chrome（2026-10-29 用户要求：左右分布——左组侧栏钮+搜索钮居左，右组历史钮居右贴侧栏缘），右侧工具簇 titlebarTools 只剩页面 Actions 与 Agent 活动浮层入口（2026-10-31：窗口置顶图钉迁入菜单栏 Window 菜单，见 window_actions.go KeepWindowOnTopFromMenu）；内容列让位宽度 sidebarToggleClearance 覆盖收起态最宽的四钮行
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -190,8 +190,8 @@ func titlebarHeight(barHeight float32) float32 {
 }
 
 // titlebarTools is the header's trailing edge: the page's Actions menu (nil
-// when the route offers none), the Agent activity button (floating panel),
-// the window pin (always on top) and, on Windows, the window controls. The
+// when the route offers none) and the Agent activity button (floating
+// panel). On Windows the window controls follow. The
 // view switch (Changes/Sessions/Files/Hosts) lives at the top of the
 // sidebar (sidebar.go sidebarViewTabs); page history and Search float on
 // the sidebar band (sidebarToggle).
@@ -200,9 +200,6 @@ func (s *Shell) titlebarTools(c *ui.Context, k *gorexColors, actions func(m *ui.
 		headerActions(c, actions)
 	}
 	s.titlebarActivity(c, k)
-	if gorexIconButton(c, k, iconPin, windowPinLabel, windowPinLabel, s.windowPinned, gorexIconBtn, gorexIconGlyph).Clicked() {
-		s.toggleWindowPinned()
-	}
 	s.windowControls(c, k)
 }
 
@@ -255,20 +252,6 @@ func (s *Shell) windowControls(c *ui.Context, k *gorexColors) {
 			win.Close()
 		}
 	})
-}
-
-// windowPinLabel names the titlebar pin for accessibility and its tooltip;
-// the selected face carries the pinned state, as the sidebar's view tabs do.
-const windowPinLabel = "Keep Window on Top"
-
-// toggleWindowPinned flips the main window's always-on-top level. The Shell
-// field mirrors the level for the pin's face; the window is nil in headless
-// sessions (tests), where the flip stays a no-op on the platform side.
-func (s *Shell) toggleWindowPinned() {
-	s.windowPinned = !s.windowPinned
-	if s.win != nil {
-		s.win.SetAlwaysOnTop(s.windowPinned)
-	}
 }
 
 // viewSwitchActive reports which of the four header views is on screen:

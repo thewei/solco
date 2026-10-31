@@ -212,12 +212,15 @@ func TestBreadcrumbGivesWayBeforeTheToolsDo(t *testing.T) {
 		if !ok {
 			t.Fatalf("width %d: no Actions button; texts=%q", width, tt.Texts())
 		}
-		pin, ok := tt.Find(windowPinLabel)
+		tools, ok := tt.Find("Agents & Services")
+		if !ok {
+			tools, ok = tt.Find("Agents & Services · Disconnected")
+		}
 		if !ok {
 			t.Fatalf("width %d: no trailing tools; texts=%q", width, tt.Texts())
 		}
-		if pin.X+pin.W > float32(width) {
-			t.Errorf("width %d: the tools end at %.1f, outside the window", width, pin.X+pin.W)
+		if tools.X+tools.W > float32(width) {
+			t.Errorf("width %d: the tools end at %.1f, outside the window", width, tools.X+tools.W)
 		}
 		var prev ui.Rect
 		var widths []float32
