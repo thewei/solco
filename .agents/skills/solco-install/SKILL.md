@@ -33,7 +33,7 @@ order (each prints `==> N/7`):
    die the script **aborts** — by design there is no SIGKILL, which would
    skip the app's session save.
 6. **replace** — `rm -rf` + `ditto` from `build/darwin-arm64/Solco.app`,
-   lint again on the installed copy.
+   lint again on the installed copy, then sign it with the local self-signed identity "Solco Local Dev" (`scripts/ensure-signing-identity.sh` creates it in the login keychain once; the first `codesign` asks for the login password — choose Always Allow) so the designated requirement is stable and macOS keeps the Microphone grant across installs. Without the identity the ad-hoc signature stays.
 7. **launch and verify** — `open`, then a two-stage liveness check so a
    crash-on-launch is caught, not reported as success.
 

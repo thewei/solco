@@ -221,6 +221,18 @@ rm -rf "$DST"
 ditto "$SRC" "$DST"
 plutil -lint "$DST/Contents/Info.plist" >/dev/null || die "installed Info.plist is invalid — source bundle kept at $SRC"
 
+# Stable signing identity (2026-10-31, per user): an ad-hoc signature changes with
+# every build, so macOS re-asks for Microphone access after each install. Signing
+# the installed copy with one local self-signed certificate keeps the designated
+# requirement constant. Falls back to the build's ad-hoc signature if unavailable.
+SIGN_ID="$(bash "$(dirname "$0")/ensure-signing-identity.sh" 2>/dev/null || true)"
+if [ -n "$SIGN_ID" ]; then
+  codesign --force --deep --sign "$SIGN_ID" "$DST" >/dev/null 2>&1 \
+    && codesign --verify --deep --strict "$DST" 2>/dev/null \
+    && echo "signed: $DST with \"$SIGN_ID\" (stable identity, TCC grants persist)" \
+    || echo "warning: signing with \"$SIGN_ID\" failed — keeping the ad-hoc signature"
+fi
+
 step "7/7 launch and verify"
 open "$DST"
 sleep 3
