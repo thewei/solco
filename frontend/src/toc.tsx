@@ -73,7 +73,7 @@ export function outline(turns: ChatBridgeTurn[]): Entry[] {
   return entries;
 }
 
-const WIDTH = [10, 14, 18, 22];
+const WIDTH = [8, 11, 14, 16];
 
 export function TocRail({
   turns,

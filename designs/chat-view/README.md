@@ -413,4 +413,4 @@ git diff --check
 
 追加 2026-10-31 · Files 预览页同口径：`/files-viewer`（Markdown 渲染与图片）同样套用——整页 `user-select:none` 仅渲染文本可选、箭头光标、`:focus-visible` 系统焦点环、链接/图片不可拖、悬停地址胶囊（`native.ts` 的 `useLinkHint` 与 Chat 共用）、屏蔽浏览器菜单改弹 macOS 菜单（Copy / Open·Copy Link / Quick Look·Copy Path / Select All，`files_menu.go`）、`OnWillNavigate` 导航闸（拖入文件或点击链接不再把预览页换掉）。导航闸函数更名为 `pageNavigationDecision`，Chat 与 Files 共用。验证：`go test ./internal/nativeui`（`TestFilesMenuPlanFollowsTheTarget`）· `tsc` · `vite build` · 真机右键 .md 文件。
 
-追加 2026-10-31 · TOC 刻度条可见性：条件是 ≥3 条用户消息、会话已加载、页面宽度 >800px（页面宽度 = 窗口宽度 − 侧栏）。原先阈值 960px 在带侧栏的常规窗口里几乎永远隐藏，下调到 800px，并把刻度条收窄（左 10px、最长 26px）以不压到正文列（正文列在 800px 时从 50px 处开始）。
+追加 2026-10-31 · TOC 刻度条可见性：条件是 ≥3 条用户消息、会话已加载、页面宽度 >800px（页面宽度 = 窗口宽度 − 侧栏）。原先阈值 960px 在带侧栏的常规窗口里几乎永远隐藏，后改为刻度条住在正文列自带的 24px 侧边距里（左 4px、最长 18px），任何宽度都不压正文，仅 ≤520px 隐藏。

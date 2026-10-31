@@ -1470,10 +1470,10 @@
 /* ---- TOC rail (designs/chat-composer, T) ---- */
 .toc {
   position: absolute;
-  left: 10px;
+  left: 4px;
   top: 64px;
   bottom: 150px;
-  width: 36px;
+  width: 22px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1499,7 +1499,7 @@
 }
 .toc .tick.on i {
   background: var(--i1);
-  width: 26px !important;
+  width: 18px !important;
 }
 .toc-card {
   position: fixed;
@@ -1560,10 +1560,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The rail lives in the gutter beside the column (the column's text starts
-   50px in at 800px); narrower pages hide it. The page is the window minus
-   the sidebar, so 960 hid it in a normal window. */
-@media (max-width: 800px) {
+/* The rail sits in the column's own 24px side padding (ticks end at 22px),
+   so it never covers text at any width; only a very narrow page hides it. */
+@media (max-width: 520px) {
   .toc {
     display: none;
   }
