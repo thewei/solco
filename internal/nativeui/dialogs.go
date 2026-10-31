@@ -217,6 +217,8 @@ func (s *Shell) submitConfirm(kind, target string) {
 		s.runWorkboardAction("start-now", target)
 	case workboardStopConfirm:
 		s.runWorkboardAction("stop", target)
+	case workboardStopAllConfirm:
+		s.stopAllProjectTasks(target)
 	case boardArchiveDoneConfirm, boardArchiveProjectConfirm, boardRestoreProjectConfirm,
 		boardClearConfirm, boardCoordinatorNewConfirm, boardAutopilotOnConfirm,
 		boardAutomationRunConfirm, boardAutomationRemoveConfirm:

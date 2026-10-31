@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/workboard"
 )
@@ -70,29 +69,36 @@ func TestPinWritesTheTargetAndRefreshes(t *testing.T) {
 	}
 }
 
-func TestProjectPageShowsPinnedFilterAndCoordinator(t *testing.T) {
+func TestProjectViewCarriesPinsAndCoordinator(t *testing.T) {
 	var ran []string
 	s := extrasShell(t, &ran, pinnedR4, `{"name":"r coordinator","state":"working","pane":"p9"}`)
 	loadBoard(t, s)
 	s.openWorkboardProjectPage("r")
-	tt := ui.NewTester(s.workboardProjectPage, 900, 700)
-	for _, want := range []string{"Pinned 1", "Message r's coordinator · working", "Open Coordinator", "★ r/4"} {
-		if !tt.HasText(want) {
-			t.Fatalf("missing %q: %q", want, tt.Texts())
+	p := s.projectsView().Project
+	if p.Coordinator.State != "working" || !p.Coordinator.Running {
+		t.Fatalf("coordinator = %+v", p.Coordinator)
+	}
+	pinned := 0
+	for _, g := range p.Groups {
+		for _, task := range g.Tasks {
+			if task.Pinned {
+				pinned++
+				if task.ID != "r/4" {
+					t.Fatalf("pinned %s, want r/4", task.ID)
+				}
+			}
 		}
 	}
-	if err := tt.Click("Pinned 1"); err != nil {
-		t.Fatal(err)
+	if pinned != 1 {
+		t.Fatalf("pinned tasks = %d, want 1", pinned)
 	}
-	tt.Frame()
-	if !tt.HasText("Later") || tt.HasText("Asks a question") {
-		t.Fatalf("Pinned filter shows only starred tasks: %q", tt.Texts())
-	}
-	// With nothing starred the filter disappears and falls back to All.
 	s.workboard.board.extras.pinnedTasks = map[string]bool{}
-	tt.Frame()
-	if tt.HasText("Pinned 0") || s.workboard.project.filter != filterAll {
-		t.Fatalf("an emptied Pinned filter must fall back: filter=%d %q", s.workboard.project.filter, tt.Texts())
+	for _, g := range s.projectsView().Project.Groups {
+		for _, task := range g.Tasks {
+			if task.Pinned {
+				t.Fatalf("an emptied pin set marks nothing: %s", task.ID)
+			}
+		}
 	}
 }
 

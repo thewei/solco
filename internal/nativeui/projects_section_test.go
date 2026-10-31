@@ -270,7 +270,8 @@ func TestProjectRowLeadsToTheRunningCoordinator(t *testing.T) {
 		s := projectsSectionShell(t)
 		coordinatorStatus(t, `{"name":"app coordinator","state":"idle","pane":"p1"}`)
 		s.settings.General.WorkboardView = view
-		s.projection.Panes = []herdr.Pane{{ID: "p1"}}
+		s.projection.Panes = []herdr.Pane{{ID: "p1", TerminalID: "t1", Agent: "claude"}}
+		s.projection.Agents = []herdr.Agent{{PaneID: "p1", TerminalID: "t1", Name: "claude"}}
 		// the cache still says it is not running
 		s.workboard.board.extras.coordinators = map[string]workboard.Coordinator{"app": {State: "none"}}
 		tt := ui.NewTester(s.View, 1200, 800)
@@ -278,6 +279,14 @@ func TestProjectRowLeadsToTheRunningCoordinator(t *testing.T) {
 			t.Fatal(err)
 		}
 		tt.Frame()
+		if view == "native" {
+			// The Project home embeds the coordinator's Chat: the row opens the
+			// page and the Chat target is the coordinator's pane.
+			if got := s.projectsView().Chat.Target; s.router.Path() != routeProject || got != "p1" {
+				t.Fatalf("native: path=%q chat target=%q, want the Project page on the coordinator", s.router.Path(), got)
+			}
+			continue
+		}
 		if s.router.Path() != routeWorkspace || s.selectedPaneID != "p1" {
 			t.Fatalf("%s: path=%q pane=%q, want the coordinator's pane", view, s.router.Path(), s.selectedPaneID)
 		}
@@ -347,6 +356,7 @@ func TestTaskRowLeadsToItsAgentPane(t *testing.T) {
 // there again (it did once, then stopped).
 func TestProjectRowLeadsToTheCoordinatorAgainAfterAnotherAgent(t *testing.T) {
 	s := projectsSectionShell(t)
+	s.settings.General.WorkboardView = "board" // the Board view goes to the pane; Native opens the page
 	coordinatorStatus(t, `{"state":"idle","pane":"p1"}`)
 	s.projection = herdr.Projection{
 		Projects: []herdr.Project{{ID: "w1", Label: "herdr-client", CWD: "/work/app"}},
@@ -432,7 +442,7 @@ func TestProjectAndTaskRowsAnnounceTheirDestination(t *testing.T) {
 		t.Fatalf("coordinator tip = %q", got)
 	}
 	s.settings.General.WorkboardView = "native"
-	if got := s.projectRowTip(workboardProject{Name: "app"}, false); got != "app: open its tasks" {
+	if got := s.projectRowTip(workboardProject{Name: "app"}, false); got != "app: open its page" {
 		t.Fatalf("native tip = %q", got)
 	}
 

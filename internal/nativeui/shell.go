@@ -539,6 +539,18 @@ type Shell struct {
 	filesPublishMu      sync.Mutex
 	filesPublishing     bool
 	filesPublishPending bool
+	// projectsWebview is the Projects page's embedded WebView (product
+	// decision 2026-10-31); projectsWebviewBroken latches a failed creation.
+	// projectsLast is the last snapshot sent (change detection), projectsSeq
+	// numbers them, projectsSubject is what the page last opened on.
+	projectsWebview       *mygo.WebView
+	projectsWebviewBroken bool
+	projectsLast          []byte
+	projectsSeq           int64
+	projectsPublishing    bool
+	projectsSubject       string
+	projectsBinding       bool
+	projectsChatFailed    string // the pane whose Chat bind failed (page says so)
 	// chatLiveCommitted is the committed live projection length at the last	// applied sync — the pending-echo baseline coordinate (0.6 §12).
 	chatLiveCommitted int
 	// chatLiveStart is the projection index the live chat window starts at

@@ -23,6 +23,7 @@ const (
 	workboardPlanBackDialog     = "workboard-plan-back"
 	workboardStartNowConfirm    = "workboard-start-now"
 	workboardStopConfirm        = "workboard-stop"
+	workboardStopAllConfirm     = "workboard-stop-all"
 	workboardToastMax           = 160
 	workboardNoRepoToast        = "Open a Project inside a Git repository to add a task."
 	workboardNotReadyToast      = "That task changed and is no longer ready to approve."
@@ -256,4 +257,56 @@ func workboardFailureToast(err error) string {
 		text = string(r[:workboardToastMax]) + "…"
 	}
 	return text
+}
+
+// projectWorkingTasks are the Project's tasks with an agent at work: what
+// "Stop All Tasks" reaches. Ready, failed and waiting tasks keep their state.
+func (s *Shell) projectWorkingTasks(project workboardProject) []workboard.Task {
+	for _, group := range project.Groups {
+		if group.Group == workboard.GroupWorking {
+			return group.Tasks
+		}
+	}
+	return nil
+}
+
+// stopAllProjectTasks stops each working task in turn. It is a macro over the
+// plugin's own `stop`, not an atomic verb: a task that finished meanwhile is
+// refused by the plugin and skipped, and the toast says how many stopped.
+func (s *Shell) stopAllProjectTasks(name string) {
+	if !s.workboardAvailable() {
+		return
+	}
+	project, ok := s.workboardProjectByName(name)
+	if !ok {
+		return
+	}
+	var ids []string
+	for _, task := range s.projectWorkingTasks(project) {
+		ids = append(ids, task.ID)
+	}
+	if len(ids) == 0 {
+		return
+	}
+	client := newWorkboardClient(s.workboard.avail.Root, herdr.ParseRef(s.activeInstance).Session)
+	slog.Info("work board write requested", "op", "stop-all", "project", name, "tasks", len(ids))
+	stopped := 0
+	s.workboardWrite("stop-all", func(ctx context.Context) error {
+		var first error
+		for _, id := range ids {
+			if err := client.Stop(ctx, id); err != nil {
+				if first == nil {
+					first = err
+				}
+				continue
+			}
+			stopped++
+		}
+		if stopped == 0 {
+			return first
+		}
+		return nil
+	}, func() {
+		s.pendingToast = "Stopped " + itoa(stopped) + " of " + itoa(len(ids)) + " task" + pluralS(len(ids))
+	})
 }

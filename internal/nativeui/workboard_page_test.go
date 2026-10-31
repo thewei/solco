@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/workboard"
 )
 
@@ -56,25 +55,57 @@ func pageShell(t *testing.T, sampleName string, ran *[]string) *Shell {
 	return s
 }
 
+// actionKinds lists the verbs the page offers, in order.
+func actionKinds(t *TaskPane) []string {
+	var out []string
+	for _, a := range t.Actions {
+		out = append(out, a.Kind)
+	}
+	return out
+}
+
+func hasFact(t *TaskPane, label, value string) bool {
+	for _, f := range t.Facts {
+		if f.Label == label && strings.Contains(f.Value, value) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestTaskPageForAReadyTaskLeadsWithApprove(t *testing.T) {
 	var ran []string
 	s := pageShell(t, "approval_real_claude", &ran)
 	if s.router.Path() != routeTask || s.workboard.page.detail == nil {
 		t.Fatalf("path=%q detail=%v: opening reads the details", s.router.Path(), s.workboard.page.detail)
 	}
-	tt := ui.NewTester(s.workboardTaskPage, 900, 700)
-	for _, want := range []string{"Approve…", "Archive", "Ready to approve", "Approve to merge? 完成。", "claude", "work/2-add-hello-file",
-		"Create a file named hello.txt"} {
-		if !tt.HasText(want) {
-			t.Fatalf("page missing %q: %q", want, tt.Texts())
+	v := s.projectsView()
+	task := v.Task
+	if v.Mode != "task" || task == nil {
+		t.Fatalf("mode=%q task=%v", v.Mode, task)
+	}
+	if task.GroupLabel != "Ready to approve" || task.Tone != "ready" {
+		t.Fatalf("group = %q/%q", task.GroupLabel, task.Tone)
+	}
+	if !hasFact(task, "Note", "Approve to merge? 完成。") || !hasFact(task, "Agent", "claude") || !hasFact(task, "Branch", "work/2-add-hello-file") {
+		t.Fatalf("facts = %+v", task.Facts)
+	}
+	if !strings.Contains(task.Narrative.Description, "Create a file named hello.txt") {
+		t.Fatalf("description = %q", task.Narrative.Description)
+	}
+	if task.Narrative.FailureTitle != "" {
+		t.Fatalf("a ready task has no Failure card: %+v", task.Narrative)
+	}
+	kinds := actionKinds(task)
+	if kinds[0] != "approve" || !task.Actions[0].Primary || !task.Actions[0].Dock || task.Actions[0].Label != "Approve…" {
+		t.Fatalf("actions = %+v: Approve leads, primary, in the dock", task.Actions)
+	}
+	for _, k := range kinds {
+		if k == "retry" {
+			t.Fatalf("a ready task offers no Retry: %v", kinds)
 		}
 	}
-	if tt.HasText("Retry") || tt.HasText("Failure") {
-		t.Fatalf("a ready task offers neither Retry nor a Failure card: %q", tt.Texts())
-	}
-	if err := tt.Click("Approve…"); err != nil {
-		t.Fatal(err)
-	}
+	NewProjectsBridge(s).Act("approve", "repo/2")
 	if !s.confirmOpen || s.confirmKind != workboardApproveConfirm || len(ran) != 0 {
 		t.Fatalf("confirm=%v kind=%q ran=%q: Approve must ask first", s.confirmOpen, s.confirmKind, ran)
 	}
@@ -86,14 +117,18 @@ func TestTaskPageForAReadyTaskLeadsWithApprove(t *testing.T) {
 func TestTaskPageShowsTheFailureAndOffersNoApprove(t *testing.T) {
 	var ran []string
 	s := pageShell(t, "approval_pr_failed_polled", &ran)
-	tt := ui.NewTester(s.workboardTaskPage, 900, 700)
-	for _, want := range []string{"Needs you", "Failure", "Pull request checks failed", "Retry", "Send failure details", "Archive"} {
-		if !tt.HasText(want) {
-			t.Fatalf("page missing %q: %q", want, tt.Texts())
+	task := s.projectsView().Task
+	if task.GroupLabel != "Needs you" || task.Narrative.FailureTitle != "Pull request checks failed" {
+		t.Fatalf("group=%q failure=%q", task.GroupLabel, task.Narrative.FailureTitle)
+	}
+	kinds := strings.Join(actionKinds(task), " ")
+	for _, want := range []string{"retry", "fix", "archive"} {
+		if !strings.Contains(kinds, want) {
+			t.Fatalf("actions %q missing %q", kinds, want)
 		}
 	}
-	if tt.HasText("Approve…") {
-		t.Fatalf("a task with a failing pull request must not offer Approve: %q", tt.Texts())
+	if strings.Contains(kinds, "approve") {
+		t.Fatalf("a task with a failing pull request must not offer Approve: %q", kinds)
 	}
 }
 
@@ -104,22 +139,21 @@ func TestStoppedTaskPageDropsTheOldFailureCard(t *testing.T) {
 	s := pageShell(t, "approval_pr_failed_polled", &ran)
 	s.workboard.board.tasks[0].Stage = "stopped"
 	s.workboard.board.tasks[0].State = "idle"
-	tt := ui.NewTester(s.workboardTaskPage, 900, 700)
-	if tt.HasText("Failure") || tt.HasText("Send failure details") {
-		t.Fatalf("a stopped task shows no Failure card: %q", tt.Texts())
+	task := s.projectsView().Task
+	if task.Narrative.FailureTitle != "" || task.Narrative.FailureDetail != "" {
+		t.Fatalf("a stopped task shows no Failure card: %+v", task.Narrative)
 	}
-	if !tt.HasText("Delegate") {
-		t.Fatalf("a stopped task is To do and can be delegated: %q", tt.Texts())
+	if !strings.Contains(strings.Join(actionKinds(task), " "), "delegate") {
+		t.Fatalf("a stopped task is To do and can be delegated: %v", actionKinds(task))
 	}
 }
 
-func TestTaskPageForAVanishedTaskOffersBack(t *testing.T) {
+func TestTaskPageForAVanishedTaskIsGone(t *testing.T) {
 	var ran []string
 	s := pageShell(t, "approval_real_claude", &ran)
 	s.workboard.board.tasks = nil
-	tt := ui.NewTester(s.workboardTaskPage, 900, 700)
-	if !tt.HasText("This task is no longer on the board") || !tt.HasText("Back") {
-		t.Fatalf("vanished task: %q", tt.Texts())
+	if v := s.projectsView(); v.Mode != "gone" || v.Task != nil {
+		t.Fatalf("a vanished task: mode=%q task=%v", v.Mode, v.Task)
 	}
 }
 

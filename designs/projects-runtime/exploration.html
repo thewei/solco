@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<!--
+  Solco · Projects workbench & run view —— Design Storybook（interactive-design-exploration）
+
+  直接用浏览器打开（file://），无外部依赖、无构建。
+  变体 A/B/C = “Project 首页放什么”这一个决策点的三种结构；Maps = 全流程图（生命周期 / 分层 / 上下文管线 / 控制矩阵 / TUI 对照）。
+  Task 运行视图、Library、New task 面板在 A/B/C 中共用（那是推荐的基础设施，不是被比较的对象）。
+
+  Tokens 来自真实实现：designs/chat-view 与 designs/subagents 的墨色四档（--i1..--i4）、
+  design_system.go（Radius Control 6 / Row 8 / Card 10 / Pill 999；无投影、hairline 边）、
+  status_indicator.go（working=转圈 / idle·resolved=空心环 / 其余=实心点；16pt 槽位）。
+  数据形状来自真实取证（见 README「Phase 0」）：herdr-projects 1.2.26 的 list/details --json
+  （stage / msg / reviews / pr / plan / limits / worktree / branch）与其 docs/*.md 的状态机。
+  URL hash 可预置：#v=A&scene=home&theme=light&w=1120   （Maps：#v=M&scene=life）
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Solco · Projects workbench & run view</title>
+
+<!-- ============================ SHELL (Design Storybook) ============================ -->
+<style>
+  [data-ide-shell]{--shell-bg:#0f0f10;--shell-panel:#18181b;--shell-border:#27272a;--shell-text:#fafafa;--shell-muted:#a1a1aa;--shell-accent:#71717a;--panel-w:332px;
+    box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--shell-bg);color:var(--shell-text);min-height:100vh;margin:0}
+  [data-ide-shell] *{box-sizing:border-box}
+  [data-ide-shell] .ide-layout{display:flex;min-height:100vh}
+  [data-ide-shell] .ide-stage{flex:1;position:relative;display:flex;flex-direction:column;min-height:100vh;min-width:0;background:#0b0b0c}
+  [data-ide-shell] .ide-stage-label{position:absolute;top:12px;left:14px;z-index:20;font-size:9px;font-weight:600;color:var(--shell-accent);text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+  [data-ide-shell] .ide-panel-collapse-btn{position:absolute;top:10px;right:10px;z-index:30;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer;font-size:12px}
+  [data-ide-shell] .ide-artboard-wrap{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:34px 24px 14px;min-width:0}
+  [data-ide-shell] .ide-artboard{width:100%;display:flex;justify-content:center;min-width:0}
+  [data-ide-shell] .ide-story-panel{width:var(--panel-w);flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--shell-border);background:var(--shell-panel);transition:width .2s;overflow:hidden;height:100vh;position:sticky;top:0}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel{width:0;border-left:none}
+  [data-ide-shell] .ide-panel-expand-btn{display:none;position:fixed;top:10px;right:10px;z-index:40;width:28px;height:28px;border-radius:6px;border:1px solid var(--shell-border);background:var(--shell-panel);color:var(--shell-muted);cursor:pointer;font-size:12px}
+  [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn{display:grid;place-items:center}
+  [data-ide-shell] .ide-panel-header{padding:12px 14px 8px;border-bottom:1px solid var(--shell-border);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--shell-muted);white-space:nowrap}
+  [data-ide-shell] .ide-panel-controls{flex:1;overflow-y:auto;padding:12px 14px;min-height:0}
+  [data-ide-shell] .ide-section-title{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--shell-accent);margin:0 0 6px}
+  [data-ide-shell] .ide-section-title:not(:first-child){margin-top:14px}
+  [data-ide-shell] .ide-variant-card,[data-ide-shell] .ide-state-card{padding:8px 10px;border-radius:6px;border:1px solid var(--shell-border);margin-bottom:5px;cursor:pointer;transition:border-color .12s,background .12s;font-size:10px;line-height:1.4;color:var(--shell-muted)}
+  [data-ide-shell] .ide-variant-card:hover,[data-ide-shell] .ide-state-card:hover{border-color:#3f3f46}
+  [data-ide-shell] .ide-variant-card.active,[data-ide-shell] .ide-state-card.active{border-color:var(--shell-accent);background:rgba(113,113,122,.1)}
+  [data-ide-shell] .ide-variant-card h2{font-size:11px;font-weight:600;margin:0 0 2px;color:var(--shell-text)}
+  [data-ide-shell] .ide-variant-card p{margin:0}
+  [data-ide-shell] .ide-state-card strong{display:block;color:var(--shell-text);font-size:10.5px;font-weight:500}
+  [data-ide-shell] .ctl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px;font-size:10.5px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--shell-border);border-radius:7px;flex-wrap:wrap;justify-content:flex-end}
+  [data-ide-shell] .shell-seg button{all:unset;cursor:pointer;padding:3px 8px;border-radius:5px;font-size:10px;color:var(--shell-muted)}
+  [data-ide-shell] .shell-seg button.on{background:#2c2c31;color:var(--shell-text)}
+  [data-ide-shell] .ide-panel-story{border-top:1px solid var(--shell-border);flex-shrink:0}
+  [data-ide-shell] .ide-story-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:none;background:rgba(255,255,255,.02);color:var(--shell-muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+  [data-ide-shell] .ide-story-toggle:hover{color:var(--shell-text);background:rgba(255,255,255,.04)}
+  [data-ide-shell] .ide-story-body{padding:0 14px 14px;font-size:11px;line-height:1.55;color:var(--shell-muted);max-height:250px;overflow-y:auto}
+  [data-ide-shell] .ide-layout.story-collapsed .ide-story-body{display:none}
+  [data-ide-shell] .ide-story-body h1{font-size:13px;font-weight:600;color:var(--shell-text);margin:0 0 6px}
+  [data-ide-shell] .ide-story-body p{margin:0 0 8px}
+  [data-ide-shell] .ide-story-body ul{margin:0 0 8px;padding-left:16px}
+  [data-ide-shell] .ide-story-body li{margin-bottom:4px}
+  [data-ide-shell] .ide-story-body b{color:var(--shell-text);font-weight:600}
+  [data-ide-shell] .ide-story-body code{font:10.5px ui-monospace,Menlo,monospace;background:#232327;padding:0 4px;border-radius:4px;color:#d4d4d8}
+</style>
+
+<!-- ============================ DESIGN (Solco window mock) ============================ -->
+<style id="design-styles">
+  .design-root{position:relative;width:var(--w,1120px);max-width:100%;height:calc(100vh - 54px);min-height:640px;display:grid;grid-template-columns:236px minmax(0,1fr);grid-template-rows:38px minmax(0,1fr);
+    background:var(--bg);color:var(--i1);border:1px solid var(--hair2);border-radius:12px;overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Helvetica Neue",sans-serif;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
+  .design-root *{box-sizing:border-box}
+  .design-root :where(button){font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}
+  .design-root .ic{flex:none;display:block}
+  .design-root .spin{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--i4);border-top-color:var(--i2);animation:spin .8s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .design-root .shim{background:linear-gradient(90deg,var(--i3) 0%,var(--i1) 50%,var(--i3) 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.7s linear infinite}
+  @keyframes shim{from{background-position:220% 0}to{background-position:-120% 0}}
+  @media (prefers-reduced-motion:reduce){.design-root .spin,.design-root .shim{animation:none}.design-root .shim{color:var(--i2);background:none}}
+
+  /* title bar */
+  .design-root .bar{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:0 12px 0 78px;border-bottom:1px solid var(--hair);font-size:12px;color:var(--i2);position:relative}
+  .design-root .bar .lights{position:absolute;left:14px;display:flex;gap:7px}
+  .design-root .bar .lights i{width:11px;height:11px;border-radius:50%;background:var(--i4)}
+  .design-root .chip{padding:3px 8px;border-radius:7px;color:var(--i2)}
+  .design-root .chip.cur{color:var(--i1)}
+  .design-root .bar .sep{color:var(--i4)}
+  .design-root .bar .tools{margin-left:auto;display:flex;align-items:center;gap:6px}
+  .design-root .trig{display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:8px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--i2)}
+  .design-root .trig:hover{background:var(--tint2);color:var(--i1)}
+  .design-root .trig b{font-weight:500;color:var(--i1)}
+  .design-root .ibtn{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--i2)}
+  .design-root .ibtn:hover,.design-root .ibtn.on{background:var(--tint2);color:var(--i1)}
+
+  /* status slot */
+  .design-root .slot{width:16px;height:16px;display:grid;place-items:center;flex:none}
+  .design-root .ring{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--i3)}
+  .design-root .dot{width:7px;height:7px;border-radius:50%}
+  .design-root .dot.warn{background:var(--warn)}.design-root .dot.bad{background:var(--bad)}.design-root .dot.ok{background:var(--ok)}
+
+  /* sidebar */
+  .design-root .side{border-right:1px solid var(--hair);padding:10px 8px;overflow:auto;font-size:12.5px}
+  .design-root .side h6{margin:12px 8px 5px;font-size:11px;font-weight:500;color:var(--i3);letter-spacing:.01em;display:flex;align-items:center;gap:6px}
+  .design-root .side h6:first-child{margin-top:2px}
+  .design-root .side h6 .pl{margin-left:auto;color:var(--i3)}
+  .design-root .prow{display:flex;align-items:center;gap:8px;min-height:30px;padding:0 6px 0 6px;border-radius:8px;color:var(--i2);width:100%}
+  .design-root .prow:hover{background:var(--tint)}
+  .design-root .prow.sel{background:var(--tint2);color:var(--i1)}
+  .design-root .prow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .design-root .prow .key{font-size:10.5px;color:var(--i3);font-variant-numeric:tabular-nums}
+  .design-root .tile{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-size:10px;font-weight:600;flex:none;background:var(--tint2);color:var(--i2)}
+  .design-root .chev{color:var(--i3);display:grid;place-items:center;width:12px}
+  .design-root .nest{position:relative;margin:1px 0 4px 15px;padding-left:9px;border-left:1px solid var(--hair2)}
+  .design-root .srow{display:flex;align-items:center;gap:7px;min-height:26px;padding:0 6px 0 4px;border-radius:7px;color:var(--i2);font-size:12px;width:100%}
+  .design-root .srow:hover{background:var(--tint)}
+  .design-root .srow.sel{background:var(--tint2);color:var(--i1)}
+  .design-root .srow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .design-root .srow .id{font-size:10.5px;color:var(--i3);font-variant-numeric:tabular-nums;flex:none}
+  .design-root .arow{display:flex;align-items:center;gap:8px;min-height:28px;padding:0 6px;border-radius:8px;color:var(--i2);font-size:12px}
+  .design-root .brand{width:16px;height:16px;border-radius:5px;display:grid;place-items:center;font-size:9px;font-weight:600;flex:none;background:var(--tint2);color:var(--i2)}
+
+  /* main columns */
+  .design-root .stage{display:grid;min-width:0;min-height:0;position:relative}
+  .design-root .stage.two{grid-template-columns:minmax(0,1fr) 332px}
+  .design-root .main{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
+  .design-root .aside{border-left:1px solid var(--hair);display:flex;flex-direction:column;min-width:0;min-height:0;font-size:12.5px}
+  .design-root .log{flex:1;overflow-y:auto;padding:20px 0 10px;min-height:0}
+  .design-root .col{max-width:700px;margin:0 auto;padding:0 24px}
+  .design-root .uB{margin:0 0 18px auto;width:fit-content;max-width:82%;background:var(--tint2);padding:9px 14px;border-radius:18px;font-size:14px;line-height:1.55}
+  .design-root .prose{font-size:14.5px;line-height:1.7;color:var(--i1);margin:0 0 .9em}
+  .design-root .prose code,.design-root code.m{font:.86em ui-monospace,"SF Mono",Menlo,monospace;background:var(--tint2);padding:.12em .38em;border-radius:5px}
+  .design-root .trow{display:flex;align-items:center;gap:8px;min-height:25px;font-size:13px;color:var(--i2)}
+  .design-root .trow .lead{width:14px;display:grid;place-items:center;color:var(--i3);flex:none}
+  .design-root .trow .meta{margin-left:auto;color:var(--i3);font-size:12px;font-variant-numeric:tabular-nums}
+  .design-root .sum{display:flex;align-items:center;gap:6px;font-size:13px;min-height:26px;color:var(--i2);margin:0 0 12px}
+  .design-root .sum .o{color:var(--i3)}
+  .design-root .fchip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:7px;background:var(--tint2);color:var(--i1);font-size:12px;vertical-align:middle;margin:0 2px}
+  .design-root .fchip .x{color:var(--i3);margin-left:2px}
+  .design-root .fchip .rd{color:var(--ok);font-size:10.5px;margin-left:3px}
+  .design-root .tcard{display:flex;align-items:center;gap:9px;width:100%;min-height:34px;padding:0 12px;margin:0 0 6px;border:1px solid var(--hair2);border-radius:10px;background:var(--panel);font-size:13px;color:var(--i2)}
+  .design-root .tcard:hover{border-color:var(--i4);color:var(--i1)}
+  .design-root .tcard b{font-weight:500;color:var(--i1);font-variant-numeric:tabular-nums}
+  .design-root .tcard .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .design-root .tcard .meta{color:var(--i3);font-size:12px;margin-left:auto;white-space:nowrap}
+
+  /* dock stack */
+  .design-root .docks{max-width:700px;width:100%;margin:0 auto;padding:0 24px 8px}
+  .design-root .dock{border:1px solid var(--hair2);border-radius:12px;background:var(--panel);margin-top:8px;overflow:hidden}
+  .design-root .dock.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--hair2))}
+  .design-root .dock .dh{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;color:var(--i2)}
+  .design-root .dock .dh b{font-weight:500;color:var(--i1)}
+  .design-root .dock .dh .r{margin-left:auto;color:var(--i3);font-size:11.5px}
+  .design-root .dock .db{padding:0 12px 10px;font-size:13px;color:var(--i1)}
+  .design-root .opt{display:flex;align-items:center;gap:9px;min-height:32px;padding:0 10px;border-radius:8px;color:var(--i2);width:100%}
+  .design-root .opt:hover{background:var(--tint)}
+  .design-root .opt .n{width:18px;height:18px;border-radius:50%;border:1px solid var(--i4);display:grid;place-items:center;font-size:10.5px;color:var(--i3);flex:none}
+  .design-root .opt.rec .n{border-color:var(--i2);color:var(--i1)}
+  .design-root .opt .tag{margin-left:auto;font-size:10.5px;color:var(--i3)}
+  .design-root .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .design-root .btn{height:28px;padding:0 12px;border-radius:8px;border:1px solid var(--hair2);display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--i1)}
+  .design-root .btn:hover{background:var(--tint)}
+  .design-root .btn.pri{background:var(--i1);color:var(--bg);border-color:var(--i1)}
+  .design-root .btn.pri:hover{opacity:.9}
+  .design-root .btn.dng{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--hair2))}
+  .design-root .btn.sm{height:24px;padding:0 9px;font-size:12px;border-radius:7px}
+  .design-root .steps{margin:0 0 4px;padding:0;list-style:none;font-size:13px;color:var(--i2)}
+  .design-root .steps li{display:flex;gap:8px;padding:3px 0}
+  .design-root .steps li span:first-child{color:var(--i3);width:14px;font-variant-numeric:tabular-nums}
+
+  /* composer */
+  .design-root .compw{max-width:700px;width:100%;margin:0 auto;padding:0 24px 16px}
+  .design-root .comp{border:1px solid var(--hair2);border-radius:18px;background:var(--panel);padding:10px 12px 8px}
+  .design-root .comp .ph{color:var(--i3);font-size:14px;min-height:22px}
+  .design-root .comp .cb{display:flex;align-items:center;gap:4px;margin-top:6px}
+  .design-root .comp .sp{flex:1}
+  .design-root .comp .cbtn{height:26px;min-width:26px;padding:0 8px;border-radius:8px;display:inline-flex;align-items:center;gap:5px;color:var(--i2);font-size:12px;justify-content:center}
+  .design-root .comp .cbtn:hover{background:var(--tint2);color:var(--i1)}
+  .design-root .comp .send{width:28px;height:28px;border-radius:50%;background:var(--i1);color:var(--bg);display:grid;place-items:center}
+  .design-root .comp .send.stop{background:var(--tint2);color:var(--i1)}
+  .design-root .working{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 10px}
+  .design-root .working .t{color:var(--i3);font-variant-numeric:tabular-nums}
+
+  /* aside: tabs + lists */
+  .design-root .atabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--hair)}
+  .design-root .atab{padding:6px 9px 8px;color:var(--i3);font-size:12.5px;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;gap:5px;align-items:center}
+  .design-root .atab:hover{color:var(--i1)}
+  .design-root .atab.on{color:var(--i1);border-bottom-color:var(--i1)}
+  .design-root .atab .c{font-size:10.5px;color:var(--i3);font-variant-numeric:tabular-nums}
+  .design-root .abody{flex:1;overflow:auto;padding:10px 10px 12px;min-height:0}
+  .design-root .cord{display:flex;align-items:center;gap:8px;min-height:38px;margin:0 0 6px;padding:0 10px;border-radius:10px;background:var(--tint)}
+  .design-root .cord .sub{font-size:11px;color:var(--i3)}
+  .design-root .gh{display:flex;align-items:center;gap:6px;margin:12px 6px 3px;font-size:11px;color:var(--i3)}
+  .design-root .gh .c{font-variant-numeric:tabular-nums}
+  .design-root .gh.need{color:var(--warn)}
+  .design-root .trw{display:flex;align-items:flex-start;gap:8px;padding:6px 6px;border-radius:8px;width:100%}
+  .design-root .trw:hover{background:var(--tint)}
+  .design-root .trw.sel{background:var(--tint2)}
+  .design-root .trw .slot{margin-top:1px}
+  .design-root .trw .tx{flex:1;min-width:0}
+  .design-root .trw .t1{display:flex;gap:6px;align-items:baseline;color:var(--i1)}
+  .design-root .trw .t1 .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .design-root .trw .t1 .id{font-size:10.5px;color:var(--i3);flex:none;font-variant-numeric:tabular-nums}
+  .design-root .trw .t2{font-size:11.5px;color:var(--i3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .design-root .trw .t2.warn{color:var(--warn)}
+  .design-root .trw .rt{display:flex;gap:4px;color:var(--i3);font-size:10.5px;flex:none;align-items:center}
+  .design-root .tag{font-size:10.5px;color:var(--i3);padding:0 5px;border-radius:5px;background:var(--tint);line-height:16px;flex:none}
+  .design-root .tag.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+  .design-root .tag.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+  .design-root .tag.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+  .design-root .find{display:flex;align-items:center;gap:7px;height:28px;padding:0 9px;border-radius:8px;border:1px solid var(--hair2);color:var(--i3);margin:0 0 4px;font-size:12px}
+  .design-root .foot{padding:8px 10px;border-top:1px solid var(--hair);display:flex;gap:6px;align-items:center}
+
+  /* progress */
+  .design-root .pbar{height:3px;border-radius:2px;background:var(--tint2);overflow:hidden}
+  .design-root .pbar i{display:block;height:100%;background:var(--i2);border-radius:2px}
+  .design-root .pbar.warn i{background:var(--warn)}.design-root .pbar.bad i{background:var(--bad)}
+
+  /* library */
+  .design-root .lh{display:flex;align-items:center;gap:8px;margin:0 2px 8px}
+  .design-root .lh .st{color:var(--i3);font-size:11.5px}
+  .design-root .budget{margin:0 2px 10px;padding:9px 10px;border-radius:10px;border:1px solid var(--hair2);background:var(--panel)}
+  .design-root .budget .bt{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--i1);margin-bottom:6px}
+  .design-root .budget .bt span{color:var(--i3);font-size:11px;margin-left:auto;font-variant-numeric:tabular-nums}
+  .design-root .budget p{margin:6px 0 0;font-size:11.5px;color:var(--i3);line-height:1.5}
+  .design-root .lrow{display:flex;align-items:flex-start;gap:9px;padding:7px 6px;border-radius:8px;position:relative;width:100%}
+  .design-root .lrow:hover{background:var(--tint)}
+  .design-root .lrow .ico{width:26px;height:26px;border-radius:7px;background:var(--tint2);display:grid;place-items:center;color:var(--i2);flex:none}
+  .design-root .lrow .tx{flex:1;min-width:0}
+  .design-root .lrow .t1{display:flex;gap:6px;align-items:center}
+  .design-root .lrow .t1 .nm{color:var(--i1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .design-root .lrow .t2{font-size:11.5px;color:var(--i3);line-height:1.4;margin-top:1px}
+  .design-root .lrow .rt{font-size:10.5px;color:var(--i3);font-variant-numeric:tabular-nums;flex:none}
+  .design-root .lrow .act{display:none;gap:4px;margin-top:6px}
+  .design-root .lrow:hover .act,.design-root .lrow.open .act{display:flex}
+  .design-root .drop{margin:0 2px 10px;border:1.5px dashed var(--i4);border-radius:12px;padding:16px 12px;text-align:center;color:var(--i3);font-size:12px;line-height:1.5}
+  .design-root .drop b{color:var(--i1);font-weight:500;display:block;font-size:13px;margin-bottom:2px}
+  .design-root .drop.live{border-color:var(--i2);background:var(--tint);color:var(--i2)}
+  .design-root .notice{margin:0 2px 10px;padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.5;color:var(--i2);background:var(--tint);display:flex;gap:8px}
+  .design-root .notice.warn{background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--i1)}
+  .design-root .notice.bad{background:color-mix(in srgb,var(--bad) 10%,transparent);color:var(--i1)}
+  .design-root .shelf-t{margin:12px 6px 4px;font-size:11px;color:var(--i3);display:flex;gap:6px;align-items:center}
+
+  /* task header, run strip */
+  .design-root .rh{padding:12px 24px 0;max-width:748px;width:100%;margin:0 auto}
+  .design-root .rh .l1{display:flex;align-items:center;gap:9px;min-height:30px}
+  .design-root .rh .l1 .id{font-size:12px;color:var(--i3);font-variant-numeric:tabular-nums}
+  .design-root .rh .l1 h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .design-root .rh .l1 .sp{flex:1}
+  .design-root .rh .l2{display:flex;align-items:center;gap:8px;margin-top:2px;font-size:12px;color:var(--i3)}
+  .design-root .rh .l2 .w{color:var(--warn)}
+  .design-root .strip{display:flex;align-items:flex-start;margin:12px 0 4px;padding-bottom:12px;border-bottom:1px solid var(--hair)}
+  .design-root .stp{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;color:var(--i3);font-size:11.5px;position:relative}
+  .design-root .stp .bar2{height:2px;background:var(--hair2);border-radius:2px;position:relative}
+  .design-root .stp.done .bar2{background:var(--i3)}
+  .design-root .stp.cur .bar2{background:var(--i1)}
+  .design-root .stp.bad .bar2{background:var(--bad)}
+  .design-root .stp.gate .bar2{background:var(--warn)}
+  .design-root .stp .lb{display:flex;gap:5px;align-items:center;padding-right:6px}
+  .design-root .stp.cur .lb{color:var(--i1)}
+  .design-root .stp.done .lb{color:var(--i2)}
+  .design-root .stp.bad .lb{color:var(--bad)}
+  .design-root .stp.gate .lb{color:var(--warn)}
+  .design-root .stp.skip{opacity:.5}
+  .design-root .stp .sm{font-size:10.5px;color:var(--i3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* inspector */
+  .design-root .kv{display:grid;grid-template-columns:78px minmax(0,1fr);gap:5px 10px;font-size:12px;margin:0 0 12px;padding:0 4px}
+  .design-root .kv dt{color:var(--i3)}
+  .design-root .kv dd{margin:0;color:var(--i1);overflow-wrap:anywhere}
+  .design-root .sec{margin:14px 4px 6px;font-size:11px;color:var(--i3);display:flex;gap:6px;align-items:center}
+  .design-root .sec:first-child{margin-top:4px}
+  .design-root .sec .r{margin-left:auto}
+  .design-root .tl{margin:0 4px;padding:0 0 0 12px;border-left:1px solid var(--hair2);font-size:12px;color:var(--i2)}
+  .design-root .tl li{list-style:none;position:relative;padding:3px 0 5px}
+  .design-root .tl li:before{content:"";position:absolute;left:-16.5px;top:9px;width:7px;height:7px;border-radius:50%;background:var(--bg);border:1.5px solid var(--i3)}
+  .design-root .tl li.ok:before{background:var(--ok);border-color:var(--ok)}
+  .design-root .tl li.bad:before{background:var(--bad);border-color:var(--bad)}
+  .design-root .tl li.cur:before{border-color:var(--i1);background:var(--i1)}
+  .design-root .tl li small{display:block;color:var(--i3);font-size:11px}
+  .design-root .layer{margin:0 4px 8px;border:1px solid var(--hair2);border-radius:10px;overflow:hidden}
+  .design-root .layer .lt{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px;background:var(--tint);color:var(--i1)}
+  .design-root .layer .lt .r{margin-left:auto;color:var(--i3);font-size:11px}
+  .design-root .layer .ls{padding:6px 10px;font-size:12px;color:var(--i2)}
+  .design-root .layer .ls div{display:flex;gap:7px;align-items:center;padding:3px 0}
+  .design-root .layer .ls .r{margin-left:auto;color:var(--i3);font-size:11px}
+  .design-root .find2{display:flex;gap:8px;align-items:flex-start;padding:6px 4px;font-size:12px;color:var(--i2)}
+  .design-root .find2 .sv{width:44px;flex:none}
+  .design-root .setrow{display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px}
+  .design-root .setrow .k{color:var(--i3);width:84px;flex:none}
+  .design-root .setrow .v{color:var(--i1);flex:1;min-width:0}
+  .design-root .setrow .src{font-size:10.5px;color:var(--i3)}
+  .design-root .small{font-size:11.5px;color:var(--i3);line-height:1.5;margin:6px 4px}
+
+  /* menus / modal / toast */
+  .design-root .menu{position:absolute;z-index:30;min-width:240px;padding:5px;border:1px solid var(--hair2);border-radius:10px;background:var(--panel);box-shadow:none;font-size:12.5px}
+  .design-root .menu .mi{display:flex;gap:9px;align-items:center;min-height:28px;padding:0 9px;border-radius:7px;color:var(--i1);width:100%}
+  .design-root .menu .mi:hover{background:var(--tint2)}
+  .design-root .menu .mi .k{margin-left:auto;color:var(--i3);font-size:11px}
+  .design-root .menu .mi.bad{color:var(--bad)}
+  .design-root .menu hr{border:0;border-top:1px solid var(--hair);margin:4px 2px}
+  .design-root .menu .mh{padding:4px 9px;font-size:10.5px;color:var(--i3)}
+  .design-root .scrim{position:absolute;inset:38px 0 0 0;background:rgba(0,0,0,.38);z-index:20;display:grid;place-items:center;padding:20px}
+  .design-root .modal{width:min(820px,100%);max-height:100%;overflow:auto;border:1px solid var(--hair2);border-radius:14px;background:var(--bg);display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)}
+  .design-root .modal .mf{padding:16px 18px}
+  .design-root .modal .mp{padding:16px 16px;border-left:1px solid var(--hair);background:var(--panel)}
+  .design-root .modal h3{margin:0 0 12px;font-size:15px;font-weight:600}
+  .design-root .modal h4{margin:0 0 8px;font-size:11px;font-weight:500;color:var(--i3)}
+  .design-root .fld{margin:0 0 12px}
+  .design-root .fld label{display:block;font-size:11.5px;color:var(--i3);margin-bottom:4px}
+  .design-root .inp{min-height:30px;padding:6px 10px;border:1px solid var(--hair2);border-radius:8px;font-size:13px;color:var(--i1);background:var(--bg)}
+  .design-root .inp.area{min-height:84px;line-height:1.5;color:var(--i2)}
+  .design-root .seg{display:inline-flex;padding:2px;border:1px solid var(--hair2);border-radius:9px;gap:2px}
+  .design-root .seg button{padding:3px 11px;border-radius:7px;font-size:12px;color:var(--i2)}
+  .design-root .seg button.on{background:var(--tint2);color:var(--i1)}
+  .design-root .mfoot{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
+  .design-root .toast{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);z-index:40;max-width:520px;padding:9px 14px;border:1px solid var(--hair2);border-radius:10px;background:var(--panel);font-size:12.5px;color:var(--i1);display:flex;gap:8px;align-items:center}
+  .design-root .pv{font-size:12px;color:var(--i2)}
+  .design-root .pv .blk{border:1px solid var(--hair2);border-radius:9px;margin:0 0 8px;overflow:hidden;background:var(--bg)}
+  .design-root .pv .bh{display:flex;gap:6px;align-items:center;padding:6px 9px;color:var(--i1);font-size:11.5px;background:var(--tint)}
+  .design-root .pv .bh .r{margin-left:auto;color:var(--i3);font-size:10.5px}
+  .design-root .pv .bb{padding:6px 9px;color:var(--i2);line-height:1.5}
+  .design-root .pv code{font:11px ui-monospace,Menlo,monospace;color:var(--i2)}
+
+  /* B: board */
+  .design-root .shelf{display:flex;align-items:center;gap:6px;padding:10px 16px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+  .design-root .shelf .lt{font-size:12px;color:var(--i3);margin-right:4px;display:flex;gap:6px;align-items:center}
+  .design-root .board{flex:1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:14px 16px;overflow:auto;min-height:0;align-content:start}
+  .design-root .bcol h5{margin:0 0 8px;font-size:11.5px;font-weight:500;color:var(--i3);display:flex;gap:6px;align-items:center}
+  .design-root .bcol h5.need{color:var(--warn)}
+  .design-root .bcol h5 .c{font-variant-numeric:tabular-nums}
+  .design-root .bcard{display:block;width:100%;padding:10px 11px;border:1px solid var(--hair2);border-radius:10px;background:var(--panel);margin:0 0 8px}
+  .design-root .bcard:hover{border-color:var(--i4)}
+  .design-root .bcard .c1{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--i3)}
+  .design-root .bcard .c1 .r{margin-left:auto;display:flex;gap:4px}
+  .design-root .bcard .c2{margin:5px 0 4px;color:var(--i1);font-size:12.5px;line-height:1.4}
+  .design-root .bcard .c3{font-size:11.5px;color:var(--i3)}
+  .design-root .bcard .c3.warn{color:var(--warn)}
+  .design-root .bdock{border-top:1px solid var(--hair);padding:10px 16px;display:flex;gap:10px;align-items:center;background:var(--bg)}
+  .design-root .bdock .say{flex:1;min-width:0;font-size:12.5px;color:var(--i2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .design-root .bdock .ask{display:flex;gap:8px;align-items:center;height:32px;padding:0 12px;border:1px solid var(--hair2);border-radius:16px;color:var(--i3);flex:0 0 300px;background:var(--panel)}
+  .design-root .tray{position:absolute;left:0;right:0;bottom:0;height:62%;z-index:15;background:var(--bg);border-top:1px solid var(--hair2);display:flex;flex-direction:column;border-radius:14px 14px 0 0}
+  .design-root .tray .th{display:flex;align-items:center;gap:8px;padding:9px 16px;border-bottom:1px solid var(--hair);font-size:12.5px;color:var(--i2)}
+  .design-root .tray .th b{font-weight:500;color:var(--i1)}
+
+  /* C: inbox split */
+  .design-root .stage.inbox{grid-template-columns:304px minmax(0,1fr)}
+  .design-root .inb{border-right:1px solid var(--hair);display:flex;flex-direction:column;min-height:0;min-width:0}
+  .design-root .inb .abody{padding-top:4px}
+  .design-root .drawer{position:absolute;top:0;right:0;bottom:0;width:320px;border-left:1px solid var(--hair2);background:var(--bg);z-index:12;display:flex;flex-direction:column}
+
+  /* Maps */
+  .design-root.maps{grid-template-columns:1fr;overflow:auto}
+  .design-root .mapbody{overflow:auto;padding:22px 28px 30px;min-height:0}
+  .design-root .mapbody h2{margin:0 0 4px;font-size:17px;font-weight:600;letter-spacing:-.01em}
+  .design-root .mapbody .lede{margin:0 0 16px;color:var(--i2);font-size:13px;max-width:820px;line-height:1.6}
+  .design-root .mapbody svg{width:100%;height:auto;display:block;border:1px solid var(--hair);border-radius:12px;background:var(--panel)}
+  .design-root .mapbody svg text{font-family:inherit;fill:var(--i1)}
+  .design-root .mapbody svg .dim{fill:var(--i3)}
+  .design-root .mapbody svg .vb{font:10.5px ui-monospace,Menlo,monospace;fill:var(--i2)}
+  .design-root .mapbody svg .n{fill:var(--bg);stroke:var(--i3);stroke-width:1.2}
+  .design-root .mapbody svg .n.gate{stroke:var(--warn);stroke-width:1.6}
+  .design-root .mapbody svg .n.opt{stroke-dasharray:4 3}
+  .design-root .mapbody svg .n.end{fill:var(--tint2)}
+  .design-root .mapbody svg .n.bad{stroke:var(--bad)}
+  .design-root .mapbody svg .n.sol{stroke:var(--ok)}
+  .design-root .mapbody svg .e{stroke:var(--i3);stroke-width:1.3;fill:none;marker-end:url(#ar)}
+  .design-root .mapbody svg .e.loop{stroke:var(--bad);stroke-dasharray:5 4;marker-end:url(#arb)}
+  .design-root .mapbody svg .e.gate{stroke:var(--warn);marker-end:url(#arw)}
+  .design-root .mapbody svg .e.dot{stroke-dasharray:2 4}
+  .design-root .mapbody svg .lg{font-size:10.5px}
+  .design-root .legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 0;font-size:12px;color:var(--i2)}
+  .design-root .legend i{display:inline-block;width:18px;height:10px;border:1.4px solid var(--i3);border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .design-root .legend i.g{border-color:var(--warn)}.design-root .legend i.o{border-style:dashed}.design-root .legend i.b{border-color:var(--bad);border-style:dashed}.design-root .legend i.s{border-color:var(--ok)}
+  .design-root table.mx{width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--hair2);border-radius:10px;overflow:hidden}
+  .design-root table.mx th{text-align:left;font-weight:500;color:var(--i3);padding:7px 10px;background:var(--tint);border-bottom:1px solid var(--hair2);white-space:nowrap}
+  .design-root table.mx td{padding:6px 10px;border-bottom:1px solid var(--hair);vertical-align:top;color:var(--i2)}
+  .design-root table.mx td:first-child{color:var(--i1);white-space:nowrap}
+  .design-root table.mx code{font:11px ui-monospace,Menlo,monospace;background:var(--tint2);padding:1px 5px;border-radius:5px;color:var(--i1)}
+  .design-root table.mx tr:last-child td{border-bottom:0}
+  .design-root .lay{display:grid;gap:10px;max-width:980px}
+  .design-root .band{border:1px solid var(--hair2);border-radius:12px;padding:12px 14px;border-left:3px solid var(--i4)}
+  .design-root .band.sol{border-left-color:var(--ok)}.design-root .band.plug{border-left-color:var(--warn)}.design-root .band.new{border-left-color:var(--ok);background:var(--tint)}
+  .design-root .band h5{margin:0 0 6px;font-size:12px;font-weight:600;display:flex;gap:8px;align-items:center}
+  .design-root .band h5 span{font-weight:400;color:var(--i3);font-size:11.5px}
+  .design-root .band .row{display:flex;gap:8px;flex-wrap:wrap}
+  .design-root .band .box{border:1px solid var(--hair2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--i2);background:var(--bg)}
+  .design-root .band .box.new{border-color:var(--ok);color:var(--i1)}
+  .design-root .arrow{text-align:center;font-size:11.5px;color:var(--i3)}
+</style>
+</head>
+<body data-ide-shell>
+<div class="ide-layout" id="ideLayout">
+  <main class="ide-stage">
+    <span class="ide-stage-label" id="stageLabel">Variant A</span>
+    <button type="button" class="ide-panel-collapse-btn" id="panelCollapseBtn" title="收起面板，全画布演示">›</button>
+    <div class="ide-artboard-wrap"><div class="ide-artboard"><div class="design-root" id="root"></div></div></div>
+  </main>
+  <button type="button" class="ide-panel-expand-btn" id="panelExpandBtn" title="展开面板">☰</button>
+  <aside class="ide-story-panel">
+    <div class="ide-panel-header">Design Storybook · Projects</div>
+    <div class="ide-panel-controls" id="panelControls"></div>
+    <div class="ide-panel-story">
+      <button type="button" class="ide-story-toggle" id="storyToggleBtn"><span>Story</span><span id="storyChevron">▼</span></button>
+      <div class="ide-story-body" id="storyBody"></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+/* ===================== state ===================== */
+const H=new URLSearchParams(location.hash.slice(1));
+const S={v:H.get('v')||'A',scene:H.get('scene')||'',theme:H.get('theme')||'dark',w:+(H.get('w')||1120),
+  atab:'tasks',insp:'run',task:'',menu:false,lstate:'default',openItem:'',inspOpen:false,mode:'Task',start:'Start now',ctxAdded:true};
+
+/* ===================== data (shape = herdr-projects 1.2.26 list/details, see README Phase 0) ===================== */
+const T=[
+ {id:'SLC-14',t:'Fix login redirect loop',st:'ask',agent:'claude',model:'opus',note:'Question for you',stage:'work',since:'12m'},
+ {id:'SLC-11',t:'Export design tokens',st:'plan',agent:'claude',model:'opus',note:'Plan to approve',stage:'plan',since:'4m'},
+ {id:'SLC-12',t:'Task chat header',st:'ready',agent:'claude',model:'opus',note:'Ready · R2 pass · 1 minor',stage:'approval',pr:60,rev:2,since:'2m'},
+ {id:'SLC-13',t:'Import dropped files into the Library',st:'work',agent:'codex',model:'gpt-5',note:'Wiring the drop zone',pct:62,eta:'6m',stage:'work',since:'3m'},
+ {id:'SLC-16',t:'Sync Library index after merge',st:'queue',note:'after SLC-12',stage:''},
+ {id:'SLC-17',t:'Write onboarding notes',st:'todo',note:'',stage:''},
+ {id:'SLC-9',t:'Fix stale Sessions row',st:'done',agent:'claude',note:'Merged · PR#57',stage:'done',pr:57},
+];
+const GROUPS=[['need','Needs you',['ask','plan']],['ready','Ready to approve',['ready']],['work','Working',['work']],['queue','Queued',['queue']],['todo','To do',['todo']],['done','Done',['done']]];
+const LIB=[
+ {n:'House rules',k:'note',mode:'always',sz:'1.1 KB',d:'Branch naming, test commands, what never to touch.'},
+ {n:'PRD · Projects.md',k:'note',mode:'ref',sz:'8.4 KB',d:'Why Projects exist, non-goals, acceptance.'},
+ {n:'login-flow.png',k:'img',mode:'ref',sz:'412 KB',d:'Current login redirect; the red box marks the loop.'},
+ {n:'api-contract.pdf',k:'file',mode:'ref',sz:'1.2 MB',d:'Host API v3 contract (source of truth).'},
+ {n:'brand-tokens.json',k:'file',mode:'ref',sz:'6 KB',d:'Design tokens exported from Figma.'},
+];
+const REPORTS=[
+ {n:'SLC-9 · report.md',d:'Why the Sessions row went stale; fix and proof.',w:'SLC-9',when:'2d'},
+ {n:'SLC-12 · closing note',d:'Header moved into the Chat page; 3 files.',w:'SLC-12',when:'2m'},
+ {n:'SLC-12 · review R2 evidence',d:'1 minor: spacing token in header.',w:'SLC-12',when:'8m'},
+];
+const taskById=id=>T.find(t=>t.id===id);
+
+/* ===================== icons ===================== */
+const P={chev:'M6 4l4 4-4 4',chevd:'M4 6l4 4 4-4',x:'M4 4l8 8M12 4l-8 8',check:'M3.5 8.5l3 3 6-7',file:'M4 2.5h5l3 3v8H4z M9 2.5v3h3',img:'M2.5 3.5h11v9h-11zM2.5 11l3.5-3.5 3 3 2-2 2.5 2.5',note:'M4 2.5h8v11H4zM6 6h4M6 9h4',plus:'M8 3v10M3 8h10',more:'M3.5 8h.01M8 8h.01M12.5 8h.01',stop:'M4.5 4.5h7v7h-7z',send:'M8 12.5V4M4.5 7.5L8 4l3.5 3.5',search:'M7 12a5 5 0 100-10 5 5 0 000 10zM11 11l3 3',eye:'M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 9.7a1.7 1.7 0 100-3.4 1.7 1.7 0 000 3.4z',branch:'M5 3v10M5 6.5a2.5 2.5 0 002.5 2.5H9a2 2 0 002-2V6',trash:'M3.5 4.5h9M6 4.5V3h4v1.5M5 4.5l.5 8.5h5l.5-8.5',lib:'M3 3.5h4l1 1.5h5v7.5H3z',lock:'M4 7h8v6H4zM6 7V5a2 2 0 014 0v2',link:'M6.5 9.5l3-3M5 8L3.5 9.5a2.1 2.1 0 003 3L8 11M11 8l1.5-1.5a2.1 2.1 0 00-3-3L8 5',cmd:'M3 4l4 4-4 4M8 12h5',back:'M10 4l-4 4 4 4',clock:'M8 4.5V8l2.5 1.5M8 13.5a5.5 5.5 0 100-11 5.5 5.5 0 000 11z',bolt:'M9 2.5L4.5 9H8l-1 4.5L11.5 7H8z',pin:'M9 2.5l4.5 4.5-3 .5-2 2.5.5 3-1 1-3-3-3.5 3.5M7.5 5.5l3 3',list:'M3 4h10M3 8h10M3 12h6',diff:'M4 3v10M12 3v10M4 8h8',warn:'M8 3l6 10H2zM8 7v3M8 11.5v.01'};
+const ic=(n,s=14)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${P[n]}"/></svg>`;
+const slot=k=>`<span class="slot">${k==='work'?'<span class="spin"></span>':k==='ready'?'<span class="dot ok"></span>':(k==='ask'||k==='plan')?'<span class="dot warn"></span>':k==='fail'?'<span class="dot bad"></span>':(k==='done'||k==='queue'||k==='todo')?'<span class="ring"></span>':''}</span>`;
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const brandOf=a=>a==='claude'?'C':a==='codex'?'X':a==='omp'?'π':'';
+const kIcon=k=>k==='img'?'img':k==='note'?'note':'file';
+
+/* ===================== tokens ===================== */
+const BASE={dark:{bg:'#161618',panel:'#1f1f22',ink:'244,244,245',ok:'#6fc29b',bad:'#ff6b61',warn:'#e0a23a',hair:.08,i:[.92,.66,.52,.34]},
+  light:{bg:'#f5f5f7',panel:'#ffffff',ink:'24,24,27',ok:'#1f7a52',bad:'#d92d20',warn:'#b7791f',hair:.09,i:[.90,.70,.60,.38]}};
+function applyVars(root){
+  const b=BASE[S.theme],st=root.style;
+  st.setProperty('--bg',b.bg);st.setProperty('--panel',b.panel);st.setProperty('--ok',b.ok);st.setProperty('--bad',b.bad);st.setProperty('--warn',b.warn);
+  b.i.forEach((a,i)=>st.setProperty('--i'+(i+1),`rgba(${b.ink},${a})`));
+  st.setProperty('--hair',`rgba(${b.ink},${b.hair})`);st.setProperty('--hair2',`rgba(${b.ink},${b.hair*1.9})`);
+  st.setProperty('--tint',`rgba(${b.ink},.04)`);st.setProperty('--tint2',`rgba(${b.ink},.07)`);
+  st.setProperty('--w',S.w+'px');
+}
+
+/* ===================== chrome ===================== */
+const need=()=>T.filter(t=>t.st==='ask'||t.st==='plan'||t.st==='ready').length;
+function bar(crumbs){
+  return `<div class="bar"><span class="lights"><i></i><i></i><i></i></span>
+    ${crumbs.map((c,i)=>(i?'<span class="sep">'+ic('chev',12)+'</span>':'')+`<span class="chip ${i===crumbs.length-1?'cur':''}">${esc(c)}</span>`).join('')}
+    <span class="tools"><button class="trig" title="Header Agent popover">${ic('bolt',13)}<b>${need()}</b>/${T.length-1}</button><button class="ibtn" data-act="menu" title="Page actions">${ic('more',16)}</button></span></div>`;
+}
+function sidebar(selId){
+  const open=T.filter(t=>t.st!=='done');
+  return `<aside class="side">
+    <h6>Projects <span class="pl">${ic('plus',12)}</span></h6>
+    <button class="prow ${!selId?'sel':''}" data-act="home"><span class="chev">${ic('chevd',12)}</span><span class="tile">S</span><span class="nm">solco</span>${slot('work')}<span class="key">SLC</span></button>
+    <div class="nest">${open.map(t=>`<button class="srow ${selId===t.id?'sel':''}" data-act="task" data-id="${t.id}">${slot(t.st)}<span class="nm">${esc(t.t)}</span><span class="id">${t.id.slice(4)}</span></button>`).join('')}</div>
+    <button class="prow"><span class="chev">${ic('chev',12)}</span><span class="tile">H</span><span class="nm">herdr-client</span><span class="key">CLN</span></button>
+    <button class="prow"><span class="chev">${ic('chev',12)}</span><span class="tile">N</span><span class="nm">nexus-crm</span><span class="key">CRM</span></button>
+    <h6>Agents</h6>
+    <div class="arow"><span class="brand">C</span><span>solco · main</span></div>
+    <div class="arow"><span class="brand">π</span><span>docs scratch</span></div>
+  </aside>`;
+}
+
+/* ===================== task rows ===================== */
+function trow(t,sel){
+  const second=t.st==='work'?`${t.note}${t.pct?' · '+t.pct+'% · '+t.eta:''}`:t.note;
+  const warn=(t.st==='ask'||t.st==='plan');
+  return `<button class="trw ${sel===t.id?'sel':''}" data-act="task" data-id="${t.id}">${slot(t.st)}<span class="tx"><span class="t1"><span class="nm">${esc(t.t)}</span><span class="id">${t.id}</span></span><span class="t2 ${warn?'warn':''}">${esc(second)}</span></span>
+    <span class="rt">${t.rev?'<span class="tag">R#'+t.rev+'</span>':''}${t.pr?'<span class="tag">PR#'+t.pr+'</span>':''}${t.agent?'<span class="brand">'+brandOf(t.agent)+'</span>':''}</span></button>`;
+}
+function groups(sel){
+  return GROUPS.map(([k,l,sts])=>{const rows=T.filter(t=>sts.includes(t.st));if(!rows.length)return '';
+    return `<div class="gh ${k==='need'?'need':''}">${ic('chevd',11)}<span>${l}</span><span class="c">${rows.length}</span></div>${rows.map(t=>trow(t,sel)).join('')}`;}).join('');
+}
+
+/* ===================== chat pieces ===================== */
+const bub=h=>`<div class="uB">${h}</div>`;
+const prose=h=>`<p class="prose">${h}</p>`;
+const fchip=(n,k,rd)=>`<span class="fchip">${ic(kIcon(k),12)}${esc(n)}${rd?`<span class="rd">opened ${rd}×</span>`:''}</span>`;
+const tcard=t=>`<button class="tcard" data-act="task" data-id="${t.id}">${slot(t.st)}<b>${t.id}</b><span class="nm">${esc(t.t)}</span><span class="meta">${esc(t.note||'To do')}</span>${ic('chev',12)}</button>`;
+const sumrow=(a,b)=>`<div class="sum">${ic('chev',12)}<span>${a}</span><span class="o">· ${b}</span></div>`;
+const workingLine=(txt,t)=>`<div class="working"><span class="spin"></span><span class="shim">${txt}</span><span class="t">${t}</span></div>`;
+function composer(ph,opts={}){
+  return `<div class="compw"><div class="comp"><div class="ph">${ph}</div><div class="cb">
+    <button class="cbtn" title="Attach · From Library · Skills">${ic('plus',14)}</button>
+    <button class="cbtn" data-act="tab" data-tab="library">${ic('lib',13)}Library · ${LIB.length}</button>
+    <span class="sp"></span>${opts.stop?`<button class="send stop" title="Stop (Esc)">${ic('stop',12)}</button>`:`<button class="send">${ic('send',13)}</button>`}</div></div></div>`;
+}
+function dockAsk(){return `<div class="dock warn"><div class="dh">${slot('ask')}<b>Question for you</b><span class="r">SLC-14 · 1/1</span></div><div class="db">Which redirect target after a successful login?
+  <div style="margin-top:6px"><button class="opt rec"><span class="n">1</span>Last visited page <span class="tag">recommended</span></button><button class="opt"><span class="n">2</span>Always /home</button><button class="opt"><span class="n">3</span>Type something else…</button></div></div></div>`}
+function dockPlan(){return `<div class="dock warn"><div class="dh">${slot('plan')}<b>Plan ready</b><span class="r">nothing in the repo changes until you approve</span></div><div class="db">
+  <ol class="steps"><li><span>1</span><span>Read <code class="m">brand-tokens.json</code> and the current token files</span></li><li><span>2</span><span>Generate <code class="m">tokens.generated.go</code> from the JSON</span></li><li><span>3</span><span>Add a drift test; wire it into <code class="m">go test</code></span></li></ol>
+  <div class="btns"><button class="btn pri">${ic('check',13)}Approve plan</button><button class="btn">Send back with notes…</button></div></div></div>`}
+function dockReady(){return `<div class="dock warn"><div class="dh">${slot('ready')}<b>Ready to approve</b><span class="r">PR#60 · checks pass · squash</span></div><div class="db">Review 2 passed with 1 minor finding. Approving merges PR#60 into <code class="m">main</code>; this cannot be undone from Solco.
+  <div class="btns"><button class="btn pri">Approve &amp; merge…</button><button class="btn">${ic('diff',13)}Review changes</button><button class="btn">Send back…</button></div></div></div>`}
+function dockTasks(){return `<div class="dock"><div class="dh">${ic('list',13)}<b>Tasks</b><span class="r">2 / 4</span></div><div class="db" style="color:var(--i2)"><ol class="steps"><li><span>✓</span><span>Add drop target to the Library tab</span></li><li><span>✓</span><span>Save bytes under ProjectLibrary/SLC</span></li><li><span>3</span><span>Regenerate INDEX.md after each change</span></li><li><span>4</span><span>Write tests</span></li></ol></div></div>`}
+
+/* ===================== run header + strip ===================== */
+function stepsFor(t){
+  const plan=t.id==='SLC-11';
+  const names=[...(plan?['Plan']:[]),'Work','Check','PR','Review','Approve','Merge'];
+  let s;
+  if(t.id==='SLC-11')s=['gate','skip','skip','skip','skip','skip','skip'];
+  else if(t.id==='SLC-12')s=['done','done','done','done','gate','skip'];
+  else if(t.id==='SLC-14')s=['gate','skip','skip','skip','skip','skip'];
+  else if(t.id==='SLC-13')s=['cur','skip','skip','skip','skip','skip'];
+  else s=names.map(()=> 'skip');
+  const sub={ 'SLC-12':[ 'R2 · 12 min','pass','#60','R2 pass · 1 minor','your yes','' ],'SLC-13':['62% · ~6m','','','','',''],'SLC-14':['asks you','','','','',''],'SLC-11':['approve plan','','','','','','']}[t.id]||[];
+  return names.map((n,i)=>({n,c:s[i]||'skip',sm:sub[i]||''}));
+}
+function runStrip(t){
+  return `<div class="strip">${stepsFor(t).map(s=>`<div class="stp ${s.c}"><div class="bar2"></div><div class="lb">${s.c==='cur'?'<span class="spin"></span>':s.c==='done'?ic('check',11):s.c==='gate'?'<span class="dot warn"></span>':''}${s.n}</div><div class="sm">${esc(s.sm)}</div></div>`).join('')}</div>`;
+}
+function runHeader(t){
+  const act=t.st==='work'?`<button class="btn sm">${ic('stop',11)}Stop</button>`
+    :t.st==='ask'?`<button class="btn sm pri">Answer below</button>`
+    :t.st==='plan'?`<button class="btn sm pri">Approve plan</button>`
+    :t.st==='ready'?`<button class="btn sm pri">Approve &amp; merge…</button>`:'';
+  const l2=t.st==='ask'?`<span class="w">Needs you · Question for you</span>`:t.st==='plan'?`<span class="w">Needs you · Plan to approve</span>`:t.st==='ready'?`<span class="w">Ready · PR#60 · R2 pass</span>`:t.st==='work'?`<span>${esc(t.note)} · ${t.pct}% · ${t.eta} left</span>`:`<span>${esc(t.note)}</span>`;
+  return `<div class="rh"><div class="l1">${slot(t.st)}<span class="id">${t.id}</span><h2>${esc(t.t)}</h2><span class="sp"></span>${act}<button class="ibtn" data-act="menu" title="Task actions">${ic('more',16)}</button></div>
+    <div class="l2">${l2}<span>·</span>${t.agent?`<span class="brand">${brandOf(t.agent)}</span><span>${t.agent} · ${t.model}</span>`:'<span>no agent yet</span>'}<span>·</span><span>${ic('branch',11)} work/${t.id.slice(4)}-${t.t.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,18)}</span></div>
+    ${runStrip(t)}</div>`;
+}
+
+/* ===================== task chat ===================== */
+function taskLog(t){
+  const brief=`${esc(t.t)}. Context: ${fchip('login-flow.png','img',t.st==='work'?2:0)}${fchip('House rules','note')}${fchip('api-contract.pdf','file')}`;
+  let body='';
+  if(t.st==='work')body=bub(brief)+prose('I opened the login screenshot and the router. The redirect loop comes from <code>afterLogin()</code> reading a stale <code>next</code> param; I am wiring the Library drop target into the same save path now.')+sumrow('Explored 4 files','Edited 2 files <b style="font-weight:500">+38 −6</b>')+workingLine('Editing library_drop.go','3m 12s');
+  else if(t.st==='ask')body=bub(brief)+prose('Two places set the redirect: the session cookie and the query param. They disagree after SSO. I can fix either, but they give different behaviour, so I need your call before I change the router.')+sumrow('Explored 7 files','Ran tests: 41 passed');
+  else if(t.st==='plan')body=bub(`${esc(t.t)}. Plan first. Context: ${fchip('brand-tokens.json','file')}`)+prose('I read the token JSON and the three Go token files. Nothing is changed yet; the plan is in the card below.')+sumrow('Explored 6 files','no edits');
+  else if(t.st==='ready')body=bub(brief)+prose('The header now lives in the Chat page and mirrors the task state. I committed on <code>work/12-task-chat-header</code>, merged main, and the board opened PR#60.')+sumrow('Edited 3 files','Ran tests: 58 passed')
+    +`<div class="dock" style="margin:6px 0 14px"><div class="dh">${ic('diff',13)}<b>Changes in working tree</b><span class="r">+112 −34</span></div><div class="db" style="color:var(--i2)">chat_header.go · frontend/src/header.tsx · header.css <div class="btns"><button class="btn sm">${ic('diff',12)}Review changes</button></div></div></div>`;
+  else if(t.st==='queue')body=bub(`${esc(t.t)}. After SLC-12.`)+prose('No agent yet. It starts by itself once <b style="font-weight:500">SLC-12</b> is merged, and is told what that task did. <code>delegate --now</code> starts it early.');
+  else if(t.st==='todo')body=bub(esc(t.t))+prose('Noted, not started. Say go, or delegate it, and an agent starts in its own worktree.');
+  else if(t.st==='done')body=bub(esc(t.t))+prose('Merged as PR#57. The worktree and branch were removed; the transcript and report stay.')+sumrow('Edited 2 files','Ran tests: 52 passed');
+  const docks=t.st==='ask'?dockAsk():t.st==='plan'?dockPlan():t.st==='ready'?dockReady():t.st==='work'?dockTasks():'';
+  const ph=t.st==='ask'?'Reply to the agent…':(t.st==='todo'||t.st==='queue')?`Say go, or change ${t.id}…`:`Tell ${t.id}…`;
+  return `<div class="log"><div class="col">${body}</div></div><div class="docks">${docks}</div>${composer(ph,{stop:t.st==='work'})}`;
+}
+
+/* ===================== inspector ===================== */
+function inspTabs(on){return `<div class="atabs">${[['run','Run'],['ctx','Context'],['chg','Changes'],['rev','Review'],['set','Settings']].map(([k,l])=>`<button class="atab ${on===k?'on':''}" data-act="insp" data-k="${k}">${l}</button>`).join('')}</div>`}
+function inspector(t){
+  const k=S.insp;let b='';
+  if(k==='run'){
+    b+=`<div class="sec">State</div><dl class="kv"><dt>State</dt><dd>${t.st==='ready'?'Ready to approve · R2':t.st==='work'?'Working · '+t.since:t.note}</dd>
+      <dt>On it</dt><dd>${t.agent?t.agent+' · '+t.model+' · high':'nobody yet'}</dd><dt>Change</dt><dd>${t.pr?'PR#'+t.pr+' · checks pass · 3 files +112 −34':'—'}</dd><dt>Branch</dt><dd>work/${t.id.slice(4)}-…</dd><dt>Limits</dt><dd>none</dd></dl>`;
+    if(t.st==='work')b+=`<div class="pbar" style="margin:0 4px 12px"><i style="width:${t.pct}%"></i></div>`;
+    b+=`<div class="sec">What the board did</div><ul class="tl">${
+      t.st==='ready'?'<li>Added by you · 14:02</li><li>Agent started · claude</li><li class="bad">Review 1 · fail (1 major) <small>sent back automatically</small></li><li class="ok">Review 2 · pass (1 minor)</li><li class="cur">Waiting for your yes</li>':
+      t.st==='work'?'<li>Added by the coordinator for you</li><li class="cur">Agent working · 3m</li>':
+      t.st==='ask'?'<li>Added by you</li><li>Agent started · claude</li><li class="cur">Asked you a question · 12m</li>':
+      '<li>Added by you · plan first</li><li class="cur">Plan written · waiting for you</li>'}</ul>
+      <p class="small">Source: <code>details --json</code> (reviews, handovers, PR, failure). A full per-event log is not exposed by the plugin today (gap G3).</p>`;
+  }else if(k==='ctx'){
+    b+=`<div class="sec">${ic('lock',12)}Always · what every agent here is told <span class="r">1.9 KB</span></div>
+      <div class="layer"><div class="ls"><div>${ic('note',12)}House rules <span class="r">Library · 1.1 KB</span></div><div>${ic('cmd',12)}worker.instructions <span class="r">repo scope · 0.4 KB</span></div><div>${ic('file',12)}AGENTS.md <span class="r">yours, in the repo</span></div></div></div>
+      <div class="sec">${ic('link',12)}Attached to this task</div>
+      <div style="padding:0 4px 4px">${fchip('login-flow.png','img',t.st==='work'?2:0)} ${fchip('api-contract.pdf','file',t.st==='work'?0:0)}</div>
+      <p class="small">“opened N×” is counted from the agent’s own read tool calls in its transcript. It shows that a file was touched, not that it was understood.</p>
+      <div class="sec">${ic('lib',12)}Available on demand <span class="r">INDEX.md</span></div>
+      ${LIB.filter(x=>x.mode!=='always').slice(0,3).map(x=>`<div class="lrow"><span class="ico">${ic(kIcon(x.k),13)}</span><div class="tx"><div class="t1"><span class="nm">${esc(x.n)}</span></div><div class="t2">${esc(x.d)}</div></div><button class="btn sm">Tell…</button></div>`).join('')}
+      <div class="notice warn" style="margin-top:8px">${ic('clock',13)}<span>Frozen at start (14:02). Library changes after that reach this task only when you <b style="font-weight:500">Tell</b> it.</span></div>`;
+  }else if(k==='chg'){
+    b+=`<div class="sec">Files <span class="r">+112 −34</span></div><div class="layer"><div class="ls"><div>${ic('file',12)}chat_header.go <span class="r">+64 −12</span></div><div>${ic('file',12)}frontend/src/header.tsx <span class="r">+38 −20</span></div><div>${ic('file',12)}header.css <span class="r">+10 −2</span></div></div></div>
+      <div class="btns" style="padding:0 4px"><button class="btn">${ic('diff',13)}Review changes</button></div><p class="small">Counts come from the live Git snapshot of the task’s worktree; “Review changes” only switches the Workspace surface to Diff Review.</p>`;
+  }else if(k==='rev'){
+    b+=`<div class="sec">Review 2 · pass <span class="r">codex · 8m ago</span></div>
+      <div class="find2"><span class="sv"><span class="tag">minor</span></span><span>Header spacing uses a literal 12; the shared token is 10.</span></div>
+      <div class="sec">Review 1 · fail</div><div class="find2"><span class="sv"><span class="tag bad">major</span></span><span>Header hides the state when the agent is idle. Sent back automatically.</span></div>
+      <div class="btns" style="padding:6px 4px"><button class="btn">Open reviewer chat</button></div><p class="small">Reviewer = a second agent in its own tab of the same space. Its transcript opens read-only in the same drawer sub-agents use.</p>`;
+  }else{
+    b+=`<div class="sec">Effective for this task</div>${[['Agent',t.agent?t.agent+' / '+t.model:'claude (default)',t.agent?'this task':'default'],['Plan first',t.id==='SLC-11'?'you approve':'off','default'],['Reviewer','codex','you'],['Must fix','major · 3 rounds','default'],['Merge','after your yes · squash','default'],['Access','full','built in'],['Limits','none','default']].map(([a,v,s])=>`<div class="setrow"><span class="k">${a}</span><span class="v">${v}${a==='Access'?' <span class="tag warn">no sandbox</span>':''}</span><span class="src">${s}</span></div>`).join('')}
+      <p class="small">Edits go through <code>set &lt;name&gt; &lt;value&gt; --task ${t.id}</code>. A running agent keeps the rules it started with; changes count from its next start (the plugin says so beside the value).</p>`;
+  }
+  return `<div class="aside">${inspTabs(k)}<div class="abody">${b}</div></div>`;
+}
+
+/* ===================== menus / toast ===================== */
+function taskMenu(t){return `<div class="menu" style="top:70px;right:${S.v==='C'?24:350}px">
+  <div class="mh">${t.id} · ${t.st==='work'?'agent is working':t.note}</div>
+  <button class="mi">${ic('send',13)}Tell…<span class="k">↵ in chat</span></button>
+  <button class="mi">${ic('stop',13)}Stop<span class="k">Esc</span></button>
+  <hr><button class="mi">Edit description…</button><button class="mi">Rename…</button><button class="mi">Change settings (next start)…</button><button class="mi">Raise limit…</button><button class="mi">Start now (skip the wait)</button>
+  <hr><button class="mi">Archive<span class="k">stop first</span></button><button class="mi bad">${ic('trash',13)}Clear task…</button></div>`}
+function projMenu(){return `<div class="menu" style="top:70px;right:${S.v==='C'?24:350}px">
+  <div class="mh">solco · 7 tasks</div>
+  <button class="mi">New task…<span class="k">⌘N</span></button><button class="mi">Open Work Board (TUI)</button>
+  <hr><button class="mi">Coordinator · Restart</button><button class="mi">Coordinator · New conversation</button>
+  <hr><button class="mi bad">${ic('stop',13)}Stop everything…<span class="k">1 working · coordinator</span></button><button class="mi">Archive done tasks…</button><button class="mi bad">Archive project…</button></div>`}
+const stopToast=()=>`<div class="toast">${ic('stop',13)}<span><b style="font-weight:500">SLC-13</b>: stopped. Ended what it started: <code class="m">node …/vite.js (pid 812)</code></span><button class="btn sm">Undo = just reply</button></div>`;
+
+/* ===================== library ===================== */
+function libraryView(){
+  const st=S.lstate;
+  const always=LIB.filter(x=>x.mode==='always');
+  const over=st==='over';
+  const used=over?5.2:1.1;
+  let b=`<div class="lh"><b style="font-weight:500">Library</b><span class="st">${LIB.length} items · 3.4 MB · this project only</span><span style="margin-left:auto"><button class="btn sm">${ic('plus',12)}Add</button></span></div>`;
+  b+=`<div class="drop ${st==='drag'?'live':''}"><b>${st==='drag'?'Release to add to solco’s Library':'Drop specs, screenshots, notes'}</b>${st==='drag'?'3 files · login-flow.png, spec.pdf, notes.md':'Agents open them by path when they need background. Nothing is sent anywhere.'}</div>`;
+  if(st==='refused')b+=`<div class="notice bad">${ic('lock',13)}<span><b style="font-weight:500">.env.production</b> was not added. It looks like credentials; keep secrets out of the Library.</span></div>`;
+  if(st==='added')b+=`<div class="notice warn">${ic('clock',13)}<span>Added <b style="font-weight:500">login-flow.png</b>. Running tasks keep what they started with. <button class="btn sm" style="margin-left:4px">Tell SLC-13</button></span></div>`;
+  b+=`<div class="budget"><div class="bt">${ic('lock',12)}Always read<span>${used.toFixed(1)} / 4.0 KB</span></div><div class="pbar ${over?'bad':''}"><i style="width:${Math.min(100,used/4*100)}%"></i></div>
+    <p>${over?'Over budget: this text is sent on every turn of every agent. Move something to Reference.':'Sent with every agent’s instructions, every turn. Keep it short; everything else stays on demand.'}</p></div>`;
+  b+=`<div class="shelf-t">Always read</div>${always.map(x=>libRow(x)).join('')}`;
+  b+=`<div class="shelf-t">Reference · on demand <span style="margin-left:auto">INDEX.md · ${LIB.length-always.length}</span></div>${LIB.filter(x=>x.mode!=='always').map(x=>libRow(x)).join('')}`;
+  b+=`<p class="small">Stored in <code class="m">ProjectLibrary/SLC/</code> next to a generated <code class="m">INDEX.md</code>. Agents are told where it is once, in the instructions they already get, and read files with their own tools.</p>`;
+  return b;
+}
+function libRow(x){
+  const open=S.openItem===x.n;
+  return `<div class="lrow ${open?'open':''}" data-act="item" data-n="${esc(x.n)}"><span class="ico">${ic(kIcon(x.k),13)}</span><div class="tx"><div class="t1"><span class="nm">${esc(x.n)}</span>${x.mode==='always'?'<span class="tag warn">always</span>':''}<span class="rt" style="margin-left:auto">${x.sz}</span></div><div class="t2">${esc(x.d)}</div>
+    <div class="act"><button class="btn sm">Attach to task…</button><button class="btn sm">Tell running…</button><button class="btn sm">${x.mode==='always'?'Make reference':'Make always'}</button></div></div></div>`;
+}
+function reportsView(){return `<div class="lh"><b style="font-weight:500">Reports</b><span class="st">written by agents · read-only</span></div>${REPORTS.map(r=>`<div class="lrow"><span class="ico">${ic('file',13)}</span><div class="tx"><div class="t1"><span class="nm">${esc(r.n)}</span><span class="rt" style="margin-left:auto">${r.when}</span></div><div class="t2">${esc(r.d)}</div><div class="act"><button class="btn sm">Open</button><button class="btn sm">Keep in Library</button></div></div></div>`).join('')}
+  <p class="small">Opened through the links <code class="m">details --json</code> reports; Solco does not read the plugin’s folders.</p>`}
+function autoView(){return `<div class="lh"><b style="font-weight:500">Automations</b><span class="st">plugin-owned</span></div>
+  <div class="lrow"><span class="ico">${ic('clock',13)}</span><div class="tx"><div class="t1"><span class="nm">Daily CI triage</span><span class="tag ok">on</span></div><div class="t2">daily 09:00 · makes a task and starts an agent</div></div></div>
+  <div class="lrow"><span class="ico">${ic('bolt',13)}</span><div class="tx"><div class="t1"><span class="nm">After merge: sync docs</span><span class="tag">off</span></div><div class="t2">when merged · every repo</div></div></div>`}
+
+/* ===================== project aside ===================== */
+function projectAside(){
+  const tabs=[['tasks','Tasks',T.filter(t=>t.st!=='done').length],['library','Library',LIB.length],['reports','Reports',REPORTS.length],['auto','Auto',2]];
+  let b='';
+  if(S.atab==='tasks')b=`<div class="cord"><span class="spin"></span><div style="flex:1"><div>Coordinator</div><div class="sub">claude · working · 1m</div></div><button class="ibtn" data-act="pmenu" style="width:24px;height:24px">${ic('more',14)}</button></div><div class="find">${ic('search',12)}Find tasks</div>${groups(S.task)}`;
+  else if(S.atab==='library')b=libraryView();else if(S.atab==='reports')b=reportsView();else b=autoView();
+  return `<div class="aside"><div class="atabs">${tabs.map(([k,l,c])=>`<button class="atab ${S.atab===k?'on':''}" data-act="tab" data-tab="${k}">${l}<span class="c">${c}</span></button>`).join('')}</div><div class="abody">${b}</div>${S.atab==='tasks'?`<div class="foot"><button class="btn sm" data-act="launch">${ic('plus',12)}New task</button><span style="flex:1"></span><span class="tag">⌘N</span></div>`:''}</div>`;
+}
+
+/* ===================== launch sheet ===================== */
+function launchSheet(){
+  const seg=(arr,cur,key)=>`<div class="seg">${arr.map(a=>`<button class="${a===cur?'on':''}" data-act="seg" data-key="${key}" data-val="${a}">${a}</button>`).join('')}</div>`;
+  const plan=S.start==='Plan first';
+  return `<div class="scrim" data-act="close"><div class="modal" data-stop="1"><div class="mf"><h3>New task in solco</h3>
+    <div class="fld"><label>Title</label><div class="inp">Show Library items in the Context tab</div></div>
+    <div class="fld"><label>Description</label><div class="inp area">The Context tab should list what the agent got and what is available. Use the Library INDEX; do not inline file contents.</div></div>
+    <div class="fld"><label>Context</label><div>${S.ctxAdded?fchip('login-flow.png','img')+fchip('PRD · Projects.md','note'):''}<button class="btn sm">${ic('lib',12)}From Library ▾</button> <button class="btn sm">${ic('plus',12)}Drop or add…</button></div></div>
+    <div class="fld"><label>Kind</label>${seg(['Task','Research','Chat'],S.mode,'mode')}</div>
+    <div class="fld"><label>Start</label>${seg(['To do','Plan first','Start now'],S.start,'start')} <span class="tag" style="margin-left:6px">after: none ▾</span></div>
+    <div class="btns" style="margin-top:2px"><button class="btn sm">Delegate with… ▾ <span style="color:var(--i3)">agent · model · review · merge</span></button></div>
+    <div class="mfoot"><button class="btn" data-act="close">Cancel</button><button class="btn pri" data-act="close">${S.start==='To do'?'Create':'Create &amp; start'}</button></div></div>
+    <div class="mp"><h4>What the agent will get</h4><div class="pv">
+      <div class="blk"><div class="bh">${ic('lock',12)}Always<span class="r">1.9 KB</span></div><div class="bb">House rules (Library) · <code>worker.instructions</code> · repo <code>AGENTS.md</code></div></div>
+      <div class="blk"><div class="bh">${ic('link',12)}This task<span class="r">${S.ctxAdded?'420 KB':'0'}</span></div><div class="bb">Description + <code>@…/login-flow.png</code> <code>@…/PRD · Projects.md</code></div></div>
+      <div class="blk"><div class="bh">${ic('lib',12)}On demand</div><div class="bb">Library <code>INDEX.md</code> (3 more items)</div></div>
+      <div class="blk"><div class="bh">${ic('cmd',12)}Settings block</div><div class="bb">${S.mode==='Task'?'claude · opus · high':S.mode==='Research'?'research only · changes nothing, result is a report':'chat only · ends when you say'} · ${plan?'plan first, you approve':'no plan step'} · review by codex · merge after your yes<br>worktree work/18-… from <code>main</code></div></div>
+      <div class="notice warn" style="margin:0">${ic('warn',13)}<span>Access is <b style="font-weight:500">full</b> (plugin default): the agent can run anything as you, outside the worktree too.</span></div></div></div></div></div>`;
+}
+
+/* ===================== variants: home ===================== */
+function homeA(){
+  const chat=`<div class="log"><div class="col">
+    ${bub('Add a project Library so agents can read the PRD and screenshots. Start SLC-13 now; SLC-16 after SLC-12.')}
+    ${prose('Added <b style="font-weight:500">SLC-13</b> and <b style="font-weight:500">SLC-16</b> and put an agent on SLC-13. SLC-16 waits for SLC-12. Two others need you:')}
+    ${tcard(taskById('SLC-14'))}${tcard(taskById('SLC-11'))}${tcard(taskById('SLC-12'))}${tcard(taskById('SLC-13'))}
+    ${sumrow('Looked at 7 tasks','read the board')}</div></div>
+    <div class="docks"><div class="dock warn"><div class="dh">${slot('ask')}<b>2 tasks need you</b><span class="r">1 ready to approve</span></div><div class="db" style="color:var(--i2)">SLC-14 asks a question · SLC-11 plan to approve<div class="btns"><button class="btn sm" data-act="task" data-id="SLC-14">Answer SLC-14</button><button class="btn sm" data-act="task" data-id="SLC-11">Review plan</button></div></div></div></div>
+    ${composer('Message the coordinator…')}`;
+  return `<div class="stage two"><div class="main">${chat}</div>${projectAside()}</div>`;
+}
+function emptyA(){
+  const chat=`<div class="log"><div class="col" style="padding-top:60px"><p class="prose" style="font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px">solco</p><p class="prose" style="color:var(--i2)">The coordinator turns what you say into tasks; every task runs as an ordinary agent in its own worktree. Add background first so each agent starts informed.</p>
+    <div class="btns" style="margin-top:14px"><button class="btn">What is left to do here?</button><button class="btn">Plan the next release</button><button class="btn">Audit open pull requests</button></div>
+    <div class="dock" style="margin-top:22px"><div class="dh"><b>Set up</b><span class="r">0 / 3</span></div><div class="db" style="color:var(--i2)"><ol class="steps"><li><span>○</span><span>Write the house rules <span class="tag">Always</span></span></li><li><span>○</span><span>Drop the PRD, screenshots, contracts into the Library</span></li><li><span>○</span><span>Ask the coordinator for the first task</span></li></ol></div></div></div></div>${composer('Message the coordinator…')}`;
+  const a=`<div class="aside"><div class="atabs"><button class="atab">Tasks<span class="c">0</span></button><button class="atab on">Library<span class="c">0</span></button><button class="atab">Reports<span class="c">0</span></button><button class="atab">Auto<span class="c">0</span></button></div><div class="abody"><div class="drop live" style="padding:34px 12px"><b>Drop files here</b>PDF, images, markdown, JSON. Up to 32 MB each. Kept in this project’s Library, never uploaded.</div><div class="btns" style="padding:0 2px"><button class="btn sm">${ic('note',12)}New note</button><button class="btn sm">${ic('plus',12)}Add files…</button><button class="btn sm">${ic('link',12)}Link a folder…</button></div><p class="small">No project knowledge yet. Agents will still read the repo’s own <code class="m">AGENTS.md</code>.</p></div></div>`;
+  return `<div class="stage two"><div class="main">${chat}</div>${a}</div>`;
+}
+function homeB(tray){
+  const col=(k,l,sts)=>{const rows=T.filter(t=>sts.includes(t.st));return `<div class="bcol"><h5 class="${k==='need'?'need':''}">${l}<span class="c">${rows.length}</span></h5>${rows.map(t=>`<button class="bcard" data-act="task" data-id="${t.id}"><div class="c1">${slot(t.st)}<span>${t.id}</span><span class="r">${t.rev?'<span class="tag">R#'+t.rev+'</span>':''}${t.pr?'<span class="tag">PR#'+t.pr+'</span>':''}${t.agent?'<span class="brand">'+brandOf(t.agent)+'</span>':''}</span></div><div class="c2">${esc(t.t)}</div>${t.pct?`<div class="pbar" style="margin:2px 0 5px"><i style="width:${t.pct}%"></i></div>`:''}<div class="c3 ${t.st==='ask'||t.st==='plan'?'warn':''}">${esc(t.note||'—')}${t.eta?' · '+t.eta:''}</div></button>`).join('')}</div>`};
+  const shelf=`<div class="shelf"><span class="lt">${ic('lib',13)}Library</span>${LIB.map(x=>`<span class="fchip">${ic(kIcon(x.k),12)}${esc(x.n)}${x.mode==='always'?'<span class="rd" style="color:var(--warn)">always</span>':''}</span>`).join('')}<button class="btn sm">${ic('plus',12)}Add</button></div>`;
+  const board=`<div class="board">${col('need','Needs you',['ask','plan'])}${col('ready','Ready',['ready'])}${col('work','Working',['work'])}${col('later','Queued · To do',['queue','todo'])}${col('done','Done',['done'])}</div>`;
+  const dock=`<div class="bdock"><span class="spin"></span><span class="say"><b style="font-weight:500">Coordinator</b> · Added SLC-13 and SLC-16, started an agent on SLC-13.</span><button class="ask" data-act="tray">${ic('send',13)}Ask the coordinator…</button><button class="btn sm" data-act="launch">${ic('plus',12)}New task</button></div>`;
+  const tr=tray?`<div class="tray"><div class="th"><span class="spin"></span><b>Coordinator</b><span>claude · working</span><span style="flex:1"></span><button class="ibtn" data-act="tray" style="width:24px;height:24px">${ic('x',14)}</button></div><div class="log"><div class="col">${bub('Add a project Library so agents can read the PRD and screenshots.')}${prose('Added <b style="font-weight:500">SLC-13</b>. Two others need you.')}${tcard(taskById('SLC-14'))}${tcard(taskById('SLC-13'))}</div></div>${composer('Message the coordinator…')}</div>`:'';
+  return `<div class="stage" style="grid-template-columns:1fr"><div class="main">${shelf}${board}${dock}${tr}</div></div>`;
+}
+function homeC(sel){
+  const t=taskById(sel||'SLC-14');
+  const inb=`<div class="inb"><div class="abody"><button class="trw" style="background:var(--tint);margin-bottom:4px"><span class="spin" style="margin:2px 2px 0 2px"></span><span class="tx"><span class="t1"><span class="nm">Coordinator</span><span class="id">solco</span></span><span class="t2">Added SLC-13 and SLC-16…</span></span></button><div class="find">${ic('search',12)}Find · this project ▾</div>${groups(t.id)}</div><div class="foot"><button class="btn sm" data-act="launch">${ic('plus',12)}New task</button><span style="flex:1"></span><button class="btn sm" data-act="tab" data-tab="library">${ic('lib',12)}Library</button></div></div>`;
+  const run=`<div class="main">${runHeader(t)}${taskLog(t)}${S.inspOpen?`<div class="drawer">${inspector(t).replace('class="aside"','class="aside" style="border:0;flex:1"')}</div>`:''}</div>`;
+  return `<div class="stage inbox">${inb}${run}</div>`;
+}
+function taskPage(t){
+  return `<div class="stage two"><div class="main">${runHeader(t)}${taskLog(t)}</div>${inspector(t)}</div>`;
+}
+
+/* ===================== Maps ===================== */
+const defs=`<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1l8 4-8 4z" fill="var(--i3)"/></marker><marker id="arb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1l8 4-8 4z" fill="var(--bad)"/></marker><marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1l8 4-8 4z" fill="var(--warn)"/></marker></defs>`;
+function node(x,y,w,h,cls,t1,t2){return `<rect class="n ${cls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="9"/><text x="${x+w/2}" y="${y+(t2?h/2-3:h/2+4)}" text-anchor="middle" font-size="12.5" font-weight="500">${t1}</text>${t2?`<text class="dim" x="${x+w/2}" y="${y+h/2+13}" text-anchor="middle" font-size="10.5">${t2}</text>`:''}`}
+function mapLife(){
+  const X=i=>14+136*i, Y=96, W=108, Hh=58;
+  const n=[['To do','','To do','delegate · --now'],['Queued','opt','after SLC-n','after'],['Plan ready','gate opt','you approve','approve · tell'],['Working','','agent in worktree','tell · stop'],['Finish line','','commit·sync·check','retry · fix'],['Pull request','','draft PR','—'],['Review R#n','','2nd agent','review'],['Ready','gate','your yes','approve'],['Merged','end','Done · cleanup','archive']];
+  let s=`<svg viewBox="0 0 1250 640" role="img" aria-label="Task lifecycle state machine">${defs}`;
+  s+=`<text class="dim lg" x="14" y="24">AUTHORITY: herdr-projects plugin (all transitions). SOLCO: shows states from list/details, sends the verbs under each step.</text>`;
+  n.forEach((a,i)=>{s+=node(X(i),Y,W,Hh,a[1],a[0],a[2]);s+=`<text class="vb" x="${X(i)+W/2}" y="${Y+Hh+17}" text-anchor="middle">${a[3]}</text>`;if(i)s+=`<path class="e ${[2,7].includes(i)?'gate':''}" d="M${X(i-1)+W} ${Y+Hh/2}H${X(i)}"/>`});
+  // loops
+  s+=`<path class="e loop" d="M${X(4)+W/2} ${Y+Hh+28}V${Y+Hh+62}H${X(3)+W/2}V${Y+Hh+28}"/><text class="lg" fill="var(--bad)" x="${X(3)+W+4}" y="${Y+Hh+78}" style="fill:var(--bad)">check fails (3 tries)</text>`;
+  s+=`<path class="e loop" d="M${X(6)+W/2} ${Y+Hh+28}V${Y+Hh+100}H${X(3)+W/2-14}V${Y+Hh+28}"/><text class="lg" x="${X(4)+W+10}" y="${Y+Hh+116}" style="fill:var(--bad)">review fails at/above “must fix” · conflict with main · GitHub checks fail</text>`;
+  s+=`<path class="e loop" d="M${X(7)+W/2} ${Y+Hh+28}V${Y+Hh+138}H${X(3)+W/2+14}V${Y+Hh+28}"/><text class="lg" x="${X(5)+W+10}" y="${Y+Hh+154}" style="fill:var(--bad)">you send it back · new commits withdraw the approval</text>`;
+  // side states below
+  const SY=400;
+  s+=node(X(3)-10,SY,128,56,'gate','Needs you','question · permission · auth');
+  s+=`<path class="e gate" d="M${X(3)+W/2} ${Y+Hh+170}V${SY}" style="marker-end:url(#arw)"/>`;
+  s+=node(X(4)+10,SY,128,56,'opt','Provider cut off','retry 1·2·4·8 min');
+  s+=node(X(5)+30,SY,128,56,'opt','Limit reached','time / tokens → waits');
+  s+=node(X(6)+50,SY,128,56,'opt','Fallback agent','takes over once');
+  s+=node(X(7)+70,SY,128,56,'opt','Stopped','work kept · reply resumes');
+  s+=`<text class="dim lg" x="${X(3)-10}" y="${SY-10}">any time while Working</text>`;
+  // off-ramps
+  s+=node(14,SY+86,170,50,'end','Chat-only','never finishes · ends when you say');
+  s+=node(204,SY+86,170,50,'end','Research-only','result is a report · no merge');
+  s+=node(394,SY+86,170,50,'end','Finish as-is','`finish` · takes the work, no merge');
+  s+=node(584,SY+86,170,50,'end','Archive','reversible · agent must be stopped');
+  s+=node(774,SY+86,170,50,'bad','Clear','removes task · keeps unsaved work');
+  s+=`<text class="dim lg" x="14" y="${SY+78}">off-ramps</text>`;
+  // solco owns
+  s+=`<rect class="n sol" x="${X(0)}" y="${Y-50}" width="${X(2)+W-X(0)}" height="30" rx="8" fill="none"/><text class="lg" x="${X(0)+8}" y="${Y-30}" style="fill:var(--ok)">Solco: New task sheet (+ Context, Brief preview)</text>`;
+  s+=`<rect class="n sol" x="${X(6)}" y="${Y-50}" width="${X(8)+W-X(6)}" height="30" rx="8" fill="none"/><text class="lg" x="${X(6)+8}" y="${Y-30}" style="fill:var(--ok)">Solco: Review tab · Changes card · Approve (shared confirm)</text>`;
+  s+='</svg>';
+  return `<h2>Lifecycle: one task, start to cleanup</h2><p class="lede">Read from the plugin’s docs (<code>how-work-gets-done</code>, <code>waiting-for-you</code>, <code>plan</code>, <code>after</code>, <code>limits</code>, <code>fallback</code>, <code>provider-errors</code>). Every arrow is the plugin’s; Solco only maps <code>stage / state / kind / msg</code> from <code>list</code> and <code>details</code> to the Run strip and sends the verbs written under each step.</p>${s}
+   <div class="legend"><span><i></i>automatic stage</span><span><i class="g"></i>waits for a human</span><span><i class="o"></i>optional / conditional</span><span><i class="b"></i>failure loop / destructive</span><span><i class="s"></i>where Solco’s new UI lives</span></div>`;
+}
+function mapLayers(){
+  return `<h2>Layers and ownership</h2><p class="lede">Solco stays presentation. The plugin owns every task fact; Herdr owns agents and worktrees; the provider CLIs own their transcripts. The one new store is the Project Library, which holds human inputs only.</p>
+  <div class="lay">
+   <div class="band sol"><h5>Solco · presentation <span>internal/nativeui + frontend (WebView)</span></h5><div class="row"><span class="box">Project Home</span><span class="box">Task run view (Run strip, Inspector)</span><span class="box">Launch sheet + Brief preview</span><span class="box">Library · Reports tabs</span><span class="box">Chat View (shared with Agents)</span><span class="box">Sidebar · Header popover · Quick panel</span></div></div>
+   <div class="arrow">▲ reads: list / details / show / coordinator status --json &nbsp;·&nbsp; ▼ writes: add · tell · stop · approve · set … (the plugin’s own verbs, as the human)</div>
+   <div class="band sol"><h5>Solco · Go bridge <span>no framework code in domain packages</span></h5><div class="row"><span class="box">internal/workboard (CLI client, gate, GroupOf)</span><span class="box">internal/chatsession (transcript, interactions, tail)</span><span class="box new">internal/projectlib NEW (Library store, INDEX.md, delivery text)</span><span class="box">internal/agentcatalog</span></div></div>
+   <div class="arrow">▲ read-only: provider session files, hook events, git snapshot</div>
+   <div class="band plug"><h5>herdr-projects plugin 1.2.x <span>authority for tasks</span></h5><div class="row"><span class="box">task state machine</span><span class="box">coordinators (all / machine / project)</span><span class="box">review · gate · merge</span><span class="box">settings + instructions (layered)</span><span class="box">keeper · automations · autopilot</span><span class="box">~/.herdr-projects (private: Solco never touches)</span></div></div>
+   <div class="arrow">▲ herdr worktree / agent / pane methods</div>
+   <div class="band"><h5>Herdr + providers + git <span>runtime authority</span></h5><div class="row"><span class="box">panes · tabs · worktrees</span><span class="box">Claude Code · Codex · pi · omp …</span><span class="box">git / gh</span></div></div>
+  </div>`;
+}
+function mapContext(){
+  let s=`<svg viewBox="0 0 1250 520" role="img" aria-label="Context pipeline">${defs}`;
+  const col=(x,t)=>`<text class="dim lg" x="${x}" y="22">${t}</text>`;
+  s+=col(14,'1 · SOURCES')+col(280,'2 · TIER (how often)')+col(560,'3 · DELIVERY (through the plugin)')+col(870,'4 · AGENT READS')+col(1060,'5 · OUTPUTS');
+  const src=[['Library','files · images · notes','sol'],['Repo AGENTS.md / CLAUDE.md','yours, in the repo',''],['Plugin instructions','worker · reviewer · coordinator',''],['Description + messages','you or the coordinator',''],['Composer attachments','paste · drop · @path','']];
+  src.forEach((a,i)=>{s+=node(14,40+i*86,220,60,a[2],a[0],a[1])});
+  const tiers=[['① Always','small · every turn',60],['② Attached','this task only',190],['③ On demand','Library INDEX.md · opened when needed',320]];
+  tiers.forEach((a,i)=>{s+=node(280,a[2],240,70,i===0?'gate':'',a[0],a[1])});
+  const del=[['Managed block in *.instructions','repo scope, plugin setting',60],['`--desc` / `tell` text with @abs/path','never inlines file bytes',190],['INDEX.md pointer (one line in the block)','agent opens only what it needs',320]];
+  del.forEach(a=>{s+=node(560,a[2],270,70,'',a[0],a[1])});
+  s+=node(870,120,160,110,'','Agents','coordinator · task · reviewer');
+  s+=`<text class="dim lg" x="950" y="212" text-anchor="middle">own file tools · @path images</text>`;
+  s+=node(1060,60,170,64,'end','Closing note','task folder (private)');
+  s+=node(1060,138,170,64,'end','Report','reports/&lt;repo&gt;/&lt;n&gt;/ + link');
+  s+=node(1060,216,170,64,'end','Review evidence','R#n verdict');
+  s+=node(1060,294,170,64,'end','PR · artifacts','git, GitHub');
+  s+=node(1060,386,170,70,'sol','Reports tab','read via details links · Keep in Library →');
+  // edges
+  const e=(x1,y1,x2,y2,c='')=>`<path class="e ${c}" d="M${x1} ${y1}C${(x1+x2)/2} ${y1} ${(x1+x2)/2} ${y2} ${x2} ${y2}"/>`;
+  s+=e(234,70,280,95)+e(234,156,280,95)+e(234,242,280,95)+e(234,70,280,225)+e(234,242,280,225)+e(234,328,280,225)+e(234,70,280,355)+e(234,414,280,225);
+  s+=e(520,95,560,95)+e(520,225,560,225)+e(520,355,560,355);
+  s+=e(830,95,870,160)+e(830,225,870,175)+e(830,355,870,190);
+  s+=e(1030,175,1060,92)+e(1030,175,1060,170)+e(1030,175,1060,248)+e(1030,175,1060,326);
+  s+=`<path class="e" d="M1145 358V386"/><path class="e dot" d="M1060 421C960 421 560 480 246 480C150 480 124 300 124 160" style="marker-end:url(#ar)"/><text class="lg dim" x="560" y="500" text-anchor="middle">“Keep in Library” (user action) closes the loop: a report becomes reference for the next task</text>`;
+  s+=`<text class="lg" x="14" y="${40+5*86+10}" style="fill:var(--warn)">Freshness: a task freezes at start; the coordinator hears changes at its next message → Library changes after start reach a running task only through “Tell”.</text>`;
+  s+='</svg>';
+  return `<h2>Context pipeline: in → tier → delivery → read → out</h2><p class="lede">Three tiers instead of one pile: <b style="font-weight:500">Always</b> (short, sent every turn), <b style="font-weight:500">Attached</b> (named for one task), <b style="font-weight:500">On demand</b> (indexed; the agent opens a file only when the work needs it). Content is never inlined into prompts: only absolute paths travel, the way every provider already treats <code>@path</code>.</p>${s}`;
+}
+function mapControls(){
+  const r=[
+   ['Talk','Chat composer, ↵','direct prompt; else <code>tell</code> / <code>coordinator tell</code>','steers mid-turn; starts a stopped agent','—','none'],
+   ['Start','Launch sheet → Create &amp; start','<code>add --desc … --delegate</code>','worktree + agent','Stop','none'],
+   ['Start later','Launch sheet → Create','<code>add</code>','To do (agent waits for “go”)','Clear','none'],
+   ['Plan first','Start = Plan first','<code>--plan.approve you</code>','agent writes a plan, repo untouched','—','none'],
+   ['Approve plan','Plan card','<code>approve &lt;id&gt;</code> (stage plan)','build begins','Send back','light'],
+   ['Send plan back','Plan card','<code>tell &lt;id&gt; "…"</code>','agent revises','—','none'],
+   ['Queue','After picker','<code>add --after</code> · <code>after</code>','starts by itself when they are done','<code>after --clear</code>','none'],
+   ['Start now','⋯','<code>delegate &lt;id&gt; --now</code>','skips the wait','Stop','none'],
+   ['Stop','Header Stop · Esc','<code>stop &lt;id&gt;</code>','interrupts, keeps work, ends what it started','just reply','light, lists processes'],
+   ['Change brief','⋯ Edit description','<code>describe &lt;id&gt;</code> (+ offer to Tell)','replaces text; agent is not told by itself','Edit again','none'],
+   ['Change settings','Settings tab','<code>set &lt;k&gt; &lt;v&gt; --task</code>','counts from the next start (shown)','<code>unset</code>','none'],
+   ['Send findings back','Review tab','<code>review &lt;id&gt;</code> · <code>retry</code> · <code>fix</code>','agent works again','—','none'],
+   ['Approve &amp; merge','Ready card','<code>approve &lt;id&gt;</code>, re-read first, never <code>--anyway</code>','merges PR','irreversible','shared confirm'],
+   ['Finish as-is','⋯ (chat / stuck)','<code>finish &lt;id&gt;</code>','done, nothing merged','—','confirm'],
+   ['Limits','Settings tab','<code>set limit.time|tokens … --task</code>','stops the agent at the limit','raise it','none'],
+   ['Archive','⋯','<code>archive &lt;id&gt;</code>','leaves lists; refused while an agent runs','<code>restore</code>','none'],
+   ['Clear','⋯','<code>clear &lt;id&gt;</code>','removes task; unsaved work kept on disk','no','destructive confirm'],
+   ['Stop everything','Project ⋯','composed: <code>coordinator stop</code> + each <code>stop</code> + automations off','pause-like (not atomic; failures listed)','start again by hand','counted confirm'],
+  ];
+  return `<h2>Controls: every verb the UI sends</h2><p class="lede">Nothing here is Solco’s own state change. Each row is one plugin verb run as the human (no pane identity). Refusals come back as the plugin’s own words in a bounded toast.</p>
+  <table class="mx"><thead><tr><th>Action</th><th>Where</th><th>Plugin verb</th><th>Effect</th><th>Undo</th><th>Confirm</th></tr></thead><tbody>${r.map(a=>`<tr>${a.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+function mapTui(){
+  const r=[
+   ['List grouped by state, marks, filters','native (/project, sidebar)','keep; add Run strip + Library tab','—'],
+   ['Chat box → coordinator / task agent','plain message box (write-only relay)','<b style="font-weight:500">Chat View bound to the agent</b> (transcript, docks, composer, @ and /)','—'],
+   ['Task panel: Status · Needs · Reviews · Settings','static /task page','Run · Context · Changes · Review · Settings tabs','—'],
+   ['Reply to a question / permission / plan','—','Question dock · Plan card (existing chat docks)','auth prompts → Open Terminal'],
+   ['Pasted pictures `[Image n]`, files `@path`','—','composer attachments (ChatAttachments) + Library','cross-machine file carry'],
+   ['`/` skills list','—','existing composer picker (Claude Code · Codex · pi · omp)','other 14 agents → Terminal'],
+   ['Approve · send back · retry · stop · archive','native actions','keep (shared confirm)','—'],
+   ['Automations · Autopilot · Settings','native (Project page, /settings/workboard)','keep','—'],
+   ['Other machines, voice, web board, keys','—','—','stays TUI / plugin'],
+  ];
+  return `<h2>TUI → native parity</h2><p class="lede">The Native | Board switch stays: Board remains the fallback until this table has no “—” in the middle column, then the default flips (the same release rule as 2026-10-26).</p>
+  <table class="mx"><thead><tr><th>TUI capability</th><th>Today (native)</th><th>After this design</th><th>Stays outside</th></tr></thead><tbody>${r.map(a=>`<tr>${a.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+function mapsView(){
+  const f={life:mapLife,layers:mapLayers,context:mapContext,controls:mapControls,tui:mapTui}[S.scene||'life'];
+  return `<div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="chip">Projects</span><span class="sep">${ic('chev',12)}</span><span class="chip cur">Maps</span></div><div class="mapbody">${f()}</div>`;
+}
+
+/* ===================== scene router ===================== */
+const VARIANTS={
+ A:{title:'A · Coordinator-first',desc:'Home = a Chat View with the project’s coordinator; the right pane is the project Overview (Tasks · Library · Reports · Auto). Same shape as Cursor Projects and Claude Projects.',
+    scenes:[['home','Home · coordinator chat'],['library','Library tab (context in)'],['task','Task · running'],['ask','Task · needs you'],['plan','Task · plan to approve'],['ready','Task · ready to approve'],['launch','New task + brief preview'],['control','Stop · modify · remove'],['empty','New project (empty)']]},
+ B:{title:'B · Board-first',desc:'Home = status columns for scanning many tasks; Library is a shelf on top; the coordinator is a bottom bar that opens a chat tray. Closest to the TUI board.',
+    scenes:[['board','Home · board'],['tray','Coordinator tray open'],['task','Task (same run view)'],['library','Library sheet'],['launch','New task sheet']]},
+ C:{title:'C · Inbox + run',desc:'No project home page: a two-pane Runs page. Left = this project’s attention-ordered list (coordinator is its first row); right = the selected run with a Details drawer.',
+    scenes:[['inbox','Runs · inbox + run'],['ask','Needs you'],['drawer','Details drawer open'],['library','Library sheet'],['launch','New task sheet']]},
+ M:{title:'Maps · flows',desc:'Lifecycle, ownership layers, context pipeline, controls matrix, TUI parity. Not a design alternative: the evidence the options share.',
+    scenes:[['life','Lifecycle (state machine)'],['layers','Layers & ownership'],['context','Context pipeline'],['controls','Controls matrix'],['tui','TUI → native parity']]},
+};
+const STATES={library:[['default','Default'],['drag','Dragging files over'],['added','Added while a task runs'],['over','Always-read over budget'],['refused','Credentials file refused']]};
+const STORY={
+ A:`<h1>A · Coordinator-first</h1><p><b>Bet:</b> you mostly talk; the board is a sidebar to the conversation.</p><ul><li>Replaces the TUI’s message box with a real Chat View (coordinator and every task agent are ordinary Herdr agents).</li><li>Overview pane = the existing /project list + Library + Reports + Auto.</li><li>Cost: the right pane is narrow for scanning 30+ tasks.</li></ul>`,
+ B:`<h1>B · Board-first</h1><p><b>Bet:</b> you mostly scan and triage; talking is occasional.</p><ul><li>Columns scale to many tasks and read like the TUI.</li><li>Coordinator chat is a tray: cheap to open, easy to ignore.</li><li>Cost: statuses are a priority list in the plugin, not a pipeline; columns imply movement that is not drag-and-drop.</li></ul>`,
+ C:`<h1>C · Inbox + run</h1><p><b>Bet:</b> you work an attention queue, one run at a time.</p><ul><li>Strongest triage flow; the Header popover grows into this page.</li><li>Cost: weak “project as a container” feel; Library has no home except a footer button.</li></ul>`,
+ M:`<h1>Maps</h1><p>All five pages are evidence from the plugin’s docs and the local code. The Controls table is the complete write surface; nothing outside it changes plugin state.</p>`,
+};
+function sceneOf(){const vs=VARIANTS[S.v].scenes;return vs.some(a=>a[0]===S.scene)?S.scene:vs[0][0]}
+
+const HOME={A:'home',B:'board',C:'inbox',M:'life'};
+const TASK_SCENE={task:'SLC-13',ask:'SLC-14',plan:'SLC-11',ready:'SLC-12',control:'SLC-13'};
+function librarySheet(){return `<div class="scrim" data-act="close"><div class="modal" data-stop="1" style="grid-template-columns:1fr;width:min(520px,100%)"><div class="mf" style="padding:14px 14px 16px">${libraryView()}</div></div></div>`}
+function render(){
+  const root=$('#root');applyVars(root);const sc=sceneOf();S.scene=sc;
+  root.className='design-root'+(S.v==='M'?' maps':'');
+  let h='';
+  if(S.v==='M'){h=mapsView()}
+  else{
+    const taskScene=S.v==='A'&&TASK_SCENE[sc];
+    const sel=S.task||(S.v==='A'?(TASK_SCENE[sc]||''):S.v==='B'?(sc==='task'||sc==='control'?'SLC-13':''):(sc==='ask'?'SLC-14':sc==='drawer'?'SLC-12':sc==='inbox'||sc==='launch'||sc==='library'?'SLC-13':''));
+    const t=sel?taskById(sel):null;
+    let stage='';
+    if(S.v==='A'){
+      if(sc==='home'||sc==='launch'){if(sc==='home')S.atab=S.atab==='library'?'tasks':S.atab;stage=homeA()}
+      else if(sc==='library'){S.atab='library';stage=homeA()}
+      else if(sc==='empty')stage=emptyA();
+      else stage=taskPage(t||taskById('SLC-13'));
+    }else if(S.v==='B'){
+      if(sc==='task'||sc==='control')stage=taskPage(t||taskById('SLC-13'));
+      else stage=homeB(sc==='tray');
+    }else{
+      if(sc==='drawer')S.inspOpen=true;else if(sc==='inbox'||sc==='ask')S.inspOpen=false;
+      stage=homeC(t?t.id:'SLC-13');
+    }
+    let over='';
+    if(sc==='launch')over=launchSheet();
+    if(sc==='library'&&S.v!=='A')over=librarySheet();
+    const inTask=!!(t&&(S.v==='A'?(taskScene||S.task):S.v==='B'?(sc==='task'||sc==='control'):true));
+    if(S.menu&&sc!=='control')over+=inTask?taskMenu(t):projMenu();
+    if(sc==='control')over+=taskMenu(taskById('SLC-13'))+stopToast();
+    const crumbs=['Projects','solco'].concat(inTask?[t.id]:[]);
+    h=bar(crumbs)+sidebar(inTask?t.id:'')+stage+over;
+  }
+  root.innerHTML=h;
+  $('#stageLabel').textContent=VARIANTS[S.v].title+' · '+(VARIANTS[S.v].scenes.find(a=>a[0]===sc)||[,''])[1];
+  renderPanel();
+  history.replaceState(null,'',`#v=${S.v}&scene=${sc}&theme=${S.theme}&w=${S.w}`);
+}
+
+/* ===================== storybook panel ===================== */
+function seg(label,key,opts){return `<div class="ctl"><span>${label}</span><div class="shell-seg">${opts.map(([v,l])=>`<button data-ctl="${key}" data-val="${v}" class="${String(S[key])===String(v)?'on':''}">${l}</button>`).join('')}</div></div>`}
+function renderPanel(){
+  const sc=S.scene;
+  $('#panelControls').innerHTML=`<div class="ide-section-title">Variants</div>${Object.entries(VARIANTS).map(([id,c])=>`<div class="ide-variant-card ${id===S.v?'active':''}" data-v="${id}"><h2>${c.title}</h2><p>${c.desc}</p></div>`).join('')}
+   <div class="ide-section-title">Scenes</div>${VARIANTS[S.v].scenes.map(([k,l])=>`<div class="ide-state-card ${k===sc?'active':''}" data-scene="${k}"><strong>${l}</strong></div>`).join('')}
+   ${S.v==='A'&&sc==='library'?`<div class="ide-section-title">Library state</div>${STATES.library.map(([k,l])=>`<div class="ide-state-card ${S.lstate===k?'active':''}" data-lstate="${k}"><strong>${l}</strong></div>`).join('')}`:''}
+   <div class="ide-section-title">Controls</div>${seg('Theme','theme',[['dark','Dark'],['light','Light']])}${seg('Window','w',[[1120,'1120'],[900,'900'],[1320,'1320']])}`;
+  $('#storyBody').innerHTML=STORY[S.v];
+}
+
+/* ===================== events ===================== */
+document.addEventListener('click',e=>{
+  const p=e.target.closest('[data-v],[data-scene],[data-lstate],[data-ctl]');
+  if(p&&p.closest('.ide-story-panel')){
+    if(p.dataset.v){S.v=p.dataset.v;S.scene='';S.task='';S.menu=false;S.atab='tasks';S.lstate='default'}
+    else if(p.dataset.scene!==undefined){S.scene=p.dataset.scene;S.task='';S.menu=false;if(S.scene!=='library')S.atab='tasks'}
+    else if(p.dataset.lstate){S.lstate=p.dataset.lstate}
+    else if(p.dataset.ctl){S[p.dataset.ctl]=p.dataset.ctl==='w'?+p.dataset.val:p.dataset.val}
+    render();return;
+  }
+  const a=e.target.closest('#root [data-act]');
+  if(!a){if(S.menu){S.menu=false;render()}return}
+  const act=a.dataset.act;
+  if(act==='close'){if(e.target.closest('.modal')&&!e.target.closest('button[data-act=close]'))return;S.scene=HOME[S.v];render();return}
+  if(act==='task'){const id=a.dataset.id;const t=taskById(id);S.task=id;S.menu=false;
+    S.scene=S.v==='A'?({ask:'ask',plan:'plan',ready:'ready'}[t.st]||'task'):S.v==='B'?'task':'inbox';
+    S.insp=t.st==='ready'?'rev':t.st==='work'||t.st==='ask'||t.st==='plan'?'run':'run';render();return}
+  if(act==='home'){S.task='';S.menu=false;S.scene=HOME[S.v];S.atab='tasks';render();return}
+  if(act==='tab'){S.menu=false;S.task='';if(a.dataset.tab==='library'){S.atab='library';S.scene='library'}else{S.atab=a.dataset.tab;S.scene=S.v==='A'?'home':HOME[S.v]}render();return}
+  if(act==='insp'){S.insp=a.dataset.k;render();return}
+  if(act==='menu'){S.menu=!S.menu;render();return}
+  if(act==='pmenu'){S.menu=!S.menu;render();return}
+  if(act==='launch'){S.menu=false;S.scene='launch';render();return}
+  if(act==='tray'){S.scene=S.scene==='tray'?'board':'tray';render();return}
+  if(act==='item'){S.openItem=S.openItem===a.dataset.n?'':a.dataset.n;render();return}
+  if(act==='seg'){S[a.dataset.key]=a.dataset.val;render();return}
+});
+$('#panelCollapseBtn').addEventListener('click',()=>$('#ideLayout').classList.add('panel-collapsed'));
+$('#panelExpandBtn').addEventListener('click',()=>$('#ideLayout').classList.remove('panel-collapsed'));
+$('#storyToggleBtn').addEventListener('click',()=>{const c=$('#ideLayout').classList.toggle('story-collapsed');$('#storyChevron').textContent=c?'▶':'▼'});
+document.addEventListener('keydown',e=>{  if(e.key==='Escape'){if(S.menu){S.menu=false;render()}else if(S.scene==='launch'||(S.scene==='library'&&S.v!=='A')){S.scene=HOME[S.v];render()}else $('#ideLayout').classList.add('panel-collapsed')}});
+render();
+</script>
+</body>
+</html>

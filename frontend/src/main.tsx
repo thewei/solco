@@ -5,13 +5,19 @@ import "highlight.js/styles/github.css";
 import "./theme.css";
 
 // One embedded SPA serves both WebView pages from the app content origin:
-// /chat (the chat body) and /files-viewer (the Files preview body). The
+// /chat (the chat body), /projects (the Projects body, which embeds the chat)
+// and /files-viewer (the Files preview body). The
 // FilesViewer chunk is lazy, so the chat route never pays for GitHub's
 // Markdown stylesheets.
 const FilesViewer = React.lazy(() =>
   import("./FilesViewer").then((m) => ({ default: m.FilesViewer })),
 );
 
+const ProjectsPage = React.lazy(() =>
+  import("./projects/ProjectsPage").then((m) => ({ default: m.ProjectsPage })),
+);
+
+const isProjects = /\/projects\/?$/.test(window.location.pathname);
 const isFilesViewer = /\/files-viewer\/?$/.test(window.location.pathname);
 
 // Dev-only crash visor: an embedded WKWebView has no inspector in the
@@ -38,7 +44,11 @@ if (import.meta.env.DEV) {
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <React.StrictMode>
-    {isFilesViewer ? (
+    {isProjects ? (
+      <React.Suspense fallback={<div className="pj-boot" />}>
+        <ProjectsPage />
+      </React.Suspense>
+    ) : isFilesViewer ? (
       <React.Suspense fallback={<div style={{ padding: 16, color: "#888" }}>Loading viewer…</div>}>
         <FilesViewer />
       </React.Suspense>

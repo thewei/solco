@@ -263,6 +263,7 @@ func TestNewTaskDialogCarriesEveryOptionToTheAddVerb(t *testing.T) {
 	var ran []string
 	s := manageShell(t, &ran, `[]`)
 	s.openWorkboardAddIn("r", false)
+	s.workboard.newTask.inPage = false // the dialog is the fallback; the page draws its own sheet
 	tt := ui.NewTester(func(c *ui.Context) { s.newTaskDialog(c) }, 700, 600)
 	for _, want := range []string{"New Task", "Task", "Research only", "Chat only", "Start an agent now", "Add"} {
 		if !tt.HasText(want) {
@@ -307,32 +308,29 @@ func TestAfterStageOffersStartNowAfterAConfirm(t *testing.T) {
 	}
 }
 
-func TestProjectPageAutomationsManage(t *testing.T) {
+func TestProjectViewAutomationsManage(t *testing.T) {
 	var ran []string
 	s := manageShell(t, &ran, `[]`)
 	s.openWorkboardProjectPage("r")
-	tt := ui.NewTester(s.workboardProjectPage, 900, 900)
-	for _, want := range []string{"Automations", "nightly check", "weekly sweep", "Turn Off", "Turn On", "Run…", "Remove…", "off: its project is archived · research only"} {
-		if !tt.HasText(want) {
-			t.Fatalf("project page missing %q: %q", want, tt.Texts())
-		}
+	autos := s.projectsView().Project.Automations
+	if len(autos) != 2 || autos[0].Name != "nightly check" || autos[1].Name != "weekly sweep" {
+		t.Fatalf("automations = %+v: only this Project's", autos)
 	}
-	if tt.HasText("elsewhere") {
-		t.Fatalf("another repo's automation: %q", tt.Texts())
+	if !autos[0].On || autos[1].On || !strings.Contains(autos[1].Caption, "off: its project is archived · research only") {
+		t.Fatalf("automations = %+v", autos)
 	}
-	if err := tt.Click("Turn Off"); err != nil {
-		t.Fatal(err)
-	}
+	b := NewProjectsBridge(s)
+	b.Manage("automation-off", "a1")
 	if got := strings.Join(ran, "|"); got != "automations off a1" || s.pendingToast != "“nightly check” is off" {
 		t.Fatalf("ran=%q toast=%q", ran, s.pendingToast)
 	}
 	ran = nil
-	s.startBoardManage(boardAutomationRunConfirm, "a1", 0)
+	b.Manage("automation-run", "a1")
 	if !strings.Contains(s.confirmMessage, "spending tokens") || len(ran) != 0 {
 		t.Fatalf("message=%q ran=%q: Run must ask first", s.confirmMessage, ran)
 	}
 	s.submitConfirm(s.confirmKind, s.confirmTarget)
-	s.startBoardManage(boardAutomationRemoveConfirm, "a2", 0)
+	b.Manage("automation-remove", "a2")
 	if !strings.Contains(s.confirmMessage, "The tasks it made stay") {
 		t.Fatalf("message=%q", s.confirmMessage)
 	}
@@ -340,9 +338,9 @@ func TestProjectPageAutomationsManage(t *testing.T) {
 	if got := strings.Join(ran, "|"); got != "automations run a1|automations remove a2" {
 		t.Fatalf("ran = %q", got)
 	}
-	// A Project with none still offers creation (and lists nothing).
+	// A Project with none lists nothing (the page still offers creation).
 	s.workboard.board.extras.automations = nil
-	if tt = ui.NewTester(s.workboardProjectPage, 900, 900); !tt.HasText("New Automation…") || tt.HasText("Turn Off") {
-		t.Fatalf("no automations: only the create button: %q", tt.Texts())
+	if got := s.projectsView().Project.Automations; len(got) != 0 {
+		t.Fatalf("no automations: %+v", got)
 	}
 }

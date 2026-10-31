@@ -263,10 +263,10 @@ func TestTasksTabRendersGroupsAndOpensTheTasksProject(t *testing.T) {
 	if s.router.Path() != routeTask || s.workboard.page.id != "r/3" {
 		t.Fatalf("path=%q page=%q, want the task page for r/3", s.router.Path(), s.workboard.page.id)
 	}
-	page := ui.NewTester(s.workboardTaskPage, 900, 700)
-	if err := page.Click("Open Project"); err != nil {
-		t.Fatal(err)
+	if !s.projectsView().Task.CanOpenPrj {
+		t.Fatal("a worktree inside a Workspace project can be opened")
 	}
+	NewProjectsBridge(s).OpenProjectWorkspace()
 	if s.selectedProjectID != "w2" {
 		t.Fatalf("selectedProjectID = %q, want the task's own Project w2", s.selectedProjectID)
 	}

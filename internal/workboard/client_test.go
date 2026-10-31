@@ -252,3 +252,28 @@ func TestApprovePlanOnlyApprovesAPlan(t *testing.T) {
 		t.Fatal("option-shaped id refused")
 	}
 }
+
+func TestDescribeArgvAndRefusals(t *testing.T) {
+	var got []string
+	c := NewClientWithExec(func(_ context.Context, args ...string) (string, error) { got = args; return "", nil })
+	if err := c.Describe(context.Background(), "p/1", "  New words\nsecond line "); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, "|") != "describe|p/1|New words\nsecond line" {
+		t.Fatalf("argv = %q", got)
+	}
+	bad := NewClientWithExec(func(context.Context, ...string) (string, error) {
+		t.Fatal("no CLI call for a refused describe")
+		return "", nil
+	})
+	for _, f := range []func() error{
+		func() error { return bad.Describe(context.Background(), "", "x") },
+		func() error { return bad.Describe(context.Background(), "--x", "x") },
+		func() error { return bad.Describe(context.Background(), "p/1", "") },
+		func() error { return bad.Describe(context.Background(), "p/1", "--research") },
+	} {
+		if f() == nil {
+			t.Fatal("expected a refusal")
+		}
+	}
+}

@@ -28,7 +28,9 @@ import "./chat.css";
 
 // The bridge mirrors conversation.PromptDisposition as "ready" | "queue" |
 // "terminal" | "unknown"; the generated client types it as string.
-export function App() {
+// `dockAbove` is the host page's own dock (the Projects page puts "needs you"
+// and the plan/approve decision there), drawn first in the composer column.
+export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const [state, setStateRaw] = useState<ChatBridgeState | null>(null);
   // A projection built before the one on screen never replaces it (snapshot
   // replies and chatUpdated events can arrive out of order).
@@ -1193,9 +1195,16 @@ export function App() {
           {unread > 1 ? `${unread} new messages ↓` : "New messages ↓"}
         </button>
       ) : null}
-      {readOnly ? null : (
+      {readOnly ? (
+        dockAbove ? (
+          <div className="composer">
+            <div className="col">{dockAbove}</div>
+          </div>
+        ) : null
+      ) : (
         <div className="composer">
           <div className="col">
+            {dockAbove}
             {planVisible || runningSubagents ? (
               <TasksTray
                 plan={planVisible ? state?.plan : undefined}

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/workboard"
 )
 
@@ -54,46 +53,4 @@ func automationCaption(a workboard.Automation) string {
 		parts = append(parts, "research only")
 	}
 	return strings.Join(parts, " · ")
-}
-
-// projectAutomations is the Project page's Automations group.
-func (s *Shell) projectAutomations(c *ui.Context, project workboardProject) {
-	list := s.projectAutomationList(project.Name)
-	if len(list) == 0 && project.Name == workboardOtherProject {
-		return
-	}
-	t := c.Theme()
-	sp := Spacing()
-	ui.Column(c).FillWidth().Gap(sp.S).Padding(sp.M, 0, 0).Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			groupLabel(c, "Automations")
-			ui.Box(c).Grow(1)
-			if project.Name != workboardOtherProject && regularButton(c, "New Automation…").Clicked() {
-				s.openWorkboardAutomation(project.Name)
-			}
-		})
-		for _, a := range list {
-			a := a
-			caption := automationCaption(a)
-			ui.Row(c.Key("automation:" + a.ID)).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
-				ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-					tipped(c, ui.Text(c, a.Name).FontSize(Typography().Body).SingleLine(), a.Name)
-					tipped(c, ui.Text(c, caption).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine(), caption)
-				})
-				label, op := "Turn Off", "automation-off"
-				if !a.On {
-					label, op = "Turn On", "automation-on"
-				}
-				if regularButton(c, label).Width(88).Clicked() {
-					s.runBoardManage(op, a.ID)
-				}
-				if regularButton(c, "Run…").Clicked() {
-					s.startBoardManage(boardAutomationRunConfirm, a.ID, 0)
-				}
-				if regularButton(c, "Remove…").Clicked() {
-					s.startBoardManage(boardAutomationRemoveConfirm, a.ID, 0)
-				}
-			})
-		}
-	})
 }

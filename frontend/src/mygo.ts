@@ -4,6 +4,50 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/**
+ * ActionPane is one of the plugin's verbs for the task. Dock marks the
+ * decisions that move the task forward; Primary the one that does.
+ */
+export interface ActionPane {
+  kind: string;
+  label: string;
+  primary: boolean;
+  dock: boolean;
+}
+
+/** AttemptPane is one parallel attempt. */
+export interface AttemptPane {
+  letter: string;
+  agent: string;
+  standing: string;
+  stat: string;
+}
+
+/** AutomationRow is one automation of the Project. */
+export interface AutomationRow {
+  id: string;
+  name: string;
+  caption: string;
+  on: boolean;
+}
+
+/** ChangeFilePane is one changed file. */
+export interface ChangeFilePane {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+/** ChangesPane is the Changes tab (uncommitted work in the worktree). */
+export interface ChangesPane {
+  loaded: boolean;
+  loading: boolean;
+  files: ChangeFilePane[];
+  more: number;
+  additions: number;
+  deletions: number;
+}
+
 /** ChatBridgeInteraction is one pending interaction card. */
 export interface ChatBridgeInteraction {
   id: string;
@@ -305,6 +349,65 @@ export interface ChatTurn {
   changes?: ChatChange[];
 }
 
+/** ComposeInput is the New Task sheet as the page filled it in. */
+export interface ComposeInput {
+  title: string;
+  description: string;
+  after: string;
+  /** task | research | chat */
+  kind: string;
+  delegate: boolean;
+  /** Library item ids */
+  attach: string[];
+}
+
+/** ComposePane opens the New Task sheet. */
+export interface ComposePane {
+  project: string;
+  delegate: boolean;
+  items: LibraryItemPane[];
+  /** CanAttach is false when there is no library to attach from. */
+  canAttach: boolean;
+}
+
+/**
+ * ContextItemPane is a library file next to a task: whether the description
+ * already carries it, and whether a running agent can still be sent it.
+ */
+export interface ContextItemPane {
+  id: string;
+  name: string;
+  mode: string;
+  inBrief: boolean;
+}
+
+/** ContextPane is the Context tab. */
+export interface ContextPane {
+  description: string;
+  /** Full is the whole description, for the Edit sheet (Description is clipped). */
+  full: string;
+  canEdit: boolean;
+  tellable: boolean;
+  live: boolean;
+  items: ContextItemPane[];
+}
+
+/** CoordinatorPane is the Project's coordinator as the plugin last reported. */
+export interface CoordinatorPane {
+  state: string;
+  agent: string;
+  running: boolean;
+  said: string;
+  queued: number;
+  error: string;
+}
+
+/** FactPane is a label/value row of the Run tab. */
+export interface FactPane {
+  label: string;
+  value: string;
+}
+
 /**
  * FilesMenuInput is what the page knows about the right-click target. The
  * file itself is never sent: the bridge uses the selection it owns.
@@ -342,6 +445,154 @@ export interface FilesPreviewTarget {
   theme: string;
 }
 
+/** FindingPane is one reviewer finding. */
+export interface FindingPane {
+  severity: string;
+  subject: string;
+  where: string;
+  proof: string;
+}
+
+/** LibraryItemPane is one library file. */
+export interface LibraryItemPane {
+  id: string;
+  name: string;
+  mode: string;
+  kind: string;
+  size: number;
+  sizeText: string;
+}
+
+/** LibraryPane is the Project's Library (Solco-owned; see internal/projectlibrary). */
+export interface LibraryPane {
+  available: boolean;
+  items: LibraryItemPane[];
+  /** Block is what the instructions carry for this Project right now. */
+  block: string;
+  note: string;
+  /** AlwaysUsed / AlwaysCap measure the always-read budget in bytes. */
+  alwaysUsed: number;
+  alwaysCap: number;
+  totalSize: number;
+  totalText: string;
+}
+
+/** NarrativePane is the plugin's free text on the task. */
+export interface NarrativePane {
+  description: string;
+  failureTitle: string;
+  failureDetail: string;
+  failureNext: string;
+  plan: string;
+  limitStopped: string;
+  handovers: string[];
+  attempts: AttemptPane[];
+}
+
+/** ProjectCounts feed the header chips. */
+export interface ProjectCounts {
+  needsYou: number;
+  ready: number;
+  working: number;
+}
+
+/** ProjectPane is the Project home. */
+export interface ProjectPane {
+  name: string;
+  other: boolean;
+  pinned: boolean;
+  open: number;
+  doneCount: number;
+  autopilot: boolean;
+  coordinator: CoordinatorPane;
+  groups: TaskGroupPane[];
+  done: TaskRow[];
+  library: LibraryPane;
+  reports: ReportsPane;
+  automations: AutomationRow[];
+  /** Working is the number of tasks "Stop All Tasks…" would stop. */
+  working: number;
+}
+
+/**
+ * ProjectsChat names who the embedded Chat talks to. Target is the pane id
+ * (empty when nobody is there to talk to) and changes when the page must ask
+ * the bridge to bind the Chat again.
+ */
+export interface ProjectsChat {
+  target: string;
+  label: string;
+  /** Why says, when Target is empty, what the page should tell the user. */
+  why: string;
+  /**
+   * Waiting: the agent is stopped on a prompt before it has a conversation
+   * (a trust-this-folder question at its first start), so the Chat has
+   * nothing to read; the page offers the terminal instead of a spinner.
+   */
+  waiting: boolean;
+}
+
+/** ProjectsView is everything the Projects page draws, one value per publish. */
+export interface ProjectsView {
+  /** Seq numbers the published snapshots (0 in a build used for change detection). */
+  seq: number;
+  theme: string;
+  /** Mode is "project", "task" or "gone" (the page's subject left the board). */
+  mode: string;
+  available: boolean;
+  project?: ProjectPane;
+  task?: TaskPane;
+  compose?: ComposePane;
+  chat: ProjectsChat;
+  counts: ProjectCounts;
+}
+
+/** ReportRow is one report. */
+export interface ReportRow {
+  taskId: string;
+  title: string;
+  link: string;
+  local: boolean;
+}
+
+/** ReportsPane lists tasks with a report. */
+export interface ReportsPane {
+  loading: boolean;
+  rows: ReportRow[];
+}
+
+/** ReviewPane is the Review tab. */
+export interface ReviewPane {
+  verdict: string;
+  failed: boolean;
+  by: string;
+  text: string;
+  findings: FindingPane[];
+  rounds: string[];
+}
+
+/** SettingPane is one non-default setting. */
+export interface SettingPane {
+  name: string;
+  value: string;
+  from: string;
+}
+
+/** SettingsPane is the Settings tab: what the task runs on beyond defaults. */
+export interface SettingsPane {
+  loaded: boolean;
+  rows: SettingPane[];
+}
+
+/**
+ * StripStepPane is one segment of the run strip; State is pending, done,
+ * current or waiting.
+ */
+export interface StripStepPane {
+  label: string;
+  state: string;
+}
+
 /** SubagentCard is one sub-agent card/roster row (the page's wire shape). */
 export interface SubagentCard {
   id: string;
@@ -366,6 +617,63 @@ export interface SubagentCard {
   tail?: string;
   result?: string;
   prompt?: string;
+}
+
+/** TaskGroupPane is one section of the Tasks list. */
+export interface TaskGroupPane {
+  key: string;
+  label: string;
+  tone: string;
+  tasks: TaskRow[];
+}
+
+/** TaskPane is the task page. */
+export interface TaskPane {
+  id: string;
+  title: string;
+  msg: string;
+  group: string;
+  tone: string;
+  app: string;
+  pr: string;
+  round: number;
+  research: boolean;
+  chat: boolean;
+  stage: string;
+  project: string;
+  groupLabel: string;
+  strip: StripStepPane[];
+  actions: ActionPane[];
+  pinned: boolean;
+  loading: boolean;
+  facts: FactPane[];
+  narrative: NarrativePane;
+  review?: ReviewPane;
+  reportLink: string;
+  worktree: string;
+  changes: ChangesPane;
+  settings: SettingsPane;
+  context: ContextPane;
+  hasAgent: boolean;
+  canOpenProject: boolean;
+  dockTitle: string;
+  dockNote: string;
+}
+
+/** TaskRow is one task line. */
+export interface TaskRow {
+  id: string;
+  title: string;
+  msg: string;
+  group: string;
+  tone: string;
+  app: string;
+  pr: string;
+  round: number;
+  pinned: boolean;
+  research: boolean;
+  chat: boolean;
+  stage: string;
 }
 
 // ---- Services ----
@@ -602,6 +910,112 @@ export const filesPreview = {
   },
 } as const;
 
+/** ProjectsBridge is the bound service of the Projects WebView page. */
+export const projects = {
+  /**
+   * Act runs one of the plugin's verbs on a task; the confirm dialogs, pickers
+   * and refusals are the native ones.
+   */
+  act(kind: string, id: string): Promise<void> {
+    return call("projects.Act", kind, id);
+  },
+  /** AddTask adds the task the sheet describes. */
+  addTask(in_: ComposeInput): Promise<void> {
+    return call("projects.AddTask", in_);
+  },
+  /** Back leaves the page the way the title bar's Back does. */
+  back(): Promise<void> {
+    return call("projects.Back");
+  },
+  /** CloseCompose dismisses the New Task sheet. */
+  closeCompose(): Promise<void> {
+    return call("projects.CloseCompose");
+  },
+  /**
+   * LoadTab reads what a tab needs once: "changes", "settings" (open task) or
+   * "reports" (open Project).
+   */
+  loadTab(tab: string): Promise<void> {
+    return call("projects.LoadTab", tab);
+  },
+  /**
+   * Manage runs a Project-level verb: confirms first where the verb is
+   * destructive or spends tokens.
+   */
+  manage(op: string, target: string): Promise<void> {
+    return call("projects.Manage", op, target);
+  },
+  /** OpenCompose opens the New Task sheet for the page's Project. */
+  openCompose(delegate: boolean): Promise<void> {
+    return call("projects.OpenCompose", delegate);
+  },
+  /**
+   * OpenInWorkspace goes to the Chat target's pane in the Workspace (Terminal
+   * and the rest of the pane's tools).
+   */
+  openInWorkspace(): Promise<void> {
+    return call("projects.OpenInWorkspace");
+  },
+  /** OpenProject opens a Project's home. */
+  openProject(name: string): Promise<void> {
+    return call("projects.OpenProject", name);
+  },
+  /** OpenProjectWorkspace opens the task's worktree as a Workspace project. */
+  openProjectWorkspace(): Promise<void> {
+    return call("projects.OpenProjectWorkspace");
+  },
+  /**
+   * OpenReport opens a report link (served page in the browser, file in the
+   * system's opener).
+   */
+  openReport(link: string): Promise<void> {
+    return call("projects.OpenReport", link);
+  },
+  /** OpenTask opens a task of the board. */
+  openTask(id: string): Promise<void> {
+    return call("projects.OpenTask", id);
+  },
+  /** OpenWorkBoard opens the plugin's own board Tab. */
+  openWorkBoard(): Promise<void> {
+    return call("projects.OpenWorkBoard");
+  },
+  /**
+   * PickFiles asks for files and adds them to the page's Project Library under
+   * mode ("always", "reference" or "task"); it returns the ids added so a New
+   * Task sheet can tick them.
+   */
+  pickFiles(mode: string): Promise<string[]> {
+    return call("projects.PickFiles", mode);
+  },
+  /** Pin stars or unstars a task or a Project. */
+  pin(target: string, pinned: boolean): Promise<void> {
+    return call("projects.Pin", target, pinned);
+  },
+  /** RemoveLibraryItem deletes a library item. */
+  removeLibraryItem(id: string): Promise<void> {
+    return call("projects.RemoveLibraryItem", id);
+  },
+  /**
+   * SaveDescription replaces the task's description through the plugin and
+   * optionally tells the agent already at work.
+   */
+  saveDescription(id: string, text: string, tell: boolean): Promise<void> {
+    return call("projects.SaveDescription", id, text, tell);
+  },
+  /** SendLibraryItem hands one library file to the open task's running agent. */
+  sendLibraryItem(id: string): Promise<void> {
+    return call("projects.SendLibraryItem", id);
+  },
+  /** SetLibraryMode changes how a library item reaches the agents. */
+  setLibraryMode(id: string, mode: string): Promise<void> {
+    return call("projects.SetLibraryMode", id, mode);
+  },
+  /** Snapshot is the page's first read (later changes arrive as events). */
+  snapshot(): Promise<ProjectsView> {
+    return call("projects.Snapshot");
+  },
+} as const;
+
 // ---- Events ----
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
@@ -622,4 +1036,9 @@ export const events = {
   filesPreview: event<FilesPreviewTarget>("files:preview"),
   /** filesMenu carries the one action only the page can run (selectAll). */
   filesMenu: event<string>("files:menu"),
+  /**
+   * projectsViewEvent carries every changed snapshot to the page. Events
+   * emitted before the page is ready are replayed by the runtime.
+   */
+  projectsView: event<ProjectsView>("projects:view"),
 } as const;

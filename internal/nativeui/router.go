@@ -60,13 +60,13 @@ func (s *Shell) routeView(c *ui.Context) {
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.historyDetailPage(c, r.Param("id")) })
 		case r.Match(routeProject):
 			r.Title("Project")
-			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.workboardProjectPage(c) })
+			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.projectsPageBody(c) })
 		case r.Match(routeArchived):
 			r.Title("Archived")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.workboardArchivedPage(c) })
 		case r.Match(routeTask):
 			r.Title("Task")
-			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.workboardTaskPage(c) })
+			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.projectsPageBody(c) })
 		case r.Match("/inspector/{pane}"):
 			r.Title("Agent Inspector")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.inspectorPage(c, r.Param("pane")) })

@@ -1,19 +1,19 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 workboard_tasks 的 board 缓存/GroupOf 分组/projectForWorktree、workboard_actions 的 workboardActionsFor/startWorkboardAction、internal/workboard Client.Details、route_header 的 routeHeaderSpec、ds_components 的 settingsGroup/settingsCard
- * [OUTPUT]: routeTask（/task 路由）、openWorkboardTaskPage（Tasks 行点击的落点）、workboardTaskPage（页面内容）、taskRouteHeader（标题栏身份：任务名 + id · 分组）
- * [POS]: herdr-projects 单个任务的详情页；一次一个任务，id 存在 workboardPage（路由不带 id：任务 id 含 “/”）；内容 = 显眼的写操作按钮（主按钮：Approve / Approve Plan…）+ 状态（含 Queue/限额）/描述/Plan/失败/Review（含 findings 与往轮）/Handovers/Attempts/Report（Open Report 开服务链接或文件），数据来自 board 缓存加一次新读的 details；任务从看板消失时显示空态并可返回，不猜测
+ * [INPUT]: 依赖 workboard_tasks 的 board 缓存/GroupOf 分组/projectForWorktree、workboard_actions 的 workboardActionsFor/startWorkboardAction、internal/workboard Client.Details、route_header 的 routeHeaderSpec
+ * [OUTPUT]: routeTask（/task 路由）、openWorkboardTaskPage（Tasks 行点击的落点）、loadWorkboardPage、splitTaskDock（决定类动词进 dock）、taskRouteHeader（标题栏身份：任务名 + id · 分组）、openBoardLink
+ * [POS]: herdr-projects 单个任务页的 Go 一半：id 存在 workboardPage（路由不带 id：任务 id 含 “/”），页面体是 Projects WebView（projects_webview.go），这里只管打开、重读 details 与标题栏；任务从看板消失时页面显示空态并可返回，不猜测；不进会话恢复路由
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/workboard"
 )
@@ -25,7 +25,13 @@ type workboardPage struct {
 	id      string
 	detail  *workboard.Detail
 	loading bool
-	draft   string // the unsent message to the task's agent
+
+	// Read once per task page, off the UI lane.
+	changes         *gitworkbench.ChangesSnapshot
+	changesFor      string // the worktree `changes` was read for
+	changesLoading  bool
+	settings        *workboard.SettingsView
+	settingsLoading bool
 }
 
 // openWorkboardTaskPage opens the task page from the Tasks tab.
@@ -114,214 +120,20 @@ func (s *Shell) taskRouteHeader() routeHeaderSpec {
 	return spec
 }
 
-// workboardTaskPage is the page content: actions first, then what the
-// plugin knows about the task.
-func (s *Shell) workboardTaskPage(c *ui.Context) {
-	sp := Spacing()
-	if !s.workboardAvailable() {
-		emptyState(c, "The work board isn't available", "")
-		return
-	}
-	task, ok := s.workboardTaskByID(s.workboard.page.id)
-	if !ok {
-		ui.Column(c).Grow(1).Center().Gap(sp.M).Children(func() {
-			emptyState(c, "This task is no longer on the board", "")
-			if regularButton(c, "Back").Clicked() {
-				s.router.Back()
-			}
-		})
-		return
-	}
-	group := s.workboardTaskGroup(task)
-	detail := s.workboard.page.detail
-	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-			contentColumn(c, formColumnWidth, func() {
-				ui.Column(c).FillWidth().Padding(pageTopInset(), sp.XL, sp.XL).Gap(sp.XL).Children(func() {
-					s.workboardTaskActions(c, task, group, detail)
-					s.workboardTaskFacts(c, task, group, detail)
-					if detail != nil {
-						s.workboardTaskNarrative(c, detail, group)
-					}
-				})
-			})
-		})
-		// A task nobody is on (to do) or that is finished has no agent to tell.
-		if group != workboard.GroupTodo && group != workboard.GroupDone {
-			s.workboardMessageBox(c, "Message "+task.ID+"'s agent", "Say something to the agent…",
-				&s.workboard.page.draft, nil, func(text string, _ bool) { s.sendTaskMessage(task.ID, text) })
-		}
-	})
-}
-
-// workboardTaskActions is the button row: the group's writes (Approve is the
-// one primary action), then the way into the task's Project.
-func (s *Shell) workboardTaskActions(c *ui.Context, task workboard.Task, group workboard.Group, detail *workboard.Detail) {
-	sp := Spacing()
-	ui.Row(c).FillWidth().Gap(sp.M).Children(func() {
-		for _, a := range workboardActionsForTask(task, group, detail) {
-			var button ui.Element
-			if isPrimaryWrite(a.Kind) {
-				button = regularPrimaryButton(c, a.Label)
-			} else {
-				button = regularButton(c, a.Label)
-			}
-			if button.Clicked() {
-				s.startWorkboardAction(a, task)
-			}
-		}
-		if task.NeedsPick() && regularButton(c, "Compare in Work Board").Clicked() {
-			s.openWorkBoard() // the attempts to pick from are not in the list rows
-		}
-		pinned := s.workboard.board.extras.pinnedTasks[task.ID]
-		pinLabel := "Pin"
-		if pinned {
-			pinLabel = "Unpin"
-		}
-		if regularButton(c, pinLabel).Clicked() {
-			s.setWorkboardPin(task.ID, !pinned)
-		}
-		if detail != nil && projectForWorktree(s.projection, detail.Worktree) != "" {
-			if regularButton(c, "Open Project").Clicked() {
-				s.selectProject(projectForWorktree(s.projection, detail.Worktree))
-				s.showViewTerminal()
-			}
-		}
-	})
-}
-
-// workboardTaskFacts is the status group: only facts the plugin reported.
-func (s *Shell) workboardTaskFacts(c *ui.Context, task workboard.Task, group workboard.Group, detail *workboard.Detail) {
-	rows := []settingsRow{row("Status", "", func() { valueText(c, group.Label()) })}
-	add := func(label, value string) {
-		if strings.TrimSpace(value) != "" {
-			rows = append(rows, row(label, "", func() { valueText(c, value) }))
+// splitTaskDock separates the verbs that move the task forward (approve the
+// plan or send it back, pick an attempt, approve the merge): they live in the
+// dock above the message box, where the eye lands after reading. The rest stay
+// in the button row.
+func splitTaskDock(all []boardWrite) (dock, rest []boardWrite) {
+	for _, a := range all {
+		switch a.Kind {
+		case "approve", "approve-plan", "plan-back", "pick":
+			dock = append(dock, a)
+		default:
+			rest = append(rest, a)
 		}
 	}
-	add("Note", task.Msg)
-	add("Stage", task.Stage)
-	if detail != nil {
-		add("Agent", detail.Agent)
-		add("Branch", detail.Branch)
-		add("Pull request", detail.PR)
-		add("Queue", detail.QueueWords)
-		add("Time limit", detail.LimitTime)
-		add("Token limit", detail.LimitTokens)
-	} else {
-		add("Pull request", task.PR)
-	}
-	settingsGroup(c, "Task", rows...)
-}
-
-// workboardTaskNarrative is the free text: what was asked, what failed, what
-// the reviewer said (g is the task's group). All of it is clipped; the plugin's board has the rest.
-func (s *Shell) workboardTaskNarrative(c *ui.Context, d *workboard.Detail, g workboard.Group) {
-	t := c.Theme()
-	body := func(text string, maxLines int) {
-		ui.Text(c, clipPreview(text, 1600, maxLines)).FontSize(Typography().BodySmall).Selectable()
-	}
-	if d.Description != "" {
-		settingsCard(c, "Description", func() { body(d.Description, 12) })
-	}
-	// The plugin keeps a failure record after a Stop; a task nobody is on (to
-	// do) or that is finished is not failing now, so the card would mislead.
-	if d.Failure && g != workboard.GroupTodo && g != workboard.GroupDone {
-		settingsCard(c, "Failure", func() {
-			if d.FailureTitle != "" {
-				ui.Text(c, d.FailureTitle).FontWeight(WeightSemibold)
-			}
-			if d.FailureDetail != "" {
-				body(d.FailureDetail, 14)
-			}
-			if d.FailureNext != "" {
-				ui.Text(c, d.FailureNext).FontSize(Typography().Caption).TextColor(t.TextMuted)
-			}
-		})
-	}
-	if d.Plan != "" {
-		settingsCard(c, "Plan", func() { body(d.Plan, 16) })
-	}
-	if d.ReviewText != "" || d.ReviewBy != "" || d.ReviewFailed || len(d.Findings) > 0 {
-		settingsCard(c, "Review", func() {
-			verdict := "Passed"
-			if d.ReviewFailed {
-				verdict = "Did not pass"
-			}
-			if d.ReviewFindings > 0 {
-				verdict += " · " + strconv.Itoa(d.ReviewFindings) + " finding" + pluralS(d.ReviewFindings)
-			}
-			if d.ReviewBy != "" {
-				verdict += " · " + d.ReviewBy
-			}
-			ui.Text(c, verdict).FontWeight(WeightSemibold)
-			if d.ReviewText != "" {
-				body(d.ReviewText, 12)
-			}
-			workboardFindings(c, d.Findings)
-			// The current round is the last of the history; the rest are one line each.
-			for i := 0; i+1 < len(d.Reviews); i++ {
-				r := d.Reviews[i]
-				line := "Round " + strconv.Itoa(i+1) + " · " + map[bool]string{true: "Did not pass", false: "Passed"}[r.Failed]
-				if n := len(r.Findings); n > 0 {
-					line += " · " + strconv.Itoa(n) + " finding" + pluralS(n)
-				}
-				ui.Text(c, line).FontSize(Typography().Caption).TextColor(t.TextMuted)
-			}
-		})
-	}
-	if d.LimitStopped != "" {
-		settingsCard(c, "Stopped at a limit", func() { body(d.LimitStopped, 4) })
-	}
-	if len(d.Handovers) > 0 {
-		settingsCard(c, "Handovers", func() {
-			for _, h := range d.Handovers {
-				body(h, 3)
-			}
-		})
-	}
-	if len(d.Attempts) > 0 {
-		settingsCard(c, "Attempts", func() {
-			for _, a := range d.Attempts {
-				line := strings.ToUpper(a.Letter) + " · " + fallbackText(a.Agent, "agent") + " · " + a.Standing
-				if a.Stat != "" {
-					line += " · " + a.Stat
-				}
-				ui.Text(c, line).FontSize(Typography().BodySmall)
-			}
-		})
-	}
-	if d.ReportLink != "" {
-		settingsCard(c, "Report", func() {
-			ui.Text(c, clipPreview(d.ReportLink, 300, 2)).FontSize(Typography().Caption).TextColor(t.TextMuted).Selectable()
-			if regularButton(c, "Open Report").Clicked() {
-				s.openBoardLink(d.ReportLink)
-			}
-		})
-	}
-}
-
-// workboardFindings lists a reviewer's findings: the plugin's severity word,
-// the subject, then where and the proof, clipped.
-func workboardFindings(c *ui.Context, findings []workboard.Finding) {
-	t := c.Theme()
-	sp := Spacing()
-	for _, f := range findings {
-		if f.Subject == "" {
-			continue
-		}
-		ui.Row(c).FillWidth().Gap(sp.M).Children(func() {
-			ui.Text(c, strings.ToUpper(fallbackText(f.Severity, "major"))).FontSize(Typography().Micro).
-				FontWeight(WeightSemibold).TextColor(t.TextMuted).Width(52).Shrink(0)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-				ui.Text(c, clipPreview(f.Subject, 400, 4)).FontSize(Typography().BodySmall).Selectable()
-				for _, extra := range []string{f.Where, f.Proof} {
-					if extra != "" {
-						ui.Text(c, clipPreview(extra, 400, 3)).FontSize(Typography().Caption).TextColor(t.TextMuted).Selectable()
-					}
-				}
-			})
-		})
-	}
+	return dock, rest
 }
 
 // openBoardLink opens what the plugin gave: a served http(s) report in the

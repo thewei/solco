@@ -50,6 +50,7 @@ type workboardState struct {
 	delegate      delegateDraft
 	pick          pickDraft
 	settings      workboardSettingsState
+	library       workboardLibraryState
 }
 
 // workboardAvailable is the one gate every workboard surface and command

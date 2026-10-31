@@ -316,11 +316,13 @@ func (s *Shell) openProjectRow(name string) {
 			pane, ok := s.coordinatorPane(extras.coordinators[name])
 			slog.Info("project row open", "project", name, "coordinator_state", extras.coordinators[name].State,
 				"pane", extras.coordinators[name].Pane, "in_session", ok, "read_failed", err != nil)
-			if ok {
+			// Native view: the Project home embeds the coordinator's Chat, so
+			// the row always opens it. Board view keeps going to the pane.
+			if ok && s.workboardBoardMode() {
 				s.openPane(pane)
 				return
 			}
-			if extras.coordinators[name].Running() {
+			if extras.coordinators[name].Running() && !ok {
 				s.pendingToast = name + "'s coordinator isn't open in this session"
 			}
 			s.openWorkboardProjectPage(name)
@@ -340,12 +342,12 @@ func (s *Shell) boardPaneSelected() bool {
 // projectRowTip says where the Project row's click goes (as the cache knows).
 func (s *Shell) projectRowTip(project workboardProject, hasCoord bool) string {
 	switch {
-	case hasCoord:
+	case s.workboardBoardMode() && hasCoord:
 		return project.Name + ": open its coordinator"
 	case s.workboardBoardMode():
 		return project.Name + ": open the Work board"
 	default:
-		return project.Name + ": open its tasks"
+		return project.Name + ": open its page"
 	}
 }
 

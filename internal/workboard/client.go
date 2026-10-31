@@ -261,6 +261,20 @@ func (c *Client) Tell(ctx context.Context, id, text string) error {
 	return err
 }
 
+// Describe replaces a task's description (`describe <id> <text>`); what the
+// agent already read stays read, so a running task is told with Tell as well.
+func (c *Client) Describe(ctx context.Context, id, text string) error {
+	text = strings.TrimSpace(text)
+	if err := checkID("describe", id); err != nil {
+		return err
+	}
+	if text == "" || strings.HasPrefix(text, "-") {
+		return errors.New("workboard: describe: invalid description")
+	}
+	_, err := c.exec(ctx, "describe", id, text)
+	return err
+}
+
 // CoordinatorTell says something to a project's coordinator (the plugin starts
 // it when it is not running); delegate puts an agent on whatever the
 // coordinator adds from the message.
