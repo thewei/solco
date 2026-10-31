@@ -40,6 +40,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # MyGo caches a release ID and overwrites assets by name; these uploads
+      # must run one at a time. GitHub Actions uses the hyphenated field.
+      max-parallel: 1
       matrix:
         include:
           - name: macOS
