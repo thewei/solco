@@ -161,3 +161,10 @@ func spanName(d time.Duration) string {
 	}
 	return fmt.Sprintf("%d-minute", int(d/time.Minute))
 }
+
+// FindTool resolves a CLI by name the way the Quota readers do (PATH, then
+// the usual install directories), for sibling read-only domains.
+func FindTool(name string) (string, error) { return findExecutable(name) }
+
+// ToolEnv is the child environment for a tool resolved with FindTool.
+func ToolEnv(binary string) []string { return toolEnv(binary) }

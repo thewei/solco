@@ -7,7 +7,7 @@ Usage 是 Solco 的只读额度读取域（2026-10-30 产品决策）：把各 A
 
 - `usage.go`：ID（Claude/Codex/Cursor/Zhipu/Copilot/Antigravity）、Window（用量%、跨度、重置时间、Amount、Used/Max/Unit 计数额度、Group 模型组、Minor 次要限额）、Level（≥80% warn、≥95% bad）、Pace（已过 15% 窗口才外推）、Snapshot/State/Result、哨兵错误 ErrSetup/ErrUnauthorized/ErrUnavailable/ErrCustomEndpoint、Fetcher 接口。
 - `service.go`：每家内存缓存（TTL 30 s，Claude 5 min）、手动刷新下限（10 s，Claude 60 s）、429 退避、失败保留旧读数（Stale）、并发 Refresh 跳过忙碌项；`NewServiceClock` 供测试步进时钟。
-- `httpjson.go`：HTTP 客户端（20 s、禁跨域重定向）、getJSON/postJSON（401/403→未授权、429→限流、1 MiB 上限、错误只含 host/status）、工具目录与可执行文件查找。
+- `httpjson.go`：HTTP 客户端（20 s、禁跨域重定向）、getJSON/postJSON（401/403→未授权、429→限流、1 MiB 上限、错误只含 host/status）、工具目录与可执行文件查找（`FindTool`/`ToolEnv` 供 agentcatalog 与 voice 复用）。
 - `codex.go`：起 `codex app-server`，JSON-RPC `account/rateLimits/read`；零凭据，不读 accountId。
 - `claude.go`：`/api/oauth/usage`；令牌来自 Keychain `Claude Code-credentials` 或 `~/.claude/.credentials.json`；自定义 `ANTHROPIC_BASE_URL` 直接 ErrCustomEndpoint 不发请求；过期令牌不刷新。
 - `cursor.go`：`cursor.com/api/usage-summary`（Cookie 形式）；旧请求制套餐（`/api/usage?user=<sub>` 的 gpt-4.maxRequestUsage>0，如 500 次）以请求数为准，替换 Total/API/Auto 百分比（Plan 显示 "Pro · 500 requests"），新套餐或该调用失败则只用 summary；令牌优先级 手动 > cursor-agent Keychain > 明文 state.vscdb（加密的 safeStorage 值跳过，绝不解密）。
