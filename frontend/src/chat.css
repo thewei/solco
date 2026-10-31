@@ -1724,11 +1724,12 @@
   white-space: nowrap;
 }
 /* The rail sits in the column's own 24px side padding (ticks end at 22px),
-   so it never covers text at any width; only a very narrow page with a mouse
-   hides it. A touch screen (the phone client) keeps it: a tap jumps to the
-   turn, and the summary card is cut to the screen's width. */
-@media (max-width: 520px) and (hover: hover) {
-  .toc {
+   so it never covers text at any width; only a very narrow desktop window
+   hides it. The phone client (mobile.tsx marks <html data-host="phone">; media
+   features such as hover are not reliable across Android WebViews) keeps it:
+   a tap jumps to the turn, and the summary card is cut to the screen's width. */
+@media (max-width: 520px) {
+  html:not([data-host="phone"]) .toc {
     display: none;
   }
 }

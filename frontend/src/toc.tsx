@@ -127,8 +127,8 @@ export function TocRail({
   const jump = (at: number) => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     scrollTo(entries[at].index, !reduced);
-    // A tap has no pointer-leave: close the summary the tap opened.
-    if (window.matchMedia("(hover: none)").matches) setHover(null);
+    // A tap has no pointer-leave: close the summary the tap opened (touch screens, the phone client).
+    if (document.documentElement.dataset.host === "phone" || window.matchMedia("(hover: none)").matches) setHover(null);
   };
 
   const shown = hover ? entries[hover.at] : null;

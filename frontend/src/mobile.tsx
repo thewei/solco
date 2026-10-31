@@ -8,6 +8,7 @@ import "./theme.css";
 // without the Projects and Files routes. The host (solco-mobile) injects a
 // `globalThis.mygo` shim before this script runs, so the generated bridge in
 // ./mygo.ts talks to the Host through React Native instead of a MyGo window.
+document.documentElement.dataset.host = "phone";
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
