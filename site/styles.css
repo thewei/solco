@@ -28,6 +28,7 @@ html, body { margin: 0; background: #0e0f11; }
 .solco .cta { margin-top:32px; display:flex; align-items:center; gap:18px; color:var(--mute); }
 .solco .cta .pill { height:43px; padding:0 21px; }
 .solco .cta a:not(.pill):hover { color:var(--fg); }
+.solco .latest { font-size:14px; color:var(--mute); } .solco .latest a { border-bottom:1px solid #33363c; } .solco .latest a:hover { color:var(--fg); }
 .solco .install { margin-top:34px; max-width:640px; border:1px solid var(--line); border-radius:12px; background:#121315; overflow:hidden; }
 .solco .tabs { display:flex; gap:2px; padding:6px; border-bottom:1px solid var(--line); }
 .solco .tabs button { height:28px; padding:0 12px; border:0; border-radius:7px; background:none; color:var(--dim); font-size:13px; cursor:pointer; }

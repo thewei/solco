@@ -23,7 +23,7 @@
   <header class="hero wrap"><div>
     <h1>Coding agents,<br><span>without the juggling.</span></h1>
     <p class="sub">Solco is the native macOS workspace for agents and the work behind them. <b>Open it once. Return to what moved.</b></p>
-    <div class="cta"><a class="pill" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for Mac</a><a href="#workflow">Walk the workflow →</a></div>
+    <div class="cta"><a class="pill" data-dl href="https://github.com/thewei/solco/releases/latest">Download for Mac</a><span class="latest" data-latest></span><a href="#workflow">Walk the workflow →</a></div>
     <img class="ram" src="./assets/appicon/solco-512.png" alt="">
   </div></header>
   <section class="statement wrap"><p>Native speed. Clear attention. <span>Sessions, terminal, files and review share one calm surface instead of competing for it.</span></p></section>
@@ -46,7 +46,7 @@ Solco  → native macOS workspace
 Herdr  → sessions · panes · agents · process life</pre></section>
     </article>
   </div>
-  <section id="download" class="end wrap"><h2>Ready in one install.<br><span>Keep the workflow.</span></h2><div class="cta"><a class="pill" href="https://github.com/thewei/solco/releases/latest/download/Solco-macos-aarch64.zip">Download for Mac</a><a href="https://github.com/thewei/solco">Star on GitHub →</a></div></section>
+  <section id="download" class="end wrap"><h2>Ready in one install.<br><span>Keep the workflow.</span></h2><div class="cta"><a class="pill" data-dl href="https://github.com/thewei/solco/releases/latest">Download for Mac</a><span class="latest" data-latest></span><a href="https://github.com/thewei/solco">Star on GitHub →</a></div></section>
   <footer class="foot wrap"><div class="me"><div class="top"><img src="./assets/appicon/solco-128.png" alt=""><b>Solco</b></div><span>Coding agents, without the juggling.</span><span>Free and open source, GPL-3.0.</span></div><div><h4>Product</h4><a href="#features">Features</a><a href="#download">Download</a></div><div><h4>Learn</h4><a href="#workflow">Workflow</a><a href="#ownership">Architecture</a></div><div><h4>Community</h4><a href="https://github.com/thewei/solco">GitHub</a><a href="https://herdr.dev">Herdr</a></div></footer>
 </div>
 
@@ -59,6 +59,31 @@ Herdr  → sessions · panes · agents · process life</pre></section>
         setTimeout(() => { button.textContent = 'Copy'; }, 1400);
       });
     });
+    // Latest release: stamp the visible version and point the pill at the
+    // arm64 DMG. Cached 1 h in localStorage; on any failure the page keeps
+    // the releases/latest page link.
+    (async () => {
+      const KEY = 'solco-latest', TTL = 36e5;
+      let rel = null;
+      try { const c = JSON.parse(localStorage.getItem(KEY) || 'null'); if (c && Date.now() - c.t < TTL) rel = c.r; } catch {}
+      if (!rel) {
+        try {
+          const res = await fetch('https://api.github.com/repos/thewei/solco/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
+          if (res.ok) { rel = await res.json(); try { localStorage.setItem(KEY, JSON.stringify({ r: rel, t: Date.now() })); } catch {} }
+        } catch {}
+      }
+      if (!rel) return;
+      const ver = String(rel.tag_name || '').replace(/^v/, '');
+      document.querySelectorAll('[data-latest]').forEach((el) => {
+        const a = document.createElement('a');
+        a.href = rel.html_url || 'https://github.com/thewei/solco/releases';
+        a.textContent = 'v' + ver;
+        el.textContent = '';
+        el.appendChild(a);
+      });
+      const dmg = (rel.assets || []).find((x) => /^Solco\..*\.arm64\.dmg$/.test(x.name));
+      if (dmg) document.querySelectorAll('[data-dl]').forEach((a) => { a.href = dmg.browser_download_url; });
+    })();
   </script>
 </body>
 </html>
