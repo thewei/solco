@@ -9,6 +9,7 @@ package projectlibrary
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -63,7 +65,10 @@ type Item struct {
 }
 
 // Store is the shelf of every Project, rooted at one folder.
-type Store struct{ root string }
+type Store struct {
+	root string
+	mu   sync.Mutex // read-modify-write of one manifest
+}
 
 // New returns a Store rooted at dir (created on first write).
 func New(dir string) *Store { return &Store{root: dir} }
@@ -71,12 +76,17 @@ func New(dir string) *Store { return &Store{root: dir} }
 var projectSafe = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 // projectDir is the Project's folder: its name made path-safe, never empty,
-// never able to leave the root.
+// never able to leave the root. A name the sanitiser had to change carries a
+// short hash of the original, so "a b" and "a_b" never share a shelf.
 func (s *Store) projectDir(project string) (string, error) {
 	project = strings.TrimSpace(project)
 	key := strings.Trim(projectSafe.ReplaceAllString(project, "_"), ".")
 	if project == "" || key == "" || s.root == "" {
 		return "", ErrBadProject
+	}
+	if key != project {
+		sum := sha256.Sum256([]byte(project))
+		key += "-" + hex.EncodeToString(sum[:4])
 	}
 	return filepath.Join(s.root, key), nil
 }
@@ -146,7 +156,7 @@ func (s *Store) save(project string, items []Item) error {
 	if err := os.Rename(tmp, path); err != nil {
 		return err
 	}
-	return s.WriteIndex(project)
+	return s.writeIndex(project)
 }
 
 // Path is the absolute path of an item's file.
@@ -219,6 +229,8 @@ func newID() (string, error) {
 // Add puts a file's bytes on the shelf. New items are Reference: indexed, not
 // pushed. The file is stored 0600 under the Project's own folder.
 func (s *Store) Add(project, name string, data []byte) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if len(data) == 0 {
 		return Item{}, ErrEmpty
 	}
@@ -274,11 +286,17 @@ func (s *Store) AddFile(project, src string) (Item, error) {
 	if err != nil {
 		return Item{}, err
 	}
+	// A link can carry an innocent name over a credential: judge the target too.
+	if real, err := filepath.EvalSymlinks(src); err == nil && looksLikeCredential(real, data) {
+		return Item{}, ErrCredential
+	}
 	return s.Add(project, filepath.Base(src), data)
 }
 
 // SetMode changes how often an item reaches the agent.
 func (s *Store) SetMode(project, id string, mode Mode) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if mode != Always && mode != Reference && mode != Task {
 		return errors.New("projectlibrary: unknown mode")
 	}
@@ -301,6 +319,8 @@ func (s *Store) SetMode(project, id string, mode Mode) error {
 
 // Remove takes an item off the shelf and deletes its copy.
 func (s *Store) Remove(project, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	items, err := s.List(project)
 	if err != nil {
 		return err
@@ -320,6 +340,12 @@ func (s *Store) Remove(project, id string) error {
 // WriteIndex regenerates INDEX.md: the one file an agent opens to learn what
 // the shelf holds. Task items are not listed (they travel with their task).
 func (s *Store) WriteIndex(project string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.writeIndex(project)
+}
+
+func (s *Store) writeIndex(project string) error {
 	items, err := s.List(project)
 	if err != nil {
 		return err

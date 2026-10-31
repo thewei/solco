@@ -1,8 +1,12 @@
 package projectlibrary
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -200,5 +204,48 @@ func TestMentionQuotesWhitespacePaths(t *testing.T) {
 	}
 	if got := mention("/tmp/x.md"); got != "/tmp/x.md" {
 		t.Fatalf("mention = %q", got)
+	}
+}
+
+func TestSanitisedProjectNamesDoNotCollide(t *testing.T) {
+	s := New(t.TempDir())
+	a, _ := s.projectDir("a b")
+	b, _ := s.projectDir("a_b")
+	if a == b {
+		t.Fatalf("\"a b\" and \"a_b\" share %s", a)
+	}
+	if clean, _ := s.projectDir("plain-name"); filepath.Base(clean) != "plain-name" {
+		t.Fatalf("a clean name keeps its folder: %s", clean)
+	}
+}
+
+func TestAddFileJudgesASymlinkTarget(t *testing.T) {
+	dir := t.TempDir()
+	secret := filepath.Join(dir, ".env")
+	os.WriteFile(secret, []byte("TOKEN=1"), 0o600)
+	link := filepath.Join(dir, "notes.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Skip(err)
+	}
+	if _, err := New(t.TempDir()).AddFile("p", link); !errors.Is(err, ErrCredential) {
+		t.Fatalf("a link to a credential file = %v, want ErrCredential", err)
+	}
+}
+
+func TestConcurrentAddsKeepEveryItem(t *testing.T) {
+	s := New(t.TempDir())
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if _, err := s.Add("p", fmt.Sprintf("f%d.md", i), []byte("x")); err != nil {
+				t.Error(err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if items, _ := s.List("p"); len(items) != 20 {
+		t.Fatalf("items = %d, want 20", len(items))
 	}
 }
