@@ -42,7 +42,7 @@ peek_test.go: PeekLine 表驱动（空屏/边框行/控制字符/多字节截断
 netaddr_test.go: 候选过滤表、列出即可 Validate、真机枚举不报错、Reconfigure 换口/作废配对码/坏配置与通配保持停止/关闭后不再可配对/端口被占失败
 server_test.go: 假 Backend 驱动——无 token/错 token/非 Bearer 全 401、子协议鉴权与旧前缀拒绝、bootstrap、配对一次性与 TLS 指纹固定端到端、off 不开口与通配拒绝、树顺序/无聚焦/ETag 仅内容变才动/未知 instance 不触达后端/后端错误不泄路径、events hello/tree.changed/静默/重订阅、终端帧顺序与头、未知 ID 与坏栅格 4xx 且不建命令、输入走对 pane 与键名校验与 Herdr 拒绝原样回传、resize 重启并回收旧子进程、Herdr 关闭→4404、每设备上限与释放、撤销关 WS 并杀子进程
 contract_test.go: 可选真 herdr 契约（SOLCO_REMOTEHOST_CONTRACT=1）：隔离 session 里整链路——51×19 首帧整屏、输入回显；结束删除 session
-serve_launch_test.go + export_test.go: 外部测试包（可 import internal/app 而不成环）经 ServeLauncher / ServeGit 给常驻 Host 装上真 RemoteLauncher 与 RemoteGit，让手机真机能走完整启动链路
+serve_launch_test.go + export_test.go: 外部测试包（可 import internal/app 而不成环）经 ServeLauncher / ServeGit 给常驻 Host 装上真 RemoteLauncher 与 RemoteGit，让手机真机能走完整启动链路（另经 ServeQueue 装上同一个 LaunchService 的 RemoteFollowUps，并随之启动跟进投递 worker）
 contract_test.go: 另有 SOLCO_REMOTEHOST_SERVE=<dir>：真 TLS + 真 herdr session 常驻给外部客户端（solco-mobile `pnpm e2e:v3`），写 pair-url.txt/instance.txt，等 <dir>/done 退出（SOLCO_REMOTEHOST_SERVE_MINUTES 调整常驻时长；SOLCO_REMOTEHOST_SERVE_IDENTITY=`codex=<rollout 路径>` 代替 Mac 应用的 hook 记忆，给 Claude/Codex pane 一个会话身份）
 
 设计与协议草案: designs/remote-host/README.md。本包不 import MyGo、不 import nativeui；P1 已含 peek、地址候选与 Reconfigure；挂载与设置页在 nativeui/remote_settings.go；剩真机总验。
