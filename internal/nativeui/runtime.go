@@ -147,6 +147,7 @@ func (s *Shell) enterInstance(name string, projection herdr.Projection) {
 	s.applyProjection(projection, true)
 	s.loading = false
 	s.bootstrapPending = false
+	s.noticeHookRepair()
 }
 
 func (s *Shell) mutate(fn func() (herdr.Projection, error)) {

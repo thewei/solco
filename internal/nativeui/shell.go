@@ -219,6 +219,8 @@ type Shell struct {
 	// card per provider joining the Herdr integration facet and the direct
 	// status hook facet (audit on entry/refresh/after-action only).
 	providers providersUIState
+	// hookRepairChecked: the launch-time hook check ran (noticeHookRepair).
+	hookRepairChecked bool
 
 	// launch drives the Agent launch transaction over the verified Herdr
 	// transport (history continuation, follow-up queue).
