@@ -354,9 +354,7 @@ export function SessionState(props: {
     <div className="sess-state invite" role="status">
       <Icon name="step" size={18} />
       <div className="st-title">Start the conversation</div>
-      <div className="st-sub">
-        {props.starting ? `${name} is starting…` : `${name} is ready.`}
-      </div>
+      {props.starting ? <div className="st-sub">{`${name} is starting…`}</div> : null}
       {props.links && props.links.length > 0 && !props.starting ? (
         <div className="links">
           <div className="links-h">Already working here? Show a recent session instead — it may not be this agent's.</div>

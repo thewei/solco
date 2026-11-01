@@ -409,7 +409,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // Phone CSS folds the composer to one row while this holds and it is not focused.
   const atRest = panel === null && !voiceBusy && files.length === 0 && !draft.includes("\n") && !(working && hasContent);
   const compactNow = disposition === "ready" && !sending && (catalog?.commands ?? []).some((c) => c.name === "/compact");
-  const ctxHint = !readOnly && Boolean(state?.contextTokens) && ctxFraction !== null && ctxFraction >= 0.85 && ctxHintOff !== conversationId;
+  const ctxHint = !readOnly && Boolean(state?.contextTokens) && ctxFraction !== null && ctxFraction >= 0.92 && ctxHintOff !== conversationId;
   useEffect(() => {
     if (ctxHintOff && ctxFraction !== null && ctxFraction < 0.7) setCtxHintOff("");
   }, [ctxFraction, ctxHintOff]);
@@ -1367,11 +1367,6 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
           {outbox ? (
             <OutboxRow outbox={outbox} onRetry={retryOutbox} onEdit={editOutbox} onDiscard={() => setOutbox(null)} />
           ) : null}
-          {state?.echoPending && !outbox && !state.loading && lastTurn?.user ? (
-            <div className="delivery sent" role="status">
-              <Icon name="check" size={13} /> Sent
-            </div>
-          ) : null}
           {showPendingAssistant && !outbox ? (
             <div className="turn assistant pending" role="status" aria-live="polite">
               <WorkingLine sinceMs={lastTurn?.tsMs} />
@@ -1380,8 +1375,15 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
         </div>
       </div>
       {showJump ? (
-        <button type="button" className="jump" onClick={jumpToLatest}>
-          {unread > 1 ? `${unread} new messages ↓` : "New messages ↓"}
+        <button
+          type="button"
+          className="jump"
+          aria-label={unread > 1 ? `${unread} new messages, jump to latest` : "Jump to latest"}
+          title={unread > 1 ? `${unread} new messages` : "Jump to latest"}
+          onClick={jumpToLatest}
+        >
+          <Icon name="up" size={15} />
+          {unread > 1 ? <span>{unread}</span> : null}
         </button>
       ) : null}
       {readOnly ? (

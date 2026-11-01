@@ -56,7 +56,7 @@ export function TurnRow(props: TurnProps) {
     const shown = userDisplay(turn.text ?? "");
     return (
       <div className={`turn user${tap.cls}`} onClick={tap.onClick}>
-        <div className={shown.output ? "bubble out" : "bubble"}>{mentions(shown.text)}</div>
+        <UserBubble text={shown.text} className={shown.output ? "bubble out" : "bubble"} />
         <Foot turn={turn} source={shown.text} onReuse={shown.output ? undefined : props.onReuse} />
       </div>
     );
@@ -653,17 +653,53 @@ export function userDisplay(text: string): { text: string; output: boolean } {
   return { text, output: false };
 }
 
-/** @path mentions in a user message read as inline chips (@"a path with spaces" is one chip). */
-function mentions(text: string): React.ReactNode {
-  return text.split(/(@"[^"\n]+"|@\S+)/g).map((part, index) =>
-    part.startsWith("@") && part.length > 1 ? (
-      <span key={index} className="mention" data-path={part.replace(/^@"?|"$/g, "")}>{part.replace(/^@"(.*)"$/, "@$1")}</span>
-    ) : (
-      part
-    ),
+/** A user message past ten lines starts folded to eight, with one line to open it (a pasted log must not fill the screen). */
+function UserBubble({ text, className }: { text: string; className: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fold, setFold] = useState<{ limit: number; lines: number } | null>(null);
+  const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const style = getComputedStyle(el);
+      const line = parseFloat(style.lineHeight) || 24;
+      const pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const lines = Math.round((el.scrollHeight - pad) / line);
+      setFold(lines > 10 ? { limit: line * 8 + pad, lines } : null);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [text]);
+  const folded = fold !== null && !open;
+  return (
+    <>
+      <div ref={ref} className={`${className}${folded ? " folded" : ""}`} style={folded ? { maxHeight: fold.limit } : undefined}>
+        {mentions(text)}
+      </div>
+      {fold ? (
+        <button type="button" className="bmore" onClick={() => setOpen(!open)}>
+          {open ? "Show less" : `Show all ${fold.lines} lines`}
+        </button>
+      ) : null}
+    </>
   );
 }
 
+/** @path mentions in a user message read as inline chips (@"a path with spaces" is one chip). */
+function mentions(text: string): React.ReactNode {
+  return text.split(/(@"[^"\n]+"|@\S+)/g).map((part, index) => {
+    if (!(part.startsWith("@") && part.length > 1)) return part;
+    const path = part.replace(/^@"?|"$/g, "");
+    // An absolute path (an attachment's cache file, say) reads as its file name; the whole path stays in data-path and the tooltip.
+    const absolute = /^(\/|~\/)/.test(path);
+    const name = absolute ? path.slice(path.lastIndexOf("/") + 1) || path : path;
+    return (
+      <span key={index} className="mention" data-path={path} title={absolute ? path : undefined}>@{name}</span>
+    );
+  });
+}
 // useDelayed turns a condition on only after it has held for ms; any change
 // of key restarts the wait (the anti-flicker rule for the Working line).
 function useDelayed(on: boolean, ms: number, key: unknown): boolean {

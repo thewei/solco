@@ -184,6 +184,23 @@
   text-autospace: ideograph-alpha ideograph-numeric;
 }
 
+.turn.user .bubble.folded {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2.6em), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.6em), transparent);
+}
+
+.turn.user .bmore {
+  margin-top: 2px;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  color: var(--i3);
+}
+
+.turn.user .bmore:hover {
+  color: var(--i1);
+}
+
 .turn.assistant {
   margin: 0 0 14px;
 }
@@ -847,13 +864,24 @@ html[data-host="phone"] .turn:not(.open):not(.last) .foot {
   bottom: 120px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid var(--hair2);
   background: var(--panel);
   color: var(--i1);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   border-radius: 999px;
-  padding: 4px 14px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  justify-content: center;
   z-index: 2;
+}
+
+.jump svg {
+  transform: rotate(180deg);
 }
 
 .composer {
@@ -983,6 +1011,11 @@ html[data-host="phone"] .cmp.rest:not(:focus-within) .cbar > :not(.send) {
 }
 /* Nothing to send yet: no dead button, the field takes the row. */
 html[data-host="phone"] .cmp.rest:not(:focus-within) .cbar > .send:disabled {
+  display: none;
+}
+/* Typing with the keyboard up: a folded Tasks tray or queue card steps aside. */
+html[data-host="phone"] .composer .col:has(.cmp:focus-within) > .tasks:has(.thead[aria-expanded="false"]),
+html[data-host="phone"] .composer .col:has(.cmp:focus-within) > .queueCard:not(:has(.qcList)) {
   display: none;
 }
 /* The ring below 70% asks for nothing; it stays a desktop-only gauge. */

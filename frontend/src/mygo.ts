@@ -952,11 +952,9 @@ export const chat = {
     return call("chat.SwitchModel", id);
   },
   /**
-   * Transcribe sends a recorded clip to the configured source — an
-   * OpenAI-compatible transcription endpoint (local proxies included) or, when
-   * the user consented in Settings → Voice, the ChatGPT sign-in Codex holds —
-   * and returns the text.
-   * The API key never reaches the page and is never logged.
+   * Transcribe sends a recorded clip to the configured source (see
+   * transcribeClip) and returns the text. The API key never reaches the page and
+   * is never logged.
    */
   transcribe(audioBase64: string, mime: string): Promise<string> {
     return call("chat.Transcribe", audioBase64, mime);
