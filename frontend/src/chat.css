@@ -1308,8 +1308,12 @@
   border: 1px solid var(--hair2);
   border-radius: 14px;
   background: var(--panel);
-  max-height: 220px;
+  /* A fixed ceiling that also follows the viewport: with the phone keyboard up the
+     page is short, and a taller list would squeeze the conversation out of view. */
+  max-height: min(220px, 32vh);
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain; /* the list scrolls itself, never the page behind it */
   margin: 0 0 8px;
   padding: 4px;
 }
@@ -1994,6 +1998,11 @@
   outline: 0;
   padding: 6px 10px 8px;
   margin-bottom: 4px;
+  /* stays at the top while the list scrolls under it (the list's own 4px padding is offset) */
+  position: sticky;
+  top: -4px;
+  background: var(--panel);
+  z-index: 1;
 }
 
 .modelchip {

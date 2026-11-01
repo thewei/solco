@@ -50,6 +50,8 @@ export function TasksTray({
   onOpenSubagent,
   live,
   compact,
+  forced,
+  onToggle,
 }: {
   plan?: ChatPlan;
   /** Sub-agents of the conversation: a second section, never paired with plan items. */
@@ -57,22 +59,31 @@ export function TasksTray({
   onOpenSubagent?: (id: string) => void;
   live: boolean;
   compact: boolean;
+  /** The composer's one-open-surface rule: true = this card was opened, false = another surface took the room. */
+  forced?: boolean;
+  onToggle?: (open: boolean) => void;
 }) {
   const [toggled, setToggled] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (forced === false) setToggled(false);
+  }, [forced]);
   const items = plan?.items ?? [];
   const done = items.filter((item) => item.status === "done").length;
   const counted = items.filter((item) => item.status !== "dropped").length;
   const finished = plan ? planFinished(plan) : true;
   const running = subagents.filter((sub) => sub.status === "running").length;
   // A card asking the user something takes the room: the list folds then.
-  const open = toggled ?? (!compact && (!finished || running > 0) && items.length + subagents.length <= 7);
+  const open = forced ?? toggled ?? (!compact && (!finished || running > 0) && items.length + subagents.length <= 7);
   const current = items.find((item) => item.status === "active") ?? items.find((item) => item.status === "pending");
   const runningLabel = running > 0 ? `${running} sub-agent${running === 1 ? "" : "s"} running` : "";
 
   let phase = "";
   return (
     <div className={`tasks${finished && running === 0 ? " finished" : ""}`}>
-      <button type="button" className="thead" aria-expanded={open} onClick={() => setToggled(!open)}>
+      <button type="button" className="thead" aria-expanded={open} onClick={() => {
+          setToggled(!open);
+          onToggle?.(!open);
+        }}>
         <Icon name={plan ? "tasks" : "agent"} size={15} />
         <span className="ttl">{plan ? "Tasks" : "Sub-agents"}</span>
         {plan ? (

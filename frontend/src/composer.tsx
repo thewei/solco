@@ -247,7 +247,7 @@ export function ModelPanel(props: {
       {models.length > 8 ? (
         <input
           className="msearch"
-          autoFocus
+          autoFocus={document.documentElement.dataset.host !== "phone"} // a phone keyboard would shrink the page
           placeholder="Search models"
           value={query}
           onChange={(event) => {

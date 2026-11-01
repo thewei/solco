@@ -1,6 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
-import type { ChatQueuedItem } from "./mygo";
+import type { ChatBridgeQueuedItem as ChatQueuedItem } from "./mygo";
 
 /**
  * The queue of follow-ups waiting behind a running turn (designs/chat-view,
@@ -41,6 +41,8 @@ export function QueueCard({
   onCancelItem,
   onReorder,
   onCancelAll,
+  forced,
+  onToggle,
 }: {
   items?: ChatQueuedItem[];
   /** Host offers chat.ReorderQueued (desktop): handles and ⌥-arrows; the phone hides both. */
@@ -48,9 +50,20 @@ export function QueueCard({
   onCancelItem: (id: string) => void;
   onReorder: (id: string, index: number) => void;
   onCancelAll: () => void;
+  /** The composer's one-open-surface rule: true = this card was opened, false = another surface took the room. */
+  forced?: boolean;
+  onToggle?: (open: boolean) => void;
 }) {
   const list = items ?? [];
-  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState(false);
+  const open = forced ?? local;
+  const setOpen = (next: boolean) => {
+    setLocal(next);
+    onToggle?.(next);
+  };
+  useEffect(() => {
+    if (forced === false) setLocal(false);
+  }, [forced]);
   // The drag in flight: the grabbed row, where it started (index, pointer Y,
   // row height) and the target it currently hovers over. Only the preview
   // order derives from it; nothing survives the pointer settling.

@@ -84,7 +84,23 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const [textAnswer, setTextAnswer] = useState("");
   const [answering, setAnswering] = useState(false);
   const [catalog, setCatalog] = useState<ChatCatalog | null>(null);
-  const [panel, setPanel] = useState<"plus" | "model" | "context" | null>(null);
+  const [panel, setPanel] = useState<"plus" | "model" | "context" | "tasks" | "queue" | null>(null);
+  // One surface above the composer is open at a time (model, + menu, context, Tasks, Queue):
+  // opening one folds the others. undefined = nobody asked, the card keeps its own default.
+  const dockForced = (name: "tasks" | "queue") => (panel === name ? true : panel !== null ? false : undefined);
+  // Escape closes a Tasks/Queue card the user opened (the other panels bind their own Escape);
+  // an auto-opened card never takes the Escape that stops the agent.
+  useEffect(() => {
+    if (panel !== "tasks" && panel !== "queue") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPanel(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [panel]);
   const [slashPick, setSlashPick] = useState(0);
   const [slashOff, setSlashOff] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
@@ -1285,6 +1301,8 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 onOpenSubagent={canOpenSubagent ? subCtx.open : undefined}
                 live={working}
                 compact={Boolean(state?.interactions?.length)}
+                forced={dockForced("tasks")}
+                onToggle={(open) => setPanel(open ? "tasks" : null)}
               />
             ) : null}
             {state?.interactions?.length ? (
@@ -1316,6 +1334,8 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
               onCancelItem={(id) => void cancelQueuedItem(id)}
               onReorder={(id, index) => void reorderQueued(id, index)}
               onCancelAll={() => void cancelQueued()}
+              forced={dockForced("queue")}
+              onToggle={(open) => setPanel(open ? "queue" : null)}
             />
             {slash.length > 0 && completions.length === 0 ? (
               <SlashPanel entries={slash} pick={slashPick} onPick={runSlash} onHover={setSlashPick} />
