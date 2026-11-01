@@ -112,7 +112,7 @@ export function ContextControl(props: {
     : [];
   const hasTotals = totals.some(([, value]) => value > 0);
   return (
-    <span ref={root} className="ctx">
+    <span ref={root} className={`ctx${lv === "" && !open ? " quiet" : ""}`}>
       <button
         type="button"
         className={`ringbtn${open ? " on" : ""}${lv ? ` ${lv}` : ""}`}

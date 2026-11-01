@@ -981,6 +981,14 @@ html[data-host="phone"] .cmp.rest:not(:focus-within) .cbar {
 html[data-host="phone"] .cmp.rest:not(:focus-within) .cbar > :not(.send) {
   display: none;
 }
+/* Nothing to send yet: no dead button, the field takes the row. */
+html[data-host="phone"] .cmp.rest:not(:focus-within) .cbar > .send:disabled {
+  display: none;
+}
+/* The ring below 70% asks for nothing; it stays a desktop-only gauge. */
+html[data-host="phone"] .ctx.quiet {
+  display: none;
+}
 
 .chip {
   font-size: 12px;
@@ -1745,6 +1753,11 @@ html[data-host="phone"] .queueCard .qcEdit {
 .ask .answer-hint {
   color: var(--i3);
   margin-left: auto;
+}
+
+/* Esc and Enter hints name keys the phone does not have. */
+html[data-host="phone"] .ask .answer-hint {
+  display: none;
 }
 
 .ask .answer-send + .answer-hint,

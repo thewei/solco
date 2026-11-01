@@ -40,6 +40,11 @@ import "./chat.css";
 // mygo.ts when `mygo generate` next runs on a tree that compiles; until
 // then the page subscribes through the runtime directly.
 const chatSubagentOpen = bridgeEvent<string>("chat:subagent-open");
+/** shortModel is a model id as the phone's one-row bar shows it: no provider prefix, no date or "latest" suffix. */
+function shortModel(id: string): string {
+  return id.slice(id.lastIndexOf("/") + 1).replace(/-(\d{8}|latest)$/, "");
+}
+
 export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const [state, setStateRaw] = useState<ChatBridgeState | null>(null);
   // A projection built before the one on screen never replaces it (snapshot
@@ -370,9 +375,12 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // A fresh session has no transcript yet, so the chip shows the model the
   // agent's own config starts it on.
   const shownModel = state?.model || catalog?.defaultModel || "";
+  const isPhone = document.documentElement.dataset.host === "phone";
   // A fresh pane (nothing sent yet) is "starting", never "working": its
   // composer holds Send until the agent is ready and shows no Stop.
   const starting = Boolean(state?.waiting) && disposition !== "ready";
+  // The Blocked card above the composer already offers the Terminal.
+  const blockedCard = !readOnly && disposition === "terminal" && !state?.interactions?.length;
   const working = disposition === "queue" && !state?.waiting;
   // The waiting placeholder stands in for the assistant card between the
   // user's sent row and the first live tail content (the agent's own TUI
@@ -1312,12 +1320,12 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
               starting={starting}
               links={state.linkCandidates}
               onLink={(key) => void chat.linkSession(key).then(setState).catch(refresh)}
-              onOpenTerminal={openTerminal}
+              onOpenTerminal={blockedCard ? undefined : openTerminal}
             />
           ) : turns.length === 0 ? (
             // A bound session with no rows yet (the agent wrote its header
             // only) reads the same as a fresh pane: type to start.
-            <SessionState kind="waiting" provider={state?.provider} onOpenTerminal={openTerminal} />
+            <SessionState kind="waiting" provider={state?.provider} onOpenTerminal={blockedCard ? undefined : openTerminal} />
           ) : (
             <div
               ref={listRef}
@@ -1505,11 +1513,9 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                       ? "Transcribing…"
                       : starting
                         ? "The agent is starting… you can type your prompt"
-                        : state?.waiting
-                          ? "Type a prompt to start the conversation"
-                          : document.documentElement.dataset.host === "phone"
-                            ? "Message"
-                            : "Send a message… (@ file · / commands · $ skills)"
+                        : document.documentElement.dataset.host === "phone"
+                          ? "Message"
+                          : "Send a message… (@ file · / commands · $ skills)"
                 }
                 aria-label="Chat prompt"
                 spellCheck
@@ -1526,6 +1532,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 onCompositionEnd={() => (composingRef.current = false)}
               />
               <div className="cbar">
+{recording ? null : (
                 <button
                   type="button"
                   className="ib"
@@ -1537,6 +1544,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 >
                   <Icon name="plus" size={16} />
                 </button>
+)}
                 {recording ? (
                   <button type="button" className="ib" title="Cancel dictation (Esc)" aria-label="Cancel dictation" onClick={cancelDictation}>
                     <Icon name="x" size={15} />
@@ -1567,7 +1575,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                   </span>
                 ) : null}
                 <span className="sp" />
-                {state?.contextTokens ? (
+                {state?.contextTokens && !recording ? (
                   <ContextControl
                     used={state.contextTokens}
                     open={panel === "context"}
@@ -1588,19 +1596,19 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                     onFraction={setCtxFraction}
                   />
                 ) : null}
-                {catalog?.canSwitchModel ? (
+                {recording ? null : catalog?.canSwitchModel ? (
                   <button
                     type="button"
                     className="chip mono modelchip"
-                    title={disposition === "ready" ? "Switch model" : "Switch model when the agent is idle"}
+                    title={disposition === "ready" ? `Switch model (${shownModel})` : "Switch model when the agent is idle"}
                     aria-expanded={panel === "model"}
                     disabled={voiceBusy}
                     onClick={() => setPanel(panel === "model" ? null : "model")}
                   >
-                    {shownModel || "Model"} <span aria-hidden>▾</span>
+                    {(isPhone ? shortModel(shownModel) : shownModel) || "Model"} <span aria-hidden>▾</span>
                   </button>
-                ) : shownModel ? (
-                  <span className="chip mono">{shownModel}</span>
+                ) : recording ? null : shownModel ? (
+                  <span className="chip mono" title={shownModel}>{isPhone ? shortModel(shownModel) : shownModel}</span>
                 ) : null}
                 {working && hasContent && !canQueueFollowUp ? (
                   <button

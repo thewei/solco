@@ -338,7 +338,8 @@ export function SessionState(props: {
    *  follows its transcript (the agent never reported a session of its own). */
   links?: ChatBridgeLink[];
   onLink?: (key: string) => void;
-  onOpenTerminal: () => void;
+  /** Omitted when a Blocked card above the composer already offers the Terminal. */
+  onOpenTerminal?: () => void;
 }) {
   if (props.kind === "loading") {
     return (
@@ -369,9 +370,11 @@ export function SessionState(props: {
           ))}
         </div>
       ) : null}
-      <button type="button" className="goterm" onClick={props.onOpenTerminal}>
-        Open Terminal
-      </button>
+      {props.onOpenTerminal ? (
+        <button type="button" className="goterm" onClick={props.onOpenTerminal}>
+          Open Terminal
+        </button>
+      ) : null}
     </div>
   );
 }

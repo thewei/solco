@@ -610,8 +610,14 @@ function fmtDuration(seconds: number): string {
   return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
+/** formatTime reads HH:mm for today; an older turn also names its day (and year, when it is not this one). */
 function formatTime(tsMs: number): string {
-  return new Date(tsMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const at = new Date(tsMs);
+  const clock = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  if (at.toDateString() === now.toDateString()) return clock;
+  const day = at.toLocaleDateString([], at.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" });
+  return `${day} ${clock}`;
 }
 
 // plainText strips common markdown syntax for the TXT copy variant.
