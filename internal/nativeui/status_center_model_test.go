@@ -1,3 +1,8 @@
+// [INPUT]: 依赖 status_center_model.go 的 BuildStatusCenterSnapshot/StatusCenterSnapshot、Shell/agent 测试夹具
+// [OUTPUT]: 测试（无导出符号）
+// [POS]: nativeui 状态中心的分桶/计数/排序/归并合约。
+// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+
 package nativeui
 
 import (

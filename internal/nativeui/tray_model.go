@@ -1,3 +1,8 @@
+// [INPUT]: 依赖 StatusCenterSnapshot（status_center_model.go）的 NeedsAttention/ReviewPending/Working/Entries、agent.OperationalLabel
+// [OUTPUT]: 导出 TrayCounts、TrayCountsFromSnapshot、TrayTitle、TrayToolTip、TrayFingerprint
+// [POS]: nativeui 托盘的纯投影层。tray.go 持有它；quick_panel.go 的 attentionSegments 共享同一份 counts 语义。无 IO。
+// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+
 package nativeui
 
 import (
@@ -11,11 +16,13 @@ import (
 )
 
 // TrayCounts are the status-center counts the menu bar projects (0.7
-// §3/§17.3): attention, ready-for-review and working.
+// §3/§17.3): attention, ready-for-review, working, and the total number of
+// agents the status center lists.
 type TrayCounts struct {
 	Attention int
 	Review    int
 	Working   int
+	Total     int
 }
 
 // TrayCountsFromSnapshot reads the shared StatusCenterSnapshot counters; the
@@ -25,25 +32,21 @@ func TrayCountsFromSnapshot(snapshot StatusCenterSnapshot) TrayCounts {
 		Attention: snapshot.NeedsAttention,
 		Review:    snapshot.ReviewPending,
 		Working:   snapshot.Working,
+		Total:     len(snapshot.Entries),
 	}
 }
 
-// TrayTitle renders the §17.3 status-first menu-bar title, e.g.
-// "⚠ 2  ✓ 1  ⚡ 3". Empty when nothing is actionable so the menu bar stays
-// quiet; raw token totals never appear in the title (usage belongs inside
-// the panel where the Agent context is visible).
+// TrayTitle renders the §17.3 status-first menu-bar title as "N/M": N is
+// the agents that need the user (attention + review), M is the total listed
+// agents. The title is empty when no agent is listed so the menu bar stays
+// quiet, and stays "N/M" while any agent works so the user sees the ratio
+// at a glance. Raw token totals never appear in the title (usage belongs
+// inside the panel where the Agent context is visible).
 func TrayTitle(counts TrayCounts) string {
-	parts := make([]string, 0, 3)
-	if counts.Attention > 0 {
-		parts = append(parts, fmt.Sprintf("⚠ %d", counts.Attention))
+	if counts.Total == 0 {
+		return ""
 	}
-	if counts.Review > 0 {
-		parts = append(parts, fmt.Sprintf("✓ %d", counts.Review))
-	}
-	if counts.Working > 0 {
-		parts = append(parts, fmt.Sprintf("⚡ %d", counts.Working))
-	}
-	return strings.Join(parts, "  ")
+	return fmt.Sprintf("%d/%d", counts.Attention+counts.Review, counts.Total)
 }
 
 // TrayToolTip renders the §17.4 summary wording shared with the titlebar:

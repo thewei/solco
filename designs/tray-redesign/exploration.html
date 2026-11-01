@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solco Tray Redesign</title>
+<style>
+:root {
+  --bg: #1a1a1c;
+  --surface: #232325;
+  --surface2: #2a2a2d;
+  --border: #353538;
+  --text: #f5f5f7;
+  --muted: #98989d;
+  --dim: #636366;
+  --accent: #d4d4d8;
+  --green: #30d158;
+  --orange: #ff9f0a;
+  --red: #ff453a;
+  --silver: #c7c7cc;
+  --mono: "SF Mono", ui-monospace, "Menlo", monospace;
+  --sans: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 0 0 60px;
+}
+.nav {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(26,26,28,.92);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex; align-items: center; gap: 16px;
+}
+.nav h1 { font-size: 15px; font-weight: 600; }
+.nav p { font-size: 12px; color: var(--muted); }
+.container { max-width: 880px; margin: 0 auto; padding: 32px 24px; }
+.section { margin-bottom: 56px; }
+.section-title {
+  font-size: 11px; font-weight: 600; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .08em;
+  margin-bottom: 14px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Menu bar simulation */
+.menubar {
+  height: 28px;
+  display: flex; align-items: center;
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: var(--sans);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  position: relative;
+  overflow: visible;
+}
+.menubar.light {
+  background: rgba(255,255,255,.72);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0,0,0,.06);
+  color: #1a1a1a;
+}
+.menubar.dark {
+  background: rgba(30,30,32,.82);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.06);
+  color: #e8e8ed;
+}
+.mb-left { display: flex; gap: 14px; align-items: center; opacity: .8; }
+.mb-right { display: flex; gap: 12px; align-items: center; margin-left: auto; opacity: .75; }
+.mb-right svg, .mb-right span.dim-icon { opacity: .7; }
+.tray-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  position: relative;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+.tray-item:has(.tray-title:not(:empty)) { background: rgba(128,128,128,.12); }
+.tray-title {
+  font-size: 13px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  white-space: pre;
+}
+.menubar.light .tray-title { color: rgba(0,0,0,.88); }
+.menubar.dark .tray-title { color: rgba(255,255,255,.92); }
+.tray-icon { display: flex; align-items: center; }
+.tray-icon svg { width: 18px; height: 18px; }
+
+/* Icon variants */
+.icon-old rect, .icon-old path { fill: currentColor; }
+.menubar.light .icon-old { color: rgba(0,0,0,.85); }
+.menubar.dark .icon-old { color: rgba(255,255,255,.9); }
+
+.icon-ram { color: currentColor; }
+.icon-ram path, .icon-ram circle { fill: currentColor; }
+
+/* state colors on tray icon */
+.state-silver { color: var(--silver); }
+.state-green { color: var(--green); }
+.state-orange { color: var(--orange); }
+.state-red { color: var(--red); }
+
+/* Card */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 12px;
+}
+.card h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.card .desc { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; }
+.card .procon { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; }
+.card .pro, .card .con { flex: 1; }
+.card .pro b { color: var(--green); font-weight: 600; display: block; margin-bottom: 3px; }
+.card .con b { color: var(--orange); font-weight: 600; display: block; margin-bottom: 3px; }
+.card .pro span, .card .con span { color: var(--muted); line-height: 1.5; display: block; }
+
+/* State switcher */
+.switcher {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.chip {
+  padding: 5px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.chip:hover { border-color: var(--dim); color: var(--text); }
+.chip.active {
+  background: var(--surface2);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.chip.active::before { content: "● "; font-size: 8px; vertical-align: 1px; }
+
+/* state demo grid */
+.demo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.state-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.state-row h4 { font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--muted); }
+.state-row .menubar { margin-bottom: 0; }
+.annotation {
+  font-size: 11px; color: var(--dim); margin-top: 6px;
+  font-family: var(--mono);
+}
+.note {
+  font-size: 12px; color: var(--muted);
+  line-height: 1.6;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: 8px;
+  margin-top: 14px;
+}
+.note b { color: var(--text); font-weight: 600; }
+.divider { height: 1px; background: var(--border); margin: 40px 0; }
+
+/* Icon comparison */
+.icon-compare {
+  display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;
+}
+.icon-compare .item {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.icon-compare .item .preview {
+  width: 72px; height: 72px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.icon-compare .item svg { width: 48px; height: 48px; }
+.icon-compare .item .label { font-size: 11px; color: var(--muted); text-align: center; }
+.icon-compare .item.current svg { color: var(--muted); }
+.icon-compare .item.new svg { color: var(--text); }
+.badge {
+  display: inline-block; padding: 2px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; letter-spacing: .03em;
+}
+.badge.new { background: rgba(48,209,88,.15); color: var(--green); }
+.badge.old { background: rgba(255,255,255,.06); color: var(--dim); }
+
+/* tooltip simulation */
+.tooltip-wrap { position: relative; display: inline-block; }
+.tooltip {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: rgba(40,40,42,.96);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+  z-index: 20;
+}
+.tooltip-wrap:hover .tooltip { opacity: 1; }
+
+table.compare {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+table.compare th, table.compare td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+}
+table.compare th { font-weight: 600; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+table.compare td:first-child { font-weight: 600; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div>
+    <h1>Solco Tray Redesign</h1>
+    <p>Logo icon + status title · 3 directions</p>
+  </div>
+</nav>
+
+<div class="container">
+
+<!-- ═══════════════════ ICON ═══════════════════ -->
+<div class="section">
+  <div class="section-title">Icon · 现有 vs 新盘羊头</div>
+  <div class="icon-compare">
+    <div class="item current">
+      <div class="preview">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-old">
+          <rect x="3" y="7" width="26" height="18" rx="0" fill="currentColor"/>
+          <rect x="5" y="9" width="22" height="14" fill="#1a1a1c"/>
+          <rect x="3" y="7" width="26" height="5" fill="currentColor"/>
+          <path d="M8 16 L11 19 L8 22" stroke="currentColor" stroke-width="2" fill="none"/>
+          <rect x="15" y="16" width="8" height="2" fill="currentColor"/>
+        </svg>
+      </div>
+      <span class="label">现有终端框<br><span class="badge old">与 logo 无关</span></span>
+    </div>
+    <div class="item new">
+      <div class="preview">
+        <!-- Ram head silhouette, simplified for 18pt -->
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-ram">
+  <path d="M 17 5.5 C 10 4, 4.5 9, 4.5 15.5 C 4.5 22, 10 27, 16.5 27 C 20 27, 22.2 24.5, 21.8 21.5 C 21.4 18.8, 19.2 17, 16.8 17.5 C 15 17.8, 14.2 19.5, 15 21" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 18 5 C 23 5, 27 9, 28.8 14 C 30 17.5, 30.2 21.5, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 L 22 30 C 21.2 30, 20.5 29.2, 20.5 28.2 L 20.5 25.5 L 18.8 25.5 C 17.6 25.5, 16.8 24.8, 16.8 23.5 L 16.8 10.5 C 16.8 7, 16.8 5.3, 18 5 Z" fill="currentColor"/>
+  <path d="M 23.5 30 L 26.5 31.2 C 27.3 31.5, 28.2 31.2, 28.8 30.5 C 29.3 29.8, 29.4 28.8, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 Z" fill="currentColor"/>
+  <path d="M 21 14 L 23.5 16.5 L 21 19" stroke="#1a1a1c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24.2" y="15.9" width="2.6" height="1.2" rx="0.4" fill="#1a1a1c"/>
+</svg>
+      </div>
+      <span class="label">新盘羊头<br><span class="badge new">与 logo 同源</span></span>
+    </div>
+      </div>
+  <div class="note">
+    <b>Template 模式限制：</b>macOS tray template icon 只接受单色剪影（黑→白自动反转）。新盘羊头用 <code>stroke + fill</code> 的简化路径确保 18pt 下仍然可辨。
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════ OPTION A ═══════════════════ -->
+<div class="section">
+  <div class="section-title">方案 A · 图标状态色 + 单数字（推荐）</div>
+  <div class="desc">图标颜色编码紧急程度，title 只有一个数。最简洁，零歧义。</div>
+
+  <div class="switcher" data-scope="optionA">
+    <button class="chip active" data-state="idle">Idle（空闲）</button>
+    <button class="chip" data-state="working">Working（3 工作）</button>
+    <button class="chip" data-state="review">Review（2 待审）</button>
+    <button class="chip" data-state="attention">Attention（1 需要你）</button>
+    <button class="chip" data-state="mixed">Mixed（2 需要你 + 3 工作）</button>
+    <button class="chip" data-state="disconnected">Disconnected</button>
+  </div>
+
+  <div class="demo-grid">
+    <div class="state-row">
+      <h4>浅色菜单栏</h4>
+      <div class="menubar light" data-demo="A-light">
+        <div class="mb-left">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.5 6H13l-2 5H8v3l-4-5h3l-1.5-4z"/></svg>
+          <span>Finder</span><span>File</span><span>Edit</span>
+        </div>
+        <div class="mb-right">
+          <span class="dim-icon">⚡</span><span class="dim-icon">🔍</span><span class="dim-icon">📅</span>
+          <div class="tray-item tooltip-wrap">
+            <div class="tray-icon state-silver">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-ram" data-state-icon="A">
+  <path d="M 17 5.5 C 10 4, 4.5 9, 4.5 15.5 C 4.5 22, 10 27, 16.5 27 C 20 27, 22.2 24.5, 21.8 21.5 C 21.4 18.8, 19.2 17, 16.8 17.5 C 15 17.8, 14.2 19.5, 15 21" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 18 5 C 23 5, 27 9, 28.8 14 C 30 17.5, 30.2 21.5, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 L 22 30 C 21.2 30, 20.5 29.2, 20.5 28.2 L 20.5 25.5 L 18.8 25.5 C 17.6 25.5, 16.8 24.8, 16.8 23.5 L 16.8 10.5 C 16.8 7, 16.8 5.3, 18 5 Z" fill="currentColor"/>
+  <path d="M 23.5 30 L 26.5 31.2 C 27.3 31.5, 28.2 31.2, 28.8 30.5 C 29.3 29.8, 29.4 28.8, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 Z" fill="currentColor"/>
+  <path d="M 21 14 L 23.5 16.5 L 21 19" stroke="#1a1a1c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24.2" y="15.9" width="2.6" height="1.2" rx="0.4" fill="#1a1a1c"/>
+</svg>
+            </div>
+            <span class="tray-title" data-title="A"></span>
+            <span class="tooltip" data-tip="A">Solco — Ready</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="state-row">
+      <h4>深色菜单栏</h4>
+      <div class="menubar dark" data-demo="A-dark">
+        <div class="mb-left">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.5 6H13l-2 5H8v3l-4-5h3l-1.5-4z"/></svg>
+          <span>Finder</span><span>File</span><span>Edit</span>
+        </div>
+        <div class="mb-right">
+          <span class="dim-icon">⚡</span><span class="dim-icon">🔍</span><span class="dim-icon">📅</span>
+          <div class="tray-item tooltip-wrap">
+            <div class="tray-icon state-silver">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-ram" data-state-icon="A">
+  <path d="M 17 5.5 C 10 4, 4.5 9, 4.5 15.5 C 4.5 22, 10 27, 16.5 27 C 20 27, 22.2 24.5, 21.8 21.5 C 21.4 18.8, 19.2 17, 16.8 17.5 C 15 17.8, 14.2 19.5, 15 21" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 18 5 C 23 5, 27 9, 28.8 14 C 30 17.5, 30.2 21.5, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 L 22 30 C 21.2 30, 20.5 29.2, 20.5 28.2 L 20.5 25.5 L 18.8 25.5 C 17.6 25.5, 16.8 24.8, 16.8 23.5 L 16.8 10.5 C 16.8 7, 16.8 5.3, 18 5 Z" fill="currentColor"/>
+  <path d="M 23.5 30 L 26.5 31.2 C 27.3 31.5, 28.2 31.2, 28.8 30.5 C 29.3 29.8, 29.4 28.8, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 Z" fill="currentColor"/>
+  <path d="M 21 14 L 23.5 16.5 L 21 19" stroke="#1a1a1c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24.2" y="15.9" width="2.6" height="1.2" rx="0.4" fill="#1a1a1c"/>
+</svg>
+            </div>
+            <span class="tray-title" data-title="A"></span>
+            <span class="tooltip" data-tip="A">Solco — Ready</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>设计规则</h3>
+    <div class="desc" style="margin-bottom:0">
+      优先级：<b>attention > review > working > idle</b>。图标颜色 + title 只反映最高优先级状态。
+      Attention/Review → 橙色图标 + N；Working → 绿色图标 + N；Idle → 银色图标 + 无文字。
+      Disconnected → 红色空心图标 + 无文字。Tooltip 始终显示完整状态。
+    </div>
+    <div class="procon">
+      <div class="pro"><b>优点</b><span>最省空间；颜色一眼分出紧急度；数字不需要解释</span></div>
+      <div class="con"><b>缺点</b><span>非 template icon（彩色），深浅色菜单栏下需两种渲染；丢失多维度并列信息</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════ OPTION B ═══════════════════ -->
+<div class="section">
+  <div class="section-title">方案 B · N/M 需要你比总数（比例）</div>
+  <div class="desc">标题格式 <code>N/M</code>，N = 需要你（attention + review），M = 总 agent 数。图标始终 logo 单色。</div>
+
+  <div class="switcher" data-scope="optionB">
+    <button class="chip active" data-state="idle">Idle（0/5）</button>
+    <button class="chip" data-state="working">Working（0/3）</button>
+    <button class="chip" data-state="review">Review（2/5）</button>
+    <button class="chip" data-state="attention">Attention（1/5）</button>
+    <button class="chip" data-state="mixed">Mixed（2/5）</button>
+    <button class="chip" data-state="disconnected">Disconnected</button>
+  </div>
+
+  <div class="demo-grid">
+    <div class="state-row">
+      <h4>浅色菜单栏</h4>
+      <div class="menubar light" data-demo="B-light">
+        <div class="mb-left">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.5 6H13l-2 5H8v3l-4-5h3l-1.5-4z"/></svg>
+          <span>Finder</span><span>File</span><span>Edit</span>
+        </div>
+        <div class="mb-right">
+          <span class="dim-icon">⚡</span><span class="dim-icon">🔍</span><span class="dim-icon">📅</span>
+          <div class="tray-item tooltip-wrap">
+            <div class="tray-icon">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-ram" style="color:var(--silver)">
+  <path d="M 17 5.5 C 10 4, 4.5 9, 4.5 15.5 C 4.5 22, 10 27, 16.5 27 C 20 27, 22.2 24.5, 21.8 21.5 C 21.4 18.8, 19.2 17, 16.8 17.5 C 15 17.8, 14.2 19.5, 15 21" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 18 5 C 23 5, 27 9, 28.8 14 C 30 17.5, 30.2 21.5, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 L 22 30 C 21.2 30, 20.5 29.2, 20.5 28.2 L 20.5 25.5 L 18.8 25.5 C 17.6 25.5, 16.8 24.8, 16.8 23.5 L 16.8 10.5 C 16.8 7, 16.8 5.3, 18 5 Z" fill="currentColor"/>
+  <path d="M 23.5 30 L 26.5 31.2 C 27.3 31.5, 28.2 31.2, 28.8 30.5 C 29.3 29.8, 29.4 28.8, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 Z" fill="currentColor"/>
+  <path d="M 21 14 L 23.5 16.5 L 21 19" stroke="#1a1a1c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24.2" y="15.9" width="2.6" height="1.2" rx="0.4" fill="#1a1a1c"/>
+</svg>
+            </div>
+            <span class="tray-title" data-title="B">0/5</span>
+            <span class="tooltip" data-tip="B">Solco — 0 需要你 / 5 agents</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="state-row">
+      <h4>深色菜单栏</h4>
+      <div class="menubar dark" data-demo="B-dark">
+        <div class="mb-left">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.5 6H13l-2 5H8v3l-1.5-4z"/></svg>
+          <span>Finder</span><span>File</span><span>Edit</span>
+        </div>
+        <div class="mb-right">
+          <span class="dim-icon">⚡</span><span class="dim-icon">🔍</span><span class="dim-icon">📅</span>
+          <div class="tray-item tooltip-wrap">
+            <div class="tray-icon">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-ram" style="color:var(--silver)">
+  <path d="M 17 5.5 C 10 4, 4.5 9, 4.5 15.5 C 4.5 22, 10 27, 16.5 27 C 20 27, 22.2 24.5, 21.8 21.5 C 21.4 18.8, 19.2 17, 16.8 17.5 C 15 17.8, 14.2 19.5, 15 21" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 18 5 C 23 5, 27 9, 28.8 14 C 30 17.5, 30.2 21.5, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 L 22 30 C 21.2 30, 20.5 29.2, 20.5 28.2 L 20.5 25.5 L 18.8 25.5 C 17.6 25.5, 16.8 24.8, 16.8 23.5 L 16.8 10.5 C 16.8 7, 16.8 5.3, 18 5 Z" fill="currentColor"/>
+  <path d="M 23.5 30 L 26.5 31.2 C 27.3 31.5, 28.2 31.2, 28.8 30.5 C 29.3 29.8, 29.4 28.8, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 Z" fill="currentColor"/>
+  <path d="M 21 14 L 23.5 16.5 L 21 19" stroke="#1a1a1c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24.2" y="15.9" width="2.6" height="1.2" rx="0.4" fill="#1a1a1c"/>
+</svg>
+            </div>
+            <span class="tray-title" data-title="B">0/5</span>
+            <span class="tooltip" data-tip="B">Solco — 0 需要你 / 5 agents</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>设计规则</h3>
+    <div class="desc" style="margin-bottom:0">
+      N = NeedsAttention + ReviewPending（合并为"需要你"）。M = 所有已列出 agent 的总数。
+      图标保持 template（单色，无状态色），大小恒定。Disconnected → title 变为 <code>—</code> 或空。
+    </div>
+    <div class="procon">
+      <div class="pro"><b>优点</b><span>保持 template icon；比例感清晰（5 分之 2 需要我）；用户提到的 "1/2" 格式</span></div>
+      <div class="con"><b>缺点</b><span>N/M 的含义需要 tooltip 解释；M 在 agent 全部退出时可能为 0</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════ OPTION C ═══════════════════ -->
+<div class="section">
+  <div class="section-title">方案 C · 双状态紧凑（最多 2 组）</div>
+  <div class="desc">保留两组最关键的状态：需要你 N + 工作 M。去掉 Review 和 Attention 的区分。</div>
+
+  <div class="switcher" data-scope="optionC">
+    <button class="chip active" data-state="idle">Idle</button>
+    <button class="chip" data-state="working">⚡3</button>
+    <button class="chip" data-state="review">✓2</button>
+    <button class="chip" data-state="attention">⚠1</button>
+    <button class="chip" data-state="mixed">⚠2 ⚡3</button>
+    <button class="chip" data-state="disconnected">断开</button>
+  </div>
+
+  <div class="demo-grid">
+    <div class="state-row">
+      <h4>浅色菜单栏</h4>
+      <div class="menubar light" data-demo="C-light">
+        <div class="mb-left">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.5 6H13l-2 5H8v3l-4-5h3l-1.5-4z"/></svg>
+          <span>Finder</span><span>File</span><span>Edit</span>
+        </div>
+        <div class="mb-right">
+          <span class="dim-icon">⚡</span><span class="dim-icon">🔍</span><span class="dim-icon">📅</span>
+          <div class="tray-item tooltip-wrap">
+            <div class="tray-icon">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-ram" style="color:var(--silver)">
+  <path d="M 17 5.5 C 10 4, 4.5 9, 4.5 15.5 C 4.5 22, 10 27, 16.5 27 C 20 27, 22.2 24.5, 21.8 21.5 C 21.4 18.8, 19.2 17, 16.8 17.5 C 15 17.8, 14.2 19.5, 15 21" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 18 5 C 23 5, 27 9, 28.8 14 C 30 17.5, 30.2 21.5, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 L 22 30 C 21.2 30, 20.5 29.2, 20.5 28.2 L 20.5 25.5 L 18.8 25.5 C 17.6 25.5, 16.8 24.8, 16.8 23.5 L 16.8 10.5 C 16.8 7, 16.8 5.3, 18 5 Z" fill="currentColor"/>
+  <path d="M 23.5 30 L 26.5 31.2 C 27.3 31.5, 28.2 31.2, 28.8 30.5 C 29.3 29.8, 29.4 28.8, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 Z" fill="currentColor"/>
+  <path d="M 21 14 L 23.5 16.5 L 21 19" stroke="#1a1a1c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24.2" y="15.9" width="2.6" height="1.2" rx="0.4" fill="#1a1a1c"/>
+</svg>
+            </div>
+            <span class="tray-title" data-title="C"></span>
+            <span class="tooltip" data-tip="C">Solco — Ready</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="state-row">
+      <h4>深色菜单栏</h4>
+      <div class="menubar dark" data-demo="C-dark">
+        <div class="mb-left">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2.5 6H13l-2 5H8v3l-1.5-4z"/></svg>
+          <span>Finder</span><span>File</span><span>Edit</span>
+        </div>
+        <div class="mb-right">
+          <span class="dim-icon">⚡</span><span class="dim-icon">🔍</span><span class="dim-icon">📅</span>
+          <div class="tray-item tooltip-wrap">
+            <div class="tray-icon">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-ram" style="color:var(--silver)">
+  <path d="M 17 5.5 C 10 4, 4.5 9, 4.5 15.5 C 4.5 22, 10 27, 16.5 27 C 20 27, 22.2 24.5, 21.8 21.5 C 21.4 18.8, 19.2 17, 16.8 17.5 C 15 17.8, 14.2 19.5, 15 21" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 18 5 C 23 5, 27 9, 28.8 14 C 30 17.5, 30.2 21.5, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 L 22 30 C 21.2 30, 20.5 29.2, 20.5 28.2 L 20.5 25.5 L 18.8 25.5 C 17.6 25.5, 16.8 24.8, 16.8 23.5 L 16.8 10.5 C 16.8 7, 16.8 5.3, 18 5 Z" fill="currentColor"/>
+  <path d="M 23.5 30 L 26.5 31.2 C 27.3 31.5, 28.2 31.2, 28.8 30.5 C 29.3 29.8, 29.4 28.8, 29.2 25 C 28.4 27.8, 26.2 29.8, 23.5 30 Z" fill="currentColor"/>
+  <path d="M 21 14 L 23.5 16.5 L 21 19" stroke="#1a1a1c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24.2" y="15.9" width="2.6" height="1.2" rx="0.4" fill="#1a1a1c"/>
+</svg>
+            </div>
+            <span class="tray-title" data-title="C"></span>
+            <span class="tooltip" data-tip="C">Solco — Ready</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>设计规则</h3>
+    <div class="desc" style="margin-bottom:0">
+      Attention 和 Review 合并为 <code>⚠N</code>（都需要用户介入）。Working 独立为 <code>⚡M</code>。
+      最多显示两组，超过两组时丢弃低优先级组。Idle → 无文字。Disconnected → tooltip 降级，title 空。
+    </div>
+    <div class="procon">
+      <div class="pro"><b>优点</b><span>保留现有符号习惯；比现有 3 组少 1 组；简化 mental model（needs you vs working）</span></div>
+      <div class="con"><b>缺点</b><span>仍然有符号+数字；比 A/B 稍宽；Review 和 Attention 混在一起可能不够精确</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════ COMPARE ═══════════════════ -->
+<div class="section">
+  <div class="section-title">方案对比</div>
+  <table class="compare">
+    <tr><th></th><th>宽度</th><th>含义清晰度</th><th>图标</th><th>macOS 原生度</th><th>实现复杂度</th></tr>
+    <tr>
+      <td>现有</td><td>最宽（⚠ 2  ✓ 1  ⚡ 3）</td><td>3 维度并列，但符号多</td><td>终端框</td><td>高（template + text）</td><td>最低</td>
+    </tr>
+    <tr>
+      <td>A · 状态色 + 数</td><td>最窄（1 个数字）</td><td>颜色编码紧急度，数字是数量</td><td>盘羊 logo · 彩色</td><td>中（非 template）</td><td>中（需渲染多色 PNG）</td>
+    </tr>
+    <tr>
+      <td>B · N/M 比例</td><td>窄（0/5）</td><td>比例清晰，但 N 含义需 tooltip</td><td>盘羊 logo · template</td><td>高</td><td>低（只改 title）</td>
+    </tr>
+    <tr>
+      <td>C · 双组紧凑</td><td>中（⚠2 ⚡3）</td><td>2 维度，比 3 组简化</td><td>盘羊 logo · template</td><td>高</td><td>最低（改 title 合并）</td>
+    </tr>
+  </table>
+  <div class="note">
+    <b>个人推荐：</b>方案 A。理由：空间最省，颜色是最强的 preattentive signal——你不需要读数字就知道有事。配合 tooltip 获取完整状态，信息不丢失。缺点是放弃 template，需要自己管理浅色/深色菜单栏的 icon 渲染。如果不想放弃 template icon，方案 B 是最实用的退路。
+  </div>
+</div>
+
+</div>
+
+<script>
+// ── state data ─────────────────────────────────────────────
+const STATES = {
+  idle:        { label: "Idle",        cls: "state-silver", titleA: "",   titleB: "0/5", titleC: "",           tipA: "Solco — Ready",                    tipB: "Solco — 0 需要你 / 5 agents",        tipC: "Solco — Ready" },
+  working:     { label: "Working",    cls: "state-green",  titleA: "3",   titleB: "0/5", titleC: "⚡ 3",       tipA: "Solco — 3 working",               tipB: "Solco — 0 需要你 / 5 agents",        tipC: "Solco — 3 working" },
+  review:      { label: "Review",     cls: "state-orange", titleA: "2",   titleB: "2/5", titleC: "✓ 2",       tipA: "Solco — 2 for review",             tipB: "Solco — 2 需要你 / 5 agents",        tipC: "Solco — 2 for review" },
+  attention:   { label: "Attention",  cls: "state-orange", titleA: "1",   titleB: "1/5", titleC: "⚠ 1",       tipA: "Solco — 1 needs attention",        tipB: "Solco — 1 需要你 / 5 agents",        tipC: "Solco — 1 needs attention" },
+  mixed:       { label: "Mixed",      cls: "state-orange", titleA: "2",   titleB: "2/5", titleC: "⚠ 2  ⚡ 3",  tipA: "Solco — 2 need attention, 3 working", tipB: "Solco — 2 需要你 / 5 agents",     tipC: "Solco — 2 need attention, 3 working" },
+  disconnected:{ label: "Disconnected", cls: "state-red",  titleA: "",    titleB: "—",   titleC: "",           tipA: "Solco — Herdr disconnected",       tipB: "Solco — Herdr disconnected",         tipC: "Solco — Herdr disconnected" },
+};
+
+function applyState(optionId, stateKey) {
+  const s = STATES[stateKey];
+  if (!s) return;
+  // icon color
+  document.querySelectorAll(`[data-demo^="${optionId}-"] .tray-icon`).forEach(el => {
+    el.className = "tray-icon " + (optionId === "A" ? s.cls : "state-silver");
+  });
+  // title
+  const titleKey = "title" + optionId;
+  document.querySelectorAll(`[data-demo^="${optionId}-"] .tray-title`).forEach(el => {
+    el.textContent = s[titleKey] || "";
+  });
+  // tooltip
+  const tipKey = "tip" + optionId;
+  document.querySelectorAll(`[data-demo^="${optionId}-"] .tooltip`).forEach(el => {
+    el.textContent = s[tipKey] || "";
+  });
+}
+
+// wire chips
+document.querySelectorAll("[data-scope]").forEach(scope => {
+  const optionId = scope.dataset.scope.replace("option", "");
+  scope.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      scope.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      applyState(optionId, chip.dataset.state);
+    });
+  });
+  // init to first active chip
+  const active = scope.querySelector(".chip.active");
+  if (active) applyState(optionId, active.dataset.state);
+});
+</script>
+</body>
+</html>

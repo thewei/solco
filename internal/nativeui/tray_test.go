@@ -1,3 +1,8 @@
+// [INPUT]: 依赖 tray.go 的 TrayIconPNG/newStatusTray/statusTray.apply、tray_model.go 的 TrayCounts/TrayTitle/TrayToolTip/TrayFingerprint、agent/herdr 测试夹具
+// [OUTPUT]: 测试（无导出符号）
+// [POS]: nativeui 托盘的行为合约：标题 N/M 表、tooltip 表、指纹稳定性、图标可解码、平台缝只按指纹重建、Shell 快照投影。
+// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+
 package nativeui
 
 import (
@@ -9,19 +14,21 @@ import (
 	"github.com/thewei/solco/internal/herdr"
 )
 
-// TestTrayTitleTable pins the §17.3 status-first menu-bar title: actionable
-// counts only, empty when quiet, never token totals.
+// TestTrayTitleTable pins the §17.3 status-first menu-bar title: the N/M
+// ratio where N = agents that need the user (attention + review) and M =
+// listed agents. Empty when no agent is listed; working agents keep the
+// "0/M" form visible. Never token totals.
 func TestTrayTitleTable(t *testing.T) {
 	cases := []struct {
 		counts TrayCounts
 		want   string
 	}{
 		{TrayCounts{}, ""},
-		{TrayCounts{Attention: 2}, "⚠ 2"},
-		{TrayCounts{Review: 1}, "✓ 1"},
-		{TrayCounts{Working: 3}, "⚡ 3"},
-		{TrayCounts{Attention: 2, Review: 1, Working: 3}, "⚠ 2  ✓ 1  ⚡ 3"},
-		{TrayCounts{Attention: 0, Review: 0, Working: 1}, "⚡ 1"},
+		{TrayCounts{Total: 5}, "0/5"},
+		{TrayCounts{Attention: 2, Total: 5}, "2/5"},
+		{TrayCounts{Review: 1, Total: 5}, "1/5"},
+		{TrayCounts{Attention: 2, Review: 1, Working: 3, Total: 6}, "3/6"},
+		{TrayCounts{Working: 3, Total: 5}, "0/5"},
 	}
 	for _, tc := range cases {
 		if got := TrayTitle(tc.counts); got != tc.want {
@@ -39,10 +46,10 @@ func TestTrayToolTipTable(t *testing.T) {
 		want      string
 	}{
 		{TrayCounts{}, true, "Solco — Ready"},
-		{TrayCounts{Attention: 2, Review: 1, Working: 3}, true, "Solco — 2 need attention, 1 for review, 3 working"},
-		{TrayCounts{Working: 2}, true, "Solco — 2 working"},
-		{TrayCounts{Attention: 1}, true, "Solco — 1 needs attention"},
-		{TrayCounts{Attention: 5, Review: 5, Working: 5}, false, "Solco — Herdr disconnected"},
+		{TrayCounts{Attention: 2, Review: 1, Working: 3, Total: 6}, true, "Solco — 2 need attention, 1 for review, 3 working"},
+		{TrayCounts{Working: 2, Total: 5}, true, "Solco — 2 working"},
+		{TrayCounts{Attention: 1, Total: 3}, true, "Solco — 1 needs attention"},
+		{TrayCounts{Attention: 5, Review: 5, Working: 5, Total: 15}, false, "Solco — Herdr disconnected"},
 		{TrayCounts{}, false, "Solco — Herdr disconnected"},
 	}
 	for _, tc := range cases {
@@ -138,7 +145,7 @@ func TestStatusTrayAppliesOnlyOnFingerprintChange(t *testing.T) {
 	}}
 
 	tray.apply(base, true)
-	if platform.titles[0] != "⚠ 2  ✓ 1  ⚡ 3" || platform.tips[0] != "Solco — 2 need attention, 1 for review, 3 working" {
+	if platform.titles[0] != "3/2" || platform.tips[0] != "Solco — 2 need attention, 1 for review, 3 working" {
 		t.Fatalf("first apply = %q / %q", platform.titles, platform.tips)
 	}
 	first := platform.calls()
@@ -164,7 +171,7 @@ func TestStatusTrayAppliesOnlyOnFingerprintChange(t *testing.T) {
 		trayEntry("t2", "p2", "Ranger", "other", agent.PhaseWorking, agent.OpWorking, false, false, false),
 	}}
 	tray.apply(cleared, true)
-	if platform.titles[1] != "⚠ 2  ⚡ 3" || platform.tips[1] != "Solco — 2 need attention, 3 working" {
+	if platform.titles[1] != "2/2" || platform.tips[1] != "Solco — 2 need attention, 3 working" {
 		t.Fatalf("second apply = %q / %q", platform.titles, platform.tips)
 	}
 
@@ -190,7 +197,7 @@ func TestUpdateTrayProjectsShellSnapshot(t *testing.T) {
 	}
 	shell.reconcileWorkbench()
 	shell.updateTray()
-	if platform.titles[0] != "⚠ 1  ⚡ 1" {
+	if platform.titles[0] != "1/2" {
 		t.Fatalf("shell tray title = %q", platform.titles)
 	}
 
@@ -208,7 +215,7 @@ func TestUpdateTrayProjectsShellSnapshot(t *testing.T) {
 }
 
 // TestTrayIconPNGIsTemplateGlyph verifies the generated menu-bar icon is a
-// decodable 32x32 template PNG.
+// decodable 128x128 template PNG (macOS scales it to 18pt).
 func TestTrayIconPNGIsTemplateGlyph(t *testing.T) {
 	data, err := TrayIconPNG()
 	if err != nil {
@@ -218,7 +225,7 @@ func TestTrayIconPNGIsTemplateGlyph(t *testing.T) {
 	if err != nil {
 		t.Fatalf("icon is not a valid PNG: %v", err)
 	}
-	if bounds := decoded.Bounds(); bounds.Dx() != 32 || bounds.Dy() != 32 {
-		t.Fatalf("icon bounds = %v, want 32x32", bounds)
+	if bounds := decoded.Bounds(); bounds.Dx() != 128 || bounds.Dy() != 128 {
+		t.Fatalf("icon bounds = %v, want 128x128", bounds)
 	}
 }

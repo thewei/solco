@@ -1,3 +1,8 @@
+// [INPUT]: 依赖 Shell.workbenchCards/interactionBroker 的已调和状态、agent.OperationalPriority/BucketOf、conversation.PendingInteraction
+// [OUTPUT]: 导出 StatusCenterEntry、StatusCenterSnapshot、Shell.BuildStatusCenterSnapshot；内部持有 statusCenterPriority
+// [POS]: nativeui 状态中心唯一快照。tray.go/quick_panel.go/titlebar 共享同一份事实；纯投影，无 IO。
+// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+
 package nativeui
 
 import (
