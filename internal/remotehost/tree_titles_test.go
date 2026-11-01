@@ -1,6 +1,7 @@
 package remotehost
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -43,5 +44,31 @@ func TestTreeTitleChangeMovesTheRevisionHash(t *testing.T) {
 	b := buildTree("default", titledProjection(), map[string]AgentFact{"term_a": {Title: "Renamed"}})
 	if a.hash() == b.hash() {
 		t.Fatal("a new title must change the tree hash so phones refetch")
+	}
+}
+
+func TestPokePushesATitleOnlyChange(t *testing.T) {
+	h := newHarness(t)
+	var mu sync.Mutex
+	title := "Old title"
+	h.srv.opts.AgentFacts = func(string) map[string]AgentFact {
+		mu.Lock()
+		defer mu.Unlock()
+		return map[string]AgentFact{"term_a": {Title: title}}
+	}
+	conn, _, err := h.dial("/api/v3/events", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readJSON(t, conn) // hello
+	if h.back.source(0) == nil {
+		t.Fatal("no subscription")
+	}
+	mu.Lock()
+	title = "New title"
+	mu.Unlock()
+	h.srv.Poke() // no Herdr event follows: the title is the only change
+	if msg := readJSON(t, conn); msg["t"] != "tree.changed" {
+		t.Fatalf("frame = %v", msg)
 	}
 }

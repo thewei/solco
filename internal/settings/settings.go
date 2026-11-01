@@ -33,10 +33,28 @@ type Settings struct {
 // "loopback", "lan" or "tailscale" (internal/remotehost.Mode); Address is the
 // single interface address picked for lan/tailscale. Pairing codes, device
 // tokens and the TLS key never live here (internal/remotehost owns them).
+// The relay fields are the opt-in route through the user's own self-hosted
+// alma-relay: URL is the bare https:// or wss:// base, RegistrationKey is the
+// relay's shared key (a relay credential, not a Solco secret). This Mac's own
+// relay connect code lives in <userDataDir>/RemoteHost/relay-secret.
 type RemoteAccessSettings struct {
 	Mode    string `json:"mode,omitempty"`
 	Port    int    `json:"port,omitempty"`
 	Address string `json:"address,omitempty"`
+
+	RelayEnabled bool   `json:"relay_enabled,omitempty"`
+	RelayURL     string `json:"relay_url,omitempty"`
+	RelayKey     string `json:"relay_key,omitempty"`
+
+	// P2P is the WebRTC direct path a phone may open through whichever route
+	// already works. It is on by default (zero value) and only does anything
+	// while the Host is on; P2PDisabled switches it off. P2PICE are the user's
+	// own STUN/TURN URLs (comma separated; empty = Solco's built-in STUN list),
+	// P2PTurnUser/P2PTurnPass the credential those turn: URLs share.
+	P2PDisabled bool   `json:"p2p_disabled,omitempty"`
+	P2PICE      string `json:"p2p_ice,omitempty"`
+	P2PTurnUser string `json:"p2p_turn_user,omitempty"`
+	P2PTurnPass string `json:"p2p_turn_pass,omitempty"`
 }
 
 // UsageSettings are the Usage page preferences (product decision 2026-10-30):

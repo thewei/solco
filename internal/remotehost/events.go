@@ -13,7 +13,7 @@ import (
 /**
  * [INPUT]: 依赖 Backend.Subscribe（Herdr events.subscribe）、server.go 的 currentTree 与 trackConn
  * [OUTPUT]: 对外提供 GET /api/v3/events 的 WebSocket 处理器：hello{revision} 之后只推 tree.changed{revision}
- * [POS]: 树变化通知通道：Herdr 事件只当「重读触发器」（和桌面同一纪律），去抖 150 ms 重算树，内容真变才推；窗格集合变化时重订阅（Herdr 的 agent_status 订阅按窗格），订阅失败指数退避；不转发 Herdr 全局焦点（手机导航本地）
+ * [POS]: 树变化通知通道：Herdr 事件与 Server.Poke（桌面标题快照变化，无 Herdr 事件）只当「重读触发器」（和桌面同一纪律），去抖 150 ms 重算树，内容真变才推；窗格集合变化时重订阅（Herdr 的 agent_status 订阅按窗格），订阅失败指数退避；不转发 Herdr 全局焦点（手机导航本地）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -101,10 +101,16 @@ func (s *Server) followTree(ctx context.Context, instance string, notify func(ui
 // It reports true when the caller should stop altogether.
 func (s *Server) pumpEvents(ctx context.Context, instance string, src EventSource, panes []string, notify func(uint64) error) (stop bool) {
 	var fire <-chan time.Time
+	poke := s.pokeChannel()
 	for {
 		select {
 		case <-ctx.Done():
 			return true
+		case <-poke:
+			poke = s.pokeChannel()
+			if fire == nil {
+				fire = time.After(eventDebounce)
+			}
 		case <-src.Done():
 			return false
 		case _, ok := <-src.Events():

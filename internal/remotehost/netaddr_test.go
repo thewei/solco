@@ -134,7 +134,7 @@ func TestReconfigureRebindsAndNeverWidens(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := srv.Reconfigure(Config{Mode: ModeLoopback, Port: p2}); err != nil {
+	if err := srv.Reconfigure(Config{Mode: ModeLoopback, Port: p2}, RelayConfig{}); err != nil {
 		t.Fatal(err)
 	}
 	if reachable(p1) || !reachable(p2) {
@@ -151,7 +151,7 @@ func TestReconfigureRebindsAndNeverWidens(t *testing.T) {
 		{Mode: ModeLAN, Port: p1, Address: ""},
 		{Mode: ModeTailscale, Port: p1, Address: "192.168.1.5"},
 	} {
-		if err := srv.Reconfigure(bad); err == nil {
+		if err := srv.Reconfigure(bad, RelayConfig{}); err == nil {
 			t.Fatalf("%+v accepted", bad)
 		}
 		if reachable(p1) || reachable(p2) {
@@ -159,7 +159,7 @@ func TestReconfigureRebindsAndNeverWidens(t *testing.T) {
 		}
 	}
 
-	if err := srv.Reconfigure(Config{Mode: ModeOff}); err != nil {
+	if err := srv.Reconfigure(Config{Mode: ModeOff}, RelayConfig{}); err != nil {
 		t.Fatal(err)
 	}
 	if reachable(p1) || reachable(p2) {
@@ -182,7 +182,7 @@ func TestReconfigureFailsCleanlyWhenThePortIsTaken(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(srv.Close)
-	if err := srv.Reconfigure(Config{Mode: ModeLoopback, Port: busy.Addr().(*net.TCPAddr).Port}); err == nil {
+	if err := srv.Reconfigure(Config{Mode: ModeLoopback, Port: busy.Addr().(*net.TCPAddr).Port}, RelayConfig{}); err == nil {
 		t.Fatal("bind over a busy port succeeded")
 	}
 }

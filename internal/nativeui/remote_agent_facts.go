@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/thewei/solco/internal/agent"
@@ -38,8 +39,13 @@ func (s *Shell) publishRemoteAgentFacts() {
 		facts[card.Key.TerminalID] = remotehost.AgentFact{Title: title, LastActive: card.LastActive}
 	}
 	s.remoteFacts.mu.Lock()
+	changed := s.remoteFacts.instance != s.activeInstance || !maps.Equal(s.remoteFacts.byTerminal, facts)
 	s.remoteFacts.instance, s.remoteFacts.byTerminal = s.activeInstance, facts
 	s.remoteFacts.mu.Unlock()
+	// A title moves without any Herdr event: tell the phones' open sockets.
+	if changed && s.remote.srv != nil {
+		s.remote.srv.Poke()
+	}
 }
 
 // hostAgentFacts serves the snapshot to the Host; another Herdr session gets none.

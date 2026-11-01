@@ -40,6 +40,8 @@ var settingsLabels = map[string][][2]string{
 	},
 	"/settings/remote": {
 		{"Listener", "Access"}, {"Listener", "Address"}, {"Listener", "Port"}, {"Phones", "Pair a phone"},
+		{"Relay", "Relay"}, {"Relay", "Relay Address"}, {"Relay", "Registration Key"}, {"Relay", "Relay Status"},
+		{"Direct P2P", "P2P"}, {"Direct P2P", "ICE Servers"}, {"Direct P2P", "TURN Username"}, {"Direct P2P", "TURN Credential"}, {"Direct P2P", "P2P Status"},
 	},
 	"/settings/providers": {
 		{"", "Integration"}, {"", "Status hook"},

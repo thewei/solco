@@ -14,15 +14,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/thewei/solco/internal/herdr"
 )
 
 /**
- * [INPUT]: 依赖 Config/DeviceStore/Pairing/LoadOrCreateCert、Backend（Herdr 缝）、net/http
- * [OUTPUT]: 对外提供 Server（New/Start/Close/Handler/StartPairing/Devices）、PairingOffer、Scope 与统一 authorize 入口
- * [POS]: Remote Host 的监听器生命周期与 HTTP 面：/api/v3 的 pair（免鉴权）、bootstrap、tree；其余端点（events/terminals/peek）在 events.go/terminal.go/peek.go；所有受保护端点都过 guard → authorize，撤销即关闭该设备的所有 WS
+ * [INPUT]: 依赖 Config/RelayConfig/DeviceStore/Pairing/LoadOrCreateCert、Backend（Herdr 缝）、net/http
+ * [OUTPUT]: 对外提供 Server（New/Start/Reconfigure/Close/Handler/StartPairing/Devices/RelayStatus）、PairingOffer、Scope 与统一 authorize 入口
+ * [POS]: Remote Host 的监听器生命周期与 HTTP 面：/api/v3 的 pair（免鉴权）、bootstrap、tree；其余端点（events/terminals/peek）在 events.go/terminal.go/peek.go；所有受保护端点都过 guard → authorize（Bearer 头、['solco.bearer', token] 子协议、或 wopen 无子协议场景的 ?token= query），撤销即关闭该设备的所有 WS；relay 隧道（relayclient.go）由 Start/Reconfigure/Close 管理生命周期，仅当 Relay.Enabled 且监听器已启动时运行，StartPairing 在 relay 开启时给 QR 追加 &r=&rt=
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -49,6 +50,10 @@ type Options struct {
 	Config  Config
 	Dir     string // <userDataDir>/RemoteHost
 	Backend Backend
+	// Relay is the opt-in route through a self-hosted alma-relay for when no
+	// direct network path exists; it dials out, so it needs no extra port and
+	// its loopback bridge is an implementation detail (relayclient.go).
+	Relay RelayConfig
 	// Identity supplies a session identity Herdr's agent list lacks (Claude
 	// Code and Codex report none; the desktop learns it from its own hooks).
 	// It must match provider and terminal itself; nil disables the fallback.
@@ -59,10 +64,14 @@ type Options struct {
 	// Launcher starts new sessions for the phone (POST /launch); nil = the Host
 	// offers no launch and bootstrap says so.
 	Launcher Launcher
-	// Queue is the desktop's follow-up queue (POST .../chat/send {queue}, .../chat/queue/cancel); nil = no queueing.
+	// Queue is the desktop's follow-up queue (POST .../chat/send {queue}, .../chat/queue/cancel, .../chat/queue/item/{requestID}/cancel); nil = no queueing.
 	Queue FollowUps
 	// Git reads a Workspace's working-tree changes for the phone (GET .../git); nil = no Git view.
 	Git GitReader
+	// Usage serves the desktop's quota page for the phone (GET /quota); nil = the
+	// Host offers no quota view and bootstrap says so. It runs on the Host's
+	// goroutines and answers every provider's standing in the page's order.
+	Usage func(ctx context.Context, force bool) Quota
 	// Catalog lists a pane agent's own Skills, commands and models for the composer; nil = agentcatalog.Load.
 	Catalog catalogLoader
 	// Attach stores an uploaded Chat attachment and returns its absolute path (POST .../chat/attachments);
@@ -100,6 +109,13 @@ type Server struct {
 	asks        map[string]*askCursor             // instance\x00pane → Question state
 	trees       map[string]*treeState
 	peeks       peekCache
+	poke        chan struct{} // closed and replaced by Poke; every events pump waits on the current one
+
+	relay       *relayClient // non-nil while the relay tunnel is running
+	relayStatus RelayStatus  // what Settings shows; written by startRelay and the client
+	secretCache string       // cached relay connect code, loaded once from Dir
+	relayHooks  *relayTestHooks
+	p2p         p2pState // WebRTC direct path (p2p.go)
 }
 
 // liveConn is one open WebSocket as the server tracks it. close sends a close
@@ -121,6 +137,7 @@ func New(opts Options) (*Server, error) {
 	s := &Server{
 		opts: opts, devices: devices, pairing: NewPairing(opts.Now),
 		conns: map[string]map[*liveConn]struct{}{}, terminals: map[string]int{}, trees: map[string]*treeState{},
+		poke: make(chan struct{}),
 	}
 	devices.OnRevoke(s.closeDevice)
 	return s, nil
@@ -140,7 +157,7 @@ func (s *Server) Start() error {
 	if addr == "" {
 		return nil
 	}
-	ln, err := net.Listen("tcp", addr)
+	ln, err := listenReliable(addr)
 	if err != nil {
 		return fmt.Errorf("remote host listen on %s: %w", addr, err)
 	}
@@ -149,6 +166,22 @@ func (s *Server) Start() error {
 		return err
 	}
 	return nil
+}
+
+// listenReliable binds addr, re-trying briefly while the address winds down:
+// rebinding the very port that was just closed can fail with EADDRINUSE for
+// a few tens of milliseconds on darwin (Reconfigure rebinds the same listener
+// whenever the user flips any Remote Access switch). A port genuinely held by
+// another process stays refused — the retry never widens the exposure.
+func listenReliable(addr string) (net.Listener, error) {
+	deadline := time.Now().Add(250 * time.Millisecond)
+	for {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil || !errors.Is(err, syscall.EADDRINUSE) || time.Now().After(deadline) {
+			return ln, err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func (s *Server) config() Config {
@@ -167,16 +200,18 @@ func (s *Server) ListenAddress() string {
 	return net.JoinHostPort(s.listenHost, s.listenPort)
 }
 
-// Reconfigure applies a new listener policy (Settings changed the mode,
-// address or port): every live socket and the listener go first, then the new
-// address binds. A pairing code is dropped because its QR carries the old
-// address. If the new config is invalid or the bind fails, the Host stays
-// stopped — it never falls back to a wider address.
-func (s *Server) Reconfigure(cfg Config) error {
+// Reconfigure applies new listener and relay choices (Settings changed the
+// mode, address, port or relay): every live socket, the listener and the
+// relay tunnel go first, then the new address binds and the tunnel redials.
+// A pairing code is dropped because its QR carries the old address. If the
+// new config is invalid or the bind fails, the Host stays stopped — it never
+// falls back to a wider address.
+func (s *Server) Reconfigure(cfg Config, relay RelayConfig) error {
 	s.Close()
 	s.pairing.Cancel()
 	s.mu.Lock()
 	s.opts.Config = cfg
+	s.opts.Relay = relay
 	s.mu.Unlock()
 	return s.Start()
 }
@@ -208,11 +243,93 @@ func (s *Server) serve(ln net.Listener, cfg Config) error {
 		}
 	}()
 	slog.Info("remote host listening", "mode", cfg.Mode, "port", port)
+	s.startRelay() // tunnels through its own loopback bridge; needs a running Host
 	return nil
 }
 
-// Close stops listening and drops every live socket.
+// startRelay brings the relay tunnel up when the user enabled it. It runs
+// only on a started Host: the tunnel bridges into Handler(), but pairing and
+// the Settings status assume the listener is up. A broken relay config or
+// secret leaves the Host serving and just puts the relay in the error state.
+func (s *Server) startRelay() {
+	rc := s.relayConfig()
+	if !rc.Enabled {
+		return
+	}
+	if err := rc.Validate(); err != nil {
+		s.setRelayStatus(RelayStatus{State: RelayError, Message: err.Error()})
+		slog.Warn("remote host relay not started", "error", err)
+		return
+	}
+	secret, err := s.relaySecret()
+	if err != nil {
+		s.setRelayStatus(RelayStatus{State: RelayError, Message: err.Error()})
+		slog.Warn("remote host relay not started", "error", err)
+		return
+	}
+	c := newRelayClient(s, rc, secret)
+	s.mu.Lock()
+	s.relay = c
+	s.mu.Unlock()
+	c.start()
+}
+
+func (s *Server) stopRelay() {
+	s.mu.Lock()
+	c := s.relay
+	s.relay = nil
+	s.mu.Unlock()
+	if c != nil {
+		c.stop()
+	}
+	s.setRelayStatus(RelayStatus{})
+}
+
+// RelayStatus is what Settings shows about the relay tunnel (idle while the
+// relay is off or the Host is stopped).
+func (s *Server) RelayStatus() RelayStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.relayStatus
+}
+
+func (s *Server) setRelayStatus(st RelayStatus) {
+	s.mu.Lock()
+	s.relayStatus = st
+	s.mu.Unlock()
+}
+
+func (s *Server) relayConfig() RelayConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.opts.Relay
+}
+
+// relaySecret loads the Mac's relay connect code once and caches it.
+func (s *Server) relaySecret() (string, error) {
+	s.mu.Lock()
+	cached := s.secretCache
+	s.mu.Unlock()
+	if cached != "" {
+		return cached, nil
+	}
+	secret, err := LoadOrCreateRelaySecret(s.opts.Dir)
+	if err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	if s.secretCache == "" {
+		s.secretCache = secret
+	}
+	s.mu.Unlock()
+	return secret, nil
+}
+
+// Close stops listening and drops every live socket. The relay tunnel goes
+// first: it dials home and bridges into the handler that is about to die.
 func (s *Server) Close() {
+	s.stopRelay()
+	s.closeP2P()
 	s.mu.Lock()
 	srv := s.httpServer
 	s.httpServer = nil
@@ -254,6 +371,17 @@ func (s *Server) StartPairing() (PairingOffer, error) {
 	q.Set("fp", fp)
 	q.Set("c", code)
 	q.Set("n", s.opts.HostName)
+	// Phones can also reach this Mac through the user's relay; the offer
+	// carries the relay base and this Mac's secret so the phone may use
+	// either path. The one-time pairing code stays single-use either way.
+	if rc := s.relayConfig(); rc.Enabled {
+		if secret, err := s.relaySecret(); err == nil {
+			q.Set("r", strings.TrimSuffix(rc.URL, "/"))
+			q.Set("rt", secret)
+		} else {
+			slog.Warn("remote host pairing: relay secret unavailable", "error", err)
+		}
+	}
 	return PairingOffer{URL: "solco://pair?" + q.Encode(), Code: code, ExpiresAt: expires, Fingerprint: fp}, nil
 }
 
@@ -275,12 +403,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/panes/{paneID}/chat/stream", s.guard(ScopeView, s.handleChatStream))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/send", s.guard(ScopeTerminalInput, s.handleChatSend))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/queue/cancel", s.guard(ScopeTerminalInput, s.handleChatQueueCancel))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/queue/item/{requestID}/cancel", s.guard(ScopeTerminalInput, s.handleChatQueueItemCancel))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/attachments", s.guard(ScopeTerminalInput, s.handleChatAttach))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/stop", s.guard(ScopeTerminalInput, s.handleChatStop))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/answer", s.guard(ScopeTerminalInput, s.handleChatAnswer))
 	mux.Handle("POST "+apiPrefix+"/launch", s.guard(ScopeManage, s.handleLaunch))
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git", s.guard(ScopeView, s.handleGitStatus))
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git/diff", s.guard(ScopeView, s.handleGitDiff))
+	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
+	mux.Handle("GET "+apiPrefix+"/p2p/ice", s.guard(ScopeView, s.handleP2PICE))
+	mux.Handle("POST "+apiPrefix+"/p2p/session", s.guard(ScopeView, s.handleP2PSession))
 	mux.Handle("GET "+apiPrefix+"/terminals/{terminalID}/stream", s.guard(ScopeView, s.handleTerminal))
 	return mux
 }
@@ -317,7 +449,11 @@ func (s *Server) guard(need Scope, h func(http.ResponseWriter, *http.Request, De
 }
 
 // bearerToken reads the Authorization header or, for WebSockets, the
-// ["solco.bearer", token] subprotocol pair.
+// ["solco.bearer", token] subprotocol pair. A third channel — the same
+// ?token= query parameter /chat/files already uses for its search term —
+// covers sockets that arrive with neither headers nor subprotocols: relayed
+// WebSocket connections (the relay's wopen carries only a path). Query
+// values must never reach a log.
 func bearerToken(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); h != "" {
 		if scheme, tok, ok := strings.Cut(h, " "); ok && strings.EqualFold(scheme, "Bearer") {
@@ -333,6 +469,9 @@ func bearerToken(r *http.Request) string {
 	}
 	if i := slices.Index(protos, subprotocolBearer); i >= 0 && i+1 < len(protos) {
 		return protos[i+1]
+	}
+	if tok := r.URL.Query().Get("token"); tok != "" {
+		return tok
 	}
 	return ""
 }
@@ -430,6 +569,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 		capabilities["launch"] = true
 		body["launchKinds"] = s.opts.Launcher.Kinds()
 	}
+	if s.opts.Usage != nil {
+		capabilities["quota"] = true
+	}
 	if s.opts.Git != nil {
 		capabilities["git"] = true
 	}
@@ -438,6 +580,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	}
 	if s.opts.Queue != nil {
 		capabilities["queue"] = true
+	}
+	if s.p2pConfig().Enabled {
+		capabilities["p2p"] = true
 	}
 	writeJSON(w, http.StatusOK, body)
 }
@@ -535,4 +680,20 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 		body["message"] = msg
 	}
 	writeJSON(w, status, map[string]any{"error": body})
+}
+
+// Poke tells every open events socket to re-read its tree now. Facts the Host
+// does not learn from Herdr (the desktop's resolved Agent titles) change
+// without any Herdr event; the owner of those facts pokes when they move.
+func (s *Server) Poke() {
+	s.mu.Lock()
+	close(s.poke)
+	s.poke = make(chan struct{})
+	s.mu.Unlock()
+}
+
+func (s *Server) pokeChannel() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.poke
 }
