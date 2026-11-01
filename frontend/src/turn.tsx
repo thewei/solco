@@ -465,6 +465,9 @@ function Delta({ add, del }: { add: number; del: number }) {
   );
 }
 
+/** Rows drawn before the card folds; the rest sit behind "Show all N files". */
+const CHANGES_PREVIEW = 5;
+
 function ChangesCard({
   changes,
   canReview,
@@ -474,10 +477,12 @@ function ChangesCard({
   canReview: boolean;
   onReview: (path: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const counted = changes.filter((change) => change.counted);
   const add = counted.reduce((sum, change) => sum + (change.additions ?? 0), 0);
   const del = counted.reduce((sum, change) => sum + (change.deletions ?? 0), 0);
   const noun = `${changes.length} file${changes.length === 1 ? "" : "s"}`;
+  const shown = expanded ? changes : changes.slice(0, CHANGES_PREVIEW);
   return (
     <div className="changes">
       <div className="chead">
@@ -494,7 +499,7 @@ function ChangesCard({
           </button>
         ) : null}
       </div>
-      {changes.map((change) => (
+      {shown.map((change) => (
         <div className="crow" key={change.path}>
           {canReview && !change.path.startsWith("/") ? (
             <button type="button" className="cpath" onClick={() => onReview(change.path)}>
@@ -506,6 +511,14 @@ function ChangesCard({
           {change.counted ? <Delta add={change.additions ?? 0} del={change.deletions ?? 0} /> : null}
         </div>
       ))}
+      {changes.length > CHANGES_PREVIEW ? (
+        <button type="button" className="cmore" onClick={() => setExpanded(!expanded)}>
+          <span className={`chev${expanded ? " open" : ""}`}>
+            <Icon name="chev" size={13} />
+          </span>
+          {expanded ? "Show fewer" : `Show all ${changes.length} files`}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -735,6 +735,26 @@
   background: var(--tint);
 }
 
+.cmore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px;
+  border-top: 1px solid var(--hair);
+  font-size: 12.5px;
+  color: var(--i3);
+}
+
+.cmore:hover {
+  background: var(--tint);
+  color: var(--i1);
+}
+
+.cmore .chev.open {
+  transform: rotate(90deg);
+}
+
 .delta {
   margin-left: auto;
   padding-left: 12px;
@@ -1102,20 +1122,184 @@
   font-size: 12px;
 }
 
-.queued {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--i3);
-  font-size: 12px;
+.queueCard {
   margin: 0 4px 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 14px;
+  background: var(--panel);
+  overflow: hidden;
 }
 
-.queued button {
+.queueCard .qcRow,
+.queueCard .qcHeadBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.queueCard .qcRow:hover,
+.queueCard .qcHeadBtn:hover {
+  background: var(--tint);
+}
+
+.queueCard .qcCnt {
+  flex: none;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--tint2);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--i2);
+  font-variant-numeric: tabular-nums;
+}
+
+.queueCard .qcLbl,
+.queueCard .qcTtl {
+  flex: none;
+  font-weight: 500;
+  color: var(--i1);
+}
+
+.queueCard .qcTxt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--i3);
+}
+
+.queueCard .chev.open {
+  transform: rotate(90deg);
+}
+
+.queueCard .qcHead {
+  display: flex;
+  align-items: center;
+}
+
+.queueCard .qcHeadBtn {
+  flex: 1;
+  min-width: 0;
+}
+
+.queueCard .qcAll {
+  flex: none;
   border: 1px solid var(--hair2);
   border-radius: 6px;
   color: var(--i1);
   padding: 2px 10px;
+  margin-right: 10px;
+}
+
+.queueCard .qcAll:hover {
+  background: var(--tint);
+}
+
+.queueCard .qcList {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 6px;
+}
+
+.queueCard .qcList.scroll {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.queueCard .qcItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.queueCard .qcItem:hover {
+  background: var(--tint);
+}
+
+.queueCard .qcItem.dragging {
+  background: var(--tint2);
+  opacity: 0.6;
+}
+
+.queueCard .qcHandle {
+  flex: none;
+  width: 10px;
+  height: 20px;
+  border-radius: 3px;
+  color: var(--i3);
+  cursor: grab;
+  touch-action: none;
+  background-image: radial-gradient(currentColor 1px, transparent 1.5px);
+  background-size: 5px 5px;
+  background-position: center;
+}
+
+.queueCard .qcHandle:active {
+  cursor: grabbing;
+}
+
+.queueCard .qcHandle.off {
+  visibility: hidden;
+}
+
+.queueCard .qcText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.queueCard .qcItem.alert .qcText {
+  color: var(--warning);
+}
+
+.queueCard .qcNext {
+  flex: none;
+  padding: 0 7px;
+  border: 1px solid var(--hair2);
+  border-radius: 9px;
+  font-size: 10.5px;
+  line-height: 15px;
+  color: var(--i2);
+}
+
+.queueCard .qcX {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--i3);
+}
+
+.queueCard .qcX.off {
+  visibility: hidden;
+}
+
+.queueCard .qcX:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.queueCard .qcItem.alert .qcX {
+  color: var(--warning);
+}
+
+.queueCard .qcItem.alert .qcX:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
 }
 
 .completions {
@@ -2296,11 +2480,46 @@
   right: 0;
   bottom: 0;
   z-index: 6;
-  width: min(420px, 100%);
+  width: min(var(--drawer-w, 420px), 100%);
   display: flex;
   flex-direction: column;
   background: var(--content);
   border-left: 1px solid var(--hair2);
+}
+
+/* The drawer's left edge resizes it: a 9px hit area over the border, with
+   a hairline that lights up on hover/drag. Wide windows shift the
+   conversation's right margin with the same --drawer-w (below). */
+.drawer-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 1;
+}
+
+.drawer-grip::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: transparent;
+}
+
+.drawer-grip:hover::after,
+.drawer-grip.dragging::after {
+  background: var(--i2);
+}
+
+body.resizing-drawer {
+  cursor: col-resize;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .dhead {
@@ -2355,7 +2574,7 @@
 @media (min-width: 1000px) {
   .chat.with-drawer > .chat-log,
   .chat.with-drawer > .composer {
-    margin-right: 420px;
+    margin-right: var(--drawer-w, 420px);
   }
 }
 
@@ -2363,7 +2582,6 @@
 .tasks .titem.sub {
   padding: 0;
 }
-
 .tasks .tsub {
   display: flex;
   align-items: center;

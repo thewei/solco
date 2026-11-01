@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { event as bridgeEvent } from "mygo-runtime";
 import { chat, events, type ChatBridgeState, type ChatCatalog, type ChatCatalogEntry } from "./mygo";
 import { Icon, StopIcon } from "./icons";
 import { selectContents, useLinkHint } from "./native";
@@ -13,10 +14,11 @@ import { OutboxRow, TurnRow, userDisplay, type Outbox } from "./turn";
 import { ContextControl } from "./context";
 import { TocRail } from "./toc";
 import { SubagentContext, type SubagentContextValue } from "./subagents";
-import { SubagentDrawer } from "./drawer";
+import { DRAWER_DEFAULT, DRAWER_MAX, DRAWER_MIN, SubagentDrawer } from "./drawer";
 import { turnText, useTurnList } from "./turnlist";
 import { AttachChips, IMAGE_EXT, ModelPanel, PlusPanel, SlashPanel, fileToBase64, slashMatches } from "./composer";
 import { BlockedDock, QuestionDock, SessionState, TasksTray, WorkingLine, isFreeTextOption, planFinished } from "./dock";
+import { QueueCard } from "./queue-card";
 import "./chat.css";
 
 /**
@@ -30,6 +32,13 @@ import "./chat.css";
 // "terminal" | "unknown"; the generated client types it as string.
 // `dockAbove` is the host page's own dock (the Projects page puts "needs you"
 // and the plan/approve decision there), drawn first in the composer column.
+// The native sidebar's and quick panel's nested sub-agent rows ask for the
+// same drawer the page's cards open: the shell emits chat:subagent-open
+// (chatSubagentOpen, chat_subagents.go) once the row's conversation is the
+// bound one, so the id is always listed. The typed accessor lands in
+// mygo.ts when `mygo generate` next runs on a tree that compiles; until
+// then the page subscribes through the runtime directly.
+const chatSubagentOpen = bridgeEvent<string>("chat:subagent-open");
 export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const [state, setStateRaw] = useState<ChatBridgeState | null>(null);
   // A projection built before the one on screen never replaces it (snapshot
@@ -555,6 +564,16 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     if (next) setState(next);
   };
 
+  const cancelQueuedItem = async (id: string) => {
+    const next = await chat.cancelQueuedItem(id).catch(() => state);
+    if (next) setState(next);
+  };
+
+  const reorderQueued = async (id: string, index: number) => {
+    const next = await chat.reorderQueued(id, index).catch(() => state);
+    if (next) setState(next);
+  };
+
   // The turn at the viewport's top edge before an older page lands: the page
   // that follows is realigned to it (see the layout effect after `list`).
   const anchorRef = useRef<{ key: string; index: number; offset: number; at: number } | null>(null);
@@ -969,6 +988,18 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // Sub-agent cards open one drawer; it closes with the conversation it
   // belonged to or when the sub-agent leaves the list.
   const [openSub, setOpenSub] = useState<string | null>(null);
+  // The native rows' drawer ask (chatSubagentOpen below). It can land
+  // before the conversation it targeted has finished binding, so it rides
+  // out one conversationId change and is spent once its drawer renders.
+  const nativeSubAsk = useRef<{ id: string; at: number } | null>(null);
+  useEffect(
+    () =>
+      chatSubagentOpen.on((id) => {
+        nativeSubAsk.current = { id, at: Date.now() };
+        setOpenSub(id);
+      }),
+    [],
+  );
   const subCtx = useMemo<SubagentContextValue>(
     () => ({
       byId: new Map((state?.subagents ?? []).map((sub) => [sub.id, sub])),
@@ -978,7 +1009,26 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     [state?.subagents, openSub, canOpenSubagent],
   );
   const subOpen = openSub !== null && subCtx.byId.has(openSub);
-  useEffect(() => setOpenSub(null), [conversationId]);
+  useEffect(() => {
+    setOpenSub((current) =>
+      current !== null && nativeSubAsk.current?.id === current && Date.now() - nativeSubAsk.current.at < 10000
+        ? current
+        : null,
+    );
+  }, [conversationId]);
+  useEffect(() => {
+    if (subOpen) nativeSubAsk.current = null;
+  }, [subOpen]);
+  // Drawer width (drawer.tsx grip): a local layout preference, unlike the
+  // per-conversation drafts.
+  const [drawerW, setDrawerW] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem("solco.drawerWidth"));
+      return saved >= DRAWER_MIN && saved <= DRAWER_MAX ? saved : DRAWER_DEFAULT;
+    } catch {
+      return DRAWER_DEFAULT;
+    }
+  });
   const listRef = useRef<HTMLDivElement>(null);
   const [listMargin, setListMargin] = useState(0);
   const list = useTurnList(logRef, turns.length, (index) => keys[index], listMargin);
@@ -1064,6 +1114,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     <SubagentContext.Provider value={subCtx}>
     <div
       className={subOpen ? "chat with-drawer" : "chat"}
+      style={subOpen ? ({ "--drawer-w": `${drawerW}px` } as React.CSSProperties) : undefined}
       onContextMenu={onContextMenu}
       onDragOver={(event) => {
         if (readOnly || voiceBusy || !canAttach || !hasFiles(event)) return;
@@ -1245,14 +1296,13 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
               <BlockedDock onOpenTerminal={openTerminal} />
             ) : null}
             {state?.outcome && !outbox ? <div className="outcome">{state.outcome}</div> : null}
-            {state?.queuedText ? (
-              <div className="queued">
-                <span>Queued after turn</span>
-                <button type="button" onClick={cancelQueued}>
-                  Cancel
-                </button>
-              </div>
-            ) : null}
+            <QueueCard
+              items={state?.queuedItems}
+              canReorder={state?.features?.reorder !== false}
+              onCancelItem={(id) => void cancelQueuedItem(id)}
+              onReorder={(id, index) => void reorderQueued(id, index)}
+              onCancelAll={() => void cancelQueued()}
+            />
             {slash.length > 0 && completions.length === 0 ? (
               <SlashPanel entries={slash} pick={slashPick} onPick={runSlash} onHover={setSlashPick} />
             ) : null}
@@ -1452,7 +1502,21 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
           </div>
         </div>
       )}
-      {subOpen && openSub ? <SubagentDrawer id={openSub} onClose={() => setOpenSub(null)} /> : null}
+      {subOpen && openSub ? (
+        <SubagentDrawer
+          id={openSub}
+          onWidth={setDrawerW}
+          onWidthCommit={(width) => {
+            setDrawerW(width);
+            try {
+              localStorage.setItem("solco.drawerWidth", String(width));
+            } catch {
+              // storage unavailable: the width just does not persist
+            }
+          }}
+          onClose={() => setOpenSub(null)}
+        />
+      ) : null}
     </div>
     </SubagentContext.Provider>
   );

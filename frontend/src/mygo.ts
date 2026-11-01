@@ -78,6 +78,19 @@ export interface ChatBridgeLink {
 }
 
 /**
+ * ChatBridgeQueuedItem is one follow-up in the conversation's ordered
+ * queue (ChatBridgeState.QueuedItems, delivery order); State is the
+ * ledger's QueueState verbatim and Detail carries the state's own
+ * annotation (e.g. why an uncertain send froze the queue).
+ */
+export interface ChatBridgeQueuedItem {
+  id: string;
+  text: string;
+  state: string;
+  detail?: string;
+}
+
+/**
  * ChatBridgeState is the full chat projection the page renders. It is
  * presentation state only: the conversation runtime, the send path and the
  * follow-up ledger stay in Go (internal/agent + internal/herdr).
@@ -119,7 +132,7 @@ export interface ChatBridgeState {
   linkCandidates?: ChatBridgeLink[];
   disposition: string;
   outcome?: string;
-  queuedText?: string;
+  queuedItems?: ChatBridgeQueuedItem[];
   /**
    * Theme is the app-resolved appearance ("light" or "dark"), following
    * Settings -> General -> Appearance through mygo.Theme — not the bare
@@ -273,6 +286,11 @@ export interface ChatFeatures {
   attach: boolean;
   /** Queue: a follow-up can be queued behind a running turn. */
   queue: boolean;
+  /**
+   * Reorder: the queued follow-ups can be reordered and individually
+   * cancelled (chat.ReorderQueued / chat.CancelQueuedItem).
+   */
+  reorder: boolean;
   /** SubagentDrawer: a sub-agent's own transcript can be opened (chat.OpenSubagent). */
   subagentDrawer: boolean;
 }
@@ -734,11 +752,19 @@ export const chat = {
     return call("chat.AnswerInteractionText", interactionID, option, text);
   },
   /**
-   * CancelQueued cancels the queued follow-up (only possible before its
-   * delivery commit) and returns the projection.
+   * CancelQueued cancels every cancellable follow-up of the bound
+   * conversation (an entry mid-delivery stays) and returns the projection.
    */
   cancelQueued(): Promise<ChatBridgeState> {
     return call("chat.CancelQueued");
+  },
+  /**
+   * CancelQueuedItem withdraws one follow-up by request id before its
+   * delivery commit and returns the projection; a commit race surfaces in
+   * the projection's Outcome instead of failing the call.
+   */
+  cancelQueuedItem(requestID: string): Promise<ChatBridgeState> {
+    return call("chat.CancelQueuedItem", requestID);
   },
   /**
    * Catalog lists the Skills, commands and models the composer can offer. It
@@ -820,6 +846,14 @@ export const chat = {
    */
   pickAttachment(): Promise<string> {
     return call("chat.PickAttachment");
+  },
+  /**
+   * ReorderQueued moves one queued follow-up to index to (delivery order =
+   * list order; entries the worker already claimed stay pinned to the head
+   * run) and returns the projection.
+   */
+  reorderQueued(requestID: string, to: number): Promise<ChatBridgeState> {
+    return call("chat.ReorderQueued", requestID, to);
   },
   /**
    * ReviewChanges opens Diff Review (the WorkspacePrimarySurface Diff state)
@@ -1050,6 +1084,13 @@ export const events = {
   chatUpdated: event<ChatBridgeState>("chat:updated"),
   /** chatMenu is the page's own menu actions (the ones only the page can run). */
   chatMenu: event<string>("chat:menu"),
+  /**
+   * chatSubagentOpen asks the page to open one listed sub-agent in its drawer
+   * (the native sidebar's and quick panel's nested rows have no page click of
+   * their own). The Shell emits it only once the sub's conversation is the
+   * bound one, so the id is always one the current chat lists.
+   */
+  chatSubagentOpen: event<string>("chat:subagent-open"),
   /**
    * filesPreviewSelected fires whenever the tree selection changes. Events
    * emitted before the page is ready are replayed by the runtime, so the
