@@ -16,6 +16,7 @@ type fakeDeliveryTransport struct {
 	fingerprintX func() string
 	deliverErr   error
 	deliverCalls int
+	delivered    []string
 }
 
 func (t *fakeDeliveryTransport) WaitTurnBoundary(ctx context.Context, item QueueItem) error {
@@ -37,6 +38,7 @@ func (t *fakeDeliveryTransport) Deliver(ctx context.Context, item QueueItem) err
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.deliverCalls++
+	t.delivered = append(t.delivered, item.Text)
 	return t.deliverErr
 }
 
@@ -58,6 +60,13 @@ func queuedItem(id ConversationID) QueueItem {
 		Text:           "continue the work",
 		Instance:       "inst-1",
 	}
+}
+
+func stackedItem(id ConversationID, requestID, text string) QueueItem {
+	item := queuedItem(id)
+	item.RequestID = requestID
+	item.Text = text
+	return item
 }
 
 func deliveryWorker(queue *FollowUpQueue, transport DeliveryTransport, states *[]QueueState) *DeliveryWorker {
@@ -90,18 +99,111 @@ func TestDeliveryWorkerHappyPath(t *testing.T) {
 	if transport.deliverCalls != 1 {
 		t.Fatalf("deliver calls = %d", transport.deliverCalls)
 	}
-	item, _ := queue.Get(id)
-	if item.State != Delivered {
-		t.Fatalf("final state = %q", item.State)
+	// A delivered item leaves the list at once.
+	if _, ok := queue.Head(id); ok {
+		t.Fatal("the delivered item must leave the list")
 	}
 	if len(states) < 3 || states[0] != WaitingForTurnBoundary || states[len(states)-1] != Delivered {
 		t.Fatalf("observed states = %v", states)
 	}
 
-	// A completed item is inert to further cycles.
+	// An empty list is inert to further cycles.
 	again := worker.DeliverOnce(context.Background(), id)
 	if again.Sent || transport.deliverCalls != 1 {
 		t.Fatalf("delivered item re-sent: %+v calls %d", again, transport.deliverCalls)
+	}
+}
+
+// TestDeliveryWorkerDrainsOnePerBoundary pins the stack semantics: one
+// prompt per cycle, in list order, and More reports the follower that owns
+// the next turn boundary.
+func TestDeliveryWorkerDrainsOnePerBoundary(t *testing.T) {
+	id := ConversationID("live:claude-code:pane-7")
+	queue := NewFollowUpQueue()
+	_ = queue.Enqueue(stackedItem(id, "req-1", "first"))
+	_ = queue.Enqueue(stackedItem(id, "req-2", "second"))
+	_ = queue.Enqueue(stackedItem(id, "req-3", "third"))
+	transport := &fakeDeliveryTransport{fingerprint: "fp-1"}
+	worker := deliveryWorker(queue, transport, nil)
+
+	// The worker's first cycle takes the head: one prompt, and More
+	// reports the follower that owns the next turn boundary.
+	outcome := worker.DeliverOnce(context.Background(), id)
+	if !outcome.Sent || !outcome.More {
+		t.Fatalf("first delivery = %+v, want More", outcome)
+	}
+	// While the second entry waits on its boundary it stays pinned; the
+	// tail may reorder below the pinned run but never jump it.
+	_, _ = queue.Transition(id, "req-2", WaitingForTurnBoundary, "worker cycle took the item")
+	if err := queue.Move(id, "req-3", 0); err == nil {
+		t.Fatal("a queued item must not jump above the pinned head run")
+	}
+	if err := queue.Enqueue(stackedItem(id, "req-4", "fourth")); err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.Move(id, "req-4", 1); err != nil {
+		t.Fatal(err)
+	}
+	outcome = worker.DeliverOnce(context.Background(), id)
+	if !outcome.Sent || !outcome.More {
+		t.Fatalf("second delivery = %+v, want More", outcome)
+	}
+	outcome = worker.DeliverOnce(context.Background(), id)
+	if !outcome.Sent || !outcome.More {
+		t.Fatalf("third delivery = %+v, want More", outcome)
+	}
+	outcome = worker.DeliverOnce(context.Background(), id)
+	if !outcome.Sent || outcome.More {
+		t.Fatalf("last delivery = %+v, want no More", outcome)
+	}
+	if transport.deliverCalls != 4 {
+		t.Fatalf("deliver calls = %d", transport.deliverCalls)
+	}
+	// The reordered stack delivered in list order, one prompt per cycle.
+	if got := transport.delivered; got[0] != "first" || got[1] != "second" || got[2] != "fourth" || got[3] != "third" {
+		t.Fatalf("delivery order = %v", got)
+	}
+	if _, ok := queue.Head(id); ok {
+		t.Fatal("the drained list must be empty")
+	}
+}
+
+// TestDeliveryWorkerUncertainFreezesTheTail pins the frozen stack: an
+// uncertain head holds every follower back — nothing sends behind a send
+// that may or may not have happened — until the entries are acknowledged.
+func TestDeliveryWorkerUncertainFreezesTheTail(t *testing.T) {
+	id := ConversationID("live:claude-code:pane-7")
+	queue := NewFollowUpQueue()
+	_ = queue.Enqueue(stackedItem(id, "req-1", "first"))
+	_ = queue.Enqueue(stackedItem(id, "req-2", "second"))
+	transport := &fakeDeliveryTransport{fingerprint: "fp-1", deliverErr: &fakeUncertainDelivery{}}
+	worker := deliveryWorker(queue, transport, nil)
+
+	outcome := worker.DeliverOnce(context.Background(), id)
+	if !outcome.Sent || outcome.More {
+		t.Fatalf("uncertain head = %+v, want frozen (no More)", outcome)
+	}
+	items, _ := queue.Items(id)
+	if len(items) != 2 || items[0].State != DeliveryUncertain || items[1].State != Queued {
+		t.Fatalf("frozen stack = %+v", items)
+	}
+	// A further cycle must not deliver the tail.
+	transport.deliverErr = nil
+	if again := worker.DeliverOnce(context.Background(), id); again.Sent || transport.deliverCalls != 1 {
+		t.Fatalf("tail sent behind an uncertain delivery: %+v", again)
+	}
+	if queue.HasPending(id) {
+		t.Fatal("a frozen conversation must not report pending work")
+	}
+	// The acknowledgment unfreezes: both entries leave, the tail never sent.
+	if _, err := queue.CancelItem(id, "req-2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.CancelItem(id, "req-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := queue.Items(id); ok {
+		t.Fatal("acknowledged stack must be empty")
 	}
 }
 
@@ -121,7 +223,7 @@ func TestDeliveryWorkerBlockedRetains(t *testing.T) {
 	if transport.deliverCalls != 0 {
 		t.Fatal("retained item must not send")
 	}
-	item, _ := queue.Get(id)
+	item, _ := queue.Head(id)
 	if item.State != WaitingForTurnBoundary {
 		t.Fatalf("retained state = %q", item.State)
 	}
@@ -149,7 +251,7 @@ func TestDeliveryWorkerIdentityChangeFailsClosed(t *testing.T) {
 	if outcome.Sent {
 		t.Fatal("identity change must never send")
 	}
-	item, _ := queue.Get(id)
+	item, _ := queue.Head(id)
 	if item.State != FailedRecoverable {
 		t.Fatalf("state = %q", item.State)
 	}
@@ -163,12 +265,12 @@ func TestDeliveryWorkerIdentityChangeFailsClosed(t *testing.T) {
 	if outcome.Sent {
 		t.Fatal("sessionless occupant must never send")
 	}
-	if item, _ := queue2.Get(id); item.State != FailedRecoverable {
+	if item, _ := queue2.Head(id); item.State != FailedRecoverable {
 		t.Fatalf("sessionless state = %q", item.State)
 	}
 
 	// Recoverable failure can be requeued and then delivers.
-	if _, err := queue.Transition(id, Queued, "user retried"); err != nil {
+	if _, err := queue.Transition(id, item.RequestID, Queued, "user retried"); err != nil {
 		t.Fatal(err)
 	}
 	transport.fingerprint = "fp-1"
@@ -191,7 +293,7 @@ func TestDeliveryWorkerUncertainTombstone(t *testing.T) {
 	if !outcome.Sent {
 		t.Fatal("uncertainty means the prompt may have arrived: Sent stays true")
 	}
-	item, _ := queue.Get(id)
+	item, _ := queue.Head(id)
 	if item.State != DeliveryUncertain {
 		t.Fatalf("state = %q", item.State)
 	}
@@ -217,15 +319,15 @@ func TestDeliveryWorkerDefiniteRejection(t *testing.T) {
 	if !outcome.Sent || outcome.Retained {
 		t.Fatalf("outcome = %+v", outcome)
 	}
-	item, _ := queue.Get(id)
+	item, _ := queue.Head(id)
 	if item.State != FailedRecoverable || item.Detail != "prompt refused by provider" {
 		t.Fatalf("recovered item = %+v", item)
 	}
 }
 
 // TestDeliveryWorkerClaimLost pins the race guards: an item already claimed
-// by another worker is left alone, and cancel-A/enqueue-B cannot let the
-// old worker send B.
+// by another worker is left alone, and a stale worker cycle cannot send a
+// request it no longer owns.
 func TestDeliveryWorkerClaimLost(t *testing.T) {
 	id := ConversationID("live:claude-code:pane-7")
 	queue := NewFollowUpQueue()
@@ -242,14 +344,16 @@ func TestDeliveryWorkerClaimLost(t *testing.T) {
 		t.Fatalf("lost claim sent: %+v", outcome)
 	}
 	// The owning worker completes normally.
-	queue.CompleteDelivery(id, true, "")
+	if _, err := queue.CompleteDelivery(id, "req-1", true, ""); err != nil {
+		t.Fatal(err)
+	}
 
 	// cancel-A/enqueue-B: the old worker's claim (request-id keyed) cannot
-	// deliver the replacement.
+	// deliver the replacement — the cancelled item is gone, the claim misses.
 	queue2 := NewFollowUpQueue()
 	_ = queue2.Enqueue(queuedItem(id))
-	first, _ := queue2.Get(id)
-	if _, err := queue2.Cancel(id); err != nil {
+	first, _ := queue2.Head(id)
+	if _, err := queue2.CancelItem(id, first.RequestID); err != nil {
 		t.Fatal(err)
 	}
 	replacement := queuedItem(id)
@@ -259,7 +363,7 @@ func TestDeliveryWorkerClaimLost(t *testing.T) {
 	if _, err := queue2.ClaimDelivery(id, first.RequestID); err == nil {
 		t.Fatal("stale claim must lose against the replacement")
 	}
-	item, _ := queue2.Get(id)
+	item, _ := queue2.Head(id)
 	if item.RequestID != "req-2" || item.State != Queued {
 		t.Fatalf("replacement item = %+v", item)
 	}
@@ -332,9 +436,8 @@ func TestDeliveryWorkerConcurrentClaim(t *testing.T) {
 	if transport.deliverCalls != 1 {
 		t.Fatalf("deliver calls = %d, want exactly 1", transport.deliverCalls)
 	}
-	item, _ := queue.Get(id)
-	if item.State != Delivered {
-		t.Fatalf("final state = %q", item.State)
+	if _, ok := queue.Head(id); ok {
+		t.Fatal("the delivered item must leave the list")
 	}
 }
 
@@ -358,7 +461,8 @@ func TestReservationsFor(t *testing.T) {
 }
 
 // TestQueuedConversationsSnapshot pins the drain snapshot: only pending
-// states are listed, in stable order.
+// states are listed, in stable order, and a mid-delivery head is left to
+// its cycle.
 func TestQueuedConversationsSnapshot(t *testing.T) {
 	queue := NewFollowUpQueue()
 	a := ConversationID("live:claude-code:a")
@@ -367,14 +471,14 @@ func TestQueuedConversationsSnapshot(t *testing.T) {
 	_ = queue.Enqueue(queuedItem(b))
 	_ = queue.Enqueue(queuedItem(a))
 	_ = queue.Enqueue(queuedItem(c))
-	if _, err := queue.CompleteDelivery(c, true, ""); err == nil {
+	if _, err := queue.CompleteDelivery(c, "req-1", true, ""); err == nil {
 		t.Fatal("complete without claim must fail")
 	}
 	claimed, err := queue.ClaimDelivery(c, "req-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := queue.CompleteDelivery(c, true, ""); err != nil {
+	if _, err := queue.CompleteDelivery(c, "req-1", true, ""); err != nil {
 		t.Fatalf("complete after claim: %v (%+v)", err, claimed)
 	}
 	ids := queue.QueuedConversations()
@@ -411,18 +515,17 @@ func TestRunRetriesARetainedItemUntilTheTurnBoundary(t *testing.T) {
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if item, ok := queue.Get(id); ok && item.State == Delivered {
-			transport.mu.Lock()
-			defer transport.mu.Unlock()
-			if transport.deliverCalls != 1 {
-				t.Fatalf("deliverCalls = %d, want exactly 1", transport.deliverCalls)
-			}
+		transport.mu.Lock()
+		done := transport.deliverCalls == 1
+		transport.mu.Unlock()
+		if done {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	item, _ := queue.Get(id)
-	t.Fatalf("never delivered; state %s", item.State)
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	t.Fatalf("never delivered; calls %d, queue %+v", transport.deliverCalls, queue.Snapshot())
 }
 
 // TestRetainedItemFailsClosedAfterTheCap pins the bound: a boundary that never
@@ -444,7 +547,7 @@ func TestRetainedItemFailsClosedAfterTheCap(t *testing.T) {
 	if worker.DrainAll(context.Background()) {
 		t.Fatal("the capped cycle must stop retrying")
 	}
-	item, _ := queue.Get(id)
+	item, _ := queue.Head(id)
 	if item.State != FailedRecoverable || transport.deliverCalls != 0 {
 		t.Fatalf("state %s, prompts %d", item.State, transport.deliverCalls)
 	}
@@ -465,7 +568,7 @@ func TestCancelledItemStopsTheRetries(t *testing.T) {
 	if !worker.DrainAll(context.Background()) {
 		t.Fatal("first cycle must retain")
 	}
-	if _, err := queue.Cancel(id); err != nil {
+	if _, err := queue.CancelAll(id); err != nil {
 		t.Fatal(err)
 	}
 	if worker.DrainAll(context.Background()) {

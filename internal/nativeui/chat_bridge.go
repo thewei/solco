@@ -29,8 +29,8 @@ const (
 )
 
 /**
- * [INPUT]: 依赖 Shell 的 0.6 Chat 状态（chatTurns/chatDisposition/chatOutcome/chatQueuedText）、launch 发送路径、mygo Bind 事件
- * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/ReviewChanges）与 chat:updated 事件、Shell.publishChatBridge、sendChatText 共享发送路径
+ * [INPUT]: 依赖 Shell 的 0.6 Chat 状态（chatTurns/chatDisposition/chatOutcome/chatQueuedItems 现读跟进队列）、launch 发送路径、mygo Bind 事件
+ * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/CancelQueuedItem/ReorderQueued/ReviewChanges）与 chat:updated 事件、Shell.publishChatBridge、sendChatText 共享发送路径
  * [POS]: WebView Chat 的唯一表现层桥：投影与动作编组到窗口 UI 通道，会话运行时/Herdr 方法零改动；页面只能通过此桥读取聊天投影
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -44,6 +44,9 @@ type ChatFeatures struct {
 	Attach bool `json:"attach"`
 	// Queue: a follow-up can be queued behind a running turn.
 	Queue bool `json:"queue"`
+	// Reorder: the queued follow-ups can be reordered and individually
+	// cancelled (chat.ReorderQueued / chat.CancelQueuedItem).
+	Reorder bool `json:"reorder"`
 	// SubagentDrawer: a sub-agent's own transcript can be opened (chat.OpenSubagent).
 	SubagentDrawer bool `json:"subagentDrawer"`
 }
@@ -75,10 +78,10 @@ type ChatBridgeState struct {
 	// LinkCandidates are recent sessions of this agent's provider in its
 	// folder, offered only while the agent has not reported a session of its
 	// own (Waiting): the invitation can then say "show this one instead".
-	LinkCandidates []ChatBridgeLink `json:"linkCandidates,omitempty"`
-	Disposition    string           `json:"disposition"`
-	Outcome        string           `json:"outcome,omitempty"`
-	QueuedText     string           `json:"queuedText,omitempty"`
+	LinkCandidates []ChatBridgeLink       `json:"linkCandidates,omitempty"`
+	Disposition    string                 `json:"disposition"`
+	Outcome        string                 `json:"outcome,omitempty"`
+	QueuedItems    []ChatBridgeQueuedItem `json:"queuedItems,omitempty"`
 	// Theme is the app-resolved appearance ("light" or "dark"), following
 	// Settings -> General -> Appearance through mygo.Theme — not the bare
 	// system preference.
@@ -122,6 +125,17 @@ type ChatBridgeState struct {
 	// Subagents are the sub-agents the turns' tool calls spawned.
 	Subagents []chatsession.SubagentCard `json:"subagents,omitempty"`
 	Turns     []chatsession.ChatTurn     `json:"turns"`
+}
+
+// ChatBridgeQueuedItem is one follow-up in the conversation's ordered
+// queue (ChatBridgeState.QueuedItems, delivery order); State is the
+// ledger's QueueState verbatim and Detail carries the state's own
+// annotation (e.g. why an uncertain send froze the queue).
+type ChatBridgeQueuedItem struct {
+	ID     string `json:"id"`
+	Text   string `json:"text"`
+	State  string `json:"state"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // ChatBridgeInteraction is one pending interaction card.
@@ -253,8 +267,8 @@ func (b *ChatBridge) InterruptAndSend(ctx context.Context, text string) (ChatBri
 	return state, nil
 }
 
-// CancelQueued cancels the queued follow-up (only possible before its
-// delivery commit) and returns the projection.
+// CancelQueued cancels every cancellable follow-up of the bound
+// conversation (an entry mid-delivery stays) and returns the projection.
 func (b *ChatBridge) CancelQueued(ctx context.Context) (ChatBridgeState, error) {
 	var state ChatBridgeState
 	b.shell.callOnWindow(func() {
@@ -262,6 +276,31 @@ func (b *ChatBridge) CancelQueued(ctx context.Context) (ChatBridgeState, error) 
 		state = b.shell.chatBridgeState()
 	})
 	return state, nil
+}
+
+// CancelQueuedItem withdraws one follow-up by request id before its
+// delivery commit and returns the projection; a commit race surfaces in
+// the projection's Outcome instead of failing the call.
+func (b *ChatBridge) CancelQueuedItem(ctx context.Context, requestID string) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		b.shell.cancelChatFollowUpItem(requestID)
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
+}
+
+// ReorderQueued moves one queued follow-up to index to (delivery order =
+// list order; entries the worker already claimed stay pinned to the head
+// run) and returns the projection.
+func (b *ChatBridge) ReorderQueued(ctx context.Context, requestID string, to int) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	var err error
+	b.shell.callOnWindow(func() {
+		err = b.shell.moveChatQueuedItem(requestID, to)
+		state = b.shell.chatBridgeState()
+	})
+	return state, err
 }
 
 // Stop interrupts the agent's current turn with one Escape (the product
@@ -657,15 +696,22 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		Loading:        s.chatLoading,
 		Disposition:    chatBridgeDisposition(s.chatDispositionNow()),
 		Outcome:        s.chatOutcome,
-		QueuedText:     s.chatQueuedText,
 		Theme:          s.chatBridgeTheme(),
 		HighContrast:   s.settings.General.HighContrast,
 		VoiceSource:    voiceSourceName(s.settings.Voice),
 		SerifProse:     s.settings.General.ChatSerif,
 		Outline:        s.settings.General.ChatOutline,
-		Features:       ChatFeatures{Voice: true, Attach: true, Queue: true, SubagentDrawer: true},
+		Features:       ChatFeatures{Voice: true, Attach: true, Queue: true, Reorder: true, SubagentDrawer: true},
 	}
 	state.EchoPending = s.chatPendingEcho != nil
+	for _, item := range s.chatQueuedItems() {
+		state.QueuedItems = append(state.QueuedItems, ChatBridgeQueuedItem{
+			ID:     item.RequestID,
+			Text:   item.Text,
+			State:  string(item.State),
+			Detail: item.Detail,
+		})
+	}
 	if s.chatAwaitingBind() {
 		state.Loading = true
 	}

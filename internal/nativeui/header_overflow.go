@@ -208,7 +208,7 @@ func (s *Shell) chatOverflowItems(m *ui.Menu) {
 	if m.Item("Back to Terminal").Chosen() {
 		s.showSurface(WorkspaceSurfaceTerminal)
 	}
-	if s.chatQueuedText != "" {
+	if len(s.chatQueuedItems()) > 0 {
 		if m.Item("Cancel Follow-Up").Chosen() {
 			s.cancelChatFollowUp()
 		}

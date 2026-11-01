@@ -32,7 +32,7 @@ func TestLaunchServiceFollowUpLedger(t *testing.T) {
 	if err := service.EnqueueFollowUp(item); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := service.Queue().Get(id); !ok || got.RequestID != "req-1" {
+	if got, ok := service.Queue().Head(id); !ok || got.RequestID != "req-1" {
 		t.Fatalf("queued item = %+v ok %v", got, ok)
 	}
 
@@ -97,7 +97,7 @@ func TestLaunchServiceLedgerPersistence(t *testing.T) {
 	// The enqueue persisted synchronously via OnChanged.
 	restored := NewLaunchService(nil)
 	restored.AttachLedgerPath(path)
-	item, ok := restored.Queue().Get("live:claude-code:pane-7")
+	item, ok := restored.Queue().Head("live:claude-code:pane-7")
 	if !ok || item.RequestID != "req-1" || item.State != conversation.Queued {
 		t.Fatalf("restored item = %+v ok %v", item, ok)
 	}
@@ -107,13 +107,13 @@ func TestLaunchServiceLedgerPersistence(t *testing.T) {
 	if _, err := restored.Queue().ClaimDelivery("live:claude-code:pane-7", "req-1"); err != nil {
 		t.Fatal(err)
 	}
-	item, _ = restored.Queue().Get("live:claude-code:pane-7")
+	item, _ = restored.Queue().Head("live:claude-code:pane-7")
 	if item.State != conversation.Delivering {
 		t.Fatalf("pre-crash state = %q", item.State)
 	}
 	restarted := NewLaunchService(nil)
 	restarted.AttachLedgerPath(path)
-	item, ok = restarted.Queue().Get("live:claude-code:pane-7")
+	item, ok = restarted.Queue().Head("live:claude-code:pane-7")
 	if !ok || item.State != conversation.DeliveryUncertain {
 		t.Fatalf("post-crash state = %+v ok %v", item, ok)
 	}
@@ -135,10 +135,10 @@ func TestLaunchServiceLedgerPersistence(t *testing.T) {
 	}
 	again := NewLaunchService(nil)
 	again.AttachLedgerPath(path)
-	if item, ok := again.Queue().Get("live:claude-code:pane-8"); !ok || item.RequestID != "req-2" {
+	if item, ok := again.Queue().Head("live:claude-code:pane-8"); !ok || item.RequestID != "req-2" {
 		t.Fatalf("second restore = %+v ok %v", item, ok)
 	}
-	if item, _ := again.Queue().Get("live:claude-code:pane-7"); item.State != conversation.DeliveryUncertain {
+	if item, _ := again.Queue().Head("live:claude-code:pane-7"); item.State != conversation.DeliveryUncertain {
 		t.Fatalf("tombstone restore = %+v", item)
 	}
 

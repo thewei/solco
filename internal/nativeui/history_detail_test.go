@@ -59,7 +59,7 @@ func TestHistoryDetailSharesTheChatViewReadOnly(t *testing.T) {
 	if !state.ReadOnly || state.Title != "Build history" || state.Provider != "Codex" || len(state.Turns) != 2 {
 		t.Fatalf("bridge state = %+v", state)
 	}
-	if len(state.Interactions) != 0 || state.QueuedText != "" {
+	if len(state.Interactions) != 0 || len(state.QueuedItems) != 0 {
 		t.Fatalf("a detached transcript carries no pane interactions: %+v", state)
 	}
 }

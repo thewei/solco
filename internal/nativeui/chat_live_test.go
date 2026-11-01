@@ -385,8 +385,9 @@ func TestChatPendingEchoRebindRules(t *testing.T) {
 
 // TestChatQueuedDispositionEnqueuesInLedger pins the §11 production wiring:
 // a QueuedAfterTurn prompt lands in the service-owned delivery ledger with
-// the enqueue-time identity coordinate; the composer cancel cancels the
-// ledger item; an unresolved identity refuses to queue.
+// the enqueue-time identity coordinate; prompts stack in delivery order;
+// one entry can be withdrawn alone, the composer cancel clears the rest;
+// an unresolved identity refuses to queue.
 func TestChatQueuedDispositionEnqueuesInLedger(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "live.jsonl")
@@ -396,6 +397,7 @@ func TestChatQueuedDispositionEnqueuesInLedger(t *testing.T) {
 	shell, _ := liveBindShell(t, "claude-code", path)
 	shell.chatPaneID = "p1"
 	shell.chatConversationID = "live:claude-code:term-1"
+	id := conversation.ConversationID(shell.chatConversationID)
 
 	fingerprint := shell.liveFingerprintForPane("p1")
 	if fingerprint == "" {
@@ -405,32 +407,46 @@ func TestChatQueuedDispositionEnqueuesInLedger(t *testing.T) {
 	// QueuedAfterTurn goes through the real ledger.
 	shell.chatDraft = "follow up please"
 	shell.sendChatPrompt()
-	if shell.chatQueuedText != "follow up please" {
-		t.Fatalf("queued text = %q outcome = %q", shell.chatQueuedText, shell.chatOutcome)
+	items, ok := shell.launch.Queue().Items(id)
+	if !ok || len(items) != 1 || items[0].Text != "follow up please" || items[0].Fingerprint != fingerprint || items[0].State != conversation.Queued {
+		t.Fatalf("ledger items = %+v ok %v", items, ok)
 	}
-	item, ok := shell.launch.Queue().Get(conversation.ConversationID(shell.chatConversationID))
-	if !ok || item.Text != "follow up please" || item.Fingerprint != fingerprint || item.State != conversation.Queued {
-		t.Fatalf("ledger item = %+v ok %v", item, ok)
+	if head, ok := shell.launch.Queue().Head(id); !ok || head.RequestID != items[0].RequestID {
+		t.Fatalf("ledger head = %+v ok %v", head, ok)
 	}
 	if shell.chatDraft != "" {
 		t.Fatalf("draft = %q after enqueue", shell.chatDraft)
 	}
 
-	// A second prompt for the same conversation stays in the single slot.
+	// A second prompt appends: the queue is an ordered list now, no
+	// single slot refusal.
 	shell.chatDraft = "second"
 	shell.sendChatPrompt()
-	if shell.chatOutcome == "" {
-		t.Fatal("second enqueue must surface the single-slot refusal")
+	items, ok = shell.launch.Queue().Items(id)
+	if !ok || len(items) != 2 || items[0].Text != "follow up please" || items[1].Text != "second" {
+		t.Fatalf("ledger after second enqueue = %+v ok %v", items, ok)
+	}
+	if shell.chatOutcome != "" {
+		t.Fatalf("second enqueue must not refuse: %q", shell.chatOutcome)
 	}
 
-	// Composer cancel cancels the ledger item (before delivery commit).
-	shell.cancelChatFollowUp()
-	if shell.chatQueuedText != "" {
-		t.Fatalf("queued chip = %q after cancel", shell.chatQueuedText)
+	// One entry withdraws alone, by request id.
+	shell.cancelChatFollowUpItem(items[1].RequestID)
+	if items = shell.chatQueuedItems(); len(items) != 1 || items[0].Text != "follow up please" {
+		t.Fatalf("queued items after single cancel = %+v", items)
 	}
-	item, _ = shell.launch.Queue().Get(conversation.ConversationID(shell.chatConversationID))
-	if item.State != conversation.Cancelled {
-		t.Fatalf("ledger state after cancel = %q", item.State)
+	// Cancelled entries leave the ledger list at once.
+	if ledger, _ := shell.launch.Queue().Items(id); len(ledger) != 1 {
+		t.Fatalf("ledger after single cancel = %+v", ledger)
+	}
+
+	// Composer cancel empties the queue (before the delivery commit).
+	shell.cancelChatFollowUp()
+	if items = shell.chatQueuedItems(); len(items) != 0 {
+		t.Fatalf("queued chip = %+v after cancel", items)
+	}
+	if ledger, _ := shell.launch.Queue().Items(id); len(ledger) != 0 {
+		t.Fatalf("ledger after cancel-all = %+v", ledger)
 	}
 
 	// Unresolved identity refuses to queue instead of guessing: the pane
@@ -438,8 +454,8 @@ func TestChatQueuedDispositionEnqueuesInLedger(t *testing.T) {
 	shell.chatDraft = "again"
 	shell.projection = herdr.Projection{}
 	shell.sendChatPrompt()
-	if shell.chatQueuedText != "" || shell.chatOutcome == "" {
-		t.Fatalf("unresolved identity must refuse: chip %q outcome %q", shell.chatQueuedText, shell.chatOutcome)
+	if items := shell.chatQueuedItems(); len(items) != 0 || shell.chatOutcome == "" {
+		t.Fatalf("unresolved identity must refuse: chip %+v outcome %q", items, shell.chatOutcome)
 	}
 }
 

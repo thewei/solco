@@ -42,39 +42,84 @@ func TestFollowUpQueueLifecycle(t *testing.T) {
 	if err := queue.Enqueue(QueueItem{RequestID: "r1", ConversationID: id, Text: "follow up"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := queue.Enqueue(QueueItem{RequestID: "r2", ConversationID: id, Text: "second"}); err == nil {
-		t.Fatal("second live enqueue must be rejected")
-	}
-
-	// Atomic claim: exactly one worker wins.
-	if _, err := queue.ClaimDelivery(id, "r1"); err != nil {
+	// The stack accepts further prompts: order is the delivery order.
+	if err := queue.Enqueue(QueueItem{RequestID: "r2", ConversationID: id, Text: "second"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := queue.ClaimDelivery(id, "r1"); !errors.Is(err, ErrAlreadyDelivered) {
+	items, _ := queue.Items(id)
+	if len(items) != 2 || items[0].RequestID != "r1" || items[1].RequestID != "r2" {
+		t.Fatalf("stacked items = %+v", items)
+	}
+
+	// Move reorders unclaimed items.
+	if err := queue.Move(id, "r1", 1); err != nil {
+		t.Fatal(err)
+	}
+	items, _ = queue.Items(id)
+	if items[0].RequestID != "r2" || items[1].RequestID != "r1" {
+		t.Fatalf("after move = %+v", items)
+	}
+
+	// Atomic claim: exactly one worker wins, and only the named item.
+	if _, err := queue.ClaimDelivery(id, "r2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.ClaimDelivery(id, "r2"); !errors.Is(err, ErrAlreadyDelivered) {
 		t.Fatalf("double claim err = %v", err)
 	}
-	// Cancel racing delivery is refused.
-	if _, err := queue.Cancel(id); err == nil {
+	// The claimed head is pinned: it can neither move nor cancel.
+	if err := queue.Move(id, "r2", 0); err == nil {
+		t.Fatal("a claimed item must not move")
+	}
+	if _, err := queue.CancelItem(id, "r2"); err == nil {
 		t.Fatal("cancel must race-refuse during delivery")
 	}
-	if _, err := queue.CompleteDelivery(id, true, ""); err != nil {
+	// The unclaimed tail may still move below the pinned head run.
+	if err := queue.Move(id, "r1", 0); err == nil {
+		t.Fatal("a move onto the pinned head run must be refused")
+	}
+	deliveredItem, err := queue.CompleteDelivery(id, "r2", true, "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	item, _ := queue.Get(id)
-	if item.State != Delivered {
-		t.Fatalf("state = %v", item.State)
+	if deliveredItem.State != Delivered {
+		t.Fatalf("state = %v", deliveredItem.State)
+	}
+	// The delivered item leaves the list at once; the next entry follows.
+	items, _ = queue.Items(id)
+	if len(items) != 1 || items[0].RequestID != "r1" {
+		t.Fatalf("items after delivery = %+v", items)
 	}
 
-	// Fresh enqueue after delivery replaces the old record.
+	// A fresh enqueue appends behind the survivor.
 	if err := queue.Enqueue(QueueItem{RequestID: "r3", ConversationID: id, Text: "next"}); err != nil {
 		t.Fatal(err)
 	}
-	if item, _ := queue.Get(id); item.RequestID != "r3" {
-		t.Fatalf("replacement item = %+v", item)
+	items, _ = queue.Items(id)
+	if items[0].RequestID != "r1" || items[1].RequestID != "r3" {
+		t.Fatalf("appended items = %+v", items)
 	}
 	// Old worker claiming by the old request id loses.
-	if _, err := queue.ClaimDelivery(id, "r1"); err == nil {
+	if _, err := queue.ClaimDelivery(id, "r2"); err == nil {
 		t.Fatal("stale worker claim must lose")
+	}
+
+	// Per-item cancel drops exactly one entry.
+	if _, err := queue.CancelItem(id, "r3"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.CancelItem(id, "r3"); !errors.Is(err, ErrNoQueueItem) {
+		t.Fatalf("second cancel err = %v", err)
+	}
+	items, _ = queue.Items(id)
+	if len(items) != 1 || items[0].RequestID != "r1" {
+		t.Fatalf("items after single cancel = %+v", items)
+	}
+	if n, err := queue.CancelAll(id); err != nil || n != 1 {
+		t.Fatalf("cancel all = %d %v", n, err)
+	}
+	if _, ok := queue.Items(id); ok {
+		t.Fatal("cancel all must empty the list")
 	}
 }
 
@@ -82,17 +127,56 @@ func TestFollowUpQueueUncertainTombstone(t *testing.T) {
 	queue := NewFollowUpQueue()
 	id := ConversationID("live:codex:s9")
 	_ = queue.Enqueue(QueueItem{RequestID: "r9", ConversationID: id, Text: "x"})
+	_ = queue.Enqueue(QueueItem{RequestID: "r10", ConversationID: id, Text: "y"})
 	_, _ = queue.ClaimDelivery(id, "r9")
-	if _, err := queue.CompleteDelivery(id, false, "response not read"); err != nil {
+	if _, err := queue.CompleteDelivery(id, "r9", false, "response not read"); err != nil {
 		t.Fatal(err)
 	}
-	item, _ := queue.Get(id)
-	if item.State != DeliveryUncertain {
-		t.Fatalf("state = %v", item.State)
+	items, _ := queue.Items(id)
+	if items[0].State != DeliveryUncertain {
+		t.Fatalf("state = %v", items[0].State)
 	}
-	// Uncertainty is a tombstone: no auto retry, no cancel back to queued.
-	if err := queue.Enqueue(QueueItem{RequestID: "r10", ConversationID: id, Text: "y"}); err == nil {
-		t.Fatal("uncertain tombstone must not be silently replaced while active")
+	// Uncertainty is a frozen tombstone: it blocks new items...
+	if err := queue.Enqueue(QueueItem{RequestID: "r11", ConversationID: id, Text: "z"}); !errors.Is(err, ErrQueueFrozen) {
+		t.Fatalf("enqueue behind tombstone err = %v", err)
+	}
+	// ...holds the tail back from the worker...
+	if queue.HasPending(id) {
+		t.Fatal("a frozen conversation must not drain")
+	}
+	// ...and leaves only through the explicit acknowledgment.
+	if _, err := queue.CancelItem(id, "r10"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.CancelItem(id, "r9"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := queue.Items(id); ok {
+		t.Fatal("acknowledged tombstone must leave the list")
+	}
+	if err := queue.Enqueue(QueueItem{RequestID: "r12", ConversationID: id, Text: "fresh"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFollowUpQueueOrderSurvivesSnapshotRestore(t *testing.T) {
+	queue := NewFollowUpQueue()
+	a := ConversationID("live:a")
+	b := ConversationID("live:b")
+	_ = queue.Enqueue(QueueItem{RequestID: "a1", ConversationID: a, Text: "one"})
+	_ = queue.Enqueue(QueueItem{RequestID: "a2", ConversationID: a, Text: "two"})
+	_ = queue.Enqueue(QueueItem{RequestID: "b1", ConversationID: b, Text: "other"})
+	if err := queue.Move(a, "a2", 0); err != nil {
+		t.Fatal(err)
+	}
+	restored := NewFollowUpQueue()
+	restored.Restore(queue.Snapshot())
+	items, _ := restored.Items(a)
+	if len(items) != 2 || items[0].RequestID != "a2" || items[1].RequestID != "a1" {
+		t.Fatalf("restored order = %+v", items)
+	}
+	if head, _ := restored.Head(b); head.RequestID != "b1" {
+		t.Fatalf("restored head = %+v", head)
 	}
 }
 

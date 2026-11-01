@@ -58,7 +58,11 @@ type DeliveryOutcome struct {
 	Item     QueueItem
 	Sent     bool
 	Retained bool // stays queued for a later cycle (blocked/timeout/transport)
-	Reason   string
+	// More reports a further pending item behind the one just delivered:
+	// the next entry owns the following turn boundary, so the drain comes
+	// back around (a paced retry, not a retained-failure count).
+	More   bool
+	Reason string
 }
 
 // DeliveryWorker owns the §11.3 pipeline. Run is the background loop;
@@ -141,14 +145,20 @@ func (w *DeliveryWorker) DrainAll(ctx context.Context) (retained bool) {
 			return retained
 		}
 		outcome := w.DeliverOnce(ctx, id)
+		if outcome.More { // a further entry follows: it owns the next turn boundary
+			retained = true
+			continue
+		}
 		if !outcome.Retained {
 			delete(w.retained, id)
 			continue
 		}
 		if w.retained[id]++; w.retained[id] >= MaxRetainedCycles {
 			delete(w.retained, id)
-			if failed, err := w.Queue.Transition(id, FailedRecoverable, "the agent did not reach a turn boundary in time"); err == nil {
-				w.observe(failed)
+			if head, ok := w.Queue.Head(id); ok {
+				if failed, err := w.Queue.Transition(id, head.RequestID, FailedRecoverable, "the agent did not reach a turn boundary in time"); err == nil {
+					w.observe(failed)
+				}
 			}
 			continue
 		}
@@ -157,10 +167,11 @@ func (w *DeliveryWorker) DrainAll(ctx context.Context) (retained bool) {
 	return retained
 }
 
-// DeliverOnce runs one pipeline cycle for one conversation. It never sends
-// more than one prompt and always reconciles the queue state.
+// DeliverOnce runs one pipeline cycle for one conversation: exactly the
+// list's head — one prompt — then reconcile. A further entry waits for the
+// following turn boundary on a later cycle.
 func (w *DeliveryWorker) DeliverOnce(ctx context.Context, id ConversationID) DeliveryOutcome {
-	item, ok := w.Queue.Get(id)
+	item, ok := w.Queue.Head(id)
 	if !ok {
 		return DeliveryOutcome{Item: item, Reason: "no queued item"}
 	}
@@ -181,7 +192,7 @@ func (w *DeliveryWorker) DeliverOnce(ctx context.Context, id ConversationID) Del
 	}
 
 	if item.State == Queued {
-		claimed, err := w.Queue.Transition(id, WaitingForTurnBoundary, "delivery worker took the item")
+		claimed, err := w.Queue.Transition(id, item.RequestID, WaitingForTurnBoundary, "delivery worker took the item")
 		if err != nil {
 			return DeliveryOutcome{Item: item, Reason: "claim race: " + err.Error()}
 		}
@@ -202,7 +213,7 @@ func (w *DeliveryWorker) DeliverOnce(ctx context.Context, id ConversationID) Del
 		return DeliveryOutcome{Item: item, Retained: true, Reason: "occupant unreadable: " + err.Error()}
 	}
 	if fingerprint == "" || fingerprint != item.Fingerprint {
-		updated, transitionErr := w.Queue.Transition(id, FailedRecoverable, "the conversation occupant changed since the prompt was queued")
+		updated, transitionErr := w.Queue.Transition(id, item.RequestID, FailedRecoverable, "the conversation occupant changed since the prompt was queued")
 		if transitionErr != nil {
 			return DeliveryOutcome{Item: item, Reason: "reconcile race: " + transitionErr.Error()}
 		}
@@ -222,21 +233,21 @@ func (w *DeliveryWorker) DeliverOnce(ctx context.Context, id ConversationID) Del
 	deliverErr := w.Transport.Deliver(ctx, claimed)
 	switch {
 	case deliverErr == nil:
-		delivered, completeErr := w.Queue.CompleteDelivery(id, true, "")
+		delivered, completeErr := w.Queue.CompleteDelivery(id, claimed.RequestID, true, "")
 		if completeErr != nil {
 			return DeliveryOutcome{Item: claimed, Sent: true, Reason: "complete race: " + completeErr.Error()}
 		}
 		w.observe(delivered)
-		return DeliveryOutcome{Item: delivered, Sent: true}
+		return DeliveryOutcome{Item: delivered, Sent: true, More: w.Queue.HasPending(id)}
 	case w.Transport.IsUncertain(deliverErr):
-		tombstoned, completeErr := w.Queue.CompleteDelivery(id, false, "delivery uncertain — inspect before retry")
+		tombstoned, completeErr := w.Queue.CompleteDelivery(id, claimed.RequestID, false, "delivery uncertain — inspect before retry")
 		if completeErr != nil {
 			return DeliveryOutcome{Item: claimed, Sent: true, Reason: "complete race: " + completeErr.Error()}
 		}
 		w.observe(tombstoned)
 		return DeliveryOutcome{Item: tombstoned, Sent: true, Reason: "delivery uncertain"}
 	default:
-		failed, transitionErr := w.Queue.Transition(id, FailedRecoverable, deliverErr.Error())
+		failed, transitionErr := w.Queue.Transition(id, claimed.RequestID, FailedRecoverable, deliverErr.Error())
 		if transitionErr != nil {
 			return DeliveryOutcome{Item: claimed, Sent: true, Reason: "reconcile race: " + transitionErr.Error()}
 		}

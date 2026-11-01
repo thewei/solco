@@ -1,7 +1,7 @@
 package nativeui
 
-// [INPUT]: Agent 投影与会话卡、chat bridge 投影、共享 emptyState/banner 构件。
-// [OUTPUT]: Chat 表面的会话呈现与空态（workspaceEmptyBanner 动作走 compact 档）。
+// [INPUT]: Agent 投影与会话卡、chat bridge 投影、launch 跟进队列（chatQueuedItems 现读 ledger）、共享 emptyState/banner 构件。
+// [OUTPUT]: Chat 表面的会话呈现与空态（workspaceEmptyBanner 动作走 compact 档）；跟进队列 chip（"Queued after turn · N" + Cancel 全清）与 enqueueChatFollowUp / cancelChatFollowUp / cancelChatFollowUpItem / moveChatQueuedItem。
 // [POS]: Chat 视图专用呈现层；对话运行时与 Agent 语义归 internal/agent 与 bridge。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -103,8 +103,8 @@ func (s *Shell) chatComposerRow(c *ui.Context) {
 				s.sendChatPrompt()
 			}
 			ui.Row(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
-				if s.chatQueuedText != "" {
-					ui.Text(c, "Queued after turn").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).Grow(1)
+				if items := s.chatQueuedItems(); len(items) > 0 {
+					ui.Text(c, fmt.Sprintf("Queued after turn · %d", len(items))).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).Grow(1)
 					if regularButton(c, "Cancel").Clicked() {
 						s.cancelChatFollowUp()
 					}
@@ -255,8 +255,8 @@ func (s *Shell) sendChatText(text string) ChatBridgeState {
 
 // enqueueChatFollowUp queues the follow-up in the real delivery ledger
 // (0.6 §11): identity-proven at enqueue so the worker's occupant
-// revalidation has its coordinate; an already-queued conversation keeps
-// its single slot.
+// revalidation has its coordinate; follow-ups stack as an ordered list,
+// refused only behind an unacknowledged uncertain send.
 func (s *Shell) enqueueChatFollowUp(text string) {
 	fingerprint := s.liveFingerprintForPane(s.chatPaneID)
 	if fingerprint == "" {
@@ -272,20 +272,42 @@ func (s *Shell) enqueueChatFollowUp(text string) {
 		Instance:       s.activeInstance,
 	}
 	if err := s.launch.EnqueueFollowUp(item); err != nil {
-		s.chatOutcome = "Queue full: " + err.Error()
+		// Only the frozen queue refuses: the uncertain send must be
+		// acknowledged (cancel the entry) before more text stacks behind it.
+		s.chatOutcome = "Cannot queue: " + err.Error()
 		s.publishChatBridge()
 		return
 	}
-	s.chatQueuedText = text
 	s.chatDraft = ""
 	s.publishChatBridge()
 }
 
-// cancelChatFollowUp cancels the queued follow-up in the ledger (available
-// only before the delivery commit) and clears the composer chip.
+// chatQueuedItems projects the bound conversation's follow-up queue in
+// delivery order, read live from the ledger — a rebind therefore never
+// needs to clear chip state. Delivered and cancelled entries leave the
+// list inside the ledger already; the filter is the second line of
+// defense for a projection raced against a completion.
+func (s *Shell) chatQueuedItems() []conversation.QueueItem {
+	if s.launch == nil || s.chatConversationID == "" {
+		return nil
+	}
+	items, _ := s.launch.Queue().Items(conversation.ConversationID(s.chatConversationID))
+	var live []conversation.QueueItem
+	for _, item := range items {
+		if item.State == conversation.Delivered || item.State == conversation.Cancelled {
+			continue
+		}
+		live = append(live, item)
+	}
+	return live
+}
+
+// cancelChatFollowUp cancels every cancellable follow-up in the ledger
+// (an entry mid-delivery stays; its commit may not be raced) and
+// refreshes the composer chip.
 func (s *Shell) cancelChatFollowUp() {
 	if s.launch != nil && s.chatConversationID != "" {
-		if _, err := s.launch.Queue().Cancel(conversation.ConversationID(s.chatConversationID)); err != nil && s.chatQueuedText != "" {
+		if _, err := s.launch.Queue().CancelAll(conversation.ConversationID(s.chatConversationID)); err != nil && len(s.chatQueuedItems()) > 0 {
 			// The delivery already committed; the chip must not pretend
 			// otherwise.
 			s.chatOutcome = "The follow-up already delivered."
@@ -293,8 +315,31 @@ func (s *Shell) cancelChatFollowUp() {
 			return
 		}
 	}
-	s.chatQueuedText = ""
 	s.publishChatBridge()
+}
+
+// cancelChatFollowUpItem withdraws one follow-up by request id before its
+// delivery commit. Racing the commit loses on purpose: the outcome says
+// the prompt is already being delivered, never that it was unsent.
+func (s *Shell) cancelChatFollowUpItem(requestID string) {
+	if s.launch == nil || s.chatConversationID == "" {
+		return
+	}
+	if _, err := s.launch.Queue().CancelItem(conversation.ConversationID(s.chatConversationID), requestID); err != nil && !errors.Is(err, conversation.ErrNoQueueItem) {
+		s.chatOutcome = "That follow-up is already being delivered."
+	}
+	s.publishChatBridge()
+}
+
+// moveChatQueuedItem reorders one follow-up in the delivery queue (items
+// the worker already claimed stay pinned to the head run).
+func (s *Shell) moveChatQueuedItem(requestID string, to int) error {
+	if s.launch == nil || s.chatConversationID == "" {
+		return conversation.ErrNoQueueItem
+	}
+	err := s.launch.Queue().Move(conversation.ConversationID(s.chatConversationID), requestID, to)
+	s.publishChatBridge()
+	return err
 }
 
 func (s *Shell) chatAfterPrompt(requestID, text string, disposition conversation.PromptDisposition, err error) {
@@ -368,7 +413,6 @@ func (s *Shell) bindChatWindow(conversationID string, readOnly bool) {
 	if readOnly {
 		s.chatPaneID = ""
 		s.chatSourcelessPaneID = ""
-		s.chatQueuedText = ""
 		s.chatOutcome = ""
 	}
 	s.chatLoading = true

@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -192,5 +193,70 @@ func TestChatDisclosuresArePerTurn(t *testing.T) {
 	}
 	if s.chatTurnPartOpen(0, "tools") || s.chatTurnPartOpen(1, "tools") {
 		t.Fatal("tools disclosure leaked from thinking state")
+	}
+}
+
+// TestChatBridgeQueuedItemsProjectAndMutate pins the page-side queue
+// contract: sendChatText stacks two follow-ups, the projection lists them
+// in delivery order, ReorderQueued swaps the order, CancelQueuedItem
+// withdraws one entry by id and CancelQueued clears the rest.
+func TestChatBridgeQueuedItemsProjectAndMutate(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "inst-1"
+	shell.chatPaneID = "p1"
+	shell.chatConversationID = "live:claude-code:term-1"
+	shell.projection = herdr.Projection{Agents: []herdr.Agent{{
+		TerminalID:   "term-1",
+		PaneID:       "p1",
+		Status:       "working",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "claude-code", Kind: "path", Source: "transcript", Value: "unused.jsonl"},
+	}}}
+	bridge := NewChatBridge(shell)
+	ctx := context.Background()
+
+	if _, err := bridge.Send(ctx, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bridge.Send(ctx, "second"); err != nil {
+		t.Fatal(err)
+	}
+	state := shell.chatBridgeState()
+	if len(state.QueuedItems) != 2 || state.QueuedItems[0].Text != "first" || state.QueuedItems[1].Text != "second" {
+		t.Fatalf("queued projection = %+v", state.QueuedItems)
+	}
+	for _, item := range state.QueuedItems {
+		if item.ID == "" || item.State != string(conversation.Queued) {
+			t.Fatalf("queued item = %+v, want id and queued state", item)
+		}
+	}
+	if !state.Features.Reorder {
+		t.Fatal("desktop bridge must advertise reorder")
+	}
+	firstID, secondID := state.QueuedItems[0].ID, state.QueuedItems[1].ID
+
+	// The second entry moves to the head: delivery order follows.
+	if _, err := bridge.ReorderQueued(ctx, secondID, 0); err != nil {
+		t.Fatal(err)
+	}
+	state = shell.chatBridgeState()
+	if len(state.QueuedItems) != 2 || state.QueuedItems[0].ID != secondID || state.QueuedItems[1].ID != firstID {
+		t.Fatalf("queued projection after reorder = %+v", state.QueuedItems)
+	}
+
+	// One entry withdraws alone; the other keeps its place.
+	if _, err := bridge.CancelQueuedItem(ctx, secondID); err != nil {
+		t.Fatal(err)
+	}
+	state = shell.chatBridgeState()
+	if len(state.QueuedItems) != 1 || state.QueuedItems[0].ID != firstID {
+		t.Fatalf("queued projection after single cancel = %+v", state.QueuedItems)
+	}
+
+	// CancelQueued clears the rest.
+	if _, err := bridge.CancelQueued(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if state = shell.chatBridgeState(); len(state.QueuedItems) != 0 {
+		t.Fatalf("queued projection after cancel-all = %+v", state.QueuedItems)
 	}
 }
