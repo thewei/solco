@@ -1,6 +1,8 @@
 package nativeui
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -14,6 +16,16 @@ import (
 // statusSlotSize is the square every state indicator occupies, so a
 // spinner and a dot sit on the same spot and rows keep one trailing column.
 const statusSlotSize float32 = 16
+
+// statusShapeMotion is how a state change reads in the slot: the old shape
+// shrinks away as the new one grows in (working → idle is a hand-over, not a
+// cut), and a dot that keeps its shape eases to the new colour.
+var statusShapeMotion = ui.ElementTransition{
+	Colors:   true,
+	Duration: 180 * time.Millisecond,
+	Enter:    &ui.Motion{Scale: 0.5},
+	Exit:     &ui.Motion{Scale: 0.5},
+}
 
 type indicatorShape uint8
 
@@ -72,11 +84,11 @@ func statusIndicatorTone(c *ui.Context, tone StatusTone, detail string) ui.Eleme
 	slot.Children(func() {
 		switch indicatorShapeFor(tone) {
 		case shapeSpinner:
-			ui.Spinner(c).Size(14, 14).TextColor(color).PassThrough()
+			ui.Spinner(c).Size(14, 14).TextColor(color).Transition(statusShapeMotion).PassThrough()
 		case shapeRing:
-			ui.Box(c).Size(8, 8).Radius(4).Border(1.5, t.TextMuted).PassThrough()
+			ui.Box(c).Size(8, 8).Radius(4).Border(1.5, t.TextMuted).Transition(statusShapeMotion).PassThrough()
 		default:
-			ui.Box(c).Size(7, 7).Radius(3.5).Background(color).PassThrough()
+			ui.Box(c).Size(7, 7).Radius(3.5).Background(color).Transition(statusShapeMotion).PassThrough()
 		}
 	})
 	return slot
@@ -91,7 +103,7 @@ func statusIndicatorService(c *ui.Context, tone StatusTone, detail string) ui.El
 	color := designTokens(t.Dark).StatusColor(tone, t.Dark)
 	slot := tipped(c, ui.Box(c).Size(statusSlotSize, statusSlotSize).Shrink(0).Center(), detail)
 	slot.Children(func() {
-		ui.Box(c).Size(7, 7).Radius(2).Background(color).PassThrough()
+		ui.Box(c).Size(7, 7).Radius(2).Background(color).Transition(statusShapeMotion).PassThrough()
 	})
 	return slot
 }
