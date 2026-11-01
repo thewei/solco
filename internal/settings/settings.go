@@ -21,7 +21,7 @@ type Settings struct {
 	// secret: never logged, never echoed.
 	Voice VoiceSettings `json:"voice,omitempty"`
 	// Usage is the Usage page's switches. Tokens are never kept here: they
-	// live in the system credential store (mygo.Secrets).
+	// live in Solco's encrypted credential file (internal/secretstore).
 	Usage UsageSettings `json:"usage,omitempty"`
 	// Remote is the phone-client Host's listener choice (product decision
 	// 2026-10-31). The zero value is off: nothing listens until the user
@@ -198,7 +198,7 @@ type CommitAPI struct {
 type WorkbenchSettings struct {
 	// CommitAPI is the one AI commit-message channel: an OpenAI-compatible
 	// chat/completions endpoint. The API key is not stored here — it lives
-	// in the system credential store (mygo.Secrets, key git.commitapi.token).
+	// in Solco's encrypted credential file (internal/secretstore, key git.commitapi.token).
 	CommitAPI CommitAPI `json:"commit_api,omitempty"`
 	// CommitPrompt overrides the default commit convention, never sent
 	// automatically. Per-app preferences are separate from Git operations.

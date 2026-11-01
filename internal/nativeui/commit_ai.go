@@ -1,7 +1,7 @@
 package nativeui
 
 /**
- * [INPUT]: selected fenced Git review, Git preferences, the configured API channel (endpoint/model/Keychain key)
+ * [INPUT]: selected fenced Git review, Git preferences, the configured API channel (endpoint/model/stored key)
  * [OUTPUT]: cancelable one-shot AI message candidate in the existing Commit modal; the channel and key helpers every AI-commit surface shares
  * [POS]: UI/application coordinator; Git mutation stays with existing Commit preflight; the channel is API-only and refuses to run unconfigured; the key is read only on click paths, render paths use the cached presence flag, which probeCommitKey fills once off the UI lane the first time a surface needs it (never at launch)
  * [PROTOCOL]: update this header and check CLAUDE.md on changes
@@ -17,12 +17,12 @@ import (
 	"github.com/thewei/solco/internal/settings"
 )
 
-// commitAPIKeyName is the Keychain key of the commit generator's API key.
+// commitAPIKeyName is the credential key of the commit generator's API key.
 // The key never enters settings files, drafts echoed back, logs or errors.
 const commitAPIKeyName = "git.commitapi.token"
 
 // commitStore returns the credential store backing the commit API key.
-// Production is the system Keychain; tests inject memory.
+// Production is appSecrets (an encrypted file); tests inject memory.
 func (s *Shell) commitStore() usageSecrets {
 	if s.commitSecrets != nil {
 		return s.commitSecrets
@@ -40,7 +40,7 @@ func (s *Shell) commitAPIKey() (string, bool) {
 	return trimmed, trimmed != ""
 }
 
-// commitKeyPresent reports a key is stored (one Keychain read).
+// commitKeyPresent reports a key is stored (one store read; the first may move an old Keychain item over).
 func (s *Shell) commitKeyPresent() bool {
 	_, ok := s.commitAPIKey()
 	return ok
@@ -66,8 +66,8 @@ func (s *Shell) commitGeneratorUsable() bool {
 }
 
 // probeCommitKey learns once, off the UI lane, whether a key is stored. It
-// runs only when a surface needs the answer (never at launch, so a Keychain
-// prompt cannot hold the window back) and only in a real window: tests set
+// runs only when a surface needs the answer (never at launch, so a first-read
+// Keychain migration prompt cannot hold the window back) and only in a real window: tests set
 // commitAPIKeySet themselves. A found key only ever raises the flag, so a
 // Save that lands first is not undone by a late read.
 func (s *Shell) probeCommitKey() {

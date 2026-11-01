@@ -101,6 +101,11 @@ func main() {
 		nativeui.WithSessionTrash(sessiontrash.New(filepath.Join(userDataDir, "SessionTrash"), historyRoots)),
 	}
 
+	// Solco's own credentials (Quota tokens, the commit API key) live in an
+	// encrypted file here, not in the Keychain, so rebuilding or reinstalling
+	// the app never makes macOS ask for the Keychain password.
+	nativeui.UseSecretsFile(filepath.Join(userDataDir, "secrets.enc"))
+
 	shell := nativeui.NewShell(append([]nativeui.ShellOption{
 		nativeui.WithSettings(settingsService),
 		nativeui.WithUserDataDir(userDataDir),

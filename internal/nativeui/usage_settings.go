@@ -10,8 +10,8 @@ import (
 
 /**
  * [INPUT]: 依赖 usage_state.go 的开关/令牌/刷新动作、internal/usage 的 Result 与 ID、controls.go 的字段与按钮、settingsGroup/row/settingSwitch 共享设置组件
- * [OUTPUT]: usageSettingsPath、Shell.settingsUsage（/settings/quota：每家一组——开关、令牌字段（Keychain）、智谱平台、状态与 Check Now）、Shell.usageProviderOn
- * [POS]: Usage 页的设置宿主：只放开关与令牌；令牌只写进 mygo.Secrets（Keychain，key 为 usage.<id>.token），字段永不回显已存值，设置文件里只有开关与智谱平台
+ * [OUTPUT]: usageSettingsPath、Shell.settingsUsage（/settings/quota：每家一组——开关、令牌字段（加密文件）、智谱平台、状态与 Check Now）、Shell.usageProviderOn
+ * [POS]: Usage 页的设置宿主：只放开关与令牌；令牌只写进 appSecrets（Solco 自己的加密文件，key 为 usage.<id>.token），字段永不回显已存值，设置文件里只有开关与智谱平台
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -70,9 +70,9 @@ func (s *Shell) settingsUsage(c *ui.Context) {
 		}
 		if usageHasToken(id) {
 			label := usageTokenLabel(id)
-			note := "Stored in the Keychain; never shown again"
+			note := "Stored encrypted on this Mac; never shown again"
 			if id != usage.Zhipu {
-				note = "Optional — replaces the sign-in Solco would read. Stored in the Keychain"
+				note = "Optional — replaces the sign-in Solco would read. Stored encrypted on this Mac"
 			}
 			rows = append(rows, row(label, note, func() {
 				draft := st.drafts[id]

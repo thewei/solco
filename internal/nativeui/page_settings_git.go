@@ -1,9 +1,9 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 persisted Workbench Settings、配置的 OpenAI 兼容 API 通道（endpoint/model + Keychain key git.commitapi.token）与用户可编辑的 commit rules
+ * [INPUT]: 依赖 persisted Workbench Settings、配置的 OpenAI 兼容 API 通道（endpoint/model + 凭据 key git.commitapi.token）与用户可编辑的 commit rules
  * [OUTPUT]: 对外提供 Shell.settingsGit 渲染 Git 提交风格规则（仅风格；安全约束固定在 agent.BuildCommitPrompt，不展示）、AI commit 通道配置（endpoint/model/key/测试）与通道就绪状态
- * [POS]: nativeui Settings 中的 Git 偏好配置子面板；key 只进 Keychain，字段永不回显已存值；未配置通道时生成入口在别处禁用
+ * [POS]: nativeui Settings 中的 Git 偏好配置子面板；key 只进 Solco 自己的加密文件（secretstore），字段永不回显已存值；未配置通道时生成入口在别处禁用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -109,7 +109,7 @@ func (s *Shell) settingsGit(c *ui.Context) {
 				}
 			})
 		}),
-		row("API key", "Stored in the macOS Keychain; never echoed, logged or written to settings.", func() {
+		row("API key", "Stored encrypted in Solco's data folder; never echoed, logged or written to settings.", func() {
 			ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
 				textField(c, &s.settingsCommitKeyDraft).Width(240).Label("API key").
 					Placeholder("Paste API key").Password()

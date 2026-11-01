@@ -6,31 +6,32 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/secretstore"
 	"github.com/thewei/solco/internal/settings"
 	"github.com/thewei/solco/internal/usage"
 )
 
 /**
- * [INPUT]: internal/usage 的 Service（各家额度读取、缓存、节流）、history.DailyUsageReader（近 30 天本地 token）、mygo.Secrets（Keychain）与 settings.Usage 开关
- * [OUTPUT]: Shell.usage（usageState）、refreshUsage（页面打开/手动刷新时才读，无后台定时器）、setUsageEnabled/requestUsageProvider（逐家开启 + 读取他人登录前的同意）、saveUsageToken/removeUsageToken、usageSigninKey/forgetUsageSignin（借用登录在同意读取一次后的副本，撤回同意或改用手填令牌即删）、loadUsageActivity、usageSecrets 接口、cachedSecrets/appSecrets（进程内每个 Keychain 条目最多读一次，命中/未命中/被拒都记住，写删才失效）
- * [POS]: Usage 页与设置页共用的展示状态与动作；只做调度与偏好持久化：额度语义在 internal/usage，token 与副本只进 Keychain（key 为 usage.<id>.token / usage.<id>.signin），永不进 settings 文件或日志；副本让 Claude/Cursor 的读取不再逐次触碰对方应用的 Keychain 条目
+ * [INPUT]: internal/usage 的 Service（各家额度读取、缓存、节流）、history.DailyUsageReader（近 30 天本地 token）、appSecrets（secretstore 加密文件，旧 Keychain 条目首次读取时迁入）与 settings.Usage 开关
+ * [OUTPUT]: Shell.usage（usageState）、refreshUsage（页面打开/手动刷新时才读，无后台定时器）、setUsageEnabled/requestUsageProvider（逐家开启 + 读取他人登录前的同意）、saveUsageToken/removeUsageToken、usageSigninKey/forgetUsageSignin（借用登录在同意读取一次后的副本，撤回同意或改用手填令牌即删）、loadUsageActivity、usageSecrets 接口、appSecrets/UseSecretsFile（Solco 自己的凭据存放处，main 启动时指向用户数据目录的 secrets.enc）
+ * [POS]: Usage 页与设置页共用的展示状态与动作；只做调度与偏好持久化：额度语义在 internal/usage，token 与副本只进 Solco 自己的加密文件（key 为 usage.<id>.token / usage.<id>.signin），永不进 settings 文件或日志；副本让 Claude/Cursor 的读取不再逐次触碰对方应用的 Keychain 条目；Solco 自己的凭据不再进 Keychain，重装/重编译不会再弹钥匙串密码
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 // usageSecrets is the credential store the Usage page keeps its tokens in.
-// Production is the system Keychain; tests inject memory.
+// Production is appSecrets (an encrypted file); tests inject memory.
 type usageSecrets interface {
 	Get(key string) (string, bool)
 	Set(key, value string) error
 	Delete(key string) error
 }
 
+// keychainSecrets is where Solco kept its credentials before secretstore.
 type keychainSecrets struct{}
 
 func (keychainSecrets) Get(key string) (string, bool) {
@@ -41,73 +42,23 @@ func (keychainSecrets) Get(key string) (string, bool) {
 	return string(value), true
 }
 
-func (keychainSecrets) Set(key, value string) error { return mygo.Secrets.Set(key, []byte(value)) }
-func (keychainSecrets) Delete(key string) error     { return mygo.Secrets.Delete(key) }
+func (keychainSecrets) Delete(key string) error { return mygo.Secrets.Delete(key) }
 
-// cachedSecrets reads each Keychain item at most once per process: a hit, a
-// miss and a refused read all stay answered until the item is written or
-// deleted through it, so macOS is asked once instead of at every Quota open.
-type cachedSecrets struct {
-	inner usageSecrets
-	mu    sync.Mutex
-	seen  map[string]cachedSecret
-}
+// appSecrets is the one store of the app's own credentials (commit API key,
+// Quota tokens and sign-in copies): an encrypted file in the user-data
+// directory (internal/secretstore, switched on by UseSecretsFile), so macOS
+// never asks for the Keychain password when Solco is rebuilt or reinstalled.
+// The Keychain is only the place an old item is moved out of, once per key.
+var appSecrets = secretstore.New(keychainSecrets{})
 
-type cachedSecret struct {
-	value string
-	ok    bool
-}
+// UseSecretsFile points the app's credential store at its file. main calls it
+// once, before the Shell exists; headless tests never do, and stay in memory.
+func UseSecretsFile(path string) { appSecrets.Use(path) }
 
-func newCachedSecrets(inner usageSecrets) *cachedSecrets {
-	return &cachedSecrets{inner: inner, seen: map[string]cachedSecret{}}
-}
-
-func (c *cachedSecrets) Get(key string) (string, bool) {
-	c.mu.Lock()
-	if e, hit := c.seen[key]; hit {
-		c.mu.Unlock()
-		return e.value, e.ok
-	}
-	c.mu.Unlock()
-	value, ok := c.inner.Get(key)
-	c.mu.Lock()
-	if e, hit := c.seen[key]; hit { // written while this read was out
-		c.mu.Unlock()
-		return e.value, e.ok
-	}
-	c.seen[key] = cachedSecret{value, ok}
-	c.mu.Unlock()
-	return value, ok
-}
-
-func (c *cachedSecrets) Set(key, value string) error {
-	if err := c.inner.Set(key, value); err != nil {
-		return err
-	}
-	c.mu.Lock()
-	c.seen[key] = cachedSecret{value, true}
-	c.mu.Unlock()
-	return nil
-}
-
-func (c *cachedSecrets) Delete(key string) error {
-	if err := c.inner.Delete(key); err != nil {
-		return err
-	}
-	c.mu.Lock()
-	c.seen[key] = cachedSecret{}
-	c.mu.Unlock()
-	return nil
-}
-
-// appSecrets is the one Keychain-backed store of the app's own credentials
-// (commit API key, Quota tokens and sign-in copies).
-var appSecrets usageSecrets = newCachedSecrets(keychainSecrets{})
-
-// usageTokenKey is the Keychain key of a provider's pasted token.
+// usageTokenKey is the credential key of a provider's pasted token.
 func usageTokenKey(id usage.ID) string { return "usage." + string(id) + ".token" }
 
-// usageSigninKey is the Keychain key of a provider's cached copy of another
+// usageSigninKey is the credential key of a provider's cached copy of another
 // app's sign-in, written once after the consented read.
 func usageSigninKey(id usage.ID) string { return "usage." + string(id) + ".signin" }
 
@@ -124,8 +75,8 @@ type usageState struct {
 	// agySignIn mirrors Usage.SignInAllowed[antigravity] for the same reason.
 	agySignIn atomic.Bool
 
-	// tokens says which providers have a token in the Keychain; it is read
-	// off the UI lane (a Keychain read may prompt) the first time it is needed.
+	// tokens says which providers have a token stored; it is read off the UI
+	// lane (a first read may move an old Keychain item over) when first needed.
 	tokens       map[usage.ID]bool
 	tokensLoaded bool
 
@@ -277,7 +228,7 @@ func (s *Shell) loadUsageActivity(force bool) {
 }
 
 // loadUsageTokens learns which providers have a pasted token, once. A
-// Keychain read can prompt, so it never runs on the UI lane.
+// first read of an old Keychain item can prompt, so it never runs on the UI lane.
 func (s *Shell) loadUsageTokens() {
 	st := s.usage
 	if st.tokensLoaded {
@@ -319,14 +270,14 @@ func (s *Shell) saveUsageToken(id usage.ID, value string) {
 		s.applyOnWindow(func() {
 			if err != nil {
 				slog.Warn("usage token save failed", "provider", string(id), "error", err)
-				s.pendingToast = "Couldn't save to the Keychain."
+				s.pendingToast = "Couldn't save the token."
 				return
 			}
 			st.tokens[id] = true
 			delete(st.drafts, id)
 			st.svc.Clear(id)
 			s.forgetUsageSignin(id)
-			s.pendingToast = "Saved in the Keychain."
+			s.pendingToast = "Token saved."
 			if s.usageEnabledFor(id) {
 				s.refreshUsage(true)
 			}

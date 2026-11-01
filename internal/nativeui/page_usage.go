@@ -185,17 +185,17 @@ func (s *Shell) usageSource(id usage.ID) string {
 		return "Codex app-server on this Mac · no sign-in read"
 	case usage.Cursor:
 		if pasted {
-			return "Your token (Keychain) · cursor.com"
+			return "Your token (stored encrypted) · cursor.com"
 		}
 		return "Cursor's own sign-in · cursor.com"
 	case usage.Zhipu:
 		if s.settings.Usage.ZhipuSite == usage.ZhipuChina {
-			return "Your API key (Keychain) · open.bigmodel.cn"
+			return "Your API key (stored encrypted) · open.bigmodel.cn"
 		}
-		return "Your API key (Keychain) · api.z.ai"
+		return "Your API key (stored encrypted) · api.z.ai"
 	case usage.Copilot:
 		if pasted {
-			return "Your token (Keychain) · api.github.com"
+			return "Your token (stored encrypted) · api.github.com"
 		}
 		return "GitHub CLI sign-in · api.github.com"
 	case usage.Antigravity:
@@ -937,10 +937,10 @@ func usageConsentText(id usage.ID) (title, message string) {
 	switch id {
 	case usage.Claude:
 		return "Allow Solco to read Claude Code's sign-in?",
-			"Solco reads the sign-in Claude Code keeps in your Keychain, only to ask Anthropic for your usage; it goes nowhere else. Solco keeps a copy in its own Keychain entry, so later reads no longer touch Claude Code's item — macOS asks only when that copy is missing or no longer accepted. macOS will now ask you to confirm (Allow Once or Always Allow)."
+			"Solco reads the sign-in Claude Code keeps in your Keychain, only to ask Anthropic for your usage; it goes nowhere else. Solco keeps a copy in its own encrypted store, so later reads no longer touch Claude Code's item — macOS asks only when that copy is missing or no longer accepted. macOS will now ask you to confirm (Allow Once or Always Allow)."
 	case usage.Cursor:
 		return "Allow Solco to read Cursor's sign-in?",
-			"Solco reads the sign-in Cursor Agent keeps on this Mac, only to ask cursor.com for your usage; it goes nowhere else. Solco keeps a copy in its own Keychain entry, so later reads no longer touch Cursor Agent's item — macOS asks only when that copy is missing or no longer accepted. macOS may ask you to confirm now."
+			"Solco reads the sign-in Cursor Agent keeps on this Mac, only to ask cursor.com for your usage; it goes nowhere else. Solco keeps a copy in its own encrypted store, so later reads no longer touch Cursor Agent's item — macOS asks only when that copy is missing or no longer accepted. macOS may ask you to confirm now."
 	case usage.Copilot:
 		return "Allow Solco to use your GitHub CLI sign-in?",
 			"Solco asks the gh command for your GitHub token, only to ask api.github.com for your Copilot usage. It is never stored or sent anywhere else."

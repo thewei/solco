@@ -1,7 +1,7 @@
 package nativeui
 
 /**
- * [INPUT]: Current fenced Git snapshot, Git preferences, the configured API channel (endpoint/model/Keychain key)
+ * [INPUT]: Current fenced Git snapshot, Git preferences, the configured API channel (endpoint/model/stored key)
  * [OUTPUT]: AI candidate applied ONLY to Local Changes quick commit subject, with async stale guards
  * [POS]: Lightweight commit composer coordinator, no Git mutation or automatic commit; refuses to run unconfigured
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
