@@ -203,6 +203,7 @@ func readEnv() []string {
 // keeps the no-pager/no-prompt/C-locale guarantees.
 func mutateEnv() []string {
 	return []string{
+		"GIT_EDITOR=true",
 		"GIT_PAGER=cat",
 		"GIT_TERMINAL_PROMPT=0",
 		"LC_ALL=C",

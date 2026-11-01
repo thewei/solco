@@ -436,6 +436,7 @@ func (s *Shell) bindChatWindow(conversationID string, readOnly bool) {
 	s.chatWindowStart = 0
 	s.chatHasOlder = false
 	s.chatContextTokens = nil
+	s.chatModel = ""
 	service := s.hist.service
 	s.publishChatBridge()
 

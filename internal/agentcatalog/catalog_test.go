@@ -240,6 +240,31 @@ func TestCursorAndAgyCatalogs(t *testing.T) {
 	}
 }
 
+func TestAgyDefaultModelFallbacks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Fallback to ~/.gemini/settings.json when antigravity-cli/settings.json is absent
+	write(t, filepath.Join(home, ".gemini", "settings.json"), `{"model":"Gemini 3.8 Flash (Medium)"}`)
+	if got := defaultModel(history.AgentAntigravity, home); got != "Gemini 3.8 Flash (Medium)" {
+		t.Fatalf("got %q, want Gemini 3.8 Flash (Medium)", got)
+	}
+
+	// Fallback to first model in agy models when no settings.json specifies a model
+	home2 := t.TempDir()
+	t.Setenv("HOME", home2)
+	modelMu.Lock()
+	modelCache["agy"] = modelEntry{at: time.Now(), models: []Model{
+		{ID: "Gemini 3.8 Flash (High)", Detail: "gemini-3.8-flash-high"},
+		{ID: "Gemini 3.8 Flash (Medium)", Detail: "gemini-3.8-flash-medium"},
+	}}
+	modelMu.Unlock()
+	agy := Load(context.Background(), history.AgentAntigravity, "")
+	if agy.DefaultModel != "Gemini 3.8 Flash (High)" {
+		t.Fatalf("default model fallback = %q, want Gemini 3.8 Flash (High)", agy.DefaultModel)
+	}
+}
+
 func TestPiEffortsFollowPisOwnModelsJSON(t *testing.T) {
 	home := t.TempDir()
 	// Shapes captured from a real ~/.pi/agent/models.json: a map with nulls for

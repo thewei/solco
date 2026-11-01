@@ -278,6 +278,8 @@ func (s *Shell) rebindWorkspaceChat() {
 		s.chatWindowMessages = nil
 		s.chatWindowStart = 0
 		s.chatHasOlder = false
+		s.chatContextTokens = nil
+		s.chatModel = ""
 		s.chatSourcelessPaneID = card.PaneID
 		// The page shows its own invitation (type the first prompt below),
 		// so no toast; a prompt already sent from here keeps its echo.
@@ -292,6 +294,8 @@ func (s *Shell) rebindWorkspaceChat() {
 		s.stopLiveTail()
 		s.chatConversationID = ""
 		s.chatTurns = nil
+		s.chatContextTokens = nil
+		s.chatModel = ""
 		s.publishChatBridge()
 	}
 }

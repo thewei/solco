@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 依赖 agentcatalog.Load, chatattach, history, Shell 窗格状态
+ * [OUTPUT]: 对外提供 ChatCatalog, ChatCatalogEntry, ChatCatalogModel, ChatCatalogEffort, ChatBridge.Catalog, ChatBridge.SwitchModel
+ * [POS]: WebView Chat 与本地 Agent 目录桥接器，向页面提供命令/技能/模型目录与切换支持
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 package nativeui
 
 import (
@@ -65,6 +71,8 @@ func (s *Shell) chatProvider() (provider history.AgentID, root string) {
 		return "", ""
 	}
 	if card, ok := s.agentCardForPane(s.chatPaneID); ok {
+		provider = card.Provider
+	} else if card, ok := s.agentCardForSelectedPane(); ok {
 		provider = card.Provider
 	}
 	if s.git != nil {

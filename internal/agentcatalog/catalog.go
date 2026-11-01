@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 history.AgentID, 用户目录配置 (~/.omp, ~/.claude, ~/.gemini, ~/.codex, ~/.cursor) 与命令行 (agy, omp, pi)
+ * [OUTPUT]: 对外提供 Catalog, Entry, Model, Effort, Load, ModelVerb, EffortVerb, ModelWindow, Classify, IsCompact
+ * [POS]: Composer 只读目录与命令能力中心，扫描 agent 自有命令、技能与模型列表
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 // Package agentcatalog lists what the composer can offer for one Agent: its
 // Skills, custom prompt commands, a short hand-verified table of built-in
 // commands and the models it can switch to. Everything is read from the
@@ -405,6 +412,13 @@ func Load(ctx context.Context, provider history.AgentID, root string) Catalog {
 			filepath.Join(home, ".claude", "skills"))
 		cat.ModelVerb = ModelVerb(provider)
 		cat.Models = groupAgyEfforts(agyModels(ctx))
+		if cat.DefaultModel == "" && len(cat.Models) > 0 {
+			if len(cat.Models[0].Efforts) > 0 {
+				cat.DefaultModel = cat.Models[0].ID + " (" + cat.Models[0].Efforts[0].Label + ")"
+			} else {
+				cat.DefaultModel = cat.Models[0].ID
+			}
+		}
 		cat.ModelNote = "Antigravity saves this as the default model for every new session."
 	}
 	return cat
@@ -746,7 +760,10 @@ func defaultModel(provider history.AgentID, home string) string {
 	case history.AgentClaudeCode:
 		return claudeDefaultModel(read(filepath.Join(home, ".claude", "settings.json")))
 	case history.AgentAntigravity:
-		return claudeDefaultModel(read(filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")))
+		if m := claudeDefaultModel(read(filepath.Join(home, ".gemini", "antigravity-cli", "settings.json"))); m != "" {
+			return m
+		}
+		return claudeDefaultModel(read(filepath.Join(home, ".gemini", "settings.json")))
 	case history.AgentCursor:
 		return cursorDefaultModel(read(filepath.Join(home, ".cursor", "cli-config.json")))
 	}

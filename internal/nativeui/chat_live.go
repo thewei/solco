@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 依赖 agent.AgentKey, herdr.Agent, history.ResolveLiveSource, history.NewLivePump, chatsession.Fold
+ * [OUTPUT]: 对外提供 Shell.openChat, Shell.bindLiveAgent, Shell.bindLiveFile, Shell.stopLiveTail, Shell.applyLiveSync, Shell.wakeLiveTail
+ * [POS]: Chat 增量尾部绑定与实时数据流调度器，负责活体 Agent 转录与 Shell 聊天视图的生命周期同步
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 package nativeui
 
 import (
@@ -207,6 +213,7 @@ func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path,
 	s.chatLiveStart = -1
 	s.chatLiveDecoder = decoder
 	s.chatContextTokens = nil
+	s.chatModel = ""
 	// A same-pane rebind preserves the pending submission (0.6 §12); any
 	// other pane's rebind dropped it at openChat's pane assignment.
 	s.retainPendingEchoForPane(s.chatPaneID)
@@ -270,6 +277,8 @@ func (s *Shell) stopLiveTail() {
 	s.clearChatSubagents()
 	s.chatLiveCommitted = 0
 	s.chatLiveDecoder = nil
+	s.chatModel = ""
+	s.chatContextTokens = nil
 }
 
 // retainPendingEchoForPane keeps a pending submission across a rebind only

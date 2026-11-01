@@ -673,9 +673,19 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		state.Title = card.Title
 		state.Provider = card.ProviderLabel
 	}
-	state.Model = s.chatModel
+	if !s.chatReadOnly && s.chatLiveProvider != "" {
+		if card, ok := s.agentCardForSelectedPane(); ok && card.Provider != "" && card.Provider != s.chatLiveProvider {
+			state.Model = ""
+			state.ContextTokens = nil
+		} else {
+			state.Model = s.chatModel
+			state.ContextTokens = s.chatContextTokens
+		}
+	} else {
+		state.Model = s.chatModel
+		state.ContextTokens = s.chatContextTokens
+	}
 	state.HasOlder = s.chatHasOlder
-	state.ContextTokens = s.chatContextTokens
 	if s.chatPaneID != "" {
 		for _, interaction := range s.interactionBroker.PendingForPane(s.chatPaneID) {
 			progress := ""

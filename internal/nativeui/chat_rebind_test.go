@@ -23,6 +23,7 @@ func TestRebindWorkspaceChatSourcelessClearsStaleTranscript(t *testing.T) {
 	shell.chatPaneID = "p-old"
 	shell.chatConversationID = "live:claude:term-old"
 	shell.chatTurns = []conversation.TimelineTurn{{UserRow: true, Text: "stale"}}
+	shell.chatModel = "group/glm-flash"
 	shell.projection = herdr.Projection{
 		Agents: []herdr.Agent{
 			{TerminalID: "term-new", PaneID: "p-new", Status: "idle"},
@@ -39,6 +40,12 @@ func TestRebindWorkspaceChatSourcelessClearsStaleTranscript(t *testing.T) {
 	}
 	if len(shell.chatTurns) != 0 {
 		t.Fatalf("stale turns survived: %d", len(shell.chatTurns))
+	}
+	if shell.chatModel != "" {
+		t.Fatalf("stale chatModel survived: %q", shell.chatModel)
+	}
+	if shell.chatBridgeState().Model != "" {
+		t.Fatalf("stale bridge model survived: %q", shell.chatBridgeState().Model)
 	}
 	if shell.chatSourcelessPaneID != "p-new" {
 		t.Fatalf("sourceless latch = %q, want p-new", shell.chatSourcelessPaneID)
@@ -363,5 +370,37 @@ func TestRebindWorkspaceChatKeepsCurrentLiveSession(t *testing.T) {
 	}
 	if countUserRows(shell.chatTurns, "kept") != 1 {
 		t.Fatalf("steady-state rebind disturbed the transcript: %+v", shell.chatTurns)
+	}
+}
+
+// Switching from an agent with a model (e.g. omp with "group/glm-flash") to
+// another agent (e.g. antigravity) must clear the recorded model so the
+// composer does not display the previous agent's model at initialization.
+func TestRebindWorkspaceChatClearsStaleModelOnAgentSwitch(t *testing.T) {
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p2"
+	shell.chatPaneID = "p1"
+	shell.chatConversationID = "live:omp:term-1"
+	shell.chatLiveProvider = history.AgentOMP
+	shell.chatModel = "group/glm-flash"
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Status: "idle", Kind: "omp"},
+			{TerminalID: "term-2", PaneID: "p2", Status: "idle", Kind: "agy"},
+		},
+	}
+
+	shell.rebindWorkspaceChat()
+
+	if shell.chatPaneID != "p2" {
+		t.Fatalf("chatPaneID = %q, want p2", shell.chatPaneID)
+	}
+	if shell.chatModel != "" {
+		t.Fatalf("chatModel = %q, want empty after switching away from omp", shell.chatModel)
+	}
+	state := shell.chatBridgeState()
+	if state.Model != "" {
+		t.Fatalf("bridge state Model = %q, want empty so composer uses defaultModel", state.Model)
 	}
 }
