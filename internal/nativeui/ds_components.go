@@ -224,8 +224,9 @@ func compactPrimaryButton(c *ui.Context, label string) ui.Element {
 	return regularPrimaryButton(c, label).FontSize(Typography().Micro)
 }
 
-// emptyState is the shared nothing-here state.
-func emptyState(c *ui.Context, title, detail string) {
+// emptyState is the shared nothing-here state. An action, when given, is the
+// way out (a button under the text).
+func emptyState(c *ui.Context, title, detail string, action ...func()) {
 	t := c.Theme()
 	typ := Typography()
 	sp := Spacing()
@@ -233,6 +234,10 @@ func emptyState(c *ui.Context, title, detail string) {
 		ui.Text(c, title).FontWeight(WeightSemibold)
 		if detail != "" {
 			ui.Text(c, detail).FontSize(typ.BodySmall).TextColor(t.TextMuted)
+		}
+		for _, build := range action {
+			ui.Box(c).Height(sp.XS).Shrink(0).PassThrough() // the button sits a step apart from the text
+			build()
 		}
 	})
 }

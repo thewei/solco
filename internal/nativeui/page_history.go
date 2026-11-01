@@ -214,10 +214,7 @@ func (s *Shell) trashListBody(c *ui.Context) {
 // noMatchingSessions is the empty state of a search or Agent tab that matches
 // nothing, with the way out.
 func (s *Shell) noMatchingSessions(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Grow(1).Center().Gap(Spacing().M).Children(func() {
-		ui.Text(c, "No matching sessions").FontWeight(WeightSemibold)
-		ui.Text(c, "Try another search or agent.").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+	emptyState(c, "No matching sessions", "Try another search or agent.", func() {
 		if regularButton(c, "Clear Filters").Clicked() {
 			s.clearHistoryFilters()
 		}
@@ -482,7 +479,7 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 	selected := selecting && s.hist.selected[key]
 	open := !selecting && !s.hist.showTrash && s.hist.preview.key == key
 	row := ui.ButtonBase(c.Key("session:"+key)).FillWidth().Padding(sp.M, rowInset).Gap(sp.L).AlignItems(ui.Center).
-		FocusRing(false).Label(title)
+		FocusRing(false).Label(title).Transition(rowEnter)
 	switch {
 	case selected, s.nav.sessions.showsCursor(row):
 		row.Background(tokens.SidebarSelect)

@@ -55,6 +55,11 @@ var treeRowMotion = ui.ElementTransition{
 	Exit:     &ui.Motion{},
 }
 
+// rowEnter is rowFade plus a fade-in for a row that joins a list already on
+// screen (a search or filter that brings rows in). The list must not be
+// virtualized: rows built by scrolling would fade too.
+var rowEnter = ui.ElementTransition{Colors: true, Duration: motionRow, Enter: &ui.Motion{}}
+
 // disclosureMotion is for a panel that opens in place under its row (the
 // Sessions info card): it grows in and fades out.
 var disclosureMotion = ui.ElementTransition{
