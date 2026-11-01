@@ -328,3 +328,14 @@ func TestP2PUsesBuiltInSTUNWhenNoneConfigured(t *testing.T) {
 		t.Fatalf("default ICE = %+v", got)
 	}
 }
+
+func TestCandidateKindsCountsTypesOnly(t *testing.T) {
+	sdp := "v=0\na=candidate:1 1 udp 1 192.168.1.2 5000 typ host\na=candidate:2 1 udp 1 1.2.3.4 5001 typ srflx raddr 0.0.0.0 rport 0\na=candidate:3 1 udp 1 5.6.7.8 5002 typ relay\n"
+	got := candidateKinds(sdp)
+	if got != "host=1 srflx=1 relay=1 prflx=0" {
+		t.Fatalf("candidateKinds = %q", got)
+	}
+	if strings.Contains(got, "1.2.3.4") {
+		t.Fatalf("an address leaked into the summary: %q", got)
+	}
+}

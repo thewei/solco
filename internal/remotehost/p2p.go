@@ -21,7 +21,7 @@ import (
 /**
  * [INPUT]: 依赖 pion/webrtc/v4、relayclient.go 的 tunnel（hreq/wopen 帧引擎）、server.go 的 guard/Handler/trackConn、relay 的 POST /turn
  * [OUTPUT]: 对外提供 P2PConfig/ICEServer、Server.SetP2P/P2PSessions、GET /api/v3/p2p/ice、POST /api/v3/p2p/session、bootstrap 的 capabilities.p2p
- * [POS]: 手机 ⇄ 桌面的 WebRTC DataChannel 直连（relay/直连路由上已鉴权的信令；不改 relay 协议）：手机经已通的路由取 ICE 服务器并 POST 一份非 trickle 的 offer，Host 等 ICE 收集完成后回完整 answer；DataChannel "solco" 上跑与 relay 完全相同的 hreq/hres/wopen/wmsg 帧（同一个 tunnel，手机扮演 relay 的角色），帧经回环桥进既有 Handler，所以每个请求仍要带设备 token、业务 /api/v3 零改动。DataChannel 单条消息有上限，故以 1 字节头（1=后续、0=末片）分片重组。撤销设备经 trackConn 立刻关闭其 P2P 会话；每设备最多 2 个会话（挤掉最旧）；ICE 服务器 = 设置里的静态 STUN/TURN ∪ relay /turn 签发的短期凭据（缓存到过期前一分钟）。日志只记设备与会话 id，绝不记 SDP/候选地址/帧内容
+ * [POS]: 手机 ⇄ 桌面的 WebRTC DataChannel 直连（relay/直连路由上已鉴权的信令；不改 relay 协议）：手机经已通的路由取 ICE 服务器并 POST 一份非 trickle 的 offer，Host 等 ICE 收集完成后回完整 answer；DataChannel "solco" 上跑与 relay 完全相同的 hreq/hres/wopen/wmsg 帧（同一个 tunnel，手机扮演 relay 的角色），帧经回环桥进既有 Handler，所以每个请求仍要带设备 token、业务 /api/v3 零改动。DataChannel 单条消息有上限，故以 1 字节头（1=后续、0=末片）分片重组。撤销设备经 trackConn 立刻关闭其 P2P 会话；每设备最多 2 个会话（挤掉最旧）；ICE 服务器 = 设置里的静态 STUN/TURN ∪ relay /turn 签发的短期凭据（缓存到过期前一分钟）。日志只记设备与会话 id、候选类型计数（host/srflx/relay/prflx）、ICE 状态迁移与选中对的类型、会话寿命，绝不记 SDP/候选地址/帧内容
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -89,6 +89,7 @@ type p2pSession struct {
 	tun    *tunnel
 	cancel context.CancelFunc
 	closed bool
+	state  string     // last PeerConnection state, for the close log
 	wmu    sync.Mutex // one fragmented frame at a time
 }
 
@@ -320,6 +321,13 @@ func (s *Server) openP2PSession(ctx context.Context, dev Device, offerSDP, bridg
 		sess.attach(dc, bridgeAddr)
 	})
 	pc.OnConnectionStateChange(func(st webrtc.PeerConnectionState) {
+		sess.mu.Lock()
+		sess.state = st.String()
+		sess.mu.Unlock()
+		slog.Info("remote host p2p state", "device", dev.ID, "session", sess.id, "state", st.String(), "after_ms", time.Since(sess.at).Milliseconds())
+		if st == webrtc.PeerConnectionStateConnected {
+			slog.Info("remote host p2p path", "device", dev.ID, "session", sess.id, "pair", selectedPairKinds(pc))
+		}
 		if st == webrtc.PeerConnectionStateFailed || st == webrtc.PeerConnectionStateClosed {
 			sess.close()
 		}
@@ -355,7 +363,8 @@ func (s *Server) openP2PSession(ctx context.Context, dev Device, offerSDP, bridg
 			sess.close()
 		}
 	})
-	slog.Info("remote host p2p session opened", "device", dev.ID, "session", sess.id)
+	slog.Info("remote host p2p session opened", "device", dev.ID, "session", sess.id,
+		"phone_candidates", candidateKinds(offerSDP), "mac_candidates", candidateKinds(pc.LocalDescription().SDP), "ice_servers", iceServerKinds(ice))
 	return map[string]string{"sessionId": sess.id, "sdp": pc.LocalDescription().SDP}, nil
 }
 
@@ -485,6 +494,7 @@ func (sess *p2pSession) close() {
 	}
 	sess.closed = true
 	tun, cancel := sess.tun, sess.cancel
+	attached, lastState := sess.dc != nil, sess.state
 	sess.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -499,5 +509,59 @@ func (sess *p2pSession) close() {
 	delete(sess.srv.p2p.sessions, sess.id)
 	sess.srv.p2p.mu.Unlock()
 	_ = sess.pc.Close()
-	slog.Info("remote host p2p session closed", "device", sess.deviceID, "session", sess.id)
+	slog.Info("remote host p2p session closed", "device", sess.deviceID, "session", sess.id,
+		"lived_ms", time.Since(sess.at).Milliseconds(), "attached", attached, "last_state", lastState)
+}
+
+// candidateKinds counts the ICE candidates of an SDP by type ("host=2 srflx=1
+// relay=0"). Types only: addresses never reach a log line. It is how a
+// session says whether the phone offered a reflexive or relayed candidate.
+func candidateKinds(sdp string) string {
+	var host, srflx, relay, prflx int
+	for _, line := range strings.Split(sdp, "\n") {
+		if !strings.HasPrefix(line, "a=candidate:") {
+			continue
+		}
+		switch {
+		case strings.Contains(line, " typ host"):
+			host++
+		case strings.Contains(line, " typ srflx"):
+			srflx++
+		case strings.Contains(line, " typ relay"):
+			relay++
+		case strings.Contains(line, " typ prflx"):
+			prflx++
+		}
+	}
+	return fmt.Sprintf("host=%d srflx=%d relay=%d prflx=%d", host, srflx, relay, prflx)
+}
+
+// iceServerKinds says how many STUN and TURN URLs this session was given.
+func iceServerKinds(servers []webrtc.ICEServer) string {
+	var stun, turn int
+	for _, sv := range servers {
+		for _, u := range sv.URLs {
+			switch {
+			case strings.HasPrefix(u, "stun:"), strings.HasPrefix(u, "stuns:"):
+				stun++
+			case strings.HasPrefix(u, "turn:"), strings.HasPrefix(u, "turns:"):
+				turn++
+			}
+		}
+	}
+	return fmt.Sprintf("stun=%d turn=%d", stun, turn)
+}
+
+// selectedPairKinds names the nominated pair by candidate types only
+// ("host/host", "srflx/srflx", "relay/srflx"); "unknown" before one exists.
+func selectedPairKinds(pc *webrtc.PeerConnection) string {
+	sctp := pc.SCTP()
+	if sctp == nil || sctp.Transport() == nil || sctp.Transport().ICETransport() == nil {
+		return "unknown"
+	}
+	pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair()
+	if err != nil || pair == nil || pair.Local == nil || pair.Remote == nil {
+		return "unknown"
+	}
+	return pair.Local.Typ.String() + "/" + pair.Remote.Typ.String()
 }
