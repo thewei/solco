@@ -495,6 +495,13 @@ func (s *Server) trackConn(deviceID string, closeFn func()) (untrack func()) {
 	}
 }
 
+// DeviceOnline reports whether the device holds a live socket right now.
+func (s *Server) DeviceOnline(deviceID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.conns[deviceID]) > 0
+}
+
 // closeDevice ends every socket of a revoked device without blocking the
 // caller (Settings' Revoke) on a phone's close handshake.
 func (s *Server) closeDevice(deviceID string) {

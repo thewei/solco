@@ -338,7 +338,7 @@ func (s *Shell) deviceAddForm(c *ui.Context) {
 			}
 			return
 		}
-		ui.Text(c, "Herdr picks the one running session on the device, asks when there are several, and uses default when there is none.").
+		ui.Text(c, "Herdr picks the running session, asks when there are several, and uses default when there is none.").
 			FontSize(typ.Caption).TextColor(t.TextMuted)
 	})
 	field("Name (optional)", func() {
@@ -347,7 +347,7 @@ func (s *Shell) deviceAddForm(c *ui.Context) {
 			submit = true
 		}
 	})
-	ui.Text(c, "Solco opens Terminal to finish the setup there. Sign-in prompts and approvals are answered in Terminal, never in Solco.").
+	ui.Text(c, "Setup finishes in Terminal; sign-in prompts and approvals are answered there.").
 		FontSize(typ.Caption).TextColor(t.TextMuted)
 	if message := add.formError(); message != "" {
 		ui.Text(c, message).FontSize(typ.Caption).TextColor(designTokens(t.Dark).StatusColor(ToneError, t.Dark))

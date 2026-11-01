@@ -41,7 +41,7 @@ func (s *Shell) settingsUsage(c *ui.Context) {
 	t := c.Theme()
 	st := s.usage
 	s.loadUsageTokens()
-	ui.Text(c, "Quota reads each agent's own limits when you open its page or its Header tab, or refresh it. Nothing runs in the background, and nothing is recorded.").
+	ui.Text(c, "Reads each agent's own limits when you open Quota or refresh. Nothing runs in the background or is recorded.").
 		FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 
 	for _, id := range usage.All {

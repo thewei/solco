@@ -856,3 +856,18 @@ func alive(pid int) bool {
 	// succeeds on a zombie, so also treat "no such process" as gone.
 	return syscall.Kill(pid, 0) == nil
 }
+
+func TestDeviceOnlineFollowsItsLiveSockets(t *testing.T) {
+	h := newHarness(t)
+	if h.srv.DeviceOnline(h.devID) {
+		t.Fatal("a device with no socket is not online")
+	}
+	untrack := h.srv.trackConn(h.devID, func() {})
+	if !h.srv.DeviceOnline(h.devID) {
+		t.Fatal("a device holding a socket is online")
+	}
+	untrack()
+	if h.srv.DeviceOnline(h.devID) {
+		t.Fatal("the device goes offline when its last socket ends")
+	}
+}

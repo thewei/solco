@@ -198,13 +198,13 @@ func remoteCandidateLabel(c remotehost.Candidate) string { return c.Address + " 
 func remoteModeNote(m remotehost.Mode) string {
 	switch m {
 	case remotehost.ModeLoopback:
-		return "Only this Mac can connect — for development and USB tunnelling."
+		return "This Mac only (development, USB tunnelling)."
 	case remotehost.ModeLAN:
-		return "Phones on the same Wi-Fi or Ethernet network. Traffic is encrypted and pinned to this Mac's certificate."
+		return "Phones on the same Wi-Fi or Ethernet."
 	case remotehost.ModeTailscale:
-		return "Phones on your tailnet and nothing else. Tailscale must be running on this Mac."
+		return "Phones on your tailnet. Tailscale must be running."
 	}
-	return "Nothing listens. The phone app cannot reach this Mac."
+	return "Off."
 }
 
 func (s *Shell) settingsRemote(c *ui.Context) {
@@ -212,7 +212,7 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 	typ := Typography()
 	cfg := remoteConfigFrom(s.settings.Remote)
 	srv := s.remoteServer()
-	ui.Text(c, "Lets the Solco phone app browse your Workspaces and type into a terminal. It is off until you choose a network; there is no account, and terminal contents are never logged.").
+	ui.Text(c, "Browse Workspaces and drive agents from the Solco phone app. Off until you pick a network.").
 		FontSize(typ.BodySmall).TextColor(t.TextMuted)
 
 	rows := []settingsRow{
@@ -242,7 +242,7 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 
 	relay := remoteRelayFrom(s.settings.Remote)
 	relayRows := []settingsRow{
-		row("Relay", "Also reach this Mac through your own relay (alma-relay) when no network path exists. The relay sees request headers and bodies in plaintext, and whoever holds its registration key can replay a paired phone's credentials.", func() {
+		row("Relay", "Reach this Mac through your own relay (alma-relay) when no direct path exists. The relay sees requests in plaintext, and its registration key can replay a paired phone's credentials.", func() {
 			if on, changed := settingSwitch(c, "Relay", relay.Enabled); changed {
 				s.setRemote(func(r *settings.RemoteAccessSettings) { r.RelayEnabled = on })
 			}
@@ -259,7 +259,7 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 
 	p2p := remoteP2PFrom(s.settings.Remote)
 	p2pRows := []settingsRow{
-		row("P2P", "Let a phone open a direct WebRTC link to this Mac through a route that already works (LAN, Tailscale or the relay). It contacts the STUN servers below only when a phone opens one; every request still needs the phone's own credential.", func() {
+		row("P2P", "A phone may open a direct WebRTC link over LAN, Tailscale or the relay. STUN servers are contacted only when a phone opens one.", func() {
 			if on, changed := settingSwitch(c, "P2P", p2p.Enabled); changed {
 				s.setRemote(func(r *settings.RemoteAccessSettings) { r.P2PDisabled = !on })
 			}
@@ -267,8 +267,8 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 	}
 	if p2p.Enabled {
 		p2pRows = append(p2pRows,
-			row("ICE Servers", "STUN/TURN URLs separated by commas. Empty uses Solco's built-in STUN servers; a relay that serves TURN adds its own credentials.", func() { s.remoteICEField(c) }),
-			row("TURN Username", "Shared by the turn: URLs above.", func() {
+			row("ICE Servers", "STUN/TURN URLs, comma-separated. Empty uses the built-in STUN servers.", func() { s.remoteICEField(c) }),
+			row("TURN Username", "For the turn: URLs above.", func() {
 				s.remoteTurnField(c, &s.remote.p2pUserDraft, "Username", s.settings.Remote.P2PTurnUser, false, func(r *settings.RemoteAccessSettings, v string) { r.P2PTurnUser = v })
 			}),
 			row("TURN Credential", "", func() {
@@ -282,7 +282,7 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 	if srv == nil || srv.ListenAddress() == "" {
 		return
 	}
-	settingsGroup(c, "Phones", row("Pair a phone", "Shows a one-time code that is good for 6 minutes.", func() {
+	settingsGroup(c, "Phones", row("Pair a phone", "One-time code, valid for 6 minutes.", func() {
 		if regularButton(c, "Show QR Code…").Clicked() {
 			s.openPairing()
 		}
@@ -295,7 +295,7 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 	for _, d := range devices {
 		d := d
 		cc := c.Key("remote-device:" + d.ID)
-		list = append(list, row(d.Name, remoteDeviceNote(d), func() {
+		list = append(list, row(d.Name, remoteDeviceNote(d, srv.DeviceOnline(d.ID)), func() {
 			if compactButton(cc, "Revoke").Clicked() {
 				if err := srv.Devices().Revoke(d.ID); err != nil {
 					s.remote.err = "Could not revoke " + d.Name + ": " + err.Error()
@@ -306,9 +306,12 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 	settingsGroup(c, "Paired phones", list...)
 }
 
-func remoteDeviceNote(d remotehost.Device) string {
+func remoteDeviceNote(d remotehost.Device, online bool) string {
 	note := "Paired " + d.CreatedAt.Format("2 Jan 2006")
-	if !d.LastSeenAt.IsZero() {
+	switch {
+	case online:
+		note = "Online · " + note
+	case !d.LastSeenAt.IsZero():
 		note += " · last seen " + usageAgo(time.Since(d.LastSeenAt))
 	}
 	return note
@@ -558,7 +561,7 @@ func (s *Shell) remotePairDialog(c *ui.Context) {
 		expired := time.Now().After(r.offer.ExpiresAt)
 		ui.Column(c).Width(360).Gap(sp.L).AlignItems(ui.Center).Children(func() {
 			modalTitle(c, "Pair a Phone")
-			ui.Text(c, "Open Solco on your phone and scan this code. It works once.").
+			ui.Text(c, "Scan with Solco on your phone. Works once.").
 				FontSize(typ.BodySmall).TextColor(t.TextMuted)
 			s.remoteQRView(c, expired)
 			if expired {

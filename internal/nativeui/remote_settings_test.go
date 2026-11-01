@@ -61,7 +61,7 @@ func TestRemoteAccessIsOffUntilChosen(t *testing.T) {
 	s := remoteShell(t)
 	tester := ui.NewTester(s.View, 1200, 800)
 	settleFrames(tester, 3)
-	for _, want := range []string{"Access", "Nothing listens. The phone app cannot reach this Mac."} {
+	for _, want := range []string{"Access", "Off."} {
 		if !tester.HasText(want) {
 			t.Fatalf("Remote Access page lacks %q; texts=%q", want, tester.Texts())
 		}
@@ -165,6 +165,16 @@ func TestRemoteAddressStaleWhenTheModeNoLongerOffersIt(t *testing.T) {
 	}
 	if remoteAddressStale("", cands) {
 		t.Fatal("no saved address is not stale, it is unchosen")
+	}
+}
+
+func TestRemoteDeviceNoteSaysOnlineOrLastSeen(t *testing.T) {
+	d := remotehost.Device{Name: "P", CreatedAt: time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC), LastSeenAt: time.Now().Add(-5 * time.Minute)}
+	if got := remoteDeviceNote(d, true); got != "Online · Paired 31 Oct 2026" {
+		t.Fatalf("online note = %q", got)
+	}
+	if got := remoteDeviceNote(d, false); !strings.HasPrefix(got, "Paired 31 Oct 2026 · last seen ") {
+		t.Fatalf("offline note = %q", got)
 	}
 }
 

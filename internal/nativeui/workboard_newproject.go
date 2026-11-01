@@ -73,7 +73,7 @@ func (s *Shell) newProjectDialog(c *ui.Context) {
 				tipped(c, ui.Text(c, d.folder).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine(), d.folder)
 			})
 			ui.Checkbox(c, &d.coordinator, "Start its coordinator now")
-			ui.Text(c, "The folder becomes a Project with no task. It and its coordinator's conversation are kept until you archive it.").
+			ui.Text(c, "The folder becomes a Project with no task, kept until you archive it.").
 				FontSize(Typography().Caption).TextColor(t.TextMuted)
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {
