@@ -143,8 +143,9 @@ type gitService struct {
 	lastActivationRefresh time.Time
 
 	// selected file for Changes↔Diff sync with oscillation guard
-	revealPath string
-	revealAt   time.Time
+	revealPath  string
+	revealAt    time.Time
+	dirOpenedAt time.Time // when a Changes folder last opened: only then do new rows grow in
 }
 
 // gapExpansion is one expanded unchanged region: numbered context lines.

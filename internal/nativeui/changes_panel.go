@@ -1,6 +1,8 @@
 package nativeui
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/gitworkbench"
 )
@@ -93,6 +95,11 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 		r.Background(designTokens(t.Dark).SidebarSelect)
 	case r.Hovered():
 		r.Background(designTokens(t.Dark).SidebarHover)
+	}
+	if timeSince(s.git.dirOpenedAt) < changesDirGrowWindow {
+		r.Transition(changesRowGrow)
+	} else {
+		r.Transition(rowFade)
 	}
 	treeGuides(r, row.Depth, designTokens(t.Dark).TreeLine)
 	r.TextColor(textColor).Children(func() {
@@ -257,13 +264,30 @@ func (s *Shell) gdRowContextMenu(m *ui.Menu, cf *gitworkbench.ChangeFile) {
 // center diff (GWB-145).
 func (s *Shell) changesClick(row gitworkbench.FlatRow) {
 	if row.Node.Dir {
-		path := row.Node.Path
-		s.git.collapsedDirs[path] = !s.git.collapsedDirs[path]
+		s.toggleChangesDir(row.Node.Path)
 		return
 	}
 	s.openChanges(row.Node.Path)
 	// Right→center: switch to Diff and reveal the card (plan §20).
 	s.revealDiffFile(row.Node.Path)
+}
+
+// changesDirGrowWindow is how long after a folder opens its new rows may grow
+// in. The Changes list is virtualized, so a row built by scrolling would
+// otherwise animate too; only rows born in this window are the folder's.
+const changesDirGrowWindow = 300 * time.Millisecond
+
+// changesRowGrow is treeRowMotion without the exit: a collapsed folder's rows
+// leave at once (the list cannot hold a removed row open).
+var changesRowGrow = ui.ElementTransition{Colors: true, Duration: 140 * time.Millisecond, Enter: &ui.Motion{Collapse: true}}
+
+// toggleChangesDir opens or closes a folder of the Changes tree.
+func (s *Shell) toggleChangesDir(path string) {
+	open := s.git.collapsedDirs[path]
+	s.git.collapsedDirs[path] = !open
+	if open {
+		s.git.dirOpenedAt = timeNow()
+	}
 }
 
 // syncChangesSelectionFromDiff expands ancestors and scrolls the selected

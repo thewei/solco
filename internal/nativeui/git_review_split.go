@@ -330,7 +330,7 @@ func (s *Shell) gitCommitFiles(c *ui.Context) {
 		list := s.gdChangedTreeList(c, gdPaletteFor(t), rows, &s.changesList, &s.changesSelected,
 			nil, gdViewCombined, func(row gitworkbench.FlatRow) {
 				if row.Node.Dir {
-					s.git.collapsedDirs[row.Node.Path] = !s.git.collapsedDirs[row.Node.Path]
+					s.toggleChangesDir(row.Node.Path)
 				} else {
 					s.revealDiffFile(row.Node.Path)
 				}

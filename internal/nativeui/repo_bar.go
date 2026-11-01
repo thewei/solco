@@ -13,8 +13,7 @@ import (
 // files open the center review on that pane's side of the change.
 func (s *Shell) changesClickSide(row gitworkbench.FlatRow, view gdViewSide) {
 	if row.Node.Dir {
-		path := row.Node.Path
-		s.git.collapsedDirs[path] = !s.git.collapsedDirs[path]
+		s.toggleChangesDir(row.Node.Path)
 		return
 	}
 	s.openChangesSide(row.Node.Path, view)
