@@ -186,3 +186,35 @@ func TestSubagentsChangedTreatsEmptyAsEqual(t *testing.T) {
 		t.Fatal("nil vs empty is not a change")
 	}
 }
+
+// An Agent that starts while the sidebar is on screen grows in; it does not
+// appear whole.
+func TestSidebarAgentRowGrowsIn(t *testing.T) {
+	s := NewShell()
+	s.loading = false
+	s.workbench.markers = agent.NewMarkerStore()
+	s.workbench.directory = agent.NewAgentDirectory()
+	card := func(n string) agent.AgentCardModel {
+		return agent.AgentCardModel{Key: agent.AgentKey{TerminalID: "term-" + n}, Provider: history.AgentPi, Title: "title-" + n, ProjectName: "proj", PaneID: "p" + n}
+	}
+	s.projection.Agents = []herdr.Agent{{PaneID: "p1"}}
+	s.workbench.directory.Replace([]agent.AgentCardModel{card("1")})
+	tester := ui.NewTester(s.View, 1200, 800)
+	tester.Frame()
+	tester.Advance(2 * treeRowMotion.Duration)
+	s.projection.Agents = []herdr.Agent{{PaneID: "p1"}, {PaneID: "p2"}}
+	s.workbench.directory.Replace([]agent.AgentCardModel{card("1"), card("2")})
+	tester.Frame()
+	early, _ := tester.Find("title-2")
+	tester.Advance(2 * treeRowMotion.Duration)
+	settled, ok := tester.Find("title-2")
+	if !ok {
+		t.Fatalf("the new Agent never showed; texts=%q", tester.Texts())
+	}
+	if early == settled {
+		t.Fatalf("the new row appeared whole: %+v", settled)
+	}
+	if first, ok := tester.Find("title-1"); ok && first.Y >= settled.Y {
+		t.Fatalf("order changed: %+v vs %+v", first, settled)
+	}
+}

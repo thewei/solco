@@ -74,7 +74,7 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 	mark := agentMark(card.Provider, t.Dark)
 	label, _ := agentCardLabel(card, dupProjects)
 	var row ui.Element
-	ui.Box(c.Key("agent:" + card.PaneID)).Children(func() {
+	ui.Box(c.Key("agent:" + card.PaneID)).Transition(treeRowMotion).Children(func() { // an Agent that starts grows in; one that exits fades out
 		row = ui.ButtonBase(c).
 			FillWidth().
 			MinHeight(38).
