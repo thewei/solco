@@ -3,6 +3,7 @@ package nativeui
 import (
 	"context"
 	"encoding/json"
+	"image"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -408,4 +409,89 @@ func TestUsageWindowAlertSharesTheVerdict(t *testing.T) {
 	if tone, text := usageWindowAlert(win(100, week/2), now); tone != ToneError || text != "limit reached" {
 		t.Fatalf("exceeded = %v %q", tone, text)
 	}
+}
+
+// TestUsageBarGrowsFromEmptyOnFirstDraw: the first time a window's bar is
+// drawn its fill eases in from nothing; once seen, a rebuilt page draws it
+// full at once (and a new reading eases from the old one, never from zero).
+func TestUsageBarGrowsFromEmptyOnFirstDraw(t *testing.T) {
+	codex := &fakeUsageFetcher{id: usage.Codex, snap: codexSnapshot()}
+	s, _ := usageTestShell(t, codex)
+	s.setUsageEnabled(usage.Codex, true)
+	s.refreshUsage(true)
+
+	diff := func(a, b *image.RGBA) int {
+		n := 0
+		for i := 0; i < len(a.Pix); i += 4 {
+			if a.Pix[i] != b.Pix[i] || a.Pix[i+1] != b.Pix[i+1] || a.Pix[i+2] != b.Pix[i+2] {
+				n++
+			}
+		}
+		return n
+	}
+	shoot := func() (early, settled *image.RGBA) {
+		tester := ui.NewTester(s.usagePage, 1000, 800)
+		tester.Frame()
+		e := *tester.Image()
+		e.Pix = append([]byte(nil), e.Pix...)
+		tester.Advance(2 * motionPanel)
+		tester.Frame()
+		return &e, tester.Image()
+	}
+	early, settled := shoot()
+	if n := diff(early, settled); n < 200 {
+		t.Fatalf("first draw: bar did not grow after the first frame (%d px changed)", n)
+	}
+	early, settled = shoot()
+	if n := diff(early, settled); n != 0 {
+		t.Fatalf("second draw: bar must start full, %d px changed", n)
+	}
+}
+
+// holdFetcher blocks its read until released.
+type holdFetcher struct {
+	fakeUsageFetcher
+	release chan struct{}
+}
+
+func (h *holdFetcher) Fetch(ctx context.Context) (usage.Snapshot, error) {
+	<-h.release
+	return h.fakeUsageFetcher.Fetch(ctx)
+}
+
+// TestUsageFirstReadShowsASkeleton: a card with nothing read yet holds the
+// room of a window, so the card does not jump when the reading lands.
+func TestUsageFirstReadShowsASkeleton(t *testing.T) {
+	hold := &holdFetcher{fakeUsageFetcher: fakeUsageFetcher{id: usage.Codex, snap: codexSnapshot()}, release: make(chan struct{})}
+	s := NewShell()
+	s.usage = &usageState{
+		svc: usage.NewService(hold), secrets: newMemSecrets(), tokens: map[usage.ID]bool{},
+		drafts: map[usage.ID]*string{}, firstRun: map[usage.ID]bool{usage.Codex: true},
+	}
+	s.applySettings(func(v *settings.Settings) error {
+		v.Usage.Configured = true
+		v.Usage.Enabled = map[string]bool{"codex": true}
+		return nil
+	})
+	go s.usage.svc.Refresh(context.Background(), []usage.ID{usage.Codex}, true, nil)
+	for i := 0; i < 100 && !s.usage.svc.Busy(usage.Codex); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	tester := ui.NewTester(s.usagePage, 1000, 800)
+	settleFrames(tester, 3)
+	if !s.usage.svc.Busy(usage.Codex) {
+		t.Fatal("fetch should still be held")
+	}
+	if !tester.HasText("Reading…") {
+		t.Fatalf("no Reading… pill; texts=%q", tester.Texts())
+	}
+	name, _ := tester.Find("Codex")
+	src, ok := tester.Find("Codex app-server on this Mac · no sign-in read")
+	if !ok {
+		t.Fatalf("no source line; texts=%q", tester.Texts())
+	}
+	if gap := src.Y - name.Y; gap < 45 {
+		t.Errorf("source line sits %.0fpt under the name: no room held for the first reading", gap)
+	}
+	close(hold.release)
 }

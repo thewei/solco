@@ -560,7 +560,7 @@ func (s *Shell) usageCard(c *ui.Context, id usage.ID, compact bool) {
 				rowGap = sp.S
 			}
 			ui.Column(c).FillWidth().Gap(rowGap).Children(func() {
-				s.usageWindows(c, res.Snapshot.Windows, left, stale, now, compact)
+				s.usageWindows(c, id, res.Snapshot.Windows, left, stale, now, compact)
 				s.usageNotes(c, res.Snapshot.Notes)
 				if stale {
 					s.usageProblem(c, id, res, now)
@@ -569,6 +569,8 @@ func (s *Shell) usageCard(c *ui.Context, id usage.ID, compact bool) {
 					s.usageActivity(c, id)
 				}
 			})
+		} else if busy && res.State == usage.StateIdle {
+			usageSkeleton(c, compact)
 		} else {
 			s.usageProblem(c, id, res, now)
 		}
@@ -577,6 +579,28 @@ func (s *Shell) usageCard(c *ui.Context, id usage.ID, compact bool) {
 			return
 		}
 		ui.Text(c, s.usageSource(id)).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").MinWidth(0)
+	})
+}
+
+// usageSkeleton holds the place of the first reading: one window's name,
+// figure and bar as quiet blocks, so the card does not jump when it lands.
+func usageSkeleton(c *ui.Context, compact bool) {
+	tokens := designTokens(c.Theme().Dark)
+	sp := Spacing()
+	block := func(w, h float32) {
+		ui.Box(c).Width(w).Height(h).Radius(h / 2).Background(tokens.PanelHover)
+	}
+	bar := usageBarHeight
+	if compact {
+		bar = usageCompactBar
+	}
+	ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+			block(72, 10)
+			ui.Box(c).Grow(1)
+			block(36, 10)
+		})
+		ui.Box(c).FillWidth().Height(bar).Radius(bar / 2).Background(tokens.PanelHover)
 	})
 }
 
@@ -681,14 +705,30 @@ func usageLookOf(c *ui.Context, w usage.Window, left, stale bool, now time.Time)
 	return look
 }
 
+// usageBarKey names one bar for usageBar: the provider, the bar's kind and
+// the window it shows.
+func usageBarKey(id usage.ID, kind string, w usage.Window) string {
+	return string(id) + "|" + kind + "|" + w.Group + "|" + w.Name
+}
+
 // usageBar draws the track, the fill and (when the window has run long
-// enough to tell) the pace tick.
-func usageBar(c *ui.Context, look usageLook, height float32) {
+// enough to tell) the pace tick. The fill grows from empty the first time the
+// bar is drawn and eases to each new reading after that.
+func (s *Shell) usageBar(c *ui.Context, key string, look usageLook, height float32) {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
-	ui.Box(c).FillWidth().Height(height).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+	box := ui.Box(c).FillWidth().Height(height).Shrink(0)
+	if !s.usage.barSeen[key] {
+		if s.usage.barSeen == nil {
+			s.usage.barSeen = map[string]bool{}
+		}
+		s.usage.barSeen[key] = true
+		_ = box.Animate("fill", 0, motionPanel) // prime at empty: the value starts at its first target
+	}
+	share := box.Animate("fill", float32(look.share/100), motionPanel)
+	box.Draw(func(p *ui.Painter, r ui.Rect) {
 		p.Fill(r, tokens.PanelHover, height/2)
-		if width := float32(look.share/100) * r.W; width > 0 {
+		if width := share * r.W; width > 0 {
 			p.Fill(ui.Rect{X: r.X, Y: r.Y, W: max(width, height), H: r.H}, look.fill, height/2)
 		}
 		if look.tick >= 0 {
@@ -734,7 +774,7 @@ func usageFoot(c *ui.Context, w usage.Window, look usageLook, now time.Time) {
 // 500 requests), sub-limits are compact rows, a model group is a titled block
 // of compact rows (Antigravity), anything else is a plain bar (Claude's
 // 5-hour and weekly, Codex, Zhipu).
-func (s *Shell) usageWindows(c *ui.Context, windows []usage.Window, left, stale bool, now time.Time, compact bool) {
+func (s *Shell) usageWindows(c *ui.Context, id usage.ID, windows []usage.Window, left, stale bool, now time.Time, compact bool) {
 	typ := Typography()
 	sp := Spacing()
 	t := c.Theme()
@@ -751,15 +791,15 @@ func (s *Shell) usageWindows(c *ui.Context, windows []usage.Window, left, stale 
 			ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
 				ui.Text(c, w.Group).FontSize(typ.BodySmall).FontWeight(WeightSemibold).TextColor(t.TextMuted).SingleLine()
 				for _, gw := range block {
-					s.usageCompact(c, gw, left, stale, now, usageNameWide)
+					s.usageCompact(c, id, gw, left, stale, now, usageNameWide)
 				}
 			})
 		case w.Counted() && !w.Minor:
-			s.usageHero(c, w, left, stale, now)
+			s.usageHero(c, id, w, left, stale, now)
 		case w.Minor || compact:
-			s.usageCompact(c, w, left, stale, now, usageNameWide)
+			s.usageCompact(c, id, w, left, stale, now, usageNameWide)
 		default:
-			s.usageWindow(c, w, left, stale, now)
+			s.usageWindow(c, id, w, left, stale, now)
 		}
 	}
 }
@@ -785,7 +825,7 @@ func (s *Shell) usageNotes(c *ui.Context, notes []string) {
 
 // usageHero is a counted allowance: the count is the headline, the share is
 // the bar.
-func (s *Shell) usageHero(c *ui.Context, w usage.Window, left, stale bool, now time.Time) {
+func (s *Shell) usageHero(c *ui.Context, id usage.ID, w usage.Window, left, stale bool, now time.Time) {
 	t := c.Theme()
 	typ := Typography()
 	sp := Spacing()
@@ -807,13 +847,13 @@ func (s *Shell) usageHero(c *ui.Context, w usage.Window, left, stale bool, now t
 				FontSize(typ.BodySmall).TextColor(t.TextMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 			ui.Text(c, usageShownText(w.UsedPct, left)).FontSize(typ.Body).FontWeight(WeightSemibold).TextColor(look.value).SingleLine()
 		})
-		usageBar(c, look, usageBarHeight)
+		s.usageBar(c, usageBarKey(id, "hero", w), look, usageBarHeight)
 		usageFoot(c, w, look, now)
 	})
 }
 
 // usageCompact is a sub-limit on one line: name, a thin bar, share and reset.
-func (s *Shell) usageCompact(c *ui.Context, w usage.Window, left, stale bool, now time.Time, nameWidth float32) {
+func (s *Shell) usageCompact(c *ui.Context, id usage.ID, w usage.Window, left, stale bool, now time.Time, nameWidth float32) {
 	typ := Typography()
 	sp := Spacing()
 	look := usageLookOf(c, w, left, stale, now)
@@ -828,7 +868,7 @@ func (s *Shell) usageCompact(c *ui.Context, w usage.Window, left, stale bool, no
 	}
 	ui.Row(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, w.Name).FontSize(typ.BodySmall).SingleLine().Ellipsis("…").Width(nameWidth).Shrink(0)
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() { usageBar(c, look, usageCompactBar) })
+		ui.Column(c).Grow(1).MinWidth(0).Children(func() { s.usageBar(c, usageBarKey(id, "compact", w), look, usageCompactBar) })
 		ui.Text(c, detail).FontSize(typ.Caption).TextColor(look.value).SingleLine().Width(usageCompactDetail).Shrink(0).
 			TextAlign(ui.End)
 	})
@@ -836,7 +876,7 @@ func (s *Shell) usageCompact(c *ui.Context, w usage.Window, left, stale bool, no
 
 // usageWindow is one limit: name and share on one line, the bar, then when
 // it resets and how the pace looks.
-func (s *Shell) usageWindow(c *ui.Context, w usage.Window, left, stale bool, now time.Time) {
+func (s *Shell) usageWindow(c *ui.Context, id usage.ID, w usage.Window, left, stale bool, now time.Time) {
 	typ := Typography()
 	sp := Spacing()
 	look := usageLookOf(c, w, left, stale, now)
@@ -845,7 +885,7 @@ func (s *Shell) usageWindow(c *ui.Context, w usage.Window, left, stale bool, now
 			ui.Text(c, w.Name).FontSize(typ.Body).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 			ui.Text(c, usageShownText(w.UsedPct, left)).FontSize(typ.Body).FontWeight(WeightSemibold).TextColor(look.value).SingleLine()
 		})
-		usageBar(c, look, usageBarHeight)
+		s.usageBar(c, usageBarKey(id, "window", w), look, usageBarHeight)
 		usageFoot(c, w, look, now)
 	})
 }

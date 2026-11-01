@@ -129,6 +129,10 @@ type usageState struct {
 	tokens       map[usage.ID]bool
 	tokensLoaded bool
 
+	// barSeen is the bars already drawn once (usageBar): a first draw grows
+	// from empty. UI lane only.
+	barSeen map[string]bool
+
 	activity     map[usage.ID][]history.DayTokens
 	activityBusy bool
 	activityAt   time.Time
