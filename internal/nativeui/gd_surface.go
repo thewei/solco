@@ -203,9 +203,16 @@ func (s *Shell) gdSyncButtons(c *ui.Context, pal *gdPalette) {
 		})
 		tipped(c, counts, "Ahead/behind "+st.Remote+"/"+st.Branch)
 	}
+	if s.git.opBusy {
+		// A running Git operation (a slow push above all) used to look
+		// exactly like a dead button: dimmed icons, no motion, no word.
+		// The cluster shows the work until the lane frees up.
+		tipped(c, ui.Spinner(c).Size(14, 14).Label("Git operation in progress…"), "Git operation in progress…")
+		return
+	}
 	button := func(svg *ui.SVG, tip string, action func()) {
 		b := gdIconButton(c, svg, tip)
-		if s.git.opBusy || s.git.sequencerChecked && s.git.sequencer.Active() {
+		if s.git.sequencerChecked && s.git.sequencer.Active() {
 			b.Disabled(true)
 		}
 		if b.Clicked() {

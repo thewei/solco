@@ -2,15 +2,20 @@ package nativeui
 
 /**
  * [INPUT]: gitworkbench Runner/selected repository snapshot, native dialogs and UI dispatcher
- * [OUTPUT]: background Stage/Unstage/Sync/Stash/FF Merge/Revert/Undo execution with failure refresh
+ * [OUTPUT]: background Stage/Unstage/Sync/Stash/FF Merge/Revert/Undo execution with failure refresh;
+ * network ops (Fetch/Pull/Push) run under the Runner's 120s network budget; every op logs
+ * start/duration/outcome class (never stderr, never repository content), and a click landing
+ * while an op runs answers with a toast instead of vanishing
  * [POS]: presentation action orchestration only; sole Git command authority remains internal/gitworkbench
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/gitworkbench"
@@ -21,22 +26,48 @@ import (
 // on explicit user intent, refreshes the snapshot, and reports through a
 // toast. Destructive actions reach here only through the confirm dialog.
 
-// gitOpTimeout bounds one working-tree operation (network ops bound
-// themselves in the Runner).
+// gitOpTimeout bounds one working-tree operation.
 const gitOpTimeout = gitworkbench.MutateTimeout
+
+// gitNetworkTimeout bounds one explicit fetch/pull/push: the Runner's own
+// network budget. The 30s working-tree budget must not parent these —
+// Runner.run only tightens a parent deadline, never extends one — so the
+// old shared 30s parent killed every push that took longer than half a
+// minute, and large pushes could then never land again (each failure left
+// the pile, and the payload, bigger).
+const gitNetworkTimeout = gitworkbench.NetworkTimeout
 
 // runGitOp runs one repository mutation off the UI lane and reports the
 // outcome as a toast; successful ops refresh the snapshot.
 func (s *Shell) runGitOp(name string, run func(ctx context.Context, root string) (string, error)) {
-	if s.git == nil || s.git.root == "" || s.git.opBusy {
+	s.runGitOpBudget(name, gitOpTimeout, run)
+}
+
+// runGitNetworkOp is runGitOp under the network budget, for Fetch/Pull/Push.
+func (s *Shell) runGitNetworkOp(name string, run func(ctx context.Context, root string) (string, error)) {
+	s.runGitOpBudget(name, gitNetworkTimeout, run)
+}
+
+func (s *Shell) runGitOpBudget(name string, budget time.Duration, run func(ctx context.Context, root string) (string, error)) {
+	if s.git == nil || s.git.root == "" {
+		return
+	}
+	if s.git.opBusy {
+		// The buttons dim while an op runs, but a click can still land
+		// (stale frame, menu entry). Swallowing it silently is what made
+		// Push feel dead; say what is happening instead.
+		s.pendingToast = "Another Git operation is still running."
 		return
 	}
 	root := s.git.root
 	s.git.opBusy = true
+	slog.Info("git op start", "op", name, "root", root)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), gitOpTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), budget)
 		defer cancel()
+		started := time.Now()
 		notice, err := run(ctx, root)
+		slog.Info("git op done", "op", name, "duration_ms", time.Since(started).Milliseconds(), "ok", err == nil, "err_class", gitErrClass(err))
 		s.applyOnUI(func() {
 			s.git.opBusy = false
 			if s.git == nil || s.git.root != root {
@@ -62,6 +93,18 @@ func (s *Shell) runGitOp(name string, run func(ctx context.Context, root string)
 			s.loadBranches()
 		})
 	}()
+}
+
+// gitErrClass names the coarse failure class for logs without echoing any
+// stderr text (remote URLs and ref names stay out of the log).
+func gitErrClass(err error) string {
+	if err == nil {
+		return ""
+	}
+	if ge, ok := gitworkbench.GitError(err); ok {
+		return string(ge.Class)
+	}
+	return "error"
 }
 
 func firstErrLine(err error) string {
@@ -120,7 +163,7 @@ func (s *Shell) discardChanges(paths []string) {
 }
 
 func (s *Shell) fetchRepo() {
-	s.runGitOp("Fetch", func(ctx context.Context, root string) (string, error) {
+	s.runGitNetworkOp("Fetch", func(ctx context.Context, root string) (string, error) {
 		remote := s.git.runner.DefaultRemote(ctx, root)
 		if err := s.git.runner.Fetch(ctx, root, remote); err != nil {
 			return "", err
@@ -130,7 +173,7 @@ func (s *Shell) fetchRepo() {
 }
 
 func (s *Shell) pullRepo() {
-	s.runGitOp("Pull", func(ctx context.Context, root string) (string, error) {
+	s.runGitNetworkOp("Pull", func(ctx context.Context, root string) (string, error) {
 		remote := s.git.runner.DefaultRemote(ctx, root)
 		branch := s.git.runner.CurrentBranch(ctx, root)
 		if branch == "" {
@@ -144,7 +187,7 @@ func (s *Shell) pullRepo() {
 }
 
 func (s *Shell) pushRepo() {
-	s.runGitOp("Push", func(ctx context.Context, root string) (string, error) {
+	s.runGitNetworkOp("Push", func(ctx context.Context, root string) (string, error) {
 		remote := s.git.runner.DefaultRemote(ctx, root)
 		branch := s.git.runner.CurrentBranch(ctx, root)
 		if branch == "" {
