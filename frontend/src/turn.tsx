@@ -1,4 +1,4 @@
-import React, { memo, useContext, useEffect, useRef, useState } from "react";
+import React, { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
@@ -28,6 +28,8 @@ export interface TurnProps {
   canReview: boolean;
   onReview: (path: string) => void;
   isLast: boolean;
+  /** Puts a sent prompt back into the composer to edit and send again; absent on a read-only transcript. */
+  onReuse?: (text: string) => void;
 }
 
 export function TurnRow(props: TurnProps) {
@@ -37,7 +39,7 @@ export function TurnRow(props: TurnProps) {
     return (
       <div className="turn user">
         <div className={shown.output ? "bubble out" : "bubble"}>{mentions(shown.text)}</div>
-        <Foot turn={turn} source={shown.text} />
+        <Foot turn={turn} source={shown.text} onReuse={shown.output ? undefined : props.onReuse} />
       </div>
     );
   }
@@ -532,11 +534,13 @@ function Foot({
   source,
   startMs,
   markdown,
+  onReuse,
 }: {
   turn: Turn;
   source: string;
   startMs?: number;
   markdown?: boolean;
+  onReuse?: (text: string) => void;
 }) {
   const [copied, setCopied] = useState("");
   const copy = (value: string, kind: string) => {
@@ -563,6 +567,11 @@ function Foot({
           >
             <Icon name={copied === "md" ? "check" : "copy"} />
           </button>
+          {onReuse ? (
+            <button type="button" className="ib" title="Edit and resend" aria-label="Edit and resend" onClick={() => onReuse(source)}>
+              <Icon name="pencil" />
+            </button>
+          ) : null}
           {markdown ? (
             <button
               type="button"
@@ -680,30 +689,81 @@ export const Markdown = memo(function Markdown({ text, caret }: { text: string; 
   );
 });
 
+/** A fenced block taller than this many lines starts folded to FOLDED_LINES. */
+const FOLD_OVER_LINES = 30;
+const FOLDED_LINES = 14;
+
+// An <img> refuses a standalone SVG without its namespace, which model-written SVG often omits.
+function withSvgNamespace(svg: string): string {
+  return /<svg\b[^>]*\sxmlns\s*=/i.test(svg) ? svg : svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+}
+
 function CodeBlock({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) {
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  const [lines, setLines] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  // An SVG block shows its picture first; Code is one tap away, and a block
+  // the image decoder refuses (a half-streamed or invalid SVG) stays code.
+  const [view, setView] = useState<"preview" | "code">("preview");
+  const [svgBroken, setSvgBroken] = useState(false);
   const child = React.Children.toArray(children)[0] as React.ReactElement<{ className?: string }> | undefined;
   const lang = /language-([\w+#-]+)/.exec(child?.props?.className ?? "")?.[1] ?? "";
-  const copy = () => {
+  const [source, setSource] = useState("");
+  // Measured after each render: the highlighted children are the only copy of the text.
+  useLayoutEffect(() => {
     const text = ref.current?.textContent ?? "";
-    if (text === "") return;
-    void navigator.clipboard.writeText(text).then(() => {
+    setSource((prev) => (prev === text ? prev : text));
+    const count = text === "" ? 0 : text.replace(/\n$/, "").split("\n").length;
+    setLines((prev) => (prev === count ? prev : count));
+  });
+  const isSvg = (lang === "svg" || lang === "xml") && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(source);
+  const preview = isSvg && view === "preview" && !svgBroken;
+  useEffect(() => setSvgBroken(false), [source]);
+  const foldable = !preview && lines > FOLD_OVER_LINES;
+  const folded = foldable && !expanded;
+  const copy = () => {
+    if (source === "") return;
+    void navigator.clipboard.writeText(source).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     });
   };
   return (
-    <div className="codeb">
+    <div className={`codeb${folded ? " folded" : ""}`}>
       <div className="ch">
         <span>{lang}</span>
+        {isSvg ? (
+          <span className="ctabs" role="tablist">
+            <button type="button" role="tab" aria-selected={preview} className={preview ? "on" : ""} onClick={() => setView("preview")}>
+              Preview
+            </button>
+            <button type="button" role="tab" aria-selected={!preview} className={preview ? "" : "on"} onClick={() => setView("code")}>
+              Code
+            </button>
+          </span>
+        ) : null}
         <button type="button" className="ib cp" title="Copy" aria-label="Copy code" onClick={copy}>
           <Icon name={copied ? "check" : "copy"} size={13} />
         </button>
       </div>
-      <pre ref={ref} {...rest}>
+      {preview ? (
+        <div className="svgprev">
+          <img
+            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(withSvgNamespace(source))}`}
+            alt="SVG preview"
+            onError={() => setSvgBroken(true)}
+          />
+        </div>
+      ) : null}
+      <pre ref={ref} {...rest} hidden={preview} style={folded ? { maxHeight: `${FOLDED_LINES * 1.62}em` } : undefined}>
         {children}
       </pre>
+      {foldable ? (
+        <button type="button" className="cfold" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show less" : `Show all ${lines} lines`}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -47,6 +47,7 @@ export function QueueCard({
   canEdit,
   onCancelItem,
   onEditItem,
+  onSendNow,
   onReorder,
   onCancelAll,
   forced,
@@ -59,6 +60,8 @@ export function QueueCard({
   canEdit: boolean;
   onCancelItem: (id: string) => void;
   onEditItem: (id: string, text: string) => void;
+  /** Cut this row in now: withdraw it and send it with Interrupt & send. */
+  onSendNow: (id: string) => void;
   onReorder: (id: string, index: number) => void;
   onCancelAll: () => void;
   /** The composer's one-open-surface rule: true = this card was opened, false = another surface took the room. */
@@ -212,6 +215,11 @@ export function QueueCard({
                         {item.text}
                       </span>
                       {index === nextIndex ? <span className="qcNext">next</span> : null}
+                      {item.id !== "" && EDITABLE_STATE[item.state] ? (
+                        <button type="button" className="qcX qcNow" title="Send now (interrupts the agent)" aria-label="Send now" onClick={() => onSendNow(item.id)}>
+                          <Icon name="up" size={12} stroke={2.2} />
+                        </button>
+                      ) : null}
                       {canEdit && item.id !== "" && EDITABLE_STATE[item.state] ? (
                         <button type="button" className="qcX qcPen" aria-label="Edit queued message" onClick={() => setEditing({ id: item.id, text: item.text })}>
                           <Icon name="pencil" size={12} />

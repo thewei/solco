@@ -56,6 +56,8 @@ export function ContextControl(props: {
   canCompact: boolean;
   compactHint: string;
   onCompact: () => void;
+  /** Reports how full the window is (null: the agent states no window) whenever it is read. */
+  onFraction?: (fraction: number | null) => void;
 }) {
   const { used, open } = props;
   const [usage, setUsage] = useState<ChatContextUsage | null>(null);
@@ -94,6 +96,10 @@ export function ContextControl(props: {
 
   const window_ = usage?.window ?? 0;
   const fraction = window_ > 0 ? Math.min(1, used / window_) : null;
+  const { onFraction } = props;
+  useEffect(() => {
+    onFraction?.(fraction);
+  }, [fraction, onFraction]);
   const lv = fraction === null ? "" : level(fraction);
   const percent = fraction === null ? "" : `${Math.round(fraction * 100)}%`;
   const totals: [string, number][] = usage

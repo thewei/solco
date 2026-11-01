@@ -319,15 +319,35 @@ export function AttachChips(props: {
   previews: Map<string, string>;
   onRemove: (path: string) => void;
 }) {
+  const [zoom, setZoom] = useState<{ src: string; name: string } | null>(null);
+  // Escape closes the enlarged picture first, before any panel behind it.
+  useEffect(() => {
+    if (!zoom) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setZoom(null);
+    };
+    window.addEventListener("keydown", close, true);
+    return () => window.removeEventListener("keydown", close, true);
+  }, [zoom]);
   if (props.files.length === 0) return null;
   return (
     <div className="achips">
+      {zoom ? (
+        <div className="lightbox" role="dialog" aria-label={zoom.name} onClick={() => setZoom(null)}>
+          <img src={zoom.src} alt={zoom.name} />
+        </div>
+      ) : null}
       {props.files.map((path) => {
         const preview = props.previews.get(path);
         return (
           <span key={path} className="achip" title={path}>
             {preview ? (
-              <img src={preview} alt="" />
+              <button type="button" className="athumb" title="Enlarge" aria-label={`Enlarge ${baseName(path)}`} onClick={() => setZoom({ src: preview, name: baseName(path) })}>
+                <img src={preview} alt="" />
+              </button>
             ) : (
               <Icon name={IMAGE_EXT.test(path) ? "image" : "read"} size={14} />
             )}

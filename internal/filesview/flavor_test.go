@@ -2,6 +2,7 @@ package filesview
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -170,5 +171,40 @@ func TestReadTextShowsBytesPastTheProbeAsReplacementRunes(t *testing.T) {
 	}
 	if preview.IsBinary || !strings.HasSuffix(preview.Content, "\uFFFDtail") {
 		t.Fatalf("late stray byte: binary=%v tail=%q", preview.IsBinary, preview.Content[len(preview.Content)-8:])
+	}
+}
+
+func TestSVGDataURLCarriesTheNamespace(t *testing.T) {
+	root := t.TempDir()
+	cases := map[string]string{
+		"bare.svg":    `<svg width="10" height="10"><rect/></svg>`,
+		"xml.svg":     `<?xml version="1.0"?><SVG viewBox="0 0 1 1"><rect/></SVG>`,
+		"ns.svg":      `<svg xmlns="http://www.w3.org/2000/svg" width="1"><rect/></svg>`,
+		"nothing.svg": `not svg at all`,
+	}
+	for name, body := range cases {
+		path := filepath.Join(root, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		url, err := ReadImageDataURL(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(url, "data:image/svg+xml;base64,"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := string(raw)
+		switch name {
+		case "ns.svg", "nothing.svg":
+			if got != body {
+				t.Errorf("%s changed: %q", name, got)
+			}
+		default:
+			if strings.Count(got, `xmlns="http://www.w3.org/2000/svg"`) != 1 || !strings.Contains(got, "<rect/>") {
+				t.Errorf("%s = %q, want one injected namespace", name, got)
+			}
+		}
 	}
 }

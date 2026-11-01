@@ -17,6 +17,7 @@ import (
 	_ "image/png"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -94,7 +95,31 @@ func ReadImageDataURL(path string) (string, error) {
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
+	if mime == "image/svg+xml" {
+		raw = withSVGNamespace(raw)
+	}
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(raw), nil
+}
+
+var svgOpenTag = regexp.MustCompile(`(?i)<svg([\s>/])`)
+
+// withSVGNamespace adds the SVG namespace to a root <svg> that lacks one: an
+// <img> refuses to draw a standalone SVG without it (hand-written and
+// generated files often omit it), while the file itself stays untouched.
+func withSVGNamespace(raw []byte) []byte {
+	loc := svgOpenTag.FindSubmatchIndex(raw)
+	if loc == nil {
+		return raw
+	}
+	end := bytes.IndexByte(raw[loc[0]:], '>')
+	if end < 0 || bytes.Contains(raw[loc[0]:loc[0]+end], []byte("xmlns=")) {
+		return raw
+	}
+	at := loc[0] + len("<svg")
+	out := make([]byte, 0, len(raw)+40)
+	out = append(out, raw[:at]...)
+	out = append(out, []byte(` xmlns="http://www.w3.org/2000/svg"`)...)
+	return append(out, raw[at:]...)
 }
 
 // MaxNativeImagePixels bounds the Native tier's decoded bitmap: 32M pixels

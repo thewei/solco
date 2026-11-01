@@ -19,6 +19,7 @@ import { turnText, useTurnList } from "./turnlist";
 import { AttachChips, IMAGE_EXT, ModelPanel, PlusPanel, SlashPanel, fileToBase64, slashMatches } from "./composer";
 import { BlockedDock, QuestionDock, SessionState, TasksTray, WorkingLine, isFreeTextOption, planFinished } from "./dock";
 import { QueueCard } from "./queue-card";
+import { loadStored, saveStored } from "./drafts";
 import "./chat.css";
 
 /**
@@ -77,6 +78,10 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const [micAsking, setMicAsking] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
+  // How full the context window is (the ring's own reading), and the conversation whose
+  // "nearly full" line the user closed; it returns once a compact brings the window under 70%.
+  const [ctxFraction, setCtxFraction] = useState<number | null>(null);
+  const [ctxHintOff, setCtxHintOff] = useState("");
   // The prompt in flight: shown at once as "Sending…", and kept (with Retry /
   // Edit) when the agent did not take it, so a failure never loses the text.
   const [outbox, setOutbox] = useState<Outbox | null>(null);
@@ -201,10 +206,36 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     heightRef.current = log.scrollHeight;
   }, [state]);
 
+  // The reader's own upward gesture (wheel, finger drag, PageUp/↑) lets go of the
+  // tail at once, even when it moved less than the 48px "at the bottom" slack: the
+  // next streamed frame must not pull a re-read line back down. Until the scroll
+  // settles, only the true bottom takes the tail again.
+  const upAt = useRef(0);
+  const touchY = useRef(0);
+  const letGo = () => {
+    upAt.current = performance.now();
+    stickToBottom.current = false;
+  };
+  const onLogWheel = (event: React.WheelEvent) => {
+    if (event.deltaY < 0) letGo();
+  };
+  const onLogTouchStart = (event: React.TouchEvent) => {
+    touchY.current = event.touches[0]?.clientY ?? 0;
+  };
+  const onLogTouchMove = (event: React.TouchEvent) => {
+    const y = event.touches[0]?.clientY ?? 0;
+    if (y > touchY.current + 2) letGo(); // the finger moves down: the content moves back up
+    touchY.current = y;
+  };
+  const onLogKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "PageUp" || event.key === "ArrowUp" || event.key === "Home") letGo();
+  };
+
   const onLogScroll = () => {
     const log = logRef.current;
     if (!log) return;
-    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+    const slack = performance.now() - upAt.current < 700 ? 2 : 48;
+    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < slack;
     setScrolled(log.scrollTop > 1);
     stickToBottom.current = atBottom;
     if (atBottom) {
@@ -224,7 +255,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   };
 
   // Drafts persist per conversation across pane switches and page reloads
-  // (session storage, keyed by conversation id).
+  // (local storage, keyed by conversation id; see drafts.ts).
   const conversationId = state?.conversationId ?? "";
   // A past session opened from Sessions: the transcript alone, nothing to
   // send, answer or queue.
@@ -245,18 +276,18 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     if (!fromFresh) setOutbox(null);
     if (!conversationId) return;
     if (fromFresh && draft !== "") return;
-    setDraft(sessionStorage.getItem(draftKey(conversationId)) ?? "");
+    setDraft(loadStored(draftKey(conversationId), ""));
     try {
-      setFiles(JSON.parse(sessionStorage.getItem(filesKey(conversationId)) ?? "[]"));
+      setFiles(JSON.parse(loadStored(filesKey(conversationId), "[]")));
     } catch {
       setFiles([]);
     }
   }, [conversationId]);
   useEffect(() => {
-    if (conversationId) sessionStorage.setItem(draftKey(conversationId), draft);
+    if (conversationId) saveStored(draftKey(conversationId), draft, "");
   }, [draft, conversationId]);
   useEffect(() => {
-    if (conversationId) sessionStorage.setItem(filesKey(conversationId), JSON.stringify(files));
+    if (conversationId) saveStored(filesKey(conversationId), JSON.stringify(files), "[]");
   }, [files, conversationId]);
   // The composer's menu: Skills, commands and models of the bound agent
   // (read-only listing; pi/omp model lists take a second to produce).
@@ -374,6 +405,11 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const voiceBusy = recording || transcribing;
   // Phone CSS folds the composer to one row while this holds and it is not focused.
   const atRest = panel === null && !voiceBusy && files.length === 0 && !draft.includes("\n") && !(working && hasContent);
+  const compactNow = disposition === "ready" && !sending && (catalog?.commands ?? []).some((c) => c.name === "/compact");
+  const ctxHint = !readOnly && Boolean(state?.contextTokens) && ctxFraction !== null && ctxFraction >= 0.85 && ctxHintOff !== conversationId;
+  useEffect(() => {
+    if (ctxHintOff && ctxFraction !== null && ctxFraction < 0.7) setCtxHintOff("");
+  }, [ctxFraction, ctxHintOff]);
   const canSend = disposition === "ready" && hasContent && !sending && !state?.loading && !voiceBusy;
   const canQueue = working && canQueueFollowUp && hasContent && !sending && !voiceBusy;
   // One composer action, as in the reference chat: while the agent works
@@ -385,10 +421,12 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // text lives in the Sending… row from then on); a refusal turns that row
   // into Not delivered · Retry · Edit, an "uncertain" outcome never offers
   // Retry (the agent may already hold it), and anything else is delivered.
-  const deliver = async (text: string, via: (text: string) => Promise<ChatBridgeState>) => {
+  const deliver = async (text: string, via: (text: string) => Promise<ChatBridgeState>, keepDraft = false) => {
     setOutbox({ text, status: "sending" });
-    setDraft("");
-    setFiles([]);
+    if (!keepDraft) {
+      setDraft("");
+      setFiles([]);
+    }
     stickToBottom.current = true;
     try {
       const next = await via(text);
@@ -418,6 +456,12 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   };
   const retryOutbox = () => {
     if (outbox) void send(outbox.text);
+  };
+  // A sent prompt comes back to the composer (after what is already typed) to be edited and sent again.
+  const reuseText = (text: string) => {
+    setDraft((current) => (current.trim() === "" ? text : `${current.replace(/\s+$/, "")}\n${text}`));
+    setPanel(null);
+    composerRef.current?.focus();
   };
   const editOutbox = () => {
     if (!outbox) return;
@@ -490,6 +534,25 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     setInterrupting(true);
     try {
       await deliver(text, (t) => chat.interruptAndSend(t));
+    } finally {
+      setInterrupting(false);
+    }
+  };
+
+  // One stacked follow-up goes now: withdrawn from the queue first (so it cannot
+  // also go at the turn boundary; a row the worker already claimed stays put),
+  // then cut in like Interrupt & send. What is typed in the composer is untouched.
+  const sendQueuedNow = async (id: string) => {
+    const item = state?.queuedItems?.find((row) => row.id === id);
+    if (!item || interrupting) return;
+    setInterrupting(true);
+    try {
+      const next = await chat.cancelQueuedItem(id);
+      if (next) setState(next);
+      if (next?.queuedItems?.some((row) => row.id === id)) return;
+      await deliver(item.text, (t) => chat.interruptAndSend(t), true);
+    } catch {
+      refresh();
     } finally {
       setInterrupting(false);
     }
@@ -1213,7 +1276,15 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
         </div>
       ) : null}
       {state?.outline !== false && !state?.loading && !state?.waiting ? <TocRail turns={turns} logRef={logRef} top={list.top} scrollTo={list.scrollTo} /> : null}
-      <div className="chat-log" ref={logRef} onScroll={onLogScroll}>
+      <div
+        className="chat-log"
+        ref={logRef}
+        onScroll={onLogScroll}
+        onWheel={onLogWheel}
+        onTouchStart={onLogTouchStart}
+        onTouchMove={onLogTouchMove}
+        onKeyDown={onLogKeyDown}
+      >
         <div className="col">
           {state?.hasOlder ? (
             <button type="button" className="older" onClick={() => void loadOlder()} disabled={loadingOlder}>
@@ -1266,6 +1337,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                         canReview={state?.canReview === true}
                         onReview={reviewChanges}
                         isLast={index === turns.length - 1}
+                        onReuse={readOnly ? undefined : reuseText}
                       />
                     </TurnBoundary>
                   </div>
@@ -1342,6 +1414,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
               canEdit={state?.features?.edit !== false}
               onCancelItem={(id) => void cancelQueuedItem(id)}
               onEditItem={(id, text) => void editQueuedItem(id, text)}
+              onSendNow={(id) => void sendQueuedNow(id)}
               onReorder={(id, index) => void reorderQueued(id, index)}
               onCancelAll={() => void cancelQueued()}
               forced={dockForced("queue")}
@@ -1392,6 +1465,19 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                     {name}
                   </button>
                 ))}
+              </div>
+            ) : null}
+            {ctxHint ? (
+              <div className="ctxhint" role="status">
+                <span>Context is {Math.round((ctxFraction ?? 0) * 100)}% full</span>
+                {compactNow ? (
+                  <button type="button" onClick={() => void send("/compact")}>
+                    Compact
+                  </button>
+                ) : null}
+                <button type="button" className="x" aria-label="Dismiss" onClick={() => setCtxHintOff(conversationId)}>
+                  <Icon name="x" size={12} />
+                </button>
               </div>
             ) : null}
             <div className={`cmp${atRest ? " rest" : ""}`}>
@@ -1486,6 +1572,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                       setPanel(null);
                       void send("/compact");
                     }}
+                    onFraction={setCtxFraction}
                   />
                 ) : null}
                 {catalog?.canSwitchModel ? (
