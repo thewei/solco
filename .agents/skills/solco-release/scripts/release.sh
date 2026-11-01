@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-#
-# Cut a Solco release end to end: bump the version in mygo.config.ts, commit,
-# tag, push, watch the release workflow, verify the published assets.
+# Cut a Solco release end to end: gate on a curated CHANGELOG.md section,
+# bump the version in mygo.config.ts, commit, tag, push, watch the release
+# workflow, publish the draft, apply the curated notes, verify the assets.
 #
 # The tag is the release. CI (.github/workflows/release.yml) checks out the
 # tag's tree, validates it against mygo.config.ts, builds all three platforms
@@ -36,13 +36,13 @@ case "$BUMP" in
   major|minor|patch) ;;
   *) printf '%s' "$BUMP" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || die "version must look like x.y.z (got: $BUMP)" ;;
 esac
-step "1/8 preflight"
+step "1/9 preflight"
 branch="$(git branch --show-current)"
 [ "$branch" = "main" ] || die "release from main, not '$branch'"
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated (gh auth login)"
 [ -f mygo.config.ts ] || die "mygo.config.ts missing"
 
-step "2/8 sync"
+step "2/9 sync"
 git fetch origin main --quiet
 behind="$(git rev-list --count main..origin/main)"
 [ "$behind" -eq 0 ] || die "main is $behind commits behind origin/main — pull first"
@@ -51,7 +51,7 @@ if [ "$dirty" -gt 0 ]; then
   printf 'NOTE: %s dirty paths in the worktree; they are NOT part of the release (CI builds the tag commit)\n' "$dirty"
 fi
 
-step "3/8 version"
+step "3/9 version"
 current="$(sed -n 's/.*version: "\([^"]*\)".*/\1/p' mygo.config.ts | head -1)"
 [ -n "$current" ] || die "cannot read the version from mygo.config.ts"
 major="${current%%.*}"; rest="${current#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
@@ -66,8 +66,25 @@ if [ "$target" = "$current" ]; then
 else
   printf '%s -> %s\n' "$current" "$target"
 fi
+step "4/9 changelog"
+esc="$(printf '%s' "$target" | sed 's/[.]/\\./g')"
+notes_file="$(mktemp)"
+trap 'rm -f "$notes_file"' EXIT
+awk -v pat="^## v${esc}(\$|[^0-9])" '
+  $0 ~ /^## v/ { if (on) exit; on = ($0 ~ pat); next }
+  on { print }
+' CHANGELOG.md > "$notes_file" || true
+[ -s "$notes_file" ] || die "CHANGELOG.md has no '## v$target' section — run scripts/changelog.sh, curate the section, commit it"
+if grep -q '<!-- draft' "$notes_file"; then
+  die "the CHANGELOG.md section for v$target still carries the draft marker — curate it and remove the marker"
+fi
+if [ "$DRY_RUN" -eq 0 ]; then
+  mkdir -p internal/changelog
+  cp "$notes_file" internal/changelog/snapshot.md
+fi
+printf 'release notes: curated CHANGELOG.md section for v%s\n' "$target"
 
-step "4/8 tag guard"
+step "5/9 tag guard"
 tag="v$target"
 remote_tag="$(git ls-remote --tags origin "refs/tags/$tag" | wc -l | tr -d ' ')"
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
@@ -82,23 +99,26 @@ fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   step "dry-run plan"
-  printf 'would set version %s, commit mygo.config.ts, tag %s at HEAD, push main + %s, watch the release workflow, require the %s assets\n' "$target" "$tag" "$tag" "$tag"
+  printf 'would require the curated CHANGELOG.md section for %s, set version %s, commit mygo.config.ts + changelog files, tag %s at HEAD, push main + %s, watch the release workflow, publish and verify the %s assets\n' "$tag" "$target" "$tag" "$tag" "$tag"
   printf 'dry-run: nothing was written\n'
   exit 0
 fi
 
-step "5/8 bump + commit"
+step "6/9 bump + commit"
 if [ "$target" != "$current" ]; then
   perl -pi -e 's/^(\s*version:\s*)"[^"]*"/${1}"'"$target"'"/' mygo.config.ts
   hits="$(grep -c "version: \"$target\"" mygo.config.ts || true)"
   [ "$hits" -eq 1 ] || die "version rewrite landed $hits times, expected 1 — inspect mygo.config.ts"
-  git add mygo.config.ts
+  git add mygo.config.ts CHANGELOG.md internal/changelog/snapshot.md
   git commit -m "chore(release): v$target"
 else
+  if [ -n "$(git status --porcelain internal/changelog/snapshot.md 2>/dev/null)" ]; then
+    die "internal/changelog/snapshot.md is dirty — commit it (or revert): the tag must carry what Settings → About shows"
+  fi
   printf 'no bump commit needed\n'
 fi
 
-step "6/8 tag + push"
+step "7/9 tag + push"
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
   git tag -f "$tag" HEAD
 else
@@ -107,7 +127,7 @@ fi
 git push origin main
 git push origin "refs/tags/$tag"
 
-step "7/8 watch the release workflow"
+step "8/9 watch the release workflow"
 run_id=""
 deadline=$(( $(date +%s) + 1500 ))
 while :; do
@@ -126,9 +146,7 @@ while :; do
 done
 [ "$conclusion" = "success" ] || die "release run failed ($conclusion): $(gh run view "$run_id" --json url --jq .url)"
 
-step "8/8 verify the published release"
-draft="$(gh release view "$tag" --json isDraft --jq .isDraft)"
-[ "$draft" = "false" ] || die "$tag is still a draft"
+step "9/9 publish and verify"
 assets="$(gh release view "$tag" --json assets --jq '[.assets[].name] | join("\n")')"
 for want in \
   "Solco.$target.arm64.dmg" \
@@ -141,6 +159,14 @@ for want in \
   update-linux-arm64.json; do
   grep -qx "$want" <<<"$assets" || die "missing release asset: $want"
 done
+draft="$(gh release view "$tag" --json isDraft --jq .isDraft)"
+if [ "$draft" = "true" ]; then
+  printf 'CI left the release as a draft — every asset is present, publishing it\n'
+  gh release edit "$tag" --draft=false
+fi
+gh release edit "$tag" --notes-file "$notes_file"
+draft="$(gh release view "$tag" --json isDraft --jq .isDraft)"
+[ "$draft" = "false" ] || die "$tag is still a draft"
 
 printf '\ndone: Solco %s released at https://github.com/thewei/solco/releases/tag/%s\n' "$target" "$tag"
 printf 'updater feeds are live; the site badge shows %s within its 1 h cache\n' "$tag"
