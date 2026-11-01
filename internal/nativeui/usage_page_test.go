@@ -390,3 +390,22 @@ func containsPrefix(texts []string, prefix string) bool {
 	}
 	return false
 }
+
+// The strip's TIGHTEST line and "Needs a look" read one verdict per window.
+func TestUsageWindowAlertSharesTheVerdict(t *testing.T) {
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	week := 7 * 24 * time.Hour
+	win := func(used float64, elapsed time.Duration) usage.Window {
+		return usage.Window{UsedPct: used, Span: week, Resets: now.Add(week - elapsed)}
+	}
+	if tone, text := usageWindowAlert(win(40, week/2), now); tone != ToneNeutral || text != "" {
+		t.Fatalf("on pace = %v %q, want neutral and silent", tone, text)
+	}
+	tone, text := usageWindowAlert(win(87, 5*24*time.Hour), now)
+	if tone == ToneNeutral || !strings.HasPrefix(text, "runs out in ") || !strings.HasSuffix(text, " at this pace") {
+		t.Fatalf("running out = %v %q", tone, text)
+	}
+	if tone, text := usageWindowAlert(win(100, week/2), now); tone != ToneError || text != "limit reached" {
+		t.Fatalf("exceeded = %v %q", tone, text)
+	}
+}

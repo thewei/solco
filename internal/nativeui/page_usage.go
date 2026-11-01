@@ -385,7 +385,12 @@ func (s *Shell) usageSummary(c *ui.Context, ids []usage.ID) {
 	ui.Row(c).FillWidth().Wrap().Gap(sp.XL).AlignItems(ui.Start).Padding(sp.M, sp.L).
 		Radius(Radius().Card).Background(tokens.Panel).Border(1, tokens.BorderSubtle).Children(func() {
 		if haveTight {
-			stat("TIGHTEST", usageShownText(tight.UsedPct, left), tightOwner.Title()+" · "+tight.Name, usageTone(tight.Level()))
+			tone, paceText := usageWindowAlert(tight, now)
+			detail := tightOwner.Title() + " · " + tight.Name
+			if paceText != "" {
+				detail += " · " + paceText
+			}
+			stat("TIGHTEST", usageShownText(tight.UsedPct, left), detail, tone)
 		} else {
 			stat("TIGHTEST", "—", "Nothing read yet", ToneNeutral)
 		}
@@ -403,6 +408,25 @@ func (s *Shell) usageSummary(c *ui.Context, ids []usage.ID) {
 		}
 		stat("SOURCES", fmt.Sprintf("%d live", live), detail, ToneNeutral)
 	})
+}
+
+// usageWindowAlert is how worried to be about one window: its level's tone,
+// raised by the pace, and the pace sentence ("runs out in 2h at this pace",
+// "limit reached") when there is one. The strip and "Needs a look" share it.
+func usageWindowAlert(w usage.Window, now time.Time) (StatusTone, string) {
+	pace, runsOut := w.Pace(now)
+	tone := usageTone(w.Level())
+	text := ""
+	switch pace {
+	case usage.PaceExceeded:
+		tone, text = ToneError, "limit reached"
+	case usage.PaceRunsOut:
+		text = "runs out in " + usageIn(runsOut) + " at this pace"
+		if tone == ToneNeutral {
+			tone = ToneAttention
+		}
+	}
+	return tone, text
 }
 
 // usageAttentionItem is one line of "Needs a look": a provider that cannot be
@@ -433,23 +457,13 @@ func (s *Shell) usageAttention(ids []usage.ID, now time.Time, left bool) []usage
 			continue
 		}
 		for _, w := range res.Snapshot.Windows {
-			pace, runsOut := w.Pace(now)
-			tone := usageTone(w.Level())
-			switch {
-			case pace == usage.PaceExceeded:
-				tone = ToneError
-			case pace == usage.PaceRunsOut && tone == ToneNeutral:
-				tone = ToneAttention
-			}
+			tone, paceText := usageWindowAlert(w, now)
 			if tone == ToneNeutral {
 				continue
 			}
 			parts := []string{id.Title() + " · " + w.Name + "  " + usageShownText(w.UsedPct, left)}
-			switch pace {
-			case usage.PaceRunsOut:
-				parts = append(parts, "runs out in "+usageIn(runsOut)+" at this pace")
-			case usage.PaceExceeded:
-				parts = append(parts, "limit reached")
+			if paceText != "" {
+				parts = append(parts, paceText)
 			}
 			if d := w.Resets.Sub(now); !w.Resets.IsZero() && d > 0 {
 				parts = append(parts, "resets "+usageIn(d))
