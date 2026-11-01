@@ -267,6 +267,102 @@ func (s *Shell) nestedSubagents(card agent.AgentCardModel) []history.Subagent {
 	return subs
 }
 
+// groupIndicatorState is the state a folded Workspace label draws: whatever
+// needs a person wins; otherwise working when any card works or any of its
+// sub-agents still writes (the fold hides both); otherwise the strongest
+// card's state (the cards arrive actionable-first).
+func groupIndicatorState(cards []agent.AgentCardModel, now time.Time) operationalState {
+	state := agentIndicatorState(cards[0])
+	if state == opNeedsAttention || state == opReadyForReview {
+		return state
+	}
+	for _, card := range cards {
+		if card.Working() || runningSubagents(card, now) > 0 {
+			return opWorking
+		}
+	}
+	return state
+}
+
+// setAgentFolds folds or unfolds every Workspace group ("group") or every
+// parent's sub-agent rows ("sub") of the listing at once.
+func (s *Shell) setAgentFolds(groups []agentGroup, kind string, fold bool) {
+	if s.foldedAgents == nil {
+		s.foldedAgents = map[string]bool{}
+	}
+	set := func(key string) {
+		if fold {
+			s.foldedAgents[key] = true
+		} else {
+			delete(s.foldedAgents, key)
+		}
+	}
+	for _, group := range groups {
+		if kind == "group" && group.Name != "" {
+			set(agentFoldKey("group", group.Key))
+		}
+		for _, card := range group.Cards {
+			if kind == "sub" && len(card.Subagents) > 0 {
+				set(subagentFoldKey(card))
+			}
+		}
+	}
+}
+
+// earlierSubagents is how many of a card's sub-agents the nested rows leave
+// out (they keep the newest subagentRowsShown); 0 while the parent is folded.
+func (s *Shell) earlierSubagents(card agent.AgentCardModel) int {
+	if s.foldedAgents[subagentFoldKey(card)] {
+		return 0
+	}
+	return max(len(card.Subagents)-subagentRowsShown, 0)
+}
+
+// nestedSubagentRows draws a card's nested rows: a "+N earlier" row first when
+// the list was cut, then the newest sub-agents. openSub runs on a sub-agent
+// row's click; openAll on the "earlier" row's (Chat's roster lists them all).
+// nav registers the rows with the sidebar's keyboard model (nil: none).
+func (s *Shell) nestedSubagentRows(c *ui.Context, card agent.AgentCardModel, nav *listNav, openSub func(history.Subagent), openAll func()) {
+	subs := s.nestedSubagents(card)
+	if n := s.earlierSubagents(card); n > 0 {
+		t := c.Theme()
+		tokens := designTokens(t.Dark)
+		var row ui.Element
+		ui.Box(c.Key("subearlier:" + subagentFoldKey(card))).FillWidth().Children(func() {
+			row = tipped(c, ui.ButtonBase(c).FillWidth().Height(20).Radius(6).Padding(0, agentCardPadX).AlignItems(ui.Center).
+				Label("Show earlier sub-agents"), "Open Chat to see all "+itoa(len(card.Subagents)))
+			if tint, ok := rowTint(tokens, false, row.Hovered()); ok {
+				row.Background(tint)
+			}
+			row.Transition(rowFade)
+			row.Draw(func(p *ui.Painter, r ui.Rect) {
+				x := r.X + agentCardPadX + agentCardMark/2
+				p.Line(x, r.Y, x, r.Y+r.H, 1, tokens.TreeLine)
+			})
+			row.Children(func() {
+				ui.Box(c).Width(agentCardMark + 4).Shrink(0).PassThrough()
+				ui.Text(c, "+"+itoa(n)+" earlier").FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().PassThrough()
+			})
+		})
+		if row.Clicked() {
+			openAll()
+		}
+	}
+	for i, sub := range subs {
+		row := s.subagentRow(c, card, sub, i == len(subs)-1)
+		nav.row(c, row, navRow{Key: "sub:" + card.PaneID + ":" + sub.ID, Level: 1}) // nil nav: the popover has no keyboard model
+		if nav != nil {
+			row.FocusRing(false)
+			if nav.showsCursor(row) {
+				row.Background(designTokens(c.Theme().Dark).SidebarSelect)
+			}
+		}
+		if row.Clicked() {
+			openSub(sub)
+		}
+	}
+}
+
 // subagentToggle is the parent card's disclosure for its sub-agent rows: a
 // chevron and the count, ending on the running tally in the tooltip. It sits
 // inside the card's row, so a click folds without opening the Agent.
@@ -295,6 +391,11 @@ func (s *Shell) subagentToggle(c *ui.Context, card agent.AgentCardModel) {
 		btn.Children(func() {
 			treeChevron(c, true, !folded, t.TextMuted)
 			ui.Text(c, itoa(n)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+			if folded && running > 0 {
+				// A fold hides the rows that show the work: the same
+				// spinner slot keeps it visible.
+				statusIndicator(c, opWorking)
+			}
 		})
 	})
 	if btn.Clicked() {

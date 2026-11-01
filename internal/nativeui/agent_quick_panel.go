@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/history"
 )
 
 /**
@@ -158,14 +159,15 @@ func (s *Shell) quickPanelEntryRow(c *ui.Context, entry StatusCenterEntry, dupPr
 		// Sub-agents hang under the agent that spawned them, running or
 		// done (the sidebar's rows; the chevron folds them, a click opens
 		// the sub-agent's own drawer in Chat, then closes the panel).
-		if subs := s.nestedSubagents(card); len(subs) > 0 {
-			for i, sub := range subs {
-				if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
-					s.hideQuickPanel()
-					s.openSubagentDrawer(card, sub)
-				}
-			}
-		}
+		s.nestedSubagentRows(c, card, nil,
+			func(sub history.Subagent) {
+				s.hideQuickPanel()
+				s.openSubagentDrawer(card, sub)
+			},
+			func() {
+				s.hideQuickPanel()
+				s.openChat(card)
+			})
 		// §17.2: the usage caption renders under the card when the cached
 		// History-meta projection has facts, lined up with the card's text.
 		if usage := s.usageLineFor(card.Key); usage != "" {
@@ -245,6 +247,9 @@ func (s *Shell) quickPanelSubagentRows(entries []StatusCenterEntry) int {
 	rows := 0
 	for _, entry := range entries {
 		rows += len(s.nestedSubagents(entry.Card))
+		if s.earlierSubagents(entry.Card) > 0 {
+			rows++ // the "+N earlier" row
+		}
 	}
 	return rows
 }

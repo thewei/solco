@@ -278,3 +278,104 @@ func TestSidebarAgentRowGrowsIn(t *testing.T) {
 		t.Fatalf("order changed: %+v vs %+v", first, settled)
 	}
 }
+
+// The folded group's slot and the folded parent's toggle keep running
+// sub-agents visible: needs-you states still win, otherwise a running
+// sub-agent makes the group read as working.
+func TestGroupIndicatorCountsRunningSubagents(t *testing.T) {
+	now := time.Now()
+	running := []history.Subagent{{ID: "a", UpdatedAt: now.Add(-time.Second)}}
+	done := []history.Subagent{{ID: "a", UpdatedAt: now.Add(-time.Hour)}}
+	idle := agent.AgentCardModel{Key: agent.AgentKey{TerminalID: "t1"}}
+	if got := groupIndicatorState([]agent.AgentCardModel{idle}, now); got == opWorking {
+		t.Fatalf("an idle card with no sub-agents must not spin; got %v", got)
+	}
+	idle.Subagents = done
+	if got := groupIndicatorState([]agent.AgentCardModel{idle}, now); got == opWorking {
+		t.Fatalf("finished sub-agents must not spin; got %v", got)
+	}
+	idle.Subagents = running
+	if got := groupIndicatorState([]agent.AgentCardModel{idle}, now); got != opWorking {
+		t.Fatalf("a running sub-agent must make the folded group work; got %v", got)
+	}
+	needs := agent.AgentCardModel{Key: agent.AgentKey{TerminalID: "t0"}, Attention: agent.OpNeedsAttention}
+	if got := groupIndicatorState([]agent.AgentCardModel{needs, idle}, now); got != opNeedsAttention {
+		t.Fatalf("what needs you outranks working sub-agents; got %v", got)
+	}
+}
+
+// A list longer than the rows shown says so, and the row opens Chat.
+func TestSidebarShowsAnEarlierRowWhenSubagentsAreCut(t *testing.T) {
+	var subs []history.Subagent
+	for i := 0; i < subagentRowsShown+2; i++ {
+		subs = append(subs, history.Subagent{ID: itoa(i), Type: "T" + itoa(i), UpdatedAt: time.Now().Add(-time.Hour)})
+	}
+	s := subagentSidebarShell(subs)
+	tester := ui.NewTester(s.View, 1200, 800)
+	if !tester.HasText("+2 earlier") || tester.HasText("T0") || !tester.HasText("T7") {
+		t.Fatalf("want the newest %d rows and a +2 earlier row; texts=%q", subagentRowsShown, tester.Texts())
+	}
+	s.toggleAgentFold(subagentFoldKey(s.workbenchCards()[0]))
+	tester.Frame()
+	if tester.HasText("+2 earlier") {
+		t.Fatalf("a folded parent shows no earlier row; texts=%q", tester.Texts())
+	}
+}
+
+// Fold All / Unfold All act on every group and every parent.
+func TestSetAgentFoldsFoldsEverything(t *testing.T) {
+	s := NewShell()
+	groups := []agentGroup{
+		{Key: "w1", Name: "site", Cards: []agent.AgentCardModel{{Key: agent.AgentKey{TerminalID: "t1"}, Subagents: []history.Subagent{{ID: "a"}}}}},
+		{Key: "w2", Name: "core", Cards: []agent.AgentCardModel{{Key: agent.AgentKey{TerminalID: "t2"}}}},
+	}
+	s.setAgentFolds(groups, "group", true)
+	if !s.foldedAgents["group:w1"] || !s.foldedAgents["group:w2"] || len(s.foldedAgents) != 2 {
+		t.Fatalf("groups = %v", s.foldedAgents)
+	}
+	s.setAgentFolds(groups, "sub", true)
+	if !s.foldedAgents["sub:t1"] || s.foldedAgents["sub:t2"] {
+		t.Fatalf("only parents with sub-agents fold: %v", s.foldedAgents)
+	}
+	s.setAgentFolds(groups, "group", false)
+	s.setAgentFolds(groups, "sub", false)
+	if len(s.foldedAgents) != 0 {
+		t.Fatalf("unfold all must clear every fold: %v", s.foldedAgents)
+	}
+}
+
+// The Agents list answers the arrows like the other sidebar lists: ←/→ fold
+// and unfold a parent's sub-agents, ↓ steps into them, ← climbs back to the
+// parent and on to the Workspace label, whose ← folds the group.
+func TestSidebarAgentsListIsKeyboardDriven(t *testing.T) {
+	s := subagentSidebarShell([]history.Subagent{
+		{ID: "a", Type: "Explore", Description: "scan", UpdatedAt: time.Now().Add(-time.Hour)},
+	})
+	tester := ui.NewTester(s.View, 1200, 800)
+	tester.SetPreferences(ui.Preferences{ReduceMotion: true})
+	settleFrames(tester, 3)
+	if err := tester.Click("pricing page"); err != nil {
+		t.Fatal(err)
+	}
+	settleFrames(tester, 3)
+	wantCursor(t, tester, "pricing page")
+	pressKey(tester, 0, ui.KeyLeft)
+	if tester.HasText("Explore") || !s.foldedAgents["sub:term-1"] {
+		t.Fatalf("← on an open parent must fold its sub-agents; folded=%v texts=%q", s.foldedAgents, tester.Texts())
+	}
+	pressKey(tester, 0, ui.KeyRight)
+	if !tester.HasText("Explore") {
+		t.Fatalf("→ on a folded parent must unfold; texts=%q", tester.Texts())
+	}
+	pressKey(tester, 0, ui.KeyDown)
+	wantCursor(t, tester, "Explore scan")
+	pressKey(tester, 0, ui.KeyLeft)
+	wantCursor(t, tester, "pricing page") // ← on a sub-agent climbs to its parent
+	pressKey(tester, 0, ui.KeyLeft)       // fold the parent again, then climb
+	pressKey(tester, 0, ui.KeyLeft)
+	wantCursor(t, tester, "Toggle website")
+	pressKey(tester, 0, ui.KeyLeft)
+	if tester.HasText("pricing page") || !s.foldedAgents["group:w1"] {
+		t.Fatalf("← on the Workspace label must fold the group; folded=%v texts=%q", s.foldedAgents, tester.Texts())
+	}
+}

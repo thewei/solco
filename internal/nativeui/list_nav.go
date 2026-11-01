@@ -266,7 +266,7 @@ func (n *listNav) to(c *ui.Context, key string) {
 
 // listNavs are the Shell's keyboard-driven sidebar lists.
 type listNavs struct {
-	files, gitRefs, hosts, sessions, boardTasks listNav
+	files, gitRefs, hosts, sessions, boardTasks, agents listNav
 }
 
 // dialog is the Shell's report, on each change, of whether a dialog is up. A
@@ -276,7 +276,7 @@ type listNavs struct {
 // so a dialog opened from a row's menu does not end the keyboard's visit to
 // the tree.
 func (ns *listNavs) dialog(open bool, pass uint64) {
-	for _, n := range []*listNav{&ns.files, &ns.gitRefs, &ns.hosts, &ns.sessions, &ns.boardTasks} {
+	for _, n := range []*listNav{&ns.files, &ns.gitRefs, &ns.hosts, &ns.sessions, &ns.boardTasks, &ns.agents} {
 		switch {
 		case open && n.seen+1 >= pass:
 			n.opener = n.cursor

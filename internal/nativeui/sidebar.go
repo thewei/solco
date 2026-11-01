@@ -17,6 +17,7 @@ import (
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 func (s *Shell) sidebar(c *ui.Context) {
@@ -602,86 +603,116 @@ func (s *Shell) agentItems(c *ui.Context) {
 	dupProjects := duplicateAgentProjectLabels(cards)
 	// Agents group under their Workspace (2026-10-30): a faint label names
 	// the group, so the cards' second line carries only the git facts.
-	for _, group := range groupAgentCards(cards) {
-		// The group's git facts (branch, files, +/-) are drawn once, at the
-		// label's right end, for the repository its first resolved card sits
-		// in; only a card in another repository keeps its own facts (2026-10-30
-		// UX audit 3, topic 1).
-		groupRoot, groupCWD := "", ""
-		for _, card := range group.Cards {
-			if root := s.agentGitRoot(card); root != "" {
-				groupRoot, groupCWD = root, s.agentCWD(card)
-				break
+	groups := groupAgentCards(cards)
+	// One Tab stop for the whole list; ↑/↓ walk the rows, ←/→ fold and unfold
+	// a group or a parent's sub-agents (list_nav.go).
+	s.navList(c, &s.nav.agents, false, ui.Column(c).FillWidth(), func() {
+		for _, group := range groups {
+			// The group's git facts (branch, files, +/-) are drawn once, at the
+			// label's right end, for the repository its first resolved card sits
+			// in; only a card in another repository keeps its own facts (2026-10-30
+			// UX audit 3, topic 1).
+			groupRoot, groupCWD := "", ""
+			for _, card := range group.Cards {
+				if root := s.agentGitRoot(card); root != "" {
+					groupRoot, groupCWD = root, s.agentCWD(card)
+					break
+				}
 			}
-		}
-		foldKey := agentFoldKey("group", group.Key)
-		groupFolded := group.Name != "" && s.foldedAgents[foldKey]
-		if group.Name != "" {
-			// The label is the group's fold handle (2026-11-01). Folded, the
-			// right end swaps the git facts for the count and the state of
-			// the group's most urgent card (the cards arrive actionable-first),
-			// so a fold never hides an Agent that needs you.
-			t := c.Theme()
-			ui.Box(c.Key("agent-group-gap:" + group.Key)).Height(5).Shrink(0)
-			head := ui.ButtonBase(c.Key("agent-group:"+group.Key)).FillWidth().Height(24).Radius(treeRowRadius).
-				Padding(0, agentCardPadX, 0, 2).Gap(4).AlignItems(ui.Center).FocusRing(false).Label("Toggle " + group.Name)
-			if head.Hovered() {
-				head.Background(t.SurfaceHover)
-			}
-			head.Transition(rowFade)
-			head.Children(func() {
-				treeChevron(c, true, !groupFolded, t.TextMuted)
-				ui.Text(c, group.Name).FontSize(Typography().Micro).
-					TextColor(t.TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).PassThrough()
+			foldKey := agentFoldKey("group", group.Key)
+			groupFolded := group.Name != "" && s.foldedAgents[foldKey]
+			if group.Name != "" {
+				// The label is the group's fold handle (2026-11-01). Folded, the
+				// right end swaps the git facts for the count and the state of
+				// the group's most urgent card (the cards arrive actionable-first),
+				// so a fold never hides an Agent that needs you.
+				t := c.Theme()
+				ui.Box(c.Key("agent-group-gap:" + group.Key)).Height(5).Shrink(0)
+				head := ui.ButtonBase(c.Key("agent-group:"+group.Key)).FillWidth().Height(24).Radius(treeRowRadius).
+					Padding(0, agentCardPadX, 0, 2).Gap(4).AlignItems(ui.Center).FocusRing(false).Label("Toggle " + group.Name)
 				switch {
-				case groupFolded:
-					ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
-					statusIndicator(c, agentIndicatorState(group.Cards[0]))
-				case groupRoot != "":
-					branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
-					gitFactsView(c, branch, adds, dels, files, ok)
+				case s.nav.agents.showsCursor(head):
+					head.Background(designTokens(t.Dark).SidebarSelect)
+				case head.Hovered():
+					head.Background(t.SurfaceHover)
 				}
-			})
-			if head.Clicked() {
-				s.toggleAgentFold(foldKey)
-			}
-		}
-		if groupFolded {
-			continue
-		}
-		for _, card := range group.Cards {
-			card := card
-			label, _ := agentCardLabel(card, dupProjects)
-			selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
-			row := s.agentCardRow(c, card, selected, dupProjects, group.Name != "", group.Name != "" && groupRoot != "" && s.agentGitRoot(card) == groupRoot, nil)
-			if row.Clicked() {
-				// N19 #4: a sidebar Agent click jumps straight to the pane's
-				// remembered surface (Chat or Terminal) instead of the detail
-				// popover; the popover stays on the tray and header entry
-				// points.
-				s.openAgentFromSidebar(card)
-			}
-			row.ContextMenu(func(m *ui.Menu) {
-				if m.Item("Open Chat").Chosen() {
-					s.openChat(card)
+				head.Transition(rowFade)
+				if s.nav.agents.row(c, head, navRow{Key: "agent-group:" + group.Key, Section: true, Folder: true, Expanded: !groupFolded}) {
+					s.toggleAgentFold(foldKey)
 				}
-				if card.PaneID != "" {
-					s.paneOverflowItems(m, card.PaneID, label)
-				}
-			})
-			// Sub-agents hang under the agent that spawned them, running or
-			// done; the card's chevron folds them. A row click opens the
-			// sub-agent's own drawer in Chat, like the page's cards do
-			// (2026-10-31 sub-agent views).
-			if subs := s.nestedSubagents(card); len(subs) > 0 {
-				for i, sub := range subs {
-					if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
-						s.openSubagentDrawer(card, sub)
+				head.Children(func() {
+					treeChevron(c, true, !groupFolded, t.TextMuted)
+					ui.Text(c, group.Name).FontSize(Typography().Micro).
+						TextColor(t.TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).PassThrough()
+					switch {
+					case groupFolded:
+						ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+						statusIndicator(c, groupIndicatorState(group.Cards, time.Now()))
+					case groupRoot != "":
+						branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
+						gitFactsView(c, branch, adds, dels, files, ok)
 					}
+				})
+				head.ContextMenu(func(m *ui.Menu) {
+					if m.Item("Fold All Groups").Chosen() {
+						s.setAgentFolds(groups, "group", true)
+					}
+					if m.Item("Unfold All Groups").Chosen() {
+						s.setAgentFolds(groups, "group", false)
+					}
+					m.Separator()
+					if m.Item("Fold All Sub-agents").Chosen() {
+						s.setAgentFolds(groups, "sub", true)
+					}
+					if m.Item("Unfold All Sub-agents").Chosen() {
+						s.setAgentFolds(groups, "sub", false)
+					}
+				})
+				if head.Clicked() {
+					s.toggleAgentFold(foldKey)
 				}
 			}
+			if groupFolded {
+				continue
+			}
+			for _, card := range group.Cards {
+				card := card
+				label, _ := agentCardLabel(card, dupProjects)
+				selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
+				row := s.agentCardRow(c, card, selected, dupProjects, group.Name != "", group.Name != "" && groupRoot != "" && s.agentGitRoot(card) == groupRoot, nil)
+				subKey := subagentFoldKey(card)
+				if s.nav.agents.row(c, row, navRow{Key: subKey, Folder: len(card.Subagents) > 0, Expanded: !s.foldedAgents[subKey]}) {
+					s.toggleAgentFold(subKey)
+				}
+				row.FocusRing(false)
+				if s.nav.agents.showsCursor(row) {
+					row.Background(designTokens(c.Theme().Dark).SidebarSelect)
+				}
+				if row.Clicked() {
+					// N19 #4: a sidebar Agent click jumps straight to the pane's
+					// remembered surface (Chat or Terminal) instead of the detail
+					// popover; the popover stays on the tray and header entry
+					// points.
+					s.openAgentFromSidebar(card)
+				}
+				row.ContextMenu(func(m *ui.Menu) {
+					if m.Item("Open Chat").Chosen() {
+						s.openChat(card)
+					}
+					if card.PaneID != "" {
+						s.paneOverflowItems(m, card.PaneID, label)
+					}
+				})
+				// Sub-agents hang under the agent that spawned them, running or
+				// done; the card's chevron folds them. A row click opens the
+				// sub-agent's own drawer in Chat, like the page's cards do
+				// (2026-10-31 sub-agent views).
+				s.nestedSubagentRows(c, card, &s.nav.agents,
+					func(sub history.Subagent) { s.openSubagentDrawer(card, sub) },
+					func() { s.openChat(card) })
+			}
 		}
-	}
+	})
 }
 
 // agentGroup is one Workspace's cards in the sidebar Agents list.
