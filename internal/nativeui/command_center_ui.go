@@ -3,6 +3,7 @@ package nativeui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
@@ -356,12 +357,18 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 	})
 }
 
+// commandCenterRowFade is how a result row appears under the list that was
+// already open: the list's scope changed, or a longer list grew.
+var commandCenterRowFade = ui.ElementTransition{Duration: 140 * time.Millisecond, Enter: &ui.Motion{}}
+
 // commandCenterRow builds one result row: hover selects it, click runs
 // it, and the row the keyboard moved to reveals itself in the list.
 func (s *Shell) commandCenterRow(c *ui.Context, i int, result commandcenter.Result, showKind bool) {
 	sp := Spacing()
-	row := ui.Row(c).FillWidth().Padding(sp.S, sp.M).Gap(sp.S).AlignItems(ui.Center).
-		Radius(Radius().Control)
+	// Keyed by chip and position: switching scope builds new rows, which fade
+	// in (commandCenterRowFade); typing keeps its rows and only changes them.
+	row := ui.Row(c.Key(fmt.Sprintf("cc-row:%d:%d", s.commandCenterChip, i))).FillWidth().Padding(sp.S, sp.M).Gap(sp.S).AlignItems(ui.Center).
+		Radius(Radius().Control).Transition(commandCenterRowFade)
 	row.Children(func() {
 		// Truncated titles stay recoverable via tooltip (F157, same
 		// contract as the commits list).
