@@ -247,6 +247,9 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 		Tooltip: it.tooltip, Level: it.level, Folder: it.folder, Expanded: !it.closed,
 		Glyph: it.glyph, Current: it.current, Trailing: trailing, Menu: menu, Nav: &s.nav.gitRefs,
 		Deliberate: true, Selected: s.gitRefsSelected == key,
+		// Folders open and close with motion; typing in the filter swaps whole
+		// result sets, which should not animate row by row.
+		Motion: strings.TrimSpace(s.gitRefsFilter) == "",
 		OnSelect: func() {
 			s.gitRefsSelected = key
 			if it.hint != "" && !s.gitRefsHinted {

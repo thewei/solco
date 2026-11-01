@@ -65,6 +65,8 @@ func newGraphFixture(t *testing.T) *graphFixture {
 	shell.showSurface(WorkspaceSurfaceDiff)
 	shell.rebuildDiffRows()
 	f.tester = ui.NewTester(shell.View, 1200, 800)
+	f.tester.SetPreferences(ui.Preferences{ReduceMotion: true}) // ref rows land at once (treeRowMotion)
+	f.tester.SetPreferences(ui.Preferences{ReduceMotion: true}) // ref rows land at once (treeRowMotion)
 	f.tester.Frame()
 	f.tester.Frame()
 	return f

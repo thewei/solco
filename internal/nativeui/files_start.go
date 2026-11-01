@@ -87,32 +87,36 @@ func (s *Shell) filesStart(c *ui.Context, root string) {
 		emptyState(c, "Select a file to preview", "")
 		return
 	}
-	ui.Scroll(c).FillWidth().Grow(1).MinHeight(0).Children(func() {
-		contentColumn(c, 520, func() {
-			ui.Column(c).FillWidth().Padding(sp.XL, sp.L).Gap(sp.L).Children(func() {
-				ui.Text(c, "Select a file to preview").FontWeight(WeightSemibold)
-				if len(data.recent) > 0 {
-					s.filesStartSection(c, "Pick up where you left off", func() {
-						for _, p := range data.recent {
-							rel, _ := filepath.Rel(root, p)
-							s.filesStartRow(c, "recent:"+p, p, filepath.Base(p), filesSearchDir(rel), "")
-						}
-					})
-				}
-				if len(changed) > 0 {
-					s.filesStartSection(c, "Changed in git", func() {
-						for i := range changed {
-							f := &changed[i]
-							s.filesStartRow(c, "changed:"+f.Path, filepath.Join(root, f.Path),
-								filepath.Base(f.Path), filesSearchDir(f.Path), gdStatusLetter(f))
-						}
-					})
-				}
-				if data.readme != "" {
-					s.filesStartSection(c, "Start here", func() {
-						s.filesStartRow(c, "readme", data.readme, filepath.Base(data.readme), "Project overview", "")
-					})
-				}
+	// The launcher sits in the middle of the page, as the bare empty state does;
+	// a long list shrinks the scroll to the page and scrolls.
+	ui.Column(c).FillWidth().Grow(1).MinHeight(0).Justify(ui.Center).Children(func() {
+		ui.Scroll(c).FillWidth().MinHeight(0).Children(func() {
+			contentColumn(c, 460, func() { // the list is as wide as its longest row (<=420): the status letter stays near the names
+				ui.Column(c).AlignSelf(ui.Center).MinWidth(280).MaxWidth(420).Padding(sp.XL, sp.L).Gap(sp.L).Children(func() {
+					ui.Text(c, "Select a file to preview").FontWeight(WeightSemibold)
+					if len(data.recent) > 0 {
+						s.filesStartSection(c, "Pick up where you left off", func() {
+							for _, p := range data.recent {
+								rel, _ := filepath.Rel(root, p)
+								s.filesStartRow(c, "recent:"+p, p, filepath.Base(p), filesSearchDir(rel), "")
+							}
+						})
+					}
+					if len(changed) > 0 {
+						s.filesStartSection(c, "Changed in git", func() {
+							for i := range changed {
+								f := &changed[i]
+								s.filesStartRow(c, "changed:"+f.Path, filepath.Join(root, f.Path),
+									filepath.Base(f.Path), filesSearchDir(f.Path), gdStatusLetter(f))
+							}
+						})
+					}
+					if data.readme != "" {
+						s.filesStartSection(c, "Start here", func() {
+							s.filesStartRow(c, "readme", data.readme, filepath.Base(data.readme), "Project overview", "")
+						})
+					}
+				})
 			})
 		})
 	})

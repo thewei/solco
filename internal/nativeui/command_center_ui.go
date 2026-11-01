@@ -329,8 +329,14 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 					ui.Text(c, strings.ToUpper(commandCenterSectionTitle(group.Section))).
 						FontSize(Typography().Micro).TextColor(c.Theme().TextMuted)
 				})
+				kinds := map[string]bool{}
 				for _, result := range group.Results {
-					s.commandCenterRow(c, flat, result)
+					kinds[commandCenterKind(result.Action)] = true
+				}
+				// A group of one kind already says it in its header (AGENTS,
+				// APP); the right-hand label returns where kinds mix.
+				for _, result := range group.Results {
+					s.commandCenterRow(c, flat, result, len(kinds) > 1)
 					flat++
 				}
 			}
@@ -352,7 +358,7 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 
 // commandCenterRow builds one result row: hover selects it, click runs
 // it, and the row the keyboard moved to reveals itself in the list.
-func (s *Shell) commandCenterRow(c *ui.Context, i int, result commandcenter.Result) {
+func (s *Shell) commandCenterRow(c *ui.Context, i int, result commandcenter.Result, showKind bool) {
 	sp := Spacing()
 	row := ui.Row(c).FillWidth().Padding(sp.S, sp.M).Gap(sp.S).AlignItems(ui.Center).
 		Radius(Radius().Control)
@@ -363,7 +369,7 @@ func (s *Shell) commandCenterRow(c *ui.Context, i int, result commandcenter.Resu
 		if result.Action.Shortcut != "" {
 			ui.Text(c, result.Action.Shortcut).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
 		}
-		if kind := commandCenterKind(result.Action); kind != "" {
+		if kind := commandCenterKind(result.Action); kind != "" && showKind {
 			ui.Text(c, kind).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0)
 		}
 	})
