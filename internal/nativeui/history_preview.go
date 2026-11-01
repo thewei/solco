@@ -108,7 +108,7 @@ func (s *Shell) sessionMetaByKey(key string) *history.SessionMeta {
 func (s *Shell) sessionPreview(c *ui.Context, summary history.SessionSummary) {
 	sp := Spacing()
 	tokens := designTokens(c.Theme().Dark)
-	ui.Column(c).FillWidth().Padding(sp.S, rowInset, sp.M, rowInset+24+sp.L).Children(func() {
+	ui.Column(c).FillWidth().Padding(sp.S, rowInset, sp.M, rowInset+24+sp.L).Transition(disclosureMotion).Children(func() {
 		ui.Column(c).FillWidth().Padding(sp.M, sp.L).Radius(Radius().Row).Background(tokens.Content).Children(func() {
 			s.sessionInfoTable(c, summary.Meta, s.hist.preview, true)
 		})

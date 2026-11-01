@@ -56,6 +56,14 @@ var treeRowMotion = ui.ElementTransition{
 	Exit:     &ui.Motion{},
 }
 
+// disclosureMotion is for a panel that opens in place under its row (the
+// Sessions info card): it grows in and fades out.
+var disclosureMotion = ui.ElementTransition{
+	Duration: 160 * time.Millisecond,
+	Enter:    &ui.Motion{Collapse: true},
+	Exit:     &ui.Motion{},
+}
+
 // rowTint is the shared background policy for selectable rows: selection
 // outranks hover, and an untinted row reports ok=false so callers keep the
 // surface transparent.

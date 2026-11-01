@@ -115,4 +115,5 @@ func openRowInfo(t *testing.T, tester *ui.Tester, title string) {
 		t.Fatalf("hovering %q shows no Session info button: %v; texts=%q", title, err, tester.Texts())
 	}
 	tester.Frame()
+	tester.Advance(2 * disclosureMotion.Duration) // the info card has finished growing in
 }
