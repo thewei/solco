@@ -92,7 +92,7 @@ func (s *Shell) filesStart(c *ui.Context, root string) {
 	ui.Column(c).FillWidth().Grow(1).MinHeight(0).Justify(ui.Center).Children(func() {
 		ui.Scroll(c).FillWidth().MinHeight(0).Children(func() {
 			contentColumn(c, 460, func() { // the list is as wide as its longest row (<=420): the status letter stays near the names
-				ui.Column(c).AlignSelf(ui.Center).MinWidth(280).MaxWidth(420).Padding(sp.XL, sp.L).Gap(sp.L).Children(func() {
+				ui.Column(c).AlignSelf(ui.Center).MaxWidth(420).Padding(sp.XL, sp.L).Gap(sp.L).Children(func() {
 					ui.Text(c, "Select a file to preview").FontWeight(WeightSemibold)
 					if len(data.recent) > 0 {
 						s.filesStartSection(c, "Pick up where you left off", func() {
