@@ -21,7 +21,7 @@ picker.go: Claude Code/Codex `/model`、`/permissions` 的 Question 卡——只
 chat.go 的 chat/stream：手机唯一会发的消息是 `{"t":"older"}`（该 socket 的 Reader 上移一页，翻页只属于这条流，重连回到最新一页），其余消息忽略
 files.go: GET /api/v3/panes/{id}/chat/files?token=（scope view）——手机输入框 `@` 补全，只列窗格 cwd 内匹配条目的名字（chatsession.ListFiles，contained=true：`..`/指向目录外的符号链接列空），不读内容；未知窗格 404
 files_test.go: 列表/子目录下钻、越界与空数组线格式、需要 view token 且窗格已知
-queue.go: 跟进队列的 Host 侧——`FollowUps` 接口（Enqueue/Items/CancelItem/Cancel(全清)，实现是 app.RemoteFollowUps → 桌面同一个 conversation.FollowUpQueue，一会话一有序列表、指纹来自 Herdr agent_session、不确定即墓碑不自动重发）；chat_send 在 agent 处于 working 且请求带 `queue:true` 时追加（仅会话头 DeliveryUncertain 冻结时拒绝），chat 帧带 `queued{items[{id,text,state,detail}]}`，`POST …/chat/queue/cancel` 全清、`POST …/chat/queue/item/{requestID}/cancel` 单条撤回；错误码 queue_unavailable/queue_blocked/queue_failed/no_queued/already_delivered；capability `queue`
+queue.go: 跟进队列的 Host 侧——`FollowUps` 接口（Enqueue/Items/CancelItem/EditItem/MoveItem/Cancel(全清；Edit/Move 对应 …/item/{id}/edit|move，capability `queueEdit`，被认领条目 409 already_delivered，越界/钉住 409 cannot_move)，实现是 app.RemoteFollowUps → 桌面同一个 conversation.FollowUpQueue，一会话一有序列表、指纹来自 Herdr agent_session、不确定即墓碑不自动重发）；chat_send 在 agent 处于 working 且请求带 `queue:true` 时追加（仅会话头 DeliveryUncertain 冻结时拒绝），chat 帧带 `queued{items[{id,text,state,detail}]}`，`POST …/chat/queue/cancel` 全清、`POST …/chat/queue/item/{requestID}/cancel` 单条撤回；错误码 queue_unavailable/queue_blocked/queue_failed/no_queued/already_delivered；capability `queue`
 queue_test.go: 追加两条/单条撤回/全清/冻结→queue_blocked/不可用/capability（fakeQueue）
 picker_test.go: 命令后出卡/答题按键/离屏撤卡、出现窗到期、普通文本不开窗
 subagent.go: GET /panes/{id}/chat/subagents/{subID}（ScopeView）——手机子 Agent 抽屉，经 chatsession.Reader.Subagent，未知 id 404 unknown_subagent

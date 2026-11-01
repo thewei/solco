@@ -243,6 +243,24 @@ func TestChatBridgeQueuedItemsProjectAndMutate(t *testing.T) {
 		t.Fatalf("queued projection after reorder = %+v", state.QueuedItems)
 	}
 
+	// An unclaimed entry's text is rewritten in place; an empty rewrite is refused.
+	if !state.Features.Edit {
+		t.Fatal("desktop bridge must advertise edit")
+	}
+	if _, err := bridge.EditQueuedItem(ctx, firstID, "first, edited"); err != nil {
+		t.Fatal(err)
+	}
+	state = shell.chatBridgeState()
+	if len(state.QueuedItems) != 2 || state.QueuedItems[1].ID != firstID || state.QueuedItems[1].Text != "first, edited" {
+		t.Fatalf("queued projection after edit = %+v", state.QueuedItems)
+	}
+	if _, err := bridge.EditQueuedItem(ctx, firstID, "  "); err != nil {
+		t.Fatal(err)
+	}
+	if state = shell.chatBridgeState(); state.QueuedItems[1].Text != "first, edited" || state.Outcome == "" {
+		t.Fatalf("an empty edit must keep the text and say why: %+v", state)
+	}
+
 	// One entry withdraws alone; the other keeps its place.
 	if _, err := bridge.CancelQueuedItem(ctx, secondID); err != nil {
 		t.Fatal(err)

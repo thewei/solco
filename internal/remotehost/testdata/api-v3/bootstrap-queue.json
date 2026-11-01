@@ -5,6 +5,7 @@
     "git": true,
     "launch": true,
     "queue": true,
+    "queueEdit": true,
     "terminal": true
   },
   "hostId": "a1cc1d2af9c5a03e",

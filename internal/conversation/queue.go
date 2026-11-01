@@ -8,6 +8,7 @@ import (
 
 	"github.com/thewei/solco/internal/agent"
 )
+
 /**
  * [INPUT]: 纯领域包：QueueItem（request id、会话、窗格、身份指纹、正文）与 QueueState 生命周期
  * [OUTPUT]: FollowUpQueue——每会话一条按投递顺序排列的跟进列表（Enqueue 追加、Items/Head 读、Move 排序、
@@ -58,6 +59,14 @@ var ErrNoQueueItem = errors.New("no queued item for this conversation")
 // ErrQueueFrozen reports an enqueue behind a DeliveryUncertain tombstone:
 // the uncertain send must be acknowledged (cancel the entry) first.
 var ErrQueueFrozen = errors.New("delivery uncertain — cancel the failed entry before queueing more")
+
+// ErrQueueClaimed reports an edit/move of a follow-up the delivery worker has
+// already claimed: its text is on its way and can no longer change.
+var ErrQueueClaimed = errors.New("the follow-up is already claimed")
+
+// ErrQueueRange reports a move to a place the list does not have or that lies
+// inside the pinned head run.
+var ErrQueueRange = errors.New("move target out of range")
 
 // ErrAlreadyDelivered reports a cancel/claim racing a completed delivery.
 var ErrAlreadyDelivered = errors.New("follow-up already delivered")
@@ -402,7 +411,7 @@ func (q *FollowUpQueue) Move(id ConversationID, requestID string, to int) error 
 	case Queued, FailedRecoverable:
 	default:
 		q.mu.Unlock()
-		return errors.New("the follow-up is already claimed and cannot move")
+		return ErrQueueClaimed
 	}
 	pinned := 0
 	for _, candidate := range cq.Items {
@@ -414,7 +423,7 @@ func (q *FollowUpQueue) Move(id ConversationID, requestID string, to int) error 
 	}
 	if to < pinned || to >= len(cq.Items) {
 		q.mu.Unlock()
-		return errors.New("move target out of range")
+		return ErrQueueRange
 	}
 	if to != index {
 		item = cq.Items[index]
@@ -429,6 +438,41 @@ func (q *FollowUpQueue) Move(id ConversationID, requestID string, to int) error 
 		changed()
 	}
 	return nil
+}
+
+// Edit replaces the text of one follow-up that has not been claimed yet
+// (queued, waiting for the turn boundary, or recoverably failed — the fix-and-
+// retry case). The claim reads the item's text under the same mutex, so an
+// edit lands either before the delivery (the new text goes) or not at all
+// (ErrQueueClaimed). The position, request id and identity fingerprint stay.
+func (q *FollowUpQueue) Edit(id ConversationID, requestID, text string) (QueueItem, error) {
+	if text == "" {
+		return QueueItem{}, errors.New("a follow-up needs text")
+	}
+	q.mu.Lock()
+	cq := q.queues[id]
+	var item *QueueItem
+	if cq != nil {
+		item = q.find(cq, requestID)
+	}
+	if item == nil {
+		q.mu.Unlock()
+		return QueueItem{}, ErrNoQueueItem
+	}
+	switch item.State {
+	case Queued, WaitingForTurnBoundary, FailedRecoverable:
+	default:
+		q.mu.Unlock()
+		return *item, ErrQueueClaimed
+	}
+	item.Text = text
+	updated := *item
+	changed := q.changed()
+	q.mu.Unlock()
+	if changed != nil {
+		changed()
+	}
+	return updated, nil
 }
 
 // SendabilityGate decides at commit time whether the queued item may be

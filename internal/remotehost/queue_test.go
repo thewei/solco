@@ -60,6 +60,45 @@ func (f *fakeQueue) CancelItem(conversationID, requestID string) error {
 	return ErrFollowUpNone
 }
 
+func (f *fakeQueue) EditItem(conversationID, requestID, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	items := f.items[conversationID]
+	for i, item := range items {
+		if item.ID == requestID {
+			if item.State != "queued" {
+				return ErrFollowUpCommitted
+			}
+			items[i].Text = text
+			return nil
+		}
+	}
+	return ErrFollowUpNone
+}
+
+func (f *fakeQueue) MoveItem(conversationID, requestID string, to int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	items := f.items[conversationID]
+	from := -1
+	for i, item := range items {
+		if item.ID == requestID {
+			from = i
+		}
+	}
+	switch {
+	case from < 0:
+		return ErrFollowUpNone
+	case to >= len(items):
+		return ErrFollowUpRange
+	}
+	moved := items[from]
+	items = append(items[:from], items[from+1:]...)
+	items = append(items[:to], append([]FollowUpItem{moved}, items[to:]...)...)
+	f.items[conversationID] = items
+	return nil
+}
+
 func (f *fakeQueue) Cancel(conversationID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -73,6 +112,8 @@ func (f *fakeQueue) Cancel(conversationID string) error {
 const (
 	queueCancelPath     = "/api/v3/panes/w1:p1/chat/queue/cancel?instance=default"
 	queueItemCancelPath = "/api/v3/panes/w1:p1/chat/queue/item/%s/cancel?instance=default"
+	queueItemEditPath   = "/api/v3/panes/w1:p1/chat/queue/item/%s/edit?instance=default"
+	queueItemMovePath   = "/api/v3/panes/w1:p1/chat/queue/item/%s/move?instance=default"
 )
 
 func queuedHarness(t *testing.T) (*harness, *fakeQueue) {
@@ -192,5 +233,52 @@ func TestBootstrapAdvertisesTheQueueOnlyWhenWired(t *testing.T) {
 	h.srv.opts.Queue = nil
 	if has() {
 		t.Fatal("queue capability without a queue")
+	}
+}
+
+func TestChatQueueItemsCanBeEditedAndReordered(t *testing.T) {
+	h, q := queuedHarness(t)
+	for _, text := range []string{"one", "two", "three"} {
+		if code, got := h.post(sendPath, h.token, fmt.Sprintf(`{"text":%q,"queue":true}`, text)); code != 200 {
+			t.Fatalf("send %q = %d %s", text, code, got)
+		}
+	}
+	if code, got := h.post(fmt.Sprintf(queueItemEditPath, "req-q2"), h.token, `{"text":"  two, fixed  "}`); code != 200 {
+		t.Fatalf("edit = %d %s", code, got)
+	}
+	if code, got := h.post(fmt.Sprintf(queueItemMovePath, "req-q3"), h.token, `{"to":0}`); code != 200 {
+		t.Fatalf("move = %d %s", code, got)
+	}
+	f := h.queuedFrame()
+	if f == nil || len(f.Items) != 3 || f.Items[0].ID != "req-q3" || f.Items[1].ID != "req-q1" || f.Items[2].ID != "req-q2" || f.Items[2].Text != "two, fixed" {
+		t.Fatalf("frame after edit+move = %+v", f)
+	}
+	for _, c := range []struct {
+		path, body, want string
+		code             int
+	}{
+		{fmt.Sprintf(queueItemEditPath, "req-q9"), `{"text":"x"}`, "no_queued|", 404},
+		{fmt.Sprintf(queueItemEditPath, "req-q1"), `{"text":"   "}`, "bad_request|", 400},
+		{fmt.Sprintf(queueItemEditPath, "req-q1"), `nope`, "bad_request|", 400},
+		{fmt.Sprintf(queueItemMovePath, "req-q9"), `{"to":0}`, "no_queued|", 404},
+		{fmt.Sprintf(queueItemMovePath, "req-q1"), `{"to":7}`, "cannot_move|", 409},
+		{fmt.Sprintf(queueItemMovePath, "req-q1"), `{}`, "bad_request|", 400},
+		{fmt.Sprintf(queueItemMovePath, "req-q1"), `{"to":-1}`, "bad_request|", 400},
+	} {
+		if code, got := h.post(c.path, h.token, c.body); code != c.code || got != c.want {
+			t.Fatalf("%s %s = %d %q, want %d %q", c.path, c.body, code, got, c.code, c.want)
+		}
+	}
+	for conv, items := range q.items {
+		for i := range items {
+			if items[i].ID == "req-q1" {
+				q.mu.Lock()
+				q.items[conv][i].State = "delivering"
+				q.mu.Unlock()
+			}
+		}
+	}
+	if code, got := h.post(fmt.Sprintf(queueItemEditPath, "req-q1"), h.token, `{"text":"late"}`); code != 409 || got != "already_delivered|" {
+		t.Fatalf("edit of a claimed item = %d %q", code, got)
 	}
 }

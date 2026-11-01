@@ -340,6 +340,10 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "error-queue-blocked.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue))))
 	q.err = nil
 	h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue)) // a second, live entry for the wholesale cancel
+	golden(t, "queue-item-edit-client-request.json", []byte(`{"text":"then run the tests and lint"}`))
+	golden(t, "queue-item-move-client-request.json", []byte(`{"to":0}`))
+	golden(t, "queue-item-edit-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/item/req-q1/edit?instance=default", h.token, `{"text":"then run the tests and lint"}`)))
+	golden(t, "queue-item-move-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/item/req-q2/move?instance=default", h.token, `{"to":0}`)))
 	golden(t, "queue-item-cancel-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/item/req-q1/cancel?instance=default", h.token, `{}`)))
 	golden(t, "queue-cancel-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/cancel?instance=default", h.token, `{}`)))
 	golden(t, "error-queue-none.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/cancel?instance=default", h.token, `{}`)))

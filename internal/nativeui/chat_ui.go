@@ -342,6 +342,20 @@ func (s *Shell) moveChatQueuedItem(requestID string, to int) error {
 	return err
 }
 
+// editChatQueuedItem rewrites one unclaimed follow-up's text in place.
+func (s *Shell) editChatQueuedItem(requestID, text string) {
+	if s.launch == nil || s.chatConversationID == "" {
+		return
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		s.chatOutcome = "A queued message can't be empty — cancel it instead."
+	} else if _, err := s.launch.Queue().Edit(conversation.ConversationID(s.chatConversationID), requestID, text); err != nil && !errors.Is(err, conversation.ErrNoQueueItem) {
+		s.chatOutcome = "That follow-up is already being delivered."
+	}
+	s.publishChatBridge()
+}
+
 func (s *Shell) chatAfterPrompt(requestID, text string, disposition conversation.PromptDisposition, err error) {
 	if err != nil {
 		var uncertain *herdr.DeliveryUncertainError

@@ -410,3 +410,48 @@ func TestDeriveTimelineReplaysItemParts(t *testing.T) {
 		t.Fatalf("second tool = %+v", steps[3].Tool)
 	}
 }
+
+func TestFollowUpQueueEditReplacesUnclaimedText(t *testing.T) {
+	queue := NewFollowUpQueue()
+	id := ConversationID("live:claude-code:term-1")
+	for _, r := range []string{"r1", "r2"} {
+		if err := queue.Enqueue(QueueItem{RequestID: r, ConversationID: id, Text: "old " + r, Fingerprint: "fp"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := queue.Edit(id, "r2", "new r2")
+	if err != nil || got.Text != "new r2" {
+		t.Fatalf("edit = %+v, %v", got, err)
+	}
+	items, _ := queue.Items(id)
+	if items[0].Text != "old r1" || items[1].Text != "new r2" || items[1].RequestID != "r2" || items[1].Fingerprint != "fp" {
+		t.Fatalf("position, identity and the other item must stay: %+v", items)
+	}
+	// The claim hands the worker the edited text.
+	claimed, err := queue.ClaimDelivery(id, "r1")
+	if err != nil || claimed.Text != "old r1" {
+		t.Fatalf("claim = %+v, %v", claimed, err)
+	}
+	if _, err := queue.Edit(id, "r1", "late"); !errors.Is(err, ErrQueueClaimed) {
+		t.Fatalf("edit of a claimed item err = %v", err)
+	}
+	if _, err := queue.Edit(id, "nope", "x"); !errors.Is(err, ErrNoQueueItem) {
+		t.Fatalf("edit of a missing item err = %v", err)
+	}
+	if _, err := queue.Edit(id, "r2", ""); err == nil {
+		t.Fatal("an empty edit must be refused")
+	}
+	// A recoverable failure is editable: fix the text, then retry.
+	if _, err := queue.CompleteDelivery(id, "r1", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.ClaimDelivery(id, "r2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.Transition(id, "r2", FailedRecoverable, "prompt rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := queue.Edit(id, "r2", "fixed"); err != nil || got.Text != "fixed" || got.State != FailedRecoverable {
+		t.Fatalf("edit of a failed item = %+v, %v", got, err)
+	}
+}

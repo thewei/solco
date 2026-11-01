@@ -41,15 +41,14 @@ function TaskGlyph({ status, live }: { status: string; live: boolean }) {
 
 /**
  * The agent's task list. One card above the composer: a header line with the
- * count and the item in progress, opening into the list. Open by default
- * while the list is short and unfinished; the user's toggle always wins.
+ * count and the item in progress, opening into the list. Folded by default;
+ * only the user's toggle opens it.
  */
 export function TasksTray({
   plan,
   subagents = [],
   onOpenSubagent,
   live,
-  compact,
   forced,
   onToggle,
 }: {
@@ -58,7 +57,6 @@ export function TasksTray({
   subagents?: SubagentCard[];
   onOpenSubagent?: (id: string) => void;
   live: boolean;
-  compact: boolean;
   /** The composer's one-open-surface rule: true = this card was opened, false = another surface took the room. */
   forced?: boolean;
   onToggle?: (open: boolean) => void;
@@ -72,8 +70,8 @@ export function TasksTray({
   const counted = items.filter((item) => item.status !== "dropped").length;
   const finished = plan ? planFinished(plan) : true;
   const running = subagents.filter((sub) => sub.status === "running").length;
-  // A card asking the user something takes the room: the list folds then.
-  const open = forced ?? toggled ?? (!compact && (!finished || running > 0) && items.length + subagents.length <= 7);
+  // Folded until the user opens it; another surface taking the room folds it again.
+  const open = forced ?? toggled ?? false;
   const current = items.find((item) => item.status === "active") ?? items.find((item) => item.status === "pending");
   const runningLabel = running > 0 ? `${running} sub-agent${running === 1 ? "" : "s"} running` : "";
 

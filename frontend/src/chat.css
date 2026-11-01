@@ -862,6 +862,27 @@
   flex: 1;
 }
 
+/* Phone: at rest (not focused, nothing open, a one-line draft) the composer is one
+   row, the field plus Send; focusing it unfolds the second row of tools. */
+html[data-host="phone"] .cmp.rest:not(:focus-within) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 16px;
+}
+html[data-host="phone"] .cmp.rest:not(:focus-within) textarea {
+  flex: 1;
+  min-width: 0;
+  height: 24px !important;
+  overflow: hidden;
+}
+html[data-host="phone"] .cmp.rest:not(:focus-within) .cbar {
+  display: contents;
+}
+html[data-host="phone"] .cmp.rest:not(:focus-within) .cbar > :not(.send) {
+  display: none;
+}
+
 .chip {
   font-size: 12px;
   color: var(--i2);
@@ -1291,6 +1312,56 @@
 .queueCard .qcX:hover {
   color: var(--danger);
   background: var(--danger-bg);
+}
+
+.queueCard .qcEdit {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background: var(--tint);
+  color: var(--i1);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  outline: 0;
+}
+
+.queueCard .qcEdit:focus {
+  border-color: var(--i3);
+}
+
+.queueCard .qcX.qcOk:not(:disabled):hover {
+  color: var(--success, var(--i1));
+  background: var(--tint2);
+}
+
+.queueCard .qcX.qcPen:hover {
+  color: var(--i1);
+  background: var(--tint2);
+}
+
+.queueCard .qcX:disabled {
+  opacity: 0.4;
+}
+
+/* A finger needs more than a 10x20 grip and 20px buttons. */
+html[data-host="phone"] .queueCard .qcItem {
+  padding: 4px 6px;
+}
+html[data-host="phone"] .queueCard .qcHandle {
+  width: 22px;
+  height: 30px;
+  background-size: 6px 6px;
+}
+html[data-host="phone"] .queueCard .qcX {
+  width: 30px;
+  height: 30px;
+}
+html[data-host="phone"] .queueCard .qcEdit {
+  font-size: 14px;
 }
 
 .queueCard .qcItem.alert .qcX {

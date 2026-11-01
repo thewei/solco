@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/thewei/solco/internal/conversation"
@@ -16,6 +17,10 @@ import (
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+// remoteQueueSeq keeps two enqueues in one clock tick (macOS time has µs
+// resolution) from sharing a request id.
+var remoteQueueSeq atomic.Uint64
+
 type RemoteFollowUps struct {
 	service *LaunchService
 }
@@ -26,7 +31,7 @@ func NewRemoteFollowUps(service *LaunchService) *RemoteFollowUps {
 
 func (r *RemoteFollowUps) Enqueue(instance, paneID, conversationID, fingerprint, text string) error {
 	err := r.service.EnqueueFollowUp(conversation.QueueItem{
-		RequestID:      fmt.Sprintf("remote-queue-%s-%d", paneID, time.Now().UnixNano()),
+		RequestID:      fmt.Sprintf("remote-queue-%s-%d-%d", paneID, time.Now().UnixNano(), remoteQueueSeq.Add(1)),
 		ConversationID: conversation.ConversationID(conversationID),
 		AgentPaneID:    paneID,
 		Fingerprint:    fingerprint,
@@ -56,6 +61,15 @@ func (r *RemoteFollowUps) CancelItem(conversationID, requestID string) error {
 	return mapCancelError(err)
 }
 
+func (r *RemoteFollowUps) EditItem(conversationID, requestID, text string) error {
+	_, err := r.service.Queue().Edit(conversation.ConversationID(conversationID), requestID, text)
+	return mapCancelError(err)
+}
+
+func (r *RemoteFollowUps) MoveItem(conversationID, requestID string, to int) error {
+	return mapCancelError(r.service.Queue().Move(conversation.ConversationID(conversationID), requestID, to))
+}
+
 func (r *RemoteFollowUps) Cancel(conversationID string) error {
 	_, err := r.service.Queue().CancelAll(conversation.ConversationID(conversationID))
 	return mapCancelError(err)
@@ -69,8 +83,10 @@ func mapCancelError(err error) error {
 		return nil
 	case errors.Is(err, conversation.ErrNoQueueItem):
 		return remotehost.ErrFollowUpNone
-	case errors.Is(err, conversation.ErrAlreadyDelivered):
+	case errors.Is(err, conversation.ErrAlreadyDelivered), errors.Is(err, conversation.ErrQueueClaimed):
 		return remotehost.ErrFollowUpCommitted
+	case errors.Is(err, conversation.ErrQueueRange):
+		return remotehost.ErrFollowUpRange
 	default:
 		return err
 	}

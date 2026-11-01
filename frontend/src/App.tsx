@@ -94,6 +94,8 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     if (panel !== "tasks" && panel !== "queue") return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.isComposing) return;
+      // Escape inside a queued message's editor discards that edit, not the card.
+      if (event.target instanceof Element && event.target.closest(".qcEdit")) return;
       event.preventDefault();
       event.stopPropagation();
       setPanel(null);
@@ -370,6 +372,8 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // off while it records or transcribes, so voice and keys never edit the same
   // draft at once. The transcript lands in the draft only when it is done.
   const voiceBusy = recording || transcribing;
+  // Phone CSS folds the composer to one row while this holds and it is not focused.
+  const atRest = panel === null && !voiceBusy && files.length === 0 && !draft.includes("\n") && !(working && hasContent);
   const canSend = disposition === "ready" && hasContent && !sending && !state?.loading && !voiceBusy;
   const canQueue = working && canQueueFollowUp && hasContent && !sending && !voiceBusy;
   // One composer action, as in the reference chat: while the agent works
@@ -582,6 +586,11 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
 
   const cancelQueuedItem = async (id: string) => {
     const next = await chat.cancelQueuedItem(id).catch(() => state);
+    if (next) setState(next);
+  };
+
+  const editQueuedItem = async (id: string, text: string) => {
+    const next = await chat.editQueuedItem(id, text).catch(() => state);
     if (next) setState(next);
   };
 
@@ -1300,7 +1309,6 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 subagents={state?.subagents}
                 onOpenSubagent={canOpenSubagent ? subCtx.open : undefined}
                 live={working}
-                compact={Boolean(state?.interactions?.length)}
                 forced={dockForced("tasks")}
                 onToggle={(open) => setPanel(open ? "tasks" : null)}
               />
@@ -1331,7 +1339,9 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
             <QueueCard
               items={state?.queuedItems}
               canReorder={state?.features?.reorder !== false}
+              canEdit={state?.features?.edit !== false}
               onCancelItem={(id) => void cancelQueuedItem(id)}
+              onEditItem={(id, text) => void editQueuedItem(id, text)}
               onReorder={(id, index) => void reorderQueued(id, index)}
               onCancelAll={() => void cancelQueued()}
               forced={dockForced("queue")}
@@ -1384,7 +1394,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 ))}
               </div>
             ) : null}
-            <div className="cmp">
+            <div className={`cmp${atRest ? " rest" : ""}`}>
               <AttachChips files={files} previews={previews.current} onRemove={removeFile} />
               <textarea
                 ref={composerRef}

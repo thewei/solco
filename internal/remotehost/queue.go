@@ -1,14 +1,17 @@
 package remotehost
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 )
 
 /**
  * [INPUT]: Options.Queue（app 层把桌面同一条 conversation.FollowUpQueue 暴露给 Host）、chatTarget 的会话身份指纹与 ConversationID（"live:<provider>:<terminal>"，与桌面同队列）
- * [OUTPUT]: chat/send 的 `queue` 标志（agent 工作中把下一条追加到回合边界后的列表）、POST /api/v3/panes/{paneID}/chat/queue/cancel（全清）、POST /api/v3/panes/{paneID}/chat/queue/item/{requestID}/cancel（单条）、聊天帧里的 `queued{items[]}`、bootstrap capability `queue`
+ * [OUTPUT]: chat/send 的 `queue` 标志（agent 工作中把下一条追加到回合边界后的列表）、POST /api/v3/panes/{paneID}/chat/queue/cancel（全清）、POST /api/v3/panes/{paneID}/chat/queue/item/{requestID}/cancel（单条）、…/edit {text}（改写未认领条目的正文）、…/move {to}（改投递顺序，被钉住的头部不动）、聊天帧里的 `queued{items[]}`、bootstrap capability `queue` 与 `queueEdit`
  * [POS]: 手机 Chat 的跟进队列（持久、跨设备）：队列与投递 worker 仍是桌面那一套（一会话一有序列表、边界等待、身份指纹复核、不确定即墓碑、绝不自动重发）；Host 只入队/查询/取消；
  *        指纹只认 Herdr 自己的 agent_session（与桌面一致：Claude 无 hook 身份则不能排队，回 409 queue_unavailable）；提示正文永不进日志
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -38,12 +41,19 @@ type FollowUps interface {
 	CancelItem(conversationID, requestID string) error
 	// Cancel withdraws every cancellable follow-up of the conversation.
 	Cancel(conversationID string) error
+	// EditItem rewrites the text of one follow-up the delivery worker has not
+	// claimed yet (its place stays): ErrFollowUpNone / ErrFollowUpCommitted otherwise.
+	EditItem(conversationID, requestID, text string) error
+	// MoveItem puts one unclaimed follow-up at index `to` of the delivery order:
+	// ErrFollowUpNone / ErrFollowUpCommitted / ErrFollowUpRange otherwise.
+	MoveItem(conversationID, requestID string, to int) error
 }
 
 var (
 	ErrFollowUpFrozen    = errors.New("delivery uncertain — cancel the failed entry before queueing more")
 	ErrFollowUpNone      = errors.New("no queued follow-up")
 	ErrFollowUpCommitted = errors.New("the follow-up is already being delivered")
+	ErrFollowUpRange     = errors.New("the follow-up cannot move there")
 )
 
 // queuedFrame is the `queued` field of a chat frame: the conversation's
@@ -114,6 +124,57 @@ func (s *Server) handleChatQueueItemCancel(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+func (s *Server) handleChatQueueItemEdit(w http.ResponseWriter, r *http.Request, dev Device) {
+	_, paneID, target, ok := s.sendTarget(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxChatText+1<<10)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "")
+		return
+	}
+	text := strings.TrimSpace(req.Text)
+	if text == "" || len(text) > maxChatText || !utf8.ValidString(text) {
+		writeError(w, http.StatusBadRequest, "bad_request", "")
+		return
+	}
+	if s.opts.Queue == nil || target.ConversationID == "" {
+		writeError(w, http.StatusConflict, "queue_unavailable", "")
+		return
+	}
+	if !writeWithdrawn(w, s.opts.Queue.EditItem(target.ConversationID, r.PathValue("requestID"), text)) {
+		return
+	}
+	slog.Info("remote host chat follow-up edited", "device", dev.ID, "pane", paneID)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleChatQueueItemMove(w http.ResponseWriter, r *http.Request, dev Device) {
+	_, paneID, target, ok := s.sendTarget(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		To *int `json:"to"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil || req.To == nil || *req.To < 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "")
+		return
+	}
+	if s.opts.Queue == nil || target.ConversationID == "" {
+		writeError(w, http.StatusConflict, "queue_unavailable", "")
+		return
+	}
+	if !writeWithdrawn(w, s.opts.Queue.MoveItem(target.ConversationID, r.PathValue("requestID"), *req.To)) {
+		return
+	}
+	slog.Info("remote host chat follow-up moved", "device", dev.ID, "pane", paneID)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // writeWithdrawn maps a withdraw result onto the wire (nil = carried out,
 // ErrFollowUpNone → 404 no_queued, ErrFollowUpCommitted → 409
 // already_delivered, anything else 502 queue_failed) and reports whether the
@@ -126,6 +187,8 @@ func writeWithdrawn(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusNotFound, "no_queued", "")
 	case errors.Is(err, ErrFollowUpCommitted):
 		writeError(w, http.StatusConflict, "already_delivered", "")
+	case errors.Is(err, ErrFollowUpRange):
+		writeError(w, http.StatusConflict, "cannot_move", "")
 	default:
 		writeError(w, http.StatusBadGateway, "queue_failed", truncate(err.Error(), 200))
 	}

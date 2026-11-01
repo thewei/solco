@@ -30,7 +30,7 @@ const (
 
 /**
  * [INPUT]: 依赖 Shell 的 0.6 Chat 状态（chatTurns/chatDisposition/chatOutcome/chatQueuedItems 现读跟进队列）、launch 发送路径、mygo Bind 事件
- * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/CancelQueuedItem/ReorderQueued/ReviewChanges）与 chat:updated 事件、Shell.publishChatBridge、sendChatText 共享发送路径
+ * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/CancelQueuedItem/ReorderQueued/EditQueuedItem/ReviewChanges）与 chat:updated 事件、Shell.publishChatBridge、sendChatText 共享发送路径
  * [POS]: WebView Chat 的唯一表现层桥：投影与动作编组到窗口 UI 通道，会话运行时/Herdr 方法零改动；页面只能通过此桥读取聊天投影
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -47,6 +47,8 @@ type ChatFeatures struct {
 	// Reorder: the queued follow-ups can be reordered and individually
 	// cancelled (chat.ReorderQueued / chat.CancelQueuedItem).
 	Reorder bool `json:"reorder"`
+	// Edit: a queued follow-up's text can be rewritten in place (chat.EditQueuedItem).
+	Edit bool `json:"edit"`
 	// SubagentDrawer: a sub-agent's own transcript can be opened (chat.OpenSubagent).
 	SubagentDrawer bool `json:"subagentDrawer"`
 }
@@ -304,6 +306,18 @@ func (b *ChatBridge) ReorderQueued(ctx context.Context, requestID string, to int
 		state = b.shell.chatBridgeState()
 	})
 	return state, err
+}
+
+// EditQueuedItem rewrites the text of one follow-up the worker has not
+// claimed yet (its place in the order stays) and returns the projection; a
+// claim race surfaces in the projection's Outcome instead of failing the call.
+func (b *ChatBridge) EditQueuedItem(ctx context.Context, requestID, text string) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		b.shell.editChatQueuedItem(requestID, text)
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
 }
 
 // Stop interrupts the agent's current turn with one Escape (the product
@@ -705,7 +719,7 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		VoiceSource:    voiceSourceName(s.settings.Voice),
 		SerifProse:     s.settings.General.ChatSerif,
 		Outline:        s.settings.General.ChatOutline,
-		Features:       ChatFeatures{Voice: true, Attach: true, Queue: true, Reorder: true, SubagentDrawer: true},
+		Features:       ChatFeatures{Voice: true, Attach: true, Queue: true, Reorder: true, Edit: true, SubagentDrawer: true},
 	}
 	state.EchoPending = s.chatPendingEcho != nil
 	for _, item := range s.chatQueuedItems() {

@@ -404,6 +404,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/send", s.guard(ScopeTerminalInput, s.handleChatSend))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/queue/cancel", s.guard(ScopeTerminalInput, s.handleChatQueueCancel))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/queue/item/{requestID}/cancel", s.guard(ScopeTerminalInput, s.handleChatQueueItemCancel))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/queue/item/{requestID}/edit", s.guard(ScopeTerminalInput, s.handleChatQueueItemEdit))
+	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/queue/item/{requestID}/move", s.guard(ScopeTerminalInput, s.handleChatQueueItemMove))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/attachments", s.guard(ScopeTerminalInput, s.handleChatAttach))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/stop", s.guard(ScopeTerminalInput, s.handleChatStop))
 	mux.Handle("POST "+apiPrefix+"/panes/{paneID}/chat/answer", s.guard(ScopeTerminalInput, s.handleChatAnswer))
@@ -587,6 +589,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	}
 	if s.opts.Queue != nil {
 		capabilities["queue"] = true
+		capabilities["queueEdit"] = true
 	}
 	if s.p2pConfig().Enabled {
 		capabilities["p2p"] = true

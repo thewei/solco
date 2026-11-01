@@ -16,6 +16,12 @@ const PINNED_STATE: Record<string, boolean> = {
   "waiting-for-turn-boundary": true,
   delivering: true,
 };
+/** States whose text can still be rewritten (the worker has not claimed them). */
+const EDITABLE_STATE: Record<string, boolean> = {
+  queued: true,
+  "waiting-for-turn-boundary": true,
+  "failed-recoverable": true,
+};
 /** States whose drag handle shows (and which ⌥-arrows can move). */
 const MOVABLE_STATE: Record<string, boolean> = {
   queued: true,
@@ -38,7 +44,9 @@ function reSlotted(items: ChatQueuedItem[], from: number, to: number): ChatQueue
 export function QueueCard({
   items,
   canReorder,
+  canEdit,
   onCancelItem,
+  onEditItem,
   onReorder,
   onCancelAll,
   forced,
@@ -47,7 +55,10 @@ export function QueueCard({
   items?: ChatQueuedItem[];
   /** Host offers chat.ReorderQueued (desktop): handles and ⌥-arrows; the phone hides both. */
   canReorder: boolean;
+  /** Host offers chat.EditQueuedItem: a pencil per row opens an in-place editor. */
+  canEdit: boolean;
   onCancelItem: (id: string) => void;
+  onEditItem: (id: string, text: string) => void;
   onReorder: (id: string, index: number) => void;
   onCancelAll: () => void;
   /** The composer's one-open-surface rule: true = this card was opened, false = another surface took the room. */
@@ -70,8 +81,18 @@ export function QueueCard({
   const [drag, setDrag] = useState<{ id: string; to: number } | null>(null);
   const session = useRef<{ id: string; from: number; startY: number; rowH: number; to: number } | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
+  // The row being rewritten; it ends when its item leaves the list (delivered, cancelled).
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const editingItem = editing ? list.find((item) => item.id === editing.id) : undefined;
 
   if (list.length === 0) return null;
+
+  const saveEdit = () => {
+    if (!editing || !editingItem) return;
+    const text = editing.text.trim();
+    setEditing(null);
+    if (text !== "" && text !== editingItem.text) onEditItem(editing.id, text);
+  };
 
   // The pinned prefix: leading waiting/delivering rows nothing may jump ahead of.
   const firstLoose = list.findIndex((item) => !PINNED_STATE[item.state]);
@@ -156,11 +177,49 @@ export function QueueCard({
                     onPointerUp={movable ? () => endDrag(true) : undefined}
                     onPointerCancel={movable ? () => endDrag(false) : undefined}
                   />
-                  <span className="qcText" title={item.detail || item.text}>
-                    {item.text}
-                  </span>
-                  {index === nextIndex ? <span className="qcNext">next</span> : null}
-                  {item.state !== "delivering" ? (
+                  {editingItem?.id === item.id && editing ? (
+                    <>
+                      <textarea
+                        className="qcEdit"
+                        autoFocus
+                        rows={Math.min(4, editing.text.split("\n").length)}
+                        value={editing.text}
+                        aria-label="Edit queued message"
+                        onChange={(event) => setEditing({ id: item.id, text: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.nativeEvent.isComposing) return;
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setEditing(null);
+                          } else if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            saveEdit();
+                          }
+                        }}
+                      />
+                      <button type="button" className="qcX qcOk" aria-label="Save" disabled={editing.text.trim() === ""} onClick={saveEdit}>
+                        <Icon name="check" size={12} />
+                      </button>
+                      <button type="button" className="qcX" aria-label="Discard edit" onClick={() => setEditing(null)}>
+                        <Icon name="x" size={12} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="qcText" title={item.detail || item.text}>
+                        {item.text}
+                      </span>
+                      {index === nextIndex ? <span className="qcNext">next</span> : null}
+                      {canEdit && item.id !== "" && EDITABLE_STATE[item.state] ? (
+                        <button type="button" className="qcX qcPen" aria-label="Edit queued message" onClick={() => setEditing({ id: item.id, text: item.text })}>
+                          <Icon name="pencil" size={12} />
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                  {editingItem?.id === item.id ? null : item.state !== "delivering" ? (
                     <button type="button" className="qcX" aria-label="Cancel queued message" onClick={() => onCancelItem(item.id)}>
                       <Icon name="x" size={12} />
                     </button>

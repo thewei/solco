@@ -66,3 +66,39 @@ func TestRemoteFollowUpsRefuseBehindAnUncertainDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRemoteFollowUpsEditAndMoveMapOntoTheHostErrors(t *testing.T) {
+	q := NewRemoteFollowUps(NewLaunchService(nil))
+	const id = "live:omp:term_a"
+	for _, text := range []string{"a", "b", "c"} {
+		if err := q.Enqueue("default", "w1:p1", id, "fp", text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, _ := q.Items(id)
+	if err := q.EditItem(id, items[1].ID, "b, edited"); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.MoveItem(id, items[2].ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := q.Items(id)
+	if got[0].Text != "c" || got[1].Text != "a" || got[2].Text != "b, edited" {
+		t.Fatalf("after edit+move = %+v", got)
+	}
+	if err := q.MoveItem(id, items[0].ID, 9); !errors.Is(err, remotehost.ErrFollowUpRange) {
+		t.Fatalf("move out of range = %v", err)
+	}
+	if err := q.EditItem(id, "remote-queue-none", "x"); !errors.Is(err, remotehost.ErrFollowUpNone) {
+		t.Fatalf("edit of nothing = %v", err)
+	}
+	if _, err := q.service.Queue().ClaimDelivery(conversation.ConversationID(id), got[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.EditItem(id, got[0].ID, "late"); !errors.Is(err, remotehost.ErrFollowUpCommitted) {
+		t.Fatalf("edit of a claimed item = %v", err)
+	}
+	if err := q.MoveItem(id, got[0].ID, 1); !errors.Is(err, remotehost.ErrFollowUpCommitted) {
+		t.Fatalf("move of a claimed item = %v", err)
+	}
+}

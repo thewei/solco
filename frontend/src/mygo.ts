@@ -323,6 +323,8 @@ export interface ChatFeatures {
    * cancelled (chat.ReorderQueued / chat.CancelQueuedItem).
    */
   reorder: boolean;
+  /** Edit: a queued follow-up's text can be rewritten in place (chat.EditQueuedItem). */
+  edit: boolean;
   /** SubagentDrawer: a sub-agent's own transcript can be opened (chat.OpenSubagent). */
   subagentDrawer: boolean;
 }
@@ -813,6 +815,14 @@ export const chat = {
    */
   contextUsage(): Promise<ChatContextUsage> {
     return call("chat.ContextUsage");
+  },
+  /**
+   * EditQueuedItem rewrites the text of one follow-up the worker has not
+   * claimed yet (its place in the order stays) and returns the projection; a
+   * claim race surfaces in the projection's Outcome instead of failing the call.
+   */
+  editQueuedItem(requestID: string, text: string): Promise<ChatBridgeState> {
+    return call("chat.EditQueuedItem", requestID, text);
   },
   /**
    * InterruptAndSend is the explicit "cut in" path (the moshi barge-in analog):
