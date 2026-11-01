@@ -2,7 +2,6 @@ package nativeui
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
@@ -156,10 +155,10 @@ func (s *Shell) quickPanelEntryRow(c *ui.Context, entry StatusCenterEntry, dupPr
 				s.fitQuickPanel()
 			}
 		})
-		// Sub-agents hang under the agent that spawned them while any runs
-		// (the sidebar's rows; a click opens the sub-agent's own drawer in
-		// Chat, then closes the panel).
-		if subs := openSubagents(card, time.Now()); len(subs) > 0 {
+		// Sub-agents hang under the agent that spawned them, running or
+		// done (the sidebar's rows; the chevron folds them, a click opens
+		// the sub-agent's own drawer in Chat, then closes the panel).
+		if subs := s.nestedSubagents(card); len(subs) > 0 {
 			for i, sub := range subs {
 				if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
 					s.hideQuickPanel()
@@ -242,10 +241,10 @@ func (s *Shell) openAgentTerminal(card agent.AgentCardModel) {
 
 // quickPanelSubagentRows counts the nested sub-agent rows the entries show
 // (the height budget of the rows quickPanelEntryRow hangs under them).
-func quickPanelSubagentRows(entries []StatusCenterEntry, now time.Time) int {
+func (s *Shell) quickPanelSubagentRows(entries []StatusCenterEntry) int {
 	rows := 0
 	for _, entry := range entries {
-		rows += len(openSubagents(entry.Card, now))
+		rows += len(s.nestedSubagents(entry.Card))
 	}
 	return rows
 }

@@ -614,15 +614,40 @@ func (s *Shell) agentItems(c *ui.Context) {
 				break
 			}
 		}
+		foldKey := agentFoldKey("group", group.Key)
+		groupFolded := group.Name != "" && s.foldedAgents[foldKey]
 		if group.Name != "" {
-			ui.Row(c.Key("agent-group:"+group.Key)).FillWidth().Padding(7, agentCardPadX, 2).Gap(8).AlignItems(ui.Center).Children(func() {
+			// The label is the group's fold handle (2026-11-01). Folded, the
+			// right end swaps the git facts for the count and the state of
+			// the group's most urgent card (the cards arrive actionable-first),
+			// so a fold never hides an Agent that needs you.
+			t := c.Theme()
+			ui.Box(c.Key("agent-group-gap:" + group.Key)).Height(5).Shrink(0)
+			head := ui.ButtonBase(c.Key("agent-group:"+group.Key)).FillWidth().Height(24).Radius(treeRowRadius).
+				Padding(0, agentCardPadX, 0, 2).Gap(4).AlignItems(ui.Center).FocusRing(false).Label("Toggle " + group.Name)
+			if head.Hovered() {
+				head.Background(t.SurfaceHover)
+			}
+			head.Transition(rowFade)
+			head.Children(func() {
+				treeChevron(c, true, !groupFolded, t.TextMuted)
 				ui.Text(c, group.Name).FontSize(Typography().Micro).
-					TextColor(c.Theme().TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-				if groupRoot != "" {
+					TextColor(t.TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).PassThrough()
+				switch {
+				case groupFolded:
+					ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+					statusIndicator(c, agentIndicatorState(group.Cards[0]))
+				case groupRoot != "":
 					branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
 					gitFactsView(c, branch, adds, dels, files, ok)
 				}
 			})
+			if head.Clicked() {
+				s.toggleAgentFold(foldKey)
+			}
+		}
+		if groupFolded {
+			continue
 		}
 		for _, card := range group.Cards {
 			card := card
@@ -644,11 +669,11 @@ func (s *Shell) agentItems(c *ui.Context) {
 					s.paneOverflowItems(m, card.PaneID, label)
 				}
 			})
-			// Sub-agents hang under the agent that spawned them while any
-			// is running; once all are done they fold into the card's ⤷N.
-			// A row click opens the sub-agent's own drawer in Chat, like
-			// the page's cards do (2026-10-31 sub-agent views).
-			if subs := openSubagents(card, time.Now()); len(subs) > 0 {
+			// Sub-agents hang under the agent that spawned them, running or
+			// done; the card's chevron folds them. A row click opens the
+			// sub-agent's own drawer in Chat, like the page's cards do
+			// (2026-10-31 sub-agent views).
+			if subs := s.nestedSubagents(card); len(subs) > 0 {
 				for i, sub := range subs {
 					if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
 						s.openSubagentDrawer(card, sub)

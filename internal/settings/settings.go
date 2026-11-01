@@ -249,6 +249,7 @@ type SessionSettings struct {
 	ExpandedTabs     []string `json:"expanded_tabs,omitempty"`
 	TasksClosed      bool     `json:"tasks_closed,omitempty"`  // sidebar Projects fold, inverted: old sessions stay open
 	FoldedBoards     []string `json:"folded_boards,omitempty"` // Projects rows the user folded; the rest stay open
+	FoldedAgents     []string `json:"folded_agents,omitempty"` // sidebar Agents groups ("group:<workspace>") and parents' sub-agent lists ("sub:<terminal>") the user folded
 	// SidebarWidth is the dragged left-sidebar width (0 = the default).
 	SidebarWidth int `json:"sidebar_width,omitempty"`
 	// Right panel cosmetics (Changes/Files/Services).

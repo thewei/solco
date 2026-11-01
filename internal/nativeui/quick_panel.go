@@ -422,7 +422,7 @@ func (s *Shell) quickPanelContentHeight() int {
 	}
 	height := QuickPanelHeightFor(len(entries), len(quickPanelGroups(entries)), captions)
 	if len(entries) > 0 {
-		height += quickPanelSubagentRows(entries, time.Now()) * quickPanelSubagentHeight
+		height += s.quickPanelSubagentRows(entries) * quickPanelSubagentHeight
 	}
 	if s.offline {
 		height += quickPanelOfflineHeight

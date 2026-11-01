@@ -135,49 +135,109 @@ func TestGroupAgentCardsKeepsUrgentWorkspaceFirst(t *testing.T) {
 	}
 }
 
-// TestSidebarNestsSubagentsUnderTheirParent pins the 2026-10-30 tree: while
-// a sub-agent still writes, the parent's card carries nested rows (kind and
-// task); once all are done the rows fold into a ⤷N chip on the parent.
+// subagentSidebarShell is a sidebar with one Claude Code card that has the
+// given sub-agents.
+func subagentSidebarShell(subs []history.Subagent) *Shell {
+	s := NewShell()
+	s.loading = false
+	s.workbench.markers = agent.NewMarkerStore()
+	s.workbench.directory = agent.NewAgentDirectory()
+	s.projection.Agents = []herdr.Agent{{PaneID: "p1"}}
+	s.workbench.directory.Replace([]agent.AgentCardModel{{
+		Key: agent.AgentKey{TerminalID: "term-1"}, Provider: history.AgentClaudeCode,
+		Title: "pricing page", ProjectID: "w1", ProjectName: "website", PaneID: "p1", Subagents: subs,
+	}})
+	return s
+}
+
+// TestSidebarNestsSubagentsUnderTheirParent pins the tree: the parent's card
+// carries nested rows (kind and task) whether the sub-agents still write or
+// are done (2026-11-01: finished ones used to collapse into a ⤷N chip), and
+// the parent's chevron folds and unfolds them.
 func TestSidebarNestsSubagentsUnderTheirParent(t *testing.T) {
-	render := func(subs []history.Subagent) []string {
-		s := NewShell()
-		s.loading = false
-		s.workbench.markers = agent.NewMarkerStore()
-		s.workbench.directory = agent.NewAgentDirectory()
-		s.projection.Agents = []herdr.Agent{{PaneID: "p1"}}
-		s.workbench.directory.Replace([]agent.AgentCardModel{{
-			Key: agent.AgentKey{TerminalID: "term-1"}, Provider: history.AgentClaudeCode,
-			Title: "pricing page", ProjectID: "w1", ProjectName: "website", PaneID: "p1", Subagents: subs,
-		}})
-		tester := ui.NewTester(s.View, 1200, 800)
-		return tester.Texts()
-	}
-	has := func(texts []string, want string) bool {
-		for _, text := range texts {
-			if text == want {
-				return true
-			}
-		}
-		return false
-	}
 	now := time.Now()
-	running := []history.Subagent{
-		{ID: "a", Type: "Explore", Description: "scan pricing section", UpdatedAt: now.Add(-2 * time.Second)},
-		{ID: "b", Type: "general-purpose", Description: "review copy", UpdatedAt: now.Add(-5 * time.Minute)},
+	for name, age := range map[string]time.Duration{"running": 2 * time.Second, "finished": 5 * time.Minute} {
+		subs := []history.Subagent{
+			{ID: "a", Type: "Explore", Description: "scan pricing section", UpdatedAt: now.Add(-age)},
+			{ID: "b", Type: "general-purpose", Description: "review copy", UpdatedAt: now.Add(-age)},
+		}
+		tester := ui.NewTester(subagentSidebarShell(subs).View, 1200, 800)
+		if !tester.HasText("Explore") || !tester.HasText("scan pricing section") || !tester.HasText("general-purpose") {
+			t.Fatalf("%s sub-agents are not nested; texts=%q", name, tester.Texts())
+		}
+		if tester.HasText("⤷2") {
+			t.Fatalf("%s: the sidebar nests rows, it has no chip; texts=%q", name, tester.Texts())
+		}
 	}
-	texts := render(running)
-	if !has(texts, "Explore") || !has(texts, "scan pricing section") || !has(texts, "general-purpose") {
-		t.Fatalf("running sub-agents are not nested; texts=%q", texts)
+}
+
+// TestSidebarSubagentFoldToggles: the chevron on the parent hides and shows
+// its nested rows without opening the Agent, and the fold persists.
+func TestSidebarSubagentFoldToggles(t *testing.T) {
+	s := subagentSidebarShell([]history.Subagent{
+		{ID: "a", Type: "Explore", Description: "scan pricing section", UpdatedAt: time.Now().Add(-5 * time.Minute)},
+	})
+	tester := ui.NewTester(s.View, 1200, 800)
+	if err := tester.Click("Toggle sub-agents of pricing page"); err != nil {
+		t.Fatal(err)
 	}
-	if has(texts, "⤷2") {
-		t.Fatalf("a running parent must show rows, not the chip; texts=%q", texts)
+	tester.Frame()
+	if tester.HasText("Explore") || !s.foldedAgents["sub:term-1"] {
+		t.Fatalf("folding must hide the rows; folded=%v texts=%q", s.foldedAgents, tester.Texts())
 	}
-	for i := range running {
-		running[i].UpdatedAt = now.Add(-5 * time.Minute)
+	if s.router.Path() != routeWorkspace || s.selectedPaneID == "p1" {
+		t.Fatalf("the chevron must not open the Agent: path=%q pane=%q", s.router.Path(), s.selectedPaneID)
 	}
-	texts = render(running)
-	if has(texts, "Explore") || !has(texts, "⤷2") {
-		t.Fatalf("finished sub-agents must fold into ⤷2; texts=%q", texts)
+	if got := s.captureSession().FoldedAgents; len(got) != 1 || got[0] != "sub:term-1" {
+		t.Fatalf("fold not captured for persistence: %v", got)
+	}
+	if err := tester.Click("Toggle sub-agents of pricing page"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if !tester.HasText("Explore") || s.foldedAgents["sub:term-1"] {
+		t.Fatalf("unfolding must show the rows again; folded=%v", s.foldedAgents)
+	}
+}
+
+// The Header popover nests finished sub-agents too, and its height budget
+// follows the same fold.
+func TestQuickPanelSubagentRowsFollowTheFold(t *testing.T) {
+	s := subagentSidebarShell([]history.Subagent{
+		{ID: "a", Type: "Explore", UpdatedAt: time.Now().Add(-5 * time.Minute)},
+		{ID: "b", Type: "Plan", UpdatedAt: time.Now().Add(-5 * time.Minute)},
+	})
+	entries := []StatusCenterEntry{{Card: s.workbenchCards()[0]}}
+	if got := s.quickPanelSubagentRows(entries); got != 2 {
+		t.Fatalf("finished sub-agents must count as rows; got %d", got)
+	}
+	s.toggleAgentFold(subagentFoldKey(entries[0].Card))
+	if got := s.quickPanelSubagentRows(entries); got != 0 {
+		t.Fatalf("a folded parent has no rows; got %d", got)
+	}
+}
+
+// TestSidebarAgentGroupFolds: the Workspace label folds its cards; folded, it
+// still tells the count and keeps the group's state visible.
+func TestSidebarAgentGroupFolds(t *testing.T) {
+	s := subagentSidebarShell(nil)
+	tester := ui.NewTester(s.View, 1200, 800)
+	if !tester.HasText("pricing page") {
+		t.Fatalf("card missing before the fold; texts=%q", tester.Texts())
+	}
+	if err := tester.Click("Toggle website"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if tester.HasText("pricing page") || !s.foldedAgents["group:w1"] || !tester.HasText("website") || !tester.HasText("1") {
+		t.Fatalf("folded group must hide its cards and keep label+count; folded=%v texts=%q", s.foldedAgents, tester.Texts())
+	}
+	if err := tester.Click("Toggle website"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if !tester.HasText("pricing page") {
+		t.Fatalf("unfolding must bring the cards back; texts=%q", tester.Texts())
 	}
 }
 

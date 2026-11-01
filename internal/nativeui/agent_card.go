@@ -109,15 +109,10 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 			if card.Unread {
 				ui.Box(c).Size(6, 6).Radius(3).Background(tokens.StatusColor(ToneAttention, t.Dark)).Shrink(0)
 			}
-			if n := len(card.Subagents); n > 0 {
-				if open := openSubagents(card, time.Now()); len(open) == 0 {
-					tipped(c, ui.Text(c, "⤷"+itoa(n)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0),
-						pluralUnits(n, "sub-agent")+" ran")
-				} else {
-					running := runningSubagents(card, time.Now())
-					tipped(c, ui.Text(c, "⤷"+itoa(running)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0),
-						pluralUnits(running, "sub-agent")+" running")
-				}
+			if len(card.Subagents) > 0 {
+				// The disclosure of the rows nested under the card (the
+				// sidebar and the Header popover draw them alike).
+				s.subagentToggle(c, card)
 			}
 			// The row ends with when the Agent last worked and its state
 			// slot (2026-10-30): spinner, dot and ring are one indicator
@@ -232,18 +227,37 @@ func runningSubagents(card agent.AgentCardModel, now time.Time) int {
 // subagentRowsShown caps the nested rows under one agent.
 const subagentRowsShown = 6
 
-// openSubagents are the sub-agent rows a card shows nested under it: the most
-// recent ones, but only while at least one is still running (an all-done
-// card folds them into its ⤷N chip instead).
-func openSubagents(card agent.AgentCardModel, now time.Time) []history.Subagent {
-	running := false
-	for _, sub := range card.Subagents {
-		if sub.Active(now) {
-			running = true
-			break
-		}
+// agentFoldKey names a sidebar fold in s.foldedAgents: kind is "group" (a
+// Workspace's Agents, id = project id) or "sub" (a parent's sub-agent rows,
+// id = its terminal id, the pane id before one is known).
+func agentFoldKey(kind, id string) string { return kind + ":" + id }
+
+func subagentFoldKey(card agent.AgentCardModel) string {
+	id := card.Key.TerminalID
+	if id == "" {
+		id = card.PaneID
 	}
-	if !running {
+	return agentFoldKey("sub", id)
+}
+
+// toggleAgentFold flips one sidebar Agents fold; open is the default.
+func (s *Shell) toggleAgentFold(key string) {
+	if s.foldedAgents == nil {
+		s.foldedAgents = map[string]bool{}
+	}
+	if s.foldedAgents[key] {
+		delete(s.foldedAgents, key)
+	} else {
+		s.foldedAgents[key] = true
+	}
+}
+
+// nestedSubagents are the rows nested under a card (sidebar and Header
+// popover): the newest few, running or not (2026-11-01 — they used to appear
+// only while one was still writing, then fold into a ⤷N chip), unless the
+// user folded this parent.
+func (s *Shell) nestedSubagents(card agent.AgentCardModel) []history.Subagent {
+	if s.foldedAgents[subagentFoldKey(card)] {
 		return nil
 	}
 	subs := card.Subagents
@@ -251,6 +265,42 @@ func openSubagents(card agent.AgentCardModel, now time.Time) []history.Subagent 
 		subs = subs[len(subs)-subagentRowsShown:]
 	}
 	return subs
+}
+
+// subagentToggle is the parent card's disclosure for its sub-agent rows: a
+// chevron and the count, ending on the running tally in the tooltip. It sits
+// inside the card's row, so a click folds without opening the Agent.
+func (s *Shell) subagentToggle(c *ui.Context, card agent.AgentCardModel) {
+	t := c.Theme()
+	key := subagentFoldKey(card)
+	folded := s.foldedAgents[key]
+	n, running := len(card.Subagents), runningSubagents(card, time.Now())
+	tip := pluralUnits(n, "sub-agent")
+	if running > 0 {
+		tip += ", " + itoa(running) + " running"
+	}
+	if folded {
+		tip += " — click to show"
+	} else {
+		tip += " — click to fold"
+	}
+	var btn ui.Element
+	ui.Box(c.Key("subfold:" + key)).Shrink(0).Children(func() {
+		btn = tipped(c, ui.ButtonBase(c).Height(20).Padding(0, 4, 0, 0).Radius(treeRowRadius).Gap(0).AlignItems(ui.Center).
+			Label("Toggle sub-agents of "+card.Title), tip)
+		if btn.Hovered() {
+			btn.Background(t.SurfaceHover)
+		}
+		btn.Transition(rowFade)
+		btn.Children(func() {
+			treeChevron(c, true, !folded, t.TextMuted)
+			ui.Text(c, itoa(n)).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+		})
+	})
+	if btn.Clicked() {
+		s.toggleAgentFold(key)
+		s.fitQuickPanel() // the Header popover's height follows its rows
+	}
 }
 
 // subagentRow is one nested sub-agent: a guide line from its parent, the

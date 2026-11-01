@@ -71,6 +71,10 @@ type Shell struct {
 	pinsOpen             bool
 	tasksOpen            bool
 	foldedBoards         map[string]bool
+	// foldedAgents holds the sidebar Agents folds the user made: a Workspace
+	// group ("group:<project id>") and a parent's sub-agent rows
+	// ("sub:<terminal id>"). Absent = open; persisted with the session.
+	foldedAgents map[string]bool
 
 	// devices is the device switcher's local state (see device_state.go):
 	// panel/filter, per-machine failure/master/checking facts, the switch in
@@ -668,6 +672,7 @@ func NewShell(opts ...ShellOption) *Shell {
 		pinsOpen:         true,
 		tasksOpen:        true,
 		foldedBoards:     make(map[string]bool),
+		foldedAgents:     make(map[string]bool),
 		expandedProjects: make(map[string]bool),
 		expandedTabs:     make(map[string]bool),
 		loading:          true,
