@@ -172,3 +172,33 @@ func TestUsageAttentionListsWhatWillBite(t *testing.T) {
 		t.Errorf("a healthy provider is listed:\n%s", text)
 	}
 }
+
+// TestQuickPanelTabContentFadesIn: switching tabs fades the new tab's body in
+// instead of snapping it.
+func TestQuickPanelTabContentFadesIn(t *testing.T) {
+	codex := &fakeUsageFetcher{id: usage.Codex, snap: codexSnapshot()}
+	s, _ := usageTestShell(t, codex)
+	s.setUsageEnabled(usage.Codex, true)
+	tester := ui.NewTester(s.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
+	settleFrames(tester, 2)
+	tester.Advance(2 * motionRow)
+	tester.Frame()
+	if err := tester.Click("Quota tab"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	early := append([]byte(nil), tester.Image().Pix...)
+	tester.Advance(2 * motionRow)
+	tester.Frame()
+	settled := tester.Image().Pix
+	changed := 0
+	body := 4 * QuickPanelWidth * 160 // skip the header: its tab colours ease too
+	for i := body; i+3 < len(early); i += 4 {
+		if early[i] != settled[i] || early[i+1] != settled[i+1] || early[i+2] != settled[i+2] {
+			changed++
+		}
+	}
+	if changed < 200 {
+		t.Fatalf("the Quota body was already fully drawn on its first frame (%d px changed)", changed)
+	}
+}

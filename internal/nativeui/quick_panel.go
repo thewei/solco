@@ -2,6 +2,7 @@ package nativeui
 
 import (
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -138,7 +139,6 @@ func QuickPanelHeightFor(rows, groups, captions int) int {
 // does not take it.
 func (s *Shell) QuickPanelView(c *ui.Context) {
 	t := c.Theme()
-	sp := Spacing()
 	tokens := designTokens(t.Dark)
 	c.Root().Background(ui.Transparent)
 	body := ui.Column(c).Fill()
@@ -150,45 +150,57 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 	}
 	body.Children(func() {
 		s.quickPanelChrome(c)
-		switch s.quickPanelTabIndex() {
-		case quickPanelServicesTab:
-			s.quickPanelServices(c)
-			return
-		case quickPanelTasksTab:
-			s.quickPanelTasks(c)
-			return
-		case quickPanelQuotaTab:
-			s.quickPanelQuota(c)
-			return
-		}
-		if s.offline {
-			ui.Row(c).FillWidth().Padding(sp.S, sp.M, 0).Gap(sp.S).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Herdr disconnected").FontSize(Typography().Caption).Grow(1).TextColor(t.TextMuted)
-				if regularButton(c, "Reconnect").Clicked() {
-					s.reloadInstances(false)
+		// One keyed body per tab: a tab switch builds a new one, which fades
+		// in (rowEnter) instead of the content snapping.
+		tab := s.quickPanelTabIndex()
+		ui.Column(c.Key("qp-tab:" + strconv.Itoa(tab))).FillWidth().Grow(1).MinHeight(0).Transition(rowEnter).Children(func() {
+			s.quickPanelTabBody(c, tab)
+		})
+	})
+}
+
+// quickPanelTabBody draws the chosen tab under the chrome.
+func (s *Shell) quickPanelTabBody(c *ui.Context, tab int) {
+	t := c.Theme()
+	sp := Spacing()
+	switch tab {
+	case quickPanelServicesTab:
+		s.quickPanelServices(c)
+		return
+	case quickPanelTasksTab:
+		s.quickPanelTasks(c)
+		return
+	case quickPanelQuotaTab:
+		s.quickPanelQuota(c)
+		return
+	}
+	if s.offline {
+		ui.Row(c).FillWidth().Padding(sp.S, sp.M, 0).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Herdr disconnected").FontSize(Typography().Caption).Grow(1).TextColor(t.TextMuted)
+			if regularButton(c, "Reconnect").Clicked() {
+				s.reloadInstances(false)
+			}
+		})
+	}
+	entries := s.filterStatusEntries(s.BuildStatusCenterSnapshot())
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).FillWidth().Padding(0, sp.S, sp.M).Children(func() {
+			if len(entries) == 0 {
+				emptyState(c, "No active agents", "")
+				return
+			}
+			cards := make([]agent.AgentCardModel, len(entries))
+			for i, entry := range entries {
+				cards[i] = entry.Card
+			}
+			dupProjects := duplicateAgentProjectLabels(cards)
+			for _, group := range quickPanelGroups(entries) {
+				tone := group.Tone
+				quickPanelGroupHeader(c, group.Label, len(group.Entries), &tone)
+				for _, entry := range group.Entries {
+					s.quickPanelEntryRow(c, entry, dupProjects)
 				}
-			})
-		}
-		entries := s.filterStatusEntries(s.BuildStatusCenterSnapshot())
-		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Padding(0, sp.S, sp.M).Children(func() {
-				if len(entries) == 0 {
-					emptyState(c, "No active agents", "")
-					return
-				}
-				cards := make([]agent.AgentCardModel, len(entries))
-				for i, entry := range entries {
-					cards[i] = entry.Card
-				}
-				dupProjects := duplicateAgentProjectLabels(cards)
-				for _, group := range quickPanelGroups(entries) {
-					tone := group.Tone
-					quickPanelGroupHeader(c, group.Label, len(group.Entries), &tone)
-					for _, entry := range group.Entries {
-						s.quickPanelEntryRow(c, entry, dupProjects)
-					}
-				}
-			})
+			}
 		})
 	})
 }
