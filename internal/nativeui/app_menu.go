@@ -8,14 +8,15 @@ package nativeui
 import "github.com/egoist/mygo"
 
 // MenuBar builds the macOS menu bar. checkForUpdates is the updater plugin's
-// item — a plugin main.go owns — and sits after About, where macOS apps put it.
+// item — a plugin main.go owns — and leads the application menu; About Solco
+// closes it, after Quit (2026-11-01, the user's call).
 //
-// The application menu opens the About page (Settings → About: mark, version,
-// release notes, GitHub doors), then carries Settings…, Hide, Quit; Go
-// carries the app's own destinations in the order of the sidebar's view
-// tabs, and accelerators only on idempotent destinations (Router.Push
-// dedupes; the Terminal view keeps the Terminal), never on a toggle, so a
-// menu accelerator and an in-app shortcut that fire together stay harmless.
+// The application menu is Check for Updates…, Settings… (⌘,), Hide/Hide
+// Others/Show All, Quit, About Solco; Go carries the app's own destinations
+// in the order of the sidebar's view tabs, and accelerators only on
+// idempotent destinations (Router.Push dedupes; the Terminal view keeps the
+// Terminal), never on a toggle, so a menu accelerator and an in-app
+// shortcut that fire together stay harmless.
 func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 	nav := func(label, accelerator, path string) *mygo.MenuItem {
 		return &mygo.MenuItem{Label: label, Accelerator: accelerator, Click: func(*mygo.MenuItem, *mygo.Window) {
@@ -26,7 +27,7 @@ func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 		return &mygo.MenuItem{Label: label, Accelerator: accelerator, Click: func(*mygo.MenuItem, *mygo.Window) { fn() }}
 	}
 
-	appMenu := []*mygo.MenuItem{nav("About Solco", "", "/settings/about")}
+	appMenu := []*mygo.MenuItem{}
 	if checkForUpdates != nil {
 		appMenu = append(appMenu, checkForUpdates)
 	}
@@ -39,6 +40,8 @@ func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 		&mygo.MenuItem{Role: mygo.RoleUnhide},
 		mygo.Separator(),
 		&mygo.MenuItem{Role: mygo.RoleQuit},
+		mygo.Separator(),
+		nav("About Solco", "", "/settings/about"),
 	)
 
 	return mygo.NewMenu([]*mygo.MenuItem{

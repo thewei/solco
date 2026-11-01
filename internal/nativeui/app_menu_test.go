@@ -49,8 +49,9 @@ func menuItemNamed(items []*mygo.MenuItem, label string) *mygo.MenuItem {
 }
 
 // TestMenuBarFollowsTheMacConventions pins the bar's shape: the application
-// menu is the stock one — Settings… (⌘,) between About and Hide, never in a
-// custom menu — and every command lives in exactly one menu.
+// menu leads with Check for Updates…, carries Settings… (⌘,) before Hide,
+// and closes with About Solco after Quit (2026-11-01, the user's
+// call) — and every command lives in exactly one menu.
 func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 	s := NewShell()
 	menu := s.MenuBar(&mygo.MenuItem{Label: "Check for Updates…"})
@@ -66,8 +67,8 @@ func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 	appMenu := menuNamed(t, menu, "Solco").Submenu
 	labels := menuLabels(appMenu)
 	// About, Hide and Quit carry the app's name: match by prefix.
-	wantApp := []string{"About ", "Check for Updates…", "-", "Settings…", "-", "Hide ", "Hide Others", "Show All", "-", "Quit "}
-	if len(labels) != len(wantApp) || labels[5] == "Hide Others" {
+	wantApp := []string{"Check for Updates…", "-", "Settings…", "-", "Hide ", "Hide Others", "Show All", "-", "Quit ", "-", "About Solco"}
+	if len(labels) != len(wantApp) {
 		t.Fatalf("application menu = %q, want the shape %q", labels, wantApp)
 	}
 	for i, want := range wantApp {
@@ -78,7 +79,7 @@ func TestMenuBarFollowsTheMacConventions(t *testing.T) {
 	if settings := menuItemNamed(appMenu, "Settings…"); settings.Accelerator != "CmdOrCtrl+," {
 		t.Fatalf("Settings… accelerator = %q, want CmdOrCtrl+,", settings.Accelerator)
 	}
-	if hide := appMenu[5]; hide.Accelerator != "Cmd+H" {
+	if hide := appMenu[4]; hide.Accelerator != "Cmd+H" {
 		t.Fatalf("%q accelerator = %q — ⌘H must hide the app", hide.Label, hide.Accelerator)
 	}
 
