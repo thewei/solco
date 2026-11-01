@@ -1018,6 +1018,42 @@ html[data-host="phone"] .composer .col:has(.cmp:focus-within) > .tasks:has(.thea
 html[data-host="phone"] .composer .col:has(.cmp:focus-within) > .queueCard:not(:has(.qcList)) {
   display: none;
 }
+/* A question owns the room: the folded Tasks tray waits behind it. */
+html[data-host="phone"] .composer .col:has(> .ask) > .tasks:has(.thead[aria-expanded="false"]) {
+  display: none;
+}
+/* No keyboard on the phone: the option numbers are noise. */
+html[data-host="phone"] .ask .opt kbd {
+  display: none;
+}
+/* One line each: the Changes card's title and the run fold's summary. */
+html[data-host="phone"] .chead .ttl {
+  flex: 1 1 0;
+  min-width: 0;
+}
+html[data-host="phone"] .chead .ttl > :not(.tt) {
+  flex: none;
+  white-space: nowrap;
+}
+html[data-host="phone"] .chead .ttl .tt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-host="phone"] .chead .ttl .o,
+html[data-host="phone"] .chead .ttl .tw {
+  display: none;
+}
+html[data-host="phone"] .runbtn {
+  max-width: 100%;
+}
+html[data-host="phone"] .runbtn > span:not([class]) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* The ring below 70% asks for nothing; it stays a desktop-only gauge. */
 html[data-host="phone"] .ctx.quiet {
   display: none;
@@ -1284,7 +1320,7 @@ html[data-host="phone"] .ctx.quiet {
 }
 
 .queueCard {
-  margin: 0 4px 8px;
+  margin: 0 0 8px;
   border: 1px solid var(--hair2);
   border-radius: 14px;
   background: var(--panel);

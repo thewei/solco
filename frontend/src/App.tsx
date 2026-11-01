@@ -40,7 +40,7 @@ import "./chat.css";
 // mygo.ts when `mygo generate` next runs on a tree that compiles; until
 // then the page subscribes through the runtime directly.
 const chatSubagentOpen = bridgeEvent<string>("chat:subagent-open");
-/** shortModel is a model id as the phone's one-row bar shows it: no provider prefix, no date or "latest" suffix. */
+/** shortModel is a model id as the composer bar shows it: no provider prefix, no date or "latest" suffix. */
 function shortModel(id: string): string {
   return id.slice(id.lastIndexOf("/") + 1).replace(/-(\d{8}|latest)$/, "");
 }
@@ -375,7 +375,6 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // A fresh session has no transcript yet, so the chip shows the model the
   // agent's own config starts it on.
   const shownModel = state?.model || catalog?.defaultModel || "";
-  const isPhone = document.documentElement.dataset.host === "phone";
   // A fresh pane (nothing sent yet) is "starting", never "working": its
   // composer holds Send until the agent is ready and shows no Stop.
   const starting = Boolean(state?.waiting) && disposition !== "ready";
@@ -1607,10 +1606,10 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                     disabled={voiceBusy}
                     onClick={() => setPanel(panel === "model" ? null : "model")}
                   >
-                    {(isPhone ? shortModel(shownModel) : shownModel) || "Model"} <span aria-hidden>▾</span>
+                    {shortModel(shownModel) || "Model"} <span aria-hidden>▾</span>
                   </button>
                 ) : recording ? null : shownModel ? (
-                  <span className="chip mono" title={shownModel}>{isPhone ? shortModel(shownModel) : shownModel}</span>
+                  <span className="chip mono" title={shownModel}>{shortModel(shownModel)}</span>
                 ) : null}
                 {working && hasContent && !canQueueFollowUp ? (
                   <button

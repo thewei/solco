@@ -510,7 +510,7 @@ function ChangesCard({
       <div className="chead">
         <span className="ttl">
           <Icon name="edit" />
-          {counted.length > 0 ? "Changes in working tree" : `Edited ${noun}`}
+          <span className="tt">{counted.length > 0 ? <>Changes<span className="tw"> in working tree</span></> : `Edited ${noun}`}</span>
           {counted.length > 0 ? <span className="o">{noun}</span> : null}
           <Delta add={add} del={del} />
         </span>

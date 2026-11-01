@@ -208,7 +208,7 @@ export function QuestionDock(props: QuestionDockProps) {
       <div className="ah">
         <Icon name={permission ? "shield" : "help"} size={15} />
         <span className="pill">{permission ? "Approval" : interaction.header || "Question"}</span>
-        <span className="await">{interaction.progress ? `Question ${interaction.progress} · Waiting for you` : "Waiting for you"}</span>
+        {interaction.progress ? <span className="await">{`Question ${interaction.progress}`}</span> : null}
       </div>
       <div className="prompt">{interaction.prompt}</div>
       {typing ? (
