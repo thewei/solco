@@ -255,20 +255,21 @@ type remoteSummary struct {
 func (s *Shell) remoteSummaryFor(srv *remotehost.Server, cfg remotehost.Config) remoteSummary {
 	switch {
 	case s.remote.err != "":
-		return remoteSummary{Title: s.remote.err, Tone: ToneError}
+		// A vanished LAN address leaves the relay tunnel up (remotehost.Server.Start): say so, a paired phone still connects.
+		sum := remoteSummary{Title: s.remote.err, Tone: ToneError}
+		if srv != nil && srv.ListenAddress() == "" {
+			if part, ok, _ := s.remoteRelayPart(srv); ok {
+				sum.Detail = part
+			}
+		}
+		return sum
 	case srv != nil && srv.ListenAddress() != "":
 		parts := []string{srv.ListenAddress()}
 		tone := ToneSuccess
-		if relay := remoteRelayFrom(s.settings.Remote); relay.Enabled {
-			switch st := srv.RelayStatus(); st.State {
-			case remotehost.RelayOnline:
-				parts = append(parts, "Relay connected")
-			case remotehost.RelayConnecting:
-				parts = append(parts, "Relay connecting…")
-			case remotehost.RelayBackoff:
-				parts, tone = append(parts, "Relay reconnecting: "+st.Message), ToneWarning
-			case remotehost.RelayError:
-				parts, tone = append(parts, "Relay: "+st.Message), ToneWarning
+		if part, ok, warn := s.remoteRelayPart(srv); ok {
+			parts = append(parts, part)
+			if warn {
+				tone = ToneWarning
 			}
 		}
 		if remoteP2PFrom(s.settings.Remote).Enabled {
@@ -286,6 +287,25 @@ func (s *Shell) remoteSummaryFor(srv *remotehost.Server, cfg remotehost.Config) 
 		return remoteSummary{Title: "Not listening", Detail: "Choose an address under Advanced to start.", Tone: ToneMuted}
 	}
 	return remoteSummary{Title: "Not listening", Tone: ToneMuted}
+}
+
+// remoteRelayPart is the relay's line in the status card: ok = the relay is enabled
+// and has something to say, warn = it is not healthy.
+func (s *Shell) remoteRelayPart(srv *remotehost.Server) (part string, ok, warn bool) {
+	if !remoteRelayFrom(s.settings.Remote).Enabled {
+		return "", false, false
+	}
+	switch st := srv.RelayStatus(); st.State {
+	case remotehost.RelayOnline:
+		return "Relay connected", true, false
+	case remotehost.RelayConnecting:
+		return "Relay connecting…", true, false
+	case remotehost.RelayBackoff:
+		return "Relay reconnecting: " + st.Message, true, true
+	case remotehost.RelayError:
+		return "Relay: " + st.Message, true, true
+	}
+	return "", false, false
 }
 
 // remoteStatusCard is the page's one status block: dot and headline, the

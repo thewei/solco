@@ -157,7 +157,8 @@ func New(opts Options) (*Server, error) {
 func (s *Server) Devices() *DeviceStore { return s.devices }
 
 // Start binds the configured address with TLS. Off is a no-op. It never binds
-// a wildcard address (Config.ListenAddr guarantees that).
+// a wildcard address (Config.ListenAddr guarantees that). A bind that fails still
+// brings the relay tunnel up when it is enabled (see below) and returns the error.
 func (s *Server) Start() error {
 	cfg := s.config()
 	addr, err := cfg.ListenAddr()
@@ -169,6 +170,11 @@ func (s *Server) Start() error {
 	}
 	ln, err := listenReliable(addr)
 	if err != nil {
+		// The address can vanish under a running Mac (DHCP, a changed network, Wi-Fi off). The relay does not
+		// need it: it dials out and bridges into Handler() through its own 127.0.0.1 loopback, so a phone that
+		// was paired through it keeps reaching the Mac. The error still goes up — Settings flags the stale
+		// address — and pairing stays refused (no listener, no QR) until it is fixed.
+		s.startRelay()
 		return fmt.Errorf("remote host listen on %s: %w", addr, err)
 	}
 	if err := s.serve(ln, cfg); err != nil {

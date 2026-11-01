@@ -858,6 +858,70 @@ func TestRelayConfigRejectionAndRestart(t *testing.T) {
 	}
 }
 
+// The address a Host was set to can vanish (DHCP hands the Mac another one, Wi-Fi changes): the bind
+// fails and Settings must hear about it, but the relay dials out and bridges through its own
+// loopback, so a phone that was paired through it keeps reaching the Mac.
+func TestRelayStaysUpWhenTheListenAddressCannotBind(t *testing.T) {
+	hold, err := net.Listen("tcp", "127.0.0.1:0") // the port is taken: the same failure as an address that is gone
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hold.Close()
+	back := &fakeBackend{instances: []string{"default"}, proj: fixtureProjection(), observe: gridScript(filepath.Join(t.TempDir(), "pids"))}
+	opts := Options{
+		Config:   Config{Mode: ModeLoopback, Port: hold.Addr().(*net.TCPAddr).Port},
+		Dir:      t.TempDir(),
+		Backend:  back,
+		HostName: "Test Mac",
+		Version:  "test-1",
+		Relay:    RelayConfig{Enabled: true, URL: "https://relay.test"},
+	}
+	srv, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, token, err := srv.Devices().Add("Test Phone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	relay := newFakeRelay(t)
+	srv.relayHooks = &relayTestHooks{dial: relay.dial, backoffMin: 5 * time.Millisecond, backoffMax: 20 * time.Millisecond, chunk: 16}
+	t.Cleanup(srv.Close)
+
+	if err := srv.Start(); err == nil {
+		t.Fatal("a bind failure must still be reported to Settings")
+	}
+	if got := srv.ListenAddress(); got != "" {
+		t.Fatalf("listening on %q after a failed bind", got)
+	}
+	h := &relayHarness{t: t, srv: srv, back: back, opts: opts, relay: relay, token: token}
+	h.waitOnline()
+	h.relay.send(relayFrame{T: "hreq", ID: "h1", Method: "GET", Path: "/api/v3/bootstrap", Headers: map[string]string{"authorization": "Bearer " + token}})
+	if status, _, _, errMsg := h.relay.collectHTTP("h1", 5*time.Second); errMsg != "" || status != http.StatusOK {
+		t.Fatalf("bootstrap through a relay-only Host = %d %q", status, errMsg)
+	}
+	// nothing to pair against: the QR carries the address and the pin
+	if _, err := srv.StartPairing(); err == nil {
+		t.Fatal("pairing needs a listener")
+	}
+	// fixing the address (here: freeing the port) brings the listener up beside the same tunnel
+	_ = hold.Close()
+	if err := srv.Reconfigure(opts.Config, opts.Relay); err != nil {
+		t.Fatalf("Reconfigure after the address came back: %v", err)
+	}
+	if srv.ListenAddress() == "" {
+		t.Fatal("the listener did not come back")
+	}
+	h.waitOnline()
+	// and turning Remote Access off takes the tunnel down with it
+	if err := srv.Reconfigure(Config{Mode: ModeOff}, opts.Relay); err != nil {
+		t.Fatal(err)
+	}
+	if st := srv.RelayStatus(); st.State != RelayIdle {
+		t.Fatalf("relay state with Remote Access off = %s", st.State)
+	}
+}
+
 func TestQueryTokenAuthenticatesLikeTheHeader(t *testing.T) {
 	h := newHarness(t)
 	for _, tc := range []struct {
