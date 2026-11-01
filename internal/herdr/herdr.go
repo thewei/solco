@@ -18,8 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/thewei/solco/internal/legacy"
 )
 
 const (
@@ -238,15 +236,14 @@ func herdrChildArgs(cli, socketPath, configPath string, tail ...string) []string
 	for _, key := range nestedTUIEnvKeys {
 		args = append(args, "-u", key)
 	}
-	solcoSock := legacy.Env("SOCKET_PATH")
+	solcoSock := strings.TrimSpace(os.Getenv("SOLCO_SOCKET_PATH"))
 	if solcoSock == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			solcoSock = filepath.Join(home, ".solco", "run", "agent-status.sock")
 		}
 	}
 	if solcoSock != "" {
-		// The pre-rebrand name too: hook scripts the old name installed read it.
-		args = append(args, "SOLCO_SOCKET_PATH="+solcoSock, "SHARDLANE_SOCKET_PATH="+solcoSock)
+		args = append(args, "SOLCO_SOCKET_PATH="+solcoSock)
 	}
 	args = append(args, "HERDR_SOCKET_PATH="+socketPath, "HERDR_CONFIG_PATH="+configPath, cli)
 	return append(args, tail...)

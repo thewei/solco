@@ -6,7 +6,7 @@ Solco is the **client/product**. **Herdr remains the backend runtime** and owns 
 
 ## Renamed from Shardlane
 
-Solco was called Shardlane until 2026-10-26. On first launch it moves what the old name left on the machine — `~/Library/Application Support/Shardlane` and `~/Library/Logs/Shardlane` into their `Solco` counterparts, and `~/.shardlane` into `~/.solco` (leaving `~/.shardlane` as a link so installed hooks keep working). The Hook Doctor (Settings → Agent integrations) replaces the old `shardlane-*-hook.sh` wiring in Claude Code and Antigravity when you press Install. `SHARDLANE_SOCKET_PATH`, `SHARDLANE_LOG_LEVEL` are still read after their `SOLCO_` names. The Herdr hook plugin is now `com.whstudio.solco.hooks` (relink: `herdr plugin link <repo>/plugins/solco-hooks`; remove the old `com.whstudio.shardlane.hooks`). The bundle identifier is now `com.whstudio.solco`, so macOS asks for microphone/accessibility permission again.
+Solco was called Shardlane until 2026-10-26. The migration code is gone (2026-11-01): nothing moves `~/Library/Application Support/Shardlane`, `~/Library/Logs/Shardlane` or `~/.shardlane` any more, and `SHARDLANE_*` environment variables are not read (use `SOLCO_SOCKET_PATH`, `SOLCO_LOG_LEVEL`). A machine that still has Shardlane-era hook wiring must press Install in the Hook Doctor (Settings → Agent integrations) from an older build first — or edit `~/.claude/settings.json` / `~/.gemini/config/hooks.json` by hand. The Herdr hook plugin is `com.whstudio.solco.hooks` (relink: `herdr plugin link <repo>/plugins/solco-hooks`; remove the old `com.whstudio.shardlane.hooks`). The bundle identifier is `com.whstudio.solco`.
 
 ## Requirements
 

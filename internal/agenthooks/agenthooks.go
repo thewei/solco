@@ -120,17 +120,6 @@ var antigravityHookEvents = []string{"PreInvocation", "Stop"}
 // groups (herdr, orca-status, …) are never touched.
 const antigravityOwnerKey = "solco-hook"
 
-// What the pre-rebrand (Shardlane) build wrote. Install replaces it: the old
-// wiring entries and owner group are dropped and the old script, when the
-// marker proves it was ours, is deleted. Until then the old wiring keeps
-// working through the ~/.shardlane link (internal/legacy).
-const (
-	legacyClaudeScript      = "shardlane-claude-hook.sh"
-	legacyAntigravityScript = "shardlane-antigravity-hook.sh"
-	legacyOwnerKey          = "shardlane-hook"
-	legacyScriptMarker      = "installed by Shardlane"
-)
-
 type providerSpec struct {
 	id         ProviderID
 	scriptName string
@@ -217,9 +206,6 @@ func (m *Manager) diagnoseProvider(id ProviderID) Diagnosis {
 		row.State = StateNotInstalled
 	}
 	row.Detail = m.describe(row)
-	if row.State != StateOK && m.hasLegacyWiring(id) {
-		row.Detail += "; Install replaces the Shardlane-era hook"
-	}
 	return row
 }
 
@@ -290,7 +276,6 @@ func (m *Manager) Install(id ProviderID) (Diagnosis, error) {
 			return Diagnosis{}, err
 		}
 	}
-	m.removeLegacyScript(id)
 	slog.Info("agent hooks provisioned", "provider", string(id), "script", m.scriptPath(id))
 	return m.diagnoseProvider(id), nil
 }
@@ -359,7 +344,7 @@ func (m *Manager) wireClaude() error {
 		return err
 	}
 	hooks := objectOf(root["hooks"])
-	changed := pruneLegacyHooks(hooks, legacyClaudeScript)
+	changed := false
 	command := fmt.Sprintf("bash %s claude", shellQuote(m.scriptPath(ProviderClaude)))
 	for _, event := range claudeHookEvents {
 		entries := arrayOf(hooks[event])
@@ -394,10 +379,6 @@ func (m *Manager) wireAntigravity() error {
 	}
 	group := objectOf(root[antigravityOwnerKey])
 	changed := false
-	if _, ok := root[legacyOwnerKey]; ok {
-		delete(root, legacyOwnerKey)
-		changed = true
-	}
 	script := m.scriptPath(ProviderAntigravity)
 	for _, event := range antigravityHookEvents {
 		entries := arrayOf(group[event])
@@ -463,97 +444,6 @@ func wiringContains(entries []any, scriptName string) bool {
 		if wiringContains(arrayOf(obj["hooks"]), scriptName) {
 			return true
 		}
-	}
-	return false
-}
-
-// pruneLegacyHooks drops, from every event of a Claude-style hooks map, the
-// commands that run the pre-rebrand script (an entry left with no command is
-// dropped too; foreign entries are untouched). It reports whether it changed
-// anything.
-func pruneLegacyHooks(hooks map[string]any, script string) bool {
-	changed := false
-	for event, value := range hooks {
-		entries, ok := value.([]any)
-		if !ok {
-			continue
-		}
-		kept, dropped := dropWiring(entries, script)
-		if !dropped {
-			continue
-		}
-		changed = true
-		if len(kept) == 0 {
-			delete(hooks, event)
-		} else {
-			hooks[event] = kept
-		}
-	}
-	return changed
-}
-
-func dropWiring(entries []any, script string) (kept []any, dropped bool) {
-	for _, entry := range entries {
-		obj, ok := entry.(map[string]any)
-		if !ok {
-			kept = append(kept, entry)
-			continue
-		}
-		if command, ok := obj["command"].(string); ok && strings.Contains(command, script) {
-			dropped = true
-			continue
-		}
-		if nested, ok := obj["hooks"].([]any); ok {
-			rest, nestedDropped := dropWiring(nested, script)
-			if nestedDropped {
-				dropped = true
-				if len(rest) == 0 {
-					continue
-				}
-				obj["hooks"] = rest
-			}
-		}
-		kept = append(kept, entry)
-	}
-	return kept, dropped
-}
-
-// removeLegacyScript deletes the pre-rebrand script of a provider once the
-// new wiring replaced it, but only a file that carries our marker.
-func (m *Manager) removeLegacyScript(id ProviderID) {
-	name := legacyClaudeScript
-	if id == ProviderAntigravity {
-		name = legacyAntigravityScript
-	}
-	path := filepath.Join(m.hooksDir(), name)
-	if data, err := os.ReadFile(path); err == nil && strings.Contains(string(data), legacyScriptMarker) {
-		if err := os.Remove(path); err != nil {
-			slog.Warn("remove pre-rebrand hook script failed", "path", path, "error", err)
-		}
-	}
-}
-
-// hasLegacyWiring reports whether the provider config still runs the
-// pre-rebrand script.
-func (m *Manager) hasLegacyWiring(id ProviderID) bool {
-	switch id {
-	case ProviderClaude:
-		root, err := readJSONObject(m.claudeSettingsPath())
-		if err != nil {
-			return false
-		}
-		for _, value := range objectOf(root["hooks"]) {
-			if wiringContains(arrayOf(value), legacyClaudeScript) {
-				return true
-			}
-		}
-	case ProviderAntigravity:
-		root, err := readJSONObject(m.antigravityHooksPath())
-		if err != nil {
-			return false
-		}
-		_, ok := root[legacyOwnerKey]
-		return ok
 	}
 	return false
 }

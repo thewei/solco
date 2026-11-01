@@ -14,8 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/thewei/solco/internal/legacy"
 )
 
 const (
@@ -46,7 +44,7 @@ func Setup(dir string) (string, error) {
 	}
 
 	level := &slog.LevelVar{}
-	level.Set(levelFromEnv(legacy.Env("LOG_LEVEL")))
+	level.Set(levelFromEnv(strings.TrimSpace(os.Getenv("SOLCO_LOG_LEVEL"))))
 	handler := slog.NewJSONHandler(writer, &slog.HandlerOptions{
 		Level:     level,
 		AddSource: level.Level() == slog.LevelDebug,

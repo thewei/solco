@@ -22,7 +22,6 @@ import (
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/applog"
 	"github.com/thewei/solco/internal/history"
-	"github.com/thewei/solco/internal/legacy"
 	"github.com/thewei/solco/internal/nativeui"
 	"github.com/thewei/solco/internal/sessiontrash"
 	"github.com/thewei/solco/internal/settings"
@@ -63,21 +62,12 @@ func main() {
 	// it becomes live the moment signed releases are published (Gate E5).
 	mygo.Use(updaterNative.Plugin)
 
-	// The Shardlane-era files move to the Solco names before anything reads
-	// them (internal/legacy).
-	if !generating {
-		if homeDir, err := os.UserHomeDir(); err == nil {
-			legacy.MigrateHome(homeDir)
-		}
-	}
 	userDataDir, err := mygo.App.Path(mygo.PathUserData)
 	if err != nil {
 		slog.Error("resolve user data dir", "error", err)
 		os.Exit(1)
 	}
-	legacy.MigrateAppDir(userDataDir)
 	logsDir := mustLogsDir()
-	legacy.MigrateAppDir(logsDir)
 	if _, err := applog.Setup(logsDir); err != nil {
 		slog.Error("setup application logging", "error", err)
 	} else if stop, err := applog.CaptureStderr(logsDir); err != nil {

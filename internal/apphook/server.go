@@ -12,8 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/thewei/solco/internal/legacy"
 )
 
 /**
@@ -25,7 +23,7 @@ import (
 
 // DefaultSocketPath returns the primary Unix domain socket path for Solco agent status hooks.
 func DefaultSocketPath() string {
-	if path := legacy.Env("SOCKET_PATH"); path != "" {
+	if path := strings.TrimSpace(os.Getenv("SOLCO_SOCKET_PATH")); path != "" {
 		return path
 	}
 	home, err := os.UserHomeDir()
