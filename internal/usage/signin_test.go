@@ -230,3 +230,46 @@ func TestCursorRejectedCopyIsDropped(t *testing.T) {
 		t.Fatal("a copy the API rejected must be dropped so the next read re-sources it")
 	}
 }
+
+// An expired sign-in (or a denied read) at the source is not asked for again
+// while it rests: each Keychain read makes macOS prompt.
+func TestClaudeExpiredSourceRestsInsteadOfAskingAgain(t *testing.T) {
+	blob := fmt.Sprintf(claudeBlob, time.Now().Add(-time.Hour).UnixMilli())
+	calls := 0
+	c := &claude{
+		client: newHTTPClient(), endpoint: "http://127.0.0.1:1", home: t.TempDir(),
+		getenv:   func(string) string { return "" },
+		keychain: func(context.Context) ([]byte, error) { calls++; return []byte(blob), nil },
+	}
+	for range 3 {
+		if _, err := c.Fetch(ctx5(t)); !errors.Is(err, ErrUnauthorized) {
+			t.Fatalf("err = %v, want ErrUnauthorized", err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("Keychain read %d times, want 1 while the source rests", calls)
+	}
+	c.blockedUntil = time.Now().Add(-time.Second) // the rest is over
+	_, _ = c.Fetch(ctx5(t))
+	if calls != 2 {
+		t.Fatalf("Keychain read %d times after the rest, want 2", calls)
+	}
+}
+
+func TestClaudeDeniedKeychainRests(t *testing.T) {
+	calls := 0
+	c := &claude{
+		client: newHTTPClient(), endpoint: "http://127.0.0.1:1", home: t.TempDir(),
+		getenv: func(string) string { return "" },
+		keychain: func(context.Context) ([]byte, error) {
+			calls++
+			return nil, fmt.Errorf("%w: the Keychain did not allow reading", ErrUnauthorized)
+		},
+	}
+	for range 3 {
+		_, _ = c.Fetch(ctx5(t))
+	}
+	if calls != 1 {
+		t.Fatalf("a denied Keychain was asked %d times, want 1", calls)
+	}
+}

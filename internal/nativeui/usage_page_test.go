@@ -156,7 +156,7 @@ func TestUsageCardShowsReadingAndLeft(t *testing.T) {
 	s.setUsageEnabled(usage.Codex, true)
 	tester := ui.NewTester(s.usagePage, 1000, 800)
 	settleFrames(tester, 3)
-	for _, want := range []string{"Codex", "Plus", "5-hour", "62% used", "TIGHTEST LIMIT"} {
+	for _, want := range []string{"Codex", "Plus", "5-hour", "62% used", "TIGHTEST"} {
 		if !tester.HasText(want) {
 			t.Errorf("page lacks %q; texts=%q", want, tester.Texts())
 		}

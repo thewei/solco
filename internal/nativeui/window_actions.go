@@ -44,12 +44,13 @@ func (s *Shell) CloseTabFromMenu() {
 	s.openConfirm("close-tab", s.selectedTabID, "Close Tab?", "This closes the selected Herdr Tab and all Panes in it.")
 }
 
-// NewTabFromMenu opens a Tab in the selected Workspace (⌘T): the Tab bar's
-// "+" and the Workspace row's "+" run the same newProjectTab.
+// NewTabFromMenu opens a Tab in the selected Workspace (⌘T) with the kind
+// the Tab bar's "+" would start (the one used last, Terminal by default);
+// the Workspace row's "+" stays a Terminal Tab.
 func (s *Shell) NewTabFromMenu() {
 	s.applyOnWindow(func() {
 		if project := s.selectedProject(); project != nil && !s.loading {
-			s.newProjectTab(*project)
+			s.startNewTab(*project, s.lastLaunchKind(s.launchKinds))
 		}
 	})
 }

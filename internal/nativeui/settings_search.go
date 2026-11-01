@@ -28,7 +28,7 @@ var settingsLabels = map[string][][2]string{
 	"/settings/general": {
 		{"Appearance", "Theme"}, {"Appearance", "Sidebar density"}, {"Appearance", "Increase contrast"},
 		{"Appearance", "Serif chat text"}, {"Appearance", "Chat outline"}, {"Appearance", "Window opacity"},
-		{"Window", "Show Tabs in Sidebar"}, {"Window", "Restore window position"},
+		{"Agents", "Default Agent view"}, {"Window", "Show Tabs in Sidebar"}, {"Window", "Restore window position"},
 	},
 	"/settings/terminal": {
 		{"Font", "Font family"}, {"Font", "Font size"}, {"Font", "Line height"},
@@ -39,9 +39,10 @@ var settingsLabels = map[string][][2]string{
 		{"Transcription", "Source"}, {"Transcription", "Account"}, {"Transcription", "What is sent"}, {"Transcription", "Endpoint"}, {"Transcription", "API key"}, {"Transcription", "Model"},
 	},
 	"/settings/remote": {
-		{"Listener", "Access"}, {"Listener", "Address"}, {"Listener", "Port"}, {"Phones", "Pair a phone"},
-		{"Relay", "Relay"}, {"Relay", "Relay Address"}, {"Relay", "Registration Key"}, {"Relay", "Relay Status"},
-		{"Direct P2P", "P2P"}, {"Direct P2P", "ICE Servers"}, {"Direct P2P", "TURN Username"}, {"Direct P2P", "TURN Credential"}, {"Direct P2P", "P2P Status"},
+		{"Access", "Access"}, {"Access", "Pair a phone"},
+		{"Advanced", "Address"}, {"Advanced", "Port"},
+		{"Advanced", "Relay"}, {"Advanced", "Relay Address"}, {"Advanced", "Registration Key"},
+		{"Advanced", "P2P"}, {"Advanced", "ICE Servers"}, {"Advanced", "TURN Username"}, {"Advanced", "TURN Credential"},
 	},
 	"/settings/providers": {
 		{"", "Integration"}, {"", "Status hook"},

@@ -1,0 +1,25 @@
+{
+  "sessions": [
+    {
+      "id": "claude-code:7f3a",
+      "agent": "claude-code",
+      "title": "Fix the failing tests",
+      "project": "solco",
+      "updatedMs": 1785549600000,
+      "messages": 42,
+      "running": {
+        "instance": "default",
+        "paneId": "w1:p1",
+        "state": "attention"
+      }
+    },
+    {
+      "id": "codex:19bd",
+      "agent": "codex",
+      "title": "Refactor the tab bar",
+      "project": "solco",
+      "updatedMs": 1785463200000,
+      "messages": 18
+    }
+  ]
+}

@@ -26,6 +26,7 @@ type remoteAgentFacts struct {
 // publishRemoteAgentFacts snapshots the reconciled cards for the Herdr session
 // this window shows. A Solco-minted plumbing name (kind-<6hex>) is no title.
 func (s *Shell) publishRemoteAgentFacts() {
+	s.publishRemoteLiveSessions()
 	cards := s.workbenchCards()
 	facts := make(map[string]remotehost.AgentFact, len(cards))
 	for _, card := range cards {

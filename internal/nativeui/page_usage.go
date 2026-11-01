@@ -3,6 +3,7 @@ package nativeui
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,20 +15,20 @@ import (
 
 /**
  * [INPUT]: 依赖 internal/usage 的 Result/Snapshot/Window（额度读数与配速）、history.DayTokens（近 30 天本地 token）、Shell.usage 状态与 settings.Usage 偏好、components/ds_components/controls 共享件
- * [OUTPUT]: 对外提供 Shell.usagePage（/usage：首次启用视图 / 摘要 + 卡片网格）、usageMenu（标题栏 Actions：Used|Left 与设置入口）、usageAgo/usageIn/usageTokens 等格式化纯函数
+ * [OUTPUT]: 对外提供 Shell.usagePage（/usage：首次启用视图 / 一条摘要 + Needs a look + 一行一张卡）、usageReadingToggle（Used|Left，标题栏工具簇与浮层 Quota 页共用）、usageCard(compact)（页与浮层同一张卡，只差密度）、usageMenu（标题栏 Actions：设置入口）、usageAgo/usageIn/usageTokens 等格式化纯函数
  * [POS]: Sessions 区的第三个入口页；只呈现，读取与偏好在 usage_state.go，额度语义在 internal/usage；页面打开时读一次、手动刷新才再读，没有定时器，也不记录历史
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 const (
-	usageCardBasis     float32 = 340
-	usageCardMaxWidth  float32 = 520
-	usagePageMaxWidth  float32 = 1120
+	usagePageMaxWidth  float32 = 820
 	usageBarHeight     float32 = 6
 	usageSparkHeight   float32 = 28
-	usageCompactName   float32 = 66
 	usageCompactBar    float32 = 4
 	usageCompactDetail float32 = 124
+	// usageNameWide is the name column of the compact card — the flyout's and
+	// every card's sub-limit rows — wide enough for "Weekly · Sonnet".
+	usageNameWide float32 = 108
 )
 
 // usageAgent maps a provider to the Agent identity whose brand mark it wears;
@@ -206,21 +207,30 @@ func (s *Shell) usageSource(id usage.ID) string {
 	return ""
 }
 
-// usageRouteHeader is the title bar of /quota: Sessions › Quota.
+// usageRouteHeader is the title bar of /quota: Sessions › Quota, with the
+// Used | Left reading beside the page's Actions (2026-11-01: it left the
+// summary row for the bar's tool cluster, where Git's own toggles live).
 func (s *Shell) usageRouteHeader() routeHeaderSpec {
-	return routeHeaderSpec{parent: "Sessions", onParent: s.showHistoryIndex, title: "Quota", actions: s.usageMenu}
+	return routeHeaderSpec{parent: "Sessions", onParent: s.showHistoryIndex, title: "Quota", actions: s.usageMenu, tools: s.usageReadingToggle}
+}
+
+// usageReadingToggle is the Used | Left switch, drawn by the title bar on
+// /quota and by the flyout's Quota tab: one control for both surfaces.
+func (s *Shell) usageReadingToggle(c *ui.Context) {
+	if !s.settings.Usage.Configured || len(s.usageEnabled()) == 0 {
+		return
+	}
+	idx := 0
+	if s.usageShowLeft() {
+		idx = 1
+	}
+	if segmentedControl(c, &idx, "Used", "Left").Label("Reading").Changed() {
+		s.setUsageShowLeft(idx == 1)
+	}
 }
 
 // usageMenu is the page's Actions pull-down.
 func (s *Shell) usageMenu(m *ui.Menu) {
-	left := s.usageShowLeft()
-	if m.Item("Show Used").Checked(!left).Chosen() {
-		s.setUsageShowLeft(false)
-	}
-	if m.Item("Show Left").Checked(left).Chosen() {
-		s.setUsageShowLeft(true)
-	}
-	m.Separator()
 	if m.Item("Quota Settings…").Chosen() {
 		s.router.Push(usageSettingsPath)
 	}
@@ -251,11 +261,10 @@ func (s *Shell) usagePage(c *ui.Context) {
 						})
 					default:
 						s.usageSummary(c, ids)
-						ui.Row(c).FillWidth().Wrap().Gap(Spacing().L).AlignItems(ui.Stretch).Children(func() {
-							for _, id := range ids {
-								s.usageCard(c, id)
-							}
-						})
+						s.usageAttentionCard(c, ids)
+						for _, id := range ids {
+							s.usageCard(c, id, false)
+						}
 					}
 				})
 			})
@@ -314,8 +323,8 @@ func usageConsentNote(id usage.ID) string {
 	return ""
 }
 
-// usageSummary is the row above the cards: the tightest limit, the next
-// reset, how many sources are live, and the Used | Left reading.
+// usageSummary is the one strip above the cards: the tightest limit, the next
+// reset and how many sources are live, as three facts of one panel.
 func (s *Shell) usageSummary(c *ui.Context, ids []usage.ID) {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
@@ -334,6 +343,7 @@ func (s *Shell) usageSummary(c *ui.Context, ids []usage.ID) {
 		live, stale  int
 		needSetup    int
 		nextInterval time.Duration
+		oldest       time.Time
 	)
 	for _, id := range ids {
 		res := s.usage.svc.Result(id)
@@ -348,6 +358,9 @@ func (s *Shell) usageSummary(c *ui.Context, ids []usage.ID) {
 		if !res.Has {
 			continue
 		}
+		if !res.Snapshot.At.IsZero() && (oldest.IsZero() || res.Snapshot.At.Before(oldest)) {
+			oldest = res.Snapshot.At
+		}
 		for _, w := range res.Snapshot.Windows {
 			if !haveTight || w.UsedPct > tight.UsedPct {
 				tight, tightOwner, haveTight = w, id, true
@@ -359,8 +372,7 @@ func (s *Shell) usageSummary(c *ui.Context, ids []usage.ID) {
 	}
 
 	stat := func(label, value, detail string, tone StatusTone) {
-		ui.Column(c).Grow(1).Basis(180).MinWidth(0).Gap(sp.XXS).Padding(sp.M, sp.L).
-			Radius(Radius().Card).Background(tokens.Panel).Border(1, tokens.BorderSubtle).Children(func() {
+		ui.Column(c).Grow(1).Basis(160).MinWidth(0).Gap(sp.XXS).Children(func() {
 			ui.Text(c, label).FontSize(typ.Micro).FontWeight(WeightBold).TextColor(t.TextMuted)
 			color := t.Text
 			if tone != ToneNeutral {
@@ -370,32 +382,132 @@ func (s *Shell) usageSummary(c *ui.Context, ids []usage.ID) {
 			ui.Text(c, detail).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…")
 		})
 	}
-	ui.Row(c).FillWidth().Wrap().Gap(sp.L).AlignItems(ui.Stretch).Children(func() {
+	ui.Row(c).FillWidth().Wrap().Gap(sp.XL).AlignItems(ui.Start).Padding(sp.M, sp.L).
+		Radius(Radius().Card).Background(tokens.Panel).Border(1, tokens.BorderSubtle).Children(func() {
 		if haveTight {
-			stat("TIGHTEST LIMIT", usageShownText(tight.UsedPct, left), tightOwner.Title()+" · "+tight.Name, usageTone(tight.Level()))
+			stat("TIGHTEST", usageShownText(tight.UsedPct, left), tightOwner.Title()+" · "+tight.Name, usageTone(tight.Level()))
 		} else {
-			stat("TIGHTEST LIMIT", "—", "Nothing read yet", ToneNeutral)
+			stat("TIGHTEST", "—", "Nothing read yet", ToneNeutral)
 		}
 		if haveNext {
 			stat("NEXT RESET", usageIn(nextInterval), nextOwner.Title()+" · "+next.Name, ToneNeutral)
 		} else {
 			stat("NEXT RESET", "—", "No reset time known", ToneNeutral)
 		}
-		stat("SOURCES", fmt.Sprintf("%d live", live), fmt.Sprintf("%d stale · %d need setup", stale, needSetup), ToneNeutral)
-		ui.Column(c).Shrink(0).Justify(ui.End).Children(func() {
-			idx := 0
-			if left {
-				idx = 1
+		detail := fmt.Sprintf("%d stale · %d need setup", stale, needSetup)
+		if !oldest.IsZero() {
+			detail = "oldest read " + usageAgo(now.Sub(oldest))
+			if needSetup > 0 {
+				detail += fmt.Sprintf(" · %d need setup", needSetup)
 			}
-			if segmentedControl(c, &idx, "Used", "Left").Label("Reading").Changed() {
-				s.setUsageShowLeft(idx == 1)
-			}
-		})
+		}
+		stat("SOURCES", fmt.Sprintf("%d live", live), detail, ToneNeutral)
 	})
 }
 
-// usageCard is one provider's card.
-func (s *Shell) usageCard(c *ui.Context, id usage.ID) {
+// usageAttentionItem is one line of "Needs a look": a provider that cannot be
+// read, or a window near its limit.
+type usageAttentionItem struct {
+	id   usage.ID
+	win  string // the window's name; empty for a setup/sign-in line
+	text string
+	tone StatusTone
+}
+
+// usageAttention lists what deserves a look, worst first: windows at their
+// limit or that will run out before they reset (pace), then providers that
+// need setup or a fresh sign-in.
+func (s *Shell) usageAttention(ids []usage.ID, now time.Time, left bool) []usageAttentionItem {
+	var windows, setups []usageAttentionItem
+	for _, id := range ids {
+		res := s.usage.svc.Result(id)
+		switch res.State {
+		case usage.StateSetup:
+			setups = append(setups, usageAttentionItem{id: id, text: id.Title() + " — needs setup", tone: ToneAttention})
+			continue
+		case usage.StateExpired:
+			setups = append(setups, usageAttentionItem{id: id, text: id.Title() + " — sign-in expired", tone: ToneAttention})
+			continue
+		}
+		if !res.Has || res.Stale() {
+			continue
+		}
+		for _, w := range res.Snapshot.Windows {
+			pace, runsOut := w.Pace(now)
+			tone := usageTone(w.Level())
+			switch {
+			case pace == usage.PaceExceeded:
+				tone = ToneError
+			case pace == usage.PaceRunsOut && tone == ToneNeutral:
+				tone = ToneAttention
+			}
+			if tone == ToneNeutral {
+				continue
+			}
+			parts := []string{id.Title() + " · " + w.Name + "  " + usageShownText(w.UsedPct, left)}
+			switch pace {
+			case usage.PaceRunsOut:
+				parts = append(parts, "runs out in "+usageIn(runsOut)+" at this pace")
+			case usage.PaceExceeded:
+				parts = append(parts, "limit reached")
+			}
+			if d := w.Resets.Sub(now); !w.Resets.IsZero() && d > 0 {
+				parts = append(parts, "resets "+usageIn(d))
+			}
+			windows = append(windows, usageAttentionItem{id: id, win: w.Name, text: strings.Join(parts, " · "), tone: tone})
+		}
+	}
+	sort.SliceStable(windows, func(i, j int) bool { return windows[i].tone == ToneError && windows[j].tone != ToneError })
+	return append(windows, setups...)
+}
+
+// usageAttentionCard is "Needs a look": the answer to what will bite soon.
+// It is not drawn when nothing does.
+func (s *Shell) usageAttentionCard(c *ui.Context, ids []usage.ID) {
+	// The summary above already names the tightest window; listing it again
+	// here would say the same thing twice.
+	var tightOwner usage.ID
+	var tightName string
+	var tightPct float64
+	for _, id := range ids {
+		if res := s.usage.svc.Result(id); res.Has {
+			for _, w := range res.Snapshot.Windows {
+				if tightName == "" || float64(w.UsedPct) > tightPct {
+					tightOwner, tightName, tightPct = id, w.Name, float64(w.UsedPct)
+				}
+			}
+		}
+	}
+	var items []usageAttentionItem
+	for _, it := range s.usageAttention(ids, time.Now(), s.usageShowLeft()) {
+		if it.win != "" && it.id == tightOwner && it.win == tightName {
+			continue
+		}
+		items = append(items, it)
+	}
+	if len(items) == 0 {
+		return
+	}
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	typ := Typography()
+	sp := Spacing()
+	ui.Column(c).FillWidth().Gap(sp.XS).Padding(sp.M, sp.L).
+		Radius(Radius().Card).Background(tokens.Panel).Border(1, tokens.BorderSubtle).Children(func() {
+		ui.Text(c, "NEEDS A LOOK").FontSize(typ.Micro).FontWeight(WeightBold).TextColor(t.TextMuted)
+		for _, it := range items {
+			ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(6, 6).Shrink(0).Radius(3).Background(tokens.StatusColor(it.tone, t.Dark))
+				ui.Text(c, it.text).FontSize(typ.BodySmall).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			})
+		}
+	})
+}
+
+// usageCard is one provider's card, one to a row. The page draws it whole;
+// compact is the flyout's density — the same data and the same rows, minus
+// the 30-day strip and the source line — so the two surfaces cannot disagree.
+func (s *Shell) usageCard(c *ui.Context, id usage.ID, compact bool) {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
 	typ := Typography()
@@ -406,9 +518,14 @@ func (s *Shell) usageCard(c *ui.Context, id usage.ID) {
 	left := s.usageShowLeft()
 	badge, tone := usageBadge(res, busy, now)
 
-	ui.Column(c).Grow(1).Basis(usageCardBasis).MinWidth(usageCardBasis*0.85).MaxWidth(usageCardMaxWidth).
+	pad, gap := sp.L, sp.M
+	if compact {
+		pad, gap = sp.M, sp.S
+	}
+	card := ui.Column(c.Key("quota-card:"+string(id))).FillWidth().
 		Radius(Radius().Card).Background(tokens.Panel).Border(1, tokens.BorderSubtle).
-		Padding(sp.L).Gap(sp.M).Children(func() {
+		Padding(pad).Gap(gap)
+	card.Children(func() {
 		ui.Row(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
 			usageMark(c, id, 20)
 			ui.Text(c, id.Title()).FontSize(typ.Section).FontWeight(WeightSemibold).SingleLine()
@@ -424,20 +541,27 @@ func (s *Shell) usageCard(c *ui.Context, id usage.ID) {
 
 		if res.Has {
 			stale := res.Stale()
-			ui.Column(c).FillWidth().Gap(sp.L).Children(func() {
-				s.usageWindows(c, res.Snapshot.Windows, left, stale, now)
+			rowGap := sp.L
+			if compact {
+				rowGap = sp.S
+			}
+			ui.Column(c).FillWidth().Gap(rowGap).Children(func() {
+				s.usageWindows(c, res.Snapshot.Windows, left, stale, now, compact)
 				s.usageNotes(c, res.Snapshot.Notes)
 				if stale {
 					s.usageProblem(c, id, res, now)
 				}
-				s.usageActivity(c, id)
+				if !compact {
+					s.usageActivity(c, id)
+				}
 			})
 		} else {
 			s.usageProblem(c, id, res, now)
 		}
 
-		// Cards of one row share a height; the source line rides the bottom.
-		ui.Box(c).Grow(1).MinHeight(0)
+		if compact {
+			return
+		}
 		ui.Text(c, s.usageSource(id)).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").MinWidth(0)
 	})
 }
@@ -596,7 +720,7 @@ func usageFoot(c *ui.Context, w usage.Window, look usageLook, now time.Time) {
 // 500 requests), sub-limits are compact rows, a model group is a titled block
 // of compact rows (Antigravity), anything else is a plain bar (Claude's
 // 5-hour and weekly, Codex, Zhipu).
-func (s *Shell) usageWindows(c *ui.Context, windows []usage.Window, left, stale bool, now time.Time) {
+func (s *Shell) usageWindows(c *ui.Context, windows []usage.Window, left, stale bool, now time.Time, compact bool) {
 	typ := Typography()
 	sp := Spacing()
 	t := c.Theme()
@@ -613,13 +737,13 @@ func (s *Shell) usageWindows(c *ui.Context, windows []usage.Window, left, stale 
 			ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
 				ui.Text(c, w.Group).FontSize(typ.BodySmall).FontWeight(WeightSemibold).TextColor(t.TextMuted).SingleLine()
 				for _, gw := range block {
-					s.usageCompact(c, gw, left, stale, now)
+					s.usageCompact(c, gw, left, stale, now, usageNameWide)
 				}
 			})
 		case w.Counted() && !w.Minor:
 			s.usageHero(c, w, left, stale, now)
-		case w.Minor:
-			s.usageCompact(c, w, left, stale, now)
+		case w.Minor || compact:
+			s.usageCompact(c, w, left, stale, now, usageNameWide)
 		default:
 			s.usageWindow(c, w, left, stale, now)
 		}
@@ -675,7 +799,7 @@ func (s *Shell) usageHero(c *ui.Context, w usage.Window, left, stale bool, now t
 }
 
 // usageCompact is a sub-limit on one line: name, a thin bar, share and reset.
-func (s *Shell) usageCompact(c *ui.Context, w usage.Window, left, stale bool, now time.Time) {
+func (s *Shell) usageCompact(c *ui.Context, w usage.Window, left, stale bool, now time.Time, nameWidth float32) {
 	typ := Typography()
 	sp := Spacing()
 	look := usageLookOf(c, w, left, stale, now)
@@ -689,7 +813,7 @@ func (s *Shell) usageCompact(c *ui.Context, w usage.Window, left, stale bool, no
 		detail = w.Amount
 	}
 	ui.Row(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, w.Name).FontSize(typ.BodySmall).SingleLine().Ellipsis("…").Width(usageCompactName).Shrink(0)
+		ui.Text(c, w.Name).FontSize(typ.BodySmall).SingleLine().Ellipsis("…").Width(nameWidth).Shrink(0)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() { usageBar(c, look, usageCompactBar) })
 		ui.Text(c, detail).FontSize(typ.Caption).TextColor(look.value).SingleLine().Width(usageCompactDetail).Shrink(0).
 			TextAlign(ui.End)

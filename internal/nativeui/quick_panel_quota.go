@@ -1,8 +1,6 @@
 package nativeui
 
 import (
-	"math"
-	"strconv"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -11,19 +9,25 @@ import (
 
 /**
  * [INPUT]: 依赖 usage_state 的 usageEnabled/Service.Result、page_usage 的 usageLookOf/usageBar/usageBadge/usageIn/usageMark（同一套读数外观与配速语义）、quickPanelHeaderHeight 所在的 quick_panel
- * [OUTPUT]: 对外提供 Shell.quickPanelQuota（浮层 Quota 页签：一行一张迷你卡片 + 页脚）、quotaHeadline（卡片的一个标题数字）、quickPanelQuotaHeight（内容驱动高度）
- * [POS]: Header 浮层的额度列（2026-10-31 用户拍板改一行一张）：每家一张卡，只放最紧的那个窗口与重置时间，细节留在 /quota 页；页签打开时按 TTL 读一次（refreshUsage(false)），无定时器、不记录历史
+ * [OUTPUT]: 对外提供 Shell.quickPanelQuota（浮层 Quota 页签：一行一张卡，与 /quota 同一个 usageCard(compact)，全部窗口 + 页脚）、quotaHeadline（一个标题数字）、quickPanelQuotaHeight（按窗口数估高）
+ * [POS]: Header 浮层的额度列（2026-10-31 用户拍板改一行一张）：2026-11-01：浮层与内页同一张卡片（usageCard），只差密度，不再各画各的；页签打开时按 TTL 读一次（refreshUsage(false)），无定时器、不记录历史
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 const (
-	quotaCardHeight       = 96
 	quotaCardGap          = 8
 	quickPanelQuotaFooter = 38
+	// quotaCardChrome and quotaRowHeight estimate a compact card's height
+	// (header, padding, and one 22pt row per window or note); the list
+	// scrolls, so the estimate only sizes the flyout.
+	quotaCardChrome = 52
+	quotaRowHeight  = 22
 )
 
 // quotaHeadline picks the one window a mini card leads with: a counted
 // allowance (Cursor's 500 requests) first, otherwise the tightest window.
+// The flyout no longer draws a headline-only card; the headline stays the
+// answer for surfaces that have room for one number (the sidebar, tooltips).
 func quotaHeadline(snap usage.Snapshot) (usage.Window, bool) {
 	for _, w := range snap.Windows {
 		if w.Counted() && !w.Minor {
@@ -33,13 +37,26 @@ func quotaHeadline(snap usage.Snapshot) (usage.Window, bool) {
 	return snap.Tightest()
 }
 
+// quotaCardEstimate is a compact card's height.
+func (s *Shell) quotaCardEstimate(id usage.ID) int {
+	res := s.usage.svc.Result(id)
+	rows := 1
+	if res.Has {
+		rows = len(res.Snapshot.Windows) + len(res.Snapshot.Notes)
+	}
+	return quotaCardChrome + rows*quotaRowHeight
+}
+
 // quickPanelQuotaHeight sizes the tab to its cards: one per line.
 func (s *Shell) quickPanelQuotaHeight() int {
-	n := len(s.usageEnabled())
-	if n == 0 {
+	ids := s.usageEnabled()
+	if len(ids) == 0 {
 		return quickPanelHeaderHeight + quickPanelEmptyHeight + quickPanelQuotaFooter
 	}
-	h := quickPanelHeaderHeight + n*quotaCardHeight + (n-1)*quotaCardGap + int(2*Spacing().S) + quickPanelQuotaFooter
+	h := quickPanelHeaderHeight + (len(ids)-1)*quotaCardGap + int(2*Spacing().S) + quickPanelQuotaFooter
+	for _, id := range ids {
+		h += s.quotaCardEstimate(id)
+	}
 	return min(max(h, quickPanelMinHeight), QuickPanelHeight)
 }
 
@@ -56,9 +73,9 @@ func (s *Shell) quickPanelQuota(c *ui.Context) {
 		})
 	} else {
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Row(c).FillWidth().Wrap().Gap(quotaCardGap).Padding(sp.S, sp.M).Children(func() {
+			ui.Column(c).FillWidth().Gap(quotaCardGap).Padding(sp.S, sp.M).Children(func() {
 				for _, id := range ids {
-					s.quotaMiniCard(c, id, now)
+					s.usageCard(c, id, true)
 				}
 			})
 		})
@@ -89,65 +106,4 @@ func (s *Shell) quotaFreshness(ids []usage.ID, now time.Time) string {
 		return ""
 	}
 	return "Updated " + usageAgo(now.Sub(oldest))
-}
-
-// quotaMiniCard is one provider: mark and name, the headline number, a thin
-// bar, and the window with its reset.
-func (s *Shell) quotaMiniCard(c *ui.Context, id usage.ID, now time.Time) {
-	t := c.Theme()
-	tokens := designTokens(t.Dark)
-	typ := Typography()
-	sp := Spacing()
-	res := s.usage.svc.Result(id)
-	busy := s.usage.svc.Busy(id)
-	left := s.usageShowLeft()
-
-	ui.Column(c.Key("quota:"+string(id))).FillWidth().Height(quotaCardHeight).
-		Radius(Radius().Row).Background(tokens.Panel).Border(1, tokens.BorderSubtle).
-		Padding(sp.M, sp.M).Gap(sp.XS).Children(func() {
-		ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
-			usageMark(c, id, 14)
-			ui.Text(c, id.Title()).FontSize(typ.Body).FontWeight(WeightSemibold).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
-			if res.Has && res.Snapshot.Plan != "" {
-				ui.Text(c, res.Snapshot.Plan).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine().Shrink(0)
-			}
-		})
-		w, ok := quotaHeadline(res.Snapshot)
-		if !res.Has || !ok {
-			badge, _ := usageBadge(res, busy, now)
-			ui.Text(c, badge).FontSize(typ.BodySmall).TextColor(t.TextMuted).SingleLine().Ellipsis("…").MinWidth(0)
-			return
-		}
-		stale := res.Stale()
-		look := usageLookOf(c, w, left, stale, now)
-		big, small := usageShownText(w.UsedPct, left), ""
-		if w.Counted() && !w.Minor {
-			count, word := w.Used, "used"
-			if left {
-				count, word = math.Max(0, w.Max-w.Used), "left"
-			}
-			unit := w.Unit
-			if unit == "" {
-				unit = "units"
-			}
-			big = strconv.FormatFloat(math.Round(count), 'f', 0, 64)
-			small = "of " + strconv.FormatFloat(math.Round(w.Max), 'f', 0, 64) + " " + unit + " " + word
-		} else {
-			// "87% used" splits into the number and its word.
-			big = strconv.Itoa(usageShown(w.UsedPct, left)) + "%"
-			small = map[bool]string{true: "left", false: "used"}[left]
-		}
-		ui.Row(c).FillWidth().Gap(sp.XS).AlignItems(ui.End).Children(func() {
-			ui.Text(c, big).FontSize(typ.Heading).FontWeight(WeightSemibold).TextColor(look.value).SingleLine().Shrink(0)
-			ui.Text(c, small).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
-		})
-		usageBar(c, look, usageCompactBar)
-		foot := w.Name
-		if !w.Resets.IsZero() {
-			if d := w.Resets.Sub(now); d > 0 {
-				foot += " · resets " + usageIn(d)
-			}
-		}
-		ui.Text(c, foot).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").MinWidth(0)
-	})
 }

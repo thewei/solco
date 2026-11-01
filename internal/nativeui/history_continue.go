@@ -87,7 +87,12 @@ func (s *Shell) continueTargets(meta history.SessionMeta) []history.AgentID {
 // Agent) to a session menu.
 func (s *Shell) continueMenuItems(m *ui.Menu, meta history.SessionMeta) {
 	can := s.canContinue()
-	if m.Item("Continue").Disabled(!can).Chosen() {
+	if live, ok := s.liveSessionFor(meta); ok {
+		// Already running: the primary action is the pane it runs in.
+		if m.Item("Go to Pane").Chosen() {
+			s.goToPane(live.PaneID)
+		}
+	} else if m.Item("Continue").Disabled(!can).Chosen() {
 		s.requestContinue(meta, nil)
 	}
 	if targets := s.continueTargets(meta); len(targets) > 0 {
@@ -118,8 +123,7 @@ func (s *Shell) requestContinue(meta history.SessionMeta, target *history.AgentI
 	plan := agent.PlanHistoryContinuation(source, target, s.liveAgentIdentities(), "")
 	switch plan.Strategy {
 	case agent.StrategyAlreadyLive:
-		s.showPane(plan.PaneID)
-		s.pendingToast = "Already running — showing its pane."
+		s.goToPane(plan.PaneID)
 	case agent.StrategyNativeResume, agent.StrategyContextTransfer:
 		s.hist.pendingContinue = &continueRequest{meta: meta, plan: plan}
 		title, message := continueConfirmText(meta, plan)

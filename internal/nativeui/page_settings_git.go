@@ -47,6 +47,7 @@ func commitEndpointHost(endpoint string) string {
 }
 
 func (s *Shell) settingsGit(c *ui.Context) {
+	s.probeCommitKey()
 	sp := Spacing()
 	t := c.Theme()
 	settingsCard(c, "Commit message rules", func() {
@@ -81,7 +82,7 @@ func (s *Shell) settingsGit(c *ui.Context) {
 		}),
 		row("Endpoint", "OpenAI-compatible base URL; /chat/completions is appended.", func() {
 			ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
-				comboField(c, &s.settingsCommitEndpointDraft, commitAPIPresets).Width(340).
+				autocompleteField(c, &s.settingsCommitEndpointDraft, commitAPIPresets).Width(340).
 					Label("API endpoint").Placeholder("https://api.openai.com/v1")
 				if regularButton(c, "Save").Label("Save endpoint").Clicked() {
 					text := strings.TrimSpace(s.settingsCommitEndpointDraft)

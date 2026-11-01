@@ -132,7 +132,7 @@ func (s *Shell) breadcrumbRow(c *ui.Context) bool {
 			segment := segment
 			last := i == len(segments)-1
 			if i > 0 {
-				ui.Icon(c, iconChevron).Size(glyph, glyph).TextColor(t.TextMuted).Shrink(0)
+				crumbSeparator(c)
 			}
 			open := s.crumbOpen[i]
 			b := ui.ButtonBase(c).
@@ -185,6 +185,14 @@ func (s *Shell) breadcrumbRow(c *ui.Context) bool {
 		}
 	})
 	return true
+}
+
+// crumbSeparator is the chevron between two crumbs; it belongs to no button.
+// The title-bar path and every inner page's breadcrumb (routeHeaderBlock) draw
+// this one.
+func crumbSeparator(c *ui.Context) {
+	glyph := Controls().IconRegular
+	ui.Icon(c, iconChevron).Size(glyph, glyph).TextColor(c.Theme().TextMuted).Shrink(0)
 }
 
 // crumbClipped reports whether an ancestor crumb's label would end in an

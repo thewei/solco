@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solco Mobile 重设计 · 探索稿</title>
+<style>
+:root{--bg:#0b0b0c;--p1:#131315;--p2:#1a1a1d;--p3:#222226;--ln:#2a2a2f;--t1:#ededf0;--t2:#a0a0a8;--t3:#6c6c75;--ac:#7c83ff;--ok:#3ecf8e;--wn:#f5a524;--er:#f0616d;--r:14px}
+*{box-sizing:border-box;margin:0}
+body{background:#050505;color:var(--t1);font:13px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif;display:flex;height:100vh;overflow:hidden}
+.stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-width:0;overflow:auto;padding:16px}
+.label{font:11px ui-monospace,monospace;color:var(--t3);text-transform:uppercase;letter-spacing:.06em}
+.cap{max-width:760px;color:var(--t2);font-size:12px;text-align:center}
+.row{display:flex;gap:28px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+.phone{width:300px;height:620px;background:var(--bg);border:1px solid #333;border-radius:34px;position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px #000}
+.sb{height:26px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:11px;color:var(--t2);flex:none}
+.top{display:flex;align-items:center;gap:8px;padding:6px 14px 8px;flex:none}
+.top h1{font-size:17px;font-weight:650;flex:1}
+.ib{width:30px;height:30px;border-radius:10px;background:var(--p2);display:grid;place-items:center;color:var(--t2);font-size:14px}
+.scroll{flex:1;overflow:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.sec{font:600 11px system-ui;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;padding:8px 4px 0;display:flex;gap:6px;align-items:center}
+.sec b{background:var(--wn);color:#111;border-radius:8px;padding:0 6px;font-size:10px}
+.card{background:var(--p1);border:1px solid var(--ln);border-radius:var(--r);padding:11px 12px;display:flex;flex-direction:column;gap:7px}
+.card.warn{border-color:#5a4318;background:#17130b}
+.hd{display:flex;align-items:center;gap:8px}
+.av{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;flex:none}
+.nm{font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{color:var(--t3);font-size:11px}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.pv{font:11px ui-monospace,monospace;color:var(--t2);background:#0d0d0f;border-radius:8px;padding:6px 8px;white-space:pre-wrap}
+.btns{display:flex;gap:6px}
+.b{flex:1;text-align:center;padding:8px;border-radius:10px;background:var(--p3);font-weight:600;font-size:12px;color:var(--t1);border:0}
+.b.pri{background:var(--t1);color:#111}.b.ok{background:#12301f;color:var(--ok)}.b.no{background:#33161a;color:var(--er)}
+.chip{padding:3px 9px;border-radius:99px;background:var(--p2);font-size:11px;color:var(--t2);white-space:nowrap}
+.chip.on{background:var(--t1);color:#111}
+.tabs{display:flex;justify-content:space-around;align-items:center;padding:8px 6px 14px;border-top:1px solid var(--ln);background:var(--p1);flex:none}
+.tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--t3);min-width:48px}
+.tab i{font-style:normal;font-size:17px}.tab.on{color:var(--t1)}
+.tab.plus i{width:42px;height:42px;border-radius:50%;background:var(--ac);color:#fff;display:grid;place-items:center;margin-top:-18px;font-size:22px;box-shadow:0 6px 18px #7c83ff55}
+.fab{position:absolute;right:16px;bottom:22px;width:48px;height:48px;border-radius:50%;background:var(--ac);color:#fff;display:grid;place-items:center;font-size:24px;box-shadow:0 6px 18px #7c83ff55}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--p1);border-top:1px solid var(--ln);border-radius:24px 24px 0 0;padding:10px 14px 18px;display:flex;flex-direction:column;gap:9px;box-shadow:0 -20px 40px #000a}
+.sheet:before{content:"";width:36px;height:4px;border-radius:2px;background:var(--p3);align-self:center}
+.scrim{position:absolute;inset:0;background:#0009}
+.msg{max-width:88%;padding:8px 11px;border-radius:16px;font-size:12px}
+.msg.u{align-self:flex-end;background:var(--p3)}.msg.a{align-self:flex-start;color:var(--t1)}
+.comp{margin:6px 10px 12px;background:var(--p2);border:1px solid var(--ln);border-radius:22px;padding:8px 10px;display:flex;align-items:center;gap:8px;color:var(--t3);flex:none}
+.comp span{flex:1}.comp .mic{width:30px;height:30px;border-radius:50%;background:var(--t1);color:#111;display:grid;place-items:center}
+.draft{font-size:10px;color:var(--t3);text-align:right;padding:0 16px}
+.notif{background:#26262b;border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:8px;width:300px}
+.widget{background:#1d1d21;border-radius:22px;padding:12px;width:300px;display:flex;flex-direction:column;gap:8px}
+.drawer{position:absolute;inset:0 70px 0 0;background:var(--p1);border-right:1px solid var(--ln);padding:34px 14px;display:flex;flex-direction:column;gap:6px;box-shadow:20px 0 40px #000a}
+.drawer .it{padding:9px 10px;border-radius:10px;color:var(--t2)}.drawer .it.on{background:var(--p3);color:var(--t1)}
+.panel{width:330px;background:#0f0f11;border-left:1px solid var(--ln);padding:14px;overflow:auto;flex:none;display:flex;flex-direction:column;gap:10px}
+.panel h4{font:600 11px system-ui;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-top:6px}
+.pb{display:flex;flex-wrap:wrap;gap:6px}
+.pb button,.vc{font:inherit;color:var(--t2);background:var(--p1);border:1px solid var(--ln);border-radius:9px;padding:6px 10px;cursor:pointer;text-align:left}
+.pb button.on,.vc.on{color:var(--t1);border-color:#555;background:var(--p3)}
+.vc{width:100%;display:block}.vc b{display:block;color:var(--t1)}.vc small{color:var(--t3)}.rec{color:var(--ok);font-size:10px;margin-left:4px}
+.story{color:var(--t2);font-size:12px}.story li{margin:4px 0 4px 16px}.story code{background:var(--p2);padding:0 4px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+<aside class="panel">
+  <div class="label">Solco Mobile · 重设计</div>
+  <h4>议题</h4><div class="pb" id="topics"></div>
+  <h4>方案</h4><div id="vars"></div>
+  <h4>状态</h4><div class="pb" id="states"></div>
+  <h4>Story</h4><div class="story" id="story"></div>
+</aside>
+<script>
+const A={cc:['C','#d97757'],cx:['X','#10a37f'],pi:['π','#7c5cff'],om:['o','#3b82f6']};
+const av=k=>`<div class="av" style="background:${A[k][1]}">${A[k][0]}</div>`;
+const dot=c=>`<span class="dot" style="background:${c}"></span>`;
+const sbar=`<div class="sb"><span>9:41</span><span>●●● 5G</span></div>`;
+const phone=(inner,extra='')=>`<div class="phone">${sbar}${inner}${extra}</div>`;
+const tabs=(items,on)=>`<div class="tabs">${items.map(([i,l,p])=>`<div class="tab ${p?'plus':''} ${l===on?'on':''}"><i>${i}</i>${p?'':l}</div>`).join('')}</div>`;
+
+/* ---- shared fragments ---- */
+const needs=(inline=true)=>`
+<div class="card warn"><div class="hd">${av('cc')}<div class="nm">Fix flaky test</div><span class="meta">solco · 2m</span></div>
+<div class="pv">Run shell command?\n$ go test ./internal/usage -run Claude -count=1</div>
+${inline?'<div class="btns"><button class="b no">Deny</button><button class="b ok">Approve</button></div>':''}</div>
+<div class="card warn"><div class="hd">${av('cx')}<div class="nm">Quota page</div><span class="meta">solco · 14m</span></div>
+<div style="font-size:12px">Which layout should the summary use?</div>
+<div class="btns"><button class="b">One row</button><button class="b">Three cards</button><button class="b">Reply…</button></div></div>`;
+const working=`
+<div class="card"><div class="hd">${av('pi')}<div class="nm">Sidebar polish</div>${dot('var(--ac)')}<span class="meta">3m</span></div><div class="pv">Reading sidebar_tree.go…</div></div>
+<div class="card"><div class="hd">${av('om')}<div class="nm">Remote access settings</div>${dot('var(--ac)')}<span class="meta">now</span></div><div class="pv">Editing remote_settings.go</div></div>`;
+
+const sheetPeek=`<div class="scrim"></div><div class="sheet">
+<div class="hd">${av('cx')}<div class="nm">Quota page</div><span class="chip">Working · 4m</span></div>
+<div class="meta">solco · Tab 1 · Codex · gpt-5</div>
+<div class="pv">edit page_usage.go\nrun go test ./internal/nativeui\n✓ 142 passed</div>
+<div class="btns"><button class="b pri">Open chat</button><button class="b">Terminal</button><button class="b">⋯</button></div></div>`;
+const sheetNew=`<div class="scrim"></div><div class="sheet" style="gap:10px">
+<div class="nm" style="font-size:15px">New session</div>
+<div class="chip" style="align-self:flex-start">solco · This Mac ▾</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+ <div class="card" style="align-items:center;border-color:var(--ac)">${av('cc')}<span style="font-size:11px">Claude</span><span class="meta" style="font-size:9px">last used</span></div>
+ <div class="card" style="align-items:center">${av('cx')}<span style="font-size:11px">Codex</span></div>
+ <div class="card" style="align-items:center">${av('pi')}<span style="font-size:11px">pi</span></div>
+ <div class="card" style="align-items:center">${av('om')}<span style="font-size:11px">omp</span></div>
+ <div class="card" style="align-items:center"><div class="av" style="background:#444">≡</div><span style="font-size:11px">Cursor</span></div>
+ <div class="card" style="align-items:center"><div class="av" style="background:#222">›_</div><span style="font-size:11px">Terminal</span></div></div>
+<div class="comp" style="margin:0"><span>What should it do?</span><div class="mic">🎤</div></div>
+<button class="b pri">Start</button></div>`;
+
+const chat=(dockOn)=>phone(`
+<div class="top"><div class="ib">‹</div>${av('cc')}<div style="flex:1"><div class="nm" style="font-size:14px">Fix flaky test</div><div class="meta">solco · Claude · ${dockOn?'needs you':'working'}</div></div><div class="ib">›_</div></div>
+<div class="scroll" style="justify-content:flex-end">
+<div class="msg u">why does TestClaude flake?</div>
+<div class="msg a">The fixture reads the clock twice; I'll freeze it and rerun.</div>
+<div class="meta" style="padding:0 4px">Thought for 12s · Edited 2 files</div>
+${dockOn?`<div class="card warn"><div class="pv">$ go test ./internal/usage -count=20</div><div class="btns"><button class="b no">Deny</button><button class="b ok">Approve</button></div></div>`:''}
+</div><div class="draft">Draft saved</div>
+<div class="comp"><span>＋  Message</span><div class="mic">🎤</div></div>`);
+
+/* ---- variants ---- */
+const V={
+A:{n:'A · 收件箱优先',d:'打开即见「要你处理」，卡片内直接批准',
+ home:()=>phone(`<div class="top"><h1>Now</h1><div class="chip">This Mac ▾</div><div class="ib">🔔</div></div>
+ <div class="scroll"><div class="sec">Needs you <b>2</b></div>${needs()}<div class="sec">Working</div>${working}<div class="sec">Idle · 2</div></div>`+tabs([['◉','Now'],['☰','Sessions'],['+','',1],['◔','Quota'],['⚙','Me']],'Now')),
+ peek:()=>phone(`<div class="top"><h1>Now</h1><div class="chip">This Mac ▾</div></div><div class="scroll"><div class="sec">Needs you <b>2</b></div>${needs(false)}<div class="sec">Working</div>${working}</div>`+tabs([['◉','Now'],['☰','Sessions'],['+','',1],['◔','Quota'],['⚙','Me']],'Now'),sheetPeek),
+ chat:()=>chat(true),
+ new:()=>phone(`<div class="top"><h1>Now</h1></div><div class="scroll">${working}</div>`+tabs([['◉','Now'],['☰','Sessions'],['+','',1],['◔','Quota'],['⚙','Me']],'Now'),sheetNew),
+ story:['底部 Tab 取代抽屉：Now / Sessions / ＋ / Quota / Me；中间 ＋ 永远在拇指区。','首页只回答一个问题：「谁在等我？」——Needs you 置顶，批准/拒绝/选项直接在卡里完成，不用先进聊天。','点卡片 = Peek 底部抽屉（状态 → 预览 → 接管：Open chat / Terminal），对应 Grok Bot 的「状态→预览→接管」。','成本：重做导航壳（Expo Router `(tabs)`），首页数据已有（`/api/v3` 状态流）。']},
+B:{n:'B · Agent 看板 + 底栏',d:'按 Mac / Workspace 分组的看板，底栏换 Tab',
+ home:()=>phone(`<div class="top"><h1>solco</h1><div class="chip">This Mac ▾</div><div class="ib">🔍</div></div>
+ <div class="scroll"><div style="display:flex;gap:6px"><span class="chip on">All 4</span><span class="chip">Needs 2</span><span class="chip">Working 2</span></div>
+ <div class="card"><div class="hd"><div class="av" style="background:#4f6df5">S</div><div class="nm">solco</div><span class="meta">main · 12 files</span></div>
+  <div class="hd">${av('cc')}<div class="nm">Fix flaky test</div>${dot('var(--wn)')}</div>
+  <div class="hd">${av('cx')}<div class="nm">Quota page</div>${dot('var(--wn)')}</div>
+  <div class="hd">${av('pi')}<div class="nm">Sidebar polish</div>${dot('var(--ac)')}</div></div>
+ <div class="card"><div class="hd"><div class="av" style="background:#17a34a">M</div><div class="nm">solco-mobile</div><span class="meta">main</span></div>
+  <div class="hd">${av('om')}<div class="nm">Remote access settings</div>${dot('var(--ac)')}</div></div></div>`+tabs([['◉','Agents'],['☰','History'],['▤','Tasks'],['◔','Quota']],'Agents')+'',`<div class="fab">+</div>`),
+ peek:()=>V.A.peek(),chat:()=>chat(true),new:()=>V.A.new(),
+ story:['保留桌面端心智（Workspace → Agent），首页是紧凑看板，一屏看全部。','底栏四项：Agents / History / Tasks / Quota；新建用 FAB。','待处理只用状态点提示，批准仍需进 Peek/聊天——比 A 多一步，信息密度更高。','成本：与桌面一致，实现最小；缺点是「等我」不够突出。']},
+C:{n:'C · 演进现有抽屉',d:'保留抽屉与现有页面，补内联批准、FAB、小组件',
+ home:()=>phone(`<div class="top"><div class="ib">☰</div><h1>solco</h1><div class="ib">🔍</div></div>
+ <div class="scroll"><div class="sec">Needs you <b>2</b></div>${needs()}<div class="sec">Working</div>${working}</div>`,`<div class="fab">+</div>`),
+ peek:()=>V.A.peek(),chat:()=>chat(true),new:()=>V.A.new(),
+ drawer:()=>phone(`<div class="top"><div class="ib">☰</div><h1>solco</h1></div><div class="scroll">${working}</div>`,`<div class="scrim"></div><div class="drawer"><div class="nm" style="font-size:15px">Solco</div><div class="it on">Agents</div><div class="it">Sessions</div><div class="it">Tasks</div><div class="it">Quota</div><div class="it">Remote · This Mac</div><div class="it">Settings</div></div>`),
+ story:['零导航重构：沿用现在的抽屉（Sessions/Quota 入口已在其中）。','只加三样：Needs you 内联批准、FAB 新建、系统层入口（通知/小组件）。','风险低、可分阶段发；但抽屉把 History / Tasks / Quota 藏得深，长期发现性差。']}
+};
+const OUT={
+ notif:()=>`<div class="notif"><div class="hd"><span class="meta">Solco · now</span></div><div class="hd">${av('cc')}<div class="nm">Fix flaky test needs approval</div></div><div class="pv">$ go test ./internal/usage -count=20</div><div class="btns"><button class="b no">Deny</button><button class="b ok">Approve</button><button class="b">Open</button></div></div>
+ <div class="cap">Android 通知：Approve / Deny / 内联回复（RemoteInput），不用点开 App。foreground service 与 attention 通知已存在，缺的是 action。</div>`,
+ widget:()=>`<div class="widget"><div class="hd"><b style="flex:1">Solco</b><span class="chip">2 need you</span></div><div class="hd">${av('cc')}<div class="nm">Fix flaky test</div>${dot('var(--wn)')}</div><div class="hd">${av('cx')}<div class="nm">Quota page</div>${dot('var(--wn)')}</div><div class="hd">${av('pi')}<div class="nm">Sidebar polish</div>${dot('var(--ac)')}</div></div>
+ <div class="cap">主屏小组件：待处理数 + 前 3 个 Agent；点行直达 Chat。（Grok Bot / Happy 的 Live Activity 同类）</div>`,
+ share:()=>`<div class="notif"><div class="nm">Share to…</div><div class="hd">${av('cc')}<div class="nm">Solco · Claude (solco)</div></div><div class="hd">${av('cx')}<div class="nm">Solco · Codex (solco)</div></div><div class="meta">截图/日志/链接作为附件 @path 送进新会话或现有会话</div></div>
+ <div class="cap">系统分享：把截图/文本直接发给 Agent；复用已有的附件上传 POST /panes/{id}/chat/attachments。</div>`
+};
+
+const TOPICS={
+ home:{n:'首页 / 导航',vars:['A','B','C'],states:[['home','首页'],['peek','Peek 抽屉'],['chat','Chat 内批准'],['new','新建会话'],['drawer','抽屉(仅 C)']]},
+ outside:{n:'App 之外',vars:[],states:[['notif','通知'],['widget','小组件'],['share','分享']]},
+ gaps:{n:'功能缺口',vars:[],states:[]}
+};
+const GAPS=[['语音听写','Composer 麦克风已有位置；手机直接用系统听写/转写，不上传音频到 Solco（桌面 Voice 为独立来源）。','P1'],
+['History 搜索','手机只有 Sessions 抽屉入口；加搜索 + Running 标识 + Continue 落到对应 Pane。','P1'],
+['Tasks','herdr-projects 在手机无入口；只读看板 + 批准计划。','P2'],
+['逐会话草稿','每个 Pane 草稿本地保存（桌面已有队列），切换不丢。','P1'],
+['状态→预览→接管','Peek 抽屉三级：状态点 → 最近输出 → Open chat / Terminal（read-only observe）。','P1'],
+['选项卡截断','真机截图里 picker 卡文字被截断（/tmp/solco-research/phone-now.png）：卡内换行 + 可展开。','Bug'],
+['多 Mac 切换','Now 顶栏 chip：This Mac ▾，记住上次。','P2']];
+let st={t:'home',v:'A',s:'home'};
+function hash(){const m=Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(x=>x.split('=')));if(m.t&&TOPICS[m.t])st.t=m.t;if(m.v&&V[m.v])st.v=m.v;if(m.s)st.s=m.s}
+function put(){location.hash=`t=${st.t}&v=${st.v}&s=${st.s}`}
+function render(){
+ const T=TOPICS[st.t];
+ topics.innerHTML=Object.entries(TOPICS).map(([k,x])=>`<button class="${k===st.t?'on':''}" data-t="${k}">${x.n}</button>`).join('');
+ vars.innerHTML=T.vars.map(k=>`<button class="vc ${k===st.v?'on':''}" data-v="${k}"><b>${V[k].n}${k==='A'?'<span class="rec">推荐</span>':''}</b><small>${V[k].d}</small></button>`).join('')||'<div class="meta">无方案分歧：按需组合</div>';
+ if(!T.states.find(x=>x[0]===st.s))st.s=T.states[0]?.[0]||'';
+ states.innerHTML=T.states.map(([k,l])=>`<button class="${k===st.s?'on':''}" data-s="${k}">${l}</button>`).join('');
+ let h='',story=[];
+ if(st.t==='home'){const v=V[st.v];const f=v[st.s]||v.home;h=`<div class="label">${v.n} · ${T.states.find(x=>x[0]===st.s)?.[1]}</div><div class="row">${f()}</div>`;story=v.story}
+ else if(st.t==='outside'){h=`<div class="label">App 之外</div><div class="row" style="flex-direction:column;align-items:center">${OUT[st.s]()}</div>`;story=['待办在 App 之外就能处理，是 Grok Bot / Happy / Omnara 的共同第一功能。','通知 action 走现有 Host v3 的 interaction answer；小组件读 bootstrap 状态。','Android 先行（项目基线），iOS 用 Live Activity 另评估。']}
+ else{h=`<div class="label">功能缺口（与竞品对照）</div><div style="max-width:620px;display:flex;flex-direction:column;gap:8px">${GAPS.map(g=>`<div class="card"><div class="hd"><b style="flex:1">${g[0]}</b><span class="chip">${g[2]}</span></div><div class="meta" style="font-size:12px;color:var(--t2)">${g[1]}</div></div>`).join('')}</div>`;story=['竞品调研：Happy / Moshi / Omnara / Grok Bot（状态→预览→接管、逐会话草稿、语音、Live Activity/Shortcuts、routine）。','P1 = 随首页重设计一起做；P2 = 之后。']}
+ stage.innerHTML=h;
+ document.getElementById('story').innerHTML='<ul>'+story.map(x=>`<li>${x}</li>`).join('')+'</ul>';
+}
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.t){st.t=b.dataset.t;st.s='';}if(b.dataset.v)st.v=b.dataset.v;if(b.dataset.s)st.s=b.dataset.s;
+ if(b.dataset.t||b.dataset.v||b.dataset.s){put();render()}});
+hash();render();window.addEventListener('hashchange',()=>{hash();render()});
+</script>
+</body>
+</html>

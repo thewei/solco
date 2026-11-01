@@ -556,6 +556,25 @@ func TestEventsHelloThenTreeChangedOnlyForRealChanges(t *testing.T) {
 	cancel()
 }
 
+func TestEventsBeatWhileIdleSoThePhoneCanTellQuietFromDead(t *testing.T) {
+	prev := eventsHeartbeat
+	eventsHeartbeat = 40 * time.Millisecond
+	t.Cleanup(func() { eventsHeartbeat = prev })
+	h := newHarness(t)
+	conn, _, err := h.dial("/api/v3/events", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hello := readJSON(t, conn); hello["t"] != "hello" {
+		t.Fatalf("hello = %v", hello)
+	}
+	for i := 0; i < 2; i++ {
+		if beat := readJSON(t, conn); beat["t"] != "hb" || len(beat) != 1 {
+			t.Fatalf("beat %d = %v, want exactly {t:hb}", i, beat)
+		}
+	}
+}
+
 func TestEventsPushRevisionWhenTheTreeChanges(t *testing.T) {
 	h := newHarness(t)
 	conn, _, err := h.dial("/api/v3/events", true)

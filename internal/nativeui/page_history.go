@@ -500,8 +500,17 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 		}
 		agentTile(c, summary.Meta.Agent, 24)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).PassThrough().Children(func() {
-			tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Ellipsis("…"), title).PassThrough()
+			live, isLive := s.liveSessionFor(summary.Meta)
+			ui.Row(c).FillWidth().MinWidth(0).Gap(sp.S).AlignItems(ui.Center).PassThrough().Children(func() {
+				tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0), title).PassThrough()
+				if isLive && !s.hist.showTrash {
+					statusPill(c, liveSessionLabel(live.State), liveSessionTone(live.State))
+				}
+			})
 			if facts := sessionFactLine(summary.Meta, s.hist.provider == ""); facts != "" {
+				if isLive && live.Where != "" && !s.hist.showTrash {
+					facts = "in " + live.Where + " · " + facts
+				}
 				ui.Text(c, facts).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").PassThrough()
 			}
 		})

@@ -61,12 +61,12 @@ func TestRemoteAccessIsOffUntilChosen(t *testing.T) {
 	s := remoteShell(t)
 	tester := ui.NewTester(s.View, 1200, 800)
 	settleFrames(tester, 3)
-	for _, want := range []string{"Access", "Off."} {
+	for _, want := range []string{"Access", "Off.", "Advanced"} {
 		if !tester.HasText(want) {
 			t.Fatalf("Remote Access page lacks %q; texts=%q", want, tester.Texts())
 		}
 	}
-	if tester.HasText("Show QR Code…") || tester.HasText("Port") {
+	if tester.HasText("Pair a Phone…") || tester.HasText("Listening · This Mac only") {
 		t.Fatalf("an off Host shows listener controls; texts=%q", tester.Texts())
 	}
 	if srv := s.remote.srv; srv != nil && srv.ListenAddress() != "" {
@@ -78,7 +78,7 @@ func TestRemoteLoopbackListensPairsAndRevokes(t *testing.T) {
 	s := remoteShell(t)
 	port := remoteFreePort(t)
 	s.applySettings(func(v *settings.Settings) error { v.Remote.Port = port; return nil })
-	tester := ui.NewTester(s.View, 1200, 1100) // tall: Relay + Direct P2P sit above the Phones list
+	tester := ui.NewTester(s.View, 1200, 1100) // tall: the status card, the phones and the folded Advanced share the page
 	settleFrames(tester, 3)
 
 	if err := tester.Click("This Mac only"); err != nil {
@@ -92,12 +92,12 @@ func TestRemoteLoopbackListensPairsAndRevokes(t *testing.T) {
 	if s.settings.Remote.Mode != "loopback" {
 		t.Fatalf("saved mode = %q", s.settings.Remote.Mode)
 	}
-	if !tester.HasText("Listening on "+srv.ListenAddress()+" over HTTPS.") || !tester.HasText("Show QR Code…") {
+	if !tester.HasText("Listening · This Mac only") || !tester.HasText("Pair a Phone…") {
 		t.Fatalf("status or pairing entry missing; texts=%q", tester.Texts())
 	}
 
 	// pairing sheet: a matrix is drawn and closing voids the code
-	if err := tester.Click("Show QR Code…"); err != nil {
+	if err := tester.Click("Pair a Phone…"); err != nil {
 		t.Fatal(err)
 	}
 	settleFrames(tester, 3)
@@ -186,7 +186,11 @@ func TestRemoteRelayPageSavesAndDrivesTheTunnel(t *testing.T) {
 	s := remoteShell(t)
 	tester := ui.NewTester(s.View, 1200, 800)
 	settleFrames(tester, 3)
-	if !tester.HasText("Relay") || !tester.HasText("Off. The phone connects over the network directly.") {
+	if err := tester.Click("Advanced"); err != nil {
+		t.Fatal(err)
+	}
+	settleFrames(tester, 3)
+	if !tester.HasText("Relay") {
 		t.Fatalf("the Relay group is missing; texts=%q", tester.Texts())
 	}
 
@@ -285,5 +289,55 @@ func TestRemoteP2PFromMapsTheSavedChoice(t *testing.T) {
 	got := remoteP2PFrom(settings.RemoteAccessSettings{P2PDisabled: true, P2PICE: "turn:t.test:3478", P2PTurnUser: "u", P2PTurnPass: "p"})
 	if got.Enabled || len(got.ICEServers) != 1 || got.ICEServers[0].Username != "u" {
 		t.Fatalf("saved choice = %+v", got)
+	}
+}
+
+// The redesigned page keeps relay, P2P, address and port behind Advanced: a
+// default page is the Access choice, the status reading and nothing else;
+// opening Advanced reveals the folded rows, and the status card carries the
+// pairing action (the old Status rows are gone).
+func TestRemoteAdvancedIsFoldedByDefault(t *testing.T) {
+	s := remoteShell(t)
+	port := remoteFreePort(t)
+	s.applySettings(func(v *settings.Settings) error { v.Remote.Port = port; return nil })
+	tester := ui.NewTester(s.View, 1200, 1100)
+	settleFrames(tester, 3)
+	if err := tester.Click("This Mac only"); err != nil {
+		t.Fatal(err)
+	}
+	settleFrames(tester, 3)
+	for _, folded := range []string{"Relay", "P2P", "Port", "Relay Status", "P2P Status", "Status"} {
+		if tester.HasText(folded) {
+			t.Errorf("%q is drawn before Advanced is opened; texts=%q", folded, tester.Texts())
+		}
+	}
+	if err := tester.Click("Advanced"); err != nil {
+		t.Fatal(err)
+	}
+	settleFrames(tester, 3)
+	for _, shown := range []string{"Port", "Relay", "P2P"} {
+		if !tester.HasText(shown) {
+			t.Errorf("%q missing once Advanced is open; texts=%q", shown, tester.Texts())
+		}
+	}
+	for _, gone := range []string{"Relay Status", "P2P Status"} {
+		if tester.HasText(gone) {
+			t.Errorf("the redundant %q row came back", gone)
+		}
+	}
+}
+
+func TestRemoteSummaryFoldsListenerRelayAndP2P(t *testing.T) {
+	s := remoteShell(t)
+	cfg := remotehost.Config{Mode: remotehost.ModeLAN}
+	if sum := s.remoteSummaryFor(nil, cfg); sum.Listening || !strings.Contains(sum.Detail, "Advanced") {
+		t.Fatalf("LAN without an address = %+v, want a pointer to Advanced", sum)
+	}
+	if sum := s.remoteSummaryFor(nil, remotehost.Config{Mode: remotehost.ModeLoopback}); sum.Listening || sum.Title != "Not listening" {
+		t.Fatalf("loopback not started = %+v", sum)
+	}
+	s.remote.err = "port in use"
+	if sum := s.remoteSummaryFor(nil, cfg); sum.Title != "port in use" || sum.Tone != ToneError {
+		t.Fatalf("an error must lead the card: %+v", sum)
 	}
 }

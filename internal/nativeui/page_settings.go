@@ -251,6 +251,20 @@ func (s *Shell) settingsGeneral(c *ui.Context) {
 			})
 		}),
 	)
+	settingsGroup(c, "Agents",
+		row("Default Agent view", "What an Agent pane opens in the first time. A pane you switch remembers its own view.", func() {
+			chosen := 0
+			if s.settings.General.AgentChatFirst() {
+				chosen = 1
+			}
+			if segmentedControl(c, &chosen, "TUI", "Chat").Label("Default Agent view").Changed() {
+				s.applySettings(func(v *settings.Settings) error {
+					v.General.AgentView = map[int]string{0: "", 1: "chat"}[chosen]
+					return nil
+				})
+			}
+		}),
+	)
 	settingsGroup(c, "Window",
 		row("Show Tabs in Sidebar", "On lists each Workspace's Tabs in the sidebar tree. Off (default) puts them in a Tab bar across the top of the window, like a browser.", func() {
 			if on, changed := settingSwitch(c, "Show Tabs in Sidebar", !s.settings.General.TabsInTitleBar()); changed {

@@ -125,11 +125,7 @@ func (s *Shell) tabBarRow(c *ui.Context) bool {
 				s.tabBarScroll.X = min(s.tabBarScroll.MaxX, s.tabBarScroll.X+tabScrollStep)
 			})
 		}
-		add := gorexIconButton(c, k, iconPlus, "New Tab", "", false, gorexIconBtn, gorexIconGlyph)
-		tipped(c, add, "New Tab in "+project.Label, tipKeys(acceleratorKeycaps(accelNewTab)))
-		if add.Clicked() {
-			s.newProjectTab(*project)
-		}
+		s.newTabControl(c, k, *project)
 		ui.Box(c).Grow(1).MinWidth(0).PassThrough()
 	})
 	return true

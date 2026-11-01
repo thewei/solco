@@ -124,3 +124,34 @@ func TestPaneSurfaceMemoryPersistsInSession(t *testing.T) {
 		t.Fatalf("p2 surface = %q, want terminal", snapshot.PaneSurfaces["p2"])
 	}
 }
+
+// Settings → General → Agent view = Chat is only the default for a pane with
+// no memory: an Agent pane opens in Chat, a plain shell stays on the
+// Terminal, and a pane the user switched to Terminal keeps that choice.
+func TestDefaultAgentViewChatOpensFreshAgentPanesInChat(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.settings.General.AgentView = "chat"
+
+	shell.selectPane("p2") // an Agent pane, never used
+	if shell.surface.current() != WorkspaceSurfaceChat || shell.chatPaneID != "p2" {
+		t.Fatalf("fresh Agent pane = %v/%q, want Chat on p2", shell.surface.current(), shell.chatPaneID)
+	}
+	if !shell.panePrefersChat("p2") || shell.panePrefersChat("p3") {
+		t.Fatal("only an Agent pane may prefer Chat; p3 is a plain shell")
+	}
+
+	shell.showSurface(WorkspaceSurfaceTerminal) // the user's own switch wins from now on
+	shell.selectPane("p1")
+	shell.selectPane("p2")
+	if shell.surface.current() != WorkspaceSurfaceTerminal {
+		t.Fatalf("a pane switched to Terminal came back as %v", shell.surface.current())
+	}
+}
+
+func TestDefaultAgentViewTUIKeepsTheTerminal(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.selectPane("p2")
+	if shell.surface.current() != WorkspaceSurfaceTerminal || shell.panePrefersChat("p2") {
+		t.Fatalf("default setting must stay Terminal, got %v", shell.surface.current())
+	}
+}

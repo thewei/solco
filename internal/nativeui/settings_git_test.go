@@ -94,3 +94,28 @@ func TestGitPreferencesPageDefaultAndSave(t *testing.T) {
 		t.Fatal("Reset default prompt failed")
 	}
 }
+
+// A custom endpoint typed into the field survives the field losing focus: a
+// Combobox put the text back to the last preset (the "Save resets it" bug).
+func TestGitEndpointKeepsCustomTextAfterBlur(t *testing.T) {
+	s := NewShell()
+	s.loading = false
+	s.router.Replace("/settings/git")
+	tester := ui.NewTester(s.View, 1200, 800)
+	if err := tester.Click("API endpoint"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Type("https://llm.example.com/v1")
+	if err := tester.Click("Model"); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.settingsCommitEndpointDraft; got != "https://llm.example.com/v1" {
+		t.Fatalf("custom endpoint was reverted on blur: %q", got)
+	}
+	if err := tester.Click("Save endpoint"); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.settings.Workbench.CommitAPI.Endpoint; got != "https://llm.example.com/v1" {
+		t.Fatalf("custom endpoint not persisted: %q", got)
+	}
+}

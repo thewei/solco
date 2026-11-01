@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "needs_project",
+    "message": "This session has no project folder."
+  }
+}

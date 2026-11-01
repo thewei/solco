@@ -47,9 +47,9 @@ func TestModalsShareOneTitleSize(t *testing.T) {
 // pageTitleSize matches the 20-point Title token however it is reached.
 var pageTitleSize = regexp.MustCompile(`Typography\(\)\.Title\b|\btyp\.Title\b`)
 
-// TestTitleSizeIsForPageTitles keeps the 20-point Title token where it
-// belongs: the page title in the title bar (route_header.go). A dialog or a
-// card that wants a heading takes Heading.
+// TestTitleSizeIsForPageTitles keeps the 20-point Title token out of every
+// source: since 2026-11-01 no page has a large title (the title bar draws a
+// breadcrumb). A dialog or a card that wants a heading takes Heading.
 func TestTitleSizeIsForPageTitles(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -57,7 +57,7 @@ func TestTitleSizeIsForPageTitles(t *testing.T) {
 	}
 	scanned := 0
 	for _, name := range files {
-		if strings.HasSuffix(name, "_test.go") || name == "route_header.go" {
+		if strings.HasSuffix(name, "_test.go") {
 			continue
 		}
 		src, err := os.ReadFile(name)
@@ -67,7 +67,7 @@ func TestTitleSizeIsForPageTitles(t *testing.T) {
 		scanned++
 		for i, line := range strings.Split(string(src), "\n") {
 			if pageTitleSize.MatchString(line) && !strings.HasPrefix(strings.TrimSpace(line), "//") {
-				t.Errorf("%s:%d uses the page-title size outside route_header.go; dialogs and cards take Typography().Heading", name, i+1)
+				t.Errorf("%s:%d uses the page-title size ; there are no large page titles; dialogs and cards take Typography().Heading", name, i+1)
 			}
 		}
 	}

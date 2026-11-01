@@ -315,13 +315,13 @@ func TestSegmentedControlChoosesWhatIsClicked(t *testing.T) {
 // Switch and Slider stay MyGo's own.
 var rawControls = map[string]bool{
 	"Button": true, "PrimaryButton": true, "TextInput": true, "TextArea": true,
-	"SearchField": true, "Combobox": true, "Select": true, "Segmented": true,
+	"SearchField": true, "Combobox": true, "Autocomplete": true, "Select": true, "Segmented": true,
 }
 
 // controlFaces are the Solco controls, whose look comes from controls.go.
 var controlFaces = map[string]bool{
 	"regularButton": true, "regularPrimaryButton": true, "compactButton": true, "compactPrimaryButton": true,
-	"textField": true, "textArea": true, "searchField": true, "comboField": true, "selectField": true,
+	"textField": true, "textArea": true, "searchField": true, "comboField": true, "autocompleteField": true, "selectField": true,
 	"segmentedControl": true,
 }
 

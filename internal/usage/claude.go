@@ -17,7 +17,7 @@ import (
 /**
  * [INPUT]: Claude Code 自己的登录凭据（登录 Keychain 条目 `Claude Code-credentials`，或 ~/.claude/.credentials.json）与 ANTHROPIC_BASE_URL（环境变量/~/.claude/settings.json）
  * [OUTPUT]: Claude Fetcher（GET api.anthropic.com/api/oauth/usage；NewClaudeCached 把取到的登录副本存进 SigninCache）、parseClaude/parseClaudeCredentials 纯函数、自定义端点识别
- * [POS]: 只读借用 Claude Code 的 OAuth access token，仅发往 api.anthropic.com；从不刷新 token（刷新会让 Claude Code 自己的登录失效），过期就如实报“请打开 Claude Code 续期”；走自定义端点的 Claude 没有套餐额度，返回 ErrCustomEndpoint；有 SigninCache 时先读副本，Claude Code 的 Keychain 条目只在副本缺失/过期/被拒时重读一次
+ * [POS]: 只读借用 Claude Code 的 OAuth access token，仅发往 api.anthropic.com；从不刷新 token（刷新会让 Claude Code 自己的登录失效），过期就如实报“请打开 Claude Code 续期”；走自定义端点的 Claude 没有套餐额度，返回 ErrCustomEndpoint；有 SigninCache 时先读副本，Claude Code 的 Keychain 条目只在副本缺失/过期/被拒时重读一次；过期的来源或被拒的 Keychain 读取之后休息 claudeSourceRetry（10 分钟）不再去问（errClaudeExpired / blockedUntil），手动 Refresh 之外不会每次打开 Quota 都弹授权
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -38,7 +38,17 @@ type claude struct {
 	// Keychain item — whose read makes macOS ask — is read once per copy.
 	cache    SigninCache
 	cacheKey string
+	// A sourced sign-in that is expired, or a Keychain read the user denied,
+	// is not read again before blockedUntil: every read of that item makes
+	// macOS ask, and the answer cannot change until Claude Code renews it.
+	blockedUntil time.Time
+	blockedErr   error
 }
+
+// claudeSourceRetry is how long an expired or denied Keychain source rests.
+const claudeSourceRetry = 10 * time.Minute
+
+var errClaudeExpired = fmt.Errorf("%w: Claude Code's sign-in expired, open Claude Code to renew it", ErrUnauthorized)
 
 // NewClaude reads Claude Code's plan limits with its own stored sign-in.
 func NewClaude() Fetcher {
@@ -68,7 +78,7 @@ func (c *claude) Fetch(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if cred.expired() {
-		return Snapshot{}, fmt.Errorf("%w: Claude Code's sign-in expired, open Claude Code to renew it", ErrUnauthorized)
+		return Snapshot{}, errClaudeExpired
 	}
 	var body claudeUsageBody
 	err = getJSON(ctx, c.client, c.endpoint, map[string]string{
@@ -158,7 +168,16 @@ func (c *claude) credentials(ctx context.Context) (claudeCred, bool, error) {
 			c.dropCached() // corrupt or expired: re-source below
 		}
 	}
+	if time.Now().Before(c.blockedUntil) {
+		return claudeCred{}, false, c.blockedErr
+	}
 	cred, err := c.sourceCredentials(ctx)
+	switch {
+	case err == nil && cred.expired():
+		c.blockedUntil, c.blockedErr = time.Now().Add(claudeSourceRetry), errClaudeExpired
+	case err != nil && errors.Is(err, ErrUnauthorized):
+		c.blockedUntil, c.blockedErr = time.Now().Add(claudeSourceRetry), err
+	}
 	if err == nil && c.cache != nil && !cred.expired() {
 		if blob, merr := json.Marshal(cred); merr == nil {
 			c.cache.Set(c.cacheKey, string(blob)) // best effort; a failed copy only means macOS asks again

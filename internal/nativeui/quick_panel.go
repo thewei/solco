@@ -205,6 +205,9 @@ func (s *Shell) quickPanelChrome(c *ui.Context) {
 	tab := s.quickPanelTabIndex()
 	ui.Row(c).FillWidth().Padding(sp.L, sp.M, 0).Gap(sp.XS).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, quickPanelTabTitle(tab)).FontSize(Typography().Section).FontWeight(WeightSemibold).Grow(1).SingleLine()
+		if tab == quickPanelQuotaTab {
+			s.usageReadingToggle(c)
+		}
 		for _, item := range s.quickPanelTabItems() {
 			if gorexIconButton(c, k, item.svg, item.label+" tab", item.label, item.id == tab, gorexPaneBtn, gorexPaneGlyph).Clicked() {
 				s.selectQuickPanelTab(item.id)

@@ -70,6 +70,16 @@ func NewHistoryService(catalog *Catalog, roots []SourceRoot) *HistoryService {
 // Catalog exposes the underlying catalog for the scanner caller and tests.
 func (s *HistoryService) Catalog() *Catalog { return s.catalog }
 
+// Session returns one cataloged session's metadata by key (metadata only; the
+// transcript is never read).
+func (s *HistoryService) Session(key string) (SessionMeta, bool) {
+	meta := s.catalog.Session(key)
+	if meta == nil {
+		return SessionMeta{}, false
+	}
+	return *meta, true
+}
+
 // Forget drops the catalog rows of sessions whose files left the provider
 // roots (moved to the Sessions Trash), so list, counts and lookups stop
 // naming them at once instead of at the next scan. Memory only: the service

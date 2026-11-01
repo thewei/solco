@@ -199,11 +199,25 @@ func (s *Shell) sidebarBackRow(c *ui.Context) {
 	}
 }
 
+// Top insets of the inner pages' sidebar body: Settings (no tab strip) and
+// Hosts (under the strip, aligned with Files and Changes).
+const (
+	innerSidebarTop          = float32(14)
+	innerSidebarTopUnderTabs = float32(6)
+)
+
 // sidebarInnerNav is the Settings and Hosts sidebar body: the page's
 // navigation lives in the app sidebar while the route owns the content area
 // (Files and Sessions carry the project header and build their own).
 func (s *Shell) sidebarInnerNav(c *ui.Context) {
-	ui.Column(c).Grow(1).MinHeight(0).Padding(14, 9, 9).Gap(3).Children(func() {
+	// Settings has no view tabs above it and keeps the roomier inset; Hosts
+	// sits under the tab strip like Files and Changes, so its first row starts
+	// at the height of theirs (the project row).
+	top := innerSidebarTop
+	if s.router.Path() == routeHosts {
+		top = innerSidebarTopUnderTabs
+	}
+	ui.Column(c).Grow(1).MinHeight(0).Padding(top, 9, 9).Gap(3).Children(func() {
 		switch path := s.router.Path(); {
 		case strings.HasPrefix(path, "/settings/"):
 			s.settingsNav(c)

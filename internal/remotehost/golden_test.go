@@ -258,6 +258,34 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "quota.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
 	h.srv.opts.Usage = nil
 	golden(t, "error-quota-unavailable.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
+	// sessions (read-only): the desktop's catalog metadata with the running-pane
+	// link; the seam answers search and running, the handler only forwards
+	h.srv.opts.Sessions = func(_ context.Context, q SessionsQuery) (Sessions, error) { return sampleSessions(q), nil }
+	golden(t, "bootstrap-sessions.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "sessions.json", bodyOf(t, h.get("/api/v3/sessions", h.token, nil)))
+	golden(t, "sessions-search.json", bodyOf(t, h.get("/api/v3/sessions?q=tests&limit=5", h.token, nil)))
+	golden(t, "error-sessions-bad-request.json", bodyOf(t, h.get("/api/v3/sessions?limit=0", h.token, nil)))
+	// continue (manage): the same engine as the desktop's Continue behind a seam;
+	// the answer names the pane the session now runs in
+	h.srv.opts.Continuer = &fakeContinuer{result: ContinueResult{PaneID: "w1:p2"}}
+	golden(t, "bootstrap-sessions-continue.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "session-continue.json", bodyOf(t, h.launch("/api/v3/sessions/codex:19bd/continue", h.token, "")))
+	h.srv.opts.Continuer = &fakeContinuer{err: &LaunchError{Code: "needs_project", Status: http.StatusConflict, Detail: "This session has no project folder."}}
+	golden(t, "error-session-needs-project.json", bodyOf(t, h.launch("/api/v3/sessions/codex:19bd/continue", h.token, "")))
+	h.srv.opts.Continuer = nil
+	golden(t, "error-session-continue-unavailable.json", bodyOf(t, h.launch("/api/v3/sessions/codex:19bd/continue", h.token, "")))
+	// voice (terminal-input): the phone's clip goes to the desktop's own Voice source and the text comes back
+	h.srv.opts.Voice = &fakeVoice{ready: true, text: "fix the failing test"}
+	golden(t, "bootstrap-voice.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "voice-client-request.json", []byte(voiceBody([]byte("webm-bytes"), "audio/webm")))
+	golden(t, "voice-transcribe.json", bodyOf(t, h.launch("/api/v3/voice/transcribe", h.token, voiceBody([]byte("webm-bytes"), "audio/webm"))))
+	golden(t, "error-voice-bad-request.json", bodyOf(t, h.launch("/api/v3/voice/transcribe", h.token, "nope")))
+	h.srv.opts.Voice = &fakeVoice{ready: true, err: errors.New("transcription auth failed — check the voice API key")}
+	golden(t, "error-voice-transcribe-failed.json", bodyOf(t, h.launch("/api/v3/voice/transcribe", h.token, voiceBody([]byte("x"), "audio/webm"))))
+	h.srv.opts.Voice = nil
+	golden(t, "error-voice-unavailable.json", bodyOf(t, h.launch("/api/v3/voice/transcribe", h.token, voiceBody([]byte("x"), "audio/webm"))))
+	h.srv.opts.Sessions = nil
+	golden(t, "error-sessions-unavailable.json", bodyOf(t, h.get("/api/v3/sessions", h.token, nil)))
 	h.srv.opts.Catalog = func(context.Context, history.AgentID, string) agentcatalog.Catalog {
 		return agentcatalog.Catalog{
 			Commands:     []agentcatalog.Entry{{Name: "/compact", Insert: "/compact ", Detail: "Compact the conversation", Kind: agentcatalog.KindText}},

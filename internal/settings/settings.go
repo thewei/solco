@@ -127,6 +127,10 @@ type GeneralSettings struct {
 	// sidebar tree lists only Workspaces) or "sidebar" (the tree lists Tabs
 	// and Panes too). Stored as a word so an absent key means the default.
 	TabsPlacement string `json:"tabs_placement,omitempty"`
+	// AgentView is the view an Agent pane opens in when it has no remembered
+	// one of its own: "" or "tui" (the terminal, the default) or "chat" (the
+	// Chat page). A pane the user has switched keeps its own choice.
+	AgentView string `json:"agent_view,omitempty"`
 	// Opacity controls the transparency of the application window shell
 	// (0.50 to 1.00). An unset (0) or out-of-range value defaults to 1.00 (opaque).
 	Opacity float64 `json:"opacity,omitempty"`
@@ -134,6 +138,9 @@ type GeneralSettings struct {
 
 // TabsInTitleBar reports Show Tabs in Sidebar left off (the default).
 func (g GeneralSettings) TabsInTitleBar() bool { return g.TabsPlacement != "sidebar" }
+
+// AgentChatFirst reports the Chat default; anything but "chat" keeps the TUI.
+func (g GeneralSettings) AgentChatFirst() bool { return g.AgentView == "chat" }
 
 // WorkboardNative reports the opt-in native work board pages; anything but
 // "native" (including unset) keeps the plugin's own board.
@@ -253,6 +260,10 @@ type SessionSettings struct {
 	RecentFiles []string `json:"recent_files,omitempty"`
 	// RecentHosts are the ssh aliases last connected from Hosts (newest first).
 	RecentHosts []string `json:"recent_hosts,omitempty"`
+	// RecentLaunchKinds are the kinds last started from the Tab bar's "+ ▾"
+	// (an agent id or "terminal"; newest first): + repeats the first, the
+	// menu lists them in this order with Terminal last.
+	RecentLaunchKinds []string `json:"recent_launch_kinds,omitempty"`
 	// HookSessions remember, per "<instance>/<pane>", the session identity an
 	// Agent's hooks announced: Herdr's own agent list carries none for some
 	// providers (Claude Code), and without it Chat cannot rebind after a

@@ -173,8 +173,49 @@ func TestContinueOfARunningSessionOnlyShowsItsPane(t *testing.T) {
 	if shell.selectedPaneID != "p2" || shell.router.Path() != routeWorkspace {
 		t.Fatalf("pane=%q route=%q, want the running pane in the Workspace", shell.selectedPaneID, shell.router.Path())
 	}
-	if !strings.Contains(shell.pendingToast, "Already running") {
-		t.Fatalf("toast = %q", shell.pendingToast)
+	if shell.pendingToast != "" {
+		t.Fatalf("landing on the running pane needs no toast, got %q", shell.pendingToast)
+	}
+}
+
+// TestRunningSessionIsMarkedAndGoesToItsPane pins the 2026-11-01 association:
+// the list row of a session an Agent is running wears a status pill with the
+// Tab it runs in, a session no Agent runs wears none, and the row's primary
+// action is "Go to pane" — the same exact-identity match Continue uses.
+func TestRunningSessionIsMarkedAndGoesToItsPane(t *testing.T) {
+	shell, _, meta := newContinueTestShell(t)
+	if _, ok := shell.liveSessionFor(meta); ok {
+		t.Fatal("a session no Agent runs must not be marked")
+	}
+	shell.router.Replace(routeHistory)
+	idle := ui.NewTester(shell.View, 1200, 800)
+	idle.Frame()
+	for _, pill := range []string{"Running", "Needs you", "Ready", "Open · idle"} {
+		if idle.HasText(pill) {
+			t.Fatalf("an idle list shows the %q pill; texts=%q", pill, idle.Texts())
+		}
+	}
+
+	live := selectionFixture("w1", "t1", "p1")
+	live.Agents = []herdr.Agent{{
+		TerminalID: "term2", PaneID: "p2", ProjectID: "w2", TabID: "t2", Status: "working",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "codex", Kind: "id", Value: meta.ID},
+	}}
+	shell.projection = live
+	found, ok := shell.liveSessionFor(meta)
+	if !ok || found.PaneID != "p2" {
+		t.Fatalf("liveSessionFor = %+v,%v, want pane p2", found, ok)
+	}
+	tester := ui.NewTester(shell.View, 1200, 800)
+	settleFrames(tester, 2)
+	if !tester.HasText("Running") {
+		t.Fatalf("the running session's row lacks its pill; texts=%q", tester.Texts())
+	}
+
+	shell.router.Replace(routeHistory)
+	shell.goToPane(found.PaneID)
+	if shell.selectedPaneID != "p2" || shell.router.Path() != routeWorkspace {
+		t.Fatalf("go to pane left pane=%q route=%q", shell.selectedPaneID, shell.router.Path())
 	}
 }
 

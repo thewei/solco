@@ -55,8 +55,9 @@ func (s *Shell) titlebar(c *ui.Context) {
 			// control sits where it did on the last page whatever the title
 			// or the path ahead of it is.
 			var actions func(m *ui.Menu)
+			var pageTools func(c *ui.Context)
 			if spec, ok := s.routeHeader(); ok {
-				actions = spec.actions
+				actions, pageTools = spec.actions, spec.tools
 				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 					s.routeHeaderBlock(c, spec)
 				})
@@ -77,6 +78,9 @@ func (s *Shell) titlebar(c *ui.Context) {
 			}
 			if s.gitHeaderToolsShown() {
 				s.gitHeaderTools(c)
+			}
+			if pageTools != nil {
+				pageTools(c)
 			}
 			s.titlebarTools(c, k, actions)
 		})

@@ -3,7 +3,7 @@ package nativeui
 /**
  * [INPUT]: selected fenced Git review, Git preferences, the configured API channel (endpoint/model/Keychain key)
  * [OUTPUT]: cancelable one-shot AI message candidate in the existing Commit modal; the channel and key helpers every AI-commit surface shares
- * [POS]: UI/application coordinator; Git mutation stays with existing Commit preflight; the channel is API-only and refuses to run unconfigured; the key is read only on click paths, render paths use the cached presence flag
+ * [POS]: UI/application coordinator; Git mutation stays with existing Commit preflight; the channel is API-only and refuses to run unconfigured; the key is read only on click paths, render paths use the cached presence flag, which probeCommitKey fills once off the UI lane the first time a surface needs it (never at launch)
  * [PROTOCOL]: update this header and check CLAUDE.md on changes
  */
 
@@ -27,7 +27,7 @@ func (s *Shell) commitStore() usageSecrets {
 	if s.commitSecrets != nil {
 		return s.commitSecrets
 	}
-	return keychainSecrets{}
+	return appSecrets
 }
 
 // commitAPIKey reads the stored key. Click paths only — never render.
@@ -58,7 +58,28 @@ func commitEndpointConfigured(cfg settings.CommitAPI) bool {
 // commitGeneratorUsable is the render-safe readiness check: it trusts the
 // cached key-presence flag because it runs per frame.
 func (s *Shell) commitGeneratorUsable() bool {
-	return commitEndpointConfigured(s.settings.Workbench.CommitAPI) && s.commitAPIKeySet
+	if !commitEndpointConfigured(s.settings.Workbench.CommitAPI) {
+		return false
+	}
+	s.probeCommitKey()
+	return s.commitAPIKeySet
+}
+
+// probeCommitKey learns once, off the UI lane, whether a key is stored. It
+// runs only when a surface needs the answer (never at launch, so a Keychain
+// prompt cannot hold the window back) and only in a real window: tests set
+// commitAPIKeySet themselves. A found key only ever raises the flag, so a
+// Save that lands first is not undone by a late read.
+func (s *Shell) probeCommitKey() {
+	if s.commitKeyProbed || s.win == nil {
+		return
+	}
+	s.commitKeyProbed = true
+	go func() {
+		if s.commitKeyPresent() {
+			s.applyOnUI(func() { s.commitAPIKeySet = true })
+		}
+	}()
 }
 
 // commitGeneratorReady is the click-path check; it touches the Keychain.

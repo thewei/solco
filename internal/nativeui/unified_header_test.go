@@ -103,11 +103,12 @@ func TestTitleBarNamesTheRouteInOneSharedPlace(t *testing.T) {
 	}
 }
 
-// TestInnerTitlesAreOneLargeRow pins the 2026-10-14 look of the bar: every
-// inner page is a single row of Title-size type — no crumb chip, no second
-// context row — so the Files folder, the Hosts config path and the like do
-// not return as a muted line under it.
-func TestInnerTitlesAreOneLargeRow(t *testing.T) {
+// TestInnerTitlesAreBreadcrumbs pins the 2026-11-01 look of the bar: no inner
+// page has a large title — each is a breadcrumb in the Workspace bar's own
+// type size, on a single row with no second context line — so the Files
+// folder, the Hosts config path and the like do not return as a muted line
+// under it.
+func TestInnerTitlesAreBreadcrumbs(t *testing.T) {
 	for _, route := range headerRoutes() {
 		s := route.setup(t)
 		s.sidebarCollapsed = route.name == "changes" // see TestTitleBarNamesTheRouteInOneSharedPlace
@@ -117,8 +118,8 @@ func TestInnerTitlesAreOneLargeRow(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: title %q missing; texts=%q", route.name, route.title, tester.Texts())
 		}
-		if rect.H < Typography().Title {
-			t.Errorf("%s: title is %.1f high, want Title-size type (>= %.0f)", route.name, rect.H, Typography().Title)
+		if rect.H >= Typography().Title {
+			t.Errorf("%s: title is %.1f high, a large title (>= %.0f); inner pages wear the breadcrumb size", route.name, rect.H, Typography().Title)
 		}
 		for _, echo := range []string{shortDir(s.rightPanel.currentRoot), compactSearchPath(s.hosts.mainPath)} {
 			if echo != "" && echo != "." && tester.HasText(echo) {
@@ -249,7 +250,9 @@ func TestInnerSidebarsShareOneInset(t *testing.T) {
 		// Settings' list sits under its search field (2026-10-30 UX audit 3):
 		// one field height plus the column's 3pt gap.
 		search := Controls().RegularHeight + 3
-		if math.Abs(float64(rect.Y-(hostsY-strip+search))) > 0.5 {
+		// Hosts sits tighter under the tab strip than Settings' body inset.
+		inset := innerSidebarTop - innerSidebarTopUnderTabs
+		if math.Abs(float64(rect.Y-(hostsY-strip+search+inset))) > 0.5 {
 			t.Errorf("%s: sidebar list starts at y %.1f, want one view-tab strip (%.0f) above the other inner pages' %.1f with the %.0f search field in between", tc.name, rect.Y, strip, hostsY, search)
 		}
 	}

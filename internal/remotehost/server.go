@@ -72,6 +72,16 @@ type Options struct {
 	// Host offers no quota view and bootstrap says so. It runs on the Host's
 	// goroutines and answers every provider's standing in the page's order.
 	Usage func(ctx context.Context, force bool) Quota
+	// Sessions serves the desktop's session catalog for the phone (GET /sessions):
+	// metadata, search and the running-pane link; nil = no such view and bootstrap
+	// says so. It runs on the Host's goroutines.
+	Sessions SessionsFunc
+	// Continuer continues one cataloged session (POST /sessions/{id}/continue, scope
+	// manage); nil = the phone gets no Continue and bootstrap says so.
+	Continuer Continuer
+	// Voice transcribes a phone-recorded clip with the desktop's Voice source (POST /voice/transcribe,
+	// scope terminal-input); nil or not Ready = no dictation on the phone and bootstrap says so.
+	Voice VoiceTranscriber
 	// Catalog lists a pane agent's own Skills, commands and models for the composer; nil = agentcatalog.Load.
 	Catalog catalogLoader
 	// Attach stores an uploaded Chat attachment and returns its absolute path (POST .../chat/attachments);
@@ -413,6 +423,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git", s.guard(ScopeView, s.handleGitStatus))
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git/diff", s.guard(ScopeView, s.handleGitDiff))
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
+	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
+	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
+	mux.Handle("POST "+apiPrefix+"/sessions/{id}/continue", s.guard(ScopeManage, s.handleSessionContinue))
 	mux.Handle("GET "+apiPrefix+"/p2p/ice", s.guard(ScopeView, s.handleP2PICE))
 	mux.Handle("POST "+apiPrefix+"/p2p/session", s.guard(ScopeView, s.handleP2PSession))
 	mux.Handle("GET "+apiPrefix+"/terminals/{terminalID}/stream", s.guard(ScopeView, s.handleTerminal))
@@ -581,11 +594,20 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	if s.opts.Usage != nil {
 		capabilities["quota"] = true
 	}
+	if s.opts.Sessions != nil {
+		capabilities["sessions"] = true
+		if s.opts.Continuer != nil {
+			capabilities["sessionContinue"] = true
+		}
+	}
 	if s.opts.Git != nil {
 		capabilities["git"] = true
 	}
 	if s.opts.Attach != nil {
 		capabilities["attachments"] = true
+	}
+	if s.voiceReady() {
+		capabilities["voice"] = true
 	}
 	if s.opts.Queue != nil {
 		capabilities["queue"] = true

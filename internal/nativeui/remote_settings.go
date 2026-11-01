@@ -23,7 +23,7 @@ import (
 
 /**
  * [INPUT]: 依赖 internal/remotehost（Server/Config/RelayConfig/RelayStatus/Candidates/PairingOffer）、settings.Remote、Shell.runtime（Herdr Manager）、controls.go 的字段/分段/按钮/开关、settingsGroup/row 共享设置组件、skip2/go-qrcode（只负责把配对 URL 编成模块矩阵）
- * [OUTPUT]: remoteSettingsPath、Shell.settingsRemote（/settings/remote：Access 分段、Address 选择、Port、Status、Relay 区（开关、Relay Address、Registration Key、Relay Status）、Pair a phone、已配对手机与 Revoke）、Shell.remotePairDialog（二维码模态）、Shell.syncRemoteHost / stopRemoteHost、remoteConfigFrom、remoteRelayFrom
+ * [OUTPUT]: remoteSettingsPath、Shell.settingsRemote（/settings/remote，2026-11-01 重设计：Access 分段 → 一张状态卡（监听/Relay/P2P 汇成一句 + Pair a Phone…）→ 已配对手机与 Revoke → 折叠的 Advanced：Address、Port、Relay、P2P；Address 需要决定时 Advanced 自动展开）、Shell.remoteSummaryFor、Shell.remotePairDialog（二维码模态）、Shell.syncRemoteHost / stopRemoteHost、remoteConfigFrom、remoteRelayFrom
  * [POS]: 手机端 Remote Host（internal/remotehost）的唯一呈现与挂载点：默认关闭，用户选了网络才监听；Relay 是可选的自托管 alma-relay 公网路线（2026-11-01 用户确认），开启即随 Reconfigure 重拨，关闭即停；设置只存模式/端口/地址与 relay 开关/地址/注册钥匙，配对码、设备 token、TLS 私钥与 relaySecret 永远在 remotehost 自己的目录里；二维码用 Painter 画（黑白固定，与主题无关），relay 开启时 QR 追加 r/rt；撤销手机立即生效（remotehost 关它的 WS）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -57,6 +57,8 @@ type remoteState struct {
 	cands     []remotehost.Candidate
 	candsMode remotehost.Mode
 	candsAt   time.Time
+
+	advancedOpen bool
 
 	pairOpen bool
 	offer    remotehost.PairingOffer
@@ -118,6 +120,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		Identity:   s.hostHookIdentity,
 		AgentFacts: s.hostAgentFacts,
 		Usage:      s.hostUsage,
+		Sessions:   s.hostSessions(s.hist.service),
 		HostName:   host,
 		Version:    mygo.App.Version(),
 		Git:        app.NewRemoteGit(),
@@ -132,6 +135,10 @@ func (s *Shell) remoteServer() *remotehost.Server {
 	if s.launch != nil {
 		opts.Launcher = app.NewRemoteLauncher(s.launch)
 		opts.Queue = app.NewRemoteFollowUps(s.launch)
+		opts.Continuer = s.hostContinuer(s.hist.service)
+	}
+	if voiceSeam := s.hostVoice(); voiceSeam != nil {
+		opts.Voice = voiceSeam
 	}
 	srv, err := remotehost.New(opts)
 	if err != nil {
@@ -207,86 +214,108 @@ func remoteModeNote(m remotehost.Mode) string {
 	return "Off."
 }
 
+// settingsRemote is the Remote Access page (2026-11-01 redesign): the one
+// Access choice, a status card that says in one place whether phones can reach
+// this Mac and by which routes (with the Pair a Phone action), the paired
+// phones, and everything an ordinary setup never touches — address, port,
+// relay, direct P2P — folded under Advanced.
 func (s *Shell) settingsRemote(c *ui.Context) {
-	t := c.Theme()
-	typ := Typography()
 	cfg := remoteConfigFrom(s.settings.Remote)
 	srv := s.remoteServer()
-	ui.Text(c, "Browse Workspaces and drive agents from the Solco phone app. Off until you pick a network.").
-		FontSize(typ.BodySmall).TextColor(t.TextMuted)
 
-	rows := []settingsRow{
-		row("Access", remoteModeNote(cfg.Mode), func() {
-			chosen := remoteModeIndex(cfg.Mode)
-			if segmentedControl(c, &chosen, remoteModeLabels...).Label("Access").Changed() {
-				mode := remoteModes[chosen]
-				s.setRemote(func(r *settings.RemoteAccessSettings) {
-					r.Mode = string(mode)
-					if mode == remotehost.ModeLAN || mode == remotehost.ModeTailscale {
-						r.Address = s.pickRemoteAddress(mode, r.Address)
-					}
-				})
-			}
-		}),
-	}
-	if cfg.Mode == remotehost.ModeLAN || cfg.Mode == remotehost.ModeTailscale {
-		rows = append(rows, row("Address", "The one interface address Solco listens on.", func() { s.remoteAddressPicker(c, cfg) }))
-	}
+	settingsGroup(c, "", row("Access", remoteModeNote(cfg.Mode), func() {
+		chosen := remoteModeIndex(cfg.Mode)
+		if segmentedControl(c, &chosen, remoteModeLabels...).Label("Access").Changed() {
+			mode := remoteModes[chosen]
+			s.setRemote(func(r *settings.RemoteAccessSettings) {
+				r.Mode = string(mode)
+				if mode == remotehost.ModeLAN || mode == remotehost.ModeTailscale {
+					r.Address = s.pickRemoteAddress(mode, r.Address)
+				}
+			})
+		}
+	}))
 	if cfg.Mode != remotehost.ModeOff {
-		rows = append(rows,
-			row("Port", "", func() { s.remotePortField(c, cfg) }),
-			row("Status", "", func() { s.remoteStatus(c, srv, cfg) }),
-		)
+		s.remoteStatusCard(c, srv, cfg)
 	}
-	settingsGroup(c, "Listener", rows...)
+	s.remotePairedPhones(c, srv)
+	s.remoteAdvanced(c, srv, cfg)
+}
 
-	relay := remoteRelayFrom(s.settings.Remote)
-	relayRows := []settingsRow{
-		row("Relay", "Reach this Mac through your own relay (alma-relay) when no direct path exists. The relay sees requests in plaintext, and its registration key can replay a paired phone's credentials.", func() {
-			if on, changed := settingSwitch(c, "Relay", relay.Enabled); changed {
-				s.setRemote(func(r *settings.RemoteAccessSettings) { r.RelayEnabled = on })
+// remoteSummary is the status card's reading of the Host: a headline, the
+// routes behind it, and whether phones can connect right now.
+type remoteSummary struct {
+	Title, Detail string
+	Tone          StatusTone
+	Listening     bool
+}
+
+// remoteSummaryFor folds what used to be three Status rows (listener, relay,
+// P2P) into one reading.
+func (s *Shell) remoteSummaryFor(srv *remotehost.Server, cfg remotehost.Config) remoteSummary {
+	switch {
+	case s.remote.err != "":
+		return remoteSummary{Title: s.remote.err, Tone: ToneError}
+	case srv != nil && srv.ListenAddress() != "":
+		parts := []string{srv.ListenAddress()}
+		tone := ToneSuccess
+		if relay := remoteRelayFrom(s.settings.Remote); relay.Enabled {
+			switch st := srv.RelayStatus(); st.State {
+			case remotehost.RelayOnline:
+				parts = append(parts, "Relay connected")
+			case remotehost.RelayConnecting:
+				parts = append(parts, "Relay connecting…")
+			case remotehost.RelayBackoff:
+				parts, tone = append(parts, "Relay reconnecting: "+st.Message), ToneWarning
+			case remotehost.RelayError:
+				parts, tone = append(parts, "Relay: "+st.Message), ToneWarning
 			}
-		}),
-	}
-	if relay.Enabled {
-		relayRows = append(relayRows,
-			row("Relay Address", "The bare https:// or wss:// address of your self-hosted relay.", func() { s.remoteRelayAddressField(c, relay) }),
-			row("Registration Key", "The relay's shared registration key, when it asks for one.", func() { s.remoteRelayKeyField(c, relay) }),
-		)
-	}
-	relayRows = append(relayRows, row("Relay Status", "", func() { s.remoteRelayStatus(c, srv) }))
-	settingsGroup(c, "Relay", relayRows...)
-
-	p2p := remoteP2PFrom(s.settings.Remote)
-	p2pRows := []settingsRow{
-		row("P2P", "A phone may open a direct WebRTC link over LAN, Tailscale or the relay. STUN servers are contacted only when a phone opens one.", func() {
-			if on, changed := settingSwitch(c, "P2P", p2p.Enabled); changed {
-				s.setRemote(func(r *settings.RemoteAccessSettings) { r.P2PDisabled = !on })
+		}
+		if remoteP2PFrom(s.settings.Remote).Enabled {
+			switch n := srv.P2PSessions(); {
+			case n == 1:
+				parts = append(parts, "1 phone linked directly")
+			case n > 1:
+				parts = append(parts, strconv.Itoa(n)+" phones linked directly")
+			default:
+				parts = append(parts, "Direct link ready")
 			}
-		}),
+		}
+		return remoteSummary{Title: "Listening · " + remoteModeLabels[remoteModeIndex(cfg.Mode)], Detail: strings.Join(parts, " · "), Tone: tone, Listening: true}
+	case cfg.Mode == remotehost.ModeLAN || cfg.Mode == remotehost.ModeTailscale:
+		return remoteSummary{Title: "Not listening", Detail: "Choose an address under Advanced to start.", Tone: ToneMuted}
 	}
-	if p2p.Enabled {
-		p2pRows = append(p2pRows,
-			row("ICE Servers", "STUN/TURN URLs, comma-separated. Empty uses the built-in STUN servers.", func() { s.remoteICEField(c) }),
-			row("TURN Username", "For the turn: URLs above.", func() {
-				s.remoteTurnField(c, &s.remote.p2pUserDraft, "Username", s.settings.Remote.P2PTurnUser, false, func(r *settings.RemoteAccessSettings, v string) { r.P2PTurnUser = v })
-			}),
-			row("TURN Credential", "", func() {
-				s.remoteTurnField(c, &s.remote.p2pPassDraft, "Credential", s.settings.Remote.P2PTurnPass, true, func(r *settings.RemoteAccessSettings, v string) { r.P2PTurnPass = v })
-			}),
-			row("P2P Status", "", func() { s.remoteP2PStatus(c, srv) }),
-		)
-	}
-	settingsGroup(c, "Direct P2P", p2pRows...)
+	return remoteSummary{Title: "Not listening", Tone: ToneMuted}
+}
 
+// remoteStatusCard is the page's one status block: dot and headline, the
+// routes under it, and Pair a Phone while the Host listens.
+func (s *Shell) remoteStatusCard(c *ui.Context, srv *remotehost.Server, cfg remotehost.Config) {
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	typ := Typography()
+	sp := Spacing()
+	sum := s.remoteSummaryFor(srv, cfg)
+	ui.Row(c).FillWidth().Gap(sp.L).AlignItems(ui.Center).Padding(sp.L).
+		Radius(Radius().Card).Background(tokens.Panel).Border(1, tokens.BorderSubtle).Children(func() {
+		ui.Box(c).Size(8, 8).Shrink(0).Radius(4).Background(tokens.StatusColor(sum.Tone, t.Dark))
+		ui.Column(c).Grow(1).MinWidth(0).Gap(sp.XXS).Children(func() {
+			ui.Text(c, sum.Title).FontSize(typ.Section).FontWeight(WeightSemibold).TextColor(t.Text)
+			if sum.Detail != "" {
+				ui.Text(c, sum.Detail).FontSize(typ.BodySmall).TextColor(t.TextMuted)
+			}
+		})
+		if sum.Listening && regularPrimaryButton(c, "Pair a Phone…").Shrink(0).Clicked() {
+			s.openPairing()
+		}
+	})
+}
+
+// remotePairedPhones lists the paired phones with Revoke.
+func (s *Shell) remotePairedPhones(c *ui.Context, srv *remotehost.Server) {
 	if srv == nil || srv.ListenAddress() == "" {
 		return
 	}
-	settingsGroup(c, "Phones", row("Pair a phone", "One-time code, valid for 6 minutes.", func() {
-		if regularButton(c, "Show QR Code…").Clicked() {
-			s.openPairing()
-		}
-	}))
 	devices := srv.Devices().List()
 	if len(devices) == 0 {
 		return
@@ -304,6 +333,76 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 		}))
 	}
 	settingsGroup(c, "Paired phones", list...)
+}
+
+// remoteAdvanced is the folded rest: address, port, relay and direct P2P. It
+// opens by itself while the address needs a decision, so the one thing a LAN
+// or Tailscale setup must choose is never hidden.
+func (s *Shell) remoteAdvanced(c *ui.Context, srv *remotehost.Server, cfg remotehost.Config) {
+	t := c.Theme()
+	sp := Spacing()
+	tokens := designTokens(t.Dark)
+	listenerRows := cfg.Mode == remotehost.ModeLAN || cfg.Mode == remotehost.ModeTailscale
+	forced := false
+	if listenerRows {
+		cands := s.remoteCandidates(cfg.Mode)
+		forced = len(cands) == 0 || cfg.Address == "" || remoteAddressStale(cfg.Address, cands)
+	}
+	open := s.remote.advancedOpen || forced
+	strip := ui.ButtonBase(c.Key("remote-advanced")).FillWidth().Padding(sp.S, sp.XS).Gap(sp.S).AlignItems(ui.Center).
+		Radius(Radius().Row).FocusRing(false).Label("Advanced")
+	if strip.Hovered() {
+		strip.Background(tokens.PanelHover)
+	}
+	strip.Children(func() {
+		treeChevron(c, true, open, t.TextMuted)
+		ui.Text(c, "Advanced").FontSize(Typography().BodySmall).FontWeight(WeightMedium).TextColor(t.TextMuted)
+		ui.Text(c, "address, port, relay, direct link").FontSize(Typography().Caption).TextColor(t.TextMuted)
+	})
+	if strip.Clicked() && !forced {
+		s.remote.advancedOpen = !s.remote.advancedOpen
+	}
+	if !open {
+		return
+	}
+
+	var rows []settingsRow
+	if listenerRows {
+		rows = append(rows, row("Address", "The one interface address Solco listens on.", func() { s.remoteAddressPicker(c, cfg) }))
+	}
+	if cfg.Mode != remotehost.ModeOff {
+		rows = append(rows, row("Port", "", func() { s.remotePortField(c, cfg) }))
+	}
+	relay := remoteRelayFrom(s.settings.Remote)
+	rows = append(rows, row("Relay", "Your own relay (alma-relay) for when no direct path exists. It sees requests in plaintext.", func() {
+		if on, changed := settingSwitch(c, "Relay", relay.Enabled); changed {
+			s.setRemote(func(r *settings.RemoteAccessSettings) { r.RelayEnabled = on })
+		}
+	}))
+	if relay.Enabled {
+		rows = append(rows,
+			row("Relay Address", "The bare https:// or wss:// address of your relay.", func() { s.remoteRelayAddressField(c, relay) }),
+			row("Registration Key", "The relay's shared key, when it asks for one.", func() { s.remoteRelayKeyField(c, relay) }),
+		)
+	}
+	p2p := remoteP2PFrom(s.settings.Remote)
+	rows = append(rows, row("P2P", "A direct WebRTC link between phone and Mac. STUN is contacted only when a phone opens one.", func() {
+		if on, changed := settingSwitch(c, "P2P", p2p.Enabled); changed {
+			s.setRemote(func(r *settings.RemoteAccessSettings) { r.P2PDisabled = !on })
+		}
+	}))
+	if p2p.Enabled {
+		rows = append(rows,
+			row("ICE Servers", "STUN/TURN URLs, comma-separated. Empty uses the built-in STUN servers.", func() { s.remoteICEField(c) }),
+			row("TURN Username", "For the turn: URLs above.", func() {
+				s.remoteTurnField(c, &s.remote.p2pUserDraft, "Username", s.settings.Remote.P2PTurnUser, false, func(r *settings.RemoteAccessSettings, v string) { r.P2PTurnUser = v })
+			}),
+			row("TURN Credential", "", func() {
+				s.remoteTurnField(c, &s.remote.p2pPassDraft, "Credential", s.settings.Remote.P2PTurnPass, true, func(r *settings.RemoteAccessSettings, v string) { r.P2PTurnPass = v })
+			}),
+		)
+	}
+	settingsGroup(c, "", rows...)
 }
 
 func remoteDeviceNote(d remotehost.Device, online bool) string {
@@ -399,21 +498,6 @@ func (s *Shell) remotePortField(c *ui.Context, cfg remotehost.Config) {
 	}
 }
 
-func (s *Shell) remoteStatus(c *ui.Context, srv *remotehost.Server, cfg remotehost.Config) {
-	t := c.Theme()
-	tokens := designTokens(t.Dark)
-	text, color := "Not listening.", t.TextMuted
-	switch {
-	case s.remote.err != "":
-		text, color = s.remote.err, tokens.StatusColor(ToneError, t.Dark)
-	case srv != nil && srv.ListenAddress() != "":
-		text, color = "Listening on "+srv.ListenAddress()+" over HTTPS.", t.Success
-	case cfg.Mode == remotehost.ModeLAN || cfg.Mode == remotehost.ModeTailscale:
-		text = "Choose an address to start listening."
-	}
-	ui.Text(c, text).FontSize(Typography().BodySmall).TextColor(color).MaxWidth(360)
-}
-
 // remoteRelayAddressField commits the relay base on Return, refusing anything
 // that is not a bare https:// or wss:// address (the error names the rule).
 func (s *Shell) remoteRelayAddressField(c *ui.Context, relay remotehost.RelayConfig) {
@@ -473,43 +557,6 @@ func (s *Shell) remoteTurnField(c *ui.Context, draft *string, label, saved strin
 	if !field.Focused() {
 		*draft = saved
 	}
-}
-
-// remoteP2PStatus counts the phones currently linked directly.
-func (s *Shell) remoteP2PStatus(c *ui.Context, srv *remotehost.Server) {
-	t := c.Theme()
-	text, color := "No phone is linked directly.", t.TextMuted
-	if srv != nil {
-		if n := srv.P2PSessions(); n == 1 {
-			text, color = "1 phone is linked directly.", t.Success
-		} else if n > 1 {
-			text, color = strconv.Itoa(n)+" phones are linked directly.", t.Success
-		}
-	}
-	ui.Text(c, text).FontSize(Typography().BodySmall).TextColor(color).MaxWidth(360)
-}
-
-// remoteRelayStatus is the Relay group's live state, driven by the Host.
-func (s *Shell) remoteRelayStatus(c *ui.Context, srv *remotehost.Server) {
-	t := c.Theme()
-	tokens := designTokens(t.Dark)
-	text, color := "Off. The phone connects over the network directly.", t.TextMuted
-	if srv != nil {
-		switch st := srv.RelayStatus(); st.State {
-		case remotehost.RelayConnecting:
-			text, color = "Connecting…", t.TextMuted
-		case remotehost.RelayOnline:
-			text, color = "Connected through the relay.", t.Success
-		case remotehost.RelayBackoff:
-			text, color = "Reconnecting: "+st.Message, tokens.StatusColor(ToneWarning, t.Dark)
-		case remotehost.RelayError:
-			text, color = st.Message, tokens.StatusColor(ToneError, t.Dark)
-		}
-	}
-	if s.remote.err != "" {
-		text, color = s.remote.err, tokens.StatusColor(ToneError, t.Dark)
-	}
-	ui.Text(c, text).FontSize(Typography().BodySmall).TextColor(color).MaxWidth(360)
 }
 
 // --- pairing ----------------------------------------------------------------

@@ -1,16 +1,10 @@
 package nativeui
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -19,7 +13,7 @@ import (
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/history"
-	"github.com/thewei/solco/internal/voice"
+	"github.com/thewei/solco/internal/settings"
 )
 
 // Voice transcription defaults; both are overridable in Settings -> General.
@@ -371,92 +365,17 @@ func (b *ChatBridge) PickAttachment(ctx context.Context) (string, error) {
 	return paths[0], nil
 }
 
-// Transcribe sends a recorded clip to the configured source — an
-// OpenAI-compatible transcription endpoint (local proxies included) or, when
-// the user consented in Settings → Voice, the ChatGPT sign-in Codex holds —
-// and returns the text.
-// The API key never reaches the page and is never logged.
+// Transcribe sends a recorded clip to the configured source (see
+// transcribeClip) and returns the text. The API key never reaches the page and
+// is never logged.
 func (b *ChatBridge) Transcribe(ctx context.Context, audioBase64 string, mime string) (string, error) {
-	var endpoint, key, model string
-	var viaChatGPT bool
-	b.shell.callOnWindow(func() {
-		vs := b.shell.settings.Voice
-		endpoint, key, model = vs.EndpointURL, vs.APIKey, vs.Model
-		viaChatGPT = voiceChatGPTOn(vs)
-	})
-	if viaChatGPT {
-		audio, err := base64.StdEncoding.DecodeString(audioBase64)
-		if err != nil || len(audio) == 0 {
-			return "", errors.New("empty or malformed recording")
-		}
-		return (&voice.ChatGPT{}).Transcribe(ctx, audio, mime)
-	}
-	if key == "" {
-		key = os.Getenv("OPENAI_API_KEY")
-	}
-	if endpoint == "" {
-		endpoint = voiceDefaultEndpoint
-	}
-	if model == "" {
-		model = voiceDefaultModel
-	}
+	var vs settings.VoiceSettings
+	b.shell.callOnWindow(func() { vs = b.shell.settings.Voice })
 	audio, err := base64.StdEncoding.DecodeString(audioBase64)
 	if err != nil || len(audio) == 0 {
 		return "", errors.New("empty or malformed recording")
 	}
-	if mime == "" {
-		mime = "audio/webm"
-	}
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", "clip."+strings.SplitN(mime, "/", 2)[1])
-	if err == nil {
-		part.Write(audio)
-		writer.WriteField("model", model)
-		writer.WriteField("response_format", "json")
-		err = writer.Close()
-	}
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(endpoint, "/")+"/audio/transcriptions", body)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+key)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("could not reach the transcription endpoint: %w", err)
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode != http.StatusOK {
-		detail := string(raw)
-		if payload := map[string]any{}; json.Unmarshal(raw, &payload) == nil {
-			if inner, ok := payload["error"].(map[string]any); ok {
-				if message, ok := inner["message"].(string); ok {
-					detail = message
-				}
-			}
-		}
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return "", errors.New("transcription auth failed — check the voice API key")
-		}
-		return "", fmt.Errorf("transcription failed (%d): %s", resp.StatusCode, detail)
-	}
-	var payload struct {
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(payload.Text), nil
+	return transcribeClip(ctx, vs, audio, mime)
 }
 
 // chatAnswerTextSettle is the pause between selecting a free-text option

@@ -224,7 +224,7 @@ func (s *Shell) openQuickPanelEntry(entry StatusCenterEntry) {
 	case agent.ActionOpenTerminal:
 		s.openAgentTerminal(card)
 	default:
-		if s.paneSurfaceMemo[card.PaneID] == WorkspaceSurfaceChat {
+		if s.panePrefersChat(card.PaneID) {
 			s.openChat(card)
 			return
 		}

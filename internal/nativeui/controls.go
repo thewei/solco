@@ -4,7 +4,7 @@ import "github.com/egoist/mygo/ui"
 
 /**
  * [INPUT]: 依赖 mygo/ui 的 Button/PrimaryButton/TextInput/TextArea/SearchField/Combobox/Select/SegmentedBase，ds_components.go 的 segmentedTrack/segmentFace
- * [OUTPUT]: 对外提供控件脸的唯一入口：regularButton/regularPrimaryButton（与 ds_components.go 的 compactButton/compactPrimaryButton 同档同高）、textField/textArea/searchField/comboField/selectField、segmentedControl
+ * [OUTPUT]: 对外提供控件脸的唯一入口：regularButton/regularPrimaryButton（与 ds_components.go 的 compactButton/compactPrimaryButton 同档同高）、textField/textArea/searchField/comboField/autocompleteField/selectField、segmentedControl
  * [POS]: nativeui 控件外观的唯一所有者；业务代码不直接调用 ui.Button/PrimaryButton/TextInput/TextArea/SearchField/Combobox/Select/Segmented（TestControlsHaveOneFace 守卫），圆角来自主题 Radius（= Radius().Row，theme.go 设一次）；焦点环是 MyGo 自己的纤细环，这里既不画也不关（TestControlsDrawNoFocusRing）——2026-10-29 试过 shadcn nova 的 3px 贴边光晕，用户更喜欢原来的，已回退；ui.NumberInput 是三个盒子（输入框与 −/+ 钮）的 MyGo 复合件，保持 MyGo 原貌，只跟随主题圆角
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -47,6 +47,13 @@ func searchField(c *ui.Context, query *string) ui.Element {
 // comboField is the field whose text filters the options below it.
 func comboField(c *ui.Context, selected *string, options []string) ui.Element {
 	return ui.Combobox(c, selected, options)
+}
+
+// autocompleteField is the free-text field that suggests options: what is
+// typed is the value, a suggestion only completes it (comboField, by contrast,
+// puts the text back to the last chosen option when the field loses focus).
+func autocompleteField(c *ui.Context, value *string, suggestions []string) ui.Element {
+	return ui.Autocomplete(c, value, suggestions)
 }
 
 // selectField is the drop-down choosing one of options.

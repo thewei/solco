@@ -153,6 +153,7 @@ type Shell struct {
 	// the Settings → Git test-request state.
 	commitSecrets        usageSecrets
 	commitAPIKeySet      bool
+	commitKeyProbed      bool
 	commitAPITestRunning bool
 	commitAPITestResult  string
 	mergeDialogOpen      bool
@@ -201,6 +202,8 @@ type Shell struct {
 	remote remoteState
 	// remoteFacts is the desktop's resolved agent titles/last-worked times, published for the Host's goroutines.
 	remoteFacts remoteAgentFacts
+	// remoteLive is the running-session identity snapshot behind the phone's Sessions list.
+	remoteLive remoteLiveSessions
 
 	settingsGitPromptDraft      string
 	settingsCommitEndpointDraft string
@@ -261,7 +264,11 @@ type Shell struct {
 	commandCenterChip         int      // index into commandCenterChips
 	recentFiles               []string // files opened in Files, newest first (persisted in the session)
 	filesStartInfo            filesStartCache
-	recentHosts               []string // ssh aliases last connected from Hosts, newest first (persisted in the session)
+	recentLaunchKinds         []string // Tab-bar "+ ▾": launch kinds used, newest first (persisted in the session)
+	launchKinds               []app.SessionKind
+	launchKindsLoading        bool
+	newTabStarter             newTabStarter // tests inject; nil = launch.Sessions()
+	recentHosts               []string      // ssh aliases last connected from Hosts, newest first (persisted in the session)
 	commandCenterSelected     int
 	commandCenterReveal       int
 	commandCenterQueryFocused bool
@@ -798,10 +805,8 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	// Appearance changes (system or Settings) re-publish the chat
 	// projection and the Files preview target, whose theme fields carry
 	// the resolved appearance to their WebView pages.
-	// The one startup Keychain read: the app's own credential item, in the
-	// production window path only. Render paths only ever check the cached
-	// presence flag; tests never reach here, so they stay Keychain-free.
-	s.commitAPIKeySet = s.commitKeyPresent()
+	// No Keychain read at launch: the commit key's presence is probed off the
+	// UI lane the first time a surface needs it (probeCommitKey).
 	s.syncThemeSource()
 	s.syncWindowOpacity()
 	mygo.Theme.OnUpdated(func() {

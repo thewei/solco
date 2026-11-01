@@ -45,11 +45,25 @@ func (s *Shell) rememberPaneSurface(paneID string, kind WorkspaceSurfaceKind) {
 	s.paneSurfaceMemo[paneID] = kind
 }
 
+// panePrefersChat is the one answer to "which view does this Agent pane open
+// in": the pane's remembered surface when it has one, otherwise Settings →
+// General → Agent view (Chat only for a pane that really is an Agent).
+func (s *Shell) panePrefersChat(paneID string) bool {
+	if kind, ok := s.paneSurfaceMemo[paneID]; ok {
+		return kind == WorkspaceSurfaceChat
+	}
+	if !s.settings.General.AgentChatFirst() {
+		return false
+	}
+	_, isAgent := s.agentCardForPane(paneID)
+	return isAgent
+}
+
 // openAgentFromSidebar is the sidebar Agent click (N19 #4): jump straight
 // to the pane's remembered surface — Chat when the user left it in Chat,
 // Terminal otherwise.
 func (s *Shell) openAgentFromSidebar(card agent.AgentCardModel) {
-	if s.paneSurfaceMemo[card.PaneID] == WorkspaceSurfaceChat {
+	if s.panePrefersChat(card.PaneID) {
 		s.openChat(card)
 		return
 	}

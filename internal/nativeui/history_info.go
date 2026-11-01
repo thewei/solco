@@ -227,7 +227,11 @@ func (s *Shell) sessionInfoTable(c *ui.Context, meta history.SessionMeta, info h
 func (s *Shell) sessionRowActions(c *ui.Context, meta history.SessionMeta, infoOpen bool, menu func(*ui.Menu)) {
 	t := c.Theme()
 	k := gorexColorsOf(t.Dark)
-	if regularButton(c, "Continue").Disabled(!s.canContinue()).Shrink(0).Clicked() {
+	if live, ok := s.liveSessionFor(meta); ok {
+		if regularPrimaryButton(c, "Go to Pane").Shrink(0).Clicked() {
+			s.goToPane(live.PaneID)
+		}
+	} else if regularButton(c, "Continue").Disabled(!s.canContinue()).Shrink(0).Clicked() {
 		s.requestContinue(meta, nil)
 	}
 	if gorexIconButton(c, k, iconInfo, "Session info", "Session info", infoOpen, gorexRowBtn+4, gorexRowGlyph+2).

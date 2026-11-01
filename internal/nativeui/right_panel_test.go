@@ -51,7 +51,7 @@ func TestFilesHeaderOpensDedicatedRouteAndInlinePreview(t *testing.T) {
 	}
 	tester := ui.NewTester(s.View, 1200, 800)
 	tester.SetPreferences(ui.Preferences{ReduceMotion: true}) // tree rows land at once
-	tester.Frame() // headless directory read fills the cache for the next frame
+	tester.Frame()                                            // headless directory read fills the cache for the next frame
 	for _, want := range []string{"Files view", "README.md", "docs"} {
 		if !tester.HasText(want) {
 			t.Fatalf("missing %q on Files route: %q", want, tester.Texts())
