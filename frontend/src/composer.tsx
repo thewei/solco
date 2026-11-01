@@ -159,17 +159,18 @@ export function PlusPanel(props: {
   const skillLead = props.catalog?.skills[0]?.name[0];
   const items: { icon: "image" | "step" | "command"; name: string; detail: string; run: () => void }[] = [];
   if (props.canAttach !== false) {
-    items.push({ icon: "image", name: "Attach file or image…", detail: "or paste / drop onto the message", run: props.onAttach });
+    items.push({ icon: "image", name: "Attach file or image…", detail: "", run: props.onAttach });
   }
   if (skillLead) {
     items.push({
       icon: "step",
       name: "Skills",
-      detail: `${props.catalog?.skills.length} available · type ${skillLead} to search`,
+      detail: `${props.catalog?.skills.length} available`,
       run: () => props.onOpenList(skillLead),
     });
   }
-  items.push({ icon: "command", name: "Commands", detail: "the agent's own / commands", run: () => props.onOpenList("/") });
+  const commandCount = props.catalog?.commands.length ?? 0;
+  items.push({ icon: "command", name: "Commands", detail: commandCount > 0 ? `${commandCount} available` : "", run: () => props.onOpenList("/") });
   const [pick, setPick] = useMenuKeys(items.length, (index) => items[index]?.run(), props.onClose);
   return (
     <div className="completions rich" role="menu" aria-label="Add to message">
@@ -209,6 +210,9 @@ export function modelFor(models: ChatCatalogModel[], current: string): ChatCatal
  * agent's picker, then the thinking-effort choices of the current model (its own
  * levels, else the agent's general ones). Every row is one keyboard stop.
  */
+/** The model list shows this many rows; the rest is reached by typing. */
+const MODEL_ROWS = 50;
+
 export function ModelPanel(props: {
   catalog: ChatCatalog | null;
   current: string;
@@ -220,7 +224,10 @@ export function ModelPanel(props: {
 }) {
   const [query, setQuery] = useState("");
   const models = props.catalog?.models ?? [];
-  const shown = models.filter((m) => m.id.toLowerCase().includes(query.toLowerCase())).slice(0, 50);
+  const matching = models.filter((m) => m.id.toLowerCase().includes(query.toLowerCase()));
+  const shown = matching.slice(0, MODEL_ROWS);
+  const isCurrent = (model: ChatCatalogModel) =>
+    props.current !== "" && (model.id.endsWith(props.current) || props.current.startsWith(model.id + " ("));
   const hasPicker = Boolean(props.catalog?.modelPicker);
   const efforts = modelFor(models, props.current)?.efforts ?? props.catalog?.efforts ?? [];
   const offset = hasPicker ? 1 : 0;
@@ -242,6 +249,11 @@ export function ModelPanel(props: {
   useEffect(() => {
     box.current?.querySelector(".pick")?.scrollIntoView({ block: "nearest" });
   }, [pick]);
+  // Opens on the model the chat is on, not on the top of the list.
+  useEffect(() => {
+    const at = shown.findIndex(isCurrent);
+    if (at >= 0) setPick(at + offset);
+  }, []);
   return (
     <div ref={box} className="completions rich" role="menu" aria-label="Switch model">
       {models.length > 8 ? (
@@ -279,16 +291,20 @@ export function ModelPanel(props: {
           type="button"
           role="menuitem"
           disabled={props.busy}
-          className={`${index + offset === pick ? "pick" : ""}${props.current !== "" && (model.id.endsWith(props.current) || props.current.startsWith(model.id + " (")) ? " on" : ""}`}
+          className={`${index + offset === pick ? "pick" : ""}${isCurrent(model) ? " on" : ""}`}
           onMouseMove={() => setPick(index + offset)}
           onMouseDown={(e) => {
             e.preventDefault();
             props.onSwitch(model);
           }}
         >
-          <span className="nm mono">{model.id}</span>
+          <span className="nm mono">
+            <span className="pf">{model.id.slice(0, model.id.lastIndexOf("/") + 1)}</span>
+            {model.id.slice(model.id.lastIndexOf("/") + 1)}
+          </span>
         </button>
       ))}
+      {matching.length > shown.length ? <div className="none">{matching.length - shown.length} more — type to search</div> : null}
       {models.length > 0 && shown.length === 0 ? <div className="none">No match</div> : null}
       {efforts.length > 0 ? <div className="none">Thinking effort</div> : null}
       {efforts.map((effort, index) => (

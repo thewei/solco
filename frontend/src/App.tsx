@@ -1516,7 +1516,9 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                         ? "The agent is starting… you can type your prompt"
                         : document.documentElement.dataset.host === "phone"
                           ? "Message"
-                          : "Send a message… (@ file · / commands · $ skills)"
+                          : state?.turns.some((turn) => turn.user)
+                            ? "Message"
+                            : "Send a message… (@ file · / commands · $ skills)"
                 }
                 aria-label="Chat prompt"
                 spellCheck

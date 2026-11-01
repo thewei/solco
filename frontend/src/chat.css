@@ -2185,6 +2185,10 @@ html[data-host="phone"] .ask .answer-hint {
   color: var(--i1);
 }
 
+.completions.rich .nm .pf {
+  color: var(--i4);
+}
+
 .completions.rich .nm.mono {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12px;
