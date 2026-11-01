@@ -379,3 +379,18 @@ func TestSidebarAgentsListIsKeyboardDriven(t *testing.T) {
 		t.Fatalf("← on the Workspace label must fold the group; folded=%v texts=%q", s.foldedAgents, tester.Texts())
 	}
 }
+
+// Folds of Workspaces and agent runs that are gone do not pile up in the
+// session file; before a projection is known nothing is dropped.
+func TestPersistableAgentFoldsDropsWhatIsGone(t *testing.T) {
+	s := subagentSidebarShell(nil)
+	s.foldedAgents = map[string]bool{"group:w1": true, "group:gone": true, "sub:term-1": true, "sub:dead": true}
+	if got := s.persistableAgentFolds(); len(got) != 4 {
+		t.Fatalf("without a known Workspace nothing may be dropped: %v", got)
+	}
+	s.projection.Projects = []herdr.Project{{ID: "w1"}}
+	got := s.persistableAgentFolds()
+	if len(got) != 2 || got[0] != "group:w1" || got[1] != "sub:term-1" {
+		t.Fatalf("want only the live folds, got %v", got)
+	}
+}

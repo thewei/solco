@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -71,6 +72,26 @@ func sortedSetKeys(expanded map[string]bool) []string {
 	return keys
 }
 
+// persistableAgentFolds is the sidebar Agents folds worth saving. A terminal
+// id lives as long as its agent run, so a "sub:" fold of an agent that is gone
+// would pile up in the session file; a "group:" fold goes with its Workspace.
+// Nothing is dropped before the first projection, while another Herdr device
+// is showing, or when no Workspace is known (the keys may still be waiting).
+func (s *Shell) persistableAgentFolds() []string {
+	keys := sortedSetKeys(s.foldedAgents)
+	if s.loading || s.activeIsRemote() || len(s.projection.Projects) == 0 {
+		return keys
+	}
+	live := make(map[string]bool, len(s.projection.Projects))
+	for _, project := range s.projection.Projects {
+		live[agentFoldKey("group", project.ID)] = true
+	}
+	for _, card := range s.workbenchCards() {
+		live[subagentFoldKey(card)] = true
+	}
+	return slices.DeleteFunc(keys, func(key string) bool { return !live[key] })
+}
+
 // clampSessionWidth bounds a restored right-panel width to the drag limits.
 func clampSessionWidth(width int) int {
 	if width < MinRightPanelWidth {
@@ -110,7 +131,7 @@ func (s *Shell) captureSession() settings.SessionSettings {
 		PinsOpen:          s.pinsOpen,
 		TasksClosed:       !s.tasksOpen,
 		FoldedBoards:      sortedSetKeys(s.foldedBoards),
-		FoldedAgents:      sortedSetKeys(s.foldedAgents),
+		FoldedAgents:      s.persistableAgentFolds(),
 		ExpandedProjects:  sortedSetKeys(s.expandedProjects),
 		ExpandedTabs:      sortedSetKeys(s.expandedTabs),
 		SidebarWidth:      int(s.sidebarW),
