@@ -70,6 +70,25 @@ func TestRouteAgentNotificationNavigatesToOwningPane(t *testing.T) {
 	}
 }
 
+func TestRouteAgentNotificationRoutesToChatWhenPreferred(t *testing.T) {
+	shell := workbenchTestShell(t)
+	shell.router.Replace(routeHistory)
+	shell.rememberPaneSurface("p2", WorkspaceSurfaceChat)
+
+	id := agentNotificationID("default", "term-2")
+	shell.routeAgentNotification(id)
+
+	if shell.selectedPaneID != "p2" {
+		t.Fatalf("click must land on the agent's pane, got %q", shell.selectedPaneID)
+	}
+	if shell.router.Path() != routeWorkspace {
+		t.Fatalf("click must route to the workspace, got %q", shell.router.Path())
+	}
+	if shell.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("agent preferring chat must land on chat surface, got %v", shell.surface.current())
+	}
+}
+
 func TestRouteAgentNotificationStaleAgentFailsClosed(t *testing.T) {
 	shell := workbenchTestShell(t)
 	shell.router.Replace("/settings")

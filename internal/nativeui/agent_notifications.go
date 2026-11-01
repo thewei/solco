@@ -1,5 +1,12 @@
 package nativeui
 
+/**
+ * [INPUT]: 依赖 herdr.Agent, agent.AgentNotification, mygo.NewNotification, window_actions.go 的 activateWindow, surface_header.go 的 panePrefersChat, chat_live.go 的 openChat, agent_quick_panel.go 的 openAgentTerminal
+ * [OUTPUT]: 对外提供 agentNotificationID, agentNotificationGroup, parseAgentNotificationID, showAgentNotification, routeAgentNotification, RouteAgentNotification
+ * [POS]: internal/nativeui 的系统桌面通知派发与点击路由，响应系统通知中心并路由到 Agent 窗格的偏好视图（Chat 或 Terminal）并激活窗口
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import (
 	"strings"
 
@@ -61,19 +68,25 @@ func showAgentNotification(instanceID string, runtimeAgent herdr.Agent, notifica
 }
 
 // routeAgentNotification handles a notification click by navigating
-// client-locally to the Agent's owning pane — the same path as opening
-// its workbench card. It revalidates the stale-prone ID against the live
-// projection: an ended or unknown Agent surfaces a toast instead of a
-// blind navigation. Pure state mutation, safe headless; the frame-local
-// pendingToast is consumed by the next View pass.
+// client-locally to the Agent's owning pane — preferring Chat when configured
+// or remembered, Terminal otherwise — and activating the application window.
+// It revalidates the stale-prone ID against the live projection: an ended or
+// unknown Agent surfaces a toast instead of a blind navigation. Pure state
+// mutation, safe headless; the frame-local pendingToast is consumed by the
+// next View pass.
 func (s *Shell) routeAgentNotification(id string) {
+	s.activateWindow()
 	key, ok := parseAgentNotificationID(id)
 	if !ok {
 		return
 	}
 	for _, card := range s.workbenchCards() {
 		if card.Key == key {
-			s.openAgentCard(card)
+			if s.panePrefersChat(card.PaneID) && s.workspaceChatAvailable() {
+				s.openChat(card)
+			} else {
+				s.openAgentTerminal(card)
+			}
 			return
 		}
 	}

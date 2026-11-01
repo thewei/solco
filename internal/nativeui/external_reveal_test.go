@@ -1,6 +1,10 @@
 package nativeui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/thewei/solco/internal/herdr"
+)
 
 func TestParseRevealURL(t *testing.T) {
 	cases := []struct {
@@ -55,6 +59,26 @@ func TestRevealExternalWithoutSessionTargetsActiveInstance(t *testing.T) {
 	s.revealExternal(revealTarget{TabID: "t2"})
 	if s.selectedTabID != "t2" {
 		t.Fatalf("selectedTabID = %q, want t2", s.selectedTabID)
+	}
+}
+
+func TestRevealExternalPrefersChatWhenConfigured(t *testing.T) {
+	s := revealShell()
+	s.projection.Agents = []herdr.Agent{
+		{TerminalID: "term2", PaneID: "p2", ProjectID: "w2", TabID: "t2", Name: "Agent B", Kind: "codex", Status: "working"},
+	}
+	s.rememberPaneSurface("p2", WorkspaceSurfaceChat)
+
+	s.revealExternal(revealTarget{Session: "default", ProjectID: "w2", TabID: "t2"})
+
+	if s.router.Path() != routeWorkspace {
+		t.Fatalf("route = %q, want workspace", s.router.Path())
+	}
+	if s.selectedTabID != "t2" {
+		t.Fatalf("selectedTabID = %q, want t2", s.selectedTabID)
+	}
+	if s.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("surface = %v, want WorkspaceSurfaceChat", s.surface.current())
 	}
 }
 

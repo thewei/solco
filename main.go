@@ -127,17 +127,23 @@ func main() {
 	// Shell functions. Binding before App.Run keeps `mygo generate` complete.
 	mygo.BindAs("projects", nativeui.NewProjectsBridge(shell))
 
+	var raiseMain func()
+
 	// Notification clicks route back to the Agent's owning pane, including
 	// clicks on notifications left over from a previous run (MyGo hands
 	// back the stable notification ID across launches).
-	mygo.App.OnNotificationClick(shell.RouteAgentNotification)
+	mygo.App.OnNotificationClick(func(id string) {
+		shell.RouteAgentNotification(id)
+		if raiseMain != nil {
+			raiseMain()
+		}
+	})
 
 	// solco://reveal?session=&workspace=&tab= — an external app (My DevTools'
 	// prox) asking this window to show one Herdr tab. Solco ignores Herdr's
 	// global focus on purpose, so this explicit link is the only way in.
 	// raiseMain is set once the window exists; a link that arrives earlier
 	// stays pending inside the Shell until its tab shows up.
-	var raiseMain func()
 	mygo.App.OnOpenURL(func(raw string) {
 		shell.RouteExternalURL(raw)
 		if raiseMain != nil {

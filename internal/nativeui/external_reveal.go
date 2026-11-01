@@ -1,10 +1,10 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 Herdr 投影存在性判定（tabByID）、selection.go 的 selectTab/selectProject、runtime.Projection
+ * [INPUT]: 依赖 Herdr 投影存在性判定（tabByID）、selection.go 的 selectTab/selectProject、runtime.Projection、window_actions.go 的 activateWindow、surface_header.go 的 panePrefersChat
  * [OUTPUT]: 对外提供 Shell.RouteExternalURL（main.go 的 OnOpenURL 接缝）、parseRevealURL、revealTarget
  * [POS]: 外部应用（如 My DevTools 的 prox）请求"切到某个 Herdr tab"的唯一入口：Solco 刻意不订阅 Herdr 全局 focus 事件，
- *        所以外部聚焦只能显式走 solco://reveal?session=&workspace=&tab=，由本窗口把本地选择切过去
+ *        所以外部聚焦只能显式走 solco://reveal?session=&workspace=&tab=，由本窗口把本地选择切过去并激活原生窗口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -51,6 +51,7 @@ func parseRevealURL(raw string) (revealTarget, bool) {
 // RouteExternalURL is the main.go seam for MyGo's OnOpenURL: it marshals onto
 // the window lane and navigates this window to the requested tab.
 func (s *Shell) RouteExternalURL(raw string) {
+	s.activateWindow()
 	target, ok := parseRevealURL(raw)
 	if !ok {
 		slog.Warn("ignored unsupported deep link")
@@ -106,14 +107,24 @@ func (s *Shell) tryPendingReveal() bool {
 		s.hideQuickPanel()
 		s.router.Push(routeWorkspace)
 		s.selectTab(req.target.TabID)
-		s.showViewTerminal()
+		if s.panePrefersChat(s.selectedPaneID) && s.workspaceChatAvailable() {
+			s.showSurface(WorkspaceSurfaceChat)
+		} else {
+			s.showViewTerminal()
+		}
+		s.activateWindow()
 		return true
 	case req.target.TabID == "" && projectExists(s.projection, req.target.ProjectID):
 		s.pendingReveal = nil
 		s.hideQuickPanel()
 		s.router.Push(routeWorkspace)
 		s.selectProject(req.target.ProjectID)
-		s.showViewTerminal()
+		if s.panePrefersChat(s.selectedPaneID) && s.workspaceChatAvailable() {
+			s.showSurface(WorkspaceSurfaceChat)
+		} else {
+			s.showViewTerminal()
+		}
+		s.activateWindow()
 		return true
 	}
 	return false

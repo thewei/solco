@@ -218,7 +218,10 @@ device_state_test.go: 状态优先级表、Herdr 判定词汇、deviceUI 懒 map
 device_switcher_test.go: 芯片读数（最窄侧栏上 This Mac 不被截、会话先让位）、宽侧栏上面板行撑满、面板内容（会话+设备+Add）、≥10 项出搜索、状态词与 tooltip、菜单随状态给出对应恢复动作、点击停用设备只解释不拨号、Add 行开面板
 device_switch_test.go: 切换拒绝条件、失败不动当前窗口、成功才进入设备、过期结果丢弃、取消停拨、失败分类、watcher 掉线记录与恢复、重试退避与封顶、无本机会话时的回落、横幅与遮罩、Command Center 设备动作及其执行
 device_add_test.go: 默认名与取值、校验、只认「之前没有的」新档案、别名快捷项上限、开面板重置、等待可停且过期结果丢弃、失败保留草稿、面板内联校验（编辑即撤销旧错误）、重命名拒重名、Forget（空闲设备/在用设备/失败）、targetShared、静默检查只更新状态行、checkingAny
-external_reveal.go: 外部应用请求（solco://reveal?session=&workspace=&tab=，MyGo OnOpenURL）→ 切到指定 session 的 tab；Solco 不跟随 Herdr 全局 focus，这是唯一的外部导航入口，未就绪的 tab/session 挂起最多 15 秒由 applyProjection 续做
+window_actions.go: 原生窗口行为补齐层（F103/F104）：syncWindowTitle 每帧幂等同步路由名到原生窗口标题，CloseTabFromMenu（⌘W）走安全关闭确认，KeepWindowOnTopFromMenu 响应置顶菜单项，activateWindow 恢复最小化并激活/置顶应用窗口
+agent_notifications.go: 系统桌面通知派发与点击路由（MyGo v0.2.15 NewNotification/OnNotificationClick）：按 solco-agent/<instance>/<terminal> 稳定 ID 识别 Agent，点击后激活/置顶原生窗口并跳转对应 Agent 窗格的偏好视图（Chat 或 Terminal），过期 Agent 弹出可恢复 Toast
+agent_notifications_test.go: 系统桌面通知 ID 编解码、群组生成、外来 ID 拒绝、拥有者窗格路由与偏好 Chat 视图跳转、过期 Agent 静默回退 Toast 回归
+external_reveal.go: 外部应用请求（solco://reveal?session=&workspace=&tab=，MyGo OnOpenURL）→ 切到指定 session 的 tab 并激活/置顶原生窗口，按 panePrefersChat 路由 Chat 或 Terminal；Solco 不跟随 Herdr 全局 focus，这是唯一的外部导航入口，未就绪的 tab/session 挂起最多 15 秒由 applyProjection 续做
 selection.go: 选中状态与页面历史之间的唯一翻译层——selectProject/selectTab/selectPane 是用户选择唯一收口（落地投影 + 把 /workspace?project=…&tab=…&pane=… 位置 Push 进 Router 历史，仅 workspace 路由记录；Files 等页上的选择是上下文不是导航），apply* 无推送落地体、syncSelectionLocation 在 Back/Forward/⌘[⌘] 走历史时把位置查询静默镜像回选择（最具体节点已选中即返回，永不逐帧重扫；失效节点回落到已记录父级）；reconcile/adopt 永不经过这里，运行时对账不产生历史；applyPaneSelection 对缺失 ProjectID 的窗格从 Tab 推导父项目，不抹掉项目选择
 sidebar_switchers.go: Git/Files/Sessions 侧栏共用头部：项目名与分支名各自是可搜索的 pull-down 快速切换（项目切换经 selectProject 记录一条选择历史），外加搜索按钮（headerSearch，Git 侧栏传入，Files/Sessions 为 nil）与刷新图标，一行排完；侧栏宽 ≤ sidebarHeaderNarrow(236) 时项目 chip 只留图标；项目列表最高 switcherListMaxHeight（常量在 breadcrumb_switcher.go，crumb 弹层共用）
 sidebar_tree_test.go: 网格对齐、导向线连续、分区无 "···"、悬停 "+"、创建对话框、项目/分支快速切换、Workspace 行无 "…" 与标题栏 Actions 回归；折叠头同一语法（TestSectionHeadersWearOneGrammar）与唯一 disclosure chevron（TestOneDisclosureChevron，禁止折叠头自行互换 chevron 图标；面包屑分隔符不是 disclosure，是登记在册的例外）

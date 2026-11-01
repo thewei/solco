@@ -1,9 +1,11 @@
 package nativeui
 
-// [INPUT]: 依赖 shell.go 的 Shell（setWindowTitle/windowTitleShown/selectedTabID/settings）、dialogs.go 的 openConfirm 通道、router.go 的 currentRouteTitle
-// [OUTPUT]: 对外提供 syncWindowTitle（每帧幂等的路由驱动原生窗口标题，含恢复到内页的启动）、CloseTabFromMenu（菜单栏 ⌘W 关闭当前 Tab）、KeepWindowOnTopFromMenu（Window 菜单的置顶勾选项，2026-10-31 自标题栏图钉迁入）
-// [POS]: window_actions 的原生窗口行为补齐层：F103/F104 的落地文件，避免触碰并行会话持有的 shell.go/titlebar.go
-// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+/**
+ * [INPUT]: 依赖 shell.go 的 Shell（setWindowTitle/windowTitleShown/selectedTabID/settings/win）、dialogs.go 的 openConfirm 通道、router.go 的 currentRouteTitle
+ * [OUTPUT]: 对外提供 syncWindowTitle、CloseTabFromMenu、KeepWindowOnTopFromMenu、activateWindow
+ * [POS]: window_actions 的原生窗口行为补齐层，处理原生窗口标题同步、窗口置顶、窗口激活与聚焦及菜单关闭 Tab
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 import (
 	"fmt"
@@ -91,5 +93,17 @@ func (s *Shell) ShowShortcutsFromMenu() {
 func (s *Shell) KeepWindowOnTopFromMenu(it *mygo.MenuItem, w *mygo.Window) {
 	if w != nil {
 		w.SetAlwaysOnTop(it.IsChecked())
+	}
+}
+
+// activateWindow restores the native window if minimized, unhides it if hidden,
+// brings it to front, and activates the application. Safe headless (no-op when s.win is nil).
+func (s *Shell) activateWindow() {
+	if s.win != nil {
+		if !s.win.IsVisible() {
+			s.win.Show()
+		}
+		s.win.Restore()
+		s.win.Focus()
 	}
 }
