@@ -1,6 +1,6 @@
 ---
 name: solco-development
-description: Use when developing, debugging, reviewing, packaging, or handing off the Solco macOS client (Go + MyGo Native UI) — the Herdr runtime/protocol boundary, native Terminal attach, pane layout projection, Agent conversation/history semantics, Git Workbench, or release validation. Enforces Solco client identity, Herdr runtime authority, mature-API-first implementation, Native-UI-only presentation, visible-only attachments, one canonical shell, bounded logging, and documentation truth alignment.
+description: Use when developing, debugging, reviewing, packaging, or handing off the Solco macOS client (Go + MyGo Native UI) — the Herdr runtime/protocol boundary, native Terminal attach, pane layout projection, Agent conversation/history semantics, Git Workbench, or release validation. Enforces Solco client identity, Herdr runtime authority, mature-API-first implementation, native-first presentation (one Chat WebView page shared with the phone), visible-only attachments, one canonical shell, bounded logging, and documentation truth alignment.
 ---
 
 # Solco Development
@@ -76,7 +76,9 @@ For nontrivial Herdr-owned runtime capabilities, verify all three applicable sur
 
 ## Native UI rule
 
-History UI and Chat UI are Native UI. WebView presentation is frozen until MyGo ships an official Native-UI-embeddable WebView capability and a later explicit product decision unfreezes it: no Chat/History Web windows, no private AppKit embedding, no localhost HTTP backend for desktop presentation, no second desktop presentation backend.
+Chat UI is the official MyGo `ui.WebView` page over the single bound-service bridge (product decision 2026-10-11; the page talks only to its own bridge from the app content origin). History and every other surface stay Native UI until their own explicit task moves them. Still forbidden: private AppKit embedding, a localhost HTTP backend for desktop presentation, a second desktop presentation backend, and a second Chat page implementation.
+
+`frontend/src` is the one Chat page source for BOTH clients: the phone (solco-mobile) embeds a generated snapshot, it never forks the page and the page gains no per-client branches. A `frontend/src` change is not done until `bun run build:mobile` (solco/frontend) + `pnpm sync:chat-page` (solco-mobile) have refreshed the snapshot; `pnpm check:chat-page` must pass afterwards. `solco-mobile/src/generated/chat-page.ts` is generated output — never hand-edit it, and never patch presentation only on one client.
 
 Use MyGo native widgets before custom drawing; reuse `theme.go`, `icons.go`, and `components.go` before one-off page styling. One canonical shell: do not add alternate Sidebar implementations or duplicate row/navigation builders for the same shell state; improve the canonical path in place. Keep framework/platform code out of `internal/herdr` and ordinary domain packages.
 

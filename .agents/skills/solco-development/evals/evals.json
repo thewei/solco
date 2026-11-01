@@ -26,11 +26,16 @@
     },
     {
       "prompt": "History and Chat would look better as embedded web views; embed a WKWebView privately in the native window for them.",
-      "expected_output": "Refuse private AppKit/WebView embedding: WebView presentation is frozen until MyGo ships an official Native-UI-embeddable WebView capability and a product decision unfreezes it; History/Chat stay Native UI."
+      "expected_output": "Refuse private AppKit embedding: Chat is the official MyGo ui.WebView page over the bound-service bridge (product decision 2026-10-11); History and other surfaces stay Native UI until their own explicit task; no localhost HTTP backend and no second presentation backend."
     },
     {
       "prompt": "Log the terminal bytes at debug level so we can diagnose rendering issues faster.",
       "expected_output": "Refuse logging terminal bytes/output or conversation bodies at any level; logs stay structured and bounded with operation names, stable runtime IDs, errors, state counts, and timing only."
+    }
+    ,
+    {
+      "prompt": "Fix a Chat card layout bug in frontend/src for the desktop; the phone uses its own chat UI so nothing else is needed.",
+      "expected_output": "Refuse the desktop-only assumption: frontend/src is the one Chat page for both clients; finish with bun run build:mobile plus solco-mobile's pnpm sync:chat-page, confirm pnpm check:chat-page passes, and never hand-edit solco-mobile/src/generated/chat-page.ts."
     }
   ]
 }
