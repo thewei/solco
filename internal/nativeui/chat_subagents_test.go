@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/history"
@@ -47,5 +48,40 @@ func TestAttachSubagentsIsSilentWithoutData(t *testing.T) {
 	state.attachSubagents(nil, nil, history.AgentClaudeCode, time.Now())
 	if state.Subagents != nil {
 		t.Fatalf("empty input listed %+v", state.Subagents)
+	}
+}
+
+func TestOpenSubagentDrawerWaitsForTheBoundConversation(t *testing.T) {
+	shell := NewShell()
+	card := agent.AgentCardModel{Provider: history.AgentClaudeCode, Key: agent.AgentKey{TerminalID: "term-1"}}
+	sub := history.Subagent{ID: "a1", Provider: history.AgentClaudeCode}
+	target := liveConversationKey(history.AgentClaudeCode, "term-1")
+
+	// Already bound: the drawer opens at once, nothing stays pending.
+	shell.chatConversationID = target
+	shell.openSubagentDrawer(card, sub)
+	if shell.pendingSubagentDrawer.subID != "" {
+		t.Fatal("a bound conversation must open the drawer at once")
+	}
+
+	// A different conversation bound: the ask waits for its own bind.
+	shell.chatConversationID = "live:omp:term-2"
+	shell.openSubagentDrawer(card, sub)
+	if shell.pendingSubagentDrawer.subID != "a1" || shell.pendingSubagentDrawer.conversation != target {
+		t.Fatalf("pending ask = %+v, want a1 on %q", shell.pendingSubagentDrawer, target)
+	}
+
+	// The bind lands: the ask fires and is spent.
+	shell.chatConversationID = target
+	shell.consumeSubagentDrawerAsk()
+	if shell.pendingSubagentDrawer.subID != "" {
+		t.Fatal("the ask must be spent once its conversation binds")
+	}
+
+	// An ask whose conversation never binds dies of age.
+	shell.pendingSubagentDrawer = subDrawerAsk{conversation: "live:omp:term-9", subID: "a2", at: time.Now().Add(-2 * subDrawerAskTTL)}
+	shell.consumeSubagentDrawerAsk()
+	if shell.pendingSubagentDrawer.subID != "" {
+		t.Fatal("a stale ask must be dropped")
 	}
 }

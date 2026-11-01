@@ -47,7 +47,7 @@ Claude 的 `subagents/` 样本来自 2026-10-25 的 `herdr-client` 会话。
 | 呈现 | 要点 |
 |---|---|
 | **Chat 卡片** | 取代 `Delegated …` 工具行:类型 chip + 说明 + 耗时 + 状态槽;运行中一行实时尾巴(`Read terminal.go`);结束后 3 行结果摘要 + `N tool calls · 时长`;`Prompt` 展开父代理给的任务;`Open` 进抽屉。**1–2 个并发 = 卡片,≥3 个 = 名册(roster)**,行点击进抽屉 |
-| **下钻抽屉** | 右侧 420pt,子代理自己的 transcript(复用 Chat 的 turn 渲染)+ 父任务 + 只读标记;`Esc` / `Back to call` 关闭;窗口 <1000 时盖住 Chat 列 |
+| **下钻抽屉** | 右侧默认 420pt(左缘可拖拽 320–720,localStorage 记忆),子代理自己的 transcript(复用 Chat 的 turn 渲染)+ 父任务 + 只读标记;`Esc` / `Back to call` 关闭;窗口 <1000 时盖住 Chat 列 |
 | **侧栏** | 三家都嵌套在父行下;运行中显示,完成沉入 `N done`(可展开);Codex chip 用昵称,omp 用 agent 名 |
 | **Header 弹层** | **不加第五个 Tab**(440pt 已 4 个):Working 里的父行带 `2 sub-agents` 徽标并嵌套子行,`N done` 折叠;`waiting/total` 不计子代理(用户不能寻址它们) |
 | **Tasks 托盘** | 一个托盘两个区:计划项 / `Sub-agents`。**不按文本把计划项与子代理配对**(没有可靠 id,猜配对会骗人);有子代理运行时头部写 `· 2 sub-agents running` |
@@ -106,6 +106,7 @@ Claude 的 `subagents/` 样本来自 2026-10-25 的 `herdr-client` 会话。
 - Codex UI 路径已真机验证(卡片 / tray / 侧栏 ↳N / 完成态);性能基准 `go test -bench CodexSubagents ./internal/history`:3 天 × 400 个 rollout 冷扫 ≈ 110 ms(仅首次),之后每次刷新 ≈ 4 ms(只 stat)。
 - **已知限制(Herdr/Codex 侧,2026-10-31 真机定位)**:Codex 的 SessionStart hook 在 Codex 共享的 app-server 守护进程里运行,继承的是**最先启动守护进程的那个 pane** 的 `HERDR_PANE_ID`(实测另一窗格启动的 Codex,hook 环境里是 `w69:p2` 而不是当前窗格),所以 Herdr 的 `herdr-agent-state.sh` 把 session id 报给了错误的 pane——后启动的 Codex 拿不到 `agent_session`,Chat/侧栏嵌套就无法绑定(降级为“最近会话”候选)。Solco 不绕过:修复在 Herdr 集成侧(hook 应读 payload 里的 cwd/thread 而非继承环境)。
 - 读取/链接/卡片投影放在 Shell 无关的 `internal/chatsession`,与将来的 Remote Host P2 共用。
+- **后续追加:侧栏/弹层子行点击进抽屉,抽屉可拖宽。** 侧栏(`sidebar.go`)与 Header 弹层(`agent_quick_panel.go`)的嵌套子行点击由 `Shell.openSubagentDrawer` 接管:先 `openChat` 落到 Chat(抽屉只在那里),该会话绑定后经 `chat:subagent-open` 事件让页面打开同一只读抽屉;8 s 内没等到绑定就丢弃。抽屉宽度页面侧记忆(localStorage `solco.drawerWidth`),经 chat 根的 `--drawer-w` 同步旁边模式的右边距。
 
 ## 文件
 

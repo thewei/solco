@@ -507,7 +507,6 @@ type Shell struct {
 	// a sidebar Agent click lands where the user left it (N19 #4).
 	paneSurfaceMemo   map[string]WorkspaceSurfaceKind
 	chatDraft         string
-	chatQueuedText    string
 	chatOutcome       string
 	chatLastRequestID string
 	// homeDraft is the workspace home prompt; submitting opens the real
@@ -534,6 +533,10 @@ type Shell struct {
 	chatSubagentsTimer  *time.Timer
 	chatSubagentsBusy   bool
 	chatSubagentsActive bool
+	// pendingSubagentDrawer carries a native sub-agent row's drawer ask
+	// until the conversation it targeted is the bound one
+	// (chat_subagents.go); consumed at every live bind.
+	pendingSubagentDrawer subDrawerAsk
 	// chatWebview is the chat page's embedded WebView (N19 Phase 2); nil
 	// until the first chat build with General.WebViewChat on, and
 	// chatWebviewBroken latches a failed creation so the native chat stays.

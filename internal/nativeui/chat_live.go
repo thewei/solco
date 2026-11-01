@@ -148,6 +148,12 @@ func (s *Shell) liveSourcePending(key agent.AgentKey) bool {
 	return errors.Is(err, fs.ErrNotExist)
 }
 
+// liveConversationKey is the conversation id a live bind carries
+// ("live:<provider>:<terminal>"); the drawer ask matches against it.
+func liveConversationKey(provider history.AgentID, terminalID string) string {
+	return "live:" + string(provider) + ":" + terminalID
+}
+
 // bindLiveFile starts the incremental tail of one provider transcript file
 // for the card's pane. bindLiveAgent resolves the file from the measured
 // session identity; linkChatSession (chat_link.go) hands it a file the user
@@ -189,7 +195,7 @@ func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path,
 	s.chatLivePath = path
 	s.chatLiveProvider = provider
 	s.clearChatSubagents()
-	s.chatConversationID = "live:" + string(provider) + ":" + key.TerminalID
+	s.chatConversationID = liveConversationKey(provider, key.TerminalID)
 	s.chatLoading = true
 	s.chatTurns = nil
 	s.chatWindowMessages = nil
@@ -202,6 +208,7 @@ func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path,
 	// other pane's rebind dropped it at openChat's pane assignment.
 	s.retainPendingEchoForPane(s.chatPaneID)
 	s.appendPendingEchoTurn()
+	s.consumeSubagentDrawerAsk()
 	s.publishChatBridge()
 	// The first hydration runs on the bind lane (synchronous in headless
 	// tests, window-marshalled in the app); the pump goroutine only reacts

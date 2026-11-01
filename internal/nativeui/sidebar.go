@@ -632,10 +632,12 @@ func (s *Shell) agentItems(c *ui.Context) {
 			})
 			// Sub-agents hang under the agent that spawned them while any
 			// is running; once all are done they fold into the card's ⤷N.
+			// A row click opens the sub-agent's own drawer in Chat, like
+			// the page's cards do (2026-10-31 sub-agent views).
 			if subs := openSubagents(card, time.Now()); len(subs) > 0 {
 				for i, sub := range subs {
 					if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
-						s.openAgentFromSidebar(card)
+						s.openSubagentDrawer(card, sub)
 					}
 				}
 			}

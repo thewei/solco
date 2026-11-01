@@ -254,7 +254,8 @@ func openSubagents(card agent.AgentCardModel, now time.Time) []history.Subagent 
 
 // subagentRow is one nested sub-agent: a guide line from its parent, the
 // kind in bold, the task muted, the same state slot at the end (a spinner
-// while it writes, a ring once done). Clicking it opens the parent.
+// while it writes, a ring once done). Clicking it opens the sub-agent's own
+// drawer in Chat (openSubagentDrawer), like the page's cards do.
 func (s *Shell) subagentRow(c *ui.Context, parent agent.AgentCardModel, sub history.Subagent, last bool) ui.Element {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)

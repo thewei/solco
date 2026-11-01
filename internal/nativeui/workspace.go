@@ -223,13 +223,29 @@ func (s *Shell) openWorkspaceChat() bool {
 func (s *Shell) rebindWorkspaceChat() {
 	if card, ok := s.agentCardForSelectedPane(); ok {
 		if s.chatPaneID == card.PaneID && s.chatConversationID != "" {
-			// A hand-linked session (chat_link.go) yields once the agent's
-			// measured identity arrives; anything else stays bound.
-			if provider, _ := s.agentSessionIdentity(card.Key); !(s.chatSessionLinked() && provider != "") {
-				// A later direct live bind (sidebar path) supersedes the
-				// sourceless latch.
-				s.chatSourcelessPaneID = ""
-				return
+			// The bound live transcript yields when the pane's occupant has
+			// moved on: another agent took the pane over (the provider
+			// changed) or the same agent restarted into a new session (the
+			// measured fingerprint changed). Without this, switching agents
+			// in place kept the previous agent's view on the Chat surface
+			// (2026-10-31). A pane whose occupant is gone or has not
+			// reported an identity yet keeps the binding; a history-bound
+			// view (no live fingerprint) only obeys the linked-yield rule.
+			current := s.liveFingerprintForPane(card.PaneID)
+			occupant := agentProvider(s.paneAgent(card.PaneID))
+			stale := s.chatLiveFingerprint != "" &&
+				((current != "" && current != s.chatLiveFingerprint) ||
+					(occupant != "" && occupant != s.chatLiveProvider))
+			if !stale {
+				// A hand-linked session (chat_link.go) yields once the
+				// agent's measured identity arrives; anything else stays
+				// bound.
+				if provider, _ := s.agentSessionIdentity(card.Key); !(s.chatSessionLinked() && provider != "") {
+					// A later direct live bind (sidebar path) supersedes
+					// the sourceless latch.
+					s.chatSourcelessPaneID = ""
+					return
+				}
 			}
 		}
 		if s.chatPaneID == card.PaneID && s.chatSourcelessPaneID == card.PaneID {

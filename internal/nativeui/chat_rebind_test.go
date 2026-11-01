@@ -8,6 +8,7 @@ import (
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
 // TestRebindWorkspaceChatSourcelessClearsStaleTranscript pins the bug where
@@ -203,4 +204,164 @@ func TestFreshAgentWithUnwrittenSessionFileOpensOnInvitation(t *testing.T) {
 		t.Fatal("a header-only session must not stay Loading")
 	}
 	shell.stopLiveTail()
+}
+
+// Switching agents inside one pane (claude exits, omp starts) never changes
+// the pane id, so the rebind must notice the occupant change itself: the
+// bound live transcript yields and the new agent's session binds
+// (2026-10-31 agent-switch report).
+func TestRebindWorkspaceChatYieldsWhenPaneAgentSwaps(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, "omp-session.jsonl")
+	header := "{\"type\":\"session\",\"version\":3,\"id\":\"s2\",\"timestamp\":\"2026-10-31T06:00:00Z\",\"cwd\":\"/tmp\"}\n"
+	if err := os.WriteFile(path, []byte(header), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p1"
+	shell.chatPaneID = "p1"
+	shell.chatConversationID = "live:claude-code:term-1"
+	shell.chatLiveFingerprint = "claude-fp"
+	shell.chatLiveProvider = history.AgentClaudeCode
+	shell.chatTurns = []conversation.TimelineTurn{{UserRow: true, Text: "claude answer"}}
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{
+			TerminalID:   "term-1",
+			PaneID:       "p1",
+			Status:       "idle",
+			AgentSession: &herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Source: "herdr:omp", Value: path},
+		}},
+	}
+
+	shell.rebindWorkspaceChat()
+
+	if shell.chatConversationID != "live:omp:term-1" {
+		t.Fatalf("conversation = %q, want live:omp:term-1", shell.chatConversationID)
+	}
+	if shell.chatLiveProvider != history.AgentOMP {
+		t.Fatalf("provider = %q, want omp", shell.chatLiveProvider)
+	}
+	if shell.chatLiveFingerprint == "claude-fp" {
+		t.Fatal("the binding kept the previous agent's fingerprint")
+	}
+	for _, turn := range shell.chatTurns {
+		if turn.UserRow && turn.Text == "claude answer" {
+			t.Fatal("the previous agent's transcript survived the switch")
+		}
+	}
+	shell.stopLiveTail()
+}
+
+// The same agent restarting into a new session (claude --resume) changes the
+// measured fingerprint without changing the pane: the tail must follow the
+// new transcript, not keep the old one.
+func TestRebindWorkspaceChatFollowsSessionRestart(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, "omp-restarted.jsonl")
+	header := "{\"type\":\"session\",\"version\":3,\"id\":\"s3\",\"timestamp\":\"2026-10-31T07:00:00Z\",\"cwd\":\"/tmp\"}\n"
+	if err := os.WriteFile(path, []byte(header), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p1"
+	shell.chatPaneID = "p1"
+	shell.chatConversationID = "live:omp:term-1"
+	shell.chatLiveFingerprint = "old-session-fp"
+	shell.chatLiveProvider = history.AgentOMP
+	shell.chatLivePath = "/old/session.jsonl"
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{
+			TerminalID:   "term-1",
+			PaneID:       "p1",
+			Status:       "idle",
+			AgentSession: &herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Source: "herdr:omp", Value: path},
+		}},
+	}
+
+	shell.rebindWorkspaceChat()
+
+	if shell.chatLivePath != path {
+		t.Fatalf("tail path = %q, want the restarted session %q", shell.chatLivePath, path)
+	}
+	if shell.chatLiveFingerprint == "old-session-fp" {
+		t.Fatal("the binding kept the restarted session's old fingerprint")
+	}
+	shell.stopLiveTail()
+}
+
+// A swapped-in agent that has not established a session yet (no measured
+// identity) still owns the pane: the stale transcript yields to the
+// sourceless invitation instead of lingering until the first prompt.
+func TestRebindWorkspaceChatYieldsToSourcelessOnProviderSwap(t *testing.T) {
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p1"
+	shell.chatPaneID = "p1"
+	shell.chatConversationID = "live:claude-code:term-1"
+	shell.chatLiveFingerprint = "claude-fp"
+	shell.chatLiveProvider = history.AgentClaudeCode
+	shell.chatTurns = []conversation.TimelineTurn{{UserRow: true, Text: "claude answer"}}
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{TerminalID: "term-1", PaneID: "p1", Status: "idle", Kind: "omp"}},
+	}
+
+	shell.rebindWorkspaceChat()
+
+	if shell.chatConversationID != "" {
+		t.Fatalf("stale conversation survived: %q", shell.chatConversationID)
+	}
+	if len(shell.chatTurns) != 0 {
+		t.Fatalf("stale turns survived: %d", len(shell.chatTurns))
+	}
+	if !shell.chatPaneSourceless() {
+		t.Fatal("the pane must latch sourceless until omp writes its session")
+	}
+	if !shell.chatBridgeState().Waiting {
+		t.Fatal("a swapped-in sourceless agent projects the invitation")
+	}
+}
+
+// The steady state must not thrash: an unchanged occupant rebind is a cheap
+// early return that keeps the bound transcript (the render path re-enters
+// every frame).
+func TestRebindWorkspaceChatKeepsCurrentLiveSession(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, "omp-session.jsonl")
+	header := "{\"type\":\"session\",\"version\":3,\"id\":\"s4\",\"timestamp\":\"2026-10-31T08:00:00Z\",\"cwd\":\"/tmp\"}\n"
+	if err := os.WriteFile(path, []byte(header), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	identity := herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Source: "herdr:omp", Value: path}
+	fingerprint := conversation.SessionIdentity{
+		Provider: string(history.AgentOMP),
+		Kind:     identity.Kind,
+		Source:   identity.Source,
+		Value:    identity.Value,
+	}.Fingerprint()
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p1"
+	shell.chatPaneID = "p1"
+	shell.chatConversationID = "live:omp:term-1"
+	shell.chatLiveFingerprint = fingerprint
+	shell.chatLiveProvider = history.AgentOMP
+	shell.chatLivePath = path
+	shell.chatTurns = []conversation.TimelineTurn{{UserRow: true, Text: "kept"}}
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{TerminalID: "term-1", PaneID: "p1", Status: "idle", AgentSession: &identity}},
+	}
+
+	shell.rebindWorkspaceChat()
+
+	if shell.chatLiveFingerprint != fingerprint || shell.chatLivePath != path {
+		t.Fatal("steady-state rebind thrashed the live binding")
+	}
+	if countUserRows(shell.chatTurns, "kept") != 1 {
+		t.Fatalf("steady-state rebind disturbed the transcript: %+v", shell.chatTurns)
+	}
 }

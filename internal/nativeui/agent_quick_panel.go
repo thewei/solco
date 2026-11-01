@@ -157,11 +157,13 @@ func (s *Shell) quickPanelEntryRow(c *ui.Context, entry StatusCenterEntry, dupPr
 			}
 		})
 		// Sub-agents hang under the agent that spawned them while any runs
-		// (the sidebar's rows; a click lands where the parent's click does).
+		// (the sidebar's rows; a click opens the sub-agent's own drawer in
+		// Chat, then closes the panel).
 		if subs := openSubagents(card, time.Now()); len(subs) > 0 {
 			for i, sub := range subs {
 				if s.subagentRow(c, card, sub, i == len(subs)-1).Clicked() {
-					s.openQuickPanelEntry(entry)
+					s.hideQuickPanel()
+					s.openSubagentDrawer(card, sub)
 				}
 			}
 		}
