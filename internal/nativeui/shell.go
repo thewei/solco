@@ -234,6 +234,9 @@ type Shell struct {
 
 	// interactionBroker owns pending structured interactions (0.6 §17).
 	interactionBroker *conversation.InteractionBroker
+	// interactionMisses keeps the projection-driven screen probe from re-reading
+	// a blocked pane that showed no prompt a moment ago (chat_hooks.go).
+	interactionMisses paneMisses
 
 	// tray owns the 0.7 §17-18 macOS menu-bar projection; nil when no tray
 	// is bound (headless sessions, tests, platform fallback).

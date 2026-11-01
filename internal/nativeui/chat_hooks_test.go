@@ -356,3 +356,29 @@ func TestDetectInteractionRecognisesOmpReviewSheet(t *testing.T) {
 		t.Fatalf("review sheet = %v %q %v %v", kind, prompt, options, ok)
 	}
 }
+
+// A blocked pane whose screen showed no prompt is left alone for a moment, so
+// a burst of projection events does not re-read it each time; the hold lapses,
+// a prompt found clears it, and a pending card still wins.
+func TestShouldProbeBlockedPaneHoldsAfterAMiss(t *testing.T) {
+	shell := NewShell()
+	if !shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("a pane never probed must be probed")
+	}
+	shell.interactionMisses.miss("p1", timeNow())
+	if shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("a pane that just showed no prompt must be left alone")
+	}
+	if !shell.shouldProbeBlockedPane("p2") {
+		t.Fatal("the hold is per pane")
+	}
+	shell.interactionMisses.at["p1"] = timeNow().Add(-2 * interactionMissHold)
+	if !shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("the hold must lapse")
+	}
+	shell.interactionMisses.miss("p1", timeNow())
+	shell.interactionMisses.clear("p1")
+	if !shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("clearing the miss must allow an immediate probe")
+	}
+}

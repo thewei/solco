@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/thewei/solco/internal/apphook"
@@ -87,13 +88,58 @@ func (s *Shell) reconcileBlockedInteractions() {
 		if agent.Status != "blocked" || agent.PaneID == "" {
 			continue
 		}
-		if len(s.interactionBroker.PendingForPane(agent.PaneID)) > 0 {
+		if !s.shouldProbeBlockedPane(agent.PaneID) {
 			continue
 		}
 		paneID := agent.PaneID
 		s.dispatch(func() { s.detectPaneInteraction(paneID) })
 	}
 	s.checkTerminalDialog()
+}
+
+// interactionMissHold is how long a pane whose screen showed no prompt shape
+// is left alone by the projection-driven pass. Without it every Herdr event
+// re-read the screen of each blocked agent that merely waits on something
+// Chat cannot structure (an RPC and a log line per event).
+const interactionMissHold = 3 * time.Second
+
+// paneMisses remembers, per pane, when a screen read last found no prompt.
+// dispatch runs detection on goroutines, so it carries its own lock.
+type paneMisses struct {
+	mu sync.Mutex
+	at map[string]time.Time
+}
+
+func (m *paneMisses) recent(pane string, now time.Time, within time.Duration) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	at, ok := m.at[pane]
+	return ok && now.Sub(at) < within
+}
+
+func (m *paneMisses) miss(pane string, now time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.at == nil {
+		m.at = map[string]time.Time{}
+	}
+	m.at[pane] = now
+}
+
+func (m *paneMisses) clear(pane string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.at, pane)
+}
+
+// shouldProbeBlockedPane reports whether the projection-driven pass should
+// read this blocked pane's screen: not while a card is already pending for
+// it, and not right after a read that found no prompt.
+func (s *Shell) shouldProbeBlockedPane(paneID string) bool {
+	if len(s.interactionBroker.PendingForPane(paneID)) > 0 {
+		return false
+	}
+	return !s.interactionMisses.recent(paneID, timeNow(), interactionMissHold)
 }
 
 // handleAppHookStatus applies a directly reported agent status event onto
@@ -399,9 +445,11 @@ func (s *Shell) detectPaneInteraction(paneID string) {
 	}
 	kind, prompt, options, ok := chatsession.DetectScreenPrompt(screen)
 	if !ok {
-		slog.Info("interaction detect found no prompt shape", "pane", paneID)
+		s.interactionMisses.miss(paneID, timeNow())
+		slog.Debug("interaction detect found no prompt shape", "pane", paneID)
 		return
 	}
+	s.interactionMisses.clear(paneID)
 	interaction := conversation.PendingInteraction{Kind: kind, Prompt: prompt, Options: options}
 	if chatsession.IsOmpReviewSheet(screen) {
 		interaction.EscapeOption = "Cancel"
@@ -417,6 +465,7 @@ func (s *Shell) redetectAfterAnswer(paneID string) {
 	time.AfterFunc(1500*time.Millisecond, func() {
 		s.applyOnWindow(func() {
 			if agent := s.paneAgent(paneID); agent != nil && agent.Status == "blocked" {
+				s.interactionMisses.clear(paneID) // the answer changed the screen: look again at once
 				s.reconcileBlockedInteractions()
 			}
 		})
