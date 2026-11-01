@@ -59,7 +59,7 @@ func Open(provider history.AgentID, path string) (*Reader, error) {
 		provider: provider,
 		path:     path,
 		decoder:  decoder,
-		watcher:  history.NewLiveWatcher(history.NewFileLiveSource(path), decoder),
+		watcher:  history.NewLiveWatcher(history.NewLiveSource(provider, path), decoder),
 		start:    -1,
 	}, nil
 }
@@ -82,7 +82,7 @@ func (r *Reader) Sync() (bool, error) {
 	return first || sync.HasUpdates(), nil
 }
 
-// Ask returns the transcript's pending `ask` call (omp/pi), if the agent is
+// Ask returns the transcript's pending `ask` / `ask_question` call (omp/pi, agy), if the agent is
 // parked on one. It reads the same window State renders without moving it.
 func (r *Reader) Ask() (TranscriptAsk, bool) {
 	r.mu.Lock()

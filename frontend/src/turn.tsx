@@ -366,9 +366,11 @@ export function toolCategory(name: string): Category {
   if (/todo|plan/i.test(name)) return "plan";
   // Codex's wait/close/resume_agent only manage an agent already delegated.
   if (/^(wait|close|resume)_agent$/i.test(name)) return "step";
+  // Antigravity's manage_task reads or stops a background command, it does not delegate.
+  if (/^manage_task$/i.test(name)) return "step";
   if (/task|agent|dispatch|spawn/i.test(name)) return "agent";
   if (/web|fetch|http|browse/i.test(name)) return "web";
-  if (/edit|write|patch|apply|replace/i.test(name)) return "edit";
+  if (/edit|write|patch|apply|replace|delete/i.test(name)) return "edit";
   if (/read|view|\bcat\b|open/i.test(name)) return "read";
   if (/grep|glob|search|find|list|\bls\b/i.test(name)) return "search";
   if (/bash|command|exec|shell|terminal|run|cmd/i.test(name)) return "command";

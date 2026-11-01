@@ -665,6 +665,20 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
       setPanel(null);
     }
   };
+  // A model row or effort that is one typed agent command (Antigravity's
+  // "/model Name (High)", pi "/thinking low", omp/Claude "/effort low"): the
+  // catalog carries the exact text, so it goes through the ordinary send.
+  const sendFromPanel = async (text: string) => {
+    setSwitching(true);
+    try {
+      setState(await chat.send(text));
+    } catch (err) {
+      setVoiceError(err instanceof Error ? err.message : "Could not send");
+    } finally {
+      setSwitching(false);
+      setPanel(null);
+    }
+  };
   const closePanel = () => {
     setPanel(null);
     composerRef.current?.focus();
@@ -1293,7 +1307,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 />
               ))
             ) : disposition === "terminal" ? (
-              <BlockedDock onOpenTerminal={openTerminal} />
+              <BlockedDock onOpenTerminal={openTerminal} reason={state?.terminalReason} />
             ) : null}
             {state?.outcome && !outbox ? <div className="outcome">{state.outcome}</div> : null}
             <QueueCard
@@ -1327,7 +1341,8 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 catalog={catalog}
                 current={shownModel}
                 busy={switching || disposition !== "ready"}
-                onSwitch={(id) => void switchModel(id)}
+                onSwitch={(model) => (model.pick ? void sendFromPanel(model.pick) : void switchModel(model.id))}
+                onEffort={(effort) => void sendFromPanel(effort.send)}
                 onPicker={() => void openModelPicker()}
                 onClose={closePanel}
               />

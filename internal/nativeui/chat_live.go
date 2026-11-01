@@ -50,6 +50,7 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 		s.selectPane(card.PaneID)
 		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceChat)
 	}
+	s.checkTerminalDialog()
 	if s.bindLiveAgent(card.Key) {
 		if s.router.Path() != routeWorkspace {
 			s.router.Push(routeWorkspace)
@@ -142,7 +143,9 @@ func (s *Shell) liveSourcePending(key agent.AgentKey) bool {
 	}
 	path, err := history.ResolveLiveSource(home, provider, identity.Kind, identity.Source, identity.Value)
 	if err != nil {
-		return false
+		// A source that cannot even be located yet (Cursor's chat store
+		// appears with the first prompt) is pending, not absent for good.
+		return errors.Is(err, fs.ErrNotExist)
 	}
 	_, err = os.Stat(path)
 	return errors.Is(err, fs.ErrNotExist)
@@ -175,7 +178,7 @@ func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path,
 	if s.chatLiveBackstopOverride > 0 {
 		backstop = s.chatLiveBackstopOverride
 	}
-	pump := history.NewLivePump(history.NewLiveWatcher(history.NewFileLiveSource(path), decoder), wake)
+	pump := history.NewLivePump(history.NewLiveWatcher(history.NewLiveSource(provider, path), decoder), wake)
 	pump.Backstop = backstop
 	pump.OnSync = func(sync history.LiveSync, syncErr error) {
 		if syncErr != nil || ctx.Err() != nil || !sync.HasUpdates() {

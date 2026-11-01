@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,16 +52,40 @@ type Entry struct {
 type Model struct {
 	ID     string
 	Detail string
+	// Efforts are this model's own thinking-effort choices (pi, omp, and
+	// Antigravity's "(High)/(Medium)/(Low)" variants); nil = none known.
+	Efforts []Effort
+	// Reasoning is true when the agent's own listing marks the model as one
+	// that thinks (pi's "thinking" column); omp states its levels in Efforts.
+	Reasoning bool
+	// Pick is the exact prompt text that selects this row when it is not
+	// ModelVerb+ID (Antigravity: a model family selects its first variant).
+	Pick string
 	// Window is the context window the agent's own model listing states
 	// (pi, omp); 0 when it states none.
 	Window int64
 }
 
 // Catalog is the composer's menu for one Agent.
+// Effort is one thinking-effort choice. Label is what the panel shows; Send is
+// the exact prompt text that applies it (the agent's own typed command), so
+// the page and the phone send it through the ordinary path and add no
+// vocabulary of their own.
+type Effort struct {
+	Label string
+	Send  string
+}
+
 type Catalog struct {
-	Commands []Entry
-	Skills   []Entry
-	Models   []Model
+	// Efforts are the choices that do not depend on the model (Claude Code);
+	// a Model's own Efforts win for that model.
+	Efforts []Effort
+	// EffortNote warns that applying an effort has a side effect ("" = none):
+	// Claude Code saves it as the model's default effort.
+	EffortNote string
+	Commands   []Entry
+	Skills     []Entry
+	Models     []Model
 	// ModelVerb is the typed command that switches model for this session
 	// ("/model ", "/switch "); empty when the provider only offers a picker.
 	ModelVerb string
@@ -70,6 +95,10 @@ type Catalog struct {
 	// agent's own config ("" when it names none): what the composer shows
 	// before any transcript records a model.
 	DefaultModel string
+	// ModelNote is a warning shown with the model list when a switch has a
+	// side effect the user should know about ("" = none): Antigravity saves
+	// the typed choice as its default model for every new session.
+	ModelNote string
 }
 
 // maxSkills bounds a runaway skills folder.
@@ -184,6 +213,62 @@ func builtins(provider history.AgentID) []Entry {
 			terminal("/tree", "Navigate the session tree"),
 			terminal("/trust", "Save the project trust decision"),
 		}
+	case history.AgentCursor:
+		// Cursor Agent 2026.10.22. Left out on purpose: /max-mode, /fast,
+		// /run-everything, /auto-review (raise cost or lower the approval
+		// level), /logout, /update, the per-model slash commands and the
+		// cosmetic toggles.
+		return []Entry{
+			resume,
+			terminal("/model", "Choose a model"),
+			terminal("/add-dir ", "Add a directory to the workspace"),
+			terminal("/ask", "Toggle ask mode (read-only Q&A)"),
+			terminal("/btw ", "Ask on the side without disrupting the chat"),
+			terminal("/changes", "Review changes"),
+			terminal("/clear", "Start a new chat session"),
+			terminal("/command", "Manage custom commands"),
+			terminal("/commit", "Ask the agent to stage and commit changes"),
+			terminal("/context", "Show context usage"),
+			terminal("/copy-conversation-id", "Copy the conversation id"),
+			terminal("/copy-request-id", "Copy the last request id"),
+			terminal("/debug ", "Toggle debug mode or send a prompt in it"),
+			terminal("/fork", "Fork the chat into a new session"),
+			terminal("/goal ", "Start a durable goal"),
+			terminal("/help", "Show help"),
+			terminal("/jobs", "Open the active tasks list"),
+			terminal("/plan ", "Create a plan or show the existing one"),
+			terminal("/rename ", "Rename the chat session"),
+			terminal("/rewind", "Jump back to a previous message"),
+			terminal("/rule", "Manage Cursor rules"),
+			terminal("/skills", "Open the skills menu"),
+			terminal("/summarize", "Summarize the conversation to reduce context"),
+			terminal("/usage", "Show plan and on-demand usage"),
+		}
+	case history.AgentAntigravity:
+		// Antigravity CLI 1.4.12.
+		return []Entry{
+			resume,
+			terminal("/model", "Choose a model"),
+			terminal("/add-dir ", "Add a directory to the workspace"),
+			terminal("/agents", "List available custom agents"),
+			terminal("/btw ", "Ask a side question without interrupting the task"),
+			terminal("/clear", "Clear the conversation and start a new one"),
+			terminal("/config", "Open the settings panel"),
+			terminal("/context", "Visualize current context usage"),
+			terminal("/copy", "Copy the last planner response"),
+			terminal("/fork", "Branch the conversation at this point"),
+			terminal("/goal ", "Run until the goal is finished"),
+			terminal("/help", "Show commands and keybindings"),
+			terminal("/hooks", "Manage hook configurations"),
+			terminal("/mcp", "Manage MCP servers"),
+			terminal("/permissions", "Manage tool permissions"),
+			terminal("/plan ", "Plan carefully before executing"),
+			terminal("/rename ", "Rename the conversation"),
+			terminal("/rewind", "Rewind to a previous message"),
+			terminal("/skills", "List available skills"),
+			terminal("/tasks", "View background tasks"),
+			terminal("/usage", "View model quota usage"),
+		}
 	case history.AgentOMP:
 		return []Entry{
 			compact,
@@ -237,6 +322,9 @@ func Classify(provider history.AgentID, text string) Kind {
 	if verb := ModelVerb(provider); verb != "" && strings.HasPrefix(text, verb) {
 		return ""
 	}
+	if isEffortText(provider, text) {
+		return ""
+	}
 	first, _, _ := strings.Cut(text, " ")
 	for _, entry := range builtins(provider) {
 		switch {
@@ -267,6 +355,10 @@ func ModelVerb(provider history.AgentID) string {
 		return "/model "
 	case history.AgentOMP:
 		return "/switch "
+	case history.AgentAntigravity:
+		// Typed, `/model <display name>` is verified on a real device but
+		// Antigravity saves it as the default model (ModelNote says so).
+		return "/model "
 	}
 	return ""
 }
@@ -283,6 +375,8 @@ func Load(ctx context.Context, provider history.AgentID, root string) Catalog {
 		}
 		cat.Skills = skills("/", filepath.Join(root, ".claude", "skills"), filepath.Join(home, ".claude", "skills"))
 		cat.ModelPicker = "/model"
+		cat.Efforts = efforts(EffortVerb(provider), claudeEfforts...)
+		cat.EffortNote = "Claude Code saves this as the model's default effort."
 	case history.AgentCodex:
 		cat.Commands = append(cat.Commands, prompts(filepath.Join(codexHome(home), "prompts"), "/prompts:")...)
 		cat.Skills = skills("$", filepath.Join(root, ".agents", "skills"), filepath.Join(home, ".agents", "skills"), filepath.Join(codexHome(home), "skills"))
@@ -291,11 +385,27 @@ func Load(ctx context.Context, provider history.AgentID, root string) Catalog {
 		cat.Commands = append(cat.Commands, prompts(filepath.Join(home, ".pi", "agent", "prompts"), "/")...)
 		cat.Skills = skills("/skill:", filepath.Join(root, ".pi", "skills"), filepath.Join(root, ".agents", "skills"), filepath.Join(home, ".pi", "agent", "skills"), filepath.Join(home, ".agents", "skills"))
 		cat.ModelVerb = ModelVerb(provider)
-		cat.Models = piModels(ctx)
+		cat.Models = withPiEfforts(piModels(ctx), home)
 	case history.AgentOMP:
 		cat.Skills = skills("/skill:", filepath.Join(root, ".omp", "skills"), filepath.Join(root, ".agents", "skills"), filepath.Join(home, ".omp", "agent", "skills"), filepath.Join(home, ".agents", "skills"))
 		cat.ModelVerb = ModelVerb(provider)
 		cat.Models = ompModels(ctx)
+	case history.AgentCursor:
+		// Skills are slash commands. No model list: the CLI's own picker has
+		// 46 base models while `--list-models` has 270+ variants, and a typed
+		// `/model <filter>` takes the first match, which can be a dearer one.
+		cat.Skills = skills("/",
+			filepath.Join(root, ".cursor", "skills"), filepath.Join(root, ".claude", "skills"), filepath.Join(root, ".agents", "skills"),
+			filepath.Join(home, ".cursor", "skills"), filepath.Join(home, ".cursor", "skills-cursor"),
+			filepath.Join(home, ".claude", "skills"), filepath.Join(home, ".agents", "skills"))
+	case history.AgentAntigravity:
+		cat.Skills = skills("/",
+			filepath.Join(root, ".agents", "skills"),
+			filepath.Join(home, ".gemini", "skills"), filepath.Join(home, ".gemini", "antigravity-cli", "skills"),
+			filepath.Join(home, ".claude", "skills"))
+		cat.ModelVerb = ModelVerb(provider)
+		cat.Models = groupAgyEfforts(agyModels(ctx))
+		cat.ModelNote = "Antigravity saves this as the default model for every new session."
 	}
 	return cat
 }
@@ -475,7 +585,8 @@ func parsePiModels(out string) []Model {
 		if len(fields) >= 3 {
 			window = parseTokenCount(fields[2])
 		}
-		models = append(models, Model{ID: fields[0] + "/" + fields[1], Window: window})
+		// provider model context max-out thinking images
+		models = append(models, Model{ID: fields[0] + "/" + fields[1], Window: window, Reasoning: len(fields) >= 5 && fields[4] == "yes"})
 	}
 	return models
 }
@@ -544,17 +655,20 @@ func ompModels(ctx context.Context) []Model {
 func parseOmpModels(out string) []Model {
 	var models []Model
 	provider := ""
-	contextAt := -1
+	contextAt, thinkingAt := -1, -1
 	for _, line := range strings.Split(out, "\n") {
 		text := strings.TrimSpace(line)
 		if strings.HasPrefix(text, "│") {
 			cells := strings.Split(strings.Trim(text, "│"), "│")
 			id := strings.TrimSpace(cells[0])
 			if id == "model" {
-				contextAt = -1
+				contextAt, thinkingAt = -1, -1
 				for at, cell := range cells {
-					if strings.TrimSpace(cell) == "context" {
+					switch strings.TrimSpace(cell) {
+					case "context":
 						contextAt = at
+					case "thinking":
+						thinkingAt = at
 					}
 				}
 			} else if id != "" && provider != "" && len(models) < maxSkills {
@@ -562,7 +676,15 @@ func parseOmpModels(out string) []Model {
 				if contextAt > 0 && contextAt < len(cells) {
 					window = parseTokenCount(cells[contextAt])
 				}
-				models = append(models, Model{ID: provider + "/" + id, Window: window})
+				model := Model{ID: provider + "/" + id, Window: window}
+				// The row's "thinking" cell lists the levels it takes ("-" =
+				// none); `/effort ` itself also offers off and auto (verified).
+				if thinkingAt > 0 && thinkingAt < len(cells) {
+					if cell := strings.TrimSpace(cells[thinkingAt]); cell != "" && cell != "-" {
+						model.Efforts = efforts("/effort ", append([]string{"off", "auto"}, strings.Split(cell, ",")...)...)
+					}
+				}
+				models = append(models, model)
 			}
 			continue
 		}
@@ -571,6 +693,39 @@ func parseOmpModels(out string) []Model {
 		}
 	}
 	return models
+}
+
+// agyModels lists `agy models`: tab-separated "id<TAB>Display Name" rows after
+// a progress line. The id is the row's Detail; the display name is what the
+// typed `/model` command and the transcripts spell.
+func agyModels(ctx context.Context) []Model {
+	return cachedModels(ctx, "agy", func(ctx context.Context) []Model {
+		return parseAgyModels(string(runList(ctx, "agy", "models")))
+	})
+}
+
+func parseAgyModels(out string) []Model {
+	var models []Model
+	for _, line := range strings.Split(out, "\n") {
+		id, name, ok := strings.Cut(strings.TrimRight(line, "\r"), "\t")
+		id, name = strings.TrimSpace(id), strings.TrimSpace(name)
+		if !ok || id == "" || name == "" || IsMaxMode(id) || len(models) >= maxSkills {
+			continue
+		}
+		models = append(models, Model{ID: name, Detail: id})
+	}
+	return models
+}
+
+// IsMaxMode reports a model id of a Max-mode variant ("…-max", "…-max-fast",
+// "…-thinking-max"): the composer never offers them, they bill at the top rate.
+func IsMaxMode(id string) bool {
+	for _, part := range strings.FieldsFunc(strings.ToLower(id), func(r rune) bool { return r == '-' || r == ' ' || r == '_' }) {
+		if part == "max" {
+			return true
+		}
+	}
+	return false
 }
 
 // defaultModel reads the model a new session of provider starts on from the
@@ -590,8 +745,26 @@ func defaultModel(provider history.AgentID, home string) string {
 		return codexDefaultModel(read(filepath.Join(codexHome(home), "config.toml")))
 	case history.AgentClaudeCode:
 		return claudeDefaultModel(read(filepath.Join(home, ".claude", "settings.json")))
+	case history.AgentAntigravity:
+		return claudeDefaultModel(read(filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")))
+	case history.AgentCursor:
+		return cursorDefaultModel(read(filepath.Join(home, ".cursor", "cli-config.json")))
 	}
 	return ""
+}
+
+// cursorDefaultModel reads model.modelId of cli-config.json, the id the chat
+// store's lastUsedModel spells.
+func cursorDefaultModel(config string) string {
+	var settings struct {
+		Model struct {
+			ID string `json:"modelId"`
+		} `json:"model"`
+	}
+	if json.Unmarshal([]byte(config), &settings) != nil {
+		return ""
+	}
+	return settings.Model.ID
 }
 
 // ompDefaultModel reads modelRoles.default ("provider/id[:level]") and returns
@@ -648,4 +821,151 @@ func claudeDefaultModel(config string) string {
 		return ""
 	}
 	return settings.Model
+}
+
+// EffortVerb is the typed command that sets the thinking effort of a running
+// session ("" = none): pi `/thinking low`, omp and Claude Code `/effort low`
+// (verified on real devices 2026-11-01; Antigravity's effort is part of the
+// model name, Codex's is the second step of its `/model` picker).
+func EffortVerb(provider history.AgentID) string {
+	switch provider {
+	case history.AgentPi:
+		return "/thinking "
+	case history.AgentOMP, history.AgentClaudeCode:
+		return "/effort "
+	}
+	return ""
+}
+
+// effortLevels is the vocabulary of EffortVerb arguments across pi, omp and
+// Claude Code. Classify uses it to tell `/effort low` (an applied level, sent
+// as typed) from a bare `/effort` (the agent's own dialog, Terminal).
+var effortLevels = map[string]bool{"off": true, "auto": true, "minimal": true, "low": true, "medium": true, "high": true, "xhigh": true, "max": true}
+
+func isEffortText(provider history.AgentID, text string) bool {
+	verb := EffortVerb(provider)
+	if verb == "" || !strings.HasPrefix(text, verb) {
+		return false
+	}
+	return effortLevels[strings.TrimSpace(strings.TrimPrefix(text, verb))]
+}
+
+// claudeEfforts is the argument list Claude Code prints for `/effort ` itself
+// (`[low|medium|high|xhigh|max|auto|ultracode [on|off]]`, claude 2026-11); its
+// own model-dependent clamping applies.
+var claudeEfforts = []string{"low", "medium", "high", "xhigh", "max", "auto"}
+
+func efforts(verb string, levels ...string) []Effort {
+	out := make([]Effort, 0, len(levels))
+	for _, level := range levels {
+		out = append(out, Effort{Label: level, Send: verb + level})
+	}
+	return out
+}
+
+// piEffortOrder is pi's level order; a model's `thinkingLevelMap` in pi's own
+// models.json names the supported ones (null = unsupported). A reasoning model
+// without a map offers off…high (verified: the `/thinking ` list on such a model).
+var piEffortOrder = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
+
+// withPiEfforts returns models with each reasoning model's efforts filled in
+// from pi's own models.json (read-only). The cached list is not modified.
+func withPiEfforts(models []Model, home string) []Model {
+	var file struct {
+		Providers map[string]struct {
+			Models []struct {
+				ID  string             `json:"id"`
+				Map map[string]*string `json:"thinkingLevelMap"`
+			} `json:"models"`
+		} `json:"providers"`
+	}
+	if data, err := os.ReadFile(filepath.Join(home, ".pi", "agent", "models.json")); err == nil && len(data) < 4<<20 {
+		_ = json.Unmarshal(data, &file)
+	}
+	maps := map[string]map[string]*string{}
+	for provider, entry := range file.Providers {
+		for _, model := range entry.Models {
+			if model.Map != nil {
+				maps[provider+"/"+model.ID] = model.Map
+			}
+		}
+	}
+	out := make([]Model, len(models))
+	copy(out, models)
+	for index := range out {
+		if !out[index].Reasoning {
+			continue
+		}
+		var levels []string
+		for _, level := range piEffortOrder {
+			if byLevel, ok := maps[out[index].ID]; ok {
+				if byLevel[level] != nil {
+					levels = append(levels, level)
+				}
+			} else if level != "xhigh" && level != "max" {
+				levels = append(levels, level)
+			}
+		}
+		out[index].Efforts = efforts("/thinking ", levels...)
+	}
+	return out
+}
+
+// groupAgyEfforts folds Antigravity's "Name (High)" / "(Medium)" / "(Low)"
+// variants into one family row with the variants as its efforts. Selecting the
+// family picks its first variant (Pick); a family needs two variants to be one
+// ("(Thinking)" is a model name, not a level).
+func groupAgyEfforts(models []Model) []Model {
+	type family struct {
+		base     string
+		variants []Model
+		levels   []string
+	}
+	var order []string
+	families := map[string]*family{}
+	rows := map[string]Model{}
+	for _, model := range models {
+		base, level, ok := splitAgyEffort(model.ID)
+		if !ok {
+			order = append(order, model.ID)
+			rows[model.ID] = model
+			continue
+		}
+		fam := families[base]
+		if fam == nil {
+			fam = &family{base: base}
+			families[base] = fam
+			order = append(order, base)
+		}
+		fam.variants = append(fam.variants, model)
+		fam.levels = append(fam.levels, level)
+	}
+	out := make([]Model, 0, len(order))
+	for _, key := range order {
+		fam := families[key]
+		if fam == nil {
+			out = append(out, rows[key])
+			continue
+		}
+		if len(fam.variants) < 2 {
+			out = append(out, fam.variants[0])
+			continue
+		}
+		row := Model{ID: fam.base, Pick: "/model " + fam.variants[0].ID, Detail: fam.variants[0].Detail}
+		for index, variant := range fam.variants {
+			row.Efforts = append(row.Efforts, Effort{Label: fam.levels[index], Send: "/model " + variant.ID})
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+var agyEffortSuffix = regexp.MustCompile(`^(.+) \((High|Medium|Low|Minimal)\)$`)
+
+func splitAgyEffort(name string) (base, level string, ok bool) {
+	match := agyEffortSuffix.FindStringSubmatch(name)
+	if match == nil {
+		return "", "", false
+	}
+	return match[1], match[2], true
 }

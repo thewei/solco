@@ -78,9 +78,12 @@ type ChatBridgeState struct {
 	// LinkCandidates are recent sessions of this agent's provider in its
 	// folder, offered only while the agent has not reported a session of its
 	// own (Waiting): the invitation can then say "show this one instead".
-	LinkCandidates []ChatBridgeLink       `json:"linkCandidates,omitempty"`
-	Disposition    string                 `json:"disposition"`
-	Outcome        string                 `json:"outcome,omitempty"`
+	LinkCandidates []ChatBridgeLink `json:"linkCandidates,omitempty"`
+	Disposition    string           `json:"disposition"`
+	Outcome        string           `json:"outcome,omitempty"`
+	// TerminalReason is the one fixed sentence the Open Terminal card shows
+	// when a Cursor/Antigravity dialog can only be answered in the terminal.
+	TerminalReason string                 `json:"terminalReason,omitempty"`
 	QueuedItems    []ChatBridgeQueuedItem `json:"queuedItems,omitempty"`
 	// Theme is the app-resolved appearance ("light" or "dark"), following
 	// Settings -> General -> Appearance through mygo.Theme — not the bare
@@ -696,6 +699,7 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		Loading:        s.chatLoading,
 		Disposition:    chatBridgeDisposition(s.chatDispositionNow()),
 		Outcome:        s.chatOutcome,
+		TerminalReason: s.terminalReason(),
 		Theme:          s.chatBridgeTheme(),
 		HighContrast:   s.settings.General.HighContrast,
 		VoiceSource:    voiceSourceName(s.settings.Voice),

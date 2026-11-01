@@ -464,6 +464,13 @@ type Shell struct {
 	chatAskStep    int
 	chatAskTotal   int
 	chatAskDone    bool
+	// chatTerminal* hold the bound pane's terminal-only dialog (Cursor Agent /
+	// Antigravity CLI trust page, AskQuestion, first-run setup): see
+	// chat_terminal_dialog.go.
+	chatTerminalPane   string
+	chatTerminalReason string
+	chatTerminalReadAt time.Time
+	chatTerminalBusy   bool
 	// chatReadOnly marks a detached history transcript — the Sessions
 	// detail shows it through the same chat view with no pane, no live tail
 	// and no composer; chatSession is that session's meta for the header.

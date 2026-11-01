@@ -623,11 +623,18 @@ func historyShortDate(ms int64, now time.Time) string {
 // come from agent.ResumeArgs, the one owner of each Provider's resume flag.
 func sessionResumeCommand(meta history.SessionMeta) string {
 	binary := map[history.AgentID]string{
-		history.AgentClaudeCode: "claude",
-		history.AgentCodex:      "codex",
-		history.AgentPi:         "pi",
-		history.AgentOMP:        "omp",
+		history.AgentClaudeCode:  "claude",
+		history.AgentCodex:       "codex",
+		history.AgentPi:          "pi",
+		history.AgentOMP:         "omp",
+		history.AgentCursor:      "cursor-agent",
+		history.AgentAntigravity: "agy",
 	}[meta.Agent]
+	// The IDE's conversations (`~/.gemini/antigravity/brain`) live in the
+	// IDE's own store: only the CLI's own folder can be resumed by agy.
+	if meta.Agent == history.AgentAntigravity && !strings.Contains(meta.FilePath, "/antigravity-cli/") {
+		binary = ""
+	}
 	args, err := agent.ResumeArgs(agent.ResumeIntent{Provider: meta.Agent, NativeSessionID: meta.ID})
 	if binary == "" || err != nil {
 		return sessionCd(meta) + fmt.Sprintf("# no known resume command for %s (session %s)", meta.Agent, meta.ID)

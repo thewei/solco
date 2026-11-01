@@ -17,9 +17,27 @@
   ],
   "models": [
     {
-      "id": "anthropic/sonnet"
+      "id": "anthropic/sonnet",
+      "efforts": [
+        {
+          "label": "low",
+          "send": "/effort low"
+        },
+        {
+          "label": "high",
+          "send": "/effort high"
+        }
+      ]
     }
   ],
   "modelVerb": "/model ",
-  "defaultModel": "sonnet"
+  "defaultModel": "sonnet",
+  "modelNote": "Saved as the default model.",
+  "efforts": [
+    {
+      "label": "medium",
+      "send": "/effort medium"
+    }
+  ],
+  "effortNote": "Saved as the model's default effort."
 }

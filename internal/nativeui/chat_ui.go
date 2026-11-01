@@ -487,6 +487,9 @@ func (s *Shell) chatDispositionNow() conversation.PromptDisposition {
 	// The composer disposition belongs to the bound chat pane, which usually
 	// follows the selection but is its own coordinate (the pane the prompt
 	// would go to).
+	if s.terminalDialogHeld() {
+		return conversation.DispositionNeedsTerminal
+	}
 	if card, ok := s.agentCardForPane(s.chatPaneID); ok {
 		// Classify from the phase, not the card's own Sendability: the
 		// projection-fallback card builder leaves it unset.

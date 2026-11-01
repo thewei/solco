@@ -54,6 +54,10 @@ type PendingInteraction struct {
 	// Commit is the key that confirms the highlighted row ("" = enter).
 	// Claude Code's model picker takes `s` for "this session only".
 	Commit string
+	// OptionKeys, when set (one entry per Option), are the exact named keys
+	// that choose each option; they replace arrow navigation. Cursor Agent's
+	// approval sheet answers to `y` / `n`, not to a highlighted row.
+	OptionKeys [][]string
 }
 
 // InteractionResolution records the first-winner resolution.

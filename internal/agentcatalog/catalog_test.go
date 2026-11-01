@@ -104,7 +104,11 @@ func TestClassifyHandsTerminalCommandsOver(t *testing.T) {
 		{history.AgentClaudeCode, "/model", KindPicker},
 		{history.AgentClaudeCode, "/model haiku", ""}, // typed switch saves a default: never structured
 		{history.AgentClaudeCode, "/status", KindTerminal},
-		{history.AgentClaudeCode, "/effort high", KindTerminal},
+		{history.AgentClaudeCode, "/effort", KindTerminal}, // bare: the agent's own dialog
+		{history.AgentClaudeCode, "/effort high", ""},      // an applied level is sent as typed
+		{history.AgentClaudeCode, "/effort ultracode on", KindTerminal},
+		{history.AgentOMP, "/effort low", ""},
+		{history.AgentPi, "/thinking max", ""},
 		{history.AgentClaudeCode, "/compact", ""},
 		{history.AgentCodex, "/diff", KindTerminal},
 		{history.AgentCodex, "/permissions", KindPicker},
@@ -113,6 +117,13 @@ func TestClassifyHandsTerminalCommandsOver(t *testing.T) {
 		{history.AgentOMP, "/switch group/glm-flash", ""},
 		{history.AgentOMP, "/git", KindTerminal},
 		{history.AgentOMP, "just text", ""},
+		{history.AgentAntigravity, "/model", KindTerminal},
+		{history.AgentAntigravity, "/model Claude Sonnet 4.6 (Thinking)", ""}, // typed switch stays in Chat
+		{history.AgentAntigravity, "/permissions", KindTerminal},
+		{history.AgentCursor, "/model", KindTerminal},
+		{history.AgentCursor, "/model gemini 3.8", KindTerminal}, // first match may be a dearer model: Terminal
+		{history.AgentCursor, "/plan make a plan", KindTerminal},
+		{history.AgentCursor, "/chrome-devtools", ""}, // a skill is an ordinary prompt
 	}
 	for _, tc := range cases {
 		if got := Classify(tc.provider, tc.text); got != tc.want {
@@ -122,7 +133,7 @@ func TestClassifyHandsTerminalCommandsOver(t *testing.T) {
 }
 
 func TestBuiltinsNeverEndTheAgent(t *testing.T) {
-	for _, provider := range []history.AgentID{history.AgentClaudeCode, history.AgentCodex, history.AgentPi, history.AgentOMP} {
+	for _, provider := range []history.AgentID{history.AgentClaudeCode, history.AgentCodex, history.AgentPi, history.AgentOMP, history.AgentCursor, history.AgentAntigravity} {
 		seen := map[string]bool{}
 		for _, entry := range builtins(provider) {
 			switch entry.Name {
@@ -166,6 +177,140 @@ func TestIsCompactTakesTheCommandAndItsInstructionsOnly(t *testing.T) {
 	for text, want := range map[string]bool{"/compact": true, " /compact keep the tests ": true, "/compaction": false, "compact it": false, "/init": false} {
 		if IsCompact(text) != want {
 			t.Fatalf("IsCompact(%q) = %v", text, !want)
+		}
+	}
+}
+
+func TestAgyModelsDropMaxModeAndKeepTheDisplayName(t *testing.T) {
+	out := "Fetching available models...\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\nclaude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\nclaude-x-max\tClaude X Max\nclaude-x-thinking-max-fast\tClaude X Max Thinking Fast\n"
+	got := parseAgyModels(out)
+	if len(got) != 2 || got[0].ID != "Gemini 3.8 Flash (High)" || got[0].Detail != "gemini-3.8-flash-high" || got[1].ID != "Claude Opus 4.6 (Thinking)" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestIsMaxModeMatchesTheMaxTokenOnly(t *testing.T) {
+	for id, want := range map[string]bool{
+		"claude-opus-5-5-max": true, "claude-opus-5-5-max-fast": true, "claude-4.6-opus-max-thinking": true,
+		"Claude Opus 5 1M Max Thinking": true, "kimi-k3-max": true,
+		"gemini-3.8-flash-high": false, "maxwell-1": false, "claude-opus-5-5-xhigh": false, "gpt-5.6-sol-high": false,
+	} {
+		if IsMaxMode(id) != want {
+			t.Errorf("IsMaxMode(%q) = %v", id, !want)
+		}
+	}
+}
+
+func TestCursorAndAgyCatalogs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	write(t, filepath.Join(home, ".cursor", "skills-cursor", "create-rule", "SKILL.md"), "---\nname: create-rule\ndescription: Make a rule\n---\n")
+	write(t, filepath.Join(home, ".claude", "skills", "agent-browser", "SKILL.md"), "---\nname: agent-browser\n---\n")
+	write(t, filepath.Join(home, ".agents", "skills", "magpie", "SKILL.md"), "---\nname: magpie\n---\n")
+	write(t, filepath.Join(home, ".cursor", "cli-config.json"), `{"model":{"modelId":"composer-2.5"}}`)
+	write(t, filepath.Join(home, ".gemini", "antigravity-cli", "settings.json"), `{"model":"Gemini 3.8 Flash (High)"}`)
+
+	cursor := Load(context.Background(), history.AgentCursor, "")
+	names := map[string]bool{}
+	for _, entry := range cursor.Skills {
+		names[entry.Name] = true
+	}
+	if !names["/create-rule"] || !names["/agent-browser"] || !names["/magpie"] {
+		t.Fatalf("cursor skills %v", names)
+	}
+	if cursor.DefaultModel != "composer-2.5" || cursor.ModelVerb != "" || len(cursor.Models) != 0 || cursor.ModelPicker != "" {
+		t.Fatalf("cursor offers no model switch: %+v", cursor)
+	}
+	for _, entry := range cursor.Commands {
+		switch entry.Name {
+		case "/max-mode", "/fast", "/run-everything", "/auto-review":
+			t.Errorf("cursor offers %s", entry.Name)
+		}
+	}
+
+	modelMu.Lock()
+	modelCache["agy"] = modelEntry{at: time.Now(), models: []Model{{ID: "Gemini 3.8 Flash (High)", Detail: "gemini-3.8-flash-high"}}}
+	modelMu.Unlock()
+	agy := Load(context.Background(), history.AgentAntigravity, "")
+	if agy.DefaultModel != "Gemini 3.8 Flash (High)" || agy.ModelVerb != "/model " || len(agy.Models) != 1 || agy.ModelNote == "" {
+		t.Fatalf("agy %+v", agy)
+	}
+	if names := agy.Skills; len(names) != 1 || names[0].Name != "/agent-browser" {
+		t.Fatalf("agy skills (own dirs and ~/.claude, not ~/.agents): %+v", names)
+	}
+}
+
+func TestPiEffortsFollowPisOwnModelsJSON(t *testing.T) {
+	home := t.TempDir()
+	// Shapes captured from a real ~/.pi/agent/models.json: a map with nulls for
+	// unsupported levels, and a reasoning model with no map at all.
+	write(t, filepath.Join(home, ".pi", "agent", "models.json"), `{"providers":{"magpie":{"models":[
+		{"id":"group/glm-flash","reasoning":true,"thinkingLevelMap":{"high":"high","low":"low","max":"max","medium":null,"minimal":null,"off":null,"xhigh":null}},
+		{"id":"opencode-zen-free/mimo-v2.6-flash-free","reasoning":true}]}}}`)
+	models := parsePiModels("provider model context max-out thinking images\nmagpie group/glm-flash 1M 131K yes no\nmagpie opencode-zen-free/mimo-v2.6-flash-free 200K 8K yes no\nmagpie plain/no-think 8K 1K no no\n")
+	got := withPiEfforts(models, home)
+	labels := func(m Model) string {
+		out := ""
+		for _, e := range m.Efforts {
+			out += e.Label + ","
+		}
+		return out
+	}
+	if labels(got[0]) != "low,high,max," || got[0].Efforts[0].Send != "/thinking low" {
+		t.Fatalf("mapped model: %+v", got[0].Efforts)
+	}
+	if labels(got[1]) != "off,minimal,low,medium,high," {
+		t.Fatalf("unmapped reasoning model: %+v", got[1].Efforts)
+	}
+	if len(got[2].Efforts) != 0 || len(models[0].Efforts) != 0 {
+		t.Fatalf("a non-thinking model has no efforts and the cached rows stay untouched: %+v %+v", got[2], models[0])
+	}
+}
+
+func TestOmpEffortsComeFromTheThinkingColumn(t *testing.T) {
+	out := "magpie (2)\n┌──┬──┬──┬──┬──┐\n│ model │ context │ max-out │ thinking │ images │\n├──┼──┼──┼──┼──┤\n" +
+		"│ group/glm-flash │ 1M │ 131K │ low,high,max │ yes │\n│ group/ourfreemodel │ 1M │ 131K │ - │ yes │\n└──┴──┴──┴──┴──┘\n"
+	models := parseOmpModels(out)
+	if len(models) != 2 || len(models[1].Efforts) != 0 {
+		t.Fatalf("models %+v", models)
+	}
+	want := []string{"off", "auto", "low", "high", "max"}
+	if len(models[0].Efforts) != len(want) {
+		t.Fatalf("efforts %+v", models[0].Efforts)
+	}
+	for i, level := range want {
+		if models[0].Efforts[i] != (Effort{Label: level, Send: "/effort " + level}) {
+			t.Fatalf("effort %d = %+v", i, models[0].Efforts[i])
+		}
+	}
+}
+
+func TestAgyEffortVariantsFoldIntoOneFamily(t *testing.T) {
+	// `agy models` as captured on agy 1.4.12.
+	out := "Fetching available models...\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)\ngemini-3.8-flash-low\tGemini 3.8 Flash (Low)\n" +
+		"claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\nclaude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\ngpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n"
+	got := groupAgyEfforts(parseAgyModels(out))
+	if len(got) != 4 {
+		t.Fatalf("rows %+v", got)
+	}
+	flash := got[0]
+	if flash.ID != "Gemini 3.8 Flash" || flash.Pick != "/model Gemini 3.8 Flash (High)" || len(flash.Efforts) != 3 ||
+		flash.Efforts[2] != (Effort{Label: "Low", Send: "/model Gemini 3.8 Flash (Low)"}) {
+		t.Fatalf("family %+v", flash)
+	}
+	if got[1].ID != "Claude Sonnet 4.6 (Thinking)" || len(got[1].Efforts) != 0 || got[3].ID != "GPT-OSS 120B (Medium)" || got[3].Pick != "" {
+		t.Fatalf("a Thinking name or a lone variant stays a plain row: %+v %+v", got[1], got[3])
+	}
+}
+
+func TestClaudeEffortsAreFixedAndNoted(t *testing.T) {
+	cat := Load(context.Background(), history.AgentClaudeCode, t.TempDir())
+	if len(cat.Efforts) != 6 || cat.Efforts[0] != (Effort{Label: "low", Send: "/effort low"}) || cat.EffortNote == "" {
+		t.Fatalf("efforts %+v note %q", cat.Efforts, cat.EffortNote)
+	}
+	for _, provider := range []history.AgentID{history.AgentCodex, history.AgentCursor} {
+		if got := Load(context.Background(), provider, t.TempDir()); len(got.Efforts) != 0 {
+			t.Fatalf("%s must not offer efforts: %+v", provider, got.Efforts)
 		}
 	}
 }

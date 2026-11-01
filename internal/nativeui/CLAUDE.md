@@ -260,6 +260,7 @@ files_menu.go: Files 预览页（Markdown/图片 WebView）的同口径原生感
 chat_context.go: 上下文环弹出卡片的只读数据（designs/chat-context 方案 B）——`ChatBridge.ContextUsage` 把转录里最近一次请求的上下文大小、`history.ReadUsage` 的会话 token 四项与缓存命中率、窗口（Codex 自己的 `model_context_window`，omp/pi 的模型表 `context` 列，Claude 无）合成 `ChatContextUsage`；卡片打开/上下文变化时现读一次，不轮询、不落盘。窗口为 0 时页面不画条与百分比。Compact 只是发送 `/compact`（`agentcatalog.IsCompact` 的文本不建待确认回显）
 chat_plan_test.go：随代码迁入 internal/chatsession（ask 与多选键测试留在 chat_ask_test.go）
 chat_ask.go: omp `ask` 提问的 transcript 来源：最后一个非用户回合的最后一步是未返回的 `ask`（每题 ≥2 选项、非 multi），逐题出卡（Step/Steps，`recommended` 为起始行），每题追加 Other 选项；multi 题为复选（无 Other，带 recommended 回落 Blocked）
+chat_terminal_dialog.go: Cursor/agy 终端专属对话框的“终端保持”——绑定/投影落地时读一次可见屏（`DetectTerminalDialog`），命中则 `chatDispositionNow`=NeedsTerminal 并给页面一句 `terminalReason`（Open Terminal 卡），期间每 2 秒复查；只对这两种 provider 且 agent 非 working 时读，屏幕文本不入日志；手机端暂无此保持。
 chat_picker.go: Claude/Codex 编号选择器（/model、/permissions）→ Question 卡：`detectPicker`（委托 chatsession.DetectPicker，解析与手机 Host 共用）读可见屏（页脚可缺，缺时须有 ❯ 标记且行在屏尾；折叠重名标签；截断提示），`watchPicker` 有界轮询出卡并在选择器消失后退卡，`afterChatSend` 对 picker/terminal 类命令收尾（Claude 用 `s` 仅本会话）
 chat_picker_test.go: 真机截屏夹具（Claude model、Codex model/permissions/effort、Claude 无页脚确认）回归
 chat_composer.go: Catalog/SaveAttachment/SwitchModel 三个绑定方法（agentcatalog 的只读目录、ChatAttachments 落盘、pi `/model`·omp `/switch` 键入切换）

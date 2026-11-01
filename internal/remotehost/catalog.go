@@ -11,7 +11,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Backend.Projection（窗格的 agent 种类与 cwd）、internal/agentcatalog（各 Agent 自己的 Skills/命令/模型，只读）、server.go 的 guard/resolveInstance
- * [OUTPUT]: 对外提供 GET /api/v3/panes/{paneID}/chat/catalog——Chat 输入框的 `/` `$` 弹窗与模型菜单的数据（scope view）
+ * [OUTPUT]: 对外提供 GET /api/v3/panes/{paneID}/chat/catalog——Chat 输入框的 `/` `$` 弹窗与模型/思考强度菜单的数据（modelNote/effortNote 让页面说明“会被 agent 存为默认”，所以 agy 的切换也下发）（scope view）
  * [POS]: 手机 Chat 与桌面共用同一份目录；与会话是否已有转录无关（新开的窗格也能列），只靠 Herdr 报的 agent 种类与窗格 cwd；不写、不执行任何 Provider 命令；失败只回通用错误，目录内容不进日志
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -25,8 +25,19 @@ type catalogEntry struct {
 	Kind string `json:"kind"`
 }
 
+// catalogEffort is one thinking-effort choice: Send is the exact prompt text
+// that applies it, so the phone sends it through its ordinary send.
+type catalogEffort struct {
+	Label string `json:"label"`
+	Send  string `json:"send"`
+}
+
+// catalogModel is one switchable model: its own efforts, and Pick when the row
+// is selected by a text other than ModelVerb+ID (Antigravity families).
 type catalogModel struct {
-	ID string `json:"id"`
+	ID      string          `json:"id"`
+	Efforts []catalogEffort `json:"efforts,omitempty"`
+	Pick    string          `json:"pick,omitempty"`
 }
 
 // catalogBody mirrors the desktop bridge's ChatCatalog plus the typed model
@@ -40,6 +51,20 @@ type catalogBody struct {
 	ModelVerb    string `json:"modelVerb,omitempty"`
 	ModelPicker  string `json:"modelPicker,omitempty"`
 	DefaultModel string `json:"defaultModel,omitempty"`
+	// ModelNote / EffortNote say that a switch or an effort is saved by the
+	// agent as its default; the page shows them under the list.
+	ModelNote string `json:"modelNote,omitempty"`
+	// Efforts do not depend on the model (Claude Code); a model's own win.
+	Efforts    []catalogEffort `json:"efforts,omitempty"`
+	EffortNote string          `json:"effortNote,omitempty"`
+}
+
+func catalogEfforts(efforts []agentcatalog.Effort) []catalogEffort {
+	var out []catalogEffort
+	for _, e := range efforts {
+		out = append(out, catalogEffort{Label: e.Label, Send: e.Send})
+	}
+	return out
 }
 
 // catalogLoader is agentcatalog.Load; tests swap it so no login shell runs.
@@ -88,9 +113,11 @@ func (s *Server) handleChatCatalog(w http.ResponseWriter, r *http.Request, _ Dev
 		return rows
 	}
 	out.Commands, out.Skills = rows(cat.Commands), rows(cat.Skills)
+	out.ModelPicker, out.DefaultModel = cat.ModelPicker, cat.DefaultModel
 	for _, m := range cat.Models {
-		out.Models = append(out.Models, catalogModel{ID: m.ID})
+		out.Models = append(out.Models, catalogModel{ID: m.ID, Efforts: catalogEfforts(m.Efforts), Pick: m.Pick})
 	}
-	out.ModelVerb, out.ModelPicker, out.DefaultModel = cat.ModelVerb, cat.ModelPicker, cat.DefaultModel
+	out.ModelVerb, out.ModelNote = cat.ModelVerb, cat.ModelNote
+	out.Efforts, out.EffortNote = catalogEfforts(cat.Efforts), cat.EffortNote
 	writeJSON(w, http.StatusOK, out)
 }

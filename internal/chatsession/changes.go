@@ -19,9 +19,10 @@ import (
 
 // editToolName matches the providers' file-editing tools whose one-line
 // input preview is the target path (Claude Edit/MultiEdit/Write/NotebookEdit,
-// Pi edit/write). It is deliberately an allow-list: "TodoWrite" and shell
+// Pi edit/write, Cursor StrReplace/Write/Delete/ApplyPatch, Antigravity
+// edit_file/write_file). It is deliberately an allow-list: "TodoWrite" and shell
 // tools must never read as edits.
-var editToolName = regexp.MustCompile(`(?i)^(edit|multiedit|write|notebookedit|apply_patch|str_replace\w*)$`)
+var editToolName = regexp.MustCompile(`(?i)^(edit|multiedit|write|notebookedit|apply_?patch|str_?replace\w*|edit_file|write_file|delete)$`)
 
 // jsonPathToken finds the first repo-style path (a slash and a file
 // extension) inside a JSON-shaped preview. Some agents (omp's hashline edit)

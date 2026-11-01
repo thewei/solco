@@ -102,3 +102,33 @@ func TestChatTurnChangesReadsHashlineHeaders(t *testing.T) {
 		t.Fatalf("clipped input: got %+v", got)
 	}
 }
+
+// Cursor's and Antigravity's edit tools read as edits; their shell tools do not.
+func TestTurnChangesRecognisesCursorAndAntigravityEdits(t *testing.T) {
+	call := func(name, preview string) conversation.TimelineStep {
+		return conversation.TimelineStep{Kind: conversation.StepTool, Tool: &conversation.ConversationToolCall{Name: name, InputPreview: preview}}
+	}
+	steps := []conversation.TimelineStep{
+		call("StrReplace", "/repo/a.go"),
+		call("Write", "/repo/b.go"),
+		call("Delete", "/repo/c.go"),
+		call("edit_file", "/repo/d.go"),
+		call("write_file", "/repo/e.go"),
+		call("Shell", "/repo/f.go"),
+		call("run_command", "/repo/g.go"),
+	}
+	got := TurnChanges(steps, "/repo", nil, false)
+	var paths []string
+	for _, change := range got {
+		paths = append(paths, change.Path)
+	}
+	want := []string{"a.go", "b.go", "c.go", "d.go", "e.go"}
+	if len(paths) != len(want) {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+	for i := range want {
+		if paths[i] != want[i] {
+			t.Fatalf("paths = %v, want %v", paths, want)
+		}
+	}
+}

@@ -114,3 +114,20 @@ Conclusions implemented:
 | `$` mid-sentence in Codex, IME `、`, model panel ↑↓⏎ beyond Esc | not exercised on the device |
 
 Verify: `GOTOOLCHAIN=auto go test ./internal/herdr -run SubmitText`, `./internal/agentcatalog`, `./internal/nativeui -run 'Attach|TerminalCommand'`.
+
+## Addendum 2026-11-01 — thinking effort in the model panel (user-approved: all providers, desktop + phone, side effects shown as a note)
+
+Real-device matrix (pi 0.x, omp, Claude Code 2.1.308, Codex, agy 1.4.12; the user's own configs backed up and restored afterwards):
+
+| Agent | How effort is set | Levels come from | Persistence | In the panel |
+|---|---|---|---|---|
+| pi | `/thinking <level>` (bare `/thinking ` lists them; an unknown level is refused with "Available levels: …") | pi's own `~/.pi/agent/models.json` `thinkingLevelMap` per model (null = unsupported; probed: glm-flash lists low/high/max); a reasoning model without a map lists off…high; `pi --list-models` marks thinking yes/no | session only (`settings.json` unchanged) | the current model's levels |
+| omp | `/effort <level>` (bare lists `off auto` + the model's own, with `(current)`) | the `thinking` column of `omp models` (`-` = none) | session only (`config.yml` unchanged) | `off`, `auto` + the column |
+| Claude Code | `/effort [low|medium|high|xhigh|max|auto|ultracode [on|off]]` (bare = its own dialog) | its own argument hint | **persists**: `settings.json` `modelSettings["<model>"].effortLevel` | six fixed levels + the note "Claude Code saves this as the model's default effort." |
+| Codex | the second step of `/model` (no `/effort`) | the picker | the picker's | none of its own: the "Choose in the agent's picker…" row already walks model → effort as Question cards |
+| agy | effort is part of the model name: `Gemini 3.8 Flash (High/Medium/Low)`; `(Thinking)` is a name, not a level | `agy models` | persists (existing model note) | the family is one model row (selects its first variant), the variants are its efforts |
+| Cursor | effort is a model variant | — | — | disabled (cost; no model list) |
+
+Mechanics: every effort is one exact prompt text (`Effort{Label, Send}` in `internal/agentcatalog`) that the page or the phone sends through the ordinary send path — no new bridge or Host method. `agentcatalog.Classify` lets `<verb><level>` through as text while a bare `/effort` still goes to Terminal. The current effort is not highlighted (no cheap reliable source; agy is the exception because it is in the model name). `max` is offered where the agent offers it: it is an effort level, not a Max-mode model. The phone wire gained `models[].efforts|pick`, `efforts`, `effortNote`, `modelNote` (golden `chat-catalog.json` in both repos), and agy's typed switch now reaches the phone because the note travels with it.
+
+Verify: `GOTOOLCHAIN=auto go test ./internal/agentcatalog ./internal/remotehost`, `pnpm test` in solco-mobile; panel: open the model chip on a Claude Code / pi / omp / agy pane.

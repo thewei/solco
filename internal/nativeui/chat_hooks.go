@@ -93,6 +93,7 @@ func (s *Shell) reconcileBlockedInteractions() {
 		paneID := agent.PaneID
 		s.dispatch(func() { s.detectPaneInteraction(paneID) })
 	}
+	s.checkTerminalDialog()
 }
 
 // handleAppHookStatus applies a directly reported agent status event onto
@@ -388,6 +389,12 @@ func (s *Shell) detectPaneInteraction(paneID string) {
 	screen, err := s.runtime.ReadPane(ctx, s.activeInstance, paneID, "visible")
 	if err != nil || strings.TrimSpace(screen) == "" {
 		slog.Warn("interaction detect read failed", "pane", paneID, "error", err)
+		return
+	}
+	// Cursor Agent / Antigravity CLI shell-permission sheets carry their own
+	// keys (never a persistent "always allow" row).
+	if interaction, hit := chatsession.DetectAgentPrompt(screen); hit {
+		s.publishInteraction(paneID, interaction)
 		return
 	}
 	kind, prompt, options, ok := chatsession.DetectScreenPrompt(screen)

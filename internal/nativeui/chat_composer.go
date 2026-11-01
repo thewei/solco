@@ -21,9 +21,20 @@ type ChatCatalogEntry struct {
 	Kind string `json:"kind"`
 }
 
-// ChatCatalogModel is one model the chip can switch to.
+// ChatCatalogEffort is one thinking-effort choice: Send is the exact prompt
+// text that applies it (the agent's own typed command).
+type ChatCatalogEffort struct {
+	Label string `json:"label"`
+	Send  string `json:"send"`
+}
+
+// ChatCatalogModel is one model the chip can switch to. Efforts are the
+// model's own levels; Pick, when set, is the exact prompt text that selects
+// the row (Antigravity families select their first variant).
 type ChatCatalogModel struct {
-	ID string `json:"id"`
+	ID      string              `json:"id"`
+	Efforts []ChatCatalogEffort `json:"efforts,omitempty"`
+	Pick    string              `json:"pick,omitempty"`
 }
 
 // ChatCatalog is the composer's menu for the bound Agent.
@@ -38,6 +49,14 @@ type ChatCatalog struct {
 	// DefaultModel is the model a fresh session starts on (the agent's own
 	// config); the chip shows it until a transcript records a model.
 	DefaultModel string `json:"defaultModel,omitempty"`
+	// ModelNote warns that a switch has a side effect (Antigravity saves it as
+	// the default model); the model panel shows it above the list.
+	ModelNote string `json:"modelNote,omitempty"`
+	// Efforts are the thinking-effort choices that do not depend on the model
+	// (Claude Code); a model's own Efforts win for it. EffortNote warns that
+	// applying one is saved by the agent.
+	Efforts    []ChatCatalogEffort `json:"efforts,omitempty"`
+	EffortNote string              `json:"effortNote,omitempty"`
 }
 
 // chatProvider reports the bound pane's Agent and the project root.
@@ -75,12 +94,22 @@ func (b *ChatBridge) Catalog(ctx context.Context) (ChatCatalog, error) {
 	}
 	out.Commands, out.Skills = rows(cat.Commands), rows(cat.Skills)
 	for _, model := range cat.Models {
-		out.Models = append(out.Models, ChatCatalogModel{ID: model.ID})
+		out.Models = append(out.Models, ChatCatalogModel{ID: model.ID, Efforts: chatEfforts(model.Efforts), Pick: model.Pick})
 	}
 	out.ModelPicker = cat.ModelPicker
 	out.DefaultModel = cat.DefaultModel
-	out.CanSwitchModel = (cat.ModelVerb != "" && len(cat.Models) > 0) || cat.ModelPicker != ""
+	out.ModelNote = cat.ModelNote
+	out.Efforts, out.EffortNote = chatEfforts(cat.Efforts), cat.EffortNote
+	out.CanSwitchModel = (cat.ModelVerb != "" && len(cat.Models) > 0) || cat.ModelPicker != "" || len(out.Efforts) > 0
 	return out, nil
+}
+
+func chatEfforts(efforts []agentcatalog.Effort) []ChatCatalogEffort {
+	var out []ChatCatalogEffort
+	for _, effort := range efforts {
+		out = append(out, ChatCatalogEffort{Label: effort.Label, Send: effort.Send})
+	}
+	return out
 }
 
 // SaveAttachment stores a pasted or dropped file under the cache dir's ChatAttachments (kept

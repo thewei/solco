@@ -162,6 +162,17 @@ func TestSessionCommands(t *testing.T) {
 	if got := sessionResumeCommand(history.SessionMeta{Agent: history.AgentCodex, ID: "z"}); got != "codex resume z" {
 		t.Fatalf("codex resume = %q", got)
 	}
+	if got := sessionResumeCommand(history.SessionMeta{Agent: history.AgentCursor, ID: "c1"}); got != "cursor-agent --resume c1" {
+		t.Fatalf("cursor resume = %q", got)
+	}
+	cli := history.SessionMeta{Agent: history.AgentAntigravity, ID: "a1", FilePath: "/h/.gemini/antigravity-cli/brain/a1/.system_generated/logs/transcript_full.jsonl"}
+	if got := sessionResumeCommand(cli); got != "agy --conversation a1" {
+		t.Fatalf("agy resume = %q", got)
+	}
+	ide := history.SessionMeta{Agent: history.AgentAntigravity, ID: "a2", FilePath: "/h/.gemini/antigravity/brain/a2/.system_generated/logs/transcript_full.jsonl"}
+	if got := sessionResumeCommand(ide); !strings.HasPrefix(got, "# no known resume command") {
+		t.Fatalf("an IDE conversation must not offer the CLI resume: %q", got)
+	}
 }
 
 // TestHistoryDetailDropsSupersededUsage pins the generation guard: a read

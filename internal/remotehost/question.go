@@ -41,7 +41,7 @@ var answerTextSettle = 500 * time.Millisecond
 
 // textOption matches the rows that take typed text ("Other (type your own)",
 // "Type something.", "Chat about this") — the same rule the desktop page uses.
-var textOption = regexp.MustCompile(`(?i)^(type something|chat about|other)\b`)
+var textOption = regexp.MustCompile(`(?i)^(type something|chat about|other|write-in)\b`)
 
 // chatInteraction is the card the phone renders for a blocked agent.
 type chatInteraction struct {
@@ -150,6 +150,8 @@ func (s *Server) derive(ctx context.Context, instance, paneID string, cur *askCu
 			cancel()
 			if err != nil {
 				slog.Warn("remote host chat: screen read failed", "instance", instance, "pane", paneID)
+			} else if agentPrompt, hit := chatsession.DetectAgentPrompt(screen); hit {
+				cur.screenInter, cur.screenOK = agentPrompt, true
 			} else if kind, prompt, options, hit := chatsession.DetectScreenPrompt(screen); hit {
 				cur.screenInter = conversation.PendingInteraction{Kind: kind, Prompt: prompt, Options: options}
 				if chatsession.IsOmpReviewSheet(screen) {

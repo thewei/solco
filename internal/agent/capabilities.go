@@ -44,7 +44,7 @@ var providerRegistry = map[history.AgentID]providerRegistryEntry{
 	history.AgentOMP:         {liveAppendLog, exposureStable},
 	history.AgentGrok:        {liveNone, exposureHidden},
 	history.AgentKimi:        {liveAppendLog, exposureHidden},
-	history.AgentAntigravity: {liveHookJournal, exposurePreview},
+	history.AgentAntigravity: {liveAppendLog, exposurePreview},
 	history.AgentDSH:         {liveNone, exposureHidden},
 	history.AgentQoder:       {liveNone, exposurePreview},
 }

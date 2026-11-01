@@ -262,9 +262,12 @@ func TestGoldenAPIv3(t *testing.T) {
 		return agentcatalog.Catalog{
 			Commands:     []agentcatalog.Entry{{Name: "/compact", Insert: "/compact ", Detail: "Compact the conversation", Kind: agentcatalog.KindText}},
 			Skills:       []agentcatalog.Entry{{Name: "/review", Insert: "/review ", Detail: "Review the diff", Kind: agentcatalog.KindSkill}},
-			Models:       []agentcatalog.Model{{ID: "anthropic/sonnet"}},
+			Models:       []agentcatalog.Model{{ID: "anthropic/sonnet", Efforts: []agentcatalog.Effort{{Label: "low", Send: "/effort low"}, {Label: "high", Send: "/effort high"}}}},
 			ModelVerb:    "/model ",
 			DefaultModel: "sonnet",
+			ModelNote:    "Saved as the default model.",
+			Efforts:      []agentcatalog.Effort{{Label: "medium", Send: "/effort medium"}},
+			EffortNote:   "Saved as the model's default effort.",
 		}
 	}
 	golden(t, "chat-catalog.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat/catalog?instance=default", h.token, nil)))

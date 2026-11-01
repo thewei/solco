@@ -53,6 +53,11 @@ var (
 // parses; the first hit is the current list. nil when there is none.
 func PlanOf(turns []conversation.TimelineTurn) *ChatPlan {
 	whole := latestPlan(turns)
+	// Cursor's TodoWrite can send only the items that changed (merge:true),
+	// so its list is the replay of every call, not the newest one.
+	if merged := mergedTodoPlan(turns); merged != nil && (whole == nil || merged.Turn >= whole.Turn) {
+		whole = merged
+	}
 	// Claude Code's task tools build the list call by call, so they replay
 	// the whole window; the newer of the two writers wins.
 	if tasks := claudeTaskPlan(turns); tasks != nil && (whole == nil || tasks.Turn >= whole.Turn) {
@@ -85,6 +90,73 @@ func latestPlan(turns []conversation.TimelineTurn) *ChatPlan {
 		}
 	}
 	return nil
+}
+
+// mergedTodoPlan replays TodoWrite calls in order when any of them is a
+// partial update (`"merge": true`, Cursor's shape): a plain call replaces the
+// list, a merge call updates the items it names by id (content and status
+// when given) and appends the unknown ones. nil when no call merges — the
+// whole-list providers keep the newest-call rule.
+func mergedTodoPlan(turns []conversation.TimelineTurn) *ChatPlan {
+	type todo struct{ id, text, status string }
+	var items []todo
+	merging, last := false, -1
+	for index, turn := range turns {
+		for _, step := range turn.Steps {
+			tool := step.Tool
+			if tool == nil {
+				continue
+			}
+			if name := strings.ToLower(tool.Name); name != "todowrite" && name != "todo_write" {
+				continue
+			}
+			var input struct {
+				Merge bool `json:"merge"`
+				Todos []struct {
+					ID      string `json:"id"`
+					Content string `json:"content"`
+					Status  string `json:"status"`
+				} `json:"todos"`
+			}
+			if json.Unmarshal([]byte(deref(tool.Input)), &input) != nil || len(input.Todos) == 0 {
+				continue
+			}
+			merging = merging || input.Merge
+			if !input.Merge {
+				items = items[:0]
+			}
+			for _, entry := range input.Todos {
+				at := -1
+				for i := range items {
+					if entry.ID != "" && items[i].id == entry.ID {
+						at = i
+						break
+					}
+				}
+				if at < 0 {
+					if text := strings.TrimSpace(entry.Content); text != "" {
+						items = append(items, todo{entry.ID, text, normalizePlanStatus(entry.Status)})
+					}
+					continue
+				}
+				if text := strings.TrimSpace(entry.Content); text != "" {
+					items[at].text = text
+				}
+				if entry.Status != "" {
+					items[at].status = normalizePlanStatus(entry.Status)
+				}
+			}
+			last = index
+		}
+	}
+	if !merging || len(items) == 0 {
+		return nil
+	}
+	out := make([]ChatPlanItem, len(items))
+	for i, item := range items {
+		out[i] = ChatPlanItem{Text: item.text, Status: item.status}
+	}
+	return &ChatPlan{Items: out, Turn: last}
 }
 
 var claudeTaskID = regexp.MustCompile(`#(\d+)`)
@@ -255,6 +327,8 @@ func normalizePlanStatus(status string) string {
 		return planDone
 	case "in_progress", "active", "running":
 		return planActive
+	case "cancelled", "canceled":
+		return planDropped
 	default:
 		return planPending
 	}

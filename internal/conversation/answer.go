@@ -28,6 +28,9 @@ func (p PendingInteraction) AnswerKeys(option string, typed bool) ([]string, err
 	if index < 0 {
 		return nil, ErrUnknownOption
 	}
+	if len(p.OptionKeys) == len(p.Options) && len(p.OptionKeys[index]) > 0 {
+		return slices.Clone(p.OptionKeys[index]), nil
+	}
 	if p.EscapeOption != "" && option == p.EscapeOption {
 		return []string{"esc"}, nil
 	}

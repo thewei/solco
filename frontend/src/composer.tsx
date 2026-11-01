@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatCatalog, ChatCatalogEntry } from "./mygo";
+import type { ChatCatalog, ChatCatalogEffort, ChatCatalogEntry, ChatCatalogModel } from "./mygo";
 import { Icon } from "./icons";
 
 /**
@@ -194,12 +194,27 @@ export function PlusPanel(props: {
   );
 }
 
-/** ModelPanel switches model: a typed list (pi, omp) and/or the agent's picker. */
+/** The catalog row of the model the chat is on: the listing spells ids "provider/model", transcripts may drop the provider, and an Antigravity family is the name before " (High)". */
+export function modelFor(models: ChatCatalogModel[], current: string): ChatCatalogModel | undefined {
+  if (current === "") return undefined;
+  return (
+    models.find((m) => m.id === current) ??
+    models.find((m) => m.id.endsWith("/" + current)) ??
+    models.find((m) => current.startsWith(m.id + " ("))
+  );
+}
+
+/**
+ * ModelPanel switches model: a typed list (pi, omp, Antigravity) and/or the
+ * agent's picker, then the thinking-effort choices of the current model (its own
+ * levels, else the agent's general ones). Every row is one keyboard stop.
+ */
 export function ModelPanel(props: {
   catalog: ChatCatalog | null;
   current: string;
   busy: boolean;
-  onSwitch: (id: string) => void;
+  onSwitch: (model: ChatCatalogModel) => void;
+  onEffort: (effort: ChatCatalogEffort) => void;
   onPicker: () => void;
   onClose: () => void;
 }) {
@@ -207,17 +222,22 @@ export function ModelPanel(props: {
   const models = props.catalog?.models ?? [];
   const shown = models.filter((m) => m.id.toLowerCase().includes(query.toLowerCase())).slice(0, 50);
   const hasPicker = Boolean(props.catalog?.modelPicker);
-  const rows = (hasPicker ? 1 : 0) + shown.length;
+  const efforts = modelFor(models, props.current)?.efforts ?? props.catalog?.efforts ?? [];
+  const offset = hasPicker ? 1 : 0;
+  const effortAt = offset + shown.length;
+  const rows = effortAt + efforts.length;
   const take = (index: number) => {
     if (props.busy) return;
     if (hasPicker && index === 0) props.onPicker();
-    else {
-      const model = shown[index - (hasPicker ? 1 : 0)];
-      if (model) props.onSwitch(model.id);
+    else if (index >= effortAt) {
+      const effort = efforts[index - effortAt];
+      if (effort) props.onEffort(effort);
+    } else {
+      const model = shown[index - offset];
+      if (model) props.onSwitch(model);
     }
   };
   const [pick, setPick] = useMenuKeys(rows, take, props.onClose);
-  const offset = hasPicker ? 1 : 0;
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     box.current?.querySelector(".pick")?.scrollIntoView({ block: "nearest" });
@@ -259,17 +279,36 @@ export function ModelPanel(props: {
           type="button"
           role="menuitem"
           disabled={props.busy}
-          className={`${index + offset === pick ? "pick" : ""}${props.current !== "" && model.id.endsWith(props.current) ? " on" : ""}`}
+          className={`${index + offset === pick ? "pick" : ""}${props.current !== "" && (model.id.endsWith(props.current) || props.current.startsWith(model.id + " (")) ? " on" : ""}`}
           onMouseMove={() => setPick(index + offset)}
           onMouseDown={(e) => {
             e.preventDefault();
-            props.onSwitch(model.id);
+            props.onSwitch(model);
           }}
         >
           <span className="nm mono">{model.id}</span>
         </button>
       ))}
       {models.length > 0 && shown.length === 0 ? <div className="none">No match</div> : null}
+      {efforts.length > 0 ? <div className="none">Thinking effort</div> : null}
+      {efforts.map((effort, index) => (
+        <button
+          key={effort.send}
+          type="button"
+          role="menuitem"
+          disabled={props.busy}
+          className={`${index + effortAt === pick ? "pick" : ""}${props.current !== "" && effort.send === "/model " + props.current ? " on" : ""}`}
+          onMouseMove={() => setPick(index + effortAt)}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            props.onEffort(effort);
+          }}
+        >
+          <span className="nm">{effort.label}</span>
+        </button>
+      ))}
+      {props.catalog?.modelNote ? <div className="none">{props.catalog.modelNote}</div> : null}
+      {efforts.length > 0 && props.catalog?.effortNote && efforts === props.catalog.efforts ? <div className="none">{props.catalog.effortNote}</div> : null}
     </div>
   );
 }

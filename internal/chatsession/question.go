@@ -19,6 +19,10 @@ import (
 // provider's own options (its TUI draws "Other (type your own)").
 const AskOtherOption = "Other (type your own)"
 
+// AgyWriteInOption is the free-text row Antigravity CLI's ask_question adds
+// after its own options (its TUI draws "Write-in...").
+const AgyWriteInOption = "Write-in..."
+
 // AskQuestion is one single-select question of an `ask` call.
 type AskQuestion struct {
 	Header       string
@@ -42,7 +46,10 @@ type TranscriptAsk struct {
 	Questions []AskQuestion
 }
 
-// TranscriptQuestion returns the `ask` call that is the very last thing the
+// TranscriptQuestion returns the `ask` (omp/pi) or `ask_question` (Antigravity
+// CLI: questions one after another, options plain strings, `is_multi_select`,
+// the cursor always opens on the first row even when a "(Recommended)" label
+// sits elsewhere) call that is the very last thing the
 // conversation did and has no result yet — the agent is parked on its
 // prompt. Every question needs ≥2 options; a multi-select question that also
 // carries `recommended` (whose pre-ticking is unverified) and anything
@@ -56,15 +63,17 @@ func TranscriptQuestion(turns []conversation.TimelineTurn) (TranscriptAsk, bool)
 		return TranscriptAsk{}, false
 	}
 	tool := last.Steps[len(last.Steps)-1].Tool
-	if tool == nil || tool.Name != "ask" || tool.Output != nil || tool.Input == nil {
+	if tool == nil || (tool.Name != "ask" && tool.Name != "ask_question") || tool.Output != nil || tool.Input == nil {
 		return TranscriptAsk{}, false
 	}
+	agy := tool.Name == "ask_question"
 	var payload struct {
 		Questions []struct {
 			Header      string            `json:"header"`
 			Question    string            `json:"question"`
 			Multi       bool              `json:"multi"`
 			Multiple    bool              `json:"multiSelect"`
+			AgyMulti    bool              `json:"is_multi_select"`
 			Recommended *int              `json:"recommended"`
 			Options     []json.RawMessage `json:"options"`
 		} `json:"questions"`
@@ -77,7 +86,7 @@ func TranscriptQuestion(turns []conversation.TimelineTurn) (TranscriptAsk, bool)
 		ask.ToolID = *tool.Input
 	}
 	for _, question := range payload.Questions {
-		multi := question.Multi || question.Multiple
+		multi := question.Multi || question.Multiple || question.AgyMulti
 		if strings.TrimSpace(question.Question) == "" || (multi && question.Recommended != nil) {
 			return TranscriptAsk{}, false
 		}
@@ -101,10 +110,14 @@ func TranscriptQuestion(turns []conversation.TimelineTurn) (TranscriptAsk, bool)
 			return TranscriptAsk{}, false
 		}
 		if !multi {
-			if r := question.Recommended; r != nil && *r > 0 && *r < len(item.Options) {
+			if r := question.Recommended; !agy && r != nil && *r > 0 && *r < len(item.Options) {
 				item.Start = *r
 			}
-			item.Options = append(item.Options, AskOtherOption)
+			other := AskOtherOption
+			if agy {
+				other = AgyWriteInOption
+			}
+			item.Options = append(item.Options, other)
 			item.Descriptions = append(item.Descriptions, "")
 		}
 		ask.Questions = append(ask.Questions, item)

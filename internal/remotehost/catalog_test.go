@@ -46,6 +46,29 @@ func TestCatalogServesTheAgentsOwnListForThePaneFolder(t *testing.T) {
 	}
 }
 
+func TestCatalogCarriesEffortsAndTheNotesThatGoWithThem(t *testing.T) {
+	h := newHarness(t)
+	h.srv.opts.Catalog = func(context.Context, history.AgentID, string) agentcatalog.Catalog {
+		return agentcatalog.Catalog{
+			Models: []agentcatalog.Model{{
+				ID: "Gemini 3.8 Flash", Pick: "/model Gemini 3.8 Flash (High)",
+				Efforts: []agentcatalog.Effort{{Label: "High", Send: "/model Gemini 3.8 Flash (High)"}},
+			}},
+			ModelVerb: "/model ", ModelNote: "saved as default",
+			Efforts: []agentcatalog.Effort{{Label: "low", Send: "/effort low"}}, EffortNote: "saved per model",
+		}
+	}
+	resp := h.get("/api/v3/panes/w1:p1/chat/catalog?instance=default", h.token, nil)
+	var out catalogBody
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Models) != 1 || out.Models[0].Pick == "" || len(out.Models[0].Efforts) != 1 || out.ModelVerb != "/model " ||
+		out.ModelNote == "" || len(out.Efforts) != 1 || out.Efforts[0].Send != "/effort low" || out.EffortNote == "" {
+		t.Fatalf("the phone shows a switch with its note, so both must reach it: %+v", out)
+	}
+}
+
 func TestCatalogRefusals(t *testing.T) {
 	h, seen := catalogHarness(t)
 	for _, c := range []struct {

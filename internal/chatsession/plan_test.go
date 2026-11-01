@@ -86,3 +86,25 @@ func TestChatPlanReplaysClaudeTaskCreateAndUpdate(t *testing.T) {
 		t.Fatalf("newer TodoWrite must win: %+v", plan)
 	}
 }
+
+// Cursor's TodoWrite may send only what changed (merge:true): the panel is
+// the replay of every call, and a plain call still replaces the list.
+func TestChatPlanReplaysCursorMergeTodos(t *testing.T) {
+	first := planTurn("TodoWrite", `{"merge":false,"todos":[{"id":"a","content":"Read","status":"in_progress"},{"id":"b","content":"Edit","status":"pending"}]}`, "")
+	second := planTurn("TodoWrite", `{"merge":true,"todos":[{"id":"a","status":"completed"},{"id":"b","status":"in_progress"},{"id":"c","content":"Test","status":"pending"}]}`, "")
+	plan := PlanOf([]conversation.TimelineTurn{first, second})
+	if plan == nil || len(plan.Items) != 3 || plan.Turn != 1 {
+		t.Fatalf("merged plan = %+v", plan)
+	}
+	want := []struct{ text, status string }{{"Read", planDone}, {"Edit", planActive}, {"Test", planPending}}
+	for i, w := range want {
+		if plan.Items[i].Text != w.text || plan.Items[i].Status != w.status {
+			t.Fatalf("item %d = %+v, want %+v", i, plan.Items[i], w)
+		}
+	}
+	replaced := planTurn("TodoWrite", `{"merge":false,"todos":[{"id":"z","content":"Fresh","status":"cancelled"}]}`, "")
+	plan = PlanOf([]conversation.TimelineTurn{first, second, replaced})
+	if plan == nil || len(plan.Items) != 1 || plan.Items[0].Text != "Fresh" || plan.Items[0].Status != planDropped {
+		t.Fatalf("a non-merge call replaces the list: %+v", plan)
+	}
+}

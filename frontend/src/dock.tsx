@@ -140,9 +140,9 @@ export interface QuestionDockProps {
   onTextCancel: () => void;
 }
 
-/** "Other (type your own)", "Type something.", "Chat about this": rows that take typed text. */
+/** "Other (type your own)", "Type something.", "Chat about this", "Write-in...": rows that take typed text. */
 export function isFreeTextOption(option: string): boolean {
-  return /^(type something|chat about|other)\b/i.test(option.trim());
+  return /^(type something|chat about|other|write-in)\b/i.test(option.trim());
 }
 
 // inlineCode renders `backtick` spans as code; option descriptions are plain
@@ -269,13 +269,13 @@ export function QuestionDock(props: QuestionDockProps) {
 // ---- Blocked in the terminal ----
 
 /** A blocked agent whose prompt the page could not read: say so, one click away. */
-export function BlockedDock({ onOpenTerminal }: { onOpenTerminal: () => void }) {
+export function BlockedDock({ onOpenTerminal, reason }: { onOpenTerminal: () => void; reason?: string }) {
   return (
     <div className="ask blocked" role="status">
       <div className="ah">
         <Icon name="terminal" size={15} />
         <span className="pill">Needs you</span>
-        <span className="prompt inline">The agent is waiting for input in its terminal.</span>
+        <span className="prompt inline">{reason || "The agent is waiting for input in its terminal."}</span>
         <button type="button" className="goterm" onClick={onOpenTerminal}>
           Open Terminal
         </button>

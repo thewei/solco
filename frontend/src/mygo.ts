@@ -132,6 +132,11 @@ export interface ChatBridgeState {
   linkCandidates?: ChatBridgeLink[];
   disposition: string;
   outcome?: string;
+  /**
+   * TerminalReason is the one fixed sentence the Open Terminal card shows
+   * when a Cursor/Antigravity dialog can only be answered in the terminal.
+   */
+  terminalReason?: string;
   queuedItems?: ChatBridgeQueuedItem[];
   /**
    * Theme is the app-resolved appearance ("light" or "dark"), following
@@ -222,6 +227,27 @@ export interface ChatCatalog {
    * config); the chip shows it until a transcript records a model.
    */
   defaultModel?: string;
+  /**
+   * ModelNote warns that a switch has a side effect (Antigravity saves it as
+   * the default model); the model panel shows it above the list.
+   */
+  modelNote?: string;
+  /**
+   * Efforts are the thinking-effort choices that do not depend on the model
+   * (Claude Code); a model's own Efforts win for it. EffortNote warns that
+   * applying one is saved by the agent.
+   */
+  efforts?: ChatCatalogEffort[];
+  effortNote?: string;
+}
+
+/**
+ * ChatCatalogEffort is one thinking-effort choice: Send is the exact prompt
+ * text that applies it (the agent's own typed command).
+ */
+export interface ChatCatalogEffort {
+  label: string;
+  send: string;
 }
 
 /** ChatCatalogEntry is one `/` or `$` popover row. */
@@ -233,9 +259,15 @@ export interface ChatCatalogEntry {
   kind: string;
 }
 
-/** ChatCatalogModel is one model the chip can switch to. */
+/**
+ * ChatCatalogModel is one model the chip can switch to. Efforts are the
+ * model's own levels; Pick, when set, is the exact prompt text that selects
+ * the row (Antigravity families select their first variant).
+ */
 export interface ChatCatalogModel {
   id: string;
+  efforts?: ChatCatalogEffort[];
+  pick?: string;
 }
 
 /**

@@ -7,11 +7,12 @@ Shell/MyGo 无关的 Chat 投影共享层：桌面 `ChatBridge` 与将来的手�
 
 - `subagents.go`：子代理投影——`Read`（一个会话的全部子代理 `View`，Busy 标记 + 摘要）、`Linked`（父工具调用 → 子代理，只用工具自己的证据：Claude tool_use id == meta.toolUseId、omp `tasks[].name`、Codex `spawn_agent.task_name`）、`Card`（`View` → 页面卡片 `SubagentCard`，状态 running/done/stopped/failed）、`Headline`/`MarkBusy`/`Summary`（按 path+mtime+size 缓存）。
 - `turns.go`：`ChatTurn/ChatStep/ChatTool/ChatChange` 线格式与 `Turns`（时间线 → 页面回合；改动卡的 `+/−` 仅在传入工作树快照时出现）。
-- `plan.go`：`ChatPlan/ChatPlanItem` 与 `PlanOf`（Claude TodoWrite/TaskCreate·Update、Codex update_plan、omp todo → Tasks 面板）。
-- `changes.go`：`TurnChanges`（edit 类工具白名单 + 文件头，只读文件名，不解析 diff）。
+- `plan.go`：`ChatPlan/ChatPlanItem` 与 `PlanOf`（Claude TodoWrite/TaskCreate·Update、Codex update_plan、omp todo → Tasks 面板；Cursor 的 `TodoWrite merge:true` 只带变更项，按 id 重放整窗，`cancelled`=dropped）。
+- `changes.go`：`TurnChanges`（edit 类工具白名单——含 Cursor `StrReplace/Write/Delete/ApplyPatch`、agy `edit_file/write_file`——+ 文件头，只读文件名，不解析 diff）。
 - `window.go`：`Fold`（解码投影 → 一个渲染窗口：最新一页、新消息延长、超界前移）、`LastModel`/`LastContext`、`MaxAccumulated`。
 - `attach.go`：`AttachSubagents`（给步骤打 SubagentIDs，并列出被链接的卡片）。
-- `question.go`：`TranscriptQuestion`（omp/pi 转录里尚无结果的 `ask` 调用 → 结构化问题序列；自 nativeui/chat_ask.go 迁入）与 `Reader.Ask`。
+- `question.go`：`TranscriptQuestion`（omp/pi 的 `ask`、agy 的 `ask_question` 尚无结果的调用 → 结构化问题序列；agy 光标恒从第 1 行起、单选末尾补 `Write-in...`、多选不补；自 nativeui/chat_ask.go 迁入）与 `Reader.Ask`。
+- `agentprompt.go`：Cursor Agent / Antigravity CLI 屏幕提示——`DetectAgentPrompt`（shell 权限卡，按键走 `PendingInteraction.OptionKeys`/方向键，永不提供“永久允许/写入 settings”行）、`DetectTerminalDialog`（Herdr 报 idle/done 的终端专属对话框：Cursor AskQuestion/信任页、agy 首次设置/信任页 → 一句固定提示）；真机截屏做测试。
 - `picker.go`：`DetectPicker`（Claude/Codex 编号选择器的可见屏纯解析，自 nativeui/chat_picker.go 迁入；桌面与手机 Host 共用）。
 - `subagent_view.go`：`OpenSubagent`/`Reader.Subagent`（抽屉：子代理卡 + 它自己的轮次，未知 id → ErrUnknownSubagent）。
 - `screenprompt.go`：`DetectScreenPrompt`/`IsOmpReviewSheet`（Claude AskUserQuestion / 权限页 / omp Review 页的可见屏纯解析；自 nativeui/chat_hooks.go 迁入）。
