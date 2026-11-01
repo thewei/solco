@@ -12,7 +12,7 @@ import (
 
 // TestQuickPanelQuotaTabShowsMiniCards pins the Quota tab: the strip carries
 // the tab, opening it reads the switched-on providers once (no timer), and
-// each provider is the page's own card in compact density.
+// each provider is the page's own card, whole.
 func TestQuickPanelQuotaTabShowsMiniCards(t *testing.T) {
 	codex := &fakeUsageFetcher{id: usage.Codex, snap: codexSnapshot()}
 	s, _ := usageTestShell(t, codex)
@@ -107,6 +107,16 @@ func TestQuotaFlyoutAndPageShowTheSameWindows(t *testing.T) {
 		if !fly.HasText(want) || !page.HasText(want) {
 			t.Errorf("%q must be on both surfaces (flyout %v, page %v)", want, fly.HasText(want), page.HasText(want))
 		}
+	}
+	// The pace footer (and the source line) were the data the compact card
+	// dropped; the popover must carry whatever the page prints under a bar.
+	for _, want := range []string{"Claude Code's sign-in · api.anthropic.com"} {
+		if !fly.HasText(want) || !page.HasText(want) {
+			t.Errorf("%q must be on both surfaces (flyout %v, page %v)", want, fly.HasText(want), page.HasText(want))
+		}
+	}
+	if !containsPrefix(fly.Texts(), "Resets in") || !containsPrefix(page.Texts(), "Resets in") {
+		t.Errorf("the reset/pace footer must be on both surfaces; flyout=%q", fly.Texts())
 	}
 	for _, figure := range []string{"62% used", "41% used", "18% used"} {
 		if !containsPrefix(fly.Texts(), figure) || !containsPrefix(page.Texts(), figure) {

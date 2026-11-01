@@ -263,7 +263,7 @@ func (s *Shell) usagePage(c *ui.Context) {
 						s.usageSummary(c, ids)
 						s.usageAttentionCard(c, ids)
 						for _, id := range ids {
-							s.usageCard(c, id, false)
+							s.usageCard(c, id)
 						}
 					}
 				})
@@ -518,10 +518,11 @@ func (s *Shell) usageAttentionCard(c *ui.Context, ids []usage.ID) {
 	})
 }
 
-// usageCard is one provider's card, one to a row. The page draws it whole;
-// compact is the flyout's density — the same data and the same rows, minus
-// the 30-day strip and the source line — so the two surfaces cannot disagree.
-func (s *Shell) usageCard(c *ui.Context, id usage.ID, compact bool) {
+// usageCard is one provider's card, one to a row: the page and the Header
+// popover's Quota tab draw this same card (2026-11-01: the popover used to
+// drop the pace footers, the 30-day strip and the source line), so the two
+// surfaces cannot disagree.
+func (s *Shell) usageCard(c *ui.Context, id usage.ID) {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
 	typ := Typography()
@@ -533,9 +534,6 @@ func (s *Shell) usageCard(c *ui.Context, id usage.ID, compact bool) {
 	badge, tone := usageBadge(res, busy, now)
 
 	pad, gap := sp.L, sp.M
-	if compact {
-		pad, gap = sp.M, sp.S
-	}
 	card := ui.Column(c.Key("quota-card:"+string(id))).FillWidth().
 		Radius(Radius().Card).Background(tokens.Panel).Border(1, tokens.BorderSubtle).
 		Padding(pad).Gap(gap)
@@ -555,45 +553,33 @@ func (s *Shell) usageCard(c *ui.Context, id usage.ID, compact bool) {
 
 		if res.Has {
 			stale := res.Stale()
-			rowGap := sp.L
-			if compact {
-				rowGap = sp.S
-			}
-			ui.Column(c).FillWidth().Gap(rowGap).Children(func() {
-				s.usageWindows(c, id, res.Snapshot.Windows, left, stale, now, compact)
+			ui.Column(c).FillWidth().Gap(sp.L).Children(func() {
+				s.usageWindows(c, id, res.Snapshot.Windows, left, stale, now)
 				s.usageNotes(c, res.Snapshot.Notes)
 				if stale {
 					s.usageProblem(c, id, res, now)
 				}
-				if !compact {
-					s.usageActivity(c, id)
-				}
+				s.usageActivity(c, id)
 			})
 		} else if busy && res.State == usage.StateIdle {
-			usageSkeleton(c, compact)
+			usageSkeleton(c)
 		} else {
 			s.usageProblem(c, id, res, now)
 		}
 
-		if compact {
-			return
-		}
 		ui.Text(c, s.usageSource(id)).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").MinWidth(0)
 	})
 }
 
 // usageSkeleton holds the place of the first reading: one window's name,
 // figure and bar as quiet blocks, so the card does not jump when it lands.
-func usageSkeleton(c *ui.Context, compact bool) {
+func usageSkeleton(c *ui.Context) {
 	tokens := designTokens(c.Theme().Dark)
 	sp := Spacing()
 	block := func(w, h float32) {
 		ui.Box(c).Width(w).Height(h).Radius(h / 2).Background(tokens.PanelHover)
 	}
 	bar := usageBarHeight
-	if compact {
-		bar = usageCompactBar
-	}
 	ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			block(72, 10)
@@ -774,7 +760,7 @@ func usageFoot(c *ui.Context, w usage.Window, look usageLook, now time.Time) {
 // 500 requests), sub-limits are compact rows, a model group is a titled block
 // of compact rows (Antigravity), anything else is a plain bar (Claude's
 // 5-hour and weekly, Codex, Zhipu).
-func (s *Shell) usageWindows(c *ui.Context, id usage.ID, windows []usage.Window, left, stale bool, now time.Time, compact bool) {
+func (s *Shell) usageWindows(c *ui.Context, id usage.ID, windows []usage.Window, left, stale bool, now time.Time) {
 	typ := Typography()
 	sp := Spacing()
 	t := c.Theme()
@@ -796,7 +782,7 @@ func (s *Shell) usageWindows(c *ui.Context, id usage.ID, windows []usage.Window,
 			})
 		case w.Counted() && !w.Minor:
 			s.usageHero(c, id, w, left, stale, now)
-		case w.Minor || compact:
+		case w.Minor:
 			s.usageCompact(c, id, w, left, stale, now, usageNameWide)
 		default:
 			s.usageWindow(c, id, w, left, stale, now)

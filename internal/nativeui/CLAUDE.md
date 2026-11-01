@@ -113,7 +113,7 @@ status_indicator.go: 全局唯一状态指示（16pt 右侧槽位：working 旋�
 files_start.go: /files 未选文件时的起始页（2026-10-30 UX audit）：最近文件（Session.RecentFiles，MRU，只列仍在当前根下的）、Changed in git、README；渲染零 IO，按根缓存
 hosts_start.go: Hosts 起始页与过滤（2026-10-30）：Recently connected 卡片（Session.RecentHosts，Connect/Edit）、user@host 副标题、Filter hosts；只读 sshconfig 索引
 status_indicator_test.go: 形状与 state→tone 映射回归
-quick_panel_quota.go: Header 浮层 Quota 页（2026-10-31 改一行一张迷你卡，头条取计数额度否则最紧窗口；页脚 Updated/Open Quota）
+quick_panel_quota.go: Header 浮层 Quota 页（2026-10-31 改一行一张卡；2026-11-01 与 /quota 同一个 usageCard，不再有紧凑密度——配速页脚/30 天条/来源行都在；高度按窗口种类估算，列表可滚；页脚 Updated/Open Quota）
 quick_panel_quota_test.go: Quota 页迷你卡、头条、header 计数 waiting/total、migrateRoute
 subagents_state.go: 三家（Claude/omp/Codex）子代理读取节流（合并刷新、后台读、身份→路径缓存；变化才重建 workbench）
 chat_subagents.go: Chat 子代理桥（attachSubagents 给步骤盖 SubagentIDs、抽屉 OpenSubagent、Shell 绑定的合并刷新与静默退化；读取/链接/卡片投影在 internal/chatsession；chatSubagentOpen 事件 + openSubagentDrawer/consumeSubagentDrawerAsk：侧栏/浮层子行点击 → openChat 落 Chat → 绑定后让页面开抽屉，8 s 未绑定即弃）
