@@ -4,10 +4,6 @@ Solco is a native macOS workspace for coding agents, built with Go and the MyGo 
 
 Solco is the **client/product**. **Herdr remains the backend runtime** and owns workspaces, tabs, panes, terminal sessions, agents, persistence, layout state, and process lifecycle. Solco projects that runtime into a native macOS interface; it does not replace or duplicate Herdr.
 
-## Renamed from Shardlane
-
-Solco was called Shardlane until 2026-10-26. The migration code is gone (2026-11-01): nothing moves `~/Library/Application Support/Shardlane`, `~/Library/Logs/Shardlane` or `~/.shardlane` any more, and `SHARDLANE_*` environment variables are not read (use `SOLCO_SOCKET_PATH`, `SOLCO_LOG_LEVEL`). A machine that still has Shardlane-era hook wiring must press Install in the Hook Doctor (Settings → Agent integrations) from an older build first — or edit `~/.claude/settings.json` / `~/.gemini/config/hooks.json` by hand. The Herdr hook plugin is `com.whstudio.solco.hooks` (relink: `herdr plugin link <repo>/plugins/solco-hooks`; remove the old `com.whstudio.shardlane.hooks`). The bundle identifier is `com.whstudio.solco`.
-
 ## Requirements
 
 - macOS 13+

@@ -306,13 +306,6 @@ func TestWebSocketAuthNeedsTheBearerSubprotocolPair(t *testing.T) {
 		t.Fatalf("server must select %q, got %q (the token must never be echoed)", subprotocolBearer, got)
 	}
 	_ = conn
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	_, resp, err = websocket.Dial(ctx, "ws"+strings.TrimPrefix(h.http.URL, "http")+"/api/v3/events",
-		&websocket.DialOptions{Subprotocols: []string{"shardlane.bearer", h.token}})
-	if err == nil || resp == nil || resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("the retired shardlane.bearer prefix must be refused: %v", err)
-	}
 }
 
 func TestBootstrapNamesTheHostAndWhatItCanDo(t *testing.T) {

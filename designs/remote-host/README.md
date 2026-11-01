@@ -49,7 +49,7 @@ Settings → Remote Access
 - **QR 负载**(只含引导元数据,不含可复用持久凭据):
   `solco://pair?h=<host>&p=<port>&fp=<sha256 指纹>&c=<一次性配对码>&n=<Mac 名>`
 - **配对**:`POST /api/v3/pair {code, deviceName}` → 校验指纹已在 TLS 层被手机固定 + 配对码未过期未使用 → 返回 `{deviceId, token}`(256 位随机)。Host **只存 `sha256(token)`**、名称、创建/最后见时间(`<userDataDir>/RemoteHost/devices.json`);手机存 SecureStore / Keystore。
-- **鉴权**:HTTP `Authorization: Bearer <token>`;WebSocket 用子协议对 `['solco.bearer', token]`(浏览器不能设头;沿用手机端既有规则,前缀由 `shardlane.bearer` 改为 `solco.bearer`,手机端同步改)。
+- **鉴权**:HTTP `Authorization: Bearer <token>`;WebSocket 用子协议对 `['solco.bearer', token]`(浏览器不能设头;沿用手机端既有规则,前缀为 `solco.bearer`)。
 - **授权域**:V1 单一「owner」权限,但所有端点过同一个 `authorize(scope)` 入口,保留日后拆 `view / prompt / terminal-input / manage` 的缝(终端输入比 prompt 权力更大,单独成 scope)。
 - **撤销**:Settings 的 Revoke 删除记录并**立刻**关闭该设备的所有 WS。
 

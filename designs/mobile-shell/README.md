@@ -41,7 +41,7 @@
 | 桌面令牌 | `frontend/src/theme.css`:`--content #f5f5f7/#161618`、`--panel #fff/#1f1f22`、`--r-bubble 18`、`--r-composer 24`、`--spring cubic-bezier(.32,.72,0,1)` |
 | 桌面 Agent 范围 | Chat **只面向 Claude Code / Codex / pi / omp**(AGENTS.md);`solco-mobile/new-agent.tsx` 仍列 10 种 kind,是 Rust 时代遗留 |
 | 手机端 UX 契约 | `docs/mobile-ui-ux.md`:Agent 优先、Workspace 导航放 sheet 不做常驻、深色优先、键盘/动态字体/慢网都要验 |
-| **Host 现状** | Go 版 Solco **没有 Remote Host**:`solco-mobile` 的 `/api/v2` 契约、golden fixtures、`docs/remote-client-architecture.md` 全部指向已退役的 Rust Host(`shardlane-remote`)。grep `internal/` 与 `main.go` 零命中 |
+| **Host 现状** | Go 版 Solco **没有 Remote Host**:`solco-mobile` 的 `/api/v2` 契约、golden fixtures、`docs/remote-client-architecture.md` 全部指向已退役的 Rust Host。grep `internal/` 与 `main.go` 零命中 |
 
 ### 约束
 
