@@ -3,7 +3,6 @@ package nativeui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
@@ -359,7 +358,7 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 
 // commandCenterRowFade is how a result row appears under the list that was
 // already open: the list's scope changed, or a longer list grew.
-var commandCenterRowFade = ui.ElementTransition{Duration: 140 * time.Millisecond, Enter: &ui.Motion{}}
+var commandCenterRowFade = ui.ElementTransition{Duration: motionRow, Enter: &ui.Motion{}}
 
 // commandCenterRow builds one result row: hover selects it, click runs
 // it, and the row the keyboard moved to reveals itself in the list.

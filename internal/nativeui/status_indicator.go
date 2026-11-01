@@ -1,8 +1,6 @@
 package nativeui
 
 import (
-	"time"
-
 	"github.com/egoist/mygo/ui"
 )
 
@@ -22,7 +20,7 @@ const statusSlotSize float32 = 16
 // cut), and a dot that keeps its shape eases to the new colour.
 var statusShapeMotion = ui.ElementTransition{
 	Colors:   true,
-	Duration: 180 * time.Millisecond,
+	Duration: motionHandOver,
 	Enter:    &ui.Motion{Scale: 0.5},
 	Exit:     &ui.Motion{Scale: 0.5},
 }

@@ -148,7 +148,7 @@ func scrollButton(c *ui.Context, k *gorexColors, glyph *ui.SVG, label string, ca
 // closed one folds away, the chips beside slide, and the chosen chip's resize
 // and face ease instead of jumping.
 var tabChipMotion = ui.ElementTransition{
-	Duration: 160 * time.Millisecond,
+	Duration: motionPanel,
 	Enter:    &ui.Motion{Collapse: true},
 	Exit:     &ui.Motion{Collapse: true},
 }

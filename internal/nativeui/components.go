@@ -9,7 +9,6 @@ package nativeui
 
 import (
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -17,7 +16,7 @@ import (
 // rowFade eases a row's background between rest, hover and selection, so
 // the tint arrives and leaves instead of popping; every row built on
 // rowTint carries it (colors only: no position or size motion).
-var rowFade = ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond}
+var rowFade = ui.ElementTransition{Colors: true, Duration: motionColor}
 
 // splitFileExt cuts a file name before its extension (".json", ".tsx") so a
 // long name can give up the middle of its stem and keep the extension; names
@@ -51,7 +50,7 @@ func fileNameLabel(c *ui.Context, name, tooltip string) ui.Element {
 // already-built list grows in, and one that goes fades out.
 var treeRowMotion = ui.ElementTransition{
 	Colors:   true,
-	Duration: 140 * time.Millisecond,
+	Duration: motionRow,
 	Enter:    &ui.Motion{Collapse: true},
 	Exit:     &ui.Motion{},
 }
@@ -59,7 +58,7 @@ var treeRowMotion = ui.ElementTransition{
 // disclosureMotion is for a panel that opens in place under its row (the
 // Sessions info card): it grows in and fades out.
 var disclosureMotion = ui.ElementTransition{
-	Duration: 160 * time.Millisecond,
+	Duration: motionPanel,
 	Enter:    &ui.Motion{Collapse: true},
 	Exit:     &ui.Motion{},
 }
@@ -258,7 +257,7 @@ func dockPanel(c *ui.Context, build func()) {
 	panel := ui.Column(c).FillWidth().Radius(gorexCardR).
 		Background(t.Surface).Border(1, tokens.BorderSubtle).
 		Padding(sp.M, sp.L).Gap(sp.S).
-		Transition(ui.ElementTransition{Colors: true, Duration: 150 * time.Millisecond})
+		Transition(ui.ElementTransition{Colors: true, Duration: motionRow})
 	if panel.FocusWithin() {
 		panel.Border(1, tokens.BorderSubtle.Mix(t.Text, 0.35))
 	}
@@ -323,11 +322,11 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 	tokens := designTokens(t.Dark)
 	var row ui.Element
 	height := designRowHeight(spec.Height)
-	container := ui.Box(c.Key(spec.Key)).FillWidth().Transition(ui.ElementTransition{Position: true, Size: true, Duration: 170 * time.Millisecond})
+	container := ui.Box(c.Key(spec.Key)).FillWidth().Transition(ui.ElementTransition{Position: true, Size: true, Duration: motionPanel})
 	container.Children(func() {
 		// Reserve an animated, pointer-transparent insertion slot. It never
 		// steals the drop from the row underneath the cursor.
-		before := ui.Box(c).Height(0).PassThrough().Transition(ui.ElementTransition{Size: true, Duration: 150 * time.Millisecond})
+		before := ui.Box(c).Height(0).PassThrough().Transition(ui.ElementTransition{Size: true, Duration: motionRow})
 		row = ui.ButtonBase(c).
 			FillWidth().
 			Height(height).
@@ -470,7 +469,7 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 			}
 			ui.Box(c).Height(afterHeight).PassThrough().
 				Background(t.Accent.Alpha(0.65)).
-				Transition(ui.ElementTransition{Size: true, Duration: 150 * time.Millisecond})
+				Transition(ui.ElementTransition{Size: true, Duration: motionRow})
 		}
 	})
 	return row

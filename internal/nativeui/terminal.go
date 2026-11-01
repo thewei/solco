@@ -130,7 +130,7 @@ func (s *Shell) terminalCanvas(c *ui.Context) {
 				continue
 			}
 			frame := ui.Box(c.Key(surface.key)).
-				Transition(ui.ElementTransition{Position: true, Duration: 190 * time.Millisecond}).
+				Transition(ui.ElementTransition{Position: true, Duration: motionHandOver}).
 				Absolute().
 				Left(inner.X + inner.W*left/100 + gorexFrameInset).
 				Top(inner.Y + inner.H*top/100 + gorexFrameInset).
@@ -488,7 +488,7 @@ func (s *Shell) paneCard(c *ui.Context, k *gorexColors, surface *terminalSurface
 		action, _ := resolvePaneCardDropAction(dragged, surface.paneID, s.selectedTabID, px, py, bounds.W, bounds.H)
 		s.handlePaneCardDrop(dragged, surface.paneID, s.selectedTabID, action)
 	}
-	card.Transition(ui.ElementTransition{Colors: true, Duration: 160 * time.Millisecond})
+	card.Transition(ui.ElementTransition{Colors: true, Duration: motionPanel})
 	hovered := card.Hovered()
 	card.Children(func() {
 		s.paneCardHeader(c, k, surface, focused, hovered)
@@ -513,7 +513,7 @@ func (s *Shell) paneCard(c *ui.Context, k *gorexColors, surface *terminalSurface
 				Padding(6, 10).Radius(7).Background(c.Theme().Surface).
 				Border(1, c.Theme().Accent.Alpha(0.5)).
 				PassThrough().Transition(ui.ElementTransition{
-				Enter: &ui.Motion{Y: 6}, Exit: &ui.Motion{Y: -4}, Duration: 140 * time.Millisecond,
+				Enter: &ui.Motion{Y: 6}, Exit: &ui.Motion{Y: -4}, Duration: motionRow,
 			}).Children(func() {
 				ui.Text(c, dropLabel).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).
 					TextColor(c.Theme().Accent).PassThrough()

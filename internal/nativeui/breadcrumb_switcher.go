@@ -1,8 +1,6 @@
 package nativeui
 
 import (
-	"time"
-
 	"github.com/egoist/mygo/ui"
 )
 
@@ -152,7 +150,7 @@ func (s *Shell) breadcrumbRow(c *ui.Context) bool {
 			// open), with ink going from muted to full as the pointer
 			// arrives; the current crumb is simply always in full ink.
 			gorexToggleFace(b, k, open)
-			b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+			b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
 			ink := t.TextMuted
 			if last || open || b.Hovered() {
 				ink = t.Text

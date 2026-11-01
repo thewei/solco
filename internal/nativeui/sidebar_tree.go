@@ -8,8 +8,6 @@ package nativeui
  */
 
 import (
-	"time"
-
 	"github.com/egoist/mygo/ui"
 )
 
@@ -85,7 +83,7 @@ func treeChevron(c *ui.Context, folder, expanded bool, color ui.Color) {
 		if !expanded {
 			target = -90
 		}
-		ic.Rotate(ic.Animate("rot", target, 150*time.Millisecond))
+		ic.Rotate(ic.Animate("rot", target, motionRow))
 	})
 }
 

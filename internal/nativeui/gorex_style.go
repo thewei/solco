@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
@@ -202,7 +201,7 @@ func gorexIconCount(c *ui.Context, k *gorexColors, svg *ui.SVG, label string, wa
 	b := tipped(c, ui.Row(c).Height(gorexIconBtn).MinWidth(gorexIconBtn).Padding(0, 7).Gap(5).AlignItems(ui.Center).Justify(ui.Center).
 		Radius(iconButtonRadius(gorexIconBtn)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label), label)
 	gorexToggleFace(b, k, false)
-	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+	b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
 	col := k.iconMuted
 	if b.Hovered() {
 		col = k.text
@@ -237,7 +236,7 @@ func gorexIconFace(c *ui.Context, b ui.Element, k *gorexColors, svg *ui.SVG, too
 		tipped(c, b, tooltip)
 	}
 	gorexToggleFace(b, k, selected)
-	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+	b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
 	col := k.iconMuted
 	if b.Hovered() || selected {
 		col = k.text
@@ -255,7 +254,7 @@ func gorexPulldown(c *ui.Context, k *gorexColors, svg *ui.SVG, label string, hei
 	b := tipped(c, ui.Row(c).Height(height).Padding(0, 6).Gap(3).AlignItems(ui.Center).Justify(ui.Center).
 		Radius(iconButtonRadius(height)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label), label)
 	gorexToggleFace(b, k, false)
-	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+	b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
 	col := k.iconMuted
 	if b.Hovered() {
 		col = k.text

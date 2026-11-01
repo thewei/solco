@@ -279,7 +279,7 @@ const changesDirGrowWindow = 300 * time.Millisecond
 
 // changesRowGrow is treeRowMotion without the exit: a collapsed folder's rows
 // leave at once (the list cannot hold a removed row open).
-var changesRowGrow = ui.ElementTransition{Colors: true, Duration: 140 * time.Millisecond, Enter: &ui.Motion{Collapse: true}}
+var changesRowGrow = ui.ElementTransition{Colors: true, Duration: motionRow, Enter: &ui.Motion{Collapse: true}}
 
 // toggleChangesDir opens or closes a folder of the Changes tree.
 func (s *Shell) toggleChangesDir(path string) {

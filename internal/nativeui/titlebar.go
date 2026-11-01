@@ -4,7 +4,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -248,7 +247,7 @@ func (s *Shell) windowControls(c *ui.Context, k *gorexColors) {
 			b.Background(closeRed)
 			col = ui.Hex("#ffffff")
 		}
-		b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+		b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
 		b.Children(func() {
 			ui.Icon(c, iconClose).Size(16, 16).TextColor(col)
 		})
