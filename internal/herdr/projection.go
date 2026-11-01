@@ -258,6 +258,14 @@ func projectSnapshot(snapshot sessionSnapshot) Projection {
 		projection.FocusedPaneID = *snapshot.FocusedPaneID
 	}
 
+	// A pane is named by Herdr's own pane titles (label, then title). A pane
+	// Herdr has not titled falls to its tab's label and finally its ID — never
+	// the raw terminal title, whose captured launch command reads like a
+	// command line, not a name.
+	tabLabels := make(map[string]string, len(snapshot.Tabs))
+	for _, tab := range snapshot.Tabs {
+		tabLabels[tab.ID] = displayLabel(tab.Label, tab.ID)
+	}
 	projectCWD := make(map[string]string)
 	for _, pane := range snapshot.Panes {
 		cwd := firstString(pane.ForegroundCWD, pane.CWD)
@@ -269,7 +277,7 @@ func projectSnapshot(snapshot sessionSnapshot) Projection {
 			TerminalID:  pane.TerminalID,
 			ProjectID:   pane.WorkspaceID,
 			TabID:       pane.TabID,
-			Label:       firstString(pane.Label, pane.Title, pane.TerminalTitleStripped, stringPtr(pane.ID)),
+			Label:       firstString(pane.Label, pane.Title, stringPtr(tabLabels[pane.TabID]), stringPtr(pane.ID)),
 			Focused:     pane.Focused,
 			Agent:       firstString(pane.Agent, pane.DisplayAgent),
 			AgentStatus: pane.AgentStatus,

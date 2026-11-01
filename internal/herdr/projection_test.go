@@ -51,6 +51,24 @@ func TestProjectSnapshotBuildsProductProjection(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotNamesUntitledPanesByTheirTabLabel(t *testing.T) {
+	command := "( cd '/repo' && eval ; ); printf"
+	projection := projectSnapshot(sessionSnapshot{
+		Version:  "0.9.5",
+		Protocol: 22,
+		Tabs: []tabInfo{{
+			ID: "t1", WorkspaceID: "w1", Number: 1, Label: "prox · demo/dev server",
+		}},
+		Panes: []paneInfo{{
+			ID: "p1", TerminalID: "term-1", WorkspaceID: "w1", TabID: "t1",
+			TerminalTitleStripped: &command,
+		}},
+	})
+	if got := projection.Panes[0].Label; got != "prox · demo/dev server" {
+		t.Fatalf("pane label = %q, want the tab label (a captured command is not a name)", got)
+	}
+}
+
 func TestProjectSnapshotUsesPaneCWDForProject(t *testing.T) {
 	cwd := "/repo/from-pane"
 	projection := projectSnapshot(sessionSnapshot{

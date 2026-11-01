@@ -11,7 +11,7 @@ instances_test.go: Session 实例发现与边界回归
 rpc.go: socket RPC 请求/响应、超时与交付不确定性边界（`agent.wait` 是长轮询，套接字截止时间 = 它自己的 timeout_ms + 10 s，否则超过 10 s 的等待会在中途失败——跟进队列的轮次边界等待曾因此永不投递，2026-10-31 真机发现）
 rpc_timeout_test.go: ping/普通调用/带 timeout_ms 的 agent.wait 的截止时间
 ref.go: Herdr runtime identity 归一化
-projection.go: session.snapshot 到客户端一次性投影的解码、Splits 分栏与布局结构；协议门共用 herdr.go 的 protocolError（旧协议错误可被 errors.Is 识别）
+projection.go: session.snapshot 到客户端一次性投影的解码、Splits 分栏与布局结构；pane 命名链 label→title→所属 tab 标题→pane ID（terminal title 里捕获的启动命令永不当名字）；协议门共用 herdr.go 的 protocolError（旧协议错误可被 errors.Is 识别）
 projection_test.go: snapshot 数据与 runtime 标识映射回归
 bridge.go: SSH Unix socket 转发、远程 RPC 通道生命周期；每台机器一座桥同时转发 API socket 与紧邻的 `<stem>-client.sock`（`herdr terminal attach` 按 API socket 推导 client socket，只转 API 则终端附着不上）；桥骑 sshcontrol.go 的共享连接（已登录时 ssh 把转发交给 master 后退出，关桥要在 master 里 cancel）；ConnectMachine 是设备切换的可取消前半（不碰 shell 状态），CloseBridge(id) 在设备被 Disable/Forget 后收掉该机器的桥（持机器自己的锁，进行中的拨号先落地再关），CloseBridges 在应用退出时全收
 sshcontrol.go: Solco 自有 OpenSSH ControlMaster（`~/.solco/ssh-ctl/<12 位 hash>`、ControlPersist=10m）——口令/MFA 只在用户终端里输入一次（signInShell 带 AddKeysToAgent），之后桥与 remoteHome 的非交互调用骑同一条共享连接；MasterLive/CloseMaster/ValidateTarget；FailureKind（auth/host-key/network/server/other）+ ClassifyFailure 把 ssh 原话分成可恢复类，BridgeError 携带类别；Herdr 自己的连接与凭据不碰，Solco 不存任何凭据
