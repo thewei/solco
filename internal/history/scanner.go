@@ -26,6 +26,18 @@ type SourceRoot struct {
 	Agent     AgentID
 	Directory string
 	NativeID  func(stem string) string
+	// List replaces the generic "every .jsonl under Directory" listing for
+	// providers whose sessions are not a flat JSONL tree (Cursor's SQLite
+	// stores, Antigravity's per-conversation folders).
+	List func(root SourceRoot) ([]SessionFileRef, error)
+}
+
+// refs lists the root's session sources.
+func (r SourceRoot) refs() ([]SessionFileRef, error) {
+	if r.List != nil {
+		return r.List(r)
+	}
+	return listJSONLRefs(r.Directory, r.Agent, r.NativeID)
 }
 
 // DefaultRoots resolves the default provider data roots under the given home
@@ -46,7 +58,11 @@ func DefaultRoots(home string) []SourceRoot {
 		SourceRoot{Agent: AgentCodex, Directory: filepath.Join(codexHome, "archived_sessions"), NativeID: rollout},
 		SourceRoot{Agent: AgentPi, Directory: filepath.Join(home, ".pi", "agent", "sessions"), NativeID: piRolloutNativeID},
 		SourceRoot{Agent: AgentOMP, Directory: filepath.Join(home, ".omp", "agent", "sessions"), NativeID: piRolloutNativeID},
+		SourceRoot{Agent: AgentCursor, Directory: cursorChatsRoot(home), List: cursorListRefs},
 	)
+	for _, brain := range agyBrainRoots(home) {
+		roots = append(roots, SourceRoot{Agent: AgentAntigravity, Directory: brain, List: agyListRefs})
+	}
 	return roots
 }
 
@@ -69,7 +85,7 @@ type Scanner struct {
 }
 
 func NewScanner(catalog *Catalog, roots []SourceRoot) *Scanner {
-	return &Scanner{catalog: catalog, roots: roots, parse: parseByAgent, workers: min(maxScanWorkers, runtime.GOMAXPROCS(0))}
+	return &Scanner{catalog: catalog, roots: roots, parse: scanParseByAgent, workers: min(maxScanWorkers, runtime.GOMAXPROCS(0))}
 }
 
 // parseByAgent dispatches to the shipped adapters. Unknown providers fail
@@ -82,9 +98,33 @@ func parseByAgent(reference SessionFileRef) (ParsedTranscript, error) {
 		return ParseCodexTranscript(reference)
 	case AgentPi, AgentOMP:
 		return ParsePiTranscript(reference)
+	case AgentCursor:
+		return ParseCursorTranscript(reference)
+	case AgentAntigravity:
+		return parseAgyWithSummary(reference)
 	default:
 		return ParsedTranscript{}, fmt.Errorf("no history adapter for provider %q", reference.Agent)
 	}
+}
+
+// scanParseByAgent is parseByAgent for list rows: Cursor's chats are read in
+// their light summary form (see summarizeCursorTranscript), every other
+// provider parses whole.
+func scanParseByAgent(reference SessionFileRef) (ParsedTranscript, error) {
+	if reference.Agent == AgentCursor {
+		parsed, err := summarizeCursorTranscript(reference)
+		if err != nil {
+			// One damaged or locked store must not fail the whole round
+			// (nothing would be cleaned or listed): it keeps the row its own
+			// meta.json gives and no message counts.
+			slog.Warn("cursor store unreadable; listing from meta.json", "chat", reference.NativeID, "error", err)
+			fallback := newCursorParseState().transcript(reference)
+			applyCursorChatMeta(&fallback.Meta, filepath.Dir(reference.FilePath))
+			return fallback, nil
+		}
+		return parsed, nil
+	}
+	return parseByAgent(reference)
 }
 
 // Scan runs one reconciliation round: list roots, parse changed sources once
@@ -106,7 +146,7 @@ func (s *Scanner) scan(ctx context.Context, onBatch func()) (ScanResult, error) 
 	seen := make(map[string]bool)
 	var changed []SessionFileRef
 	for _, root := range s.roots {
-		references, err := listJSONLRefs(root.Directory, root.Agent, root.NativeID)
+		references, err := root.refs()
 		if err != nil {
 			return result, fmt.Errorf("observe root %s: %w", root.Directory, err)
 		}
@@ -226,7 +266,7 @@ dispatch:
 // Sessions Trash lists trashed sessions this way, straight from the moved
 // file, instead of persisting metadata about them.
 func SummarizeSource(reference SessionFileRef) (SessionSummary, error) {
-	transcript, err := parseByAgent(reference)
+	transcript, err := scanParseByAgent(reference)
 	if err != nil {
 		return SessionSummary{}, err
 	}

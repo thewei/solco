@@ -25,11 +25,15 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `subagents_read.go`：`ReadSubagent`/`SubagentDetail`（抽屉与卡片摘要、handback 结果、FirstTs）
 - `usage_daily.go`：Quota（原 Usage）页的 30 天活动条数据——按本地日汇总 Claude Code / Codex 会话文件里的 token（每个文件按 (mtime,size) 只解析一次，缓存只在内存；不落盘、不记录历史、日期补零到今天）。
 - `pi.go`：Pi / Oh My Pi 会话解析器；会话标题优先取 agent 自己写的 `title`/`title_change` 行（文件序最后一行生效，空标题不清除旧值；omp 改名会话即此），无标题行才回退首条消息启发式；合并后的 assistant 消息带保序 `Parts`（text/thinking/tool 索引 + 逐块时间戳，使回复与工具调用不被拆成两个桶），工具结果恒设 `Output`（空输出也算已完成，nil=仍在跑）。`TranscriptMessage.Parts` 为空表示顺序即 Text→Thinking→ToolCalls（Claude/Codex）。
-- `live.go`：Provider 会话的只读增量 decoder / 追尾接口。
+- `live.go`：Provider 会话的只读增量 decoder / 追尾接口（含 `ResolveLiveSource` 的 agy/Cursor 定位、`NewLiveSource` 选源、`Replaced` 接缝：源重建而非追加时解码器整体重读）。
+- `agy.go`：Antigravity CLI 解析器与列表——只读 `brain/<id>/.system_generated/logs/transcript_full.jsonl`（PLANNER_RESPONSE 的 thinking/content/tool_calls 与随后的 GENERIC 结果步骤按先进先出配对，无 call id；CHECKPOINT=压缩，SYSTEM_MESSAGE=meta，ERROR=失败调用；USER_REQUEST 取出原话、`Model Selection` 提示取模型）；标题与工作区来自同目录旁只读的 `conversation_summaries.db`，有 parent 的子代理会话不列出；CLI 与 IDE 两个 brain 根。
+- `cursor.go`：Cursor Agent 解析器与列表——解析 `CursorStoreSource` 合成的 JSONL 流（system 不显示、`<user_query>` 取出、`isSummary`=压缩、`highLevelToolCallResult.isError` 标错，相邻 assistant 合并）；`summarizeCursorTranscript` 是列表行的轻量读法（用户轮读全文、assistant 轮用占位、不读工具输出），`meta.json` 给标题/cwd/时间；`cursorListRefs` 的 mtime/size 含 WAL；用户消息头 `<timestamp>…(UTC+8)</timestamp>` 经 `cursorMessageTime` 成为用户行真实时间与会话起止（其余行仍无时间）。
+- `cursor_store.go`：`CursorStoreSource`——把 `store.db`（meta['0'].latestRootBlobId→根 blob protobuf 字段 1 的消息哈希序→OpenAI 风格 JSON）经系统 `sqlite3` 命令只读（`mode=ro`/`immutable=1` 互为回退；`SQLiteRunner` 是将来换驱动的接缝）合成为只追加 JSONL；stat 签名不变就不起进程；哈希前缀不吻合（压缩/回滚）则重建并 `Replaced`；瞬时读失败保持原流；永不写库。
 - `catalog_test.go`：内存 Catalog 的写入/排序/搜索/路径唯一/并发（-race）契约与描述行提取；Forget 同时释放行与路径。
 - `legacy_test.go`：旧 SQLite 目录清理（只删 history.sqlite3 家族、幂等）。
 - `claude_test.go`：Claude 会话解析行为。
 - `codex_test.go`：Codex 会话解析行为。
+- `agy_test.go` / `cursor_test.go`：agy 转录与 Cursor store 形状（真机 2026-11-01）回归——配对/ERROR/CHECKPOINT/合并、live=整文件、追加/压缩重建、轻量摘要=完整解析、真实 sqlite3 读取（无 sqlite3 时跳过）、列表与 WAL 戳。
 - `live_parity_test.go`：live 增量解码（一次灌入 / 逐行追加）的投影必须与整文件解析的 Mainline 逐字段一致——Chat 的三条入口（新会话 / 已有 Agent 窗格 live tail / 历史记录）共用同一份转录的守卫。
 - `history_test.go`：跨 Provider 解析与历史模型语义。
 - `live_test.go`：增量读取/解码的边界行为。

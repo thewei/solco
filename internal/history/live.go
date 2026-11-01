@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -44,7 +46,7 @@ var liveRegistry = map[AgentID]LiveCapability{
 	AgentClaudeCode:  {Mode: LiveModeAppendLog, DecoderReady: true},
 	AgentCodex:       {Mode: LiveModeAppendLog, DecoderReady: true},
 	AgentCopilot:     {Mode: LiveModeNone},
-	AgentCursor:      {Mode: LiveModeAppendLog},
+	AgentCursor:      {Mode: LiveModeAppendLog, DecoderReady: true},
 	AgentOpenCode:    {Mode: LiveModeNone},
 	AgentCommandCode: {Mode: LiveModeAppendLog},
 	AgentKiro:        {Mode: LiveModeNone},
@@ -53,7 +55,7 @@ var liveRegistry = map[AgentID]LiveCapability{
 	AgentOMP:         {Mode: LiveModeAppendLog, DecoderReady: true},
 	AgentGrok:        {Mode: LiveModeNone},
 	AgentKimi:        {Mode: LiveModeAppendLog},
-	AgentAntigravity: {Mode: LiveModeHookJournal},
+	AgentAntigravity: {Mode: LiveModeAppendLog, DecoderReady: true},
 	AgentDSH:         {Mode: LiveModeNone},
 	AgentQoder:       {Mode: LiveModeNone},
 }
@@ -85,13 +87,24 @@ func ResolveLiveSource(home string, agent AgentID, kind, source, value string) (
 		if strings.TrimSpace(locator.Identity) == "" {
 			return "", fmt.Errorf("%w: empty path identity", ErrLiveSourceUnresolved)
 		}
-		return locator.Identity, nil
+		return normalizeLivePath(home, agent, locator.Identity), nil
 	case LocatorNativeID:
+		switch agent {
+		case AgentAntigravity:
+			return resolveAgyLiveSource(home, locator.Identity), nil
+		case AgentCursor:
+			if path, ok := cursorStoreFile(cursorChatsRoot(home), locator.Identity); ok {
+				return path, nil
+			}
+			// Not written yet is a state, not a failure: a fresh chat has no
+			// store until its first prompt (the pending-source case).
+			return "", fmt.Errorf("%w: %s chat %q not found: %w", ErrLiveSourceUnresolved, agent, locator.Identity, fs.ErrNotExist)
+		}
 		for _, root := range DefaultRoots(home) {
 			if root.Agent != agent {
 				continue
 			}
-			references, err := listJSONLRefs(root.Directory, root.Agent, root.NativeID)
+			references, err := root.refs()
 			if err != nil {
 				return "", err
 			}
@@ -105,6 +118,56 @@ func ResolveLiveSource(home string, agent AgentID, kind, source, value string) (
 	default:
 		return "", fmt.Errorf("%w: locator kind %q", ErrLiveSourceUnresolved, locator.Kind)
 	}
+}
+
+// agyBrainRoots lists where Antigravity keeps conversation folders: the CLI
+// first, the IDE's (same layout) second.
+func agyBrainRoots(home string) []string {
+	return []string{
+		filepath.Join(home, ".gemini", "antigravity-cli", "brain"),
+		filepath.Join(home, ".gemini", "antigravity", "brain"),
+	}
+}
+
+func cursorChatsRoot(home string) string { return filepath.Join(home, ".cursor", "chats") }
+
+// resolveAgyLiveSource names the transcript of one conversation id. A fresh
+// conversation has not written it yet: the CLI location is returned anyway,
+// the same "named but not written" state pi and omp sessions have.
+func resolveAgyLiveSource(home, conversationID string) string {
+	roots := agyBrainRoots(home)
+	for _, root := range roots {
+		path := agyTranscriptFile(root, conversationID)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return agyTranscriptFile(roots[0], conversationID)
+}
+
+// normalizeLivePath maps the path a provider's hook reports onto the file
+// that is actually tailed: agy reports `transcript.jsonl` (clipped
+// arguments) while `transcript_full.jsonl` beside it is the complete one;
+// Cursor's transcript-style paths resolve to the chat's store by id.
+func normalizeLivePath(home string, agent AgentID, path string) string {
+	switch agent {
+	case AgentAntigravity:
+		if filepath.Base(path) == "transcript.jsonl" {
+			full := filepath.Join(filepath.Dir(path), agyTranscriptName)
+			if _, err := os.Stat(full); err == nil {
+				return full
+			}
+		}
+	case AgentCursor:
+		if filepath.Base(path) == cursorStoreName {
+			return path
+		}
+		id := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		if store, ok := cursorStoreFile(cursorChatsRoot(home), id); ok {
+			return store
+		}
+	}
+	return path
 }
 
 // IndexedMessage pairs a projection index with its row for delta reports.
@@ -147,6 +210,8 @@ type LiveDecoder struct {
 	claude     *claudeParseState
 	codex      *codexParseState
 	pi         *piParseState
+	agy        *agyParseState
+	cursorChat *cursorParseState
 	cursor     int64
 	partial    []byte
 	snapshot   []TranscriptMessage
@@ -171,6 +236,10 @@ func NewLiveDecoder(agent AgentID) (*LiveDecoder, error) {
 		decoder.codex = newCodexParseState()
 	case AgentPi, AgentOMP:
 		decoder.pi = newPiParseState()
+	case AgentAntigravity:
+		decoder.agy = newAgyParseState()
+	case AgentCursor:
+		decoder.cursorChat = newCursorParseState()
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrLiveDecoderUnavailable, agent)
 	}
@@ -248,6 +317,10 @@ func (d *LiveDecoder) Reset() {
 		d.codex = newCodexParseState()
 	case AgentPi, AgentOMP:
 		d.pi = newPiParseState()
+	case AgentAntigravity:
+		d.agy = newAgyParseState()
+	case AgentCursor:
+		d.cursorChat = newCursorParseState()
 	}
 	d.cursor = 0
 	d.partial = nil
@@ -274,6 +347,14 @@ func (d *LiveDecoder) feedLine(line string) {
 		d.pi.feedPiLine(line)
 		return
 	}
+	if d.agy != nil {
+		d.agy.feedAgyLine(line)
+		return
+	}
+	if d.cursorChat != nil {
+		d.cursorChat.feedCursorLine(line)
+		return
+	}
 }
 
 // current returns a deep copy of the active projection. Tool outputs and
@@ -289,6 +370,12 @@ func (d *LiveDecoder) current() []TranscriptMessage {
 	if d.pi != nil {
 		return deepCopyMessages(d.pi.messages)
 	}
+	if d.agy != nil {
+		return deepCopyMessages(d.agy.messages)
+	}
+	if d.cursorChat != nil {
+		return deepCopyMessages(d.cursorChat.messages)
+	}
 	return nil
 }
 
@@ -301,6 +388,12 @@ func (d *LiveDecoder) unknownLines() uint32 {
 	}
 	if d.pi != nil {
 		return d.pi.unknownLines
+	}
+	if d.agy != nil {
+		return d.agy.unknownLines
+	}
+	if d.cursorChat != nil {
+		return d.cursorChat.unknownLines
 	}
 	return 0
 }
@@ -474,6 +567,21 @@ func (s *FileLiveSource) ReadAt(p []byte, off int64) (int, error) {
 	return file.ReadAt(p, off)
 }
 
+// NewLiveSource is the source a provider's live tail reads: the transcript
+// file itself, except for Cursor, whose conversation lives in a SQLite store
+// that CursorStoreSource turns into the same append-only stream.
+func NewLiveSource(agent AgentID, path string) LiveSource {
+	if agent == AgentCursor {
+		return NewCursorStoreSource(path)
+	}
+	return NewFileLiveSource(path)
+}
+
+// replacedSource is implemented by sources that can rebuild rather than
+// extend their stream (CursorStoreSource after a compaction): Replaced
+// reports it once, and the watcher then re-hydrates the decoder.
+type replacedSource interface{ Replaced() bool }
+
 // LiveWatcher polls one LiveSource into a LiveDecoder, reading only the
 // appended byte window and re-hydrating after truncate/replace (CONV-13/18).
 type LiveWatcher struct {
@@ -495,7 +603,11 @@ func (w *LiveWatcher) Poll() (LiveSync, error) {
 	if err != nil {
 		return LiveSync{}, err
 	}
-	if (w.lastSize >= 0 && size < w.lastSize) || size < w.decoder.cursor {
+	replaced := false
+	if r, ok := w.source.(replacedSource); ok {
+		replaced = r.Replaced()
+	}
+	if replaced || (w.lastSize >= 0 && size < w.lastSize) || size < w.decoder.cursor {
 		w.decoder.Reset()
 		w.lastSize = -1
 	}
