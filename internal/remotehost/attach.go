@@ -61,6 +61,11 @@ func (s *Server) handleChatAttach(w http.ResponseWriter, r *http.Request, _ Devi
 		writeError(w, http.StatusNotFound, "unknown_pane", "")
 		return
 	}
+	s.saveAttachment(w, req)
+}
+
+// saveAttachment decodes, bounds and stores one upload (the pane, or the draft it belongs to, is already checked).
+func (s *Server) saveAttachment(w http.ResponseWriter, req attachRequest) {
 	data, err := base64.StdEncoding.DecodeString(req.DataBase64)
 	if err != nil || len(data) == 0 {
 		writeError(w, http.StatusBadRequest, "bad_request", "")

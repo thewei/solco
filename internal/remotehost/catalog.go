@@ -94,6 +94,11 @@ func (s *Server) handleChatCatalog(w http.ResponseWriter, r *http.Request, _ Dev
 		writeError(w, http.StatusNotFound, "unknown_pane", "")
 		return
 	}
+	s.writeCatalog(w, r, kind, cwd)
+}
+
+// writeCatalog answers the composer's catalog for one agent kind in one folder (a live pane's, or a draft's).
+func (s *Server) writeCatalog(w http.ResponseWriter, r *http.Request, kind, cwd string) {
 	out := catalogBody{Commands: []catalogEntry{}, Skills: []catalogEntry{}, Models: []catalogModel{}}
 	provider, known := history.ParseAgentID(kind)
 	if !known {

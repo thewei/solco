@@ -196,3 +196,32 @@ func TestRemoteLauncherBlockedAgentIsStartedAndKeepsThePromptForTheUser(t *testi
 		t.Fatalf("blocked agent without a prompt has nothing pending: %+v %v", bare, err)
 	}
 }
+
+func TestRemoteLauncherTerminalTypesItsFirstCommand(t *testing.T) {
+	rt := &fakeAppRuntime{}
+	l := newTestLauncher(rt, nil, nil)
+	var typed []string
+	l.sessions.sendInput = func(_ context.Context, _, paneID, text string) error {
+		typed = append(typed, paneID+":"+text)
+		return nil
+	}
+	spec := remotehost.LaunchSpec{RequestID: "req_eeeeeeee", WorkspaceID: "w1", CWD: t.TempDir(), Kind: remotehost.LaunchTerminal, Prompt: "ls -la"}
+	pane, err := l.Launch(context.Background(), "default", spec)
+	if err != nil || pane.PromptPending || len(typed) != 1 || typed[0] != "pane-1:ls -la" {
+		t.Fatalf("pane %+v err %v typed %v", pane, err, typed)
+	}
+	if _, err := l.Launch(context.Background(), "default", spec); err != nil || len(typed) != 1 {
+		t.Fatalf("a replay typed the command again: %v %v", err, typed)
+	}
+}
+
+func TestRemoteLauncherTerminalCommandFailureKeepsThePane(t *testing.T) {
+	l := newTestLauncher(&fakeAppRuntime{}, nil, nil)
+	l.sessions.sendInput = func(context.Context, string, string, string) error { return errors.New("refused") }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pane, err := l.Launch(ctx, "default", remotehost.LaunchSpec{RequestID: "req_ffffffff", WorkspaceID: "w1", CWD: t.TempDir(), Kind: remotehost.LaunchTerminal, Prompt: "ls"})
+	if err != nil || pane.PaneID != "pane-1" || !pane.PromptPending {
+		t.Fatalf("pane %+v err %v", pane, err)
+	}
+}

@@ -30,7 +30,8 @@ var fallbackKinds = []history.AgentID{history.AgentClaudeCode, history.AgentCode
 
 // SessionSpec is one new-session request: a Workspace (new Tab in it) or a
 // directory (its Workspace found or created). Agent == "" opens a Terminal.
-// An empty Prompt starts the agent only.
+// An empty Prompt starts the agent only; for a Terminal it is the first command line, typed into the
+// new shell with Enter.
 type SessionSpec struct {
 	RequestID   string
 	WorkspaceID string
@@ -78,6 +79,8 @@ type SessionStarter struct {
 	runtime   func(instance string) agent.LaunchRuntime
 	listKinds func(context.Context) ([]string, error)
 	run       func(context.Context, agent.LaunchRuntime, agent.LaunchIntent) (agent.LaunchOutcome, *agent.LaunchFailure)
+	// sendInput types one line (text + Enter) into a pane; nil = a Terminal first command is unavailable.
+	sendInput func(ctx context.Context, instance, paneID, text string) error
 	now       func() time.Time
 
 	mu      sync.Mutex
@@ -94,6 +97,9 @@ func (s *LaunchService) Sessions() *SessionStarter {
 			listKinds: s.manager.AgentKinds,
 			run: func(ctx context.Context, rt agent.LaunchRuntime, intent agent.LaunchIntent) (agent.LaunchOutcome, *agent.LaunchFailure) {
 				return agent.RunLaunchTransaction(ctx, rt, Preparer{}, intent, agent.DefaultTimings())
+			},
+			sendInput: func(ctx context.Context, instance, paneID, text string) error {
+				return s.manager.SendPaneInput(ctx, instance, paneID, text, []string{"enter"})
 			},
 			now: time.Now,
 		}
@@ -151,12 +157,17 @@ func (l *SessionStarter) StartSession(ctx context.Context, instance string, spec
 		// Same durable idempotency as an agent launch (a retry after a lost answer must not open a
 		// second tab). Validate wants a known provider, so a placeholder carries the request; the
 		// "terminal:" project prefix keeps it distinct from any agent request.
-		request := agent.StartAgentRequest{RequestID: spec.RequestID, Instance: instance, ProjectID: "terminal:" + sessionProject(spec), Provider: history.AgentClaudeCode, CWD: spec.CWD}
+		request := agent.StartAgentRequest{RequestID: spec.RequestID, Instance: instance, ProjectID: "terminal:" + sessionProject(spec), Provider: history.AgentClaudeCode, CWD: spec.CWD, Prompt: spec.Prompt}
 		rec, err := registry.Submit(ctx, request, func(ctx context.Context, _ agent.StartAgentRequest) (agent.LaunchOutcomeRecord, error) {
 			pane, err := l.openTerminal(ctx, rt, spec)
-			return agent.LaunchOutcomeRecord{Launched: err == nil, AgentKey: pane}, err
+			if err != nil {
+				return agent.LaunchOutcomeRecord{AgentKey: pane}, err
+			}
+			// The pane exists either way; a command that could not be typed is reported, not rolled back.
+			pending := spec.Prompt != "" && l.typeFirstCommand(ctx, instance, pane, spec.Prompt) != nil
+			return agent.LaunchOutcomeRecord{Launched: true, AgentKey: pane, PromptPending: pending}, nil
 		})
-		return SessionResult{PaneID: rec.AgentKey}, sessionError(err)
+		return SessionResult{PaneID: rec.AgentKey, PromptPending: rec.PromptPending}, sessionError(err)
 	}
 
 	request := agent.StartAgentRequest{RequestID: spec.RequestID, Instance: instance, ProjectID: sessionProject(spec), Provider: spec.Agent, CWD: spec.CWD, Prompt: spec.Prompt}
@@ -194,6 +205,22 @@ func (l *SessionStarter) blockedOnHuman(ctx context.Context, rt agent.LaunchRunt
 		return agent.LaunchOutcomeRecord{}, false
 	}
 	return agent.LaunchOutcomeRecord{Launched: true, AgentKey: failure.PaneID, PromptPending: hadPrompt}, true
+}
+
+// typeFirstCommand types the Terminal's first command line into its shell. The PTY queues typeahead until
+// the shell reads, so no readiness wait is needed; a pane that is not yet attachable gets a few quick retries.
+func (l *SessionStarter) typeFirstCommand(ctx context.Context, instance, paneID, text string) error {
+	if l.sendInput == nil {
+		return errors.New("pane input unavailable")
+	}
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		if err = l.sendInput(ctx, instance, paneID, text); err == nil {
+			return nil
+		}
+		sleepContext(ctx, 300*time.Millisecond)
+	}
+	return err
 }
 
 func sessionProject(spec SessionSpec) string {

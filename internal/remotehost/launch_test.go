@@ -99,17 +99,17 @@ func TestLaunchNeedsAuth(t *testing.T) {
 func TestLaunchRejectsBadRequests(t *testing.T) {
 	h, l := launcherHarness(t)
 	cases := map[string]string{
-		"not json":         `{`,
-		"short request id": `{"requestId":"x","workspaceId":"w1","kind":"terminal"}`,
-		"bad request id":   `{"requestId":"req 0123456789!","workspaceId":"w1","kind":"terminal"}`,
-		"unknown kind":     `{"requestId":"` + launchID + `","workspaceId":"w1","kind":"rm -rf"}`,
-		"no target":        `{"requestId":"` + launchID + `","kind":"terminal"}`,
-		"two targets":      `{"requestId":"` + launchID + `","workspaceId":"w1","path":"/tmp","kind":"terminal"}`,
-		"relative path":    `{"requestId":"` + launchID + `","path":"work/solco","kind":"terminal"}`,
-		"dotdot path":      `{"requestId":"` + launchID + `","path":"/work/../etc","kind":"terminal"}`,
-		"newline in path":  `{"requestId":"` + launchID + `","path":"/work\n/x","kind":"terminal"}`,
-		"terminal prompt":  `{"requestId":"` + launchID + `","workspaceId":"w1","kind":"terminal","prompt":"ls"}`,
-		"huge prompt":      `{"requestId":"` + launchID + `","workspaceId":"w1","kind":"claude-code","prompt":"` + strings.Repeat("a", maxLaunchPrompt+1) + `"}`,
+		"not json":           `{`,
+		"short request id":   `{"requestId":"x","workspaceId":"w1","kind":"terminal"}`,
+		"bad request id":     `{"requestId":"req 0123456789!","workspaceId":"w1","kind":"terminal"}`,
+		"unknown kind":       `{"requestId":"` + launchID + `","workspaceId":"w1","kind":"rm -rf"}`,
+		"no target":          `{"requestId":"` + launchID + `","kind":"terminal"}`,
+		"two targets":        `{"requestId":"` + launchID + `","workspaceId":"w1","path":"/tmp","kind":"terminal"}`,
+		"relative path":      `{"requestId":"` + launchID + `","path":"work/solco","kind":"terminal"}`,
+		"dotdot path":        `{"requestId":"` + launchID + `","path":"/work/../etc","kind":"terminal"}`,
+		"newline in path":    `{"requestId":"` + launchID + `","path":"/work\n/x","kind":"terminal"}`,
+		"terminal multiline": `{"requestId":"` + launchID + `","workspaceId":"w1","kind":"terminal","prompt":"ls\nrm x"}`,
+		"huge prompt":        `{"requestId":"` + launchID + `","workspaceId":"w1","kind":"claude-code","prompt":"` + strings.Repeat("a", maxLaunchPrompt+1) + `"}`,
 	}
 	for name, body := range cases {
 		resp := h.launch("/api/v3/launch", h.token, body)
@@ -251,5 +251,16 @@ func TestLaunchReportsPromptPending(t *testing.T) {
 	}
 	if !pending.PromptPending || pending.PaneID != "w1:p2" {
 		t.Fatalf("blocked agent: %+v", pending)
+	}
+}
+
+func TestLaunchTerminalCarriesItsFirstCommand(t *testing.T) {
+	h, l := launcherHarness(t)
+	resp := h.launch("/api/v3/launch", h.token, `{"requestId":"`+launchID+`","workspaceId":"w1","kind":"terminal","prompt":"  git status  "}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	if spec, _ := l.last(); spec.Kind != LaunchTerminal || spec.Prompt != "git status" {
+		t.Fatalf("spec %+v", spec)
 	}
 }

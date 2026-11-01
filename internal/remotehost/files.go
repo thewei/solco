@@ -42,6 +42,11 @@ func (s *Server) handleChatFiles(w http.ResponseWriter, r *http.Request, _ Devic
 		writeError(w, http.StatusNotFound, "unknown_pane", "")
 		return
 	}
+	s.writeFiles(w, r, cwd)
+}
+
+// writeFiles lists the `@` completions of one folder (a live pane's, or a draft's).
+func (s *Server) writeFiles(w http.ResponseWriter, r *http.Request, cwd string) {
 	files := chatsession.ListFiles(cwd, r.URL.Query().Get("token"), true)
 	if files == nil {
 		files = []string{}
