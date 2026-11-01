@@ -86,6 +86,7 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 		if tint, ok := rowTint(tokens, selected, row.Hovered()); ok {
 			row.Background(tint)
 		}
+		row.Transition(rowFade)
 		row.Children(func() {
 			ui.Box(c).Size(agentCardMark, agentCardMark).Shrink(0).Children(func() {
 				markView(c, mark, agentCardMark, t.TextMuted)
@@ -270,6 +271,7 @@ func (s *Shell) subagentRow(c *ui.Context, parent agent.AgentCardModel, sub hist
 		if tint, ok := rowTint(tokens, false, row.Hovered()); ok {
 			row.Background(tint)
 		}
+		row.Transition(rowFade)
 		row.Draw(func(p *ui.Painter, r ui.Rect) {
 			x := r.X + agentCardPadX + agentCardMark/2
 			bottom := r.Y + r.H

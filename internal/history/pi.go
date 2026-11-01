@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -67,6 +68,11 @@ func (s *piParseState) transcript(reference SessionFileRef) ParsedTranscript {
 	title := strings.TrimSpace(s.sessionTitle)
 	if title == "" {
 		title = titleFromMessages(s.messages)
+		// A sub-agent's file is named after the agent (`<session>/DeployPhone.jsonl`,
+		// not `<timestamp>_<id>.jsonl`): that name tells assignments apart.
+		if name := subagentFileName(reference.FilePath); name != "" && title != "" {
+			title = name + " · " + title
+		}
 	}
 	if title == "" {
 		title = Untitled
@@ -463,6 +469,19 @@ func piToolResultText(content any) string {
 func piRolloutNativeID(stem string) string {
 	if idx := strings.LastIndexByte(stem, '_'); idx >= 0 {
 		return stem[idx+1:]
+	}
+	return stem
+}
+
+// subagentFileName returns the agent name of an omp sub-agent session file —
+// one whose stem is not the `<timestamp>_<id>` of a top-level session.
+func subagentFileName(path string) string {
+	stem := strings.TrimSuffix(filepath.Base(path), ".jsonl")
+	if stem == "" || strings.Contains(stem, "_") {
+		return ""
+	}
+	if len(stem) >= 4 && stem[0] >= '0' && stem[0] <= '9' {
+		return ""
 	}
 	return stem
 }

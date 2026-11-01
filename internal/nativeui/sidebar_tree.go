@@ -169,6 +169,7 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 	case row.Hovered():
 		row.Background(t.SurfaceHover)
 	}
+	row.Transition(rowFade)
 	if spec.Menu != nil {
 		row.ContextMenu(spec.Menu)
 	}
@@ -252,6 +253,7 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 	case row.Hovered():
 		row.Background(t.SurfaceHover)
 	}
+	row.Transition(rowFade)
 	if spec.Menu != nil {
 		row.ContextMenu(spec.Menu)
 	}
@@ -294,6 +296,7 @@ func sectionTextAction(c *ui.Context, label, tooltip string) ui.Element {
 	if b.Hovered() {
 		b.Background(t.SurfaceHover).TextColor(t.Text)
 	}
+	b.Transition(rowFade)
 	b.Children(func() {
 		ui.Text(c, label).FontSize(Typography().Micro).FontWeight(WeightSemibold).PassThrough()
 	})

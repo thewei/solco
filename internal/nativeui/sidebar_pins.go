@@ -97,6 +97,7 @@ func (s *Shell) pinnedItemsView(c *ui.Context) {
 			if tint, ok := rowTint(tokens, selected, row.Hovered()); ok {
 				row.Background(tint)
 			}
+			row.Transition(rowFade)
 			row.Children(func() {
 				ui.Box(c).Size(14, 14).Shrink(0).Children(func() {
 					markView(c, mark, 14, t.TextMuted)

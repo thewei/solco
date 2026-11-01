@@ -73,7 +73,6 @@ func (s *Shell) filesStartData(root string) *filesStartCache {
 
 // filesStart is the /files center while no file is open.
 func (s *Shell) filesStart(c *ui.Context, root string) {
-	t := c.Theme()
 	sp := Spacing()
 	data := s.filesStartData(root)
 	var changed []gitworkbench.ChangeFile
@@ -114,7 +113,6 @@ func (s *Shell) filesStart(c *ui.Context, root string) {
 						s.filesStartRow(c, "readme", data.readme, filepath.Base(data.readme), "Project overview", "")
 					})
 				}
-				ui.Text(c, "Or pick one from the tree on the left.").FontSize(Typography().Caption).TextColor(t.TextMuted)
 			})
 		})
 	})
@@ -137,6 +135,7 @@ func (s *Shell) filesStartRow(c *ui.Context, key, abs, name, detail, status stri
 	if tint, ok := rowTint(designTokens(t.Dark), false, row.Hovered()); ok {
 		row.Background(tint)
 	}
+	row.Transition(rowFade)
 	row.Children(func() {
 		ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, iconFile).Size(14, 14).TextColor(t.TextMuted).Shrink(0)

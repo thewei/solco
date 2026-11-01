@@ -128,6 +128,7 @@ func (s *Shell) quickPanelTaskRowIn(c *ui.Context, task workboard.Task, group wo
 		if tint, ok := rowTint(tokens, nav.showsCursor(row), row.Hovered()); ok {
 			row.Background(tint)
 		}
+		row.Transition(rowFade)
 		row.Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
 				tipped(c, ui.Text(c, title).FontSize(Typography().Body).SingleLine(), title)

@@ -14,6 +14,11 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// rowFade eases a row's background between rest, hover and selection, so
+// the tint arrives and leaves instead of popping; every row built on
+// rowTint carries it (colors only: no position or size motion).
+var rowFade = ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond}
+
 // rowTint is the shared background policy for selectable rows: selection
 // outranks hover, and an untinted row reports ok=false so callers keep the
 // surface transparent.
@@ -41,6 +46,7 @@ func navButton(c *ui.Context, glyph *ui.SVG, label, shortcut string, selected bo
 	if tint, ok := rowTint(tokens, selected, b.Hovered()); ok {
 		b.Background(tint)
 	}
+	b.Transition(rowFade)
 	b.Children(func() {
 		if glyph != nil {
 			ui.Icon(c, glyph).Size(14, 14).TextColor(t.TextMuted)
@@ -73,6 +79,7 @@ func navTileButtonDetail(c *ui.Context, glyph *ui.SVG, tone TileTone, label, det
 	if tint, ok := rowTint(tokens, selected, b.Hovered()); ok {
 		b.Background(tint)
 	}
+	b.Transition(rowFade)
 	b.Children(func() {
 		iconTile(c, glyph, tone, 20)
 		ui.Text(c, label).FontSize(Typography().Body).Grow(1).SingleLine().PassThrough()
@@ -188,6 +195,7 @@ func sidebarTopAction(c *ui.Context, glyph *ui.SVG, label, shortcut string, sele
 	if tint, ok := rowTint(tokens, selected, b.Hovered()); ok {
 		b.Background(tint)
 	}
+	b.Transition(rowFade)
 	b.Children(func() {
 		ui.Icon(c, glyph).Size(14, 14).TextColor(t.TextMuted).PassThrough()
 	})
@@ -284,6 +292,7 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 		if tint, ok := rowTint(tokens, spec.Selected, row.Hovered()); ok {
 			row.Background(tint)
 		}
+		row.Transition(rowFade)
 		if drag := spec.Drag; drag != nil {
 			row.Drag(drag.Value).Cursor(ui.CursorGrab)
 			if row.Dragging() {

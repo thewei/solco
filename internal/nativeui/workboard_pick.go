@@ -85,6 +85,7 @@ func (s *Shell) pickDialog(c *ui.Context) {
 					if tint, ok := rowTint(designTokens(t.Dark), d.chosen == i, row.Hovered()); ok {
 						row.Background(tint)
 					}
+					row.Transition(rowFade)
 					row.Children(func() { ui.Text(key, label).FontSize(Typography().Body).SingleLine() })
 					if row.Clicked() {
 						d.chosen = i

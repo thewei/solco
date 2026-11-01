@@ -448,6 +448,7 @@ func TestHostsSelectedRowWearsTheSelectionFace(t *testing.T) {
 	if !ok1 || !ok2 {
 		t.Fatalf("rows missing; texts=%q", tester.Texts())
 	}
+	tester.Advance(2 * rowFade.Duration) // rows ease their face (rowFade)
 	img := tester.Image()
 	at := func(r ui.Rect) [4]uint8 {
 		c := img.RGBAAt(int(picked.X+80), int(r.Y+r.H/2))

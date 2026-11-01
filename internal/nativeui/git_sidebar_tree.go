@@ -59,24 +59,15 @@ func segmentTabs(c *ui.Context, name string, chosen *int, items []segmentTab, ba
 }
 
 // gitViewTabs is the Changes | Commits switch at the top of the Git sidebar,
-// with, on Changes, the count of changed files. (Commits, not History: History
-// is the Sessions page.)
+// (Commits, not History: History is the Sessions page.) It carries no count:
+// the changed-file total already heads the file column and the Unstaged
+// section, and a badge here squeezed "Changes" into "Chang…".
 func (s *Shell) gitViewTabs(c *ui.Context) {
 	chosen := 0
 	if s.commitsMode {
 		chosen = 1
 	}
-	changed := 0
-	if snap := s.gitSnapshot(); snap != nil {
-		changed = len(snap.Files)
-	}
-	moved := segmentTabs(c, "Git view", &chosen, []segmentTab{{"Changes", iconFileDiff}, {"Commits", iconCommit}},
-		func(i int) int {
-			if i == 0 {
-				return changed
-			}
-			return 0
-		})
+	moved := segmentTabs(c, "Git view", &chosen, []segmentTab{{"Changes", iconFileDiff}, {"Commits", iconCommit}}, nil)
 	if moved {
 		if chosen == 0 {
 			s.commitsMode = false

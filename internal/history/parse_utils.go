@@ -55,8 +55,54 @@ func projectName(cwd string) string {
 	return name
 }
 
+// taskPreamble is the fixed lead-in omp's task tool puts in front of every
+// sub-agent assignment; it is followed by a "# Target" header and the repo
+// path, so left in, every sub-agent session shares one title head.
+const taskPreamble = "Complete assignment thoroughly:"
+
+// stripTaskPreamble drops the task tool's lead-in, its "# Target" header and
+// the "仓库 /path" / "Repo /path" token after it, so the title starts at what
+// tells assignments apart. Anything else comes back untouched.
+func stripTaskPreamble(text string) string {
+	rest, ok := strings.CutPrefix(strings.TrimLeft(text, " \t\r\n"), taskPreamble)
+	if !ok {
+		return text
+	}
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	rest = strings.TrimLeft(strings.TrimPrefix(rest, "# Target"), " \t\r\n")
+	for _, label := range []string{"仓库", "Repo", "Repository"} {
+		if tail, ok := strings.CutPrefix(rest, label); ok {
+			tail = strings.TrimLeft(tail, " \t")
+			if strings.HasPrefix(tail, "/") {
+				if end := strings.IndexAny(tail, " \t\r\n（(，,。"); end > 0 {
+					rest = strings.TrimLeft(tail[end:], " \t")
+					if after, ok := cutParenthetical(rest); ok {
+						rest = after
+					}
+					rest = strings.TrimLeft(rest, " \t\r\n，,。.")
+				}
+			}
+			break
+		}
+	}
+	return rest
+}
+
+// cutParenthetical drops a leading （…） / (…) remark and returns what follows.
+func cutParenthetical(text string) (string, bool) {
+	closer := map[string]string{"（": "）", "(": ")"}
+	for open, closeMark := range closer {
+		if strings.HasPrefix(text, open) {
+			if end := strings.Index(text, closeMark); end > 0 {
+				return text[end+len(closeMark):], true
+			}
+		}
+	}
+	return text, false
+}
+
 func cleanTitleCandidate(raw string) string {
-	text := stripTagBlock(raw, "system-reminder")
+	text := stripTagBlock(stripTaskPreamble(raw), "system-reminder")
 	text = stripTagBlock(text, "local-command-caveat")
 	text = stripTagBlock(text, "local-command-stdout")
 	// Skill invocations are injected directives, not user prose; their

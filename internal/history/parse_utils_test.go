@@ -1,6 +1,9 @@
 package history
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestCleanTitleCandidateStripsSkillBlocks pins F166: a session whose first
 // message opens with a skill invocation must not surface the injected XML
@@ -49,5 +52,16 @@ func TestAgentsInstructionsInjectionIsMetaNotTitle(t *testing.T) {
 	}
 	if got, want := titleFromMessages(messages), "Review the sidebar"; got != want {
 		t.Fatalf("title = %q, want %q", got, want)
+	}
+}
+
+func TestTaskPreambleIsSkippedInTitle(t *testing.T) {
+	raw := "Complete assignment thoroughly:\n\n# Target\n仓库 /Users/me/code/solco（Go 1.27 + MyGo）。目标：跑起带 Relay 的开发实例。\n\n# Change\n1. x"
+	if got := cleanTitleCandidate(raw); !strings.HasPrefix(got, "目标：跑起带 Relay 的开发实例") {
+		t.Fatalf("title = %q", got)
+	}
+	plain := "Complete assignment thoroughly later"
+	if got := cleanTitleCandidate(plain); got != plain {
+		t.Fatalf("non-preamble text changed: %q", got)
 	}
 }

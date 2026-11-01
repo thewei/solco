@@ -257,6 +257,7 @@ func rowFace(t *testing.T, tester *ui.Tester, label string) [3]uint8 {
 	if !ok {
 		t.Fatalf("no %q; texts=%q", label, tester.Texts())
 	}
+	tester.Advance(2 * rowFade.Duration) // rows ease their face (rowFade)
 	c := tester.Image().RGBAAt(int(rect.X+rect.W-6), int(rect.Y+rect.H/2))
 	return [3]uint8{c.R, c.G, c.B}
 }

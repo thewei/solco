@@ -256,6 +256,7 @@ func (s *Shell) deviceRow(c *ui.Context, instance herdr.Instance) {
 		if tint, ok := rowTint(tokens, selected, row.Hovered()); ok {
 			row.Background(tint)
 		}
+		row.Transition(rowFade)
 		row.ContextMenu(build)
 		row.Children(func() {
 			ui.Box(c).Size(14, 14).Shrink(0).Children(func() {
