@@ -8,7 +8,7 @@ Execution rules: `docs/mygo-native-execution-rules.md`
 
 ## 1. Verdict
 
-**0.2.0 is a valid Native Foundation / Terminal test build. It is not the completed herdr-client migration.**
+**0.2.0 is a valid Native Foundation / Terminal test build. It is not the completed Solco migration.**
 
 The current implementation meets the intended architecture for the migrated shell/runtime slice:
 

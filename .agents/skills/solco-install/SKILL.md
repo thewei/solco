@@ -1,6 +1,6 @@
 ---
 name: solco-install
-description: "Build the newest Solco.app from the herdr-client working tree and replace the copy the user runs day to day in ~/Applications, restarting the running instance. Use whenever the user says 编译最新app / 覆盖安装 / 更新我正在用的 Solco / build and install the latest app / deploy the newest build / 给我装上最新版 — i.e. they want the code that is on disk right now running in their real app, not left in build/ output."
+description: "Build the newest Solco.app from the solco working tree and replace the copy the user runs day to day in ~/Applications, restarting the running instance. Use whenever the user says 编译最新app / 覆盖安装 / 更新我正在用的 Solco / build and install the latest app / deploy the newest build / 给我装上最新版 — i.e. they want the code that is on disk right now running in their real app, not left in build/ output."
 ---
 
 # Solco Install

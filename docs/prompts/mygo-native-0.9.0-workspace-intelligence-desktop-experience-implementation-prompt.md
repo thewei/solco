@@ -4,7 +4,7 @@ Continue the Solco MyGo migration after **0.8 History Management, Usage & Agent 
 
 Repository:
 
-`/Users/wilson/Workspaces/wh-studio/herdr-client`
+`/Users/wilson/Workspaces/wh-studio/solco`
 
 Use the existing Devspace workspace and branch `rewrite/mygo`.
 Preserve all user/other-agent changes. Do not reset, stage, commit or push unless explicitly requested.
@@ -13,7 +13,7 @@ Preserve all user/other-agent changes. Do not reset, stage, commit or push unles
 
 1. `AGENTS.md`
 2. `CLAUDE.md`
-3. `.agents/skills/herdr-client-development/SKILL.md`
+3. `.agents/skills/solco-development/SKILL.md`
 4. `docs/client-product-architecture.md`
 5. `docs/performance-engineering.md`
 6. `docs/terminal-interaction-spec.md`

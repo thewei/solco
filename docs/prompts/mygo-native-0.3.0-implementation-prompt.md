@@ -1,8 +1,8 @@
 # Solco MyGo 0.3.0 Implementation Prompt
 
-You are continuing the Solco/herdr-client MyGo migration in:
+You are continuing the Solco MyGo migration in:
 
-`/Users/wilson/Workspaces/wh-studio/herdr-client`
+`/Users/wilson/Workspaces/wh-studio/solco`
 
 Use the existing Devspace checkout/workspace if one is already open. Work on branch `rewrite/mygo`. Do not create another migration architecture.
 
@@ -12,7 +12,7 @@ Read, in this order:
 
 1. `AGENTS.md`
 2. `CLAUDE.md`
-3. `.agents/skills/herdr-client-development/SKILL.md`
+3. `.agents/skills/solco-development/SKILL.md`
 4. `docs/client-product-architecture.md`
 5. `docs/mygo-native-execution-rules.md`
 6. `docs/mygo-native-migration-roadmap.md`

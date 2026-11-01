@@ -3,7 +3,7 @@
 
 成员清单
 
-- `herdr-client-development/SKILL.md` — Solco Go/MyGo 原生客户端开发、Herdr 协议纪律与验证流程。
+- `solco-development/SKILL.md` — Solco Go/MyGo 原生客户端开发、Herdr 协议纪律与验证流程。
 - `solco-install/SKILL.md` — 构建工作树最新 Solco.app 并覆盖安装、优雅重启、存活校验（`scripts/install.sh`）；安装后用本机自签身份 “Solco Local Dev” 重签（`scripts/ensure-signing-identity.sh` 幂等创建），使麦克风等 TCC 授权跨安装保留。
 - `solco-release/SKILL.md` — 发版一条龙：版本号 bump（`mygo.config.ts`）→ 提交 → 打 tag → 推送 → 盯 release workflow → 校验已发布资产（`scripts/release.sh`，`--dry-run` 预演、`--redo` 仅挪本地旧 tag）；绝不 force 已发布的 tag，绝不本地构建发布（tag 触发 CI）。
 - `solco-ui-audit/SKILL.md` — Computer Use 实机巡检 → 代码验证 → 修复 → 复核的循环、F 台账与并发协议。

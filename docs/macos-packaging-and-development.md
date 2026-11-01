@@ -266,7 +266,7 @@ do not hand-write another proxy or business service.
 
    ```sh
    cd ../herdr-mobile && pnpm export:web
-   cd ../herdr-client && scripts/bundle-web.sh ../herdr-mobile
+   cd ../solco && scripts/bundle-web.sh ../herdr-mobile
    SOLCO_WEB_BUNDLE="$PWD/target/mobile-web" \
      SDKROOT="$(xcrun --show-sdk-path)" crepus dev --bin solco
    ```
@@ -301,7 +301,7 @@ Minimal acceptance order for cross-repo changes:
 # herdr-mobile
 pnpm typecheck && pnpm lint && pnpm test && pnpm export:web
 
-# herdr-client
+# solco
 cargo fmt -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace

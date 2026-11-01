@@ -4,7 +4,7 @@ Continue Solco after the current 0.9 implementation pass.
 
 Repository:
 
-`/Users/wilson/Workspaces/wh-studio/herdr-client`
+`/Users/wilson/Workspaces/wh-studio/solco`
 
 Branch:
 
@@ -17,7 +17,7 @@ Preserve all user/parallel-agent changes. Do not reset, stage, commit or push un
 
 1. `AGENTS.md`
 2. `CLAUDE.md`
-3. `.agents/skills/herdr-client-development/SKILL.md`
+3. `.agents/skills/solco-development/SKILL.md`
 4. `docs/client-product-architecture.md`
 5. `docs/performance-engineering.md`
 6. `docs/terminal-interaction-spec.md`

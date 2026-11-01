@@ -15,7 +15,7 @@ set -euo pipefail
 step() { printf '\n==> %s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run from inside the herdr-client repository"
+REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run from inside the solco repository"
 PB=/usr/libexec/PlistBuddy
 
 bundle_id() { "$PB" -c "Print :CFBundleIdentifier" "$1/Contents/Info.plist" 2>/dev/null; }
@@ -195,24 +195,6 @@ if [ -n "$(pids_on_target)" ]; then
   echo "previous instance exited"
 else
   echo "not running from $DST"
-fi
-
-# Rebrand (2026-10-26): the app used to be Shardlane.app. Its running instance
-# is quit and the old bundle moved to the Trash (recoverable) so only one copy
-# of the product runs; the new app moves its Shardlane-era data on first launch.
-OLD="$(dirname "$DST")/Shardlane.app"
-if [ -d "$OLD" ] && [ "$(bundle_id "$OLD" || true)" = com.whstudio.shardlane.next ]; then
-  step "5b/7 retire the pre-rebrand Shardlane.app"
-  if pgrep -x Shardlane >/dev/null 2>&1; then
-    osascript -e 'tell application "Shardlane" to quit' >/dev/null 2>&1 || true
-    for _ in $(seq 1 10); do
-      pgrep -x Shardlane >/dev/null 2>&1 || break
-      sleep 1
-    done
-    pgrep -x Shardlane >/dev/null 2>&1 && die "Shardlane still running — quit it manually and rerun (no SIGKILL by design: it skips the session save)"
-  fi
-  mv "$OLD" "$HOME/.Trash/Shardlane-$(date +%s).app"
-  echo "moved $OLD to the Trash"
 fi
 
 step "6/7 replace"

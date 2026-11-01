@@ -283,7 +283,7 @@ Update:
 - this file for new reusable performance lessons;
 - feature implementation docs for feature-specific budgets;
 - the internal engineering archive with verified measurements only;
-- `.agents/skills/herdr-client-development/SKILL.md` when the lesson changes how every future Agent should work.
+- `.agents/skills/solco-development/SKILL.md` when the lesson changes how every future Agent should work.
 
 ## 7. Known measured lessons — 2026-08-21
 
