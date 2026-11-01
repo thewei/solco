@@ -261,11 +261,6 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // send, answer or queue.
   const readOnly = state?.readOnly === true;
   const openTerminal = () => void chat.openTerminal().catch(() => {});
-  // A starter prompt only fills the composer; sending stays the user's act.
-  const fillDraft = (text: string) => {
-    setDraft(text);
-    composerRef.current?.focus();
-  };
   // A fresh pane's first conversation id appears while the user may already
   // be typing: that transition keeps the draft instead of restoring one.
   const prevConversation = useRef("");
@@ -639,7 +634,9 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     if (event.key !== "Enter" || event.shiftKey) return;
     if (composingRef.current || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (canSend) void send();
+    // ⌘/Ctrl+⏎ while the agent works cuts in; plain ⏎ then queues the follow-up.
+    if ((event.metaKey || event.ctrlKey) && working && hasContent && !sending && !interrupting && !voiceBusy) void interruptSend();
+    else if (canSend || canQueue) void send();
   };
 
   const cancelQueued = async () => {
@@ -687,6 +684,34 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
       setLoadingOlder(false);
     }
   };
+
+  // Reaching the top loads the earlier page by itself; the button stays as the
+  // visible state (and the manual way when the page cannot tell). Observing again
+  // after each page lets a short transcript fill the viewport.
+  const olderRef = useRef<HTMLButtonElement>(null);
+  const loadOlderRef = useRef(loadOlder);
+  loadOlderRef.current = loadOlder;
+  const turnCount = state?.turns.length ?? 0;
+  // The transcript length the last automatic load started from: a page that added nothing is not asked for again.
+  const autoOlderAt = useRef(-1);
+  useEffect(() => {
+    const button = olderRef.current;
+    const log = logRef.current;
+    if (!button || !log || loadingOlder || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting) || autoOlderAt.current === turnCount) return;
+        autoOlderAt.current = turnCount;
+        void loadOlderRef.current();
+      },
+      { root: log, rootMargin: "120px 0px 0px 0px" },
+    );
+    observer.observe(button);
+    return () => observer.disconnect();
+  }, [state?.hasOlder, turnCount, loadingOlder, conversationId]);
+  useEffect(() => {
+    autoOlderAt.current = -1;
+  }, [conversationId]);
 
   // insertAtCaret splices text into the draft at the caret (attachments,
   // dictated text) and puts the caret after the insertion.
@@ -1171,26 +1196,13 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const reviewChanges = (path: string) => {
     void chat.reviewChanges(path).catch(() => {});
   };
+  // One line under the composer, only for what needs saying: dictation and its
+  // failures. State the Working line, the placeholder and the buttons already show stays out.
   const note =
     voiceError ||
     (micAsking ? "Waiting for microphone permission — answer the system prompt (it may be on another display)." : "") ||
-    // A pending question or a terminal hand-off already says so in its own
-    // card above; the line below the composer stays quiet then.
-    (state?.interactions?.length || disposition === "terminal"
-      ? ""
-      : starting
-        ? "Starting the agent…"
-        : state?.waiting
-          ? "Your first message starts the conversation."
-          : working
-        ? canQueueFollowUp
-          ? "Working • Queue appends a follow-up; Interrupt sends it now."
-          : "Working • Interrupt & send cuts in; Stop ends the turn."
-        : transcribing
-          ? "Transcribing…"
-          : recording
-            ? "Listening… ⏎ or ■ finishes · Esc cancels"
-            : "");
+    (transcribing ? "Transcribing…" : recording ? "Listening… ⏎ or ■ finishes · Esc cancels" : "");
+  const hasHint = note !== "" || micDenied || (clipFailed && !transcribing);
 
   // A browser's right-click menu (Reload, Inspect) has no place in an app:
   // the system menu below is built from what is under the pointer. Editable
@@ -1287,7 +1299,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
       >
         <div className="col">
           {state?.hasOlder ? (
-            <button type="button" className="older" onClick={() => void loadOlder()} disabled={loadingOlder}>
+            <button ref={olderRef} type="button" className="older" onClick={() => void loadOlder()} disabled={loadingOlder}>
               {loadingOlder ? "Loading…" : "Earlier messages"}
             </button>
           ) : null}
@@ -1298,7 +1310,6 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
               kind="waiting"
               provider={state.provider}
               starting={starting}
-              onPick={fillDraft}
               links={state.linkCandidates}
               onLink={(key) => void chat.linkSession(key).then(setState).catch(refresh)}
               onOpenTerminal={openTerminal}
@@ -1306,7 +1317,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
           ) : turns.length === 0 ? (
             // A bound session with no rows yet (the agent wrote its header
             // only) reads the same as a fresh pane: type to start.
-            <SessionState kind="waiting" provider={state?.provider} onPick={fillDraft} onOpenTerminal={openTerminal} />
+            <SessionState kind="waiting" provider={state?.provider} onOpenTerminal={openTerminal} />
           ) : (
             <div
               ref={listRef}
@@ -1496,7 +1507,9 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                         ? "The agent is starting… you can type your prompt"
                         : state?.waiting
                           ? "Type a prompt to start the conversation"
-                          : "Send a message… (@ file · / commands · $ skills)"
+                          : document.documentElement.dataset.host === "phone"
+                            ? "Message"
+                            : "Send a message… (@ file · / commands · $ skills)"
                 }
                 aria-label="Chat prompt"
                 spellCheck
@@ -1589,7 +1602,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 ) : shownModel ? (
                   <span className="chip mono">{shownModel}</span>
                 ) : null}
-                {working && hasContent ? (
+                {working && hasContent && !canQueueFollowUp ? (
                   <button
                     type="button"
                     className="intr"
@@ -1608,7 +1621,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                   <button
                     type="button"
                     className="send"
-                    title={working ? "Queue after this turn" : "Send"}
+                    title={working ? "Queue after this turn (⌘⏎ sends now)" : "Send"}
                     aria-label={working ? "Queue" : "Send"}
                     disabled={!(canSend || canQueue)}
                     onClick={() => void send()}
@@ -1618,6 +1631,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 )}
               </div>
             </div>
+            {hasHint ? (
             <div className="hint">
               {note}
               {micDenied ? (
@@ -1631,6 +1645,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 </button>
               ) : null}
             </div>
+            ) : null}
           </div>
         </div>
       )}

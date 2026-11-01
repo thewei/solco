@@ -323,8 +323,6 @@ export function WorkingLine({ sinceMs }: { sinceMs?: number }) {
 
 // ---- Before there is a conversation ----
 
-const STARTERS = ["Explain this repository", "Find and fix a failing test", "Review my uncommitted changes"];
-
 /**
  * The two states ahead of a transcript: the session is being read, or the
  * agent has not opened one yet (a fresh pane). Centered in the log, quiet.
@@ -336,7 +334,6 @@ export function SessionState(props: {
   provider?: string;
   /** The agent is still launching: the composer holds Send until it is ready. */
   starting?: boolean;
-  onPick?: (text: string) => void;
   /** Recent sessions of this agent's provider in its folder; picking one
    *  follows its transcript (the agent never reported a session of its own). */
   links?: ChatBridgeLink[];
@@ -357,18 +354,8 @@ export function SessionState(props: {
       <Icon name="step" size={18} />
       <div className="st-title">Start the conversation</div>
       <div className="st-sub">
-        {props.starting ? `${name} is starting…` : `${name} is ready.`} <b>Type a prompt below</b> and Solco sends it to the agent — the
-        conversation shows up here as soon as the agent reports its session.
+        {props.starting ? `${name} is starting…` : `${name} is ready.`}
       </div>
-      {props.starting || !props.onPick ? null : (
-        <div className="starters">
-          {STARTERS.map((text) => (
-            <button key={text} type="button" onClick={() => props.onPick?.(text)}>
-              {text}
-            </button>
-          ))}
-        </div>
-      )}
       {props.links && props.links.length > 0 && !props.starting ? (
         <div className="links">
           <div className="links-h">Already working here? Show a recent session instead — it may not be this agent's.</div>

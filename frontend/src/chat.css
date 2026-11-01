@@ -218,9 +218,15 @@
 }
 
 .turn:hover .foot,
+.turn.open .foot,
 .turn.last .foot,
 .foot:focus-within {
   opacity: 1;
+}
+
+/* No hover on the phone: a folded footer takes no stray taps. */
+html[data-host="phone"] .turn:not(.open):not(.last) .foot {
+  pointer-events: none;
 }
 
 .foot .t {
@@ -245,11 +251,6 @@
 
 .ib:disabled {
   opacity: 0.4;
-}
-
-.foot .ib.txt {
-  font-size: 11px;
-  padding: 0 7px;
 }
 
 .foot .copied,
@@ -1967,32 +1968,6 @@ html[data-host="phone"] .queueCard .qcEdit {
    only fill it (never send). */
 .sess-state.invite {
   max-width: 460px;
-}
-
-.sess-state.invite .st-sub b {
-  font-weight: 500;
-  color: var(--i2);
-}
-
-.sess-state .starters {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-.sess-state .starters button {
-  padding: 5px 12px;
-  border: 1px solid var(--hair2);
-  border-radius: 999px;
-  font-size: 12.5px;
-  color: var(--i2);
-}
-
-.sess-state .starters button:hover {
-  background: var(--tint);
-  color: var(--i1);
 }
 
 /* ---- TOC rail (designs/chat-composer, T) ---- */

@@ -32,18 +32,36 @@ export interface TurnProps {
   onReuse?: (text: string) => void;
 }
 
+/**
+ * A touch screen has no hover: tapping a turn's own text opens (and closes)
+ * its footer — time, copy, edit and resend — while links, buttons, code and a
+ * text selection keep their taps. Elsewhere the footer is hover/last-turn as before.
+ */
+function useFootTap() {
+  const [open, setOpen] = useState(false);
+  const onClick = (event: React.MouseEvent<HTMLElement>) => {
+    if (document.documentElement.dataset.host !== "phone") return;
+    const target = event.target as Element;
+    if (target.closest("a, button, pre, input, textarea, summary, [role=tab]")) return;
+    if (window.getSelection()?.toString()) return;
+    setOpen((value) => !value);
+  };
+  return { cls: open ? " open" : "", onClick };
+}
+
 export function TurnRow(props: TurnProps) {
   const { turn } = props;
+  const tap = useFootTap();
   if (turn.user) {
     const shown = userDisplay(turn.text ?? "");
     return (
-      <div className="turn user">
+      <div className={`turn user${tap.cls}`} onClick={tap.onClick}>
         <div className={shown.output ? "bubble out" : "bubble"}>{mentions(shown.text)}</div>
         <Foot turn={turn} source={shown.text} onReuse={shown.output ? undefined : props.onReuse} />
       </div>
     );
   }
-  return <AssistantRow {...props} />;
+  return <AssistantRow {...props} tap={tap} />;
 }
 
 /** A prompt on its way to the agent (or one that did not arrive). */
@@ -97,7 +115,7 @@ export function OutboxRow({
   );
 }
 
-function AssistantRow({ turn, startMs, root, canReview, onReview, isLast }: TurnProps) {
+function AssistantRow({ turn, startMs, root, canReview, onReview, isLast, tap }: TurnProps & { tap: { cls: string; onClick: (event: React.MouseEvent<HTMLElement>) => void } }) {
   const steps = effectiveSteps(turn);
   const { byId } = useContext(SubagentContext);
   const segs = segments(steps, byId);
@@ -127,7 +145,7 @@ function AssistantRow({ turn, startMs, root, canReview, onReview, isLast }: Turn
 
   const changes = turn.changes ?? [];
   return (
-    <div className={`turn assistant${turn.live ? " live" : ""}${isLast ? " last" : ""}`}>
+    <div className={`turn assistant${turn.live ? " live" : ""}${isLast ? " last" : ""}${tap.cls}`} onClick={tap.onClick}>
       {body}
       {showWorking ? (
         <div className="run" role="status" aria-live="polite">
@@ -560,26 +578,16 @@ function Foot({
         <>
           <button
             type="button"
-            className={`ib${copied === "md" ? " copied" : ""}`}
-            title={markdown ? "Copy Markdown" : "Copy"}
+            className={`ib${copied ? " copied" : ""}`}
+            title={markdown ? "Copy Markdown (⌥-click: plain text)" : "Copy"}
             aria-label={markdown ? "Copy Markdown" : "Copy"}
-            onClick={() => copy(source, "md")}
+            onClick={(event) => (markdown && event.altKey ? copy(plainText(source), "txt") : copy(source, "md"))}
           >
-            <Icon name={copied === "md" ? "check" : "copy"} />
+            <Icon name={copied ? "check" : "copy"} />
           </button>
           {onReuse ? (
             <button type="button" className="ib" title="Edit and resend" aria-label="Edit and resend" onClick={() => onReuse(source)}>
               <Icon name="pencil" />
-            </button>
-          ) : null}
-          {markdown ? (
-            <button
-              type="button"
-              className={`ib txt${copied === "txt" ? " copied" : ""}`}
-              title="Copy as plain text"
-              onClick={() => copy(plainText(source), "txt")}
-            >
-              {copied === "txt" ? "Copied" : "TXT"}
             </button>
           ) : null}
         </>
