@@ -33,6 +33,7 @@ var (
 	iconAgent        = icon(`<circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>`)
 	iconActivity     = icon(`<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>`)
 	iconQuota        = icon(`<path d="M3 3v18h18"/><path d="M8 17v-5"/><path d="M13 17V8"/><path d="M18 17v-3"/>`)
+	iconAbout        = icon(`<path d="M12 3l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L5 8.3l5-.7z"/>`)
 	iconInfo         = icon(`<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>`)
 	iconSearch       = icon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`)
 	iconHistory      = icon(`<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>`)

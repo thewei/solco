@@ -60,6 +60,7 @@ var settingsSections = []settingsSection{
 	{usageSettingsPath, "Quota", iconQuota, TileTeal},
 	{remoteSettingsPath, "Remote Access", iconGlobe, TileIndigo},
 	{"/settings/diagnostics", "Diagnostics", iconInfo, TileBlue},
+	{"/settings/about", "About", iconAbout, TileGray},
 }
 
 // settingsNav is the Settings sidebar body: the section navigation that used
@@ -132,6 +133,9 @@ func (s *Shell) settingsLayout(c *ui.Context, r *ui.Route) {
 			case r.Match("/diagnostics"):
 				r.Title("Settings · Diagnostics")
 				settingsPage(c, func() { s.settingsDiagnostics(c) })
+			case r.Match("/about"):
+				r.Title("Settings · About")
+				settingsPage(c, func() { s.settingsAbout(c) })
 			default:
 				r.Title("Settings · General")
 				// Unknown sections stay usable through the canonical fallback.

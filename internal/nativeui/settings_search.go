@@ -57,6 +57,10 @@ var settingsLabels = map[string][][2]string{
 		{"Compatibility", "Rich chat view"}, {"Compatibility", "Rich file preview"},
 		{"", "Copy Diagnostics"}, {"Logs", "Logs"},
 	},
+	"/settings/about": {
+		{"Links", "GitHub Repository"}, {"Links", "Release Notes"},
+		{"What's new", "What's new in this version"},
+	},
 	"/settings/workboard": {
 		{"View", "Work board"}, {"Scope", "Applies to"},
 	},

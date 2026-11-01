@@ -37,11 +37,11 @@ func assertCentered(t *testing.T, what string, narrow, wide, delta float32) {
 }
 
 func TestSettingsContentIsACenteredColumn(t *testing.T) {
-	for _, route := range []string{"/settings/general", "/settings/git", "/settings/diagnostics"} {
+	for _, route := range []string{"/settings/general", "/settings/git", "/settings/diagnostics", "/settings/about"} {
 		shell := NewShell()
 		shell.loading = false
 		shell.router.Replace(route)
-		anchor := map[string]string{"/settings/general": "Appearance", "/settings/git": "Commit message rules", "/settings/diagnostics": "About"}[route]
+		anchor := map[string]string{"/settings/general": "Appearance", "/settings/git": "Commit message rules", "/settings/diagnostics": "Compatibility", "/settings/about": "GitHub Repository"}[route]
 		narrow := renderedRect(t, shell, 1200, anchor)
 		wide := renderedRect(t, shell, 1600, anchor)
 		assertCentered(t, route+" content", narrow.X, wide.X, 400)

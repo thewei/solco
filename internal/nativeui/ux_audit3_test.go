@@ -30,7 +30,7 @@ func TestSettingsIndexCoversEveryRow(t *testing.T) {
 	}
 	dynamic := map[string]bool{"Show in Quota": true, "Platform": true, "Status": true, "Project": true}
 	re := regexp.MustCompile(`[^A-Za-z]row\("([^"]+)"`)
-	for _, file := range []string{"page_settings.go", "page_settings_git.go", "usage_settings.go", "voice_settings.go", "workboard_settings.go", "remote_settings.go"} {
+	for _, file := range []string{"page_settings.go", "page_settings_git.go", "usage_settings.go", "voice_settings.go", "workboard_settings.go", "remote_settings.go", "about_settings.go"} {
 		src, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)

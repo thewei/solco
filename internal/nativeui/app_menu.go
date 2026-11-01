@@ -10,7 +10,8 @@ import "github.com/egoist/mygo"
 // MenuBar builds the macOS menu bar. checkForUpdates is the updater plugin's
 // item — a plugin main.go owns — and sits after About, where macOS apps put it.
 //
-// The application menu is the stock one (About, Settings…, Hide, Quit); Go
+// The application menu opens the About page (Settings → About: mark, version,
+// release notes, GitHub doors), then carries Settings…, Hide, Quit; Go
 // carries the app's own destinations in the order of the sidebar's view
 // tabs, and accelerators only on idempotent destinations (Router.Push
 // dedupes; the Terminal view keeps the Terminal), never on a toggle, so a
@@ -25,7 +26,7 @@ func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 		return &mygo.MenuItem{Label: label, Accelerator: accelerator, Click: func(*mygo.MenuItem, *mygo.Window) { fn() }}
 	}
 
-	appMenu := []*mygo.MenuItem{{Role: mygo.RoleAbout}}
+	appMenu := []*mygo.MenuItem{nav("About Solco", "", "/settings/about")}
 	if checkForUpdates != nil {
 		appMenu = append(appMenu, checkForUpdates)
 	}
