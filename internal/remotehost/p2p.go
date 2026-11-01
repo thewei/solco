@@ -21,7 +21,7 @@ import (
 /**
  * [INPUT]: 依赖 pion/webrtc/v4、relayclient.go 的 tunnel（hreq/wopen 帧引擎）、server.go 的 guard/Handler/trackConn、relay 的 POST /turn
  * [OUTPUT]: 对外提供 P2PConfig/ICEServer、Server.SetP2P/P2PSessions、GET /api/v3/p2p/ice、POST /api/v3/p2p/session、bootstrap 的 capabilities.p2p
- * [POS]: 手机 ⇄ 桌面的 WebRTC DataChannel 直连（relay/直连路由上已鉴权的信令；不改 relay 协议）：手机经已通的路由取 ICE 服务器并 POST 一份非 trickle 的 offer，Host 等 ICE 收集完成后回完整 answer；DataChannel "solco" 上跑与 relay 完全相同的 hreq/hres/wopen/wmsg 帧（同一个 tunnel，手机扮演 relay 的角色），帧经回环桥进既有 Handler，所以每个请求仍要带设备 token、业务 /api/v3 零改动。DataChannel 单条消息有上限，故以 1 字节头（1=后续、0=末片）分片重组。撤销设备经 trackConn 立刻关闭其 P2P 会话；每设备最多 2 个会话（挤掉最旧）；ICE 服务器 = 设置里的静态 STUN/TURN ∪ relay /turn 签发的短期凭据（缓存到过期前一分钟）。日志只记设备与会话 id、候选类型计数（host/srflx/relay/prflx）、ICE 状态迁移与选中对的类型、会话寿命，绝不记 SDP/候选地址/帧内容
+ * [POS]: 手机 ⇄ 桌面的 WebRTC DataChannel 直连（relay/直连路由上已鉴权的信令；不改 relay 协议）：手机经已通的路由取 ICE 服务器并 POST 一份非 trickle 的 offer，Host 等 ICE 收集完成、或首个 srflx 候选后再宽限 1.5 s（gatherEarly，死 TURN 不再拖满 8 s）后回 answer；DataChannel "solco" 上跑与 relay 完全相同的 hreq/hres/wopen/wmsg 帧（同一个 tunnel，手机扮演 relay 的角色），帧经回环桥进既有 Handler，所以每个请求仍要带设备 token、业务 /api/v3 零改动。DataChannel 单条消息有上限，故以 1 字节头（1=后续、0=末片）分片重组。撤销设备经 trackConn 立刻关闭其 P2P 会话；每设备最多 2 个会话（挤掉最旧）；ICE 服务器 = 设置里的静态 STUN/TURN ∪ relay /turn 签发的短期凭据（缓存到过期前一分钟）。日志只记设备与会话 id、候选类型计数（host/srflx/relay/prflx）、ICE 状态迁移与选中对的类型、会话寿命，绝不记 SDP/候选地址/帧内容
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -32,6 +32,7 @@ const (
 	p2pMaxFrame       = relayReadLimit
 	p2pMaxPerDevice   = 2
 	p2pGatherTimeout  = 8 * time.Second
+	p2pSrflxGrace     = 1500 * time.Millisecond // after the first reflexive candidate, how long a relayed one may still arrive
 	p2pAttachTimeout  = 30 * time.Second
 	p2pBufferHigh     = 1 << 20
 	p2pBufferWait     = 30 * time.Second
@@ -342,7 +343,7 @@ func (s *Server) openP2PSession(ctx context.Context, dev Device, offerSDP, bridg
 		sess.close()
 		return nil, err
 	}
-	gathered := webrtc.GatheringCompletePromise(pc)
+	gathered := gatherEarly(pc)
 	if err := pc.SetLocalDescription(ans); err != nil {
 		sess.close()
 		return nil, err
@@ -511,6 +512,27 @@ func (sess *p2pSession) close() {
 	_ = sess.pc.Close()
 	slog.Info("remote host p2p session closed", "device", sess.deviceID, "session", sess.id,
 		"lived_ms", time.Since(sess.at).Milliseconds(), "attached", attached, "last_state", lastState)
+}
+
+// gatherEarly closes its channel when ICE gathering completes, or p2pSrflxGrace
+// after the first server-reflexive candidate shows up. The answer is
+// non-trickle, so whatever has not arrived by then is left out; but waiting for
+// a dead STUN/TURN server to time out (8 s) before answering made every P2P
+// attempt crawl, while the first reflexive candidate plus a short grace for a
+// relayed one is what a live path needs. With no reflexive candidate at all the
+// caller's own timeout still bounds the wait. Call it before SetLocalDescription.
+func gatherEarly(pc *webrtc.PeerConnection) <-chan struct{} {
+	done := make(chan struct{})
+	var finish, armed sync.Once
+	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		switch {
+		case c == nil:
+			finish.Do(func() { close(done) })
+		case c.Typ == webrtc.ICECandidateTypeSrflx:
+			armed.Do(func() { time.AfterFunc(p2pSrflxGrace, func() { finish.Do(func() { close(done) }) }) })
+		}
+	})
+	return done
 }
 
 // candidateKinds counts the ICE candidates of an SDP by type ("host=2 srflx=1

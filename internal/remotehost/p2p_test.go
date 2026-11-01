@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/stun/v4"
 	"github.com/pion/webrtc/v4"
 	"github.com/thewei/solco/internal/agentcatalog"
 	"github.com/thewei/solco/internal/history"
@@ -337,5 +339,75 @@ func TestCandidateKindsCountsTypesOnly(t *testing.T) {
 	}
 	if strings.Contains(got, "1.2.3.4") {
 		t.Fatalf("an address leaked into the summary: %q", got)
+	}
+}
+
+// A TURN server that never answers keeps ICE gathering open until pion's own
+// timeout; gatherEarly must still hand the SDP over shortly after the first
+// reflexive candidate (here from a local STUN responder).
+func TestGatherEarlyDoesNotWaitForADeadTurnServer(t *testing.T) {
+	stunConn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stunConn.Close() })
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			n, from, err := stunConn.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			req := &stun.Message{Raw: append([]byte(nil), buf[:n]...)}
+			if req.Decode() != nil {
+				continue
+			}
+			udp := from.(*net.UDPAddr)
+			resp, err := stun.Build(stun.NewTransactionIDSetter(req.TransactionID), stun.BindingSuccess,
+				&stun.XORMappedAddress{IP: udp.IP, Port: udp.Port}, stun.Fingerprint)
+			if err == nil {
+				_, _ = stunConn.WriteTo(resp.Raw, from)
+			}
+		}
+	}()
+	deadTurn, err := net.ListenPacket("udp4", "127.0.0.1:0") // listens, never replies
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = deadTurn.Close() })
+
+	se := webrtc.SettingEngine{}
+	se.SetIncludeLoopbackCandidate(true)
+	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
+	pc, err := webrtc.NewAPI(webrtc.WithSettingEngine(se)).NewPeerConnection(webrtc.Configuration{ICEServers: []webrtc.ICEServer{
+		{URLs: []string{"stun:" + stunConn.LocalAddr().String()}},
+		{URLs: []string{"turn:" + deadTurn.LocalAddr().String() + "?transport=udp"}, Username: "u", Credential: "p"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pc.Close() })
+	if _, err := pc.CreateDataChannel("x", nil); err != nil {
+		t.Fatal(err)
+	}
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	gathered := gatherEarly(pc)
+	if err := pc.SetLocalDescription(offer); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-gathered:
+	case <-time.After(p2pGatherTimeout):
+		t.Fatal("gatherEarly waited for the dead TURN server")
+	}
+	if took := time.Since(start); took > p2pSrflxGrace+2*time.Second {
+		t.Fatalf("answer took %v, want about the srflx grace (%v)", took, p2pSrflxGrace)
+	}
+	if got := candidateKinds(pc.LocalDescription().SDP); !strings.Contains(got, "srflx=1") && !strings.Contains(got, "srflx=2") {
+		t.Fatalf("the SDP should carry the reflexive candidate: %s", got)
 	}
 }
