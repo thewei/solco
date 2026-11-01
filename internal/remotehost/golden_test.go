@@ -251,6 +251,13 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "git-status.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git", h.token, nil)))
 	golden(t, "git-diff.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git/diff?path=a.go", h.token, nil)))
 	golden(t, "error-git-unknown-file.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git/diff?path=gone.go", h.token, nil)))
+	// quota (read-only): the desktop's provider quotas behind a capability;
+	// the seam answers the whole page, the handler only forwards
+	h.srv.opts.Usage = func(context.Context, bool) Quota { return sampleQuota() }
+	golden(t, "bootstrap-quota.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "quota.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
+	h.srv.opts.Usage = nil
+	golden(t, "error-quota-unavailable.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
 	h.srv.opts.Catalog = func(context.Context, history.AgentID, string) agentcatalog.Catalog {
 		return agentcatalog.Catalog{
 			Commands:     []agentcatalog.Entry{{Name: "/compact", Insert: "/compact ", Detail: "Compact the conversation", Kind: agentcatalog.KindText}},
@@ -315,8 +322,10 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "chat-subagent.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat/subagents/abc123", h.token, nil)))
 	golden(t, "error-unknown-subagent.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat/subagents/nope", h.token, nil)))
 
-	// follow-up queue: parked behind a running turn, shown in the chat state, refused when full, withdrawn
-	h.srv.opts.Queue = &fakeQueue{}
+	// follow-up queue: parked behind a running turn, shown in the chat state,
+	// blocked behind an uncertain delivery, withdrawn by item and wholesale
+	q := &fakeQueue{}
+	h.srv.opts.Queue = q
 	golden(t, "bootstrap-queue.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
 	subProj.Panes[0].AgentStatus = "working"
 	h.back.set(subProj)
@@ -324,7 +333,11 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "queue-client-request.json", rawQueue)
 	golden(t, "queue-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue))))
 	golden(t, "chat-queued.json", bodyOf(t, h.get("/api/v3/panes/w1:p1/chat", h.token, nil)))
-	golden(t, "error-queue-full.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue))))
+	q.err = ErrFollowUpFrozen
+	golden(t, "error-queue-blocked.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue))))
+	q.err = nil
+	h.launch("/api/v3/panes/w1:p1/chat/send?instance=default", h.token, string(rawQueue)) // a second, live entry for the wholesale cancel
+	golden(t, "queue-item-cancel-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/item/req-q1/cancel?instance=default", h.token, `{}`)))
 	golden(t, "queue-cancel-ok.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/cancel?instance=default", h.token, `{}`)))
 	golden(t, "error-queue-none.json", bodyOf(t, h.launch("/api/v3/panes/w1:p1/chat/queue/cancel?instance=default", h.token, `{}`)))
 
