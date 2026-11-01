@@ -354,11 +354,18 @@
   border-radius: 5px;
 }
 
-.prose table {
-  border-collapse: collapse;
-  margin: 0.2em 0 0.9em;
-  font-size: 0.92em;
-  font-variant-numeric: tabular-nums;
+/* Tables scroll sideways inside their own box instead of collapsing:
+   CJK wraps a character at a time, so under width pressure auto layout used
+   to degrade short label columns to one character per row. The per-cell
+   floor keeps every column readable, and the box scrolls once the floors
+   alone no longer fit. */
+.prose .tbl {
+  overflow-x: auto;
+}
+
+.prose th,
+.prose td {
+  min-width: 8em;
 }
 
 .prose th {

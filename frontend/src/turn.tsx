@@ -652,6 +652,11 @@ export const Markdown = memo(function Markdown({ text, caret }: { text: string; 
         rehypePlugins={[rehypeHighlight]}
         components={{
           pre: (props) => <CodeBlock {...props} />,
+          table: ({ node: _node, ...rest }) => (
+            <div className="tbl">
+              <table {...rest} />
+            </div>
+          ),
         }}
       >
         {text}
