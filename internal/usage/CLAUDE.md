@@ -15,7 +15,7 @@ Usage 是 Solco 的只读额度读取域（2026-10-30 产品决策）：把各 A
 - `zhipu.go`：`api.z.ai`（国际）/ `open.bigmodel.cn`（中国）额度接口，Bearer API key。
 - `signin.go`：`SigninCache` 接口（Get/Set/Delete，生产为 mygo.Secrets、测试为内存）——借用的他人登录经同意读取一次后把凭据副本存进 Solco 自己的条目，之后的读取不再触发对对方应用的 macOS 钥匙串询问；副本失效即删、下次重取。
 - `antigravity.go`：本机来源——`ps`+`lsof` 找 language_server 的 CSRF 与端口，仅回环请求；应用未运行即不可用。
-- `antigravity_cloud.go`：离线来源（默认，需用户同意）——读 Antigravity 自存的 Google OAuth（`~/.gemini/jetski-standalone-oauth-token`→旧 `antigravity-cli/…`→Keychain `gemini/antigravity`，含 go-keyring-base64），过期则用其公开 installed-app 客户端在内存里刷新（不写回），POST `retrieveUserQuotaSummary`（daily 主机→生产主机）+ `loadCodeAssist` 取套餐；按模型组产出 5-hour/Weekly 窗口（Group）。`NewAntigravity(allowed)` 先云端后本机，未允许时只问本机；缺 Gemini 组时并入本机 Gemini 窗口。官方不支持第三方使用，风险由用户承担；客户端密钥可用 `ANTIGRAVITY_OAUTH_CLIENT_ID/SECRET` 覆盖。
+- `antigravity_cloud.go`：离线来源（默认，需用户同意）——读 Antigravity 自存的 Google OAuth（`~/.gemini/jetski-standalone-oauth-token`→旧 `antigravity-cli/…`→Keychain `gemini/antigravity`，含 go-keyring-base64），过期则用 installed-app 客户端在内存里刷新（不写回；凭据由 `ANTIGRAVITY_OAUTH_CLIENT_ID`/`ANTIGRAVITY_OAUTH_CLIENT_SECRET` 提供，未设置时不走云端），POST `retrieveUserQuotaSummary`（daily 主机→生产主机）+ `loadCodeAssist` 取套餐；按模型组产出 5-hour/Weekly 窗口（Group）。`NewAntigravity(allowed)` 先云端后本机，未允许时只问本机；缺 Gemini 组时并入本机 Gemini 窗口。官方不支持第三方使用，风险由用户承担；客户端凭据只来自 `ANTIGRAVITY_OAUTH_CLIENT_ID/SECRET`（2026-11-01 应 GitHub push protection 移除内嵌值）。
 - `*_test.go`：httptest/假 Fetcher/注入时钟的表驱动测试（含令牌不泄漏检查，`-race` 通过）。
 
 法则: 只读·逐家同意·只访问自家域名·令牌与同意后的副本不落盘不进日志·不记历史
