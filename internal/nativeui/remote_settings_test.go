@@ -341,3 +341,22 @@ func TestRemoteSummaryFoldsListenerRelayAndP2P(t *testing.T) {
 		t.Fatalf("an error must lead the card: %+v", sum)
 	}
 }
+
+// The page opens like its siblings — a labelled first group — and the
+// Advanced strip leads from the column's left edge like every other row.
+func TestRemoteAccessPageSharesTheSettingsRhythm(t *testing.T) {
+	s := remoteShell(t)
+	tester := ui.NewTester(s.View, 1200, 800)
+	settleFrames(tester, 3)
+	title, ok := tester.Find("Phone access")
+	if !ok {
+		t.Fatalf("the first group has no label; texts=%q", tester.Texts())
+	}
+	advanced, ok := tester.Find("Advanced")
+	if !ok {
+		t.Fatal("no Advanced strip")
+	}
+	if advanced.X-title.X > 40 {
+		t.Fatalf("Advanced starts %.0fpt right of the group labels: it is centered, not leading", advanced.X-title.X)
+	}
+}

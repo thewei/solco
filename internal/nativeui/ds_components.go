@@ -113,10 +113,10 @@ func row(label, note string, control func()) settingsRow {
 // settingsGroup is the grouped list used by every settings-like surface: a
 // quiet label above one rounded panel whose rows are split by inset
 // hairlines, as in macOS' own Settings.
-func settingsGroup(c *ui.Context, title string, rows ...settingsRow) {
+func settingsGroup(c *ui.Context, title string, rows ...settingsRow) ui.Element {
 	sp := Spacing()
 	tokens := designTokens(c.Theme().Dark)
-	ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
+	return ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
 		if title != "" {
 			groupLabel(c, title)
 		}

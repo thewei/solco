@@ -223,7 +223,7 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 	cfg := remoteConfigFrom(s.settings.Remote)
 	srv := s.remoteServer()
 
-	settingsGroup(c, "", row("Access", remoteModeNote(cfg.Mode), func() {
+	settingsGroup(c, "Phone access", row("Access", remoteModeNote(cfg.Mode), func() {
 		chosen := remoteModeIndex(cfg.Mode)
 		if segmentedControl(c, &chosen, remoteModeLabels...).Label("Access").Changed() {
 			mode := remoteModes[chosen]
@@ -350,7 +350,7 @@ func (s *Shell) remoteAdvanced(c *ui.Context, srv *remotehost.Server, cfg remote
 	}
 	open := s.remote.advancedOpen || forced
 	strip := ui.ButtonBase(c.Key("remote-advanced")).FillWidth().Padding(sp.S, sp.XS).Gap(sp.S).AlignItems(ui.Center).
-		Radius(Radius().Row).FocusRing(false).Label("Advanced")
+		Justify(ui.Start).Radius(Radius().Row).FocusRing(false).Label("Advanced")
 	if strip.Hovered() {
 		strip.Background(tokens.PanelHover)
 	}
@@ -402,7 +402,7 @@ func (s *Shell) remoteAdvanced(c *ui.Context, srv *remotehost.Server, cfg remote
 			}),
 		)
 	}
-	settingsGroup(c, "", rows...)
+	settingsGroup(c, "", rows...).Transition(disclosureMotion)
 }
 
 func remoteDeviceNote(d remotehost.Device, online bool) string {
