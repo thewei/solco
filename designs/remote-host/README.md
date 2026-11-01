@@ -165,3 +165,22 @@ internal/nativeui/
 ## 后续候选(用户 2026-10-31 提问:手机端能否操作 Herdr TUI?)
 
 可以,但不在 P1–P4:Herdr 的 TUI 本体(侧栏 + 多窗格界面,`herdr session attach <name>`)不是某个 `terminal_id`,`observe` 帮不上;要给手机一个「Herdr TUI」面,只能由 Host 在 PTY 里跑一个 Herdr TUI client 并转发(= 旧 Rust Host 的「共享 TUI session」模型)。代价:Herdr 的焦点/布局是全局的,手机在 TUI 里的操作会**改动 Mac 上同一 session 的焦点与 resize**,与「手机导航客户端本地」冲突,所以只能是一个明确标注「会影响 Mac」的高级入口,另起一期(P5)并重新评估(那时才需要 `creack/pty`)。日常的「看 + 打字进某个终端」已由 P1 覆盖,Agent 的结构化操作走 P2/P3 的 Chat。
+
+## 决议补记(2026-10-31,用户确认)
+
+- **手机的 Mac 列表**:一台 Mac = 一张卡(以证书指纹为 id),最多 8 台 × 5 个历史地址,只存 SecureStore;「地点」用连接方式标签(局域网 / Tailscale / 本机 USB,由地址段判断)+ 连接时的手机网络类型(Wi-Fi/蜂窝),不取定位;移除当前 Mac 后不静默切到别的。当前地址不通时,手机并行试该 Mac 的历史地址,最先通的成为当前地址(同证书同 token)。连接失败页按超时/拒绝/不可达/指纹不符/401 分类,显示地址、路线与手机网络。
+- **标题与活动时间对齐桌面**:Host 不解析会话文件,只转发桌面已算好的标题链(会话标题 → agent name(过滤 Solco 生成的 `kind-xxxxxx`)→ provider 显示名)与最近活动时间;只覆盖桌面当前显示的 Herdr session,其它 session 退回 provider 显示名。标题单独变化没有 Herdr 事件,由快照发布方调用 `Server.Poke` 让已打开的 events 套接字立即重算(150 ms 去抖,内容真变才推 `tree.changed`)。手机 Idle 分组不轮询 peek。
+- **跟进队列重试**:保留项(agent 未到 turn 边界)每 5 s 重试,最多 120 轮(≈10 min)后以可恢复失败收尾;桌面队列同样生效。
+- **LAN 候选**:排除 `bridge*`/`feth*`/`vmnet*`/`utun*` 等虚拟接口,`en*` 优先;候选标签带网卡名。已保存的地址若不再在候选里(网络变了或是 VM 网桥),Settings 的 Address 行出现警示并提供「Use <推荐地址>」一键切换。起因:手机曾被配对到 `bridge100`(192.168.139.3)而超时,真正可达的是 `en0`(192.168.5.59)。
+
+## 决议补记(2026-11-01,用户确认)
+
+- **接入自托管 alma-relay**:用户确认接入 2026-11-01 自托管的 [yetone/alma-relay](https://github.com/yetone/alma-relay)(https://relay.7200.online,Cloudflare Workers + Durable Objects 版)。桌面 Mac Host 作为 agent 拨出注册(`GET wss://<relay>/agent?th=<sha256hex(relaySecret)>`,首帧 `register`),手机经 relay 的 `ANY /c/<token>/…` 透传访问既有 `/api/v3`——**业务 API、请求、响应与 golden fixtures 零改动**;线协议逐字遵守 relay 的 `docs/PROTOCOL.md`(两端共用)。落地:`internal/remotehost/relay.go`(RelayConfig + relay-secret)+ `relayclient.go`(隧道客户端);Settings → Remote Access 增 Relay 区(开关、Relay Address、Registration Key、Relay Status),持久化进 `settings.Remote`。
+- **V1 明文中继边界(已接受的取舍)**:relay 可见请求头与正文(它本就是传输层);持有注册权者(`RELAY_REGISTRATION_KEY`/`RELAY_TOKEN_SECRET`)可重放某手机的 Bearer 而获得同一访问面。端到端加密(alma-relay 的 E2E 路线,`/__alma_e2e__` wopen-only)列为后续,另行决议。
+- **QR 增 r/rt**:`solco://pair?h=&p=&fp=&c=&n=` 在 relay 开启时追加 `&r=<relay 基址>&rt=<relaySecret>`;relaySecret 是本地生成的 256-bit 随机值、URL 安全字母表([A-Za-z0-9_-],43 字符),存 `<userDataDir>/RemoteHost/relay-secret`(0600,原子写),缺失/损坏即重建(与证书同语义),只意味着手机要重新配对;relay 侧只存 `sha256hex(relaySecret)`。
+- **WS query token**:经 relay 的 WS 没有头也没有子协议(alma-relay 的 `wopen` 只带 path+query),所以 `bearerToken` 增加第三通道 `?token=`(与 `/chat/files` 的搜索词同名——带头时头优先,无头时搜索词只会 401,不冲突);LAN 直连 WS 仍用 `['solco.bearer', token]` 子协议不变。日志绝不记 query。
+- **回环桥设计**:relayclient 启动一个仅绑 `127.0.0.1` 随机端口的内部 `http.Server`,`handler` 就是既有的 `Server.Handler()`(mux/guard/WS 全复用);`hreq` 剥 `/c/<secret>` 前缀打回环(响应头立即 `hres`、body 流式 `hchunk`)、`wopen` 对回环拨 ws 客户端到同路径(query 原样)。回环 listener 是实现细节,不进用户配置,**绝不产生非回环监听**;agent 套接字断开即取消全部在途请求与桥接。重连指数退避 1s→30s 带抖动、成功归零,close 4000(哈希被占)终态停止重拨。
+- **对外拨出的 TLS 群组(2026-11 网络实测,中国网络)**:GFW 会静默丢弃以 `X25519MLKEM768`(后量子)为首选 key share 的握手,Go 1.24+ 默认把它排在首位,直连 Cloudflare 边缘会超时;relayclient 的拨出 `*tls.Config` 固定 `CurvePreferences = [X25519, P-256]`(排除 ML-KEM),重连全程生效,并有单测钉住;回环桥不受影响。
+   - **router 24 MB body 上限已知**:Cloudflare 版 relay 对请求体限 24 MB(Durable Object WebSocket 消息 32 MiB 帽内),等待响应头 120 s;手机经 relay 上传大附件(单文件上限 32 MB)在 V1 会被 413 拒——直连 LAN/Tailscale 不受限。
+   - **agent 流寿命与自愈(2026-11 实测,本机经 TUN 代理)**:即便有 20s keepalive,agent WSS 约 4 分钟被中间层静默清除一次(与活动无关);keepalive 把死窗压到 ≤30s(Pong 超时→秒级重拨),死窗内手机的 hreq/WS 会被 relay 以 502/1012 `Desktop disconnected` 立即回绝,客户端重试即可。生产契约测试连续通过即含此重拨路径。
+- **生产验证与线径事实(2026-11-01 契约测试)**:新增可选真生产契约 `prodrelay_contract_test.go`(`SOLCO_RELAY_PROD_CONTRACT=1 RELAY_KEY=<注册钥匙> go test -run TestProdRelayContract ./internal/remotehost/`,不进 CI)——真拨出 → 经 relay 真配对(一次性码)→ bootstrap/tree 透传 → 坏 token 401 → Revoke 后 401,连续通过。两个硬事实:① **两版 relay 实现(index.mjs/worker.mjs)转发的 hreq/wopen path 都是剥掉 `/c/<code>` 的裸路径**(PROTOCOL.md 口径含糊),`loopbackURL` 同时接受裸路径与 `/c/<own-secret>/` 全前缀、拒绝异己前缀,假 relay 夹具已改为贴真实 wire;② **agent WSS 需要 keepalive**(20s Ping/10s Pong 超时,CF hibernation 协议层自动应答不唤醒 DO)——本机实测经代理/中间层时注册后数秒即被静默清流,hreq 投进半开套接字,keepalive 把静默死链变成秒级重拨。部署侧:Worker `alma-relay` 已设 `RELAY_REGISTRATION_KEY`,自定义域 `relay.7200.online`(CF 自动建 DNS),`/healthz`、官方 e2e(HTTP/SSE/WS 透传)、注册门禁(无钥匙 4003)均实测通过。注意 `newRelayHarness` 无条件把 `relayHooks.dial` 指到进程内假 relay,任何真生产拨号测试必须自行组装 Server。
