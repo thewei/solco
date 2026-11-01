@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 history/pi.go, models.go, live.go
- * [OUTPUT]: TestPiParseTranscript, TestPiLiveDecoderIncremental, TestParseAgentIDAliases
+ * [OUTPUT]: TestPiParseTranscript, TestPiSkillPromptCustomMessageIsTheUserTurn, TestPiLiveDecoderIncremental, TestParseAgentIDAliases
  * [POS]: history 包中 Pi / Oh My Pi 解析与 live 增量解码测试
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,6 +19,49 @@ const testPiJSONL = `{"type":"session","version":3,"id":"pi-sess-123","timestamp
 {"type":"message","timestamp":"2026-10-06T10:00:03.000Z","message":{"role":"toolResult","toolCallId":"call_1","toolName":"sh","content":[{"type":"text","text":"On branch main\nnothing to commit"}],"isError":false}}
 {"type":"message","timestamp":"2026-10-06T10:00:04.000Z","message":{"role":"assistant","model":"glm-5.3-flash","content":[{"type":"text","text":"Working tree is clean."}]}}
 `
+
+const testPiSkillPromptJSONL = `{"type":"session","version":3,"id":"pi-skill-1","timestamp":"2026-11-01T09:52:08.647Z","cwd":"/work/solco"}
+{"type":"custom_message","customType":"skill-prompt","content":"[IMPORTANT: User invoked the \"check\" skill; follow its instructions. Full skill below.]\n\n# Check: Review Before You Ship","display":true,"details":{"name":"check","path":"/home/u/.agents/skills/check/SKILL.md","args":"修复首条消息","prompt":"/skill:check 修复首条消息","lineCount":295},"attribution":"user","id":"2848442c","timestamp":"2026-11-01T09:53:19.399Z"}
+{"type":"custom_message","customType":"launch-completion","content":"Supervised process herdr-chatbug failed with exit code 1.","display":true,"details":{"daemons":[]},"attribution":"agent","id":"51334226","timestamp":"2026-11-01T10:44:26.652Z"}
+{"type":"message","id":"a1","timestamp":"2026-11-01T09:53:40.000Z","message":{"role":"assistant","content":[{"type":"text","text":"🥷 开始排查。"}]}}
+`
+
+// The 2026-11-01 report: a conversation opened with a skill invocation shows
+// no first message in Chat — everything after is the assistant's work. omp
+// records that prompt as a skill-prompt custom_message (attribution user,
+// typed text in details.prompt), the transcript's ONLY user row: the parser
+// must surface it as the user turn, and agent-attributed notices must not.
+func TestPiSkillPromptCustomMessageIsTheUserTurn(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "2026-11-01T09-52-08-647Z_pi-skill-1.jsonl")
+	if err := os.WriteFile(filePath, []byte(testPiSkillPromptJSONL), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	transcript, err := ParsePiTranscript(SessionFileRef{Agent: AgentOMP, NativeID: "pi-skill-1", FilePath: filePath})
+	if err != nil {
+		t.Fatalf("ParsePiTranscript failed: %v", err)
+	}
+	if len(transcript.Mainline) != 2 {
+		t.Fatalf("got %d rows, want 2 (user skill turn + assistant): %+v", len(transcript.Mainline), transcript.Mainline)
+	}
+	user := transcript.Mainline[0]
+	if user.Role != RoleUser || user.Text != "/skill:check 修复首条消息" {
+		t.Fatalf("first row = %s %.60q, want user /skill:check 修复首条消息", user.Role, user.Text)
+	}
+	if user.Timestamp == nil || *user.Timestamp != 1793526799399 {
+		t.Fatalf("user timestamp = %v", user.Timestamp)
+	}
+
+	// The live decoder shares the parser: the bound Chat tail must agree.
+	decoder, err := NewLiveDecoder(AgentOMP)
+	if err != nil {
+		t.Fatalf("decoder: %v", err)
+	}
+	sync := decoder.Append([]byte(testPiSkillPromptJSONL))
+	if len(sync.Messages) != 2 || sync.Messages[0].Role != RoleUser || sync.Messages[0].Text != user.Text {
+		t.Fatalf("live = %+v, want matching user row first", sync.Messages)
+	}
+}
 
 func TestPiParseTranscript(t *testing.T) {
 	tmpDir := t.TempDir()

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 history/models.go (TranscriptMessage, SessionFileRef), parse_utils.go (clipText, epochMS, toolInput, injectedUserContent)
- * [OUTPUT]: 对外提供 ParsePiTranscript, piParseState, newPiParseState；会话标题优先取 agent 自己写的 title/title_change 行（随工作改名，文件序最后一行生效，空标题不清除旧值），无标题行才回退首条消息启发式
+ * [OUTPUT]: ParsePiTranscript, piParseState, newPiParseState, feedPiCustomMessage；会话标题优先取 agent 自己写的 title/title_change 行（随工作改名，文件序最后一行生效，空标题不清除旧值），无标题行才回退首条消息启发式；custom_message 里 attribution 用户的行（skill-prompt 的 details.prompt）作为用户轮入线，agent 通知行不入时间线
  * [POS]: history 包中 Pi / Oh My Pi 会话历史与 live append log 解析器，与 claude.go / codex.go 兄弟对称
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -262,8 +262,43 @@ func (s *piParseState) feedPiLine(line string) {
 		}
 	case "model_change", "thinking_level_change", "custom":
 		// Known non-content events skipped silently.
+	case "custom_message":
+		s.feedPiCustomMessage(row)
 	default:
 		s.unknownLines++
+	}
+}
+
+// feedPiCustomMessage carries the custom_message rows that hold visible
+// conversation content. A skill invocation — the TUI's and the composer's
+// `/skill:name …` form — is written as skill-prompt with the typed prompt in
+// details.prompt, and it is the transcript's ONLY record of that user turn:
+// without it Chat opens on the assistant's work and the user's first message
+// is missing (2026-11-01 report). Other custom messages (launch-completion,
+// async-result, …) are agent-attributed runtime notices, not turns, and stay
+// out of the timeline.
+func (s *piParseState) feedPiCustomMessage(row map[string]any) {
+	customType, _ := row["customType"].(string)
+	attribution, _ := row["attribution"].(string)
+	if customType != "skill-prompt" && attribution != "user" {
+		return
+	}
+	text := ""
+	if details, ok := row["details"].(map[string]any); ok {
+		text, _ = details["prompt"].(string)
+		if text == "" {
+			text, _ = details["args"].(string)
+		}
+	}
+	if text == "" {
+		text, _ = row["content"].(string)
+	}
+	timestamp := epochMS(row["timestamp"])
+	if timestamp > s.lastTS {
+		s.lastTS = timestamp
+	}
+	if strings.TrimSpace(text) != "" {
+		s.pushUser(text, timestamp)
 	}
 }
 

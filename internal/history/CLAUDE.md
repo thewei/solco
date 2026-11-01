@@ -24,7 +24,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `subagents_codex.go` / `subagents_omp.go`：Codex 子 rollout（`thread_spawn`↔`spawn_agent`）与 omp 子会话（`parentSession`↔`task`）的只读识别与缓存
 - `subagents_read.go`：`ReadSubagent`/`SubagentDetail`（抽屉与卡片摘要、handback 结果、FirstTs）
 - `usage_daily.go`：Quota（原 Usage）页的 30 天活动条数据——按本地日汇总 Claude Code / Codex 会话文件里的 token（每个文件按 (mtime,size) 只解析一次，缓存只在内存；不落盘、不记录历史、日期补零到今天）。
-- `pi.go`：Pi / Oh My Pi 会话解析器；会话标题优先取 agent 自己写的 `title`/`title_change` 行（文件序最后一行生效，空标题不清除旧值；omp 改名会话即此），无标题行才回退首条消息启发式；合并后的 assistant 消息带保序 `Parts`（text/thinking/tool 索引 + 逐块时间戳，使回复与工具调用不被拆成两个桶），工具结果恒设 `Output`（空输出也算已完成，nil=仍在跑）。`TranscriptMessage.Parts` 为空表示顺序即 Text→Thinking→ToolCalls（Claude/Codex）。
+- `pi.go`：Pi / Oh My Pi 会话解析器；会话标题优先取 agent 自己写的 `title`/`title_change` 行（文件序最后一行生效，空标题不清除旧值；omp 改名会话即此），无标题行才回退首条消息启发式；`custom_message` 里 attribution 用户的行作为用户轮入线——`skill-prompt`（`/skill:name …` 技能调用，用户原话在 `details.prompt`，回退 `args`/`content`）是那次用户输入在转录里的唯一记录，2026-11-01 前被整行丢弃致 Chat 首条消息缺失；agent 归属的通知行（launch-completion、async-result…）不入时间线；合并后的 assistant 消息带保序 `Parts`（text/thinking/tool 索引 + 逐块时间戳，使回复与工具调用不被拆成两个桶），工具结果恒设 `Output`（空输出也算已完成，nil=仍在跑）。`TranscriptMessage.Parts` 为空表示顺序即 Text→Thinking→ToolCalls（Claude/Codex）。
 - `live.go`：Provider 会话的只读增量 decoder / 追尾接口（含 `ResolveLiveSource` 的 agy/Cursor 定位、`NewLiveSource` 选源、`Replaced` 接缝：源重建而非追加时解码器整体重读）。
 - `agy.go`：Antigravity CLI 解析器与列表——只读 `brain/<id>/.system_generated/logs/transcript_full.jsonl`（PLANNER_RESPONSE 的 thinking/content/tool_calls 与随后的 GENERIC 结果步骤按先进先出配对，无 call id；CHECKPOINT=压缩，SYSTEM_MESSAGE=meta，ERROR=失败调用；USER_REQUEST 取出原话、`Model Selection` 提示取模型）；标题与工作区来自同目录旁只读的 `conversation_summaries.db`，有 parent 的子代理会话不列出；CLI 与 IDE 两个 brain 根。
 - `cursor.go`：Cursor Agent 解析器与列表——解析 `CursorStoreSource` 合成的 JSONL 流（system 不显示、`<user_query>` 取出、`isSummary`=压缩、`highLevelToolCallResult.isError` 标错，相邻 assistant 合并）；`summarizeCursorTranscript` 是列表行的轻量读法（用户轮读全文、assistant 轮用占位、不读工具输出），`meta.json` 给标题/cwd/时间；`cursorListRefs` 的 mtime/size 含 WAL；用户消息头 `<timestamp>…(UTC+8)</timestamp>` 经 `cursorMessageTime` 成为用户行真实时间与会话起止（其余行仍无时间）。
@@ -37,7 +37,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `live_parity_test.go`：live 增量解码（一次灌入 / 逐行追加）的投影必须与整文件解析的 Mainline 逐字段一致——Chat 的三条入口（新会话 / 已有 Agent 窗格 live tail / 历史记录）共用同一份转录的守卫。
 - `history_test.go`：跨 Provider 解析与历史模型语义。
 - `live_test.go`：增量读取/解码的边界行为。
-- `pi_test.go`：Pi Provider 解析和 live 增量回归；`TestPiTitleRowWinsOverFirstMessage` 钉 agent 自生成标题优先（含空 title 行不清除、title 行不计 unknown）。
+- `pi_test.go`：Pi Provider 解析和 live 增量回归；`TestPiTitleRowWinsOverFirstMessage` 钉 agent 自生成标题优先（含空 title 行不清除、title 行不计 unknown）；`TestPiSkillPromptCustomMessageIsTheUserTurn` 钉 skill-prompt 行=用户首条消息（批量=live，agent 通知行不入线）。
 - `scanner_test.go`：来源扫描、去重与索引协调；同 mtime 大小变化仍重读；每 100 个来源一批的上报契约；SummarizeSource 读回一行摘要。
 - `service_test.go`：HistoryService 列表/读取/扫描契约；Open 始终反映原始文件的当前内容（追加后无需重扫）；Forget 后所有读取面一致。
 - `service_filter_test.go`：Provider/Project 提前过滤、完整 Provider 集合和各 Provider 计数（排除归档）的回归；Project 范围含子文件夹且不误收同前缀兄弟目录（列表/搜索/计数同一规则）与 `ProjectContains` 表驱动。
