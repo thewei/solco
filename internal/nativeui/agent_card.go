@@ -240,7 +240,7 @@ func subagentFoldKey(card agent.AgentCardModel) string {
 	return agentFoldKey("sub", id)
 }
 
-// toggleAgentFold flips one sidebar Agents fold; open is the default.
+// toggleAgentFold flips one Workspace group's fold; open is the default.
 func (s *Shell) toggleAgentFold(key string) {
 	if s.foldedAgents == nil {
 		s.foldedAgents = map[string]bool{}
@@ -252,12 +252,50 @@ func (s *Shell) toggleAgentFold(key string) {
 	}
 }
 
+// subagentAutoFoldAfter is how long a parent's sub-agents must have been all
+// done before their rows fold on their own.
+const subagentAutoFoldAfter = 10 * time.Minute
+
+// subagentsFolded is whether a parent's nested rows are folded: the user's
+// own choice when they made one (true = folded, false = opened on purpose,
+// which also overrides the automatic fold), otherwise folded once every
+// sub-agent has been done for subagentAutoFoldAfter.
+func (s *Shell) subagentsFolded(card agent.AgentCardModel, now time.Time) bool {
+	if folded, chosen := s.foldedAgents[subagentFoldKey(card)]; chosen {
+		return folded
+	}
+	var newest time.Time
+	for _, sub := range card.Subagents {
+		if sub.Active(now) {
+			return false
+		}
+		newest = laterOf(newest, sub.UpdatedAt)
+	}
+	return len(card.Subagents) > 0 && !newest.IsZero() && now.Sub(newest) >= subagentAutoFoldAfter
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
+}
+
+// toggleSubagentFold flips a parent's sub-agent rows from whatever they show
+// now, recording the choice.
+func (s *Shell) toggleSubagentFold(card agent.AgentCardModel) {
+	if s.foldedAgents == nil {
+		s.foldedAgents = map[string]bool{}
+	}
+	s.foldedAgents[subagentFoldKey(card)] = !s.subagentsFolded(card, time.Now())
+}
+
 // nestedSubagents are the rows nested under a card (sidebar and Header
 // popover): the newest few, running or not (2026-11-01 — they used to appear
 // only while one was still writing, then fold into a ⤷N chip), unless the
 // user folded this parent.
 func (s *Shell) nestedSubagents(card agent.AgentCardModel) []history.Subagent {
-	if s.foldedAgents[subagentFoldKey(card)] {
+	if s.subagentsFolded(card, time.Now()) {
 		return nil
 	}
 	subs := card.Subagents
@@ -290,20 +328,20 @@ func (s *Shell) setAgentFolds(groups []agentGroup, kind string, fold bool) {
 	if s.foldedAgents == nil {
 		s.foldedAgents = map[string]bool{}
 	}
-	set := func(key string) {
-		if fold {
-			s.foldedAgents[key] = true
-		} else {
-			delete(s.foldedAgents, key)
-		}
-	}
 	for _, group := range groups {
 		if kind == "group" && group.Name != "" {
-			set(agentFoldKey("group", group.Key))
+			key := agentFoldKey("group", group.Key)
+			if fold {
+				s.foldedAgents[key] = true
+			} else {
+				delete(s.foldedAgents, key)
+			}
 		}
 		for _, card := range group.Cards {
 			if kind == "sub" && len(card.Subagents) > 0 {
-				set(subagentFoldKey(card))
+				// Unfolding is a choice too: it keeps a long-finished
+				// parent open against the automatic fold.
+				s.foldedAgents[subagentFoldKey(card)] = fold
 			}
 		}
 	}
@@ -312,7 +350,7 @@ func (s *Shell) setAgentFolds(groups []agentGroup, kind string, fold bool) {
 // earlierSubagents is how many of a card's sub-agents the nested rows leave
 // out (they keep the newest subagentRowsShown); 0 while the parent is folded.
 func (s *Shell) earlierSubagents(card agent.AgentCardModel) int {
-	if s.foldedAgents[subagentFoldKey(card)] {
+	if s.subagentsFolded(card, time.Now()) {
 		return 0
 	}
 	return max(len(card.Subagents)-subagentRowsShown, 0)
@@ -369,7 +407,7 @@ func (s *Shell) nestedSubagentRows(c *ui.Context, card agent.AgentCardModel, nav
 func (s *Shell) subagentToggle(c *ui.Context, card agent.AgentCardModel) {
 	t := c.Theme()
 	key := subagentFoldKey(card)
-	folded := s.foldedAgents[key]
+	folded := s.subagentsFolded(card, time.Now())
 	n, running := len(card.Subagents), runningSubagents(card, time.Now())
 	tip := pluralUnits(n, "sub-agent")
 	if running > 0 {
@@ -399,7 +437,7 @@ func (s *Shell) subagentToggle(c *ui.Context, card agent.AgentCardModel) {
 		})
 	})
 	if btn.Clicked() {
-		s.toggleAgentFold(key)
+		s.toggleSubagentFold(card)
 		s.fitQuickPanel() // the Header popover's height follows its rows
 	}
 }

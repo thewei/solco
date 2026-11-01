@@ -211,7 +211,7 @@ func TestQuickPanelSubagentRowsFollowTheFold(t *testing.T) {
 	if got := s.quickPanelSubagentRows(entries); got != 2 {
 		t.Fatalf("finished sub-agents must count as rows; got %d", got)
 	}
-	s.toggleAgentFold(subagentFoldKey(entries[0].Card))
+	s.toggleSubagentFold(entries[0].Card)
 	if got := s.quickPanelSubagentRows(entries); got != 0 {
 		t.Fatalf("a folded parent has no rows; got %d", got)
 	}
@@ -308,7 +308,7 @@ func TestGroupIndicatorCountsRunningSubagents(t *testing.T) {
 func TestSidebarShowsAnEarlierRowWhenSubagentsAreCut(t *testing.T) {
 	var subs []history.Subagent
 	for i := 0; i < subagentRowsShown+2; i++ {
-		subs = append(subs, history.Subagent{ID: itoa(i), Type: "T" + itoa(i), UpdatedAt: time.Now().Add(-time.Hour)})
+		subs = append(subs, history.Subagent{ID: itoa(i), Type: "T" + itoa(i), UpdatedAt: time.Now().Add(-5 * time.Minute)})
 	}
 	s := subagentSidebarShell(subs)
 	tester := ui.NewTester(s.View, 1200, 800)
@@ -339,8 +339,13 @@ func TestSetAgentFoldsFoldsEverything(t *testing.T) {
 	}
 	s.setAgentFolds(groups, "group", false)
 	s.setAgentFolds(groups, "sub", false)
-	if len(s.foldedAgents) != 0 {
-		t.Fatalf("unfold all must clear every fold: %v", s.foldedAgents)
+	for key, folded := range s.foldedAgents {
+		if folded {
+			t.Fatalf("unfold all must leave nothing folded: %s in %v", key, s.foldedAgents)
+		}
+	}
+	if len(s.persistableAgentFolds()) != 0 {
+		t.Fatalf("an explicit open is not worth saving: %v", s.persistableAgentFolds())
 	}
 }
 
@@ -349,7 +354,7 @@ func TestSetAgentFoldsFoldsEverything(t *testing.T) {
 // parent and on to the Workspace label, whose ← folds the group.
 func TestSidebarAgentsListIsKeyboardDriven(t *testing.T) {
 	s := subagentSidebarShell([]history.Subagent{
-		{ID: "a", Type: "Explore", Description: "scan", UpdatedAt: time.Now().Add(-time.Hour)},
+		{ID: "a", Type: "Explore", Description: "scan", UpdatedAt: time.Now().Add(-5 * time.Minute)},
 	})
 	tester := ui.NewTester(s.View, 1200, 800)
 	tester.SetPreferences(ui.Preferences{ReduceMotion: true})
@@ -392,5 +397,40 @@ func TestPersistableAgentFoldsDropsWhatIsGone(t *testing.T) {
 	got := s.persistableAgentFolds()
 	if len(got) != 2 || got[0] != "group:w1" || got[1] != "sub:term-1" {
 		t.Fatalf("want only the live folds, got %v", got)
+	}
+}
+
+// A parent whose sub-agents have all been done for a while folds on its own;
+// opening it on purpose keeps it open, and a running sub-agent never folds.
+func TestSubagentsFoldThemselvesWhenLongDone(t *testing.T) {
+	now := time.Now()
+	card := func(age time.Duration) agent.AgentCardModel {
+		return agent.AgentCardModel{Key: agent.AgentKey{TerminalID: "t1"}, Subagents: []history.Subagent{
+			{ID: "a", UpdatedAt: now.Add(-age)}, {ID: "b", UpdatedAt: now.Add(-age - time.Hour)},
+		}}
+	}
+	s := NewShell()
+	if s.subagentsFolded(card(9*time.Minute), now) {
+		t.Fatal("done for 9 minutes is not long enough")
+	}
+	if !s.subagentsFolded(card(11*time.Minute), now) {
+		t.Fatal("done for 11 minutes must fold on its own")
+	}
+	busy := card(11 * time.Minute)
+	busy.Subagents[0].UpdatedAt = now.Add(-time.Second)
+	if s.subagentsFolded(busy, now) {
+		t.Fatal("a running sub-agent must keep the rows open")
+	}
+	if s.subagentsFolded(agent.AgentCardModel{Key: agent.AgentKey{TerminalID: "t1"}}, now) {
+		t.Fatal("no sub-agents, nothing to fold")
+	}
+	old := card(11 * time.Minute)
+	s.toggleSubagentFold(old) // folded by default, so this opens it on purpose
+	if s.subagentsFolded(old, now) {
+		t.Fatal("the user's open must beat the automatic fold")
+	}
+	s.toggleSubagentFold(old)
+	if !s.subagentsFolded(old, now) {
+		t.Fatal("and fold again on the next toggle")
 	}
 }

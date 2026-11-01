@@ -681,8 +681,8 @@ func (s *Shell) agentItems(c *ui.Context) {
 				selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
 				row := s.agentCardRow(c, card, selected, dupProjects, group.Name != "", group.Name != "" && groupRoot != "" && s.agentGitRoot(card) == groupRoot, nil)
 				subKey := subagentFoldKey(card)
-				if s.nav.agents.row(c, row, navRow{Key: "agent:" + strings.TrimPrefix(subKey, "sub:"), Folder: len(card.Subagents) > 0, Expanded: !s.foldedAgents[subKey]}) {
-					s.toggleAgentFold(subKey)
+				if s.nav.agents.row(c, row, navRow{Key: "agent:" + strings.TrimPrefix(subKey, "sub:"), Folder: len(card.Subagents) > 0, Expanded: !s.subagentsFolded(card, time.Now())}) {
+					s.toggleSubagentFold(card)
 				}
 				row.FocusRing(false)
 				if s.nav.agents.showsCursor(row) {
