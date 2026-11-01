@@ -144,6 +144,15 @@ func scrollButton(c *ui.Context, k *gorexColors, glyph *ui.SVG, label string, ca
 	}
 }
 
+// tabChipMotion moves the strip as it changes: a new Tab opens its width in, a
+// closed one folds away, the chips beside slide, and the chosen chip's resize
+// and face ease instead of jumping.
+var tabChipMotion = ui.ElementTransition{
+	Duration: 160 * time.Millisecond,
+	Enter:    &ui.Motion{Collapse: true},
+	Exit:     &ui.Motion{Collapse: true},
+}
+
 // tabChip is one Tab: brand mark, title, the pane tally when it is split, the
 // shared state slot, and a close × that shows under the pointer or on the
 // selected chip. The selected chip keeps the neutral chip face.
@@ -160,7 +169,7 @@ func (s *Shell) tabChip(c *ui.Context, k *gorexColors, tab titlebarTab, reveal b
 		Radius(Radius().Row).Padding(0, Spacing().S, 0, Spacing().M).Gap(Spacing().S).
 		AlignItems(ui.Center).Label(tab.Label)
 	gorexToggleFace(b, k, tab.Selected)
-	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+	b.Transition(tabChipMotion)
 	ink := t.TextMuted
 	if tab.Selected || b.Hovered() {
 		ink = t.Text

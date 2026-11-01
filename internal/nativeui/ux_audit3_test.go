@@ -187,6 +187,8 @@ func TestSelectedTabEndsWholeInView(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			tester.Frame()
 		}
+		tester.Advance(2 * tabChipMotion.Duration) // the chips have finished easing
+		tester.Frame()
 		closeBtn, ok := tester.Find("Close Tab")
 		right, _ := tester.Find("Scroll Tabs Right")
 		if !ok || closeBtn.W == 0 || closeBtn.X+closeBtn.W > right.X {

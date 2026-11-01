@@ -77,3 +77,24 @@ func TestTabBarScrollsToTheSelectedTab(t *testing.T) {
 		t.Fatalf("the selected last tab must be scrolled into view; X=%v", s.tabBarScroll.X)
 	}
 }
+
+// A Tab opened later grows into its width instead of appearing whole.
+func TestNewTabChipGrowsIn(t *testing.T) {
+	s := tabBarShell(3, "t1")
+	tester := ui.NewTester(s.View, 1100, 800)
+	tester.Frame()
+	tester.Advance(2 * tabChipMotion.Duration)
+	s.projection.Tabs = append(s.projection.Tabs, herdr.Tab{ID: "t4", ProjectID: "w1", Label: "Fresh tab", PaneCount: 1})
+	s.projection.Panes = append(s.projection.Panes, herdr.Pane{ID: "pt4", ProjectID: "w1", TabID: "t4", Label: "pane t4"})
+	s.projection.Projects[0].TabCount = 4
+	tester.Frame()
+	early, _ := tester.Find("Fresh tab")
+	tester.Advance(2 * tabChipMotion.Duration)
+	settled, ok := tester.Find("Fresh tab")
+	if !ok || settled.W <= 0 {
+		t.Fatalf("the new chip never reached its width: %+v ok=%v", settled, ok)
+	}
+	if early.W >= settled.W {
+		t.Fatalf("the new chip appeared whole (%.1f wide at once, %.1f settled)", early.W, settled.W)
+	}
+}
