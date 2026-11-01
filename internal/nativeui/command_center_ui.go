@@ -311,7 +311,7 @@ func (s *Shell) commandCenterOverlay(c *ui.Context) {
 			results = results[:commandCenterMaxShown]
 		}
 		if total == 0 {
-			ui.Text(c, "No matching commands").FontSize(Typography().Body).TextColor(c.Theme().TextMuted)
+			ui.Text(c, "No matching commands").FontSize(Typography().Body).TextColor(c.Theme().TextMuted).FillWidth().TextAlign(ui.Center).Padding(sp.XL, sp.L)
 			return
 		}
 		// The grouped list scrolls past the cap; the selection reveals
