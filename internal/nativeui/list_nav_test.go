@@ -51,6 +51,7 @@ func navFilesShell(t *testing.T) (*Shell, *ui.Tester, string) {
 	s := rightPanelTestShell(t, root)
 	s.showViewFiles()
 	tester := ui.NewTester(s.View, 1200, 800)
+	tester.SetPreferences(ui.Preferences{ReduceMotion: true}) // rows land at once (treeRowMotion)
 	settleFrames(tester, 4)
 	return s, tester, root
 }

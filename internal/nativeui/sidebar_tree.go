@@ -118,6 +118,9 @@ type sidebarTreeSpec struct {
 	// TrailingOnDemand draws Trailing only while the row is hovered or
 	// selected, so the title keeps the whole width the rest of the time.
 	TrailingOnDemand bool
+	// Motion lets rows grow in and fade out as a folder opens and closes
+	// (Files tree); rows that appear with their whole parent never animate.
+	Motion bool
 	// Menu is the row's context menu.
 	Menu func(*ui.Menu)
 	// Nav is the list's keyboard model; nil leaves the row to the mouse.
@@ -169,7 +172,11 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 	case row.Hovered():
 		row.Background(t.SurfaceHover)
 	}
-	row.Transition(rowFade)
+	if spec.Motion {
+		row.Transition(treeRowMotion)
+	} else {
+		row.Transition(rowFade)
+	}
 	if spec.Menu != nil {
 		row.ContextMenu(spec.Menu)
 	}

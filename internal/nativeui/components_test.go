@@ -126,3 +126,17 @@ func TestServiceSlotIsNotAnAgentDot(t *testing.T) {
 		t.Fatal("a pane's own Agent state outranks its service and keeps the dot shapes")
 	}
 }
+
+func TestSplitFileExt(t *testing.T) {
+	for name, want := range map[string][2]string{
+		"main.go":             {"main", ".go"},
+		"bootstrap-x.json":    {"bootstrap-x", ".json"},
+		".env":                {".env", ""},
+		"Makefile":            {"Makefile", ""},
+		"a.verylongextension": {"a.verylongextension", ""},
+	} {
+		if stem, ext := splitFileExt(name); stem != want[0] || ext != want[1] {
+			t.Errorf("splitFileExt(%q) = %q, %q; want %q, %q", name, stem, ext, want[0], want[1])
+		}
+	}
+}

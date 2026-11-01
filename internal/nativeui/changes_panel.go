@@ -131,7 +131,7 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 		ui.Box(c).Width(treeTitleGap).Shrink(0).PassThrough()
 		// Full path on hover (F113): the 250px pane truncates names so
 		// service_index.go and service_index_test.go read as the same row.
-		name := tipped(c, ui.Text(c, node.Name).FontSize(Typography().Body).SingleLine().Grow(1).Shrink(1).MinWidth(0), node.Path)
+		name := fileNameLabel(c, node.Name, node.Path)
 		if viewed && !(selected && focused) {
 			name.TextColor(t.TextMuted)
 		}

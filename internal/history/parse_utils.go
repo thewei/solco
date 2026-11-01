@@ -136,7 +136,15 @@ func cleanTitleCandidate(raw string) string {
 		out.WriteByte(' ')
 		index += closeIndex + 1
 	}
-	compact := strings.Join(strings.Fields(out.String()), " ")
+	words := strings.Fields(out.String())
+	kept := words[:0]
+	for _, word := range words {
+		// Markdown heading marks ("#", "##") flattened into one line read as noise.
+		if strings.Trim(word, "#") != "" {
+			kept = append(kept, word)
+		}
+	}
+	compact := strings.Join(kept, " ")
 	runes := []rune(compact)
 	if len(runes) > MaxTitle {
 		return string(runes[:MaxTitle]) + "…"

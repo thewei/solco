@@ -264,8 +264,9 @@ func (s *Shell) filesPreviewBar(c *ui.Context, selected string) {
 	typ := Typography()
 	sp := Spacing()
 	// The segmented choice sets the bar's height; every file keeps it, so
-	// the code never jumps between a Markdown file and the rest.
-	ui.Row(c).FillWidth().MinHeight(Controls().RegularHeight+2*sp.S).Padding(sp.S, sp.L).Gap(sp.M).AlignItems(ui.Center).
+	// the code never jumps between a Markdown file and the rest. Its side
+	// padding is the title bar's (XL), so the name sits under the page title.
+	ui.Row(c).FillWidth().MinHeight(Controls().RegularHeight+2*sp.S).Padding(sp.S, sp.XL).Gap(sp.M).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(designTokens(t.Dark).BorderSubtle).Children(func() {
 		tipped(c, ui.Text(c, filepath.Base(selected)).FontSize(typ.Body).FontWeight(WeightSemibold).
 			Grow(1).SingleLine(), selected)

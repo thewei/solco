@@ -65,3 +65,9 @@ func TestTaskPreambleIsSkippedInTitle(t *testing.T) {
 		t.Fatalf("non-preamble text changed: %q", got)
 	}
 }
+
+func TestTitleDropsHeadingMarks(t *testing.T) {
+	if got := cleanTitleCandidate("fix C# parser\n\n# Change\n## 1. x"); got != "fix C# parser Change 1. x" {
+		t.Fatalf("title = %q", got)
+	}
+}

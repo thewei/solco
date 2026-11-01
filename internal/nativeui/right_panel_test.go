@@ -50,6 +50,7 @@ func TestFilesHeaderOpensDedicatedRouteAndInlinePreview(t *testing.T) {
 		t.Fatal("Files entry must open route with left navigation visible")
 	}
 	tester := ui.NewTester(s.View, 1200, 800)
+	tester.SetPreferences(ui.Preferences{ReduceMotion: true}) // tree rows land at once
 	tester.Frame() // headless directory read fills the cache for the next frame
 	for _, want := range []string{"Files view", "README.md", "docs"} {
 		if !tester.HasText(want) {
@@ -118,6 +119,7 @@ func TestFilesSelectionClearsOnTabRootChange(t *testing.T) {
 	s.reconcileLocalSelection(s.projection)
 	s.showViewFiles()
 	tester := ui.NewTester(s.View, 1200, 800)
+	tester.SetPreferences(ui.Preferences{ReduceMotion: true}) // tree rows land at once
 	tester.Frame()
 	private := filepath.Join(root1, "private.txt")
 	if err := tester.Click("private.txt"); err != nil {

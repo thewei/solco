@@ -19,6 +19,43 @@ import (
 // rowTint carries it (colors only: no position or size motion).
 var rowFade = ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond}
 
+// splitFileExt cuts a file name before its extension (".json", ".tsx") so a
+// long name can give up the middle of its stem and keep the extension; names
+// without one (and dotfiles) come back whole.
+func splitFileExt(name string) (stem, ext string) {
+	dot := strings.LastIndexByte(name, '.')
+	if dot <= 0 || len(name)-dot > 8 {
+		return name, ""
+	}
+	return name[:dot], name[dot:]
+}
+
+// fileNameLabel is a file row's name: when the row is too narrow the stem
+// ends in an ellipsis and the extension stays, so session-index.json and
+// session-index_test.json no longer both read as "session-in…".
+func fileNameLabel(c *ui.Context, name, tooltip string) ui.Element {
+	size := Typography().Body
+	stem, ext := splitFileExt(name)
+	if ext == "" {
+		return tipped(c, ui.Text(c, name).FontSize(size).SingleLine().Grow(1).Shrink(1).MinWidth(0), tooltip)
+	}
+	row := ui.Row(c).Grow(1).Shrink(1).MinWidth(0).Label(name) // one name for screen readers and lookups
+	row.Children(func() {
+		ui.Text(c, stem).FontSize(size).SingleLine().Shrink(1).MinWidth(0)
+		ui.Text(c, ext).FontSize(size).SingleLine().Shrink(0)
+	})
+	return tipped(c, row, tooltip)
+}
+
+// treeRowMotion is rowFade plus the folder motion: a row appearing under an
+// already-built list grows in, and one that goes fades out.
+var treeRowMotion = ui.ElementTransition{
+	Colors:   true,
+	Duration: 140 * time.Millisecond,
+	Enter:    &ui.Motion{Collapse: true},
+	Exit:     &ui.Motion{},
+}
+
 // rowTint is the shared background policy for selectable rows: selection
 // outranks hover, and an untinted row reports ok=false so callers keep the
 // surface transparent.

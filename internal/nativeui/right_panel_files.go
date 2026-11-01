@@ -232,7 +232,7 @@ func (s *Shell) renderDirectoryLevel(c *ui.Context, dir string, level int) {
 			Current: !isDir && s.rightPanel.selectedFilePath == e.Path, Dim: e.IsSymlink,
 			// The size shows on the hovered row and the open file (Selected
 			// wears the same face as Current), so names keep the full width.
-			Selected: !isDir && s.rightPanel.selectedFilePath == e.Path, TrailingOnDemand: true,
+			Selected: !isDir && s.rightPanel.selectedFilePath == e.Path, TrailingOnDemand: true, Motion: true,
 			Nav:  &s.nav.files,
 			Menu: func(m *ui.Menu) { s.filesRowMenu(m, e) },
 			Trailing: func() {
