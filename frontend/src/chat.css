@@ -1731,6 +1731,21 @@ html[data-host="phone"] .queueCard .qcEdit {
   background: var(--tint);
 }
 
+/* The phone has no room for icon, pill, sentence and button in one row: the
+   sentence took a squeezed middle column and broke into ragged lines. Stack
+   instead — label row, full-width sentence, trailing button sized for a
+   finger now that it sits alone. */
+html[data-host="phone"] .ask.blocked .ah {
+  flex-wrap: wrap;
+}
+html[data-host="phone"] .ask.blocked .prompt.inline {
+  flex-basis: 100%;
+}
+html[data-host="phone"] .ask.blocked .goterm {
+  margin-left: auto;
+  padding: 6px 14px;
+}
+
 .ask .options {
   display: flex;
   flex-direction: column;
