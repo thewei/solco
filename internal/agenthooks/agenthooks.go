@@ -328,6 +328,30 @@ func (m *Manager) Install(id ProviderID) (Diagnosis, error) {
 	return m.diagnoseProvider(id), nil
 }
 
+// UpgradeScripts refreshes the hook scripts Solco itself installed earlier
+// (owned marker, version below the current one) and nothing else: no provider
+// config, hooks.json or Codex trust record is touched, a missing or foreign
+// script is left alone, so the user's choices and approvals stay theirs. It
+// returns the providers whose script it replaced.
+func (m *Manager) UpgradeScripts() []ProviderID {
+	var upgraded []ProviderID
+	for _, id := range []ProviderID{ProviderClaude, ProviderAntigravity, ProviderCursor, ProviderCodex} {
+		if _, ok := m.spec(id); !ok {
+			continue
+		}
+		owned, version, err := readOwnedScript(m.scriptPath(id))
+		if err != nil || owned != oursOwned || version == 0 || version >= hookScriptVersion {
+			continue
+		}
+		if err := m.writeScript(id); err != nil {
+			slog.Warn("agent hook script upgrade failed", "provider", string(id), "error", err)
+			continue
+		}
+		upgraded = append(upgraded, id)
+	}
+	return upgraded
+}
+
 // writeScript installs the universal hook script at the provider's path.
 // Foreign files at the same path are never touched.
 func (m *Manager) writeScript(id ProviderID) error {

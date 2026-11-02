@@ -767,3 +767,50 @@ func TestApplyLiveAntigravityHook(t *testing.T) {
 		t.Fatalf("Install Antigravity failed: %v", err)
 	}
 }
+
+// TestUpgradeScriptsReplacesOnlyOlderScriptsOfOurs pins the silent upgrade:
+// an older script of ours is rewritten in place, while a current one, a
+// missing one and a foreign file are left exactly as they are, and the
+// provider's own config is never touched.
+func TestUpgradeScriptsReplacesOnlyOlderScriptsOfOurs(t *testing.T) {
+	home := newTestHome(t)
+	m := NewManagerWithHome(home)
+	if _, err := m.Install(ProviderClaude); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Install(ProviderCursor); err != nil {
+		t.Fatal(err)
+	}
+	old := strings.Replace(hookScriptTemplate, "SOLCO_HOOK_VERSION="+strconv.Itoa(hookScriptVersion), "SOLCO_HOOK_VERSION=1", 1)
+	if old == hookScriptTemplate {
+		t.Fatal("template carries no version marker to age")
+	}
+	if err := os.WriteFile(m.scriptPath(ProviderClaude), []byte(old), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	foreign := []byte("#!/bin/sh\necho mine\n")
+	if err := os.WriteFile(m.scriptPath(ProviderAntigravity), foreign, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cursorConfig, err := os.ReadFile(m.cursorHooksPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := m.UpgradeScripts()
+	if len(got) != 1 || got[0] != ProviderClaude {
+		t.Fatalf("upgraded = %v, want only claude", got)
+	}
+	if _, version, _ := readOwnedScript(m.scriptPath(ProviderClaude)); version != hookScriptVersion {
+		t.Fatalf("claude script version = %d, want %d", version, hookScriptVersion)
+	}
+	if after, _ := os.ReadFile(m.scriptPath(ProviderAntigravity)); string(after) != string(foreign) {
+		t.Fatal("a foreign script was rewritten")
+	}
+	if after, _ := os.ReadFile(m.cursorHooksPath()); string(after) != string(cursorConfig) {
+		t.Fatal("the provider's own config changed")
+	}
+	if again := m.UpgradeScripts(); len(again) != 0 {
+		t.Fatalf("second pass upgraded %v", again)
+	}
+}
