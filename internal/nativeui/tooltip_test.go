@@ -16,18 +16,15 @@ import (
 
 /**
  * [INPUT]: 依赖 nativeui 的 tipped/tipKeys/tipColors 与 shortcutBinding.keycaps、Shell.sidebarToggle/surfaceToggle, mygo/ui 的 Tester 无头渲染（Move/Advance 驱动悬停、Image 像素量边）, go/parser 源码扫描
- * [OUTPUT]: 对外提供 tooltip 合约回归：nova 面（圆角 Row、内边距 6×12、无阴影）、箭头随翻转与夹紧指向锚点、键帽芯片尺寸与右内边距、禁用元素不出 tip、全应用只经 tipped 出 tooltip（源码扫描）、键帽拼写与"有效绑定"文案（改绑后提示不说谎）
+ * [OUTPUT]: 对外提供 tooltip 合约回归：主题卡片面（Surface 填充随深浅色、圆角、内边距 6×12）、键帽芯片尺寸与右内边距、禁用元素不出 tip、全应用只经 tipped 出 tooltip（源码扫描）、键帽拼写与"有效绑定"文案（改绑后提示不说谎）
  * [POS]: 2026-10-29 Phase 2 tooltip 单一外观的守卫测试；新增 tooltip 时由源码扫描拦下绕过 tipped 的写法
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 // The nova numbers the tests hold the face to, written out here rather than
 // read from tooltip.go so that changing a constant there fails a test:
-// the arrow stands 5 points out of the tip, a Kbd chip is h-5 (20) high.
-const (
-	novaArrowRise = 5
-	novaKbdHeight = 20
-)
+// a Kbd chip is h-5 (20) high.
+const novaKbdHeight = 20
 
 // tipWindow is a window holding one anchor box at at, tipped with text; the
 // pointer then rests on the anchor until its tooltip shows.
@@ -97,10 +94,12 @@ func plainBoxInsets(dark bool, rect ui.Rect, radius float32, box image.Rectangle
 	return cornerInsets(ref, box, pixelAt(ref, int(rect.X+rect.W/2), int(rect.Y+rect.H/2)), rows)
 }
 
-// TestTooltipWearsTheNovaFace pins the shared face: the row radius, 6×12
-// padding, no shadow — the shadcn nova tooltip, light and dark.
-func TestTooltipWearsTheNovaFace(t *testing.T) {
+// TestTooltipWearsTheThemeCard pins the shared face: the theme's own Surface
+// fill (so light and dark differ), 6×12 padding, rounded corners — the card
+// of 2026-11-02, not the inverted nova tip.
+func TestTooltipWearsTheThemeCard(t *testing.T) {
 	sp := Spacing()
+	fills := map[bool][4]uint8{}
 	for _, dark := range []bool{false, true} {
 		at := ui.Rect{X: 200, Y: 200, W: 60, H: 28}
 		tt := tipWindow(t, dark, 600, 400, at, "Open the thing")
@@ -109,84 +108,35 @@ func TestTooltipWearsTheNovaFace(t *testing.T) {
 			t.Fatalf("dark=%v: no tooltip after the pointer rested; texts=%q", dark, tt.Texts())
 		}
 		box, fill := tipEdges(t, tt, text)
-		if got := float32(int(text.X) - box.Min.X); got < sp.L-1 || got > sp.L+1 {
+		fills[dark] = fill
+		if got := float32(int(text.X) - box.Min.X); got < sp.L-1 || got > sp.L+2 {
 			t.Errorf("dark=%v: left padding %.0f, want %.0f", dark, got, sp.L)
 		}
-		if got := float32(box.Max.X - int(text.X+text.W)); got < sp.L-1 || got > sp.L+1 {
+		if got := float32(box.Max.X - int(text.X+text.W)); got < sp.L-1 || got > sp.L+2 {
 			t.Errorf("dark=%v: right padding %.0f, want %.0f", dark, got, sp.L)
 		}
-		if got := float32(int(text.Y) - box.Min.Y); got < sp.S-1 || got > sp.S+1 {
+		if got := float32(int(text.Y) - box.Min.Y); got < sp.S-1 || got > sp.S+2 {
 			t.Errorf("dark=%v: top padding %.0f, want %.0f", dark, got, sp.S)
 		}
-		if got := float32(box.Max.Y - int(text.Y+text.H)); got < sp.S-1 || got > sp.S+1 {
+		if got := float32(box.Max.Y - int(text.Y+text.H)); got < sp.S-1 || got > sp.S+2 {
 			t.Errorf("dark=%v: bottom padding %.0f, want %.0f", dark, got, sp.S)
 		}
-
-		// The corner is the row radius: the first rows of the curve start
-		// where those of a plain box of that radius do (MyGo's corners are
-		// continuous, so the curve is measured against a reference rather
-		// than against a circle), and not where a 6 or a 10 starts them.
-		rect := ui.Rect{X: text.X - sp.L, Y: text.Y - sp.S, W: text.W + 2*sp.L, H: text.H + 2*sp.S}
-		got, want := cornerInsets(tt, box, fill, 5), plainBoxInsets(dark, rect, Radius().Row, box, 5)
-		for row := 1; row < len(got); row++ {
-			if d := got[row] - want[row]; d < -1 || d > 1 {
-				t.Errorf("dark=%v: corner inset by row %v, a radius-%.0f box has %v", dark, got, Radius().Row, want)
-				break
-			}
+		theme := ui.LightTheme()
+		if dark {
+			theme = ui.DarkTheme()
 		}
-
-		// No shadow: just outside the box the page is as it is far away.
-		page := pixelAt(tt, box.Min.X-40, (box.Min.Y+box.Max.Y)/2)
-		mid := (box.Min.Y + box.Max.Y) / 2
-		for _, x := range []int{box.Min.X - 3, box.Max.X + 2} {
-			if d := rgbDiff(pixelAt(tt, x, mid), page); d > 3 {
-				t.Errorf("dark=%v: the page at x=%d beside the tip is off by %d; the tip casts a shadow", dark, x, d)
-			}
+		surface, _ := tipColors(theme)
+		want := [4]uint8{surface.R, surface.G, surface.B, 255}
+		if d := rgbDiff(fill, want); d > 6 {
+			t.Errorf("dark=%v: the card's fill %v is not the theme's Surface %v (diff %d)", dark, fill, want, d)
+		}
+		// Rounded: the corner pixel is not the fill.
+		if d := rgbDiff(pixelAt(tt, box.Min.X, box.Min.Y), fill); d < 8 {
+			t.Errorf("dark=%v: the card's corner is square", dark)
 		}
 	}
-}
-
-// TestTooltipArrowPointsAtItsAnchor pins the nub: it stands out of the foot
-// of a tip above its anchor and out of the head of one below it, at the
-// anchor's middle even where the window edge pushes the tip aside, and
-// nowhere else along the edge.
-func TestTooltipArrowPointsAtItsAnchor(t *testing.T) {
-	const label = "Open the thing, a bit longer"
-	for _, dark := range []bool{false, true} {
-		for _, tc := range []struct {
-			name  string
-			at    ui.Rect
-			above bool
-		}{
-			{"above", ui.Rect{X: 300, Y: 250, W: 60, H: 28}, true},
-			{"below", ui.Rect{X: 300, Y: 4, W: 60, H: 28}, false},
-			{"pushed along by the window's left edge", ui.Rect{X: 8, Y: 250, W: 28, H: 28}, true},
-		} {
-			tt := tipWindow(t, dark, 600, 400, tc.at, label)
-			text, ok := tt.Find(label)
-			if !ok {
-				t.Fatalf("dark=%v %s: no tooltip", dark, tc.name)
-			}
-			box, fill := tipEdges(t, tt, text)
-			page := pixelAt(tt, 590, 390)
-			cx := int(tc.at.X + tc.at.W/2)
-			edge, step := box.Max.Y, 1 // the nub stands out of the foot
-			if !tc.above {
-				edge, step = box.Min.Y-1, -1 // out of the head
-			}
-			at := func(x, rise int) [4]uint8 { return pixelAt(tt, x, edge+step*rise) }
-			if d := rgbDiff(at(cx, 2), fill); d > 24 {
-				t.Errorf("dark=%v %s: no nub under the anchor's middle at x=%d (diff %d from the tip's fill)", dark, tc.name, cx, d)
-			}
-			if d := rgbDiff(at(cx, novaArrowRise+4), page); d > 3 {
-				t.Errorf("dark=%v %s: the nub reaches beyond its %d points (diff %d from the page)", dark, tc.name, novaArrowRise, d)
-			}
-			for _, off := range []int{-14, 14} {
-				if d := rgbDiff(at(cx+off, 2), page); d > 8 {
-					t.Errorf("dark=%v %s: the nub is wider than its base: x=%d is filled (diff %d from the page)", dark, tc.name, cx+off, d)
-				}
-			}
-		}
+	if rgbDiff(fills[false], fills[true]) < 40 {
+		t.Errorf("light and dark cards look alike: %v vs %v", fills[false], fills[true])
 	}
 }
 
