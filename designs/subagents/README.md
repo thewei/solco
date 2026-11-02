@@ -97,7 +97,7 @@ Claude 的 `subagents/` 样本来自 2026-10-25 的 `herdr-client` 会话。
 
 ## Decision(2026-10-31,用户批准,按推荐定稿)
 
-- 范围:Claude Code(`<session>/subagents/agent-*.jsonl|.meta.json`)、omp(`<session>/<name>.jsonl`,header `parentSession`)、Codex(同日期目录下的子 rollout,首行 `thread_spawn`);pi 没有子代理。全部只读 `internal/history`,Herdr 无父子信息也不新增。
+- 范围:Claude Code(`<session>/subagents/agent-*.jsonl|.meta.json`)、omp(`<session>/<name>.jsonl`,header `parentSession`)、Codex(同日期目录下的子 rollout,首行 `thread_spawn`);pi(2026-11-02 补:pi-subagents 扩展 `<session>/<uuid>/run-N/session.jsonl`,按 task 正文链接父 `subagent` 调用)。全部只读 `internal/history`,Herdr 无父子信息也不新增。
 - Chat:1–2 个子代理为卡片,≥3 个为 roster;“Open”进入只读抽屉(同一 transcript 解码器,无写入)。
 - Header 弹层:子代理嵌套在父 Agent 下并带 `N sub-agents` 徽标,不加第五个 tab,不计入 `waiting/total`。
 - Tasks tray:两段(计划项 / Sub-agents),不做文字配对。

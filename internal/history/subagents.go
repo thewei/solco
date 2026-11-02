@@ -39,8 +39,12 @@ type Subagent struct {
 	CallID string
 	// Name links it where the parent names it in the call's input: omp
 	// `tasks[].name`, Codex `spawn_agent.task_name`.
-	Name  string
-	Depth int
+	Name string
+	// CallRun links it where the parent's call result names the run: pi's
+	// `Async: … [runId]` / `Async workflow [runId]`, recovered from the
+	// parent's own subagent-notify messages ("" when none names it yet).
+	CallRun string
+	Depth   int
 	// Ended is the provider's own end marker (omp's session_exit); without
 	// one, liveness is the recent-write window.
 	Ended bool
@@ -89,6 +93,8 @@ func SubagentsFor(provider AgentID, sessionPath string) []Subagent {
 		return ompSubagents(sessionPath)
 	case AgentCodex:
 		return codexSubagents(sessionPath)
+	case AgentPi:
+		return piSubagents(sessionPath)
 	default:
 		return nil
 	}
@@ -169,10 +175,10 @@ func ClaudeSubagents(sessionPath string) []Subagent {
 }
 
 // HasSubagents reports whether a provider has a sub-agent layout Solco reads
-// (pi has none).
+// (every Chat provider except Cursor Agent and Antigravity).
 func HasSubagents(provider AgentID) bool {
 	switch provider {
-	case AgentClaudeCode, AgentOMP, AgentCodex:
+	case AgentClaudeCode, AgentOMP, AgentCodex, AgentPi:
 		return true
 	}
 	return false

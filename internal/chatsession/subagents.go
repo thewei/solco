@@ -136,6 +136,42 @@ func Linked(tool *conversation.ConversationToolCall, views []View) (ids []string
 				}
 			}
 		}
+	case name == "subagent" && views[0].Sub.Provider == history.AgentPi:
+		var args struct {
+			Action string `json:"action"`
+			Task   string `json:"task"`
+			Tasks  []struct {
+				Task string `json:"task"`
+			} `json:"tasks"`
+		}
+		if json.Unmarshal([]byte(input), &args) != nil || args.Action != "" {
+			return nil, nil // status/steer/resume mention a run; they do not start one
+		}
+		wanted := []string{args.Task}
+		for _, task := range args.Tasks {
+			wanted = append(wanted, task.Task)
+		}
+		output := ""
+		if tool.Output != nil {
+			output = *tool.Output
+		}
+		for _, view := range views {
+			if view.Sub.Provider != history.AgentPi {
+				continue
+			}
+			// The call's own result names its run; the parent's notify
+			// messages say which run each child belongs to.
+			if run := view.Sub.CallRun; run != "" && strings.Contains(output, run) {
+				add(view)
+				continue
+			}
+			for _, task := range wanted {
+				if piTaskMatches(view.Detail.Prompt, task) {
+					add(view)
+					break
+				}
+			}
+		}
 	case tool.ID != "" && (name == "agent" || name == "task"):
 		for _, view := range views {
 			if view.Sub.Provider == history.AgentClaudeCode && view.Sub.CallID == tool.ID {
@@ -144,6 +180,20 @@ func Linked(tool *conversation.ConversationToolCall, views []View) (ids []string
 		}
 	}
 	return ids, types
+}
+
+// piTaskMatches reports whether a pi-subagents child's first user message
+// (`Task: <task>`) is the task the parent's call carried. Only a leading
+// slice is compared: the child's prompt is clipped and may carry a suffix.
+func piTaskMatches(prompt, task string) bool {
+	task = strings.TrimSpace(task)
+	if task == "" {
+		return false
+	}
+	prompt = strings.TrimPrefix(strings.TrimSpace(prompt), "Task: ")
+	n := min(len([]rune(task)), 200)
+	head := string([]rune(task)[:n])
+	return strings.HasPrefix(prompt, head)
 }
 
 // Card projects one linked sub-agent into the page's card shape.

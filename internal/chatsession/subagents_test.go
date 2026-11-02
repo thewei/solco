@@ -62,3 +62,40 @@ func TestCardReportsStoppedOnlyFromTheProviderMarker(t *testing.T) {
 		t.Fatalf("status = %q, want done", got)
 	}
 }
+
+func TestLinkedPiSubagentByTaskText(t *testing.T) {
+	views := []View{
+		{Sub: history.Subagent{ID: "a/run-0", Provider: history.AgentPi}, Detail: history.SubagentDetail{Prompt: "Task: audit the router and report"}},
+		{Sub: history.Subagent{ID: "b/run-0", Provider: history.AgentPi}, Detail: history.SubagentDetail{Prompt: "Task: something else entirely"}},
+	}
+	input := `{"agent":"worker","async":true,"task":"audit the router and report"}`
+	ids, _ := Linked(&conversation.ConversationToolCall{Name: "subagent", Input: &input}, views)
+	if len(ids) != 1 || ids[0] != "a/run-0" {
+		t.Fatalf("ids = %v, want [a/run-0]", ids)
+	}
+	input = `{"tasks":[{"agent":"x","task":"something else entirely"},{"agent":"y","task":"audit the router and report"}]}`
+	ids, _ = Linked(&conversation.ConversationToolCall{Name: "subagent", Input: &input}, views)
+	if len(ids) != 2 {
+		t.Fatalf("parallel ids = %v, want both", ids)
+	}
+	input = `{"action":"status","id":"z"}`
+	if ids, _ = Linked(&conversation.ConversationToolCall{Name: "subagent", Input: &input}, views); len(ids) != 0 {
+		t.Fatalf("management call linked %v", ids)
+	}
+}
+
+func TestLinkedPiSubagentByRunNamedInTheResult(t *testing.T) {
+	views := []View{
+		{Sub: history.Subagent{ID: "a/run-0", Provider: history.AgentPi, CallRun: "wf-1"}},
+		{Sub: history.Subagent{ID: "b/run-0", Provider: history.AgentPi, CallRun: "wf-2"}},
+	}
+	input, out := `{"workflowScript":"x","async":true}`, "Async workflow [wf-1]\n\ndetached"
+	ids, _ := Linked(&conversation.ConversationToolCall{Name: "subagent", Input: &input, Output: &out}, views)
+	if len(ids) != 1 || ids[0] != "a/run-0" {
+		t.Fatalf("ids = %v, want [a/run-0]", ids)
+	}
+	input = `{"action":"status","id":"wf-1"}`
+	if ids, _ = Linked(&conversation.ConversationToolCall{Name: "subagent", Input: &input, Output: &out}, views); len(ids) != 0 {
+		t.Fatalf("a status call linked %v", ids)
+	}
+}

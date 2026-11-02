@@ -15,7 +15,7 @@ import (
 /**
  * [INPUT]: 依赖 history.SubagentsFor（只读读各 Provider 自己的会话文件）、Herdr 投影里的 agent_session 身份、workbench 的 reconcile
  * [OUTPUT]: 对外提供 Shell.refreshSubagents（节流的后台读取）、subagentsChanged（缓存是否变化的纯函数）
- * [POS]: 侧栏 Agents 子代理树的数据调度（2026-10-30）：Herdr 没有父子信息，三家（Claude Code / omp / Codex，pi 无）各按自己的落盘布局读，身份为 id 时在后台解析到文件；读取在后台、渲染只读 map，没有渲染期 IO，也没有常驻定时器——由投影更新与侧栏重建触发，4 秒节流
+ * [POS]: 侧栏 Agents 子代理树的数据调度（2026-10-30）：Herdr 没有父子信息，四家（Claude Code / omp / Codex / pi）各按自己的落盘布局读，身份为 id 时在后台解析到文件；读取在后台、渲染只读 map，没有渲染期 IO，也没有常驻定时器——由投影更新与侧栏重建触发，4 秒节流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

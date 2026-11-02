@@ -103,6 +103,10 @@ func ReadSubagent(provider AgentID, path string) (SubagentDetail, error) {
 	if detail.Description == "" && detail.Prompt != "" {
 		detail.Description = promptHeadline(detail.Prompt)
 	}
+	if provider == AgentPi {
+		// pi-subagents opens every child with a literal `Task: ` label.
+		detail.Description = strings.TrimPrefix(detail.Description, "Task: ")
+	}
 	return detail, nil
 }
 
