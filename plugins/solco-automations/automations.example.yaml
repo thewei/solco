@@ -1,0 +1,46 @@
+# Copy to your plugin config dir (herdr plugin config-dir com.whstudio.solco.automations)
+# as automations.yaml — or let `herdr-automations add` write it for you.
+automations:
+  - name: issue-triage
+    cron: "0 9 * * 1-5"
+    repo: ~/Projects/myapp
+    workspace: worktree
+    # Optional: provision every run in this Herdr session, kept apart from the
+    # ones you work in. It must be running; the plugin never starts it.
+    session: automations
+    agent: claude
+    # Passed to the agent as --model. Leave it out and the agent picks for
+    # itself — which is how an unattended chore lands on a flagship model.
+    model: sonnet
+    prompt: |
+      Triage new GitHub issues: label them, close duplicates,
+      draft replies for the ones needing more info.
+    mcp_config: ~/.config/mcp/github.json
+    timeout_minutes: 45
+    # If the machine was asleep at 09:00, run on wake — but only within 2h.
+    catch_up_minutes: 120
+
+  - name: nightly-deps
+    cron: "@daily"
+    repo: ~/Projects/myapp
+    workflow: bump-dependencies   # delegated to herdr-workflows: hwf run bump-dependencies
+    disabled: true
+
+  # A draft: visible in `list`, never scheduled until someone runs
+  # `herdr-automations approve weekly-review-draft`. The rationale is what the
+  # approver reads.
+  - name: weekly-review-draft
+    cron: "0 10 * * 1"
+    repo: ~/Projects/myapp
+    agent: claude
+    model: sonnet
+    prompt: |
+      Summarise last week's merged PRs into a review draft.
+    rationale: |
+      Goal: a Monday-morning digest nobody assembles by hand.
+      Inputs: git log and gh pr list for the last 7 days.
+      Guardrails: read-only; the digest goes to the chat, nowhere else.
+      Cost: one sonnet run per week.
+    draft: true
+    on_overlap: queue             # hold one catch-up if Monday's run is still working
+    cleanup_ttl_hours: 168        # daily pass removes merged run worktrees after a week
