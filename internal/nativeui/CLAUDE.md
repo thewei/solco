@@ -40,7 +40,7 @@ files_search_test.go: 搜索钮开合并清空、按名排序/点击打开、Con
 files_static_preview.go: Files 查看条里 HTML 文件的「Open Preview」「Open in Browser」（2026-10-30）——点了才在项目根起 internal/preview.StaticServer（只读、127.0.0.1 随机端口、同根复用、忽略集合随树的眼睛开关同步、换项目即关），页面进既有 Local Preview 窗口（已开则跳页）或系统浏览器；桌面调用是可替换 var
 files_static_preview_test.go: 只有 HTML 有预览入口、点了才起服务且同根一个端口、相对资源可取、忽略项随眼睛、换项目服务即关
 automations_ui.go: com.whstudio.solco.automations 插件门（镜像 workboard_ui）——automationsState、detectAutomations（30s 焦点去抖、in-flight 不重复）、automationsAvailable（Supported ∧ 本机实例，唯一显示门）、refreshAutomations/loadAutomationHistory（automationsGo/newAutomationsClient 测试缝）；门关即零痕迹
-page_automations.go: /automations 页（Phase 4 Option A 管理列表 + 详情抽屉）——showViewAutomations/goAutomations、工具条（全部/启用/草稿/已暂停 segment、✦让 Agent 起草 sheet、＋新建 sheet→add --draft）、行（状态槽+副行+尾 chip）、抽屉（rationale/prompt 卡、事实格、最近 5 次运行：打开窗格走 openPane 既有跳转、在 Chat 仅 internal/history 按 agent+cwd+±2min 唯一命中、立即运行/暂停|恢复/编辑（put --original）/删除（shared confirm））；渲染零 IO，只画 list/history 缓存
+page_automations.go: /automations 页（Phase 4 Option A 管理列表 + 详情抽屉）——showViewAutomations/goAutomations、工具条（All/Enabled/Drafts/Paused segment、✦ Let an Agent Draft sheet、＋ New sheet→add --draft）、行（状态槽+副行+尾 chip）、抽屉（rationale/prompt 卡、事实格、Last 5 runs：Open Pane 走 openPane 既有跳转、View in Chat 仅 internal/history 按 agent+cwd+±2min 唯一命中、Run Now/Pause|Resume/Edit…（put --original）/Delete…（shared confirm））；渲染零 IO，只画 list/history 缓存
 page_files.go: Header Files 独立页面：左树/中预览（查看条 + 分级预览体）、当前 Tab CWD 归属和空态；页面只画内容，标题/根路径/文件动作在标题栏（route_header.go）
 files_native_preview.go: Files 预览分级计划与原生层——选中后离 UI lane 探测 size×flavor×偏好：文本/代码/Markdown 源码进只读 editor.View（Buffer 离 UI lane 构建，8 MiB 上限、截断胶囊、散文自动换行），Markdown 渲染与网页图片交 WebView 页，解码得了的图片原生位图，其余给真实失败态；查看条（名称/大小/截断/Rendered⇄Source 分段）横跨所有层级；重命名、偏好切换、Source 切换都重新计划
 code_theme.go: codeEditorTheme——把 Git 评审的语法色/代码色/行号色（gd_palette 调色板，经 codehl.KindClasses 这张 token→类表）穿到框架 editor 上，同一份代码在 Files 与 Git 评审里同色
@@ -284,5 +284,9 @@ chat_picker.go: Claude/Codex 编号选择器（/model、/permissions）→ Quest
 chat_picker_test.go: 真机截屏夹具（Claude model、Codex model/permissions/effort、Claude 无页脚确认）回归
 chat_composer.go: Catalog/SaveAttachment/SwitchModel 三个绑定方法（agentcatalog 的只读目录、ChatAttachments 落盘、pi `/model`·omp `/switch` 键入切换）
 chat_attach_test.go: bridge 往返（落盘实现已迁到 internal/chatattach，桌面 bridge 与手机 Host 共用）
+sidebar_services.go: 侧栏 Agents 下方的 Services 区块（designs/services-surfaces，2026-11-02 定稿 Option A）：Pane 归因的检测服务两行卡（彩色品牌 mark + 标题 + 端口 + 归属 chip + 绿方块 statusIndicatorService），多工作区加淡色组标签；点击按 panePrefersChat 跳 Pane（有 Agent 卡走 openAgentFromSidebar，否则 selectPane），右键菜单 Open Chat / Pane 动作 / Preview :端口；未运行 Scripts 只留浮层、Project-wide 歧义 daemon 只留浮层 Other listeners（classifyServiceOrigin/cardForPane/groupServiceRows/unclaimedPorts/serviceRowModels——**唯一真相源**，侧栏与浮层 Running 共用）；脚本/命令启动的服务标题取 scripts 定义名（scriptTitleFor 按定义+Pane 目录解析，缺定义退回记录名，2026-11-02 用户要求）；scriptPanes 键 `<instance>/<pane>`→命令名（rememberScriptPane 记录，UI lane 写入），**走 Session.ScriptPanes 持久化**（captureSession 对失效 Pane 剪枝），重启不再丢归属；ServicesOpen 走 Session 持久化
+quick_panel_services.go: Services 页重构（同一决策）：Running（**serviceRowModels() 与侧栏同源，不按根过滤**——2026-11-02 用户要求对齐；彩色 mark + 标题 + 端口 + 归属 + Preview 首端口）→ Other listeners（observedPorts 减去已被 Pane 认领的端口，诚实降级无归属）→ Scripts（Run 照旧，仍按选中根列出）
+proc_brands.go: procBrandTints 品牌色表 + procBrandAsset（procBrand 的键值版）；brands.go visualMark 增 tint/tinted，markView 在 mark 自带品牌色时覆盖调用方颜色——仅 Services 面使用，tab bar 等既有进程 mark 保持中性染色
+run_command_button.go: pane 头运行控件 Run 成功后经 rememberScriptPane 记录 pane→命令名（定义与检测命令 package.json/Makefile/justfile 一视同仁），服务归因与标题由此覆盖全部运行入口
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

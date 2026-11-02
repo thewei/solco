@@ -34,7 +34,7 @@ func (s *Shell) shortcutSections() (left, right []shortcutSection) {
 	left = []shortcutSection{
 		{Title: "Go to", Rows: []shortcutRow{
 			accel("Workspace", accelWorkspace), accel("Changes", accelChanges), accel("Sessions", accelSessions),
-			accel("Files", accelFiles), accel("Hosts", accelHosts),
+			accel("Files", accelFiles), accel("Hosts", accelHosts), accel("Automations", accelAutomations),
 		}},
 		{Title: "Tabs", Rows: []shortcutRow{
 			accel("New Tab", accelNewTab), accel("Close Tab", accelCloseTab), row("Select Tab", selectTab),

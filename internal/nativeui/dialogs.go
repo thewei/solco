@@ -133,6 +133,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 	s.usageConsentDialog(c)
 	s.voiceConsentDialog(c)
 	s.remotePairDialog(c)
+	s.automationsDialogs(c)
 	s.shortcutsSheet(c)
 	if s.confirmOpen {
 		// Destructive confirms must not default-focus the destructive
@@ -209,6 +210,8 @@ func (s *Shell) submitConfirm(kind, target string) {
 		s.deleteFromTrash(strings.Split(target, confirmIDSeparator))
 	case emptyTrashConfirm:
 		s.emptyTrash()
+	case automationsRemoveConfirm:
+		s.removeAutomation(target)
 	case workboardApproveConfirm:
 		s.runWorkboardAction("approve", target)
 	case workboardApprovePlanConfirm:

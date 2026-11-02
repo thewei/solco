@@ -12,6 +12,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/automations"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/sshconfig"
@@ -224,6 +225,21 @@ func TestCommandCenterShowsTheMenuAccelerators(t *testing.T) {
 	}
 	if got := acceleratorLabel(accelSettings); got != "⌘," {
 		t.Errorf("Settings label = %q, want ⌘,", got)
+	}
+	// The Automations entry (⌘6) is gate-gated: closed, neither the menu
+	// nor an available palette command exists; open, both name ⌘6 alike.
+	if item := menuItemNamed(menuNamed(t, s.MenuBar(nil), "Go").Submenu, "Automations"); item != nil {
+		t.Errorf("a closed gate put Automations in the Go menu with %q", item.Accelerator)
+	}
+	s.applyAutomationsAvailability(automations.Availability{Installed: true, Enabled: true, Version: "0.12.0", Supported: true})
+	item := menuItemNamed(menuNamed(t, s.MenuBar(nil), "Go").Submenu, "Automations")
+	if item == nil || item.Accelerator != accelAutomations {
+		t.Fatalf("an open gate must bind Automations to %q in the Go menu", accelAutomations)
+	}
+	for _, a := range s.buildCommandCenterActions() {
+		if a.Title == "Automations" && a.Shortcut != acceleratorLabel(accelAutomations) {
+			t.Errorf("Automations shows %q, the menu binds %q", a.Shortcut, item.Accelerator)
+		}
 	}
 }
 

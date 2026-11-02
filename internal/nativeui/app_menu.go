@@ -44,18 +44,29 @@ func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 		nav("About Solco", "", "/settings/about"),
 	)
 
+	goMenu := []*mygo.MenuItem{
+		do("Workspace", accelWorkspace, s.ShowWorkspaceFromMenu),
+		do("Changes", accelChanges, s.ShowChangesFromMenu),
+		nav("Sessions", accelSessions, routeHistory),
+		do("Files", accelFiles, s.ShowFilesFromMenu),
+		nav("Hosts", accelHosts, routeHosts),
+	}
+	// ⌘6 exists only while the automations gate is open — the menu is built
+	// when the window shows, after the startup detection, and a plugin that
+	// leaves takes its item back on the next launch. Selecting it stays a
+	// destination: Navigate dedupes a repeat of the open page.
+	if s.automationsAvailable() {
+		goMenu = append(goMenu, nav("Automations", accelAutomations, routeAutomations))
+	}
+	goMenu = append(goMenu,
+		mygo.Separator(),
+		nav("Set Up Agents", "", "/settings/providers"),
+		do("Command Center", accelCommandCenter, s.OpenCommandCenterFromMenu),
+	)
+
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Label: "Solco", Submenu: appMenu},
-		{Label: "Go", Submenu: []*mygo.MenuItem{
-			do("Workspace", accelWorkspace, s.ShowWorkspaceFromMenu),
-			do("Changes", accelChanges, s.ShowChangesFromMenu),
-			nav("Sessions", accelSessions, routeHistory),
-			do("Files", accelFiles, s.ShowFilesFromMenu),
-			nav("Hosts", accelHosts, routeHosts),
-			mygo.Separator(),
-			nav("Set Up Agents", "", "/settings/providers"),
-			do("Command Center", accelCommandCenter, s.OpenCommandCenterFromMenu),
-		}},
+		{Label: "Go", Submenu: goMenu},
 		// Tab (2026-10-30 UX audit): the Tab bar's actions with their keys.
 		// Select Tab 1–8 and Last Tab take ⌥⌘1–9 — ⌘1–5 are the pages, and
 		// ⌥⌘ digits are free in a terminal.

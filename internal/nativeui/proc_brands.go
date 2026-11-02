@@ -280,9 +280,52 @@ var procBrandAssets = map[string]string{
 	"top":     "htop",
 }
 
-// procBrand returns the brand SVG for a foreground process name, or nil
-// when the program has no known mark.
-func procBrand(proc string) *ui.SVG {
+// procBrandTints gives a known brand asset its display color for the
+// Services surfaces (2026-11-02, designs/services-surfaces): the embedded
+// marks are single-path vectors that used to render in the muted text
+// color. Colors are the brands' own where that reads on both appearances;
+// near-white or near-black marks carry a contrast-adjusted variant. An
+// asset without an entry keeps the neutral tint.
+var procBrandTints = map[string]string{
+	"anthropic":  "#d97757",
+	"bun":        "#e2b26a",
+	"caddy":      "#1f88d8",
+	"clickhouse": "#eecd00",
+	"cloudflare": "#f38020",
+	"deno":       "#22adb2",
+	"docker":     "#2496ed",
+	"elixir":     "#8a6fc8",
+	"git":        "#f05032",
+	"gnubash":    "#4eaa25",
+	"go":         "#00add8",
+	"java":       "#e76f00",
+	"kotlin":     "#7f52ff",
+	"mongodb":    "#47a248",
+	"mysql":      "#4479a1",
+	"neovim":     "#54a358",
+	"nginx":      "#009639",
+	"nodedotjs":  "#5fa04e",
+	"npm":        "#cb3837",
+	"ollama":     "#a8a8ad",
+	"openai":     "#74aa9c",
+	"php":        "#777bb4",
+	"pnpm":       "#f9ad00",
+	"postgresql": "#4169e1",
+	"python":     "#3776ab",
+	"redis":      "#dc382d",
+	"ruby":       "#cc342d",
+	"rust":       "#e43717",
+	"sqlite":     "#0f80cc",
+	"supabase":   "#3fcf8e",
+	"swift":      "#f05138",
+	"traefik":    "#24a1c1",
+	"vim":        "#019733",
+	"yarn":       "#2c8ebb",
+}
+
+// procBrandAsset resolves a foreground process name to its brand asset key
+// and SVG ("" and nil when the program has no known mark).
+func procBrandAsset(proc string) (string, *ui.SVG) {
 	procBrandOnce.Do(func() {
 		entries, err := procBrandFS.ReadDir("brands")
 		if err == nil {
@@ -317,20 +360,27 @@ func procBrand(proc string) *ui.SVG {
 	base := strings.ToLower(strings.TrimSpace(proc))
 	base = strings.TrimSuffix(base, ".exe")
 	if base == "" {
-		return nil
+		return "", nil
 	}
 	for {
 		if asset, ok := procBrandByProc[base]; ok {
-			return procBrandSVGs[asset]
+			return asset, procBrandSVGs[asset]
 		}
 		// Versioned binaries report as python3.13 or go1.24: strip the
 		// trailing .NNN / digit run and try the shorter name.
 		cut := strings.LastIndexAny(base, ".0123456789")
 		if cut <= 0 {
-			return nil
+			return "", nil
 		}
 		base = base[:cut]
 	}
+}
+
+// procBrand returns the brand SVG for a foreground process name, or nil
+// when the program has no known mark.
+func procBrand(proc string) *ui.SVG {
+	_, svg := procBrandAsset(proc)
+	return svg
 }
 
 // procMarkForPane resolves one Pane's runtime brand mark from the service

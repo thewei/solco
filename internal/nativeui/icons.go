@@ -83,4 +83,7 @@ var (
 	// iconSort marks a list-order menu (the sidebar Agents header): Lucide's
 	// arrow-up-down in the shared light stroke.
 	iconSort = icon(`<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>`)
+	// iconBolt marks the Automations view tab: a lightning bolt, the
+	// scheduled-runs vocabulary, in the shared light stroke.
+	iconBolt = icon(`<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>`)
 )

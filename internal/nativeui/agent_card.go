@@ -452,7 +452,7 @@ func (s *Shell) cardService(card agent.AgentCardModel) (paneServiceActivity, boo
 func (s *Shell) serviceRow(c *ui.Context, parent agent.AgentCardModel, act paneServiceActivity) ui.Element {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
-	name := firstText(act.Proc, "service")
+	name := firstText(procFriendlyName(act.Proc), act.Proc, "service")
 	ports := servicePortsText(act)
 	var row ui.Element
 	ui.Box(c.Key("svc:" + parent.PaneID)).FillWidth().Children(func() {
@@ -468,7 +468,13 @@ func (s *Shell) serviceRow(c *ui.Context, parent agent.AgentCardModel, act paneS
 			p.Line(x, r.Y+r.H/2, x+9, r.Y+r.H/2, 1, tokens.TreeLine)
 		})
 		row.Children(func() {
-			ui.Box(c).Width(agentCardMark + 4).Shrink(0).PassThrough()
+			if mark, ok := procServiceMark(act); ok {
+				ui.Box(c).Width(agentCardMark + 4).Shrink(0).Children(func() {
+					markView(c, mark, agentCardMark, t.TextMuted)
+				})
+			} else {
+				ui.Box(c).Width(agentCardMark + 4).Shrink(0).PassThrough()
+			}
 			ui.Text(c, name).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).SingleLine().Shrink(0).PassThrough()
 			ui.Text(c, ports).FontSize(Typography().Micro).TextColor(t.TextMuted).
 				SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Grow(1).PassThrough()

@@ -244,6 +244,7 @@ type SessionSettings struct {
 	// Sidebar section visibility and tree expansion cosmetics.
 	ProjectsOpen     bool     `json:"projects_open"`
 	AgentsOpen       bool     `json:"agents_open"`
+	ServicesOpen     bool     `json:"services_open"`
 	PinsOpen         bool     `json:"pins_open"`
 	ExpandedProjects []string `json:"expanded_projects,omitempty"`
 	ExpandedTabs     []string `json:"expanded_tabs,omitempty"`
@@ -279,6 +280,11 @@ type SessionSettings struct {
 	// providers (Claude Code), and without it Chat cannot rebind after a
 	// restart until the next hook event. No conversation content.
 	HookSessions map[string]HookSessionSettings `json:"hook_sessions,omitempty"`
+	// ScriptPanes remembers which pane each script/command launch ran in
+	// ("<instance>/<pane>" → the command's name), so Services attribution
+	// and titles survive a restart. Command names only — never command
+	// lines, output or paths beyond the pane's own.
+	ScriptPanes map[string]string `json:"script_panes,omitempty"`
 }
 
 // HookSessionSettings is one remembered hook-reported session identity.

@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<!--
+  exploration.html — Automations 视图设计探索（solco designs house style）
+
+  Mental model: Design Storybook（方案选型用）。
+  变体：A 管理列表+详情抽屉 / B 运行看板 / C 双栏监控。
+  状态机在右侧面板切换，画布内行/卡片也可点击进入状态；Esc 退出。
+  色值即实现 token（internal/nativeui/theme.go）：bg #141516 surface #212121
+  border #333338 text #ececee muted #8b8c92 accent #0a84ff ok #30d158 warn #ffd60a bad #ff453a
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Automations 视图 — 设计探索</title>
+
+  <style>
+    [data-ide-shell] {
+      --shell-bg: #0f0f10;
+      --shell-panel: #18181b;
+      --shell-border: #27272a;
+      --shell-text: #fafafa;
+      --shell-muted: #a1a1aa;
+      --shell-accent: #71717a;
+      --panel-w: 280px;
+      box-sizing: border-box;
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: var(--shell-bg);
+      color: var(--shell-text);
+      min-height: 100vh;
+      margin: 0;
+    }
+    [data-ide-shell] * { box-sizing: border-box; }
+
+    [data-ide-shell] .ide-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ----- Canvas (left / main) ----- */
+    [data-ide-shell] .ide-stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+      background: #111113;
+    }
+    [data-ide-shell] .ide-stage-label {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      z-index: 20;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--shell-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      pointer-events: none;
+    }
+    [data-ide-shell] .ide-panel-collapse-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 30;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-collapse-btn { right: 10px; }
+    [data-ide-shell] .ide-artboard-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 32px 32px;
+    }
+    [data-ide-shell] .ide-artboard {
+      display: none;
+      width: 100%;
+      max-width: 960px;
+      max-height: calc(100vh - 80px);
+    }
+    [data-ide-shell] .ide-artboard.active { display: block; }
+    [data-ide-shell] .ide-artboard .design-root {
+      all: initial;
+      display: block;
+      font-family: inherit;
+    }
+
+    /* ----- Story panel (right — Controls + Story docs) ----- */
+    [data-ide-shell] .ide-story-panel {
+      width: var(--panel-w);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      transition: width 0.2s;
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel {
+      width: 0;
+      border-left: none;
+    }
+    [data-ide-shell] .ide-panel-expand-btn {
+      display: none;
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 40;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn { display: grid; place-items: center; }
+
+    [data-ide-shell] .ide-panel-header {
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid var(--shell-border);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--shell-muted);
+    }
+    [data-ide-shell] .ide-panel-controls {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      min-height: 0;
+    }
+    [data-ide-shell] .ide-section-title {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--shell-accent);
+      margin: 0 0 6px;
+    }
+    [data-ide-shell] .ide-section-title + .ide-section-title { margin-top: 14px; }
+    [data-ide-shell] .ide-variant-card,
+    [data-ide-shell] .ide-state-card {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      margin-bottom: 5px;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    [data-ide-shell] .ide-variant-card:hover,
+    [data-ide-shell] .ide-state-card:hover { border-color: #3f3f46; }
+    [data-ide-shell] .ide-variant-card.active,
+    [data-ide-shell] .ide-state-card.active {
+      border-color: var(--shell-accent);
+      background: rgba(113, 113, 122, 0.1);
+    }
+    [data-ide-shell] .ide-variant-card h2 { font-size: 11px; font-weight: 600; margin: 0 0 2px; }
+    [data-ide-shell] .ide-variant-card p { margin: 0; color: var(--shell-muted); font-size: 10px; line-height: 1.4; }
+    [data-ide-shell] .ide-state-card { font-size: 10px; color: var(--shell-muted); }
+    [data-ide-shell] .ide-state-card strong { display: block; color: var(--shell-text); font-size: 10px; }
+
+    /* Story docs — collapsible bottom (Storybook addons style) */
+    [data-ide-shell] .ide-panel-story {
+      border-top: 1px solid var(--shell-border);
+      flex-shrink: 0;
+    }
+    [data-ide-shell] .ide-story-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border: none;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--shell-muted);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+    }
+    [data-ide-shell] .ide-story-toggle:hover { color: var(--shell-text); background: rgba(255, 255, 255, 0.04); }
+    [data-ide-shell] .ide-story-body {
+      padding: 0 14px 14px;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--shell-muted);
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    [data-ide-shell] .ide-layout.story-collapsed .ide-story-body { display: none; }
+    [data-ide-shell] .ide-story-body h1 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--shell-text);
+      margin: 0 0 6px;
+    }
+    [data-ide-shell] .ide-story-body p { margin: 0 0 8px; }
+    [data-ide-shell] .ide-story-body ul { margin: 0; padding-left: 16px; }
+    [data-ide-shell] .ide-story-body li { margin-bottom: 4px; }
+  </style>
+
+  <!-- ============ 设计区样式（scoped：[data-ide-shell] .design-root …） ============ -->
+  <style id="design-styles">
+    [data-ide-shell] .ide-artboard[data-variant="A"],
+    [data-ide-shell] .ide-artboard[data-variant="B"],
+    [data-ide-shell] .ide-artboard[data-variant="C"] { max-width: 1240px; }
+
+    [data-ide-shell] .aut-root {
+      --bg: #141516; --surface: #212121; --hover: #2a2a2e; --pressed: #333338;
+      --line: #333338; --text: #ececee; --muted: #8b8c92;
+      --accent: #0a84ff; --ok: #30d158; --warn: #ffd60a; --bad: #ff453a;
+      font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+      background: transparent; color: var(--text);
+      font-size: 13px; line-height: 1.45;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    [data-ide-shell] .win {
+      width: 1160px; height: 648px;
+      background: var(--bg); color: var(--text);
+      border: 1px solid #2a2a2e; border-radius: 10px; overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,.5);
+      display: flex; flex-direction: column;
+      user-select: none;
+    }
+    [data-ide-shell] .tbar {
+      height: 40px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 12px; border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.02);
+    }
+    [data-ide-shell] .tl { display: flex; gap: 6px; margin-right: 4px; }
+    [data-ide-shell] .tl i { width: 11px; height: 11px; border-radius: 50%; background: #3a3a3f; }
+    [data-ide-shell] .tl i:nth-child(1) { background: #ff5f57; }
+    [data-ide-shell] .tl i:nth-child(2) { background: #febc2e; }
+    [data-ide-shell] .tl i:nth-child(3) { background: #28c840; }
+    [data-ide-shell] .crumbs { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    [data-ide-shell] .crumb { color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 2px 10px; border-radius: 999px; }
+    [data-ide-shell] .crumb.cur { color: var(--text); }
+    [data-ide-shell] .csep { color: var(--muted); opacity: .6; font-size: 10px; }
+    [data-ide-shell] .sp { flex: 1; }
+    [data-ide-shell] .ticon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+    [data-ide-shell] .wbody { flex: 1; display: flex; min-height: 0; position: relative; }
+
+    /* sidebar */
+    [data-ide-shell] .sb { width: 212px; flex-shrink: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; background: #191a1b; }
+    [data-ide-shell] .vtabs { display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    [data-ide-shell] .vt { width: 30px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+    [data-ide-shell] .vt:hover { background: var(--hover); }
+    [data-ide-shell] .vt.on { background: var(--pressed); color: var(--accent); }
+    [data-ide-shell] .sbgrp { font-size: 10px; letter-spacing: .08em; color: var(--muted); opacity: .8; padding: 12px 12px 4px; }
+    [data-ide-shell] .sbtile { display: flex; align-items: center; gap: 8px; padding: 5px 12px; }
+    [data-ide-shell] .sbtile b { font-size: 12.5px; font-weight: 500; display: block; }
+    [data-ide-shell] .sbtile small { font-size: 11px; color: var(--muted); }
+    [data-ide-shell] .stl { width: 22px; height: 22px; border-radius: 6px; background: var(--pressed); color: var(--muted); display: grid; place-items: center; font-size: 11px; }
+    [data-ide-shell] .sbrow { display: flex; align-items: center; gap: 7px; padding: 4px 12px; font-size: 12px; color: var(--text); opacity: .85; }
+    [data-ide-shell] .sbrow small { color: var(--muted); margin-left: auto; font-size: 10.5px; }
+
+    /* shapes: 唯一状态槽语言（status_indicator.go） */
+    [data-ide-shell] .spin { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--line); border-top-color: var(--accent); animation: autspin .9s linear infinite; flex-shrink: 0; }
+    [data-ide-shell] .ring { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ok); flex-shrink: 0; }
+    [data-ide-shell] .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    [data-ide-shell] .sq { width: 11px; height: 11px; border-radius: 3.5px; flex-shrink: 0; }
+    [data-ide-shell] .slot { width: 16px; display: grid; place-items: center; flex-shrink: 0; }
+    [data-ide-shell] .ok-c { background: var(--ok); } .warn-c { background: var(--warn); } .bad-c { background: var(--bad); }
+    [data-ide-shell] .mut-c { background: var(--muted); opacity: .5; }
+    [data-ide-shell] .sq.run { background: rgba(10,132,255,.15); border: 1.5px solid transparent; border-top-color: var(--accent); animation: autspin .9s linear infinite; }
+    @keyframes autspin { to { transform: rotate(360deg); } }
+
+    /* chips / buttons / segmented */
+    [data-ide-shell] .chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 1.5px 8px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+    [data-ide-shell] .chip.ok { color: var(--ok); border-color: rgba(48,209,88,.35); background: rgba(48,209,88,.08); }
+    [data-ide-shell] .chip.bad { color: var(--bad); border-color: rgba(255,69,58,.35); background: rgba(255,69,58,.08); }
+    [data-ide-shell] .chip.warn { color: var(--warn); border-color: rgba(255,214,10,.3); background: rgba(255,214,10,.06); }
+    [data-ide-shell] .chip.acc { color: var(--accent); border-color: rgba(10,132,255,.4); background: rgba(10,132,255,.1); }
+    [data-ide-shell] .btn { background: var(--hover); border: 1px solid var(--pressed); border-radius: 8px; padding: 4px 11px; font-size: 12px; color: var(--text); cursor: pointer; white-space: nowrap; }
+    [data-ide-shell] .btn:hover { background: var(--pressed); }
+    [data-ide-shell] .btn.pri { background: var(--accent); border-color: transparent; color: #fff; }
+    [data-ide-shell] .btn.ghost { background: transparent; border-color: var(--line); color: var(--text); }
+    [data-ide-shell] .btn.danger { color: var(--bad); }
+    [data-ide-shell] .btn.sm { padding: 2px 8px; font-size: 11px; }
+    [data-ide-shell] .seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; }
+    [data-ide-shell] .seg span { padding: 3px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+    [data-ide-shell] .seg span.on { background: var(--pressed); color: var(--text); }
+    [data-ide-shell] .lnk { color: var(--accent); cursor: pointer; }
+    [data-ide-shell] .mut { color: var(--muted); }
+
+    /* ============ Variant A — 管理列表 + 详情抽屉 ============ */
+    [data-ide-shell] .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    [data-ide-shell] .ptool { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+    [data-ide-shell] .phint { font-size: 11px; color: var(--muted); }
+    [data-ide-shell] .livebar { display: none; align-items: center; gap: 9px; margin: 0 14px 8px; padding: 8px 12px; border: 1px solid rgba(10,132,255,.35); background: rgba(10,132,255,.08); border-radius: 10px; font-size: 12.5px; }
+    [data-ide-shell] .design-root.ide-mode-running .livebar { display: flex; }
+    [data-ide-shell] .alist { flex: 1; overflow: hidden; padding: 0 8px; }
+    [data-ide-shell] .arow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+    [data-ide-shell] .arow:hover { background: var(--hover); }
+    [data-ide-shell] .anm { font-size: 13px; font-weight: 500; }
+    [data-ide-shell] .asub { font-size: 11.5px; color: var(--muted); }
+    [data-ide-shell] .anext { margin-left: auto; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+    [data-ide-shell] .pfoot { padding: 8px 16px 10px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); }
+    [data-ide-shell] .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 5; }
+    [data-ide-shell] .design-root.ide-mode-detail .dim, [data-ide-shell] .design-root.ide-mode-draft .dim { opacity: 1; pointer-events: auto; }
+    [data-ide-shell] .drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 420px; background: var(--surface); border-left: 1px solid var(--line); transform: translateX(105%); transition: transform .2s ease; z-index: 6; display: flex; flex-direction: column; }
+    [data-ide-shell] .design-root.ide-mode-detail .drawer { transform: none; }
+    [data-ide-shell] .dhead { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    [data-ide-shell] .dhead b { font-size: 14px; font-weight: 600; }
+    [data-ide-shell] .dx { margin-left: auto; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+    [data-ide-shell] .dx:hover { background: var(--hover); color: var(--text); }
+    [data-ide-shell] .dscroll { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+    [data-ide-shell] .pcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); }
+    [data-ide-shell] .pk { font-size: 10px; letter-spacing: .07em; color: var(--muted); margin: 8px 0 4px; }
+    [data-ide-shell] .pk:first-child { margin-top: 0; }
+    [data-ide-shell] .prat { font-size: 12px; color: var(--text); opacity: .85; }
+    [data-ide-shell] .pcard pre { margin: 0; font: 11px/1.55 "SF Mono", ui-monospace, Menlo, monospace; color: var(--text); white-space: pre-wrap; }
+    [data-ide-shell] .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+    [data-ide-shell] .fact { border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
+    [data-ide-shell] .fact small { display: block; font-size: 10px; color: var(--muted); letter-spacing: .05em; }
+    [data-ide-shell] .fact span { font-size: 12px; }
+    [data-ide-shell] .rk { font-size: 10px; letter-spacing: .07em; color: var(--muted); margin-bottom: 4px; }
+    [data-ide-shell] .rrow { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px; }
+    [data-ide-shell] .rrow:last-child { border-bottom: none; }
+    [data-ide-shell] .rmeta { color: var(--muted); font-size: 11.5px; }
+    [data-ide-shell] .ract { margin-left: auto; display: flex; gap: 6px; }
+    [data-ide-shell] .dfoot { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+    [data-ide-shell] .modal { position: absolute; left: 50%; top: 34px; width: 660px; transform: translate(-50%, -10px) scale(.98); opacity: 0; pointer-events: none; transition: all .18s; background: var(--surface); border: 1px solid var(--pressed); border-radius: 12px; z-index: 7; box-shadow: 0 30px 80px rgba(0,0,0,.55); display: flex; flex-direction: column; max-height: 570px; }
+    [data-ide-shell] .design-root.ide-mode-draft .modal { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto; }
+    [data-ide-shell] .mhead { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+    [data-ide-shell] .mbody { padding: 12px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+    [data-ide-shell] .mintent { font-size: 12.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; }
+    [data-ide-shell] .bul { margin: 0; padding-left: 16px; font-size: 12px; }
+    [data-ide-shell] .bul li { margin-bottom: 3px; }
+    [data-ide-shell] .mfoot { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); align-items: center; }
+
+    /* ============ Variant B — 运行看板 ============ */
+    [data-ide-shell] .board { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 4px 14px 12px; min-height: 0; }
+    [data-ide-shell] .bcol { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+    [data-ide-shell] .bch { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .06em; color: var(--muted); padding: 2px 4px; }
+    [data-ide-shell] .bch b { color: var(--text); font-weight: 600; }
+    [data-ide-shell] .bcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface); cursor: pointer; }
+    [data-ide-shell] .bcard:hover { border-color: var(--pressed); }
+    [data-ide-shell] .bh { display: flex; align-items: center; gap: 6px; }
+    [data-ide-shell] .bh b { font-size: 12.5px; font-weight: 600; }
+    [data-ide-shell] .bl { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+    [data-ide-shell] .dots { display: flex; gap: 4px; margin-top: 8px; }
+    [data-ide-shell] .dots i { width: 14px; height: 4px; border-radius: 2px; background: var(--ok); opacity: .75; }
+    [data-ide-shell] .dots i.f { background: var(--bad); }
+    [data-ide-shell] .dots i.s { background: var(--muted); opacity: .3; }
+    [data-ide-shell] .dots i.n { background: var(--line); }
+    [data-ide-shell] .ba { font-size: 11px; color: var(--muted); margin-top: 8px; }
+    [data-ide-shell] .bact { display: flex; gap: 6px; margin-top: 8px; }
+    [data-ide-shell] .brun { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; padding: 6px 8px; border-radius: 8px; background: rgba(10,132,255,.08); border: 1px solid rgba(10,132,255,.25); }
+    [data-ide-shell] .design-root.ide-mode-live .bcard.running { border-color: rgba(10,132,255,.45); box-shadow: 0 0 16px rgba(10,132,255,.12); }
+    [data-ide-shell] .brev { display: none; margin-top: 9px; border-top: 1px solid var(--line); padding-top: 9px; }
+    [data-ide-shell] .design-root.ide-mode-draft .bcard.draft .brev { display: block; }
+    [data-ide-shell] .brev pre { margin: 0 0 8px; font: 10.5px/1.5 "SF Mono", ui-monospace, Menlo, monospace; color: var(--text); white-space: pre-wrap; max-height: 120px; overflow: hidden; }
+    [data-ide-shell] .bfoot { padding: 4px 16px 10px; font-size: 11px; color: var(--muted); }
+
+    /* ============ Variant C — 双栏监控 ============ */
+    [data-ide-shell] .gstrip { display: flex; align-items: center; gap: 10px; margin: 10px 14px 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 12px; }
+    [data-ide-shell] .split { flex: 1; display: flex; min-height: 0; padding: 10px 14px 12px; gap: 12px; }
+    [data-ide-shell] .rail { width: 264px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 5px; overflow-y: auto; }
+    [data-ide-shell] .lrow { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 8px; cursor: pointer; }
+    [data-ide-shell] .lrow:hover { background: var(--hover); }
+    [data-ide-shell] .lrow.sel { background: rgba(10,132,255,.14); }
+    [data-ide-shell] .lnm { font-size: 12.5px; font-weight: 500; }
+    [data-ide-shell] .lsub { font-size: 10.5px; color: var(--muted); }
+    [data-ide-shell] .det { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px 14px; overflow-y: auto; }
+    [data-ide-shell] .deth { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    [data-ide-shell] .deth b { font-size: 15px; font-weight: 600; }
+    [data-ide-shell] .strip { display: flex; align-items: center; gap: 5px; padding: 7px 0; }
+    [data-ide-shell] .strip i { flex: 1; height: 1px; background: var(--line); }
+    [data-ide-shell] .sg { font-size: 10.5px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+    [data-ide-shell] .sg.done { color: var(--ok); border-color: rgba(48,209,88,.35); }
+    [data-ide-shell] .sg.cur { color: var(--accent); border-color: rgba(10,132,255,.45); animation: autpulse 1.6s ease infinite; }
+    [data-ide-shell] .sg.stall { color: var(--bad); border-color: rgba(255,69,58,.4); }
+    [data-ide-shell] .sg.idle { opacity: .55; }
+    @keyframes autpulse { 50% { box-shadow: 0 0 10px rgba(10,132,255,.25); } }
+    [data-ide-shell] .titem { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; }
+    [data-ide-shell] .titem .rmeta { display: block; margin-top: 5px; }
+    [data-ide-shell] .livet { display: none; border-color: rgba(10,132,255,.4); }
+    [data-ide-shell] .design-root.ide-mode-live .livet { display: block; }
+    [data-ide-shell] .detdraft { display: none; }
+    [data-ide-shell] .design-root.ide-mode-draft .detdraft { display: block; }
+    [data-ide-shell] .design-root.ide-mode-draft .detnorm { display: none; }
+
+    [data-ide-shell] .mech { width: 1160px; font-size: 11px; color: var(--muted); opacity: .8; padding: 0 4px; }
+    [data-ide-shell] .mech code { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text); opacity: .9; }
+  </style>
+</head>
+<body data-ide-shell>
+  <div class="ide-layout" id="ideLayout">
+    <main class="ide-stage">
+      <span class="ide-stage-label" id="stageLabel">Variant A</span>
+      <button type="button" class="ide-panel-collapse-btn" id="panelCollapseBtn" title="收起面板，全画布演示">›</button>
+
+      <div class="ide-artboard-wrap">
+        <!-- ================= Variant A ================= -->
+        <div class="ide-artboard active" data-variant="A">
+          <div class="design-root" id="designRootA">
+            <div class="aut-root">
+              <div class="win">
+                <div class="tbar">
+                  <span class="tl"><i></i><i></i><i></i></span>
+                  <div class="crumbs"><span class="crumb">solco</span><span class="csep">›</span><span class="crumb cur">Automations</span></div>
+                  <span class="sp"></span>
+                  <span class="ticon">⌕</span><span class="ticon">⋯</span>
+                </div>
+                <div class="wbody">
+                  <aside class="sb">
+                    <div class="vtabs" title="侧栏顶部视图 tabs：Terminal / Changes / Sessions / Files / Hosts + Automations（新）">
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 4.5l4 3.5-4 3.5M9 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="3.5" r="1.6" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="12.5" r="1.6" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="6" r="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 5.1v5.8M11.5 7.6c0 2.3-2.3 2.9-5.4 3.2" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.2l2.2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.7a1 1 0 011-1h2.8L7.8 5.2h4.7a1 1 0 011 1v5.6a1 1 0 01-1 1h-9a1 1 0 01-1-1z" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="8" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M6 13.5h4M8 11v2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+                      <span class="vt on" title="Automations"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8.9 1.8L4.2 9h3l-.9 5.2L11.8 7h-3z"/></svg></span>
+                    </div>
+                    <div class="sbgrp">WORKSPACES</div>
+                    <div class="sbtile"><span class="stl">S</span><div><b>solco</b><small>main · 3 panes</small></div></div>
+                    <div class="sbgrp">AGENTS · SOLCO</div>
+                    <div class="sbrow"><span class="slot"><span class="ring"></span></span>docs-sync 对话<small>2h</small></div>
+                    <div class="sbrow"><span class="slot"><span class="spin" style="width:11px;height:11px"></span></span>refactor-gorexE<small>14m</small></div>
+                  </aside>
+                  <main class="main">
+                    <div class="ptool">
+                      <div class="seg"><span class="on">全部 6</span><span>启用 4</span><span>草稿 1</span><span>已暂停 1</span></div>
+                      <span class="sp"></span>
+                      <span class="phint">com.whstudio.solco.automations 0.2.0 · daemon 运行中</span>
+                      <button class="btn ghost" data-act="open-draft">✦ 让 Agent 起草</button>
+                      <button class="btn pri">＋ 新建自动化</button>
+                    </div>
+                    <div class="livebar"><span class="spin"></span><b style="font-weight:600">pr-wait-babysit</b> 正在运行 · 12 分钟 · worktree auto/pr-wait-1102<span class="sp"></span><button class="btn ghost sm">打开窗格</button><button class="btn ghost sm">在 Chat 查看</button></div>
+                    <div class="alist">
+                      <div class="arow" data-act="open-drawer">
+                        <span class="slot"><span class="ring"></span></span>
+                        <div><div class="anm">nightly-ci-triage</div><div class="asub">工作日 09:00 · claude · solco</div></div>
+                        <span class="anext">下次 明天 09:00</span>
+                        <span class="chip ok">✓ 昨天 · 38m</span>
+                      </div>
+                      <div class="arow">
+                        <span class="slot"><span class="sq run"></span></span>
+                        <div><div class="anm">pr-wait-babysit</div><div class="asub">每 30 分钟 · codex · solco</div></div>
+                        <span class="anext" style="color:var(--accent)">运行中 · 12m</span>
+                        <span class="chip acc">运行 2/4 轮</span>
+                      </div>
+                      <div class="arow">
+                        <span class="slot"><span class="dot warn-c"></span></span>
+                        <div><div class="anm">flaky-hunt</div><div class="asub">每天 02:00 · claude · solco</div></div>
+                        <span class="anext">下次 明天 02:00</span>
+                        <span class="chip bad">✗ 超时 · 需要你</span>
+                      </div>
+                      <div class="arow" data-act="open-draft">
+                        <span class="slot"><span class="dot" style="background:var(--accent)"></span></span>
+                        <div><div class="anm">merge-sync-docs</div><div class="asub">草稿 · Agent 起草于 2 小时前 · docs</div></div>
+                        <span class="anext">待审阅</span>
+                        <span class="chip acc">✦ 草稿</span>
+                      </div>
+                      <div class="arow">
+                        <span class="slot"><span class="dot mut-c"></span></span>
+                        <div><div class="anm">deps-drift-report</div><div class="asub">每周一 10:00 · omp · solco</div></div>
+                        <span class="anext">已暂停</span>
+                        <span class="chip">✓ 10-27 · 6m</span>
+                      </div>
+                      <div class="arow">
+                        <span class="slot"><span class="ring" style="border-color:var(--muted)"></span></span>
+                        <div><div class="anm">inbox-triage</div><div class="asub">一次性 · 明天 08:30 · claude</div></div>
+                        <span class="anext">已排程 · 1 次</span>
+                        <span class="chip">从未运行</span>
+                      </div>
+                    </div>
+                    <div class="pfoot">6 个自动化 · 1 个运行中 · 上次扫描 30 秒前 · 运行记录保留 30 天</div>
+                  </main>
+                  <div class="dim" data-act="close-drawer"></div>
+                  <aside class="drawer">
+                    <div class="dhead"><b>nightly-ci-triage</b><span class="chip ok">已启用</span><span class="sp"></span><span class="dx" data-act="close-drawer">✕</span></div>
+                    <div class="dscroll">
+                      <div class="pcard">
+                        <div class="pk">AGENT 起草时的分析（RATIONALE）</div>
+                        <div class="prat">观察 6 周 nightly：70% 失败为测试抖动、被反复人工重跑。目标 = 工作日早上 9 点前拿到归因表；真实回归当天出修复草案 PR。</div>
+                        <div class="pk">提示词 · 每次运行原样投递</div>
+                        <pre>目标：分诊夜间 CI 失败，产出归因与修复草案。
+输入：gh run list 昨晚失败的 workflow；失败 job 日志尾部。
+步骤：
+1. 逐个失败 job 提取报错栈，定位可疑提交
+2. 归因：测试抖动 / 依赖漂移 / 真实回归
+3. 真实回归 → 新分支写最小修复 + 测试，开 PR
+4. 抖动 → 重跑一次确认，记入报告
+产出：≤200 字摘要 + 归因表；PR 链接随通知发送。
+护栏：不合并 PR；不改 workflow 文件；40 分钟未定位即停止。</pre>
+                      </div>
+                      <div class="facts">
+                        <div class="fact"><small>触发</small><span>工作日 09:00 · cron 0 9 * * 1-5</span></div>
+                        <div class="fact"><small>仓库</small><span>~/Workspaces/wh-studio/solco</span></div>
+                        <div class="fact"><small>运行模式</small><span>独立 worktree auto/&lt;名称&gt;-&lt;日期&gt;</span></div>
+                        <div class="fact"><small>Agent</small><span>claude · 默认模型</span></div>
+                        <div class="fact"><small>策略</small><span>重叠跳过 · 超时 60 分钟</span></div>
+                        <div class="fact"><small>清理</small><span>合并后保留 7 天</span></div>
+                      </div>
+                      <div>
+                        <div class="rk">运行 · 最近 5 次（保留 30 天）</div>
+                        <div class="rrow"><span class="chip ok">✓</span><b style="font-weight:500">#128</b><span class="rmeta">昨天 09:00 · 38 分钟 · 修复 PR #482</span><span class="ract"><span class="lnk">打开窗格</span><span class="lnk">在 Chat 查看</span></span></div>
+                        <div class="rrow"><span class="chip ok">✓</span><b style="font-weight:500">#127</b><span class="rmeta">前天 09:00 · 41 分钟 · 无回归</span><span class="ract"><span class="lnk">打开窗格</span></span></div>
+                        <div class="rrow"><span class="chip bad">✗</span><b style="font-weight:500">#126</b><span class="rmeta">10-31 09:00 · 超时（60 分钟上限）</span><span class="ract"><span class="lnk">打开窗格</span><span class="lnk">在 Chat 查看</span></span></div>
+                        <div class="rrow"><span class="chip">⊘</span><b style="font-weight:500">#125</b><span class="rmeta">10-30 · 跳过（上一次仍在运行）</span></div>
+                      </div>
+                    </div>
+                    <div class="dfoot"><button class="btn pri">▶ 立即运行</button><button class="btn">暂停</button><button class="btn">编辑…</button><span class="sp"></span><button class="btn danger">删除…</button></div>
+                  </aside>
+                  <div class="modal">
+                    <div class="mhead">Agent 草稿 · 待你审阅<span class="chip acc">merge-sync-docs</span><span class="sp"></span><span class="dx" data-act="close-draft">✕</span></div>
+                    <div class="mbody">
+                      <div class="mintent">你在 Chat 里说：「PR 合并后自动把 API 变更同步到 docs 仓库」</div>
+                      <div>
+                        <div class="rk">AGENT 的分析</div>
+                        <ul class="bul">
+                          <li><b>触发</b>：你要的是「合并后」事件；插件 v1 触发器为 cron / 一次性 / 手动 → 用 <code style="font-family:ui-monospace;font-size:11px">*/10</code> 轮询已合并 PR 近似，延迟 ≤10 分钟</li>
+                          <li><b>目标</b>：~/Workspaces/wh-studio/docs（本机检测到）；只写 docs 仓库，每次运行独立 worktree，不碰你的工作区</li>
+                          <li><b>成本</b>：每次运行 ≈ 1 个 claude 会话，约 15k tokens；建议超时 30 分钟</li>
+                        </ul>
+                      </div>
+                      <div class="pcard">
+                        <div class="pk">生成的提示词（批准后与自动化一起保存）</div>
+                        <pre>目标：PR 合并后 10 分钟内，把 API 变更同步到 docs 仓库。
+输入：git log --first-parent <同步标记>..main 的合并提交；变更 API 符号。
+步骤：
+1. 归类新增 / 变更 / 废弃 API
+2. 在 docs 仓库按模板更新参考页（保持现有语气）
+3. 开 PR：docs: sync API changes (date)，正文列源合并与符号
+护栏：不修改本仓库；docs PR 永不自动合并；单次 ≤20 文件。
+成功：docs PR 创建且 CI 绿；失败时 herdr notification show 通知。</pre>
+                      </div>
+                      <div class="facts">
+                        <div class="fact"><small>触发</small><span>每 10 分钟检查已合并 PR</span></div>
+                        <div class="fact"><small>仓库</small><span>~/Workspaces/wh-studio/docs</span></div>
+                        <div class="fact"><small>Agent</small><span>claude</span></div>
+                        <div class="fact"><small>超时</small><span>30 分钟 · 重叠跳过</span></div>
+                      </div>
+                    </div>
+                    <div class="mfoot"><button class="btn ghost">丢弃草稿</button><span class="sp"></span><button class="btn">调整后再审</button><button class="btn pri" data-act="close-draft">批准并启用</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mech">实现机制：行 = <code>automations list --json</code>；抽屉事实 = 记录字段；运行 = 插件开真实 Herdr worktree workspace + <code>agent start/prompt/wait</code>；草稿 = <code>automations add --draft</code> → 批准 = <code>automations approve &lt;name&gt;</code>。Solco 无任何自有运行时。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= Variant B ================= -->
+        <div class="ide-artboard" data-variant="B">
+          <div class="design-root" id="designRootB">
+            <div class="aut-root">
+              <div class="win">
+                <div class="tbar">
+                  <span class="tl"><i></i><i></i><i></i></span>
+                  <div class="crumbs"><span class="crumb">solco</span><span class="csep">›</span><span class="crumb cur">Automations</span></div>
+                  <span class="sp"></span>
+                  <span class="ticon">⌕</span><span class="ticon">⋯</span>
+                </div>
+                <div class="wbody">
+                  <aside class="sb">
+                    <div class="vtabs">
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 4.5l4 3.5-4 3.5M9 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="3.5" r="1.6" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="12.5" r="1.6" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="6" r="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 5.1v5.8M11.5 7.6c0 2.3-2.3 2.9-5.4 3.2" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.2l2.2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.7a1 1 0 011-1h2.8L7.8 5.2h4.7a1 1 0 011 1v5.6a1 1 0 01-1 1h-9a1 1 0 01-1-1z" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="8" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M6 13.5h4M8 11v2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+                      <span class="vt on"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8.9 1.8L4.2 9h3l-.9 5.2L11.8 7h-3z"/></svg></span>
+                    </div>
+                    <div class="sbgrp">WORKSPACES</div>
+                    <div class="sbtile"><span class="stl">S</span><div><b>solco</b><small>main · 3 panes</small></div></div>
+                    <div class="sbgrp">AGENTS · SOLCO</div>
+                    <div class="sbrow"><span class="slot"><span class="ring"></span></span>docs-sync 对话<small>2h</small></div>
+                  </aside>
+                  <main class="main">
+                    <div class="ptool">
+                      <span class="phint" style="font-size:12.5px;color:var(--text)">自动化看板</span>
+                      <span class="sp"></span>
+                      <span class="phint">com.whstudio.solco.automations 0.2.0</span>
+                      <button class="btn ghost">✦ 让 Agent 起草</button>
+                      <button class="btn pri">＋ 新建自动化</button>
+                    </div>
+                    <div class="board">
+                      <div class="bcol">
+                        <div class="bch"><b>需要你</b> 2</div>
+                        <div class="bcard">
+                          <div class="bh"><b>flaky-hunt</b><span class="chip bad">✗ 超时</span></div>
+                          <div class="bl">每天 02:00 · claude · solco</div>
+                          <div class="dots"><i></i><i></i><i></i><i class="f"></i><i></i><i></i><i></i></div>
+                          <div class="ba">昨夜 02:00 · 60 分钟上限 · agent 停在依赖安装</div>
+                          <div class="bact"><button class="btn sm ghost">打开窗格</button><button class="btn sm ghost">在 Chat 查看</button><button class="btn sm">重试</button></div>
+                        </div>
+                        <div class="bcard draft" data-act="open-draft-b">
+                          <div class="bh"><b>merge-sync-docs</b><span class="chip acc">✦ 草稿</span></div>
+                          <div class="bl">PR merged → 同步 docs · claude · docs</div>
+                          <div class="ba">Claude 起草于 2 小时前 · 待你批准</div>
+                          <div class="brev">
+                            <pre>目标：PR 合并后 10 分钟内同步 API 变更到 docs 仓库。
+1. 归类新增/变更/废弃 API
+2. 按 docs 模板更新参考页
+3. 开 PR（永不自动合并）
+护栏：不修改本仓库；单次 ≤20 文件。</pre>
+                            <div class="bact"><button class="btn sm pri">批准并启用</button><button class="btn sm ghost">编辑</button><button class="btn sm ghost">丢弃</button></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="bcol">
+                        <div class="bch"><b>运行中</b> 1</div>
+                        <div class="bcard running">
+                          <div class="bh"><b>pr-wait-babysit</b><span class="chip acc">运行中</span></div>
+                          <div class="bl">每 30 分钟 · codex · solco</div>
+                          <div class="brun"><span class="spin"></span> 12 分钟 · 轮 2/4 · worktree auto/pr-wait-1102</div>
+                          <div class="bact"><button class="btn sm ghost">打开窗格</button><button class="btn sm ghost">在 Chat 查看</button><button class="btn sm danger">停止</button></div>
+                        </div>
+                      </div>
+                      <div class="bcol">
+                        <div class="bch"><b>已排程</b> 2</div>
+                        <div class="bcard">
+                          <div class="bh"><b>nightly-ci-triage</b><span class="chip ok">✓ 稳定</span></div>
+                          <div class="bl">工作日 09:00 · claude · solco</div>
+                          <div class="dots"><i></i><i></i><i></i><i class="f"></i><i></i><i></i><i></i></div>
+                          <div class="ba">下次 明天 09:00 · 上次 38 分钟 · 修复 PR #482</div>
+                        </div>
+                        <div class="bcard">
+                          <div class="bh"><b>inbox-triage</b><span class="chip">一次性</span></div>
+                          <div class="bl">明天 08:30 · claude · 个人收件箱</div>
+                          <div class="ba">从未运行 · 运行后自动完成</div>
+                        </div>
+                      </div>
+                      <div class="bcol">
+                        <div class="bch"><b>已暂停 / 完成</b></div>
+                        <div class="bcard">
+                          <div class="bh"><b>deps-drift-report</b><span class="chip">已暂停</span></div>
+                          <div class="bl">每周一 10:00 · omp · solco</div>
+                          <div class="ba">暂停于 10-28 · <span class="lnk">恢复</span></div>
+                        </div>
+                        <div class="ba" style="padding:2px 4px">今天已完成 3 次运行 · 全部成功 · 历史在 <span class="lnk">运行记录</span></div>
+                      </div>
+                    </div>
+                    <div class="bfoot">看板按状态分列 · 卡片上的 7 格条 = 最近 7 次运行 · 运行记录保留 30 天</div>
+                  </main>
+                </div>
+              </div>
+              <div class="mech">实现机制：列 = <code>automations list --json</code> 按 state 分组（draft/needs-you 由插件状态机给出）；运行卡 = 活跃 run 记录轮询；「需要你」列聚合 待审草稿 + 失败运行。Solco 无任何自有运行时。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= Variant C ================= -->
+        <div class="ide-artboard" data-variant="C">
+          <div class="design-root" id="designRootC">
+            <div class="aut-root">
+              <div class="win">
+                <div class="tbar">
+                  <span class="tl"><i></i><i></i><i></i></span>
+                  <div class="crumbs"><span class="crumb">solco</span><span class="csep">›</span><span class="crumb cur">Automations</span></div>
+                  <span class="sp"></span>
+                  <span class="ticon">⌕</span><span class="ticon">⋯</span>
+                </div>
+                <div class="wbody">
+                  <aside class="sb">
+                    <div class="vtabs">
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 4.5l4 3.5-4 3.5M9 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="3.5" r="1.6" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="12.5" r="1.6" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="6" r="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 5.1v5.8M11.5 7.6c0 2.3-2.3 2.9-5.4 3.2" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.2l2.2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.7a1 1 0 011-1h2.8L7.8 5.2h4.7a1 1 0 011 1v5.6a1 1 0 01-1 1h-9a1 1 0 01-1-1z" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                      <span class="vt"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="8" rx="1.2" stroke="currentColor" stroke-width="1.4"/><path d="M6 13.5h4M8 11v2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+                      <span class="vt on"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8.9 1.8L4.2 9h3l-.9 5.2L11.8 7h-3z"/></svg></span>
+                    </div>
+                    <div class="sbgrp">WORKSPACES</div>
+                    <div class="sbtile"><span class="stl">S</span><div><b>solco</b><small>main · 3 panes</small></div></div>
+                    <div class="sbgrp">AGENTS · SOLCO</div>
+                    <div class="sbrow"><span class="slot"><span class="ring"></span></span>docs-sync 对话<small>2h</small></div>
+                  </aside>
+                  <main class="main">
+                    <div class="gstrip">
+                      <span class="spin"></span><b style="font-weight:600">pr-wait-babysit</b> 运行中 · 12 分钟<span class="lnk">打开窗格</span>
+                      <span style="opacity:.3">|</span>
+                      <span class="dot warn-c"></span> flaky-hunt 需要你 · 昨夜超时<span class="lnk">查看</span>
+                      <span class="sp"></span>
+                      <button class="btn ghost sm">✦ 让 Agent 起草</button>
+                      <button class="btn pri sm">＋ 新建自动化</button>
+                    </div>
+                    <div class="split">
+                      <div class="rail">
+                        <div class="lrow sel"><span class="slot"><span class="ring"></span></span><div><div class="lnm">nightly-ci-triage</div><div class="lsub">工作日 09:00 · claude</div></div></div>
+                        <div class="lrow"><span class="slot"><span class="sq run"></span></span><div><div class="lnm">pr-wait-babysit</div><div class="lsub">每 30 分钟 · codex</div></div></div>
+                        <div class="lrow"><span class="slot"><span class="dot warn-c"></span></span><div><div class="lnm">flaky-hunt</div><div class="lsub">每天 02:00 · ✗ 超时</div></div></div>
+                        <div class="lrow"><span class="slot"><span class="dot" style="background:var(--accent)"></span></span><div><div class="lnm">merge-sync-docs</div><div class="lsub">草稿 · 待审阅</div></div></div>
+                        <div class="lrow"><span class="slot"><span class="dot mut-c"></span></span><div><div class="lnm">deps-drift-report</div><div class="lsub">每周一 10:00 · 已暂停</div></div></div>
+                      </div>
+                      <div class="det">
+                        <div class="detnorm">
+                          <div class="deth"><b>nightly-ci-triage</b><span class="chip ok">已启用</span><span class="sp"></span><button class="btn sm pri">▶ 立即运行</button><button class="btn sm">暂停</button><button class="btn sm">编辑…</button><button class="btn sm danger">删除…</button></div>
+                          <div class="pcard" style="margin-bottom:10px">
+                            <div class="pk">提示词 · 每次运行原样投递（<span class="lnk">展开起草分析</span>）</div>
+                            <pre style="font:11px/1.55 'SF Mono',ui-monospace,Menlo,monospace;white-space:pre-wrap">目标：分诊夜间 CI 失败，产出归因与修复草案。
+步骤：提取失败栈 → 归因（抖动/漂移/回归）→ 回归开修复 PR → 抖动重跑确认。
+产出 ≤200 字摘要 + 归因表；护栏：不合并 PR、不改 workflow、40 分钟未定位即停止。</pre>
+                          </div>
+                          <div class="titem livet">
+                            <div style="display:flex;align-items:center;gap:8px"><span class="spin"></span><b style="font-weight:600">#129 · 手动触发</b><span class="rmeta">现在 · 已 12 分钟</span><span class="sp"></span><span class="lnk">打开窗格</span><span class="lnk">在 Chat 查看</span><span class="lnk" style="color:var(--bad)">停止</span></div>
+                            <div class="strip"><span class="sg done">排队</span><i></i><span class="sg done">Worktree</span><i></i><span class="sg cur">Agent</span><i></i><span class="sg idle">收尾</span><i></i><span class="sg idle">完成</span></div>
+                            <span class="rmeta">worktree auto/nightly-ci-1102 · claude · 超时余 48 分钟</span>
+                          </div>
+                          <div class="titem">
+                            <div style="display:flex;align-items:center;gap:8px"><span class="chip ok">✓</span><b style="font-weight:600">#128</b><span class="rmeta">昨天 09:00 · 38 分钟 · 修复 PR #482</span><span class="sp"></span><span class="lnk">打开窗格</span><span class="lnk">在 Chat 查看</span></div>
+                            <div class="strip"><span class="sg done">排队</span><i></i><span class="sg done">Worktree</span><i></i><span class="sg done">Agent</span><i></i><span class="sg done">收尾</span><i></i><span class="sg done">完成</span></div>
+                            <span class="rmeta">worktree auto/nightly-ci-1101 · 2 提交 · 已合并</span>
+                          </div>
+                          <div class="titem">
+                            <div style="display:flex;align-items:center;gap:8px"><span class="chip bad">✗</span><b style="font-weight:600">#126</b><span class="rmeta">10-31 09:00 · 超时（60 分钟上限）</span><span class="sp"></span><span class="lnk">打开窗格</span><span class="lnk">在 Chat 查看</span></div>
+                            <div class="strip"><span class="sg done">排队</span><i></i><span class="sg done">Worktree</span><i></i><span class="sg stall">Agent</span><i></i><span class="sg idle">收尾</span><i></i><span class="sg idle">完成</span></div>
+                          </div>
+                          <div class="titem">
+                            <div style="display:flex;align-items:center;gap:8px"><span class="chip">⊘</span><b style="font-weight:600">#125</b><span class="rmeta">10-30 · 跳过（上一次仍在运行）</span></div>
+                          </div>
+                          <div class="rk" style="margin-top:6px">更早的运行 · 保留 30 天 · <span class="lnk">全部 128 条</span></div>
+                        </div>
+                        <div class="detdraft">
+                          <div class="deth"><b>merge-sync-docs</b><span class="chip acc">✦ 草稿</span><span class="sp"></span><button class="btn sm ghost">丢弃</button><button class="btn sm">编辑</button><button class="btn sm pri">批准并启用</button></div>
+                          <div class="mintent" style="margin-bottom:10px">你在 Chat 里说：「PR 合并后自动把 API 变更同步到 docs 仓库」</div>
+                          <div class="rk">AGENT 的分析</div>
+                          <ul class="bul" style="margin-bottom:10px">
+                            <li>「合并后」事件 → v1 用 */10 轮询已合并 PR 近似，延迟 ≤10 分钟</li>
+                            <li>目标 ~/Workspaces/wh-studio/docs；每次运行独立 worktree</li>
+                            <li>每次 ≈ 15k tokens · 超时建议 30 分钟</li>
+                          </ul>
+                          <div class="pcard">
+                            <div class="pk">生成的提示词</div>
+                            <pre>目标：PR 合并后 10 分钟内，把 API 变更同步到 docs 仓库。
+步骤：归类新增/变更/废弃 API → 更新参考页 → 开 PR（永不自动合并）。
+护栏：不修改本仓库；单次 ≤20 文件。失败时 herdr notification show。</pre>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </main>
+                </div>
+              </div>
+              <div class="mech">实现机制：顶部全局运行条 = 活跃 run 列表；时间线条 = 插件 run 记录的阶段字段（排队/Worktree/Agent/收尾/完成），失败停在实际阶段；「在 Chat 查看」 = run 关联的 provider session 经 internal/history 打开。Solco 无任何自有运行时。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <button type="button" class="ide-panel-expand-btn" id="panelExpandBtn" title="展开面板">☰</button>
+
+    <aside class="ide-story-panel">
+      <div class="ide-panel-header">Design Storybook</div>
+      <div class="ide-panel-controls">
+        <div class="ide-section-title">Variants</div>
+        <div id="variantList"></div>
+        <div class="ide-section-title" id="statesSectionTitle" hidden>Interaction states</div>
+        <div id="statesList"></div>
+      </div>
+      <div class="ide-panel-story">
+        <button type="button" class="ide-story-toggle" id="storyToggleBtn">
+          <span>Story</span><span id="storyChevron">▼</span>
+        </button>
+        <div class="ide-story-body" id="storyBody">
+          <h1>Automations：herdr 自动化的原生视图</h1>
+          <p><b>决策点</b>：侧栏第 5 个视图目的地的信息架构（A 列表+抽屉 / B 看板 / C 双栏监控），以及 Agent 起草→人审批的创建流如何进入界面。</p>
+          <p><b>调研结论（Phase 0）</b></p>
+          <ul>
+            <li>参考 DnzzL/herdr-automations（MIT，已克隆 /tmp）：herdr 插件 + 常驻 daemon，cron 触发，每次运行开真实 worktree workspace + agent start/prompt/wait；缺口 = 无草稿审批、无成功通知、历史无界、无清理 TTL、只留 pane id。</li>
+            <li>业界共识（ChatGPT Tasks / Claude Code routines）：任务 = prompt+触发+环境，Agent 可对话式创建，每次运行可追溯，有专门管理面。</li>
+            <li>solco 已有插件门控先例（internal/workboard）与本机自有插件先例（com.whstudio.solco.hooks）；workboard 亦有项目级 automations 客户端。</li>
+          </ul>
+          <p><b>三案共同点</b>：视图入口在 sidebarViewTabs 第 6 枚图标（⌘6），gate 关时隐藏；Agent 起草的自动化一律先落「草稿/待审阅」，批准才启用；每次运行在真实窗格，可从运行行跳窗格或经 internal/history 在 Chat 回看；提示词与 Agent 分析（rationale）一起保存。</p>
+          <p><b>取舍</b></p>
+          <ul>
+            <li>A：与 Sessions/Files 心智一致、实现最薄；活感靠列表行内 spinner + 抽屉。</li>
+            <li>B：监控感最强，「需要你」列统一收口失败与待审；密度最低，自动化多时靠滚动。</li>
+            <li>C：单自动化生命周期最完整（RunStrip 阶段条）；占宽最大，多一层选择。</li>
+          </ul>
+          <p><b>最脆弱的假设</b>：插件 v1 只有 cron/一次性/手动触发，「事件触发」用轮询近似（草稿卡里已向用户言明）；daemon 挂掉时视图只读 + 顶部离线提示。</p>
+          <p><b>视觉</b>：全部色值取自 internal/nativeui/theme.go（暗色）；行高/圆角对齐 controls.go 与既有视图。</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const IDE_CONFIG = {
+      variants: {
+        A: { label: 'A · 管理列表 + 详情抽屉', title: 'A — 管理列表 + 详情抽屉', desc: '一列自动化行，点开右侧抽屉读分析/提示词/事实/运行；与 Sessions/Files 心智一致，实现最薄', states: ['detail', 'draft', 'running'] },
+        B: { label: 'B · 运行看板', title: 'B — 运行看板', desc: '按状态分列（需要你/运行中/已排程/已暂停）；失败与待审草稿统一收口在「需要你」', states: ['live', 'draft'] },
+        C: { label: 'C · 双栏监控', title: 'C — 双栏监控', desc: '左栏自动化 + 右栏单自动化生命周期（RunStrip 阶段条）+ 顶部全局运行条', states: ['live', 'draft'] },
+      },
+      stateLabels: { '': '默认', detail: '详情抽屉', draft: 'Agent 草稿审批', running: '运行中', live: '运行实况' },
+    };
+
+    let activeVariant = 'A';
+    let activeState = '';
+    const ideLayout = document.getElementById('ideLayout');
+    const stageLabel = document.getElementById('stageLabel');
+    const statesSection = document.getElementById('statesSectionTitle');
+    const statesList = document.getElementById('statesList');
+    const variantList = document.getElementById('variantList');
+    const artboards = document.querySelectorAll('.ide-artboard');
+
+    function renderVariantCards() {
+      variantList.innerHTML = '';
+      Object.entries(IDE_CONFIG.variants).forEach(([id, cfg]) => {
+        const card = document.createElement('div');
+        card.className = 'ide-variant-card' + (id === activeVariant ? ' active' : '');
+        card.innerHTML = '<h2>' + (cfg.title || id) + '</h2><p>' + (cfg.desc || '') + '</p>';
+        card.addEventListener('click', () => setVariant(id));
+        variantList.appendChild(card);
+      });
+    }
+
+    function renderStateCards() {
+      const states = IDE_CONFIG.variants[activeVariant]?.states ?? [];
+      statesList.innerHTML = '';
+      statesSection.hidden = !states.length;
+      states.forEach((s) => {
+        const card = document.createElement('div');
+        card.className = 'ide-state-card' + (s === activeState ? ' active' : '');
+        const label = (IDE_CONFIG.stateLabels[s] ?? s) || 'Default';
+        card.innerHTML = '<strong>' + label + '</strong>';
+        card.addEventListener('click', () => setState(s));
+        statesList.appendChild(card);
+      });
+    }
+
+    function applyInteractionClass() {
+      artboards.forEach((ab) => {
+        if (ab.dataset.variant !== activeVariant) return;
+        const root = ab.querySelector('.design-root');
+        if (!root) return;
+        const id = root.id;
+        root.className = 'design-root' + (activeState ? ' ide-mode-' + activeState : '');
+        if (id) root.id = id;
+      });
+    }
+
+    function setVariant(v) {
+      activeVariant = v;
+      activeState = '';
+      artboards.forEach((ab) => ab.classList.toggle('active', ab.dataset.variant === v));
+      const cfg = IDE_CONFIG.variants[v];
+      stageLabel.textContent = 'Variant ' + v + (cfg?.label ? ' — ' + cfg.label : '');
+      renderVariantCards();
+      renderStateCards();
+      applyInteractionClass();
+    }
+
+    function setState(s) {
+      activeState = activeState === s && s !== '' ? '' : s;
+      renderStateCards();
+      applyInteractionClass();
+      const stateName = (IDE_CONFIG.stateLabels[activeState] ?? activeState) || 'Default';
+      stageLabel.textContent = 'Variant ' + activeVariant + ' · ' + stateName;
+    }
+
+    document.getElementById('panelCollapseBtn')?.addEventListener('click', () => {
+      ideLayout.classList.add('panel-collapsed');
+    });
+    document.getElementById('panelExpandBtn')?.addEventListener('click', () => {
+      ideLayout.classList.remove('panel-collapsed');
+    });
+    document.getElementById('storyToggleBtn')?.addEventListener('click', () => {
+      const collapsed = ideLayout.classList.toggle('story-collapsed');
+      document.getElementById('storyChevron').textContent = collapsed ? '▶' : '▼';
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (activeState) setState(activeState);
+        else ideLayout.classList.add('panel-collapsed');
+      }
+    });
+
+    /* 画布内交互：行/卡片点击进入对应状态（与右栏 state 卡等效） */
+    const ACT_MAP = {
+      'open-drawer': ['ide-mode-detail', 'add'],
+      'close-drawer': ['ide-mode-detail', 'remove'],
+      'open-draft': ['ide-mode-draft', 'add'],
+      'open-draft-b': ['ide-mode-draft', 'add'],
+      'close-draft': ['ide-mode-draft', 'remove'],
+    };
+    document.querySelectorAll('.design-root').forEach((root) => {
+      root.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-act]');
+        if (!t) return;
+        const spec = ACT_MAP[t.dataset.act];
+        if (!spec) return;
+        root.classList[spec[1]](spec[0]);
+      });
+    });
+
+    renderVariantCards();
+    setVariant('A');
+  </script>
+</body>
+</html>

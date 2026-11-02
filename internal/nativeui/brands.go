@@ -114,10 +114,14 @@ func brandAssetName(provider history.AgentID, dark bool) string {
 }
 
 // visualMark is what agent rows render as their identity: a brand bitmap
-// when the provider ships one, else the monochrome fallback glyph.
+// when the provider ships one, else the monochrome fallback glyph. A
+// detected service's mark may carry its own brand tint, which overrides
+// the caller's color (designs/services-surfaces).
 type visualMark struct {
-	bmp *ui.Bitmap
-	svg *ui.SVG
+	bmp    *ui.Bitmap
+	svg    *ui.SVG
+	tint   ui.Color
+	tinted bool
 }
 
 func markView(c *ui.Context, mark visualMark, size float32, color ui.Color) {
@@ -126,7 +130,12 @@ func markView(c *ui.Context, mark visualMark, size float32, color ui.Color) {
 		return
 	}
 	if mark.svg != nil {
-		ui.Icon(c, mark.svg).Size(size, size).TextColor(color)
+		icon := ui.Icon(c, mark.svg).Size(size, size)
+		if mark.tinted {
+			icon.TextColor(mark.tint)
+		} else {
+			icon.TextColor(color)
+		}
 	}
 }
 

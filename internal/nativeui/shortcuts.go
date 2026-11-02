@@ -44,7 +44,8 @@ var (
 
 // The menu bar's accelerators, one place for the menu and the Keyboard
 // Shortcuts sheet (shortcuts_sheet.go) so a listed key is a bound key. The
-// pages take ⌘1–5 in the sidebar's tab order; Tabs take ⌥⌘1–9.
+// pages take ⌘1–6 in the sidebar's tab order (⌘6 only exists while the
+// automations gate is open); Tabs take ⌥⌘1–9.
 const (
 	accelWorkspace     = "CmdOrCtrl+1"
 	accelChanges       = "CmdOrCtrl+2"
@@ -55,6 +56,7 @@ const (
 	accelCloseTab      = "CmdOrCtrl+W"
 	accelCommandCenter = "CmdOrCtrl+Shift+P"
 	accelShortcuts     = "CmdOrCtrl+/"
+	accelAutomations   = "CmdOrCtrl+6"
 	accelSettings      = "CmdOrCtrl+,"
 
 	// lastTab is the pseudo index of "the last Tab" (⌥⌘9).

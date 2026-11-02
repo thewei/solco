@@ -81,6 +81,7 @@ func (s *Shell) launchScript(instance, projectID, root string, script scripts.Sc
 	if err := s.runtime.SendAgentKeys(ctx, instance, paneID, []string{line}); err != nil {
 		return fmt.Errorf("send script input: %w", err)
 	}
+	s.rememberScriptPane(instance, paneID, script.Name)
 	return nil
 }
 

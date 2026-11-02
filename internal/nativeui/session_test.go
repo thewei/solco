@@ -45,8 +45,10 @@ func TestSessionCaptureRestoreRoundTrip(t *testing.T) {
 	first.selectedPaneID = "pane-1"
 	first.projectsOpen = false
 	first.agentsOpen = false
+	first.servicesOpen = false
 	first.pinsOpen = false
 	first.tasksOpen = false
+	first.scriptPanes = map[string]string{"main/pane-1": "dev.up"}
 	first.expandedProjects["proj-a"] = true
 	first.expandedProjects["proj-b"] = false // cleared entries are not captured
 	first.expandedTabs["tab-9"] = true
@@ -66,8 +68,11 @@ func TestSessionCaptureRestoreRoundTrip(t *testing.T) {
 	if second.selectedProjectID != "proj-1" || second.selectedTabID != "tab-1" || second.selectedPaneID != "pane-1" {
 		t.Fatalf("selection hints = %q/%q/%q", second.selectedProjectID, second.selectedTabID, second.selectedPaneID)
 	}
-	if second.projectsOpen || second.agentsOpen || second.pinsOpen || second.tasksOpen {
+	if second.projectsOpen || second.agentsOpen || second.servicesOpen || second.pinsOpen || second.tasksOpen {
 		t.Fatal("sidebar section visibility not restored")
+	}
+	if second.scriptPanes["main/pane-1"] != "dev.up" {
+		t.Fatalf("script pane associations not restored: %+v", second.scriptPanes)
 	}
 	if !second.expandedProjects["proj-a"] || second.expandedProjects["proj-b"] || !second.expandedTabs["tab-9"] {
 		t.Fatalf("tree expansion not restored: %+v %+v", second.expandedProjects, second.expandedTabs)
@@ -82,7 +87,7 @@ func TestRestoreSessionKeepsFirstLaunchDefaults(t *testing.T) {
 	if s.visibleRoute != routeWorkspace || s.router.Path() != routeWorkspace {
 		t.Fatalf("fresh shell route = %q/%q, want workspace", s.visibleRoute, s.router.Path())
 	}
-	if !s.projectsOpen || !s.agentsOpen || !s.pinsOpen || !s.tasksOpen {
+	if !s.projectsOpen || !s.agentsOpen || !s.servicesOpen || !s.pinsOpen || !s.tasksOpen {
 		t.Fatal("fresh shell sidebar sections must stay at their first-launch defaults")
 	}
 	if s.rightPanel.open {

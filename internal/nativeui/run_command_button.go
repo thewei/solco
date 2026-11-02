@@ -206,6 +206,13 @@ func (s *Shell) runCommandInPane(paneID, root string, entry scripts.CommandEntry
 				slog.Warn("last-used command persist failed", "error", err)
 			}
 		}
+		if failure == "" {
+			// The Services surfaces attribute this pane's service to the
+			// command the user ran — saved definitions and detected
+			// commands (package.json/Makefile/justfile) alike; the
+			// association persists through the session snapshot.
+			s.rememberScriptPane(instance, paneID, entry.Name)
+		}
 		s.onUI(func() {
 			delete(s.runBusy, paneID)
 			if failure != "" {

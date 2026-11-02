@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<!--
+  exploration.html — Services 三表面重设计（designs/services-surfaces/）
+  Design Storybook scaffold from interactive-design-exploration/exploration-shell.html
+  Tokens from internal/nativeui/theme.go / design_system.go (dark + light, verbatim values).
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Services 三表面重设计 — Sidebar 区块 · QuickPanel</title>
+
+  <style>
+    [data-ide-shell] {
+      --shell-bg: #0f0f10;
+      --shell-panel: #18181b;
+      --shell-border: #27272a;
+      --shell-text: #fafafa;
+      --shell-muted: #a1a1aa;
+      --shell-accent: #71717a;
+      --panel-w: 280px;
+      box-sizing: border-box;
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: var(--shell-bg);
+      color: var(--shell-text);
+      min-height: 100vh;
+      margin: 0;
+    }
+    [data-ide-shell] * { box-sizing: border-box; }
+
+    [data-ide-shell] .ide-layout { display: flex; min-height: 100vh; }
+
+    [data-ide-shell] .ide-stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+      background: #111113;
+    }
+    [data-ide-shell] .ide-stage-label {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      z-index: 20;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--shell-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      pointer-events: none;
+    }
+    [data-ide-shell] .ide-panel-collapse-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 30;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-collapse-btn { right: 10px; }
+    [data-ide-shell] .ide-artboard-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 32px 32px;
+    }
+    [data-ide-shell] .ide-artboard {
+      display: none;
+      width: 100%;
+      max-width: 960px;
+      max-height: calc(100vh - 80px);
+    }
+    [data-ide-shell] .ide-artboard.active { display: block; }
+    [data-ide-shell] .ide-artboard .design-root {
+      all: initial;
+      display: block;
+      font-family: inherit;
+    }
+
+    [data-ide-shell] .ide-story-panel {
+      width: var(--panel-w);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      transition: width 0.2s;
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-story-panel { width: 0; border-left: none; }
+    [data-ide-shell] .ide-panel-expand-btn {
+      display: none;
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 40;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      background: var(--shell-panel);
+      color: var(--shell-muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    [data-ide-shell] .ide-layout.panel-collapsed .ide-panel-expand-btn { display: grid; place-items: center; }
+
+    [data-ide-shell] .ide-panel-header {
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid var(--shell-border);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--shell-muted);
+    }
+    [data-ide-shell] .ide-panel-controls { flex: 1; overflow-y: auto; padding: 12px 14px; min-height: 0; }
+    [data-ide-shell] .ide-section-title {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--shell-accent);
+      margin: 0 0 6px;
+    }
+    [data-ide-shell] .ide-section-title + .ide-section-title { margin-top: 14px; }
+    [data-ide-shell] .ide-variant-card,
+    [data-ide-shell] .ide-state-card {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--shell-border);
+      margin-bottom: 5px;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    [data-ide-shell] .ide-variant-card:hover,
+    [data-ide-shell] .ide-state-card:hover { border-color: #3f3f46; }
+    [data-ide-shell] .ide-variant-card.active,
+    [data-ide-shell] .ide-state-card.active {
+      border-color: var(--shell-accent);
+      background: rgba(113, 113, 122, 0.1);
+    }
+    [data-ide-shell] .ide-variant-card h2 { font-size: 11px; font-weight: 600; margin: 0 0 2px; }
+    [data-ide-shell] .ide-variant-card p { margin: 0; color: var(--shell-muted); font-size: 10px; line-height: 1.4; }
+    [data-ide-shell] .ide-state-card { font-size: 10px; color: var(--shell-muted); }
+    [data-ide-shell] .ide-state-card strong { display: block; color: var(--shell-text); font-size: 10px; }
+
+    [data-ide-shell] .ide-panel-story { border-top: 1px solid var(--shell-border); flex-shrink: 0; }
+    [data-ide-shell] .ide-story-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border: none;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--shell-muted);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+    }
+    [data-ide-shell] .ide-story-toggle:hover { color: var(--shell-text); background: rgba(255, 255, 255, 0.04); }
+    [data-ide-shell] .ide-story-body {
+      padding: 0 14px 14px;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--shell-muted);
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    [data-ide-shell] .ide-layout.story-collapsed .ide-story-body { display: none; }
+    [data-ide-shell] .ide-story-body h1 { font-size: 13px; font-weight: 600; color: var(--shell-text); margin: 0 0 6px; }
+    [data-ide-shell] .ide-story-body p { margin: 0 0 8px; }
+    [data-ide-shell] .ide-story-body ul { margin: 0; padding-left: 16px; }
+    [data-ide-shell] .ide-story-body li { margin-bottom: 4px; }
+  </style>
+
+  <!-- ============ Design styles (scoped: shell + artboard + design-root) ============ -->
+  <style id="design-styles-common">
+    [data-ide-shell] .ide-artboard .design-root {
+      /* theme.go dark values (verbatim) */
+      --bg: #141516;
+      --sidebar: #17171a;
+      --sidehover: rgba(255, 255, 255, 0.05);
+      --sideselect: rgba(255, 255, 255, 0.08);
+      --panel: #212121;
+      --panelhover: #2a2a2e;
+      --border: rgba(255, 255, 255, 0.07);
+      --treeline: rgba(152, 152, 159, 0.26);
+      --text: #ececee;
+      --muted: #8b8c92;
+      --accent: #0a84ff;
+      --success: #30d158;
+      --danger: #ff453a;
+      --spin-track: rgba(139, 140, 146, 0.30);
+      --pop-shadow: 0 14px 40px rgba(0, 0, 0, 0.40);
+      --app-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      font-family: -apple-system, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 34px 30px;
+      border-radius: 8px;
+      min-height: 320px;
+    }
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-light {
+      /* theme.go light values (verbatim) */
+      --bg: #f7f7f5;
+      --sidebar: #efeff1;
+      --sidehover: rgba(0, 0, 0, 0.05);
+      --sideselect: rgba(0, 0, 0, 0.06);
+      --panel: #ffffff;
+      --panelhover: #f0f0f3;
+      --border: rgba(0, 0, 0, 0.07);
+      --treeline: rgba(113, 113, 122, 0.28);
+      --text: #18181b;
+      --muted: #71717a;
+      --spin-track: rgba(113, 113, 122, 0.30);
+      --pop-shadow: 0 14px 40px rgba(0, 0, 0, 0.14);
+      --app-shadow: 0 10px 30px rgba(0, 0, 0, 0.10);
+    }
+
+    [data-ide-shell] .ide-artboard .design-root .stage {
+      display: flex;
+      gap: 30px;
+      align-items: flex-start;
+    }
+    [data-ide-shell] .ide-artboard .design-root .cap {
+      font-size: 10px;
+      color: var(--muted);
+      margin: 0 2px 8px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ----- app frame (sidebar) ----- */
+    [data-ide-shell] .ide-artboard .design-root .app {
+      width: 272px;
+      flex-shrink: 0;
+      background: var(--sidebar);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: var(--app-shadow);
+    }
+    [data-ide-shell] .ide-artboard .design-root .tf {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    [data-ide-shell] .ide-artboard .design-root .tl { width: 10px; height: 10px; border-radius: 50%; }
+    [data-ide-shell] .ide-artboard .design-root .tl.r { background: #ff5f57; }
+    [data-ide-shell] .ide-artboard .design-root .tl.y { background: #febc2e; }
+    [data-ide-shell] .ide-artboard .design-root .tl.g { background: #28c840; }
+    [data-ide-shell] .ide-artboard .design-root .tf-title { margin-left: 6px; font-size: 10px; color: var(--muted); }
+    [data-ide-shell] .ide-artboard .design-root .sbar { padding: 6px 8px 10px; }
+
+    /* section header — mirrors sidebarSection */
+    [data-ide-shell] .ide-artboard .design-root .sec-h {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      height: 26px;
+      padding: 0 6px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .sec-h .chev { width: 10px; height: 10px; color: var(--muted); flex-shrink: 0; }
+    [data-ide-shell] .ide-artboard .design-root .ttl { font-size: 11.5px; font-weight: 600; color: var(--text); }
+    [data-ide-shell] .ide-artboard .design-root .cnt { font-size: 10px; color: var(--muted); }
+    [data-ide-shell] .ide-artboard .design-root .hact { margin-left: auto; color: var(--muted); opacity: 0.55; }
+    [data-ide-shell] .ide-artboard .design-root .hact svg { width: 11px; height: 11px; display: block; }
+
+    /* rows */
+    [data-ide-shell] .ide-artboard .design-root .card,
+    [data-ide-shell] .ide-artboard .design-root .srow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .card:hover,
+    [data-ide-shell] .ide-artboard .design-root .srow:hover,
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-hover .srow.first {
+      background: var(--sidehover);
+    }
+
+    /* marks */
+    [data-ide-shell] .ide-artboard .design-root .mark {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-artboard .design-root .mark svg { width: 11px; height: 11px; display: block; }
+    [data-ide-shell] .ide-artboard .design-root .t-claude { background: #d97757; }
+    [data-ide-shell] .ide-artboard .design-root .t-codex { background: #39393b; }
+    [data-ide-shell] .ide-artboard .design-root .t-vite { background: rgba(100, 108, 255, 0.16); }
+    [data-ide-shell] .ide-artboard .design-root .t-node { background: rgba(95, 160, 78, 0.16); }
+    [data-ide-shell] .ide-artboard .design-root .t-go { background: rgba(0, 173, 216, 0.14); }
+    [data-ide-shell] .ide-artboard .design-root .t-redis { background: rgba(255, 68, 56, 0.13); }
+    [data-ide-shell] .ide-artboard .design-root .t-next { background: var(--text); }
+    [data-ide-shell] .ide-artboard .design-root .t-next .ltr { color: var(--bg); font-size: 9.5px; font-weight: 700; line-height: 1; }
+    [data-ide-shell] .ide-artboard .design-root .t-go .ltr { color: #00add8; font-size: 8.5px; font-weight: 700; line-height: 1; }
+    [data-ide-shell] .ide-artboard .design-root .t-script { background: var(--panelhover); color: var(--muted); }
+
+    /* text columns */
+    [data-ide-shell] .ide-artboard .design-root .col {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .t1 {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-artboard .design-root .t1 .nm { overflow: hidden; text-overflow: ellipsis; }
+    [data-ide-shell] .ide-artboard .design-root .t2 {
+      font-size: 10px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-artboard .design-root .pt {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-weight: 400;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    [data-ide-shell] .ide-artboard .design-root .mono {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 9.5px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .ago { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+    [data-ide-shell] .ide-artboard .design-root .add { color: var(--success); }
+    [data-ide-shell] .ide-artboard .design-root .del { color: var(--danger); }
+    [data-ide-shell] .ide-artboard .design-root .branch::before { content: "⎇ "; font-size: 9px; }
+
+    /* status slot — status_indicator.go: square 7×7 r2 (service), dot (agent ready), spinner */
+    [data-ide-shell] .ide-artboard .design-root .slot {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    [data-ide-shell] .ide-artboard .design-root .sq { width: 7px; height: 7px; border-radius: 2px; background: var(--success); }
+    [data-ide-shell] .ide-artboard .design-root .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+    [data-ide-shell] .ide-artboard .design-root .spin {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      border: 1.5px solid var(--spin-track);
+      border-top-color: var(--accent);
+      animation: dsgn-spin 0.9s linear infinite;
+    }
+    @keyframes dsgn-spin { to { transform: rotate(360deg); } }
+
+    /* origin chip */
+    [data-ide-shell] .ide-artboard .design-root .chip { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+    [data-ide-shell] .ide-artboard .design-root .mchip {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    [data-ide-shell] .ide-artboard .design-root .mchip svg { width: 8px; height: 8px; display: block; }
+
+    /* hover action */
+    [data-ide-shell] .ide-artboard .design-root .hov-act {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      opacity: 0;
+      flex-shrink: 0;
+      border: none;
+      background: transparent;
+      padding: 0;
+      cursor: pointer;
+    }
+    [data-ide-shell] .ide-artboard .design-root .hov-act svg { width: 10px; height: 10px; display: block; }
+    [data-ide-shell] .ide-artboard .design-root .srow:hover .hov-act,
+    [data-ide-shell] .ide-artboard .design-root .card:hover .hov-act,
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-hover .srow.first .hov-act { opacity: 1; }
+    [data-ide-shell] .ide-artboard .design-root .srow .hov-act:hover { background: var(--panelhover); color: var(--text); }
+
+    [data-ide-shell] .ide-artboard .design-root .dim { opacity: 0.62; }
+    [data-ide-shell] .ide-artboard .design-root .wslabel {
+      font-size: 10px;
+      color: var(--muted);
+      padding: 7px 8px 2px 32px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .b-grp {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 8px 8px 2px;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .sub-grp {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 8px 8px 2px;
+      letter-spacing: 0.02em;
+    }
+
+    /* run pill */
+    [data-ide-shell] .ide-artboard .design-root .runpill {
+      font-size: 10px;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--panelhover);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 9px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    /* nested service row (Option C) */
+    [data-ide-shell] .ide-artboard .design-root .nest {
+      margin: 0 8px 2px 15px;
+      padding-left: 10px;
+      border-left: 1px solid var(--treeline);
+    }
+    [data-ide-shell] .ide-artboard .design-root .nrow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 25px;
+      border-radius: 5px;
+      padding: 0 6px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .nrow:hover { background: var(--sidehover); }
+    [data-ide-shell] .ide-artboard .design-root .nrow .mark { width: 14px; height: 14px; }
+    [data-ide-shell] .ide-artboard .design-root .nrow .mark svg { width: 10px; height: 10px; }
+
+    /* compact single-line service row (Options B/C) */
+    [data-ide-shell] .ide-artboard .design-root .srow.one { min-height: 28px; padding: 3px 8px; }
+
+    /* empty states */
+    [data-ide-shell] .ide-artboard .design-root .svc-empty,
+    [data-ide-shell] .ide-artboard .design-root .qp-empty { display: none; }
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-empty .svc-live { display: none !important; }
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-empty .qp-live { display: none !important; }
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-empty .svc-empty,
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-empty .qp-empty { display: block; }
+    [data-ide-shell] .ide-artboard .design-root .empty-block {
+      padding: 14px 10px 16px;
+      text-align: left;
+    }
+    [data-ide-shell] .ide-artboard .design-root .empty-block .e1 { font-size: 11px; font-weight: 600; color: var(--text); }
+    [data-ide-shell] .ide-artboard .design-root .empty-block .e2 { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+
+    /* stub sections below */
+    [data-ide-shell] .ide-artboard .design-root .stub { opacity: 0.45; }
+
+    /* ----- QuickPanel popover (tray + header share this component) ----- */
+    [data-ide-shell] .ide-artboard .design-root .pop {
+      width: 340px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--pop-shadow);
+      overflow: hidden;
+    }
+    [data-ide-shell] .ide-artboard .design-root .qp-head {
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    [data-ide-shell] .ide-artboard .design-root .qp-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
+    [data-ide-shell] .ide-artboard .design-root .qp-tabs {
+      display: flex;
+      gap: 2px;
+      margin: 4px 10px 0;
+      padding: 2px;
+      background: var(--sidehover);
+      border-radius: 7px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .qtab {
+      flex: 1;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 10.5px;
+      color: var(--muted);
+      border-radius: 5px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .qtab svg { width: 11px; height: 11px; display: block; }
+    [data-ide-shell] .ide-artboard .design-root .qtab.on {
+      background: var(--panelhover);
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    }
+    [data-ide-shell] .ide-artboard .design-root.ide-mode-light .qtab.on { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+    [data-ide-shell] .ide-artboard .design-root .qp-body { padding: 10px 10px 12px; }
+    [data-ide-shell] .ide-artboard .design-root .qctx {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 6px 8px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    [data-ide-shell] .ide-artboard .design-root .qctx svg { width: 12px; height: 12px; color: var(--muted); flex-shrink: 0; }
+    [data-ide-shell] .ide-artboard .design-root .qctx .sub {
+      font-weight: 400;
+      color: var(--muted);
+      margin-left: auto;
+      font-size: 9.5px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    [data-ide-shell] .ide-artboard .design-root .grp-h {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text);
+      padding: 8px 6px 4px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .qrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+      padding: 3px 6px;
+      border-radius: 6px;
+    }
+    [data-ide-shell] .ide-artboard .design-root .qrow:hover { background: var(--panelhover); }
+    [data-ide-shell] .ide-artboard .design-root .qrow .grow { flex: 1; min-width: 0; }
+    [data-ide-shell] .ide-artboard .design-root .qrow .kind { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+    [data-ide-shell] .ide-artboard .design-root .qplain { font-size: 10.5px; color: var(--muted); }
+    [data-ide-shell] .ide-artboard .design-root .qplain svg { width: 12px; height: 12px; display: block; }
+  </style>
+</head>
+<body data-ide-shell>
+  <div class="ide-layout" id="ideLayout">
+    <main class="ide-stage">
+      <span class="ide-stage-label" id="stageLabel">Variant A</span>
+      <button type="button" class="ide-panel-collapse-btn" id="panelCollapseBtn" title="收起面板，全画布演示">›</button>
+
+      <div class="ide-artboard-wrap">
+        <!-- ==================== Variant A — 清单平铺 ==================== -->
+        <div class="ide-artboard active" data-variant="A">
+          <div class="design-root" id="designRootA">
+            <div class="stage">
+              <div>
+                <p class="cap">Sidebar — Agents 下方 Services 区块</p>
+                <div class="app">
+                  <div class="tf"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="tf-title">Solco</span></div>
+                  <div class="sbar">
+                    <!-- Agents -->
+                    <div class="sec-h">
+                      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                      <span class="ttl">Agents</span><span class="cnt">2</span>
+                      <span class="hact"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9 4-4 4 4M8 15l4 4 4-4"/></svg></span>
+                    </div>
+                    <div class="card">
+                      <div class="mark t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">Refactor service index</span></div>
+                        <div class="t2"><span class="nm">solco</span>·<span class="branch">main</span><span class="add">+128</span><span class="del">−42</span></div>
+                      </div>
+                      <span class="ago">2m</span>
+                      <div class="slot"><div class="spin"></div></div>
+                    </div>
+                    <div class="card">
+                      <div class="mark t-codex"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3.5" y="3.5" width="11" height="11" rx="3.5"/><rect x="9.5" y="9.5" width="11" height="11" rx="3.5"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">Fix mobile quota chart</span></div>
+                        <div class="t2"><span class="nm">solco</span>·<span class="branch">feat/quota</span><span class="add">+12</span><span class="del">−3</span></div>
+                      </div>
+                      <span class="ago">12m</span>
+                      <div class="slot"><div class="dot"></div></div>
+                    </div>
+
+                    <!-- Services (new section, directly below Agents) -->
+                    <div class="sec-h">
+                      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                      <span class="ttl">Services</span><span class="cnt">4</span>
+                    </div>
+                    <div class="wslabel svc-live">wh-studio/solco</div>
+                    <div class="srow first svc-live" title="Jump to the pane running vite">
+                      <div class="mark t-vite"><svg viewBox="0 0 24 24"><path fill="#646CFF" d="M12 2.2 21.8 5 12.6 21.8 2.2 5z"/><path fill="#FFD62E" d="m13.4 6.3-3.8 5.8h2.7l-1.3 5.6 4.9-7.3h-2.9z"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">vite</span><span class="pt">:5173</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></span>Claude</span><span>·</span><span>dev server</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:5173"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="srow svc-live dim" title="Detected in this project — no single owning pane">
+                      <div class="mark t-redis"><svg viewBox="0 0 24 24"><path fill="#FF4438" d="m4 8.4 8-4.2 8 4.2-8 4.2z"/><path fill="#FF4438" opacity=".7" d="m4 12.4 8 4.2 8-4.2v2.4l-8 4.2-8-4.2z"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">redis</span><span class="pt">:6379</span></div>
+                        <div class="t2"><span>Project-wide</span><span>·</span><span>no pane</span></div>
+                      </div>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="wslabel svc-live">api-gateway</div>
+                    <div class="srow svc-live" title="Jump to the pane running go">
+                      <div class="mark t-go"><span class="ltr">Go</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">go</span><span class="pt">:8080</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span>Script · dev.up</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:8080"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="wslabel svc-live">getaipages</div>
+                    <div class="srow svc-live" title="Jump to the pane running next">
+                      <div class="mark t-next"><span class="ltr">N</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">next</span><span class="pt">:3000</span></div>
+                        <div class="t2"><span>Manual</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:3000"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="sub-grp">Scripts</div>
+                    <div class="srow one dim" title="Persisted Service script — not running">
+                      <div class="mark t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+                      <div class="col"><div class="t1"><span class="nm">dev.down</span><span class="pt" style="text-transform:none;font-family:inherit;font-size:10px;">Service</span></div></div>
+                      <button type="button" class="runpill">Run</button>
+                    </div>
+
+                    <div class="svc-empty empty-block">
+                      <div class="e1">No services running</div>
+                      <div class="e2">Start a dev server in a terminal, or run a Service script.</div>
+                    </div>
+
+                    <!-- stubs for context -->
+                    <div class="stub">
+                      <div class="sec-h">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                        <span class="ttl">Projects</span><span class="cnt">3</span>
+                      </div>
+                      <div class="srow one"><div class="mark" style="background:var(--panelhover);color:var(--muted);font-size:8.5px;font-weight:700;">S</div><div class="col"><div class="t1"><span class="nm">solco</span></div></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p class="cap">QuickPanel · Services（托盘与 Header 共用）</p>
+                <div class="pop">
+                  <div class="qp-head"><div class="qp-grip"></div></div>
+                  <div class="qp-tabs">
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 18.6a4.5 4.5 0 0 1 6.5-3"/></svg>Agents</div>
+                    <div class="qtab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/></svg>Services</div>
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 2 2 3-3M4 15l2 2 3-3M12 7h8M12 16h8"/></svg>Tasks</div>
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19a9 9 0 1 1 14 0"/><path d="m12 14 3.5-4.5"/></svg>Quota</div>
+                  </div>
+                  <div class="qp-body">
+                    <div class="qctx">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+                      solco<span class="sub">~/Workspaces/wh-studio/solco</span>
+                    </div>
+                    <div class="grp-h qp-live">Running <span class="cnt">3</span></div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-vite"><svg viewBox="0 0 24 24"><path fill="#646CFF" d="M12 2.2 21.8 5 12.6 21.8 2.2 5z"/><path fill="#FFD62E" d="m13.4 6.3-3.8 5.8h2.7l-1.3 5.6 4.9-7.3h-2.9z"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">vite</span><span class="pt">:5173</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></span>Claude</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-go"><span class="ltr">Go</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">go</span><span class="pt">:8080</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span>Script · dev.up</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-next"><span class="ltr">N</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">next</span><span class="pt">:3000</span></div>
+                        <div class="t2"><span>Manual</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="grp-h qp-live">Other listeners <span class="cnt">1</span></div>
+                    <div class="qrow qp-live qplain">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>
+                      localhost:6379<span class="grow"></span><span class="kind">no pane</span>
+                    </div>
+                    <div class="grp-h">Scripts <span class="cnt">1</span></div>
+                    <div class="qrow dim">
+                      <div class="mark t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+                      <div class="col"><div class="t1"><span class="nm">dev.down</span></div><div class="t2"><span>Service</span></div></div>
+                      <button type="button" class="runpill">Run</button>
+                    </div>
+                    <div class="qp-empty empty-block">
+                      <div class="e1">No services running</div>
+                      <div class="e2">Scripts you can run are listed below.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== Variant B — 按启动者分组 ==================== -->
+        <div class="ide-artboard" data-variant="B">
+          <div class="design-root" id="designRootB">
+            <div class="stage">
+              <div>
+                <p class="cap">Sidebar — Services 按启动者分组</p>
+                <div class="app">
+                  <div class="tf"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="tf-title">Solco</span></div>
+                  <div class="sbar">
+                    <div class="sec-h">
+                      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                      <span class="ttl">Agents</span><span class="cnt">2</span>
+                      <span class="hact"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9 4-4 4 4M8 15l4 4 4-4"/></svg></span>
+                    </div>
+                    <div class="card">
+                      <div class="mark t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">Refactor service index</span></div>
+                        <div class="t2"><span class="nm">solco</span>·<span class="branch">main</span><span class="add">+128</span><span class="del">−42</span></div>
+                      </div>
+                      <span class="ago">2m</span>
+                      <div class="slot"><div class="spin"></div></div>
+                    </div>
+                    <div class="card">
+                      <div class="mark t-codex"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3.5" y="3.5" width="11" height="11" rx="3.5"/><rect x="9.5" y="9.5" width="11" height="11" rx="3.5"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">Fix mobile quota chart</span></div>
+                        <div class="t2"><span class="nm">solco</span>·<span class="branch">feat/quota</span><span class="add">+12</span><span class="del">−3</span></div>
+                      </div>
+                      <span class="ago">12m</span>
+                      <div class="slot"><div class="dot"></div></div>
+                    </div>
+
+                    <div class="sec-h">
+                      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                      <span class="ttl">Services</span><span class="cnt">4</span>
+                    </div>
+                    <div class="b-grp svc-live">Started by agents <span class="cnt">1</span></div>
+                    <div class="srow first svc-live" title="Jump to the pane running vite">
+                      <div class="mark t-vite"><svg viewBox="0 0 24 24"><path fill="#646CFF" d="M12 2.2 21.8 5 12.6 21.8 2.2 5z"/><path fill="#FFD62E" d="m13.4 6.3-3.8 5.8h2.7l-1.3 5.6 4.9-7.3h-2.9z"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">vite</span><span class="pt">:5173</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></span>Claude</span><span>·</span><span class="nm">solco</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:5173"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="b-grp svc-live">Script launches <span class="cnt">1</span></div>
+                    <div class="srow svc-live" title="Jump to the pane running go">
+                      <div class="mark t-go"><span class="ltr">Go</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">go</span><span class="pt">:8080</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span>dev.up</span><span>·</span><span class="nm">api-gateway</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:8080"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="b-grp svc-live">Manual <span class="cnt">1</span></div>
+                    <div class="srow svc-live" title="Jump to the pane running next">
+                      <div class="mark t-next"><span class="ltr">N</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">next</span><span class="pt">:3000</span></div>
+                        <div class="t2"><span class="nm">getaipages</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:3000"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="b-grp svc-live">Project-wide <span class="cnt">1</span></div>
+                    <div class="srow svc-live dim" title="Detected in this project — no single owning pane">
+                      <div class="mark t-redis"><svg viewBox="0 0 24 24"><path fill="#FF4438" d="m4 8.4 8-4.2 8 4.2-8 4.2z"/><path fill="#FF4438" opacity=".7" d="m4 12.4 8 4.2 8-4.2v2.4l-8 4.2-8-4.2z"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">redis</span><span class="pt">:6379</span></div>
+                        <div class="t2"><span class="nm">solco</span></div>
+                      </div>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="sub-grp">Scripts</div>
+                    <div class="srow one dim" title="Persisted Service script — not running">
+                      <div class="mark t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+                      <div class="col"><div class="t1"><span class="nm">dev.down</span><span class="pt" style="text-transform:none;font-family:inherit;font-size:10px;">Service</span></div></div>
+                      <button type="button" class="runpill">Run</button>
+                    </div>
+
+                    <div class="svc-empty empty-block">
+                      <div class="e1">No services running</div>
+                      <div class="e2">Start a dev server in a terminal, or run a Service script.</div>
+                    </div>
+
+                    <div class="stub">
+                      <div class="sec-h">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                        <span class="ttl">Projects</span><span class="cnt">3</span>
+                      </div>
+                      <div class="srow one"><div class="mark" style="background:var(--panelhover);color:var(--muted);font-size:8.5px;font-weight:700;">S</div><div class="col"><div class="t1"><span class="nm">solco</span></div></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p class="cap">QuickPanel · Services（同 A：行模型一处定义，两处表面共用）</p>
+                <div class="pop">
+                  <div class="qp-head"><div class="qp-grip"></div></div>
+                  <div class="qp-tabs">
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 18.6a4.5 4.5 0 0 1 6.5-3"/></svg>Agents</div>
+                    <div class="qtab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/></svg>Services</div>
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 2 2 3-3M4 15l2 2 3-3M12 7h8M12 16h8"/></svg>Tasks</div>
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19a9 9 0 1 1 14 0"/><path d="m12 14 3.5-4.5"/></svg>Quota</div>
+                  </div>
+                  <div class="qp-body">
+                    <div class="qctx">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+                      solco<span class="sub">~/Workspaces/wh-studio/solco</span>
+                    </div>
+                    <div class="grp-h qp-live">Running <span class="cnt">3</span></div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-vite"><svg viewBox="0 0 24 24"><path fill="#646CFF" d="M12 2.2 21.8 5 12.6 21.8 2.2 5z"/><path fill="#FFD62E" d="m13.4 6.3-3.8 5.8h2.7l-1.3 5.6 4.9-7.3h-2.9z"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">vite</span><span class="pt">:5173</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></span>Claude</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-go"><span class="ltr">Go</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">go</span><span class="pt">:8080</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span>Script · dev.up</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-next"><span class="ltr">N</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">next</span><span class="pt">:3000</span></div>
+                        <div class="t2"><span>Manual</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="grp-h qp-live">Other listeners <span class="cnt">1</span></div>
+                    <div class="qrow qp-live qplain">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>
+                      localhost:6379<span class="grow"></span><span class="kind">no pane</span>
+                    </div>
+                    <div class="grp-h">Scripts <span class="cnt">1</span></div>
+                    <div class="qrow dim">
+                      <div class="mark t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+                      <div class="col"><div class="t1"><span class="nm">dev.down</span></div><div class="t2"><span>Service</span></div></div>
+                      <button type="button" class="runpill">Run</button>
+                    </div>
+                    <div class="qp-empty empty-block">
+                      <div class="e1">No services running</div>
+                      <div class="e2">Scripts you can run are listed below.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== Variant C — 嵌入 + 汇总 ==================== -->
+        <div class="ide-artboard" data-variant="C">
+          <div class="design-root" id="designRootC">
+            <div class="stage">
+              <div>
+                <p class="cap">Sidebar — Agent 卡内嵌套服务行 + 紧凑索引区</p>
+                <div class="app">
+                  <div class="tf"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="tf-title">Solco</span></div>
+                  <div class="sbar">
+                    <div class="sec-h">
+                      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                      <span class="ttl">Agents</span><span class="cnt">2</span>
+                      <span class="hact"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9 4-4 4 4M8 15l4 4 4-4"/></svg></span>
+                    </div>
+                    <div class="card">
+                      <div class="mark t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">Refactor service index</span></div>
+                        <div class="t2"><span class="nm">solco</span>·<span class="branch">main</span><span class="add">+128</span><span class="del">−42</span></div>
+                      </div>
+                      <span class="ago">2m</span>
+                      <div class="slot"><div class="spin"></div></div>
+                    </div>
+                    <!-- nested service row under its agent (generalized cardService row) -->
+                    <div class="nest svc-live">
+                      <div class="nrow" title="Started by this agent — jump to its pane">
+                        <div class="mark t-vite"><svg viewBox="0 0 24 24"><path fill="#646CFF" d="M12 2.2 21.8 5 12.6 21.8 2.2 5z"/><path fill="#FFD62E" d="m13.4 6.3-3.8 5.8h2.7l-1.3 5.6 4.9-7.3h-2.9z"/></svg></div>
+                        <span class="t1"><span class="nm">vite</span></span>
+                        <span class="pt">:5173</span>
+                        <span class="grow" style="flex:1"></span>
+                        <div class="slot"><div class="sq"></div></div>
+                      </div>
+                    </div>
+                    <div class="card">
+                      <div class="mark t-codex"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3.5" y="3.5" width="11" height="11" rx="3.5"/><rect x="9.5" y="9.5" width="11" height="11" rx="3.5"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">Fix mobile quota chart</span></div>
+                        <div class="t2"><span class="nm">solco</span>·<span class="branch">feat/quota</span><span class="add">+12</span><span class="del">−3</span></div>
+                      </div>
+                      <span class="ago">12m</span>
+                      <div class="slot"><div class="dot"></div></div>
+                    </div>
+
+                    <div class="sec-h">
+                      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                      <span class="ttl">Services</span><span class="cnt">4</span>
+                    </div>
+                    <div class="srow one first svc-live" title="Jump to the pane running vite">
+                      <div class="mark t-vite"><svg viewBox="0 0 24 24"><path fill="#646CFF" d="M12 2.2 21.8 5 12.6 21.8 2.2 5z"/><path fill="#FFD62E" d="m13.4 6.3-3.8 5.8h2.7l-1.3 5.6 4.9-7.3h-2.9z"/></svg></div>
+                      <span class="t1"><span class="nm">vite</span><span class="pt">:5173</span></span>
+                      <span class="grow" style="flex:1"></span>
+                      <span class="chip"><span class="mchip t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></span></span>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:5173"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="srow one svc-live dim" title="Detected in this project — no single owning pane">
+                      <div class="mark t-redis"><svg viewBox="0 0 24 24"><path fill="#FF4438" d="m4 8.4 8-4.2 8 4.2-8 4.2z"/><path fill="#FF4438" opacity=".7" d="m4 12.4 8 4.2 8-4.2v2.4l-8 4.2-8-4.2z"/></svg></div>
+                      <span class="t1"><span class="nm">redis</span><span class="pt">:6379</span></span>
+                      <span class="grow" style="flex:1"></span>
+                      <span class="t2"><span>Project-wide</span></span>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="srow one svc-live" title="Jump to the pane running go">
+                      <div class="mark t-go"><span class="ltr">Go</span></div>
+                      <span class="t1"><span class="nm">go</span><span class="pt">:8080</span></span>
+                      <span class="grow" style="flex:1"></span>
+                      <span class="chip"><span class="mchip t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span></span>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:8080"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="srow one svc-live" title="Jump to the pane running next">
+                      <div class="mark t-next"><span class="ltr">N</span></div>
+                      <span class="t1"><span class="nm">next</span><span class="pt">:3000</span></span>
+                      <span class="grow" style="flex:1"></span>
+                      <button type="button" class="hov-act" title="Preview http://127.0.0.1:3000"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="sub-grp">Scripts</div>
+                    <div class="srow one dim" title="Persisted Service script — not running">
+                      <div class="mark t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+                      <div class="col"><div class="t1"><span class="nm">dev.down</span><span class="pt" style="text-transform:none;font-family:inherit;font-size:10px;">Service</span></div></div>
+                      <button type="button" class="runpill">Run</button>
+                    </div>
+
+                    <div class="svc-empty empty-block">
+                      <div class="e1">No services running</div>
+                      <div class="e2">Start a dev server in a terminal, or run a Service script.</div>
+                    </div>
+
+                    <div class="stub">
+                      <div class="sec-h">
+                        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+                        <span class="ttl">Projects</span><span class="cnt">3</span>
+                      </div>
+                      <div class="srow one"><div class="mark" style="background:var(--panelhover);color:var(--muted);font-size:8.5px;font-weight:700;">S</div><div class="col"><div class="t1"><span class="nm">solco</span></div></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p class="cap">QuickPanel · Services（同 A）</p>
+                <div class="pop">
+                  <div class="qp-head"><div class="qp-grip"></div></div>
+                  <div class="qp-tabs">
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 18.6a4.5 4.5 0 0 1 6.5-3"/></svg>Agents</div>
+                    <div class="qtab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/></svg>Services</div>
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 2 2 3-3M4 15l2 2 3-3M12 7h8M12 16h8"/></svg>Tasks</div>
+                    <div class="qtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19a9 9 0 1 1 14 0"/><path d="m12 14 3.5-4.5"/></svg>Quota</div>
+                  </div>
+                  <div class="qp-body">
+                    <div class="qctx">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+                      solco<span class="sub">~/Workspaces/wh-studio/solco</span>
+                    </div>
+                    <div class="grp-h qp-live">Running <span class="cnt">3</span></div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-vite"><svg viewBox="0 0 24 24"><path fill="#646CFF" d="M12 2.2 21.8 5 12.6 21.8 2.2 5z"/><path fill="#FFD62E" d="m13.4 6.3-3.8 5.8h2.7l-1.3 5.6 4.9-7.3h-2.9z"/></svg></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">vite</span><span class="pt">:5173</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-claude"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></span>Claude</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-go"><span class="ltr">Go</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">go</span><span class="pt">:8080</span></div>
+                        <div class="t2"><span class="chip"><span class="mchip t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span>Script · dev.up</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="qrow qp-live">
+                      <div class="mark t-next"><span class="ltr">N</span></div>
+                      <div class="col">
+                        <div class="t1"><span class="nm">next</span><span class="pt">:3000</span></div>
+                        <div class="t2"><span>Manual</span></div>
+                      </div>
+                      <button type="button" class="hov-act" title="Preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></button>
+                      <div class="slot"><div class="sq"></div></div>
+                    </div>
+                    <div class="grp-h qp-live">Other listeners <span class="cnt">1</span></div>
+                    <div class="qrow qp-live qplain">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>
+                      localhost:6379<span class="grow"></span><span class="kind">no pane</span>
+                    </div>
+                    <div class="grp-h">Scripts <span class="cnt">1</span></div>
+                    <div class="qrow dim">
+                      <div class="mark t-script"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+                      <div class="col"><div class="t1"><span class="nm">dev.down</span></div><div class="t2"><span>Service</span></div></div>
+                      <button type="button" class="runpill">Run</button>
+                    </div>
+                    <div class="qp-empty empty-block">
+                      <div class="e1">No services running</div>
+                      <div class="e2">Scripts you can run are listed below.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <button type="button" class="ide-panel-expand-btn" id="panelExpandBtn" title="展开面板">☰</button>
+
+    <aside class="ide-story-panel">
+      <div class="ide-panel-header">Design Storybook</div>
+      <div class="ide-panel-controls">
+        <div class="ide-section-title">Variants</div>
+        <div id="variantList"></div>
+        <div class="ide-section-title" id="statesSectionTitle" hidden>Interaction states</div>
+        <div id="statesList"></div>
+      </div>
+      <div class="ide-panel-story">
+        <button type="button" class="ide-story-toggle" id="storyToggleBtn">
+          <span>Story</span><span id="storyChevron">▼</span>
+        </button>
+        <div class="ide-story-body" id="storyBody">
+          <h1>Services 三表面重设计</h1>
+          <p><strong>问题</strong>：Services 以什么行模型与分组出现在侧栏（Agents 下方），并让侧栏、托盘浮层、Header 浮层共用同一行模型，使「什么在跑 / 跑在哪个 Pane / 谁启动的」一眼可读。</p>
+          <ul>
+            <li>数据 = 现有只读投影（lsof 10s 扫描 → serviceIndex 归因到 Pane/Project）+ 持久 service Scripts；不新增运行时、不伪造状态。</li>
+            <li>行模型：品牌彩 mark（proc_brands 60+，补品牌色表）+ 名称 + 等宽端口 + 归属 chip（Agent mark / Script / Manual / Project-wide）+ 绿方块（statusIndicatorService 语言）。</li>
+            <li>点击 → 跳对应 Pane（panePrefersChat：Agent→Chat、手动→Terminal）；hover ↗ = Preview localhost:port。</li>
+            <li>QuickPanel Services 页重构：Running（新行模型）→ Other listeners（无归属裸端口，诚实降级）→ Scripts（Run）。托盘与 Header 是同一组件的两个锚点。</li>
+            <li>Token 取自 theme.go 实测值（暗/亮），状态含浅色主题翻转验证。</li>
+            <li>对比与拍板项见同目录 README.md；未选型前不改产品代码。</li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const IDE_CONFIG = {
+      variants: {
+        A: { label: 'A', title: 'A · 清单平铺 Roster', desc: 'Agents 同款两行卡；多工作区时淡色组标签；归属内联第二行。与 Agents 最同构。', states: ['hover', 'empty', 'light'] },
+        B: { label: 'B', title: 'B · 按启动者分组', desc: 'Started by agents / Script launches / Manual / Project-wide 四组，归属由组表达。', states: ['hover', 'empty', 'light'] },
+        C: { label: 'C', title: 'C · 嵌入 + 汇总', desc: 'Agent 卡内嵌套完整服务行 + 紧凑单行索引区。上下文最强，密度最高。', states: ['hover', 'empty', 'light'] },
+      },
+      stateLabels: { '': 'Default', hover: 'Row hover', empty: '无运行服务', light: '浅色主题' },
+    };
+
+    let activeVariant = 'A';
+    let activeState = '';
+    const ideLayout = document.getElementById('ideLayout');
+    const stageLabel = document.getElementById('stageLabel');
+    const statesSection = document.getElementById('statesSectionTitle');
+    const statesList = document.getElementById('statesList');
+    const variantList = document.getElementById('variantList');
+    const artboards = document.querySelectorAll('.ide-artboard');
+
+    function renderVariantCards() {
+      variantList.innerHTML = '';
+      Object.entries(IDE_CONFIG.variants).forEach(([id, cfg]) => {
+        const card = document.createElement('div');
+        card.className = 'ide-variant-card' + (id === activeVariant ? ' active' : '');
+        card.innerHTML = '<h2>' + (cfg.title || id) + '</h2><p>' + (cfg.desc || '') + '</p>';
+        card.addEventListener('click', () => setVariant(id));
+        variantList.appendChild(card);
+      });
+    }
+
+    function renderStateCards() {
+      const states = IDE_CONFIG.variants[activeVariant]?.states ?? [];
+      statesList.innerHTML = '';
+      statesSection.hidden = !states.length;
+      states.forEach((s) => {
+        const card = document.createElement('div');
+        card.className = 'ide-state-card' + (s === activeState ? ' active' : '');
+        const label = (IDE_CONFIG.stateLabels[s] ?? s) || 'Default';
+        card.innerHTML = '<strong>' + label + '</strong>';
+        card.addEventListener('click', () => setState(s));
+        statesList.appendChild(card);
+      });
+    }
+
+    function applyInteractionClass() {
+      artboards.forEach((ab) => {
+        if (ab.dataset.variant !== activeVariant) return;
+        const root = ab.querySelector('.design-root');
+        if (!root) return;
+        const id = root.id;
+        root.className = 'design-root' + (activeState ? ' ide-mode-' + activeState : '');
+        if (id) root.id = id;
+      });
+    }
+
+    function setVariant(v) {
+      activeVariant = v;
+      activeState = '';
+      artboards.forEach((ab) => ab.classList.toggle('active', ab.dataset.variant === v));
+      const cfg = IDE_CONFIG.variants[v];
+      stageLabel.textContent = 'Variant ' + v + (cfg?.label ? ' — ' + cfg.label : '');
+      renderVariantCards();
+      renderStateCards();
+      applyInteractionClass();
+    }
+
+    function setState(s) {
+      activeState = activeState === s && s !== '' ? '' : s;
+      renderStateCards();
+      applyInteractionClass();
+      const stateName = (IDE_CONFIG.stateLabels[activeState] ?? activeState) || 'Default';
+      stageLabel.textContent = 'Variant ' + activeVariant + ' · ' + stateName;
+    }
+
+    document.getElementById('panelCollapseBtn')?.addEventListener('click', () => {
+      ideLayout.classList.add('panel-collapsed');
+    });
+    document.getElementById('panelExpandBtn')?.addEventListener('click', () => {
+      ideLayout.classList.remove('panel-collapsed');
+    });
+    document.getElementById('storyToggleBtn')?.addEventListener('click', () => {
+      const collapsed = ideLayout.classList.toggle('story-collapsed');
+      document.getElementById('storyChevron').textContent = collapsed ? '▶' : '▼';
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (activeState) setState(activeState);
+        else ideLayout.classList.add('panel-collapsed');
+      }
+    });
+
+    renderVariantCards();
+    setVariant('A');
+  </script>
+</body>
+</html>

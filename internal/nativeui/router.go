@@ -15,12 +15,13 @@ import (
 )
 
 const (
-	routeWorkspace = "/workspace"
-	routeHistory   = "/history"
-	routeSettings  = "/settings/general"
-	routeFiles     = "/files"
-	routeHosts     = "/hosts"
-	routeQuota     = "/quota"
+	routeWorkspace   = "/workspace"
+	routeHistory     = "/history"
+	routeSettings    = "/settings/general"
+	routeFiles       = "/files"
+	routeHosts       = "/hosts"
+	routeQuota       = "/quota"
+	routeAutomations = "/automations"
 )
 
 // isHistoryRoute is the one exact boundary for the History top-level view.
@@ -55,6 +56,9 @@ func (s *Shell) routeView(c *ui.Context) {
 		case r.Match(routeQuota):
 			r.Title("Quota")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.usagePage(c) })
+		case r.Match(routeAutomations):
+			r.Title("Automations")
+			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.automationsPage(c) })
 		case r.Match("/history/{id}"):
 			r.Title("Session Detail")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.historyDetailPage(c, r.Param("id")) })
@@ -100,6 +104,8 @@ func (s *Shell) currentRouteTitle() string {
 		return "Sessions"
 	case path == routeQuota:
 		return "Quota"
+	case path == routeAutomations:
+		return "Automations"
 	case path == routeFiles:
 		return "Files"
 	case path == routeHosts:

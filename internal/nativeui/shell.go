@@ -68,6 +68,7 @@ type Shell struct {
 	selected             string
 	projectsOpen         bool
 	agentsOpen           bool
+	servicesOpen         bool
 	pinsOpen             bool
 	tasksOpen            bool
 	foldedBoards         map[string]bool
@@ -295,6 +296,10 @@ type Shell struct {
 	// workboard is the herdr-projects plugin gate (workboard_ui.go): every
 	// workboard surface hides unless detection reports it Supported.
 	workboard workboardState
+	// automations is the com.whstudio.solco.automations plugin gate
+	// (automations_ui.go): the page, its sidebar tab and every command hide
+	// unless detection reports it Supported.
+	automations automationsState
 	// rightPanel owns the Native Right Panel (Changes/Files/Services).
 	rightPanel rightPanelState
 	// filesSearch is the Files sidebar's one search (names | content).
@@ -335,6 +340,10 @@ type Shell struct {
 	scriptStore *scripts.Store
 	// scriptBusy marks running script launches by name.
 	scriptBusy map[string]bool
+	// scriptPanes remembers which pane each script launch created, so the
+	// Services surfaces can attribute its service to the script. In-memory
+	// only, like the service index; written on the UI lane.
+	scriptPanes map[string]string
 	// lastUsedStore persists each root's last-run command name for the pane
 	// header's run control (last-commands.json in production).
 	lastUsedStore *scripts.LastUsedStore
@@ -694,6 +703,7 @@ func NewShell(opts ...ShellOption) *Shell {
 		visibleRoute:     routeWorkspace,
 		projectsOpen:     true,
 		agentsOpen:       true,
+		servicesOpen:     true,
 		pinsOpen:         true,
 		tasksOpen:        true,
 		foldedBoards:     make(map[string]bool),
@@ -731,6 +741,7 @@ func NewShell(opts ...ShellOption) *Shell {
 	// Preview external-open failures surface as the shell's status toast.
 	s.previews.report = func(msg string) { s.status = msg }
 	s.scriptBusy = make(map[string]bool)
+	s.scriptPanes = make(map[string]string)
 	s.runBusy = make(map[string]bool)
 	s.paneBusyIndex = make(map[string]paneBusyInfo)
 	s.paneShellIdle = make(map[string]bool)
@@ -872,11 +883,13 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	win.OnFocus(func() {
 		s.refreshGitOnActivation()
 		s.detectWorkboard(false)
+		s.detectAutomations(false)
 		// A task added by the plugin's CLI/TUI raises no Herdr event: re-read
 		// the board on activation (throttled; a no-op while the gate is closed).
 		s.refreshWorkboardTasks(false)
 	})
 	s.detectWorkboard(true)
+	s.detectAutomations(true)
 	s.reloadInstances(true)
 	s.startHistoryScan()
 	s.startServiceScan()

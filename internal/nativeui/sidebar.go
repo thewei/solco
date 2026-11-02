@@ -83,6 +83,7 @@ func (s *Shell) sidebar(c *ui.Context) {
 			}, &s.agentsOpen, func() {
 				s.agentItems(c)
 			})
+			s.servicesSection(c)
 			if pins := s.pinnedPaneIDs(); len(pins) > 0 {
 				s.sidebarSection(c, sidebarSectionSpec{Key: "section:pin", Title: "Pin", Count: len(pins)}, &s.pinsOpen, func() {
 					s.pinnedItemsView(c)
@@ -203,6 +204,13 @@ func (s *Shell) sidebarViewTabs(c *ui.Context) {
 		}
 		if gorexIconTab(c, k, iconGlobe, "Hosts view", "SSH hosts and machines", s.router.Path() == routeHosts).Clicked() {
 			s.showViewHosts()
+		}
+		if s.automationsAvailable() {
+			// The sixth tab exists only while the plugin gate is open, like
+			// the quick panel's Tasks tab.
+			if gorexIconTab(c, k, iconBolt, "Automations view", "Scheduled agent automations", s.router.Path() == routeAutomations).Clicked() {
+				s.showViewAutomations()
+			}
 		}
 	})
 }

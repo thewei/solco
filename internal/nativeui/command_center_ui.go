@@ -214,6 +214,11 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 			Keywords: []string{"preferences", "appearance", "theme", "density", "language"}, Kind: commandcenter.TargetSetting, TargetID: "/settings/general", Available: true},
 		commandcenter.Action{ID: "app.hook-doctor", Title: "Set Up Agents", Section: "App",
 			Keywords: []string{"agents", "hooks", "integration", "install", "update", "claude", "antigravity"}, Kind: commandcenter.TargetRoute, TargetID: "/settings/providers", Available: true},
+		// The com.whstudio.solco.automations plugin: derived from the plugin
+		// gate like the work board entry, so it exists only while the plugin
+		// is installed, enabled and in the verified 0.12.x window.
+		commandcenter.Action{ID: "app.automations", Title: "Automations", Section: "App", Shortcut: acceleratorLabel(accelAutomations),
+			Keywords: []string{"scheduled", "cron", "定时", "runs"}, Kind: commandcenter.TargetRoute, TargetID: routeAutomations, Available: s.automationsAvailable()},
 		// The herdr-projects work board: derived from the plugin gate, so it
 		// exists only while the plugin is installed, enabled and supported.
 		commandcenter.Action{ID: "app.work-board", Title: "Open Work Board", Section: "App",

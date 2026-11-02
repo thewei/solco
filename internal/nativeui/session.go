@@ -23,7 +23,7 @@ import (
 // their targets may no longer exist.
 func persistableRoute(path string) string {
 	switch path {
-	case routeWorkspace, routeFiles, routeHosts, routeHistory, routeQuota, "/history-projects":
+	case routeWorkspace, routeFiles, routeHosts, routeHistory, routeQuota, routeAutomations, "/history-projects":
 		return path
 	}
 	if strings.HasPrefix(path, "/settings/") {
@@ -127,25 +127,26 @@ func clampSessionSidebarWidth(width int) int {
 // already owns the shell.
 func (s *Shell) captureSession() settings.SessionSettings {
 	snapshot := settings.SessionSettings{
-		Route:             persistableRoute(s.router.Path()),
-		Instance:          s.activeInstance,
-		ProjectID:         s.selectedProjectID,
-		TabID:             s.selectedTabID,
-		PaneID:            s.selectedPaneID,
-		ProjectsOpen:      s.projectsOpen,
-		AgentsOpen:        s.agentsOpen,
-		PinsOpen:          s.pinsOpen,
-		TasksClosed:       !s.tasksOpen,
-		FoldedBoards:      sortedSetKeys(s.foldedBoards),
-		FoldedAgents:      s.persistableAgentFolds(),
-		ExpandedProjects:  sortedSetKeys(s.expandedProjects),
-		ExpandedTabs:      sortedSetKeys(s.expandedTabs),
-		SidebarWidth:      int(s.sidebarW),
-		RightPanelOpen:    s.rightPanel.open,
-		RightPanelSurface: string(s.rightPanel.surface),
-		RightPanelWidth:   s.rightPanel.width,
-		RecentFiles:       s.recentFiles,
-		RecentHosts:       s.recentHosts,
+		Route:               persistableRoute(s.router.Path()),
+		Instance:            s.activeInstance,
+		ProjectID:           s.selectedProjectID,
+		TabID:               s.selectedTabID,
+		PaneID:              s.selectedPaneID,
+		ProjectsOpen:        s.projectsOpen,
+		AgentsOpen:          s.agentsOpen,
+		ServicesOpen:        s.servicesOpen,
+		PinsOpen:            s.pinsOpen,
+		TasksClosed:         !s.tasksOpen,
+		FoldedBoards:        sortedSetKeys(s.foldedBoards),
+		FoldedAgents:        s.persistableAgentFolds(),
+		ExpandedProjects:    sortedSetKeys(s.expandedProjects),
+		ExpandedTabs:        sortedSetKeys(s.expandedTabs),
+		SidebarWidth:        int(s.sidebarW),
+		RightPanelOpen:      s.rightPanel.open,
+		RightPanelSurface:   string(s.rightPanel.surface),
+		RightPanelWidth:     s.rightPanel.width,
+		RecentFiles:         s.recentFiles,
+		RecentHosts:         s.recentHosts,
 		RecentLaunchKinds:   s.recentLaunchKinds,
 		AgentsSort:          s.agentsSort,
 		AgentsSortByTime:    s.agentsSortByTime,
@@ -173,6 +174,19 @@ func (s *Shell) captureSession() settings.SessionSettings {
 			snapshot.PaneSurfaces = map[string]string{}
 		}
 		snapshot.PaneSurfaces[paneID] = string(kind)
+	}
+	// The pane→script/command associations persist like the hook
+	// identities: a restart must not strip a running service of its
+	// attribution or its script-defined title.
+	for key, name := range s.scriptPanes {
+		if paneID, mine := strings.CutPrefix(key, livePrefix); mine &&
+			len(s.projection.Panes) > 0 && paneByID(s.projection, paneID) == nil {
+			continue
+		}
+		if snapshot.ScriptPanes == nil {
+			snapshot.ScriptPanes = map[string]string{}
+		}
+		snapshot.ScriptPanes[key] = name
 	}
 	return snapshot
 }
@@ -242,6 +256,13 @@ func (s *Shell) restoreSession() {
 	s.restoreSessionHooks(session)
 	s.projectsOpen = session.ProjectsOpen
 	s.agentsOpen = session.AgentsOpen
+	s.servicesOpen = session.ServicesOpen
+	for key, name := range session.ScriptPanes {
+		if s.scriptPanes == nil {
+			s.scriptPanes = make(map[string]string)
+		}
+		s.scriptPanes[key] = name
+	}
 	s.pinsOpen = session.PinsOpen
 	s.tasksOpen = !session.TasksClosed
 	for _, name := range session.FoldedBoards {

@@ -147,7 +147,7 @@ func TestAgentServicesTabsAreClickable(t *testing.T) {
 	if err := tt.Click("Services tab"); err != nil {
 		t.Fatal(err)
 	}
-	if s.quickPanelTab != 1 || !tt.HasText("Listening ports") {
+	if s.quickPanelTab != 1 || !tt.HasText("Running") || !tt.HasText("Scripts") {
 		t.Fatalf("Services tab should expose real data, got: %q", tt.Texts())
 	}
 	// The Agents icon is the way back to the list.
@@ -187,7 +187,7 @@ func TestServicesLiveInAgentQuickPanel(t *testing.T) {
 	s.portsForRoot = root
 	s.portsRefreshedAt = time.Now()
 	tester := ui.NewTester(s.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
-	for _, want := range []string{"Services", "Scripts", "Listening ports", "localhost:43217", "Preview"} {
+	for _, want := range []string{"Services", "Running", "Other listeners", "Scripts", "localhost:43217", "Preview"} {
 		if !tester.HasText(want) {
 			t.Fatalf("Services panel missing %q: %q", want, tester.Texts())
 		}
