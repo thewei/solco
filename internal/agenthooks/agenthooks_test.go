@@ -757,3 +757,13 @@ func TestClaudeHookScriptIgnoresCursorPayloads(t *testing.T) {
 		t.Fatal("Claude's hook stayed silent for a real Claude payload")
 	}
 }
+
+func TestApplyLiveAntigravityHook(t *testing.T) {
+	if os.Getenv("APPLY_LIVE_HOOK") != "1" {
+		t.Skip("skipping live hook application; set APPLY_LIVE_HOOK=1 to apply")
+	}
+	m := NewManager()
+	if _, err := m.Install(ProviderAntigravity); err != nil {
+		t.Fatalf("Install Antigravity failed: %v", err)
+	}
+}
