@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/thewei/solco/internal/history"
 )
 
 /**
@@ -30,7 +29,6 @@ type titlebarTab struct {
 	Detail   string
 	HasState bool
 	Service  bool
-	Draft    bool     // the blank new-session conversation (new_chat_draft.go), not a Herdr Tab
 	Keys     []string // the Select Tab shortcut as keycaps; nil past the ninth Tab
 }
 
@@ -56,15 +54,9 @@ func (s *Shell) titlebarTabs(dark bool) []titlebarTab {
 		tone, detail, ok := spec.indicator()
 		out = append(out, titlebarTab{
 			ID: tab.ID, Label: fallbackText(label, "Tab"), Mark: s.tabRowMark(panes, dark),
-			Selected: tab.ID == s.selectedTabID && s.newChatDraft == nil, Panes: len(panes),
+			Selected: tab.ID == s.selectedTabID, Panes: len(panes),
 			Tone: tone, Detail: detail, HasState: ok, Service: spec.serviceSlot(),
 			Keys: selectTabKeycaps(i+1, len(tabs)),
-		})
-	}
-	if d := s.newChatDraft; d != nil {
-		out = append(out, titlebarTab{
-			ID: "draft", Label: "New " + d.Kind.Label, Selected: true, Draft: true,
-			Mark: agentMark(history.AgentID(d.Kind.ID), dark),
 		})
 	}
 	return out
@@ -184,9 +176,6 @@ func planTabStrip(avail float32, tabs []titlebarTab) tabStripPlan {
 // the Workspace with its pane count, and the state in words (a line the chip
 // has no room to say, or no word for), plus the Select Tab keycaps.
 func tabTipSpec(tab titlebarTab, workspace string) tipCardSpec {
-	if tab.Draft {
-		return tipCardSpec{Title: tab.Label}
-	}
 	meta := itoa(max(tab.Panes, 1)) + " pane"
 	if tab.Panes > 1 {
 		meta += "s"
@@ -295,10 +284,7 @@ func (s *Shell) tabChip(c *ui.Context, k *gorexColors, tab titlebarTab, reveal b
 		minW, maxW = tabChipSelectedMinWidth, tabChipSelectedMaxWidth
 	}
 	slot := ui.Row(c.Key("tabslot:" + tab.ID)).AlignItems(ui.Center).Shrink(0).Transition(tabChipMotion)
-	var drag *treeRowDrag
-	if !tab.Draft {
-		drag = s.treeDragFor(treeNodeDrag{s.activeInstance, "tab", s.selectedProjectID, tab.ID})
-	}
+	drag := s.treeDragFor(treeNodeDrag{s.activeInstance, "tab", s.selectedProjectID, tab.ID})
 	// The chips beside a dragged one make way: the half of the slot the pointer
 	// is over opens a gap (the dragged chip's own ghost follows the pointer),
 	// and the gap holds the insertion bar. The side is read from the chip's
@@ -405,13 +391,11 @@ func (s *Shell) tabChip(c *ui.Context, k *gorexColors, tab titlebarTab, reveal b
 		if b.Clicked() && !tab.Selected {
 			s.selectTab(tab.ID)
 		}
-		if !tab.Draft {
-			b.ContextMenu(func(m *ui.Menu) {
-				if herdrTab := tabByID(s.projection, tab.ID); herdrTab != nil {
-					s.tabMenuItems(m, *herdrTab)
-				}
-			})
-		}
+		b.ContextMenu(func(m *ui.Menu) {
+			if herdrTab := tabByID(s.projection, tab.ID); herdrTab != nil {
+				s.tabMenuItems(m, *herdrTab)
+			}
+		})
 		s.tabGap(c, gapAfter, tab.ID+":after", !insertBefore && dragged.ID != "")
 	})
 }
@@ -449,13 +433,8 @@ func (s *Shell) tabGap(c *ui.Context, w float32, key string, bar bool) ui.Elemen
 	return gap
 }
 
-// closeTabChip is a chip's ×: the draft is dropped, a Herdr Tab goes through
-// the shared close confirm.
+// closeTabChip is a chip's ×: a Herdr Tab goes through the shared close confirm.
 func (s *Shell) closeTabChip(tab titlebarTab) {
-	if tab.Draft {
-		s.dropNewChatDraft()
-		return
-	}
 	s.openConfirm("close-tab", tab.ID, "Close Tab?", "This closes the selected Herdr Tab and all Panes in it.")
 }
 

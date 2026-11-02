@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/history"
@@ -105,5 +106,26 @@ func TestCmdTFollowsTheLastKind(t *testing.T) {
 	s.NewTabFromMenu()
 	if len(fake.specs) != 1 || fake.specs[0].Agent != history.AgentClaudeCode {
 		t.Fatalf("⌘T specs = %+v, want one Claude Code launch", fake.specs)
+	}
+}
+
+func TestPendingAgentOpenDropsWhenTheUserMovesOn(t *testing.T) {
+	s := tabBarShell(1, "t1")
+	s.pendingAgentOpen = &pendingAgentOpen{PaneID: "gone", At: time.Now()}
+	s.completeAgentOpen()
+	if s.pendingAgentOpen != nil {
+		t.Fatal("a pane that is no longer selected must not be pulled into Chat")
+	}
+}
+
+func TestPendingAgentOpenLandsOnChatOnceTheCardExistsWithoutAnIdentity(t *testing.T) {
+	s := tabBarShell(2, "t2")
+	s.pendingAgentOpen = &pendingAgentOpen{PaneID: "pt2", At: time.Now()}
+	s.completeAgentOpen()
+	if s.pendingAgentOpen != nil {
+		t.Fatal("the pending open must be consumed once the card exists")
+	}
+	if s.surface.current() != WorkspaceSurfaceChat || s.paneSurfaceMemo["pt2"] != WorkspaceSurfaceChat {
+		t.Fatalf("surface=%v memo=%v, want Chat", s.surface.current(), s.paneSurfaceMemo["pt2"])
 	}
 }

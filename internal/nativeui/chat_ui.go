@@ -231,9 +231,6 @@ func (s *Shell) sendChatPrompt() {
 // refused. Shared by the native composer and the WebView chat bridge; it
 // returns the projection after the attempt.
 func (s *Shell) sendChatText(text string) ChatBridgeState {
-	if s.newChatDraft != nil {
-		return s.sendNewChatDraft(text)
-	}
 	text = strings.TrimSpace(text)
 	if text == "" || s.launch == nil || s.activeInstance == "" || s.chatPaneID == "" {
 		return s.chatBridgeState()

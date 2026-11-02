@@ -635,9 +635,6 @@ func (s *Shell) chatAwaitingBind() bool {
 
 // chatBridgeState projects the chat state (UI lane only).
 func (s *Shell) chatBridgeState() ChatBridgeState {
-	if s.newChatDraft != nil {
-		return s.draftBridgeState()
-	}
 	s.chatStateSeq++
 	state := ChatBridgeState{
 		Seq:            s.chatStateSeq,

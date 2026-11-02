@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: app.SessionStarter（桌面与手机共用的「启动新会话」服务层：Kinds / StartSession）、Shell.recentLaunchKinds（MRU，随 settings.Session 持久）、herdr.Manager.Projection
- * [OUTPUT]: 提供 Tab 条的「+」菜单按钮（newTabControl）：点 + 总是弹菜单（Terminal 在前，其后 MRU 排序的 Agent，上次用的标 last used）；⌘T/侧栏行 + 仍用 lastLaunchKind；Agent 且默认 Chat 时转 new_chat_draft；orderLaunchKinds / rememberLaunchKind / startNewTab
+ * [OUTPUT]: 提供 Tab 条的「+」菜单按钮（newTabControl）：点 + 总是弹菜单（Terminal 在前，其后 MRU 排序的 Agent，上次用的标 last used）；⌘T/侧栏行 + 仍用 lastLaunchKind；选 Agent 直接经 SessionStarter 默认参数启动，Settings 默认 Chat 时待新 pane 的 Agent 卡出现即进入 Chat（空会话邀请态，会话身份由 Chat 渲染路径/hook 之后补绑；completeAgentOpen，不再经空白 draft）；orderLaunchKinds / rememberLaunchKind / startNewTab
  * [POS]: 新建 Tab 选 Agent 的唯一入口（2026-11-01 用户拍板，design: designs/ux-audit-4 议题 7，v1 不含 split-with-Agent）；Agent 走既有 launch transaction（与 Continue、手机 launch 同一个 SessionStarter），不造第二条启动路径；种类清单在后台读取，渲染路径不做 IO
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -110,45 +110,52 @@ func (s *Shell) ensureLaunchKinds() {
 	})
 }
 
-// newTabControl is the Tab bar's "+": one button that always opens the kind
-// menu — Terminal first, then the Agents, the last-used kind marked and first
-// among them (2026-11-02, design: designs/mobile-projection). ⌘T and the
-// sidebar rows' + still start the last-used kind directly.
-func (s *Shell) newTabControl(c *ui.Context, k *gorexColors, project herdr.Project) {
+// newTabMenu is the one kind menu behind every "+" that starts a Tab (Tab bar,
+// Workspace row, Agent-group row, and the New Tab submenu of the context menus):
+// Terminal first, then the Agents — the last-used one first and marked. A choice
+// starts that kind in project; the catalog is read in the background, so until it
+// arrives the menu holds Terminal alone.
+func (s *Shell) newTabMenu(m *ui.Menu, project herdr.Project) {
 	s.ensureLaunchKinds()
 	last := s.lastLaunchKind(s.launchKinds)
+	kinds := s.launchKinds
+	if len(kinds) == 0 {
+		kinds = []app.SessionKind{{ID: app.TerminalKind, Label: "Terminal"}}
+	}
+	ordered := orderLaunchKinds(kinds, s.recentLaunchKinds)
+	pick := func(kind app.SessionKind) {
+		label := kind.Label
+		if kind.ID == last.ID && kind.ID != app.TerminalKind {
+			label += "  ·  last used"
+		}
+		if m.Item(label).Chosen() {
+			s.startNewTab(project, kind)
+		}
+	}
+	for _, kind := range ordered {
+		if kind.ID == app.TerminalKind {
+			pick(kind)
+		}
+	}
+	agents := false
+	for _, kind := range ordered {
+		if kind.ID != app.TerminalKind {
+			if !agents {
+				m.Separator()
+				agents = true
+			}
+			pick(kind)
+		}
+	}
+}
+
+// newTabControl is the Tab bar's "+": one button that always opens the kind
+// menu (newTabMenu). ⌘T starts the last-used kind directly — a key has no
+// anchor for a menu.
+func (s *Shell) newTabControl(c *ui.Context, k *gorexColors, project herdr.Project) {
 	add := gorexIconButton(c, k, iconPlus, "New Tab", "", false, gorexIconBtn, gorexIconGlyph)
 	tipped(c, add, "New Tab in "+project.Label, tipKeys(acceleratorKeycaps(accelNewTab)))
-	if len(s.launchKinds) < 2 {
-		// Catalog still loading (or Terminal only): the + starts a Terminal.
-		if add.Clicked() {
-			s.startNewTab(project, last)
-		}
-		return
-	}
-	add.Menu(func(m *ui.Menu) {
-		ordered := orderLaunchKinds(s.launchKinds, s.recentLaunchKinds)
-		pick := func(kind app.SessionKind) {
-			label := kind.Label
-			if kind.ID == last.ID && kind.ID != app.TerminalKind {
-				label += "  ·  last used"
-			}
-			if m.Item(label).Chosen() {
-				s.startNewTab(project, kind)
-			}
-		}
-		for _, kind := range ordered {
-			if kind.ID == app.TerminalKind {
-				pick(kind)
-			}
-		}
-		m.Separator()
-		for _, kind := range ordered {
-			if kind.ID != app.TerminalKind {
-				pick(kind)
-			}
-		}
-	})
+	add.Menu(func(m *ui.Menu) { s.newTabMenu(m, project) })
 }
 
 // startNewTab opens a Tab in project with kind: Terminal through the existing
@@ -162,10 +169,6 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 	}
 	starter, instance := s.newTabLauncher(), s.activeInstance
 	if starter == nil || instance == "" {
-		return
-	}
-	if s.newChatDraftAvailable() {
-		s.beginNewChatDraft(project, kind)
 		return
 	}
 	spec := app.SessionSpec{
@@ -194,6 +197,50 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 				s.applyProjection(*projection, false)
 			}
 			s.showPane(result.PaneID)
+			if err == nil && s.settings.General.AgentChatFirst() {
+				s.pendingAgentOpen = &pendingAgentOpen{PaneID: result.PaneID, At: time.Now()}
+			}
 		})
 	})
+}
+
+// pendingAgentOpen is a freshly launched Agent pane that lands on Chat as soon
+// as its Agent card exists (Settings → General → Agent view = Chat).
+type pendingAgentOpen struct {
+	PaneID string
+	At     time.Time
+}
+
+// agentOpenPatience is how long a launched Agent may take to show up as a
+// card before the pane simply stays on its Terminal.
+const agentOpenPatience = 15 * time.Second
+
+// completeAgentOpen runs after every Agent-card rebuild (workbench.go): the
+// moment the new pane's card exists, Chat opens on it. A session identity is
+// not awaited — the page starts on its empty-session invitation and the Chat
+// surface's own render path binds the transcript as soon as the Agent (or its
+// hook) reports one. If the user moved to another pane meanwhile, nothing
+// changes.
+func (s *Shell) completeAgentOpen() {
+	p := s.pendingAgentOpen
+	if p == nil {
+		return
+	}
+	if s.selectedPaneID != p.PaneID || paneByID(s.projection, p.PaneID) == nil {
+		s.pendingAgentOpen = nil
+		return
+	}
+	if _, ok := s.agentCardForPane(p.PaneID); !ok {
+		if time.Since(p.At) > agentOpenPatience {
+			s.pendingAgentOpen = nil
+		}
+		return
+	}
+	s.pendingAgentOpen = nil
+	if s.router.Path() != routeWorkspace {
+		s.router.Push(routeWorkspace)
+	}
+	s.rememberPaneSurface(p.PaneID, WorkspaceSurfaceChat)
+	s.showSurface(WorkspaceSurfaceChat)
+	s.rebindWorkspaceChat()
 }

@@ -2,12 +2,13 @@ package nativeui
 
 /**
  * [INPUT]: Shell 假投影（herdr.Project/Agents）与假 newTabStarter（fakeStarter）、sidebarSectionHeader 的 Menu 型 Action 常驻槽、ui.Tester 的悬停/菜单模拟
- * [OUTPUT]: Agents 区排序回归——头部排序槽点击开菜单、指针离开行后选项仍必达（Menu 型 Action 的存在理由）、time/status 扁平顺序与分组默认、组行悬停 "+" 走 startNewTab 上次种类且不折叠分组、AgentsSort 随会话捕获/恢复
+ * [OUTPUT]: Agents 区排序回归——头部排序槽点击开菜单、指针离开行后选项仍必达（Menu 型 Action 的存在理由）、time/status 扁平顺序与分组默认、组行悬停 "+" 开种类菜单（离开行后选项仍必达）并走 startNewTab 且不折叠分组、AgentsSort 随会话捕获/恢复
  * [POS]: 2026-11-02 用户要求（Agents 标题排序菜单 + 分组行新建 Pane）；悬停条件菜单会丢选择（探针实证），故槽按钮键控常驻
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -160,10 +161,11 @@ func TestAgentsSortOrders(t *testing.T) {
 	}
 }
 
-// TestGroupPlusStartsTheLastKind hovers a group row, clicks its "+" and
-// expects the Tab bar's own flow: the last-used kind started in that
-// Workspace — and no fold toggle from the same press.
-func TestGroupPlusStartsTheLastKind(t *testing.T) {
+// TestGroupPlusOpensTheKindMenu hovers a group row, clicks its "+" and
+// expects the Tab bar's own menu — Terminal first, then the Agents with the
+// last-used one marked — whose choice (made with the pointer off the row)
+// starts that kind in that Workspace, with no fold toggle from the same press.
+func TestGroupPlusOpensTheKindMenu(t *testing.T) {
 	s, tester := agentsSortShell(t)
 	s.activeInstance = "main" // startNewTab refuses to launch without one
 	fake := &fakeStarter{kinds: testKinds}
@@ -176,10 +178,18 @@ func TestGroupPlusStartsTheLastKind(t *testing.T) {
 	}
 	tester.Move(head.X+head.W/2, head.Y+head.H/2)
 	tester.Frame()
-	if _, ok := tester.Find("New Pane in core"); !ok {
+	if rect, ok := tester.Find("New Pane in core"); !ok || rect.W == 0 {
 		t.Fatal("hovering the group row shows no +")
 	}
 	if err := tester.Click("New Pane in core"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tester.Menu()
+	if want := []string{"Terminal", "-", "Codex  ·  last used", "Claude Code", "Pi"}; !reflect.DeepEqual(menu, want) {
+		t.Fatalf("group + menu = %q, want %q", menu, want)
+	}
+	tester.Move(1150, 780) // the pointer is in the popup, off the row
+	if err := tester.ChooseMenuItem("Codex  ·  last used"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()

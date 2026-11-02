@@ -139,7 +139,7 @@ func (s *Shell) reconcileWorkbench() {
 	s.publishRemoteAgentFacts()
 	s.pruneAgentMRU(live)
 	// A launched new-session draft waits here for its Agent card (new_chat_draft.go).
-	s.completeDraftHandoff()
+	s.completeAgentOpen()
 }
 
 // agentTitleFrom applies the title fallback: History session title (the

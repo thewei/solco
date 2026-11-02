@@ -53,7 +53,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 			Status:     s.liveAgentStatus(project.AgentStatus, projectPanes),
 			Activity:   activity[project.ID],
 			Count:      projectCount,
-			Action:     &treeRowAction{Label: "New tab in " + project.Label, Glyph: iconPlus, Run: func() { s.newProjectTab(project) }},
+			Action:     &treeRowAction{Label: "New tab in " + project.Label, Glyph: iconPlus, Menu: func(m *ui.Menu) { s.newTabMenu(m, project) }},
 			Drag:       s.treeDragFor(treeNodeDrag{s.activeInstance, "project", "", project.ID}),
 		})
 		if row.Clicked() {
@@ -230,9 +230,7 @@ func (s *Shell) newProjectTab(project herdr.Project) {
 // projectMenuItems is the shared New Tab / Rename / Close builder behind the
 // project row's right-click menu.
 func (s *Shell) projectMenuItems(m *ui.Menu, project herdr.Project) {
-	if m.Item("New Tab").Chosen() {
-		s.newProjectTab(project)
-	}
+	m.Submenu("New Tab", func(sub *ui.Menu) { s.newTabMenu(sub, project) })
 	if m.Item("Rename Project…").Chosen() {
 		s.openTextDialog("rename-project", project.ID, "Rename Project", "Name", project.Label)
 	}

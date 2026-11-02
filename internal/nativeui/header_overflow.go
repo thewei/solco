@@ -143,8 +143,8 @@ func (s *Shell) surfaceOverflowItems(m *ui.Menu) {
 		s.paneOverflowItems(m, s.selectedPaneID, label)
 		m.Separator()
 	}
-	if project := s.selectedProject(); project != nil && m.Item("New Tab").Chosen() {
-		s.newProjectTab(*project)
+	if project := s.selectedProject(); project != nil {
+		m.Submenu("New Tab", func(sub *ui.Menu) { s.newTabMenu(sub, *project) })
 	}
 	if m.Item("Refresh Runtime").Chosen() {
 		s.reloadInstances(false)

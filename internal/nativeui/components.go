@@ -403,6 +403,27 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 			}
 			ui.Text(c, spec.Label).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").PassThrough()
 			hovered := row.Hovered()
+			// A menu action is one keyed button built on every frame — the glyph's size under the
+			// pointer, no width at rest — because a popup's chosen item is delivered to the element
+			// that opened it, and a hover-conditional element is gone by then (the pointer is on
+			// the popup, not the row; probed 2026-11-02, see sidebar_tree.go's section header).
+			menuSlot := func() {
+				w := float32(0)
+				if hovered {
+					w = gorexRowBtn
+				}
+				slot := tipped(c, ui.ButtonBase(c.Key(spec.Key+":action")).Size(w, gorexRowBtn).Shrink(0).
+					Radius(iconButtonRadius(gorexRowBtn)).Center().FocusRing(false).Label(spec.Action.Label), spec.Action.tooltip())
+				slot.Menu(spec.Action.Menu)
+				if hovered && slot.Hovered() {
+					slot.Background(t.SurfaceHover)
+				}
+				slot.Children(func() {
+					if hovered {
+						ui.Icon(c, spec.Action.Glyph).FontSize(gorexRowGlyph).TextColor(t.TextMuted)
+					}
+				})
+			}
 			controls := func() {
 				if spec.Expandable && hovered {
 					glyph := iconChevron
@@ -411,7 +432,10 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 					}
 					ui.Icon(c, glyph).Size(11, 11).TextColor(t.TextMuted).Shrink(0).PassThrough()
 				}
-				if spec.Action != nil && hovered {
+				switch {
+				case spec.Action != nil && spec.Action.Menu != nil:
+					menuSlot()
+				case spec.Action != nil && hovered:
 					action := gorexIconButton(c, gorexColorsOf(t.Dark), spec.Action.Glyph, spec.Action.Label, spec.Action.tooltip(), false, gorexRowBtn, gorexRowGlyph)
 					if action.Clicked() {
 						spec.Action.Run()
@@ -454,6 +478,9 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 					ui.Row(c).Width(treeCountColW).Shrink(0).PassThrough().Children(func() {
 						ui.Box(c).Grow(1).MinWidth(0).PassThrough()
 						tally()
+						if spec.Action != nil && spec.Action.Menu != nil {
+							menuSlot()
+						}
 					})
 				})
 			} else {

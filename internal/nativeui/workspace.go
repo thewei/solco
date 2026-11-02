@@ -24,10 +24,6 @@ func (s *Shell) workspacePage(c *ui.Context) {
 			s.workspaceErrorBanner(c, t)
 		}
 
-		if s.newChatDraft != nil {
-			gorexContentCard(c, gorexColorsOf(t.Dark), func() { s.newChatDraftSurface(c) })
-			return
-		}
 		switch s.surface.current() {
 		case WorkspaceSurfaceDiff:
 			// Git references stay in the left sidebar. Commit/file navigation

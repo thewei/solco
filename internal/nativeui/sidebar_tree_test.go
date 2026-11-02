@@ -505,7 +505,7 @@ func TestWorkspaceTreeRowsDropTheEllipsisAndProjectsOfferNewTabOnHover(t *testin
 			t.Fatalf("a Workspace tree row still carries a kebab: %q", text)
 		}
 	}
-	if tester.HasText("New tab in Project Menu") {
+	if rect, ok := tester.Find("New tab in Project Menu"); ok && rect.W > 0 {
 		t.Fatal("the + belongs under the pointer only")
 	}
 	row, ok := tester.Find("Project Menu")
@@ -515,11 +515,14 @@ func TestWorkspaceTreeRowsDropTheEllipsisAndProjectsOfferNewTabOnHover(t *testin
 	tester.Move(row.X+row.W/2, row.Y+row.H/2)
 	tester.Frame()
 	tester.Frame()
-	if !tester.HasText("New tab in Project Menu") {
+	if rect, ok := tester.Find("New tab in Project Menu"); !ok || rect.W == 0 {
 		t.Fatalf("hovering a project must offer + New Tab: %q", tester.Texts())
 	}
 	if err := tester.Click("New tab in Project Menu"); err != nil {
 		t.Fatal(err)
+	}
+	if menu := tester.Menu(); len(menu) == 0 || menu[0] != "Terminal" {
+		t.Fatalf("the project + opens the kind menu with Terminal first: %q", menu)
 	}
 	if s.selectedProjectID != "w1" {
 		t.Fatalf("pressing + also activated the row: selected project %q", s.selectedProjectID)

@@ -674,19 +674,43 @@ func (s *Shell) agentGroupItems(c *ui.Context, cards []agent.AgentCardModel, dup
 				treeChevron(c, true, !groupFolded, t.TextMuted)
 				ui.Text(c, group.Name).FontSize(Typography().Micro).
 					TextColor(t.TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).PassThrough()
-				switch {
-				case head.Hovered() && project != nil:
-					add := gorexIconButton(c, gorexColorsOf(t.Dark), iconPlus, "New Pane in "+group.Name, "New Pane in "+group.Name, false, gorexRowBtn, gorexRowGlyph)
-					if add.Clicked() {
-						s.startNewTab(*project, s.lastLaunchKind(s.launchKinds))
+				resting := func() {
+					switch {
+					case groupFolded:
+						ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+						statusIndicator(c, groupIndicatorState(group.Cards, time.Now()))
+					case groupRoot != "":
+						branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
+						gitFactsView(c, branch, adds, dels, files, ok)
 					}
-				case groupFolded:
-					ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
-					statusIndicator(c, groupIndicatorState(group.Cards, time.Now()))
-				case groupRoot != "":
-					branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
-					gitFactsView(c, branch, adds, dels, files, ok)
 				}
+				if project == nil {
+					resting()
+					return
+				}
+				// The "+" is the kind menu. Its button is built on every frame — the glyph's size under
+				// the pointer, no width at rest — so the item chosen from the popup (the pointer is on
+				// the popup, not the row) still reaches it, and what the row shows at rest stays a
+				// plain label that toggles the fold.
+				hovered := head.Hovered()
+				if !hovered {
+					resting()
+				}
+				w := float32(0)
+				if hovered {
+					w = gorexRowBtn
+				}
+				slot := tipped(c, ui.ButtonBase(c.Key("agent-group-add:"+group.Key)).Size(w, gorexRowBtn).Shrink(0).
+					Radius(iconButtonRadius(gorexRowBtn)).Center().FocusRing(false).Label("New Pane in "+group.Name), "New Pane in "+group.Name)
+				slot.Menu(func(m *ui.Menu) { s.newTabMenu(m, *project) })
+				if hovered && slot.Hovered() {
+					slot.Background(t.SurfaceHover)
+				}
+				slot.Children(func() {
+					if hovered {
+						ui.Icon(c, iconPlus).FontSize(gorexRowGlyph).TextColor(t.TextMuted)
+					}
+				})
 			})
 			head.ContextMenu(func(m *ui.Menu) {
 				if m.Item("Fold All Groups").Chosen() {
