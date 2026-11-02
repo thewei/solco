@@ -61,6 +61,7 @@ func (s *Shell) selectProject(projectID string) {
 // side of syncSelectionLocation.
 func (s *Shell) applyProjectSelection(projectID string) {
 	defer s.syncWorkspaceForSelection()
+	s.dropNewChatDraft()
 	if !projectExists(s.projection, projectID) {
 		return
 	}
@@ -79,6 +80,7 @@ func (s *Shell) selectTab(tabID string) {
 // applyTabSelection is selectTab without the history push.
 func (s *Shell) applyTabSelection(tabID string) {
 	defer s.syncWorkspaceForSelection()
+	s.dropNewChatDraft()
 	tab := tabByID(s.projection, tabID)
 	if tab == nil {
 		return
@@ -103,6 +105,7 @@ func (s *Shell) selectPane(paneID string) {
 // applyPaneSelection is selectPane without the history push.
 func (s *Shell) applyPaneSelection(paneID string) {
 	defer s.syncWorkspaceForSelection()
+	s.dropNewChatDraft()
 	pane := paneByID(s.projection, paneID)
 	if pane == nil {
 		s.selectedPaneID = paneID

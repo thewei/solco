@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/history"
 )
@@ -64,18 +63,13 @@ func TestRememberLaunchKindIsMRUAndBounded(t *testing.T) {
 	}
 }
 
-func TestPlusRepeatsTheLastKindAndDefaultsToTerminal(t *testing.T) {
+func TestLastKindIsWhatShortcutsStartAndDefaultsToTerminal(t *testing.T) {
 	fake := &fakeStarter{kinds: testKinds}
 	s := tabBarShell(2, "t1")
 	s.newTabStarter = fake
 	s.launchKinds = testKinds
 	s.recentLaunchKinds = []string{"codex"}
-	tester := ui.NewTester(s.View, 1400, 800)
-	tester.Frame()
-	if err := tester.Click("New Tab"); err != nil {
-		t.Fatal(err)
-	}
-	tester.Frame()
+	s.startNewTab(s.projection.Projects[0], s.lastLaunchKind(s.launchKinds))
 	if len(fake.specs) != 1 || fake.specs[0].Agent != history.AgentCodex || fake.specs[0].WorkspaceID != "w1" {
 		t.Fatalf("specs = %+v, want one Codex launch in w1", fake.specs)
 	}

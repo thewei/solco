@@ -601,6 +601,9 @@ type Shell struct {
 	// chatPendingEcho is the unconsumed pending submission echo; nil once
 	// the provider source confirmed it.
 	chatPendingEcho *conversation.PendingEcho
+	// newChatDraft is the blank Agent conversation shown before its pane
+	// exists (new_chat_draft.go); nil when none is open.
+	newChatDraft *newChatDraft
 	// chatLiveBackstopOverride shrinks the pump's timer backstop in tests;
 	// zero keeps the production backstop.
 	chatLiveBackstopOverride time.Duration

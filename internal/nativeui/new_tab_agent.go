@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: app.SessionStarter（桌面与手机共用的「启动新会话」服务层：Kinds / StartSession）、Shell.recentLaunchKinds（MRU，随 settings.Session 持久）、herdr.Manager.Projection
- * [OUTPUT]: 提供 Tab 条的「+ ▾」分裂按钮（newTabControl）：点 + 用上次用的种类开新 Tab（默认 Terminal），▾ 列出 MRU 排序的 Agent、Terminal 永远最后；orderLaunchKinds / rememberLaunchKind / startNewTab
+ * [OUTPUT]: 提供 Tab 条的「+」菜单按钮（newTabControl）：点 + 总是弹菜单（Terminal 在前，其后 MRU 排序的 Agent，上次用的标 last used）；⌘T/侧栏行 + 仍用 lastLaunchKind；Agent 且默认 Chat 时转 new_chat_draft；orderLaunchKinds / rememberLaunchKind / startNewTab
  * [POS]: 新建 Tab 选 Agent 的唯一入口（2026-11-01 用户拍板，design: designs/ux-audit-4 议题 7，v1 不含 split-with-Agent）；Agent 走既有 launch transaction（与 Continue、手机 launch 同一个 SessionStarter），不造第二条启动路径；种类清单在后台读取，渲染路径不做 IO
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -110,33 +110,42 @@ func (s *Shell) ensureLaunchKinds() {
 	})
 }
 
-// newTabControl is the Tab bar's "+ ▾": + opens a Tab with the kind used last,
-// ▾ lists the kinds.
+// newTabControl is the Tab bar's "+": one button that always opens the kind
+// menu — Terminal first, then the Agents, the last-used kind marked and first
+// among them (2026-11-02, design: designs/mobile-projection). ⌘T and the
+// sidebar rows' + still start the last-used kind directly.
 func (s *Shell) newTabControl(c *ui.Context, k *gorexColors, project herdr.Project) {
 	s.ensureLaunchKinds()
 	last := s.lastLaunchKind(s.launchKinds)
 	add := gorexIconButton(c, k, iconPlus, "New Tab", "", false, gorexIconBtn, gorexIconGlyph)
-	name := "New Tab in "
-	if last.ID != app.TerminalKind {
-		name = "New " + last.Label + " Tab in "
-	}
-	tipped(c, add, name+project.Label, tipKeys(acceleratorKeycaps(accelNewTab)))
-	if add.Clicked() {
-		s.startNewTab(project, last)
-	}
+	tipped(c, add, "New Tab in "+project.Label, tipKeys(acceleratorKeycaps(accelNewTab)))
 	if len(s.launchKinds) < 2 {
+		// Catalog still loading (or Terminal only): the + starts a Terminal.
+		if add.Clicked() {
+			s.startNewTab(project, last)
+		}
 		return
 	}
-	more := gorexIconButton(c, k, iconChevronDown, "New Tab Options", "New Tab Options", false, gorexPaneBtn, gorexPaneGlyph-4)
-	more.Menu(func(m *ui.Menu) {
-		for _, kind := range orderLaunchKinds(s.launchKinds, s.recentLaunchKinds) {
-			kind := kind
+	add.Menu(func(m *ui.Menu) {
+		ordered := orderLaunchKinds(s.launchKinds, s.recentLaunchKinds)
+		pick := func(kind app.SessionKind) {
 			label := kind.Label
-			if kind.ID == last.ID {
+			if kind.ID == last.ID && kind.ID != app.TerminalKind {
 				label += "  ·  last used"
 			}
 			if m.Item(label).Chosen() {
 				s.startNewTab(project, kind)
+			}
+		}
+		for _, kind := range ordered {
+			if kind.ID == app.TerminalKind {
+				pick(kind)
+			}
+		}
+		m.Separator()
+		for _, kind := range ordered {
+			if kind.ID != app.TerminalKind {
+				pick(kind)
 			}
 		}
 	})
@@ -153,6 +162,10 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 	}
 	starter, instance := s.newTabLauncher(), s.activeInstance
 	if starter == nil || instance == "" {
+		return
+	}
+	if s.newChatDraftAvailable() {
+		s.beginNewChatDraft(project, kind)
 		return
 	}
 	spec := app.SessionSpec{

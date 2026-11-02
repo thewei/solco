@@ -266,6 +266,8 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   // send, answer or queue.
   const readOnly = state?.readOnly === true;
   const openTerminal = () => void chat.openTerminal().catch(() => {});
+  // A draft session has no pane yet, so there is no Terminal to open.
+  const terminalFor = state?.draft === true ? undefined : openTerminal;
   // A fresh pane's first conversation id appears while the user may already
   // be typing: that transition keeps the draft instead of restoring one.
   const prevConversation = useRef("");
@@ -1311,7 +1313,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
             </button>
           ) : null}
           {state?.loading ? (
-            <SessionState kind="loading" onOpenTerminal={openTerminal} />
+            <SessionState kind="loading" onOpenTerminal={terminalFor} />
           ) : state?.waiting ? (
             <SessionState
               kind="waiting"
@@ -1319,12 +1321,12 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
               starting={starting}
               links={state.linkCandidates}
               onLink={(key) => void chat.linkSession(key).then(setState).catch(refresh)}
-              onOpenTerminal={blockedCard ? undefined : openTerminal}
+              onOpenTerminal={blockedCard ? undefined : terminalFor}
             />
           ) : turns.length === 0 ? (
             // A bound session with no rows yet (the agent wrote its header
             // only) reads the same as a fresh pane: type to start.
-            <SessionState kind="waiting" provider={state?.provider} onOpenTerminal={blockedCard ? undefined : openTerminal} />
+            <SessionState kind="waiting" provider={state?.provider} onOpenTerminal={blockedCard ? undefined : terminalFor} />
           ) : (
             <div
               ref={listRef}

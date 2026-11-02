@@ -125,6 +125,11 @@ export interface ChatBridgeState {
    */
   echoPending?: boolean;
   /**
+   * Draft marks a new session whose Agent has not started: there is no pane
+   * yet, so the page offers no Open Terminal (new_chat_draft.go).
+   */
+  draft?: boolean;
+  /**
    * LinkCandidates are recent sessions of this agent's provider in its
    * folder, offered only while the agent has not reported a session of its
    * own (Waiting): the invitation can then say "show this one instead".

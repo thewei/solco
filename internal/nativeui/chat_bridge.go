@@ -71,6 +71,9 @@ type ChatBridgeState struct {
 	// that the provider transcript has not confirmed yet: the page stands in
 	// a Working line until the agent's own rows arrive.
 	EchoPending bool `json:"echoPending,omitempty"`
+	// Draft marks a new session whose Agent has not started: there is no pane
+	// yet, so the page offers no Open Terminal (new_chat_draft.go).
+	Draft bool `json:"draft,omitempty"`
 	// LinkCandidates are recent sessions of this agent's provider in its
 	// folder, offered only while the agent has not reported a session of its
 	// own (Waiting): the invitation can then say "show this one instead".
@@ -632,6 +635,9 @@ func (s *Shell) chatAwaitingBind() bool {
 
 // chatBridgeState projects the chat state (UI lane only).
 func (s *Shell) chatBridgeState() ChatBridgeState {
+	if s.newChatDraft != nil {
+		return s.draftBridgeState()
+	}
 	s.chatStateSeq++
 	state := ChatBridgeState{
 		Seq:            s.chatStateSeq,
