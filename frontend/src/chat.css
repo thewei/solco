@@ -498,6 +498,29 @@ html[data-host="phone"] .turn:not(.open):not(.last) .foot {
   object-fit: contain;
 }
 
+/* A mermaid diagram renders into the same slot: the library's own SVG,
+   sized to the block (mermaid sets its own max-width when it draws). */
+.codeb .mmprev {
+  display: grid;
+  place-items: center;
+  padding: 12px 14px 14px;
+  overflow-x: auto;
+}
+
+.codeb .mmprev svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* A diagram that will not parse keeps its source; one quiet line names why
+   (cleared on the next source change, so a stream never flashes it). */
+.codeb .mmerr {
+  padding: 2px 14px 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--warning);
+}
+
 /* A long block starts folded: a fade over the cut and one line to open it. */
 .codeb.folded pre {
   overflow-y: hidden;

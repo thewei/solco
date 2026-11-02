@@ -12,8 +12,10 @@ import { SubagentBlock, SubagentContext } from "./subagents";
  * the user speaks in a neutral bubble; the assistant is plain reading text
  * with no container; process (thinking + tool calls) folds into one summary
  * line per run that opens into typed ledger rows; a settled turn that edited
- * files ends in a changes card. Presentation only: every fact comes from the
- * bridge projection.
+ * files ends in a changes card. Fenced blocks share one face: an SVG block
+ * previews its picture and a mermaid block renders a diagram, each with a
+ * one-tap source view. Presentation only: every fact comes from the bridge
+ * projection.
  */
 
 type Turn = ChatTurn;
@@ -748,6 +750,72 @@ function withSvgNamespace(svg: string): string {
   return /<svg\b[^>]*\sxmlns\s*=/i.test(svg) ? svg : svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
 }
 
+// ---- mermaid ----
+
+// Mermaid loads lazily: the library is large and most turns carry no
+// diagram, so nothing is evaluated until a mermaid block first renders.
+let mermaidApi: Promise<typeof import("mermaid")["default"]> | null = null;
+let mermaidTheme = "";
+
+function loadMermaid(theme: string) {
+  if (!mermaidApi) {
+    mermaidApi = import("mermaid").then((mod) => {
+      mod.default.initialize({
+        startOnLoad: false,
+        // strict sanitizes labels and disables click callbacks: the page
+        // renders agent-authored text, so the library's safe mode stays on.
+        securityLevel: "strict",
+        // Parse failures surface as our own muted line, not the library's
+        // error-bomb SVG injected into the page.
+        suppressErrorRendering: true,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+      });
+      return mod.default;
+    });
+  }
+  // initialize merges config: a theme flip is one more call, and the next
+  // render redraws every block in the new palette.
+  if (mermaidTheme !== theme) {
+    mermaidTheme = theme;
+    return mermaidApi.then((mermaid) => {
+      mermaid.initialize({ theme: theme === "dark" ? "dark" : "default" });
+      return mermaid;
+    });
+  }
+  return mermaidApi;
+}
+
+// Each render needs an element id of its own: mermaid names its defs and
+// clip paths after it, and two live diagrams must not collide.
+let mermaidSeq = 0;
+
+// errText condenses a parse failure (mermaid's message is multi-line HTML)
+// into one quiet line.
+function errText(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const line = raw
+    .replace(/<[^>]*>/g, "")
+    .split("\n")
+    .map((part) => part.trim())
+    .find(Boolean);
+  return (line ?? "This diagram could not be rendered").slice(0, 200);
+}
+
+// usePageTheme reads the page's resolved light/dark (App.tsx writes it onto
+// the html element from the bridge and the system) and updates when it flips,
+// so theme-painted content like a diagram redraws without a turn re-render.
+function usePageTheme(): string {
+  const read = () => document.documentElement.dataset.theme ?? "light";
+  const [theme, setTheme] = useState(read);
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => setTheme(read()));
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
+
 function CodeBlock({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) {
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
@@ -755,6 +823,7 @@ function CodeBlock({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) 
   const [expanded, setExpanded] = useState(false);
   // An SVG block shows its picture first; Code is one tap away, and a block
   // the image decoder refuses (a half-streamed or invalid SVG) stays code.
+  // A mermaid block runs the same shape through the library's own parser.
   const [view, setView] = useState<"preview" | "code">("preview");
   const [svgBroken, setSvgBroken] = useState(false);
   const child = React.Children.toArray(children)[0] as React.ReactElement<{ className?: string }> | undefined;
@@ -768,7 +837,41 @@ function CodeBlock({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) 
     setLines((prev) => (prev === count ? prev : count));
   });
   const isSvg = (lang === "svg" || lang === "xml") && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(source);
-  const preview = isSvg && view === "preview" && !svgBroken;
+  const isMermaid = lang === "mermaid";
+  // Mermaid re-renders once the source settles (a stream redraws the block
+  // per chunk, so each attempt waits out a 350ms lull) and on theme flips;
+  // a parse failure falls back to the source with one muted reason line.
+  const theme = usePageTheme();
+  const [mmSvg, setMmSvg] = useState("");
+  const [mmError, setMmError] = useState("");
+  useEffect(() => setMmError(""), [source]);
+  useEffect(() => {
+    if (!(isMermaid && view === "preview") || source.trim() === "") return;
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      loadMermaid(theme)
+        .then((mermaid) => mermaid.render(`s${++mermaidSeq}-d`, source))
+        .then(({ svg }) => {
+          if (alive) {
+            setMmSvg(svg);
+            setMmError("");
+          }
+        })
+        .catch((err: unknown) => {
+          if (alive) {
+            setMmSvg("");
+            setMmError(errText(err));
+          }
+        });
+    }, 350);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [isMermaid, view, source, theme]);
+  const svgShow = isSvg && view === "preview" && !svgBroken;
+  const mmShow = isMermaid && view === "preview" && mmSvg !== "";
+  const preview = svgShow || mmShow;
   useEffect(() => setSvgBroken(false), [source]);
   const foldable = !preview && lines > FOLD_OVER_LINES;
   const folded = foldable && !expanded;
@@ -783,10 +886,10 @@ function CodeBlock({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) 
     <div className={`codeb${folded ? " folded" : ""}`}>
       <div className="ch">
         <span>{lang}</span>
-        {isSvg ? (
+        {isSvg || isMermaid ? (
           <span className="ctabs" role="tablist">
             <button type="button" role="tab" aria-selected={preview} className={preview ? "on" : ""} onClick={() => setView("preview")}>
-              Preview
+              {isMermaid ? "Diagram" : "Preview"}
             </button>
             <button type="button" role="tab" aria-selected={!preview} className={preview ? "" : "on"} onClick={() => setView("code")}>
               Code
@@ -797,7 +900,7 @@ function CodeBlock({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) 
           <Icon name={copied ? "check" : "copy"} size={13} />
         </button>
       </div>
-      {preview ? (
+      {svgShow ? (
         <div className="svgprev">
           <img
             src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(withSvgNamespace(source))}`}
@@ -806,6 +909,11 @@ function CodeBlock({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) 
           />
         </div>
       ) : null}
+      {mmShow ? (
+        // strict mode sanitizes the SVG before it reaches this attribute.
+        <div className="mmprev" role="img" aria-label="Diagram preview" dangerouslySetInnerHTML={{ __html: mmSvg }} />
+      ) : null}
+      {mmError && isMermaid && view === "preview" && !mmShow ? <div className="mmerr">{mmError}</div> : null}
       <pre ref={ref} {...rest} hidden={preview} style={folded ? { maxHeight: `${FOLDED_LINES * 1.62}em` } : undefined}>
         {children}
       </pre>
