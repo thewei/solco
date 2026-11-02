@@ -50,18 +50,23 @@ export interface SlashMatches {
 
 /**
  * slashMatches lists what the draft's last token asks for. `/` opens the
- * commands and the skills invoked with `/` only at the start of a message
- * (that is where every agent reads a command); `$` lists the skills invoked
- * with `$`, which Codex also reads in the middle of a sentence. Prefix hits
- * rank before substring hits; max 60 rows.
+ * commands and the skills invoked with `/` at any token position, so one
+ * draft can carry several of them (`/a /b …`); what each agent makes of the
+ * tokens after the first is its own reading of the sent text. `$` lists the
+ * skills invoked with `$` — Codex reads them mid-sentence too — and only
+ * when the catalog actually carries `$` entries. Prefix hits rank before
+ * substring hits; max 60 rows. The lead is recognized at a word boundary:
+ * start of draft, whitespace, or a non-ASCII character — CJK text carries
+ * no spaces, so `提交一下/comm` must fire; an ASCII letter or digit never
+ * counts (`5/3`, `https://…`, `and/or` stay ordinary text).
  */
 export function slashMatches(catalog: ChatCatalog | null, draft: string): SlashMatches {
   const none: SlashMatches = { entries: [], start: 0 };
-  const m = /(^|\s)([/$／＄、¥￥])(\S*)$/.exec(draft);
+  const m = /(^|\s|[^\s\x00-\x7f])([/$／＄、¥￥])(\S*)$/.exec(draft);
   if (!catalog || !m) return none;
   const start = m.index + m[1].length;
   const lead = LEAD[m[2]];
-  if (start > 0 && !(m[2] === "$" && catalog.skills.some((e) => e.name.startsWith("$")))) return none;
+  if (lead !== "/" && !catalog.skills.some((e) => e.name.startsWith("$"))) return none;
   const query = m[3].toLowerCase();
   const pool = [...catalog.commands, ...catalog.skills].filter((e) => e.name.startsWith(lead));
   const scored: [number, ChatCatalogEntry][] = [];

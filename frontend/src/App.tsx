@@ -306,7 +306,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     };
   }, [conversationId, paneProvider, readOnly]);
 
-  // The `/` `$` list: only while the draft is one leading token.
+  // The `/` `$` list: while the draft's last token asks for a command or skill.
   const slashState = !panel && !slashOff && !recording && !transcribing ? slashMatches(catalog, draft) : { entries: [], start: 0 };
   const slash = slashState.entries;
   useEffect(() => {
