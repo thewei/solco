@@ -170,11 +170,6 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 		writeError(w, http.StatusConflict, "no_conversation", "")
 		return
 	}
-	if !s.acquireChat(dev.ID) {
-		writeError(w, http.StatusTooManyRequests, "too_many_streams", "")
-		return
-	}
-	defer s.releaseChat(dev.ID)
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{subprotocolBearer}})
 	if err != nil {
 		return
@@ -182,6 +177,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 	defer conn.CloseNow()
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	defer s.acquireChat(dev.ID, cancel)()
 	defer s.trackConn(dev.ID, func() { _ = conn.Close(websocket.StatusPolicyViolation, "revoked"); cancel() })()
 	// The phone sends one message: {"t":"older"} asks for the previous page of this stream's window. Anything
 	// else is ignored; reading also detects a close.
@@ -277,23 +273,43 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 	}
 }
 
-func (s *Server) acquireChat(deviceID string) bool {
+// acquireChat registers one open chat stream of a device and returns its release. A phone that changed network
+// leaves its old sockets half-open on this side (a stream writes only on change, so nothing ever fails), and those
+// would hold the device's slots until TCP gives up: a full device evicts its oldest stream instead of refusing the
+// new one, so the chat the user just opened always gets through.
+func (s *Server) acquireChat(deviceID string, evict func()) (release func()) {
+	slot := &chatSlot{evict: evict}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.chats == nil {
-		s.chats = map[string]int{}
+		s.chats = map[string][]*chatSlot{}
 	}
-	if s.chats[deviceID] >= maxChatStreamsPerDev {
-		return false
+	slots := append(s.chats[deviceID], slot)
+	var dropped []*chatSlot
+	for len(slots) > maxChatStreamsPerDev {
+		dropped = append(dropped, slots[0])
+		slots = slots[1:]
 	}
-	s.chats[deviceID]++
-	return true
+	s.chats[deviceID] = slots
+	s.mu.Unlock()
+	for _, old := range dropped {
+		old.evict()
+	}
+	return func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		kept := s.chats[deviceID][:0:0]
+		for _, other := range s.chats[deviceID] {
+			if other != slot {
+				kept = append(kept, other)
+			}
+		}
+		if len(kept) == 0 {
+			delete(s.chats, deviceID)
+			return
+		}
+		s.chats[deviceID] = kept
+	}
 }
 
-func (s *Server) releaseChat(deviceID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.chats[deviceID]--; s.chats[deviceID] <= 0 {
-		delete(s.chats, deviceID)
-	}
-}
+// chatSlot is one open chat stream; evict ends it.
+type chatSlot struct{ evict func() }

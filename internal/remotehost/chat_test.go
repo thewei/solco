@@ -189,3 +189,31 @@ func TestChatStreamOlderAsksForThePreviousPageOnlyOnThatSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A phone that changed network leaves half-open streams behind: the new chat evicts the oldest one instead of being refused.
+func TestChatStreamsOfOneDeviceEvictTheOldestInsteadOfRefusing(t *testing.T) {
+	s := &Server{}
+	evicted := make([]int, maxChatStreamsPerDev+2)
+	releases := make([]func(), len(evicted))
+	for i := range evicted {
+		releases[i] = s.acquireChat("dev", func() { evicted[i]++ })
+	}
+	for i, n := range evicted {
+		want := 0
+		if i < 2 { // six opened, four allowed: the two oldest went
+			want = 1
+		}
+		if n != want {
+			t.Fatalf("stream %d evicted %d times, want %d", i, n, want)
+		}
+	}
+	if got := len(s.chats["dev"]); got != maxChatStreamsPerDev {
+		t.Fatalf("slots = %d, want %d", got, maxChatStreamsPerDev)
+	}
+	for _, release := range releases { // an evicted stream's own release must not free someone else's slot
+		release()
+	}
+	if len(s.chats) != 0 {
+		t.Fatalf("slots left after every release: %v", s.chats)
+	}
+}

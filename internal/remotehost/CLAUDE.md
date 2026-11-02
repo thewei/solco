@@ -46,7 +46,7 @@ quota_test.go: 假缝——无缝 404/未鉴权不触达缝/refresh=1 传 force/
 terminal.go: GET /terminals/{id}/stream：每 WS 一个只读 `terminal session observe` 子进程（手机自己的栅格，不 attach/takeover、不重排 Mac 窗格），帧 = JSON 头文本帧 + ANSI 二进制帧；输入只走 pane.send_input（文本≤64KiB、键名白名单正则）；resize=用新栅格重启（100 ms 去抖）；每设备 ≤2 路；Herdr 结束流以 4404 + 机读原因关闭
 question_test.go: 屏幕提问显示/单次答题/二次答题 409 且不触达 Herdr、未知选项与错 id 拒绝、未 blocked 与投递失败（卡留着）、omp 多问题逐步（recommended 起始行、多选 space 序列）、自由文本行先选再打字（含 pane.send_input 回退）、流里出卡与离开 blocked 即撤
 remotehost_test.go: 模式/地址表（含通配拒绝）、证书稳定与续期/损坏重建、配对码单次/过期/替换/取消、token 不落盘、撤销、LastSeen 节流、损坏文件、名称边界
-chat.go: P2 只读 Chat——GET /panes/{paneId}/chat 与 WS /panes/{paneId}/chat/stream；pane → Herdr agent_session → history.ResolveLiveSource → chatsession.Reader（与桌面同一投影）；无会话 409 no_conversation；流内 1 s 轮询、4 s 重绑/子代理刷新，序列化相同不重推；每设备 ≤4 路；Options.Home 可注入（测试）；Options.Identity 是桌面 hook 学到的会话身份的借用口（Herdr 的 agent 列表没有 Claude Code/Codex 的 session）
+chat.go: P2 只读 Chat——GET /panes/{paneId}/chat 与 WS /panes/{paneId}/chat/stream；pane → Herdr agent_session → history.ResolveLiveSource → chatsession.Reader（与桌面同一投影）；无会话 409 no_conversation；流内 1 s 轮询、4 s 重绑/子代理刷新，序列化相同不重推；每设备 ≤4 路，满了淘汰最老的一路而不是拒绝新的（手机切网后旧 socket 在 Host 侧半开，流只在内容变时才写，不会自己失败）；Options.Home 可注入（测试）；Options.Identity 是桌面 hook 学到的会话身份的借用口（Herdr 的 agent 列表没有 Claude Code/Codex 的 session）
 chat_send.go: P3 子集——POST /panes/{paneId}/chat/send（Sendable 才发；working 须 interrupt 才 Esc→Ctrl-C→发；blocked/failed needs_terminal；Herdr 拒绝原样 refused；DeliveryUncertain 504 不重发；正文不进日志）与 /chat/stop（一次 Esc）；Backend.PromptAgent/SendAgentKeys 即 Herdr 既有 agent.prompt/agent.send_keys
 chat_send_test.go: 门禁表驱动（拒绝从不触达 Herdr）、interrupt 顺序、Herdr 拒绝/不确定投递、Stop
 contract_chat_test.go: 可选真机契约（SOLCO_REMOTEHOST_CONTRACT_CHAT=1）：真 Herdr + 真 omp，经 Host 发 prompt、经共享投影读回答案
