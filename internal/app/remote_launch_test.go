@@ -225,3 +225,22 @@ func TestRemoteLauncherTerminalCommandFailureKeepsThePane(t *testing.T) {
 		t.Fatalf("pane %+v err %v", pane, err)
 	}
 }
+
+// A saved machine's directory exists on that computer only: a Terminal opens in its Workspace without any look
+// at this Mac's disk, and an agent is refused (it would be checked and started from this Mac's side).
+func TestRemoteLauncherDeviceTerminalSkipsTheMacsDisk(t *testing.T) {
+	rt := &fakeAppRuntime{}
+	l := newTestLauncher(rt, nil, nil)
+	pane, err := l.Launch(context.Background(), "machine/abc", remotehost.LaunchSpec{RequestID: "req_dddddddd", WorkspaceID: "w1", CWD: "/home/nobody/not-on-this-mac", Kind: remotehost.LaunchTerminal})
+	if err != nil || pane.PaneID != "pane-1" {
+		t.Fatalf("pane %+v err %v", pane, err)
+	}
+	_, err = l.Launch(context.Background(), "machine/abc", remotehost.LaunchSpec{RequestID: "req_eeeeeeee", WorkspaceID: "w1", CWD: "/home/nobody/x", Kind: "codex"})
+	var refusal *remotehost.LaunchError
+	if !errors.As(err, &refusal) || len(rt.started) != 0 {
+		t.Fatalf("an agent on a device must be refused before it starts: %v started %d", err, len(rt.started))
+	}
+	if _, err := l.Launch(context.Background(), "default", remotehost.LaunchSpec{RequestID: "req_ffffffff", WorkspaceID: "w1", CWD: "/home/nobody/not-on-this-mac", Kind: remotehost.LaunchTerminal}); err == nil {
+		t.Fatal("a Mac session still checks the folder on disk")
+	}
+}

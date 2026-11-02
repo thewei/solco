@@ -98,7 +98,7 @@ func (c *peekCache) put(key, line string, now time.Time) {
 }
 
 func (s *Server) handlePeek(w http.ResponseWriter, r *http.Request, _ Device) {
-	instance, ok := s.resolveInstance(w, r)
+	instance, ok := s.resolveAnyInstance(w, r)
 	if !ok {
 		return
 	}

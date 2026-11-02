@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 )
 
@@ -149,8 +150,13 @@ func (l *SessionStarter) StartSession(ctx context.Context, instance string, spec
 	registry := l.service.Registry()
 	// Herdr matches a Workspace by its resolved directory (macOS /tmp is /private/tmp); a path typed
 	// on the phone must find the Workspace the desktop already shows rather than create a twin.
-	if resolved, err := filepath.EvalSymlinks(spec.CWD); err == nil {
+	// A saved machine's directories live on that computer: its path is never looked up on this disk.
+	remote := herdr.ParseRef(instance).IsRemote()
+	if resolved, err := filepath.EvalSymlinks(spec.CWD); err == nil && !remote {
 		spec.CWD = resolved
+	}
+	if remote && spec.Agent != "" {
+		return SessionResult{}, &SessionError{Code: SessionPathUnavailable, Detail: "agents cannot be started on a remote machine from here"}
 	}
 
 	if spec.Agent == "" {
@@ -159,7 +165,7 @@ func (l *SessionStarter) StartSession(ctx context.Context, instance string, spec
 		// "terminal:" project prefix keeps it distinct from any agent request.
 		request := agent.StartAgentRequest{RequestID: spec.RequestID, Instance: instance, ProjectID: "terminal:" + sessionProject(spec), Provider: history.AgentClaudeCode, CWD: spec.CWD, Prompt: spec.Prompt}
 		rec, err := registry.Submit(ctx, request, func(ctx context.Context, _ agent.StartAgentRequest) (agent.LaunchOutcomeRecord, error) {
-			pane, err := l.openTerminal(ctx, rt, spec)
+			pane, err := l.openTerminal(ctx, rt, spec, remote)
 			if err != nil {
 				return agent.LaunchOutcomeRecord{AgentKey: pane}, err
 			}
@@ -232,11 +238,15 @@ func sessionProject(spec SessionSpec) string {
 
 // openTerminal creates a Tab (existing workspace, or the one matching the
 // path, or a new workspace) and returns its pane, never taking focus.
-func (l *SessionStarter) openTerminal(ctx context.Context, rt agent.LaunchRuntime, spec SessionSpec) (string, error) {
-	cwd, err := Preparer{}.Prepare(ctx, spec.CWD, "")
-	if err != nil {
-		return "", &SessionError{Code: SessionPathUnavailable, Detail: err.Error()}
+func (l *SessionStarter) openTerminal(ctx context.Context, rt agent.LaunchRuntime, spec SessionSpec, remote bool) (string, error) {
+	cwd := spec.CWD
+	if !remote { // a remote machine's directory is checked by its own Herdr, not on this disk
+		var err error
+		if cwd, err = (Preparer{}).Prepare(ctx, spec.CWD, ""); err != nil {
+			return "", &SessionError{Code: SessionPathUnavailable, Detail: err.Error()}
+		}
 	}
+	var err error
 	workspace := spec.WorkspaceID
 	if workspace == "" {
 		if workspace, err = rt.WorkspaceIDForPath(ctx, cwd); err != nil {

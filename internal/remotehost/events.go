@@ -28,7 +28,7 @@ const (
 var eventsHeartbeat = 5 * time.Second
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, dev Device) {
-	instance, ok := s.resolveInstance(w, r)
+	instance, ok := s.resolveAnyInstance(w, r)
 	if !ok {
 		return
 	}

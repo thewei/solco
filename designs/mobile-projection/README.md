@@ -133,3 +133,5 @@ GOTOOLCHAIN=auto go test ./internal/remotehost/... ./internal/nativeui/... && GO
 3. Files：只读 + `Attach to chat` 够不够，还是要编辑？
 4. 设备：只连「桌面已登录/可免交互直连」的设备，需要 MFA 的让你回 Mac——可以吗？
 5. 桌面＋：确认「点＋总是出菜单」取代现有分裂按钮；⌘T 仍直接用上次种类？
+
+- P4 设备（2026-11-02）：完成。bootstrap.instances 带 `kind/label/status`，`POST /devices/{id}/connect`，设备实例上 Files/Git/Chat/附件/Continue 一律 409 `instance_remote`、launch 仅限已有 Workspace 的 Terminal；桥归桌面管（用户选 A）。真机验证：桌面 Manager 对已保存的 omarchy-wilson 走 checking→online→connected，Projection 读到远端 Workspace（/home/wilson/…），observe/peek 命令可建。手机端 UI 未上真机。

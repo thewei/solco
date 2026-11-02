@@ -90,7 +90,10 @@ type Options struct {
 	Catalog catalogLoader
 	// Attach stores an uploaded Chat attachment and returns its absolute path (POST .../chat/attachments);
 	// nil = the Host takes no uploads and bootstrap says so.
-	Attach   func(data []byte, mime, name string) (string, error)
+	Attach func(data []byte, mime, name string) (string, error)
+	// Machines lists and connects the desktop's saved Herdr machines as phone "devices" (POST /devices/{id}/connect,
+	// scope manage); nil = the phone sees no devices.
+	Machines Machines
 	Home     string // user home for provider transcript roots ("" = os.UserHomeDir)
 	HostName string
 	Version  string
@@ -443,6 +446,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+apiPrefix+"/workspaces/{id}/git/push", s.guard(ScopeManage, s.handleGitSync(GitPush)))
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/files", s.guard(ScopeView, s.handleFilesList))
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/files/content", s.guard(ScopeView, s.handleFileContent))
+	mux.Handle("POST "+apiPrefix+"/devices/{id}/connect", s.guard(ScopeManage, s.handleDeviceConnect))
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
 	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
 	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
@@ -587,11 +591,19 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 		return
 	}
 	type instance struct {
-		ID string `json:"id"`
+		ID     string `json:"id"`
+		Kind   string `json:"kind,omitempty"`
+		Label  string `json:"label,omitempty"`
+		Status string `json:"status,omitempty"`
 	}
 	instances := []instance{}
 	for _, n := range names {
-		instances = append(instances, instance{ID: n})
+		if !isDeviceInstance(n) { // a live bridge is listed below with its status
+			instances = append(instances, instance{ID: n})
+		}
+	}
+	for _, m := range s.machineEntries() {
+		instances = append(instances, instance{ID: m.Key, Kind: "device", Label: m.Label, Status: m.Status})
 	}
 	s.mu.Lock()
 	fp := s.fingerprint
@@ -611,6 +623,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	if s.opts.Launcher != nil {
 		capabilities["launch"] = true
 		body["launchKinds"] = s.opts.Launcher.Kinds()
+	}
+	if s.opts.Machines != nil {
+		capabilities["devices"] = true
 	}
 	if s.opts.Usage != nil {
 		capabilities["quota"] = true
@@ -647,7 +662,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 }
 
 func (s *Server) handleTree(w http.ResponseWriter, r *http.Request, _ Device) {
-	instance, ok := s.resolveInstance(w, r)
+	instance, ok := s.resolveAnyInstance(w, r)
 	if !ok {
 		return
 	}
@@ -666,9 +681,30 @@ func (s *Server) handleTree(w http.ResponseWriter, r *http.Request, _ Device) {
 	writeJSON(w, http.StatusOK, tree)
 }
 
-// resolveInstance validates ?instance= against the backend's local sessions;
-// an unknown string never reaches a socket path.
+// isDeviceInstance reports whether an instance key names a saved machine (a Herdr
+// runtime on another computer) rather than a local session.
+func isDeviceInstance(name string) bool { return herdr.ParseRef(name).IsRemote() }
+
+// resolveInstance validates ?instance= against the backend and refuses a device:
+// Files, Git, Chat transcripts, attachments and Continue read the Mac's own disk,
+// and a remote Workspace's path would otherwise be read (or written) as the same
+// path here. Only the routes that go through Herdr alone use resolveAnyInstance.
 func (s *Server) resolveInstance(w http.ResponseWriter, r *http.Request) (string, bool) {
+	instance, ok := s.resolveAnyInstance(w, r)
+	if !ok {
+		return "", false
+	}
+	if isDeviceInstance(instance) {
+		writeError(w, http.StatusConflict, "instance_remote", "")
+		return "", false
+	}
+	return instance, true
+}
+
+// resolveAnyInstance validates ?instance= against the backend's serveable
+// instances: local sessions and the machines whose bridge is up. An unknown
+// string never reaches a socket path.
+func (s *Server) resolveAnyInstance(w http.ResponseWriter, r *http.Request) (string, bool) {
 	names, err := s.opts.Backend.Instances()
 	if err != nil {
 		slog.Warn("remote host: list instances failed", "error", err)

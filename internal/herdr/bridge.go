@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -105,6 +106,20 @@ func (m *Manager) ConnectMachine(ctx context.Context, id string) error {
 	}
 	_, err = m.ensureBridgeCtx(ctx, machine)
 	return err
+}
+
+// BridgedMachineKeys lists the instance keys of the saved machines whose SSH
+// bridge is up right now (presence only, no probe), sorted. The phone Host
+// serves a device only while the desktop's bridge for it exists.
+func (m *Manager) BridgedMachineKeys() []string {
+	bridges.mu.Lock()
+	keys := make([]string, 0, len(bridges.byID))
+	for id := range bridges.byID {
+		keys = append(keys, MachineInstanceKey(id))
+	}
+	bridges.mu.Unlock()
+	sort.Strings(keys)
+	return keys
 }
 
 func (m *Manager) ensureBridgeCtx(ctx context.Context, machine Machine) (string, error) {

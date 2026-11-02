@@ -127,6 +127,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		Git:        git,
 		GitWrite:   git,
 		Files:      true,
+		Machines:   app.NewRemoteMachines(s.runtime),
 		Attach: func(data []byte, mime, name string) (string, error) {
 			dir, err := chatattach.Dir(userDataDir)
 			if err != nil {

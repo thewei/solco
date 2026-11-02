@@ -116,8 +116,15 @@ func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request, dev Device
 			return
 		}
 	}
-	instance, ok := s.resolveInstance(w, r)
+	instance, ok := s.resolveAnyInstance(w, r)
 	if !ok {
+		return
+	}
+	// A device's agents run on another computer: only a Terminal in one of its existing
+	// Workspaces can start, from the directory that computer's Herdr reports (nothing typed
+	// on the phone is ever checked against, or created on, this Mac's disk).
+	if isDeviceInstance(instance) && (req.Kind != LaunchTerminal || req.WorkspaceID == "") {
+		writeError(w, http.StatusConflict, "instance_remote", "")
 		return
 	}
 	spec := LaunchSpec{RequestID: req.RequestID, WorkspaceID: req.WorkspaceID, CWD: req.Path, Kind: req.Kind, Prompt: strings.TrimSpace(req.Prompt)}

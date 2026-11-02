@@ -249,6 +249,13 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "error-launch-bad-request.json", bodyOf(t, h.launch("/api/v3/launch", h.token, `{"requestId":"x","kind":"terminal"}`)))
 	h.srv.opts.Launcher = &fakeLauncher{pane: "w1:p2", pending: true}
 	golden(t, "launch-prompt-pending.json", bodyOf(t, h.launch("/api/v3/launch", h.token, string(rawLaunch))))
+	// devices: saved machines ride in bootstrap.instances with kind/label/status; connect answers the instance
+	h.srv.opts.Machines = sampleMachines()
+	golden(t, "bootstrap-devices.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "device-connect.json", bodyOf(t, h.launch("/api/v3/devices/def/connect", h.token, ``)))
+	h.srv.opts.Machines.(*fakeMachines).err = &MachineError{Code: "device_needs_signin", Status: http.StatusConflict}
+	golden(t, "error-device-needs-signin.json", bodyOf(t, h.launch("/api/v3/devices/def/connect", h.token, ``)))
+	h.srv.opts.Machines = nil
 	h.srv.opts.Git = sampleGit()
 	golden(t, "bootstrap-git.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
 	golden(t, "git-status.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git", h.token, nil)))

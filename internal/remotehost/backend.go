@@ -25,7 +25,8 @@ type EventSource interface {
 // instance, pane and terminal ID against this interface before it reaches a
 // path or an argv.
 type Backend interface {
-	// Instances lists the local Herdr sessions (never saved remote machines).
+	// Instances lists the local Herdr sessions plus the saved machines whose SSH bridge is up
+	// (the desktop owns every bridge; the Host never starts or stops one).
 	Instances() ([]string, error)
 	Projection(instance string) (herdr.Projection, error)
 	Subscribe(instance string, paneIDs []string) (EventSource, error)
@@ -60,7 +61,7 @@ func (b managerBackend) Instances() ([]string, error) {
 			names = append(names, in.Name)
 		}
 	}
-	return names, nil
+	return append(names, b.m.BridgedMachineKeys()...), nil
 }
 
 func (b managerBackend) Projection(instance string) (herdr.Projection, error) {

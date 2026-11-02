@@ -1,0 +1,38 @@
+{
+  "capabilities": {
+    "chat": true,
+    "devices": true,
+    "launch": true,
+    "terminal": true
+  },
+  "hostId": "a1cc1d2af9c5a03e",
+  "hostName": "Test Mac",
+  "instances": [
+    {
+      "id": "default"
+    },
+    {
+      "id": "machine/abc",
+      "kind": "device",
+      "label": "omarchy",
+      "status": "connected"
+    },
+    {
+      "id": "machine/def",
+      "kind": "device",
+      "label": "build box",
+      "status": "needs_signin"
+    }
+  ],
+  "launchKinds": [
+    {
+      "id": "terminal",
+      "label": "Terminal"
+    },
+    {
+      "id": "claude-code",
+      "label": "Claude Code"
+    }
+  ],
+  "version": "test"
+}
