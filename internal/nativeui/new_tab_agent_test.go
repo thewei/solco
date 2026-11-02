@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 )
 
@@ -20,12 +21,13 @@ import (
 type fakeStarter struct {
 	kinds []app.SessionKind
 	specs []app.SessionSpec
+	pane  string
 }
 
 func (f *fakeStarter) Kinds() []app.SessionKind { return f.kinds }
 func (f *fakeStarter) StartSession(_ context.Context, _ string, spec app.SessionSpec) (app.SessionResult, error) {
 	f.specs = append(f.specs, spec)
-	return app.SessionResult{}, nil
+	return app.SessionResult{PaneID: f.pane}, nil
 }
 
 var testKinds = []app.SessionKind{
@@ -127,5 +129,34 @@ func TestPendingAgentOpenLandsOnChatOnceTheCardExistsWithoutAnIdentity(t *testin
 	}
 	if s.surface.current() != WorkspaceSurfaceChat || s.paneSurfaceMemo["pt2"] != WorkspaceSurfaceChat {
 		t.Fatalf("surface=%v memo=%v, want Chat", s.surface.current(), s.paneSurfaceMemo["pt2"])
+	}
+}
+
+func TestStartNewTabAgentLandsOnChatWhenTheLaunchShipsTheCard(t *testing.T) {
+	fake := &fakeStarter{kinds: testKinds, pane: "p-new"}
+	s := tabBarShell(1, "t1")
+	s.newTabStarter = fake
+	s.settings.General.AgentView = "chat"
+	// Hermetic shell: drop whatever selected pane / surface memo the
+	// machine's persisted session state restored, so the assertion reads
+	// only this test's launch.
+	s.clearLocalSelection()
+	s.paneSurfaceMemo = nil
+	s.selectedProjectID, s.selectedTabID, s.selectedPaneID = "w1", "t1", "pt1"
+	s.surface.resetToTerminal(s.workspaceContext())
+	// A real launch fetches the projection that already carries the new
+	// pane's agent entry (2026-11-02 surface-flash loop); with no runtime the
+	// launch reads THIS shell's projection, so the pane and its agent ride it
+	// — the same shape reconcileWorkbench rebuilds the workbench directory
+	// from, so the card survives the rebuild during the launch.
+	s.runtime = nil
+	s.projection.Panes = append(s.projection.Panes, herdr.Pane{ID: "p-new", ProjectID: "w1", TabID: "t1"})
+	s.projection.Agents = append(s.projection.Agents, herdr.Agent{PaneID: "p-new", Kind: "pi", TerminalID: "term-new", Status: "working"})
+	s.startNewTab(s.projection.Projects[0], app.SessionKind{ID: "pi", Label: "Pi"})
+	if s.selectedPaneID != "p-new" {
+		t.Fatalf("selection = %q, want the launched pane", s.selectedPaneID)
+	}
+	if s.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("surface = %v, want Chat: the launch intent with Agent view = chat must land Chat the moment the pane ships its card", s.surface.current())
 	}
 }

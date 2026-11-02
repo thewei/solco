@@ -239,7 +239,7 @@ func (s *Shell) runContinue(key string) {
 			if projection != nil {
 				s.applyProjection(*projection, false)
 			}
-			s.showPane(pane)
+			s.landLaunchedPane(pane)
 		})
 	})
 }

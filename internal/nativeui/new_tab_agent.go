@@ -200,12 +200,32 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 			if projection != nil {
 				s.applyProjection(*projection, false)
 			}
-			s.showPane(result.PaneID)
+			// Terminal keeps its own landing; an Agent pane lands by launch
+			// intent (see landLaunchedPane).
+			s.landLaunchedPane(result.PaneID)
 			if err == nil && s.settings.General.AgentChatFirst() {
 				s.pendingAgentOpen = &pendingAgentOpen{PaneID: result.PaneID, At: time.Now()}
 			}
 		})
 	})
+}
+
+// landLaunchedPane selects a freshly launched pane and lands on the surface
+// the launch intent calls for: an Agent pane opens Chat the moment its card
+// ships with the launch (Settings → General → Agent view = Chat). showPane's
+// hardwired Terminal view used to slam that Chat closed right after the
+// selection sync opened it and then strand the pane until a later workbench
+// rebuild re-ran completeAgentOpen — or forever when none came (2026-11-02
+// surface-flash loop). Shared by the New Tab and the Continue launch paths.
+func (s *Shell) landLaunchedPane(paneID string) {
+	s.selectPane(paneID)
+	if s.surface.current() == WorkspaceSurfaceChat {
+		if s.router.Path() != routeWorkspace {
+			s.router.Push(routeWorkspace)
+		}
+		return
+	}
+	s.showViewTerminal()
 }
 
 // pendingAgentOpen is a freshly launched Agent pane that lands on Chat as soon

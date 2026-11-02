@@ -101,6 +101,8 @@ For packaging changes also: build the `.app`, verify `Solco.app` exists under `b
 
 Real-app UI acceptance (only-the-real-app questions: picker contents, multi-Pane input/resize, rendering) drives a real app run through the Computer Use tools with mandatory isolation — temporary `HOME` + dedicated `HERDR_SOCKET_PATH`, never the user's live instance — and asserts Herdr/protocol ground truth over pixels alone, recording PASS/FAIL evidence per scenario. The Rust-era acceptance harness scripts were removed with the Rust implementation; rebuild the harness entrypoints against the Go app before the next acceptance session.
 
+Bug investigations, behavior misidentification, and any fix needing on-device proof run the `.agents/skills/solco-evidence-loop/SKILL.md` loop instead of an ad-hoc path: isolated environment first, failing-before device evidence, hunt-contract root cause, fix, passing-after evidence in the same environment; it maintains `docs/debug/` progress files and self-updating lessons.
+
 ## Completion review
 
 Before handoff or commit:
