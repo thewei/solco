@@ -1,0 +1,8 @@
+{
+  "subject": "Fix the failing test",
+  "body": "The nil check was inverted.",
+  "paths": [
+    "a.go"
+  ],
+  "head": "abc1234"
+}

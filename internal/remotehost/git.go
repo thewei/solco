@@ -10,7 +10,7 @@ import (
 /**
  * [INPUT]: 依赖 Options.Git（只读 Git 缝）、Backend.Projection（Workspace → 目录）、server.go 的 guard/resolveInstance/writeError、launch.go 的 workspaceCWD
  * [OUTPUT]: 对外提供 GitReader/GitStatus/GitFile/GitDiff/GitHunk/GitLine/ErrGitFileNotFound 与 GET /api/v3/workspaces/{id}/git、GET /api/v3/workspaces/{id}/git/diff?path=
- * [POS]: 手机「Changes」只读视图（Git 状态 + 单文件 unified diff）：Host 只解析 Workspace 目录并转发给 GitReader（具体实现在 internal/app，走桌面同一个 gitworkbench）；不暂存、不提交、不 fetch；非仓库 = 200 repo:false；日志只记设备、workspace、文件数，路径与 diff 文本永不进日志
+ * [POS]: 手机「Changes」只读视图（Git 状态 + 单文件 unified diff）：Host 只解析 Workspace 目录并转发给 GitReader（具体实现在 internal/app，走桌面同一个 gitworkbench）；写面见 git_write.go；非仓库 = 200 repo:false；日志只记设备、workspace、文件数，路径与 diff 文本永不进日志
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

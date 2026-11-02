@@ -10,8 +10,8 @@ import (
 
 /**
  * [INPUT]: 依赖 gitworkbench.Runner（Snapshot/ResolveRoot/Upstream/ReadFileDiff）、remotehost.GitReader 契约
- * [OUTPUT]: 对外提供 RemoteGit（实现 remotehost.GitReader：手机 Changes 只读视图）
- * [POS]: 手机 Host 与桌面同一个本地 Git 域（gitworkbench）之间的只读适配——只读快照与单文件 diff，把 hunk 压成线协议行并按预算截断；不暂存、不提交、不 fetch，不另起 Git 缓存
+ * [OUTPUT]: 对外提供 RemoteGit 的读面（实现 remotehost.GitReader：手机 Changes 只读视图；写面见 remote_git_write.go）
+ * [POS]: 手机 Host 与桌面同一个本地 Git 域（gitworkbench）之间的只读适配——只读快照与单文件 diff，把 hunk 压成线协议行并按预算截断；不另起 Git 缓存
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
