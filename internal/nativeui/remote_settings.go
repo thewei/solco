@@ -141,6 +141,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		opts.Queue = app.NewRemoteFollowUps(s.launch)
 		opts.Continuer = s.hostContinuer(s.hist.service)
 	}
+	opts.Trasher = s.hostTrasher(s.hist.service)
 	if voiceSeam := s.hostVoice(); voiceSeam != nil {
 		opts.Voice = voiceSeam
 	}

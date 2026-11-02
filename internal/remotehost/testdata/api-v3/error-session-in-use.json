@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "session_in_use",
+    "message": "An Agent is still using this session."
+  }
+}

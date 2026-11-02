@@ -83,6 +83,10 @@ type Options struct {
 	// Continuer continues one cataloged session (POST /sessions/{id}/continue, scope
 	// manage); nil = the phone gets no Continue and bootstrap says so.
 	Continuer Continuer
+	// Trasher moves a session into the desktop's Sessions Trash and puts one back
+	// (POST /sessions/{id}/trash, GET /sessions/trash, POST /sessions/trash/{entry}/restore);
+	// nil = the phone has no Trash and bootstrap says so. Permanent deletion is not on it.
+	Trasher Trasher
 	// Voice transcribes a phone-recorded clip with the desktop's Voice source (POST /voice/transcribe,
 	// scope terminal-input); nil or not Ready = no dictation on the phone and bootstrap says so.
 	Voice VoiceTranscriber
@@ -451,6 +455,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
 	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
 	mux.Handle("POST "+apiPrefix+"/sessions/{id}/continue", s.guard(ScopeManage, s.handleSessionContinue))
+	mux.Handle("POST "+apiPrefix+"/sessions/{id}/trash", s.guard(ScopeManage, s.handleSessionTrash))
+	mux.Handle("GET "+apiPrefix+"/sessions/trash", s.guard(ScopeView, s.handleTrashList))
+	mux.Handle("POST "+apiPrefix+"/sessions/trash/{entry}/restore", s.guard(ScopeManage, s.handleTrashRestore))
 	mux.Handle("GET "+apiPrefix+"/p2p/ice", s.guard(ScopeView, s.handleP2PICE))
 	mux.Handle("POST "+apiPrefix+"/p2p/session", s.guard(ScopeView, s.handleP2PSession))
 	mux.Handle("GET "+apiPrefix+"/terminals/{terminalID}/stream", s.guard(ScopeView, s.handleTerminal))
@@ -634,6 +641,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 		capabilities["sessions"] = true
 		if s.opts.Continuer != nil {
 			capabilities["sessionContinue"] = true
+		}
+		if s.opts.Trasher != nil {
+			capabilities["sessionTrash"] = true
 		}
 	}
 	if s.opts.Git != nil {

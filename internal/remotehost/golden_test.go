@@ -321,6 +321,18 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "error-session-needs-project.json", bodyOf(t, h.launch("/api/v3/sessions/codex:19bd/continue", h.token, "")))
 	h.srv.opts.Continuer = nil
 	golden(t, "error-session-continue-unavailable.json", bodyOf(t, h.launch("/api/v3/sessions/codex:19bd/continue", h.token, "")))
+	// trash (manage): the reversible two steps of the desktop's Sessions Trash; the
+	// seam moves files, the handler only forwards (permanent delete is desktop-only)
+	h.srv.opts.Trasher = &fakeTrasher{entries: sampleTrash()}
+	golden(t, "bootstrap-sessions-trash.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "session-trash.json", bodyOf(t, h.launch("/api/v3/sessions/codex:19bd/trash", h.token, "")))
+	golden(t, "sessions-trash.json", bodyOf(t, h.get("/api/v3/sessions/trash", h.token, nil)))
+	golden(t, "session-trash-restore.json", bodyOf(t, h.launch("/api/v3/sessions/trash/1785549600000-0a1b2c3d/restore", h.token, "")))
+	h.srv.opts.Trasher = &fakeTrasher{err: &TrashError{Code: "session_in_use", Status: http.StatusConflict, Detail: "An Agent is still using this session."}}
+	golden(t, "error-session-in-use.json", bodyOf(t, h.launch("/api/v3/sessions/codex:19bd/trash", h.token, "")))
+	h.srv.opts.Trasher = &fakeTrasher{err: &TrashError{Code: "session_exists", Status: http.StatusConflict, Detail: "A session file already exists there."}}
+	golden(t, "error-session-exists.json", bodyOf(t, h.launch("/api/v3/sessions/trash/1785549600000-0a1b2c3d/restore", h.token, "")))
+	h.srv.opts.Trasher = nil
 	// voice (terminal-input): the phone's clip goes to the desktop's own Voice source and the text comes back
 	h.srv.opts.Voice = &fakeVoice{ready: true, text: "fix the failing test"}
 	golden(t, "bootstrap-voice.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
