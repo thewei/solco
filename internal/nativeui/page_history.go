@@ -534,12 +534,18 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 				ui.Text(c, "tokens").FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().PassThrough()
 			}
 		})
-		if s.hist.showTrash && row.Hovered() && !selecting {
-			// The button plus the margin fills the date's footprint, so the
-			// hover swap does not shift the row.
-			more := gorexIconButton(c, gorexColorsOf(t.Dark), iconChevronDown, "Actions for "+title, "", false, gorexRowBtn, gorexRowGlyph).
-				Margin(0, 0, 0, historyDateWidth-gorexRowBtn).Shrink(0)
-			more.Menu(menu)
+		if s.hist.showTrash && !s.hist.selecting {
+			// The ▾ replaces the date under the pointer in the same footprint
+			// (a click still ticks the row), and stays built, zero width,
+			// otherwise — like the ⋯ above.
+			shown := row.Hovered()
+			ui.Row(c).Width(historyDateWidth).Shrink(0).AlignItems(ui.Center).Justify(ui.End).PassThrough().Children(func() {
+				if !shown {
+					ui.Text(c, historyShortDate(summary.Meta.UpdatedAt, time.Now())).FontSize(Typography().Caption).
+						TextColor(t.TextMuted).Width(historyDateWidth).TextAlign(ui.End).SingleLine().Shrink(0).PassThrough()
+				}
+				rowMenuSlot(c, "session-more:"+key, "Actions for "+title, iconChevronDown, shown, gorexRowBtn, gorexRowGlyph, menu)
+			})
 		} else {
 			ui.Text(c, historyShortDate(summary.Meta.UpdatedAt, time.Now())).FontSize(Typography().Caption).
 				TextColor(t.TextMuted).Width(historyDateWidth).TextAlign(ui.End).SingleLine().Shrink(0).PassThrough()

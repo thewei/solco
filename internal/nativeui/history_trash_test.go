@@ -741,3 +741,41 @@ func TestRowMenuDeliversAwayFromTheRow(t *testing.T) {
 		t.Fatalf("route after the away-choice = %q, want the session's page", got)
 	}
 }
+
+// TestTrashRowMenuDeliversAwayFromTheRow is the same rule for the Trash's ▾,
+// which replaces the date under the pointer; a click on the row still ticks.
+func TestTrashRowMenuDeliversAwayFromTheRow(t *testing.T) {
+	f := newTrashFixture(t)
+	tester := f.page()
+	f.shell.moveSessionsToTrash([]history.SessionMeta{f.meta(trashKeyRelease)})
+	tester.Frame()
+	if err := tester.Click("Trash"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ { // let the row's entrance motion settle
+		tester.Frame()
+	}
+	title, ok := tester.Find("Review the release notes")
+	if !ok {
+		t.Fatalf("Trash row missing; texts=%q", tester.Texts())
+	}
+	tester.Move(title.X+title.W/2, title.Y+title.H/2)
+	tester.Frame()
+	tester.Frame()
+	if err := tester.Click("Actions for Review the release notes"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if len(f.shell.hist.selected) != 0 {
+		t.Fatalf("opening the ▾ ticked the row: %v", f.shell.hist.selected)
+	}
+	tester.Move(1150, 780)
+	if err := tester.ChooseMenuItem("Put Back"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	tester.Frame()
+	if !pathExists(f.paths[trashKeyRelease]) || f.inTrash() != 0 {
+		t.Fatalf("Put Back from the away-choice did not restore: in trash %d", f.inTrash())
+	}
+}
