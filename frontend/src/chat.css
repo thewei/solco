@@ -651,9 +651,13 @@ html[data-host="phone"] .turn:not(.open):not(.last) .foot {
 .failed {
   color: var(--danger);
   font-size: 12px;
+  /* The summary text shrinks and ellipsizes; this tail never wraps or gives way. */
+  flex: none;
+  white-space: nowrap;
 }
 
 .chev {
+  flex: none;
   display: inline-grid;
   transition: transform 0.2s var(--spring);
   color: var(--i3);
@@ -1172,6 +1176,23 @@ html[data-host="phone"] .ctx.quiet {
     opacity: 0;
     transform: translateY(4px);
   }
+}
+
+/* A fixed 320px card anchored to the ring spills off a narrow screen: on the phone it spans the
+   composer's own width instead (the composer, not the ring, is the positioning box). */
+html[data-host="phone"] .ctx {
+  position: static;
+}
+html[data-host="phone"] .cmp {
+  position: relative;
+}
+html[data-host="phone"] .ctxcard {
+  left: 0;
+  right: 0;
+  width: auto;
+  bottom: calc(100% + 8px);
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .ctx-h {
@@ -1917,6 +1938,8 @@ html[data-host="phone"] .ask .answer-hint {
 
 .tasks .ttl {
   font-weight: 500;
+  flex: none;
+  white-space: nowrap;
 }
 
 .tasks .cnt {
@@ -2746,13 +2769,18 @@ html[data-host="phone"] .ask .answer-hint {
   padding: 0 12px 8px;
   font-size: 12px;
   color: var(--i3);
+  white-space: nowrap;
 }
 
 .sub-foot > span {
   margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sub-link {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -2775,6 +2803,7 @@ html[data-host="phone"] .ask .answer-hint {
   background: var(--tint);
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .sub-rhead .o {
