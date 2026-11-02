@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/thewei/solco/internal/agent"
@@ -205,6 +206,10 @@ func (s *Shell) bindLiveFile(key agent.AgentKey, provider history.AgentID, path,
 	s.chatLiveProvider = provider
 	s.clearChatSubagents()
 	s.chatConversationID = liveConversationKey(provider, key.TerminalID)
+	if strings.HasPrefix(s.chatOutcome, "Cannot queue") {
+		// The unlinked-window refusal is moot once the transcript is bound.
+		s.chatOutcome = ""
+	}
 	s.chatLoading = true
 	s.chatTurns = nil
 	s.chatWindowMessages = nil

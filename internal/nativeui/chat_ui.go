@@ -261,6 +261,12 @@ func (s *Shell) sendChatText(text string) ChatBridgeState {
 // revalidation has its coordinate; follow-ups stack as an ordered list,
 // refused only behind an unacknowledged uncertain send.
 func (s *Shell) enqueueChatFollowUp(text string) {
+	if s.chatConversationID == "" {
+		// A fresh omp/pi pane whose transcript file is not written yet has no
+		// conversation to queue behind: say so, and keep the draft.
+		s.chatOutcome = "Cannot queue yet: this conversation is not linked until the agent's first reply is written. Send again in a moment."
+		return
+	}
 	fingerprint := s.liveFingerprintForPane(s.chatPaneID)
 	if fingerprint == "" {
 		s.chatOutcome = "Cannot queue: the live session identity is unresolved."
