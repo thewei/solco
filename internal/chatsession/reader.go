@@ -21,7 +21,9 @@ type State struct {
 	Provider      string `json:"provider"`
 	Model         string `json:"model,omitempty"`
 	ContextTokens *int64 `json:"contextTokens,omitempty"`
-	HasOlder      bool   `json:"hasOlder,omitempty"`
+	// ContextWindow is the window the agent states, in tokens (set by the Host, which reads it once a minute; 0 = none).
+	ContextWindow int64 `json:"contextWindow,omitempty"`
+	HasOlder      bool  `json:"hasOlder,omitempty"`
 	// Working reports a streaming (uncommitted) tail: the agent is writing now.
 	Working   bool           `json:"working,omitempty"`
 	Plan      *ChatPlan      `json:"plan,omitempty"`

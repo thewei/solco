@@ -149,7 +149,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request, _ Device) {
 		PaneID: paneID, AgentStatus: target.Status,
 		Interaction: s.interactionFrame(r.Context(), instance, paneID, target.Status, reader),
 		Queued:      s.queuedFor(target),
-		State:       reader.State(s.opts.Now()),
+		State:       s.chatState(r.Context(), target, reader),
 	})
 }
 
@@ -208,7 +208,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 	var last [sha256.Size]byte
 	sent := false
 	push := func() bool {
-		frame := map[string]any{"t": "chat", "paneId": paneID, "agentStatus": status, "state": reader.State(s.opts.Now())}
+		frame := map[string]any{"t": "chat", "paneId": paneID, "agentStatus": status, "state": s.chatState(ctx, target, reader)}
 		if card := s.interactionFrame(ctx, instance, paneID, status, reader); card != nil {
 			frame["interaction"] = card
 		}

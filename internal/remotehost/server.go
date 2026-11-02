@@ -127,6 +127,7 @@ type Server struct {
 	conns       map[string]map[*liveConn]struct{} // deviceID → live sockets
 	terminals   map[string]int                    // deviceID → open terminal streams
 	chats       map[string]int                    // deviceID → open chat streams
+	windows     contextWindowCache                // context windows of open chats (60 s)
 	asks        map[string]*askCursor             // instance\x00pane → Question state
 	trees       map[string]*treeState
 	peeks       peekCache
