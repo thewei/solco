@@ -68,6 +68,10 @@ type Options struct {
 	Queue FollowUps
 	// Git reads a Workspace's working-tree changes for the phone (GET .../git); nil = no Git view.
 	Git GitReader
+	// GitWrite stages, unstages, commits, fetches, pulls and pushes for the phone (POST .../git/*, scope manage); nil = the Git view stays read-only.
+	GitWrite GitWriter
+	// Files serves each Workspace's folder read-only (GET .../files, .../files/content); false = no Files view.
+	Files bool
 	// Usage serves the desktop's quota page for the phone (GET /quota); nil = the
 	// Host offers no quota view and bootstrap says so. It runs on the Host's
 	// goroutines and answers every provider's standing in the page's order.
@@ -431,6 +435,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+apiPrefix+"/launch/attachments", s.guard(ScopeTerminalInput, s.handleDraftAttach))
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git", s.guard(ScopeView, s.handleGitStatus))
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/git/diff", s.guard(ScopeView, s.handleGitDiff))
+	mux.Handle("POST "+apiPrefix+"/workspaces/{id}/git/stage", s.guard(ScopeManage, s.handleGitPaths("stage")))
+	mux.Handle("POST "+apiPrefix+"/workspaces/{id}/git/unstage", s.guard(ScopeManage, s.handleGitPaths("unstage")))
+	mux.Handle("POST "+apiPrefix+"/workspaces/{id}/git/commit", s.guard(ScopeManage, s.handleGitCommit))
+	mux.Handle("POST "+apiPrefix+"/workspaces/{id}/git/fetch", s.guard(ScopeManage, s.handleGitSync(GitFetch)))
+	mux.Handle("POST "+apiPrefix+"/workspaces/{id}/git/pull", s.guard(ScopeManage, s.handleGitSync(GitPull)))
+	mux.Handle("POST "+apiPrefix+"/workspaces/{id}/git/push", s.guard(ScopeManage, s.handleGitSync(GitPush)))
+	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/files", s.guard(ScopeView, s.handleFilesList))
+	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/files/content", s.guard(ScopeView, s.handleFileContent))
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
 	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
 	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
@@ -611,6 +623,12 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	}
 	if s.opts.Git != nil {
 		capabilities["git"] = true
+		if s.opts.GitWrite != nil {
+			capabilities["gitWrite"] = true
+		}
+	}
+	if s.opts.Files {
+		capabilities["files"] = true
 	}
 	if s.opts.Attach != nil {
 		capabilities["attachments"] = true

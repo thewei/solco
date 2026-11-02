@@ -113,6 +113,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 	}
 	host, _ := os.Hostname()
 	userDataDir := s.userDataDir // fixed at startup; the Host's goroutines must not touch the Shell
+	git := app.NewRemoteGit()
 	opts := remotehost.Options{
 		Config:     remoteConfigFrom(s.settings.Remote),
 		Dir:        filepath.Join(s.userDataDir, "RemoteHost"),
@@ -123,7 +124,9 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		Sessions:   s.hostSessions(s.hist.service),
 		HostName:   host,
 		Version:    mygo.App.Version(),
-		Git:        app.NewRemoteGit(),
+		Git:        git,
+		GitWrite:   git,
+		Files:      true,
 		Attach: func(data []byte, mime, name string) (string, error) {
 			dir, err := chatattach.Dir(userDataDir)
 			if err != nil {

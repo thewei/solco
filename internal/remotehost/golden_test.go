@@ -254,6 +254,43 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "git-status.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git", h.token, nil)))
 	golden(t, "git-diff.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git/diff?path=a.go", h.token, nil)))
 	golden(t, "error-git-unknown-file.json", bodyOf(t, h.get("/api/v3/workspaces/w1/git/diff?path=gone.go", h.token, nil)))
+	// git write: stage/unstage/commit/fetch/pull/push answer the fresh status; refusals are stable codes
+	gw := &fakeGitWriter{}
+	h.srv.opts.GitWrite = gw
+	golden(t, "bootstrap-git-write.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "git-paths-client-request.json", []byte(`{"paths":["a.go"]}`))
+	golden(t, "git-commit-client-request.json", []byte(`{"subject":"Fix the failing test","body":"The nil check was inverted.","paths":["a.go"],"head":"abc1234"}`))
+	golden(t, "git-stage-ok.json", bodyOf(t, h.launch("/api/v3/workspaces/w1/git/stage", h.token, `{"paths":["a.go"]}`)))
+	golden(t, "git-commit-ok.json", bodyOf(t, h.launch("/api/v3/workspaces/w1/git/commit", h.token, `{"subject":"Fix the failing test","body":"The nil check was inverted.","paths":["a.go"],"head":"abc1234"}`)))
+	golden(t, "git-push-ok.json", bodyOf(t, h.launch("/api/v3/workspaces/w1/git/push", h.token, ``)))
+	gw.err = &GitWriteError{Code: "git_rejected", Status: http.StatusConflict}
+	golden(t, "error-git-rejected.json", bodyOf(t, h.launch("/api/v3/workspaces/w1/git/pull", h.token, ``)))
+	h.srv.opts.GitWrite = nil
+	// files (read-only): one Workspace folder browsed a level at a time; a path outside it is refused
+	filesRoot := t.TempDir()
+	for rel, body := range map[string]string{"README.md": "# Solco\n", "src/main.go": "package main\n", "assets/blob.bin": "a\x00b"} {
+		if err := os.MkdirAll(filepath.Join(filesRoot, filepath.Dir(rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(filesRoot, rel), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.back.mu.Lock()
+	savedCWD := h.back.proj.Projects[0].CWD
+	h.back.proj.Projects[0].CWD = filesRoot
+	h.back.mu.Unlock()
+	h.srv.opts.Files = true
+	golden(t, "bootstrap-files.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "files.json", bodyOf(t, h.get("/api/v3/workspaces/w1/files", h.token, nil)))
+	golden(t, "files-dir.json", bodyOf(t, h.get("/api/v3/workspaces/w1/files?dir=src", h.token, nil)))
+	golden(t, "file-content.json", bodyOf(t, h.get("/api/v3/workspaces/w1/files/content?path=README.md", h.token, nil)))
+	golden(t, "file-content-binary.json", bodyOf(t, h.get("/api/v3/workspaces/w1/files/content?path=assets/blob.bin", h.token, nil)))
+	golden(t, "error-files-bad-request.json", bodyOf(t, h.get("/api/v3/workspaces/w1/files?dir=..", h.token, nil)))
+	h.srv.opts.Files = false
+	h.back.mu.Lock()
+	h.back.proj.Projects[0].CWD = savedCWD
+	h.back.mu.Unlock()
 	// quota (read-only): the desktop's provider quotas behind a capability;
 	// the seam answers the whole page, the handler only forwards
 	h.srv.opts.Usage = func(context.Context, bool) Quota { return sampleQuota() }

@@ -88,6 +88,11 @@ func (s *Server) gitWorkspaceDir(w http.ResponseWriter, r *http.Request) (dir, w
 		writeError(w, http.StatusNotFound, "git_unavailable", "")
 		return "", "", false
 	}
+	return s.workspaceFolder(w, r)
+}
+
+// workspaceFolder resolves the {id} workspace to its directory (Git and Files share it), answering the refusal itself.
+func (s *Server) workspaceFolder(w http.ResponseWriter, r *http.Request) (dir, workspaceID string, ok bool) {
 	instance, ok := s.resolveInstance(w, r)
 	if !ok {
 		return "", "", false
