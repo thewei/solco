@@ -366,6 +366,11 @@ func rollupActivity(index map[string]sidebarActivity, agentStateByPane map[strin
 	return act, true
 }
 
+// servicePortsText is the ports alone: ":3000, :5173".
+func servicePortsText(act paneServiceActivity) string {
+	return strings.TrimPrefix(serviceActivityDetail(act), firstText(act.Proc, "service")+" on ")
+}
+
 // serviceActivityDetail is the tooltip fact for one service:
 // "node on :3000, :8080" (ports capped to keep the tooltip readable).
 func serviceActivityDetail(act paneServiceActivity) string {
@@ -488,6 +493,7 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 		livenessChanged := !maps.Equal(s.paneShellIdle, shellIdle)
 		s.serviceIndex = next
 		s.paneBusyIndex = busy
+		s.publishRemoteAgentFacts() // phones list the services beside each agent
 		s.paneShellIdle = shellIdle
 		if livenessChanged {
 			// The measured liveness facts moved: the Agent directory and

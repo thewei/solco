@@ -56,6 +56,22 @@ type TreeAgent struct {
 	// desktop's last-worked time (Unix ms), absent while unknown.
 	Title        string `json:"title,omitempty"`
 	LastActiveMs int64  `json:"lastActiveMs,omitempty"`
+	// Background is what runs beside the agent: the sub-agents it spawned and
+	// the service its pane serves, one list (2026-11-02, designs/mobile-projection).
+	Background []TreeBackground `json:"background,omitempty"`
+}
+
+// TreeBackground is one such item. Kind "subagent": State working | done |
+// stopped, ID the sub-agent's id (the Chat drawer's key), Title its type,
+// Detail the task. Kind "service": State running, ID "svc:<paneId>", Title the
+// process, Detail its ports. UpdatedMs is the last write (sub-agents only).
+type TreeBackground struct {
+	Kind      string `json:"kind"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Detail    string `json:"detail,omitempty"`
+	State     string `json:"state"`
+	UpdatedMs int64  `json:"updatedMs,omitempty"`
 }
 
 // AgentFact is the desktop's own resolved facts about one live agent, keyed by
@@ -64,6 +80,7 @@ type TreeAgent struct {
 type AgentFact struct {
 	Title      string
 	LastActive time.Time
+	Background []TreeBackground
 }
 
 // BuildTree maps a Herdr projection to the wire tree, keeping Herdr's order.
@@ -92,6 +109,7 @@ func buildTree(instance string, p herdr.Projection, facts map[string]AgentFact) 
 					if !fact.LastActive.IsZero() {
 						tp.Agent.LastActiveMs = fact.LastActive.UnixMilli()
 					}
+					tp.Agent.Background = fact.Background
 				}
 				tt.Panes = append(tt.Panes, tp)
 			}

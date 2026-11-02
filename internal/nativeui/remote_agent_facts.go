@@ -1,10 +1,12 @@
 package nativeui
 
 import (
-	"maps"
+	"reflect"
 	"sync"
+	"time"
 
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/remotehost"
 )
 
@@ -37,10 +39,10 @@ func (s *Shell) publishRemoteAgentFacts() {
 		if agent.IsGeneratedAgentName(title, string(card.Provider)) {
 			title = ""
 		}
-		facts[card.Key.TerminalID] = remotehost.AgentFact{Title: title, LastActive: card.LastActive}
+		facts[card.Key.TerminalID] = remotehost.AgentFact{Title: title, LastActive: card.LastActive, Background: s.remoteBackground(card, time.Now())}
 	}
 	s.remoteFacts.mu.Lock()
-	changed := s.remoteFacts.instance != s.activeInstance || !maps.Equal(s.remoteFacts.byTerminal, facts)
+	changed := s.remoteFacts.instance != s.activeInstance || !reflect.DeepEqual(s.remoteFacts.byTerminal, facts)
 	s.remoteFacts.instance, s.remoteFacts.byTerminal = s.activeInstance, facts
 	s.remoteFacts.mu.Unlock()
 	// A title moves without any Herdr event: tell the phones' open sockets.
@@ -57,4 +59,46 @@ func (s *Shell) hostAgentFacts(instance string) map[string]remotehost.AgentFact 
 		return nil
 	}
 	return s.remoteFacts.byTerminal
+}
+
+// remoteBackground is what runs beside one agent, as the phone's list shows it:
+// the newest sub-agents (read from the provider's own files by the desktop) and
+// the service its pane serves. Titles only — never a prompt or result body.
+func (s *Shell) remoteBackground(card agent.AgentCardModel, now time.Time) []remotehost.TreeBackground {
+	var out []remotehost.TreeBackground
+	subs := card.Subagents
+	if len(subs) > subagentRowsShown {
+		subs = subs[len(subs)-subagentRowsShown:]
+	}
+	for _, sub := range subs {
+		item := remotehost.TreeBackground{Kind: "subagent", ID: sub.ID, Title: fallbackText(sub.Type, "Sub-agent"), Detail: clipRunes(sub.Description, 140), State: subagentWireState(sub, now)}
+		if !sub.UpdatedAt.IsZero() {
+			item.UpdatedMs = sub.UpdatedAt.UnixMilli()
+		}
+		out = append(out, item)
+	}
+	if act, ok := s.serviceIndex.Panes[card.PaneID]; ok && len(act.Ports) > 0 && card.PaneID != "" {
+		name := firstText(act.Proc, "service")
+		out = append(out, remotehost.TreeBackground{Kind: "service", ID: "svc:" + card.PaneID, Title: name, Detail: servicePortsText(act), State: "running"})
+	}
+	return out
+}
+
+func subagentWireState(sub history.Subagent, now time.Time) string {
+	switch {
+	case sub.Active(now):
+		return "working"
+	case sub.Stopped:
+		return "stopped"
+	default:
+		return "done"
+	}
+}
+
+func clipRunes(text string, limit int) string {
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit]) + "…"
 }

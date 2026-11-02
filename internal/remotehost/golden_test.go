@@ -104,7 +104,10 @@ func TestGoldenAPIv3(t *testing.T) {
 	h.srv.opts.HostName = "Test Mac"
 	// the desktop's resolved title and last-worked time for the agent pane (the shell pane has none)
 	h.srv.opts.AgentFacts = func(string) map[string]AgentFact {
-		return map[string]AgentFact{"term_a": {Title: "Fix the parser", LastActive: time.UnixMilli(1785546001000)}}
+		return map[string]AgentFact{"term_a": {Title: "Fix the parser", LastActive: time.UnixMilli(1785546001000), Background: []TreeBackground{
+			{Kind: "subagent", ID: "agent-a1", Title: "Explore", Detail: "Find the lexer entry points", State: "working", UpdatedMs: 1785546000000},
+			{Kind: "service", ID: "svc:w1:p1", Title: "node", Detail: ":3000, :5173", State: "running"},
+		}}}
 	}
 
 	// pairing: the offer URL and the POST /pair answer

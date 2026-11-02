@@ -22,7 +22,24 @@
                 "provider": "claude",
                 "status": "working",
                 "title": "Fix the parser",
-                "lastActiveMs": 1785546001000
+                "lastActiveMs": 1785546001000,
+                "background": [
+                  {
+                    "kind": "subagent",
+                    "id": "agent-a1",
+                    "title": "Explore",
+                    "detail": "Find the lexer entry points",
+                    "state": "working",
+                    "updatedMs": 1785546000000
+                  },
+                  {
+                    "kind": "service",
+                    "id": "svc:w1:p1",
+                    "title": "node",
+                    "detail": ":3000, :5173",
+                    "state": "running"
+                  }
+                ]
               }
             },
             {

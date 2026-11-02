@@ -386,8 +386,9 @@ func (s *Shell) nestedSubagentRows(c *ui.Context, card agent.AgentCardModel, nav
 			openAll()
 		}
 	}
+	svc, hasSvc := s.cardService(card)
 	for i, sub := range subs {
-		row := s.subagentRow(c, card, sub, i == len(subs)-1)
+		row := s.subagentRow(c, card, sub, i == len(subs)-1 && !hasSvc)
 		nav.row(c, row, navRow{Key: "sub:" + card.PaneID + ":" + sub.ID, Level: 1}) // nil nav: the popover has no keyboard model
 		if nav != nil {
 			row.FocusRing(false)
@@ -399,6 +400,66 @@ func (s *Shell) nestedSubagentRows(c *ui.Context, card agent.AgentCardModel, nav
 			openSub(sub)
 		}
 	}
+	if hasSvc {
+		// The service the Agent's pane is running hangs beside its
+		// sub-agents as one more nested row (2026-11-02): same guide line,
+		// the service shape (rounded square) instead of the Agent circle.
+		row := s.serviceRow(c, card, svc)
+		nav.row(c, row, navRow{Key: "svc:" + card.PaneID, Level: 1})
+		if nav != nil {
+			row.FocusRing(false)
+			if nav.showsCursor(row) {
+				row.Background(designTokens(c.Theme().Dark).SidebarSelect)
+			}
+		}
+		if row.Clicked() {
+			s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceTerminal)
+			s.openAgentCard(card)
+		}
+	}
+}
+
+// cardService is the service running in the card's pane (a dev server the
+// Agent started), shown nested like a sub-agent; none while the parent's
+// nested rows are folded or the pane has no listener.
+func (s *Shell) cardService(card agent.AgentCardModel) (paneServiceActivity, bool) {
+	if card.PaneID == "" || s.subagentsFolded(card, time.Now()) {
+		return paneServiceActivity{}, false
+	}
+	act, ok := s.serviceIndex.Panes[card.PaneID]
+	return act, ok && len(act.Ports) > 0
+}
+
+// serviceRow is one nested service: the process in bold, its ports muted, the
+// service-shaped slot at the end. A click opens the pane's Terminal, where it
+// runs (v1 is read-only: no Stop).
+func (s *Shell) serviceRow(c *ui.Context, parent agent.AgentCardModel, act paneServiceActivity) ui.Element {
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	name := firstText(act.Proc, "service")
+	ports := servicePortsText(act)
+	var row ui.Element
+	ui.Box(c.Key("svc:" + parent.PaneID)).FillWidth().Children(func() {
+		row = ui.ButtonBase(c).FillWidth().Height(24).Radius(6).Padding(0, agentCardPadX).Gap(6).
+			AlignItems(ui.Center).Label("Service " + serviceActivityDetail(act))
+		if tint, ok := rowTint(tokens, false, row.Hovered()); ok {
+			row.Background(tint)
+		}
+		row.Transition(rowFade)
+		row.Draw(func(p *ui.Painter, r ui.Rect) {
+			x := r.X + agentCardPadX + agentCardMark/2
+			p.Line(x, r.Y, x, r.Y+r.H/2, 1, tokens.TreeLine)
+			p.Line(x, r.Y+r.H/2, x+9, r.Y+r.H/2, 1, tokens.TreeLine)
+		})
+		row.Children(func() {
+			ui.Box(c).Width(agentCardMark + 4).Shrink(0).PassThrough()
+			ui.Text(c, name).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).SingleLine().Shrink(0).PassThrough()
+			ui.Text(c, ports).FontSize(Typography().Micro).TextColor(t.TextMuted).
+				SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Grow(1).PassThrough()
+			statusIndicatorService(c, ToneSuccess, serviceActivityDetail(act))
+		})
+	})
+	return row
 }
 
 // subagentToggle is the parent card's disclosure for its sub-agent rows: a
