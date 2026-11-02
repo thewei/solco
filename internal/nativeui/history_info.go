@@ -220,26 +220,55 @@ func (s *Shell) sessionInfoTable(c *ui.Context, meta history.SessionMeta, info h
 	})
 }
 
-// sessionRowActions are the row's trailing actions under the pointer (or
-// while its info card is open), in place of its date: Continue, the ⓘ that
-// folds the info card, and ⋯ with every other action (Continue in, copy the
-// resume command, Trash …).
-func (s *Shell) sessionRowActions(c *ui.Context, meta history.SessionMeta, infoOpen bool, menu func(*ui.Menu)) {
+// sessionRowActions is the strip under the pointer: Continue / Go to Pane and
+// ⓘ while shown, and the ⋯ always (rowMenuSlot keeps it built, see there).
+func (s *Shell) sessionRowActions(c *ui.Context, meta history.SessionMeta, infoOpen, shown bool, menu func(*ui.Menu)) {
 	t := c.Theme()
 	k := gorexColorsOf(t.Dark)
-	if live, ok := s.liveSessionFor(meta); ok {
-		if regularPrimaryButton(c, "Go to Pane").Shrink(0).Clicked() {
-			s.goToPane(live.PaneID)
+	if shown {
+		if live, ok := s.liveSessionFor(meta); ok {
+			if regularPrimaryButton(c, "Go to Pane").Shrink(0).Clicked() {
+				s.goToPane(live.PaneID)
+			}
+		} else if regularButton(c, "Continue").Disabled(!s.canContinue()).Shrink(0).Clicked() {
+			s.requestContinue(meta, nil)
 		}
-	} else if regularButton(c, "Continue").Disabled(!s.canContinue()).Shrink(0).Clicked() {
-		s.requestContinue(meta, nil)
+		if gorexIconButton(c, k, iconInfo, "Session info", "Session info", infoOpen, gorexRowBtn+4, gorexRowGlyph+2).
+			Shrink(0).Clicked() {
+			s.toggleHistoryPreview(meta.Key)
+		}
 	}
-	if gorexIconButton(c, k, iconInfo, "Session info", "Session info", infoOpen, gorexRowBtn+4, gorexRowGlyph+2).
-		Shrink(0).Clicked() {
-		s.toggleHistoryPreview(meta.Key)
+	rowMenuSlot(c, "session-more:"+meta.Key, "More actions for "+fallbackText(meta.Title, history.Untitled),
+		iconActions, shown, gorexRowBtn+4, gorexRowGlyph+2, menu)
+}
+
+// rowMenuSlot is a hover-revealed row button that opens a menu. MyGo hands a
+// popup's choice to the element that opened it, and the pointer is on the
+// popup, not the row, by the time an item is chosen — so the button is always
+// built (keyed, zero width while hidden) instead of appearing with the hover
+// (probed 2026-11-02; same rule as sidebar rows' menuSlot).
+func rowMenuSlot(c *ui.Context, key, label string, glyph *ui.SVG, shown bool, size, glyphSize float32, menu func(*ui.Menu)) {
+	w := float32(0)
+	if shown {
+		w = size
 	}
-	gorexIconButton(c, k, iconActions, "More actions for "+fallbackText(meta.Title, history.Untitled), "", false, gorexRowBtn+4, gorexRowGlyph+2).
-		Shrink(0).Menu(menu)
+	b := ui.Box(c.Key(key)).Size(w, size).Shrink(0).Center().Radius(iconButtonRadius(size)).
+		Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label)
+	b.Menu(menu)
+	k := gorexColorsOf(c.Theme().Dark)
+	if shown {
+		gorexToggleFace(b, k, false)
+		b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
+	}
+	col := k.iconMuted
+	if shown && b.Hovered() {
+		col = k.text
+	}
+	b.Children(func() {
+		if shown {
+			ui.Icon(c, glyph).Size(glyphSize, glyphSize).TextColor(col)
+		}
+	})
 }
 
 // historyDetailInfo is the detail page's collapsible card: a "Session details"

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 agent.AgentKey, herdr.Agent, history.ResolveLiveSource, history.NewLivePump, chatsession.Fold
- * [OUTPUT]: 对外提供 Shell.openChat, Shell.bindLiveAgent, Shell.bindLiveFile, Shell.stopLiveTail, Shell.applyLiveSync, Shell.wakeLiveTail
+ * [INPUT]: 依赖 agent.AgentKey, herdr.Agent, history.ResolveLiveSource, history.NewLivePump, chatsession.Fold, markAgentReviewedIfPending
+ * [OUTPUT]: 对外提供 Shell.openChat（打开 Chat 并清除 Review 状态）, Shell.bindLiveAgent, Shell.bindLiveFile, Shell.stopLiveTail, Shell.applyLiveSync, Shell.wakeLiveTail
  * [POS]: Chat 增量尾部绑定与实时数据流调度器，负责活体 Agent 转录与 Shell 聊天视图的生命周期同步
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -52,6 +52,7 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 	if s.holdCommitNavigation() {
 		return
 	}
+	s.markAgentReviewedIfPending(card.Key)
 	s.chatPaneID = card.PaneID
 	if card.PaneID != "" {
 		s.selectPane(card.PaneID)

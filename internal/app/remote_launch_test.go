@@ -34,13 +34,32 @@ func TestRemoteLauncherKinds(t *testing.T) {
 		}
 		return out
 	}
-	got := ids(newTestLauncher(&fakeAppRuntime{}, []string{"claude", "pi", "nonsense"}, nil).Kinds())
-	if want := []string{"terminal", "claude-code", "pi"}; !equalStrings(got, want) {
+	got := ids(newTestLauncher(&fakeAppRuntime{}, []string{"claude", "pi", "agy", "nonsense"}, nil).Kinds())
+	if want := []string{"terminal", "claude-code", "pi", "antigravity"}; !equalStrings(got, want) {
 		t.Fatalf("live list: got %v want %v", got, want)
 	}
 	got = ids(newTestLauncher(&fakeAppRuntime{}, nil, errors.New("no herdr")).Kinds())
-	if want := []string{"terminal", "claude-code", "codex", "pi", "omp"}; !equalStrings(got, want) {
+	if want := []string{"terminal", "claude-code", "codex", "pi", "omp", "antigravity"}; !equalStrings(got, want) {
 		t.Fatalf("fallback: got %v want %v", got, want)
+	}
+}
+
+func TestRemoteLauncherAntigravityDefaultsToFullAccess(t *testing.T) {
+	rt := &fakeAppRuntime{agentKind: "agy"}
+	l := newTestLauncher(rt, nil, nil)
+	dir := t.TempDir()
+	pane, err := l.Launch(context.Background(), "default", remotehost.LaunchSpec{RequestID: "req_antigrav", CWD: dir, Kind: "antigravity"})
+	if err != nil || pane.PaneID != "pane-9" {
+		t.Fatalf("pane %+v err %v", pane, err)
+	}
+	if len(rt.started) != 1 {
+		t.Fatalf("started %d, want 1", len(rt.started))
+	}
+	if rt.started[0].Kind != "agy" {
+		t.Errorf("kind = %q, want 'agy'", rt.started[0].Kind)
+	}
+	if !equalStrings(rt.started[0].Args, []string{"--dangerously-skip-permissions"}) {
+		t.Errorf("args = %v, want ['--dangerously-skip-permissions']", rt.started[0].Args)
 	}
 }
 

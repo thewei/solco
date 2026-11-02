@@ -1,8 +1,11 @@
-// Package agent owns the UI-independent Agent product semantics for the MyGo
-// rewrite: the provider capability projection, launch request identity, and
-// (later) the full launch transaction. It never starts provider processes;
-// Herdr remains the runtime authority.
 package agent
+
+/**
+ * [INPUT]: 依赖 history.AgentID, history.AllAgents
+ * [OUTPUT]: 对外提供 Capabilities, ProjectCapabilities, ProjectAllCapabilities, Environment, ResumeSupported
+ * [POS]: internal/agent 的能力投影层，定义各 Provider 的暴露级别、运行策略与权限/计划模式支持
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 import "github.com/thewei/solco/internal/history"
 
@@ -145,7 +148,7 @@ func ProjectAllCapabilities(environment func(history.AgentID) Environment) []Cap
 
 func planModeSupport(agent history.AgentID) planSupport {
 	switch agent {
-	case history.AgentClaudeCode, history.AgentGemini:
+	case history.AgentClaudeCode, history.AgentGemini, history.AgentAntigravity:
 		return planNativeCLI
 	case history.AgentCodex:
 		return planPostLaunchKeys
@@ -156,7 +159,7 @@ func planModeSupport(agent history.AgentID) planSupport {
 
 func permissionModes(agent history.AgentID) bool {
 	switch agent {
-	case history.AgentClaudeCode, history.AgentCodex, history.AgentGemini:
+	case history.AgentClaudeCode, history.AgentCodex, history.AgentGemini, history.AgentAntigravity:
 		return true
 	default:
 		return false

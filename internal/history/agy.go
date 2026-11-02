@@ -36,11 +36,12 @@ func agyTranscriptFile(brainRoot, conversationID string) string {
 }
 
 // agyNativeID is the conversation id of a transcript path
-// (`…/brain/<id>/.system_generated/logs/transcript_full.jsonl`), "" when the
+// (`…/brain/<id>/.system_generated/logs/transcript_full.jsonl` or `transcript.jsonl`), "" when the
 // path does not have that shape.
 func agyNativeID(path string) string {
 	logs := filepath.Dir(path)
-	if filepath.Base(path) != agyTranscriptName || filepath.Base(logs) != "logs" {
+	base := filepath.Base(path)
+	if (base != agyTranscriptName && base != "transcript.jsonl") || filepath.Base(logs) != "logs" {
 		return ""
 	}
 	generated := filepath.Dir(logs)
@@ -181,6 +182,14 @@ func (s *agyParseState) feedAgyLine(line string) {
 		// summary row. The summary text is the agent's own prompt, not a
 		// message to show.
 		s.pushText(RoleSystem, MessageCompactSummary, "── Context compacted ──", timestamp)
+	case "ERROR_MESSAGE":
+		errMsg, _ := row["error"].(string)
+		if strings.TrimSpace(errMsg) == "" {
+			errMsg = content
+		}
+		if strings.TrimSpace(errMsg) != "" {
+			s.pushText(RoleSystem, MessageMeta, errMsg, timestamp)
+		}
 	case "PLANNER_RESPONSE":
 		s.feedPlanner(row, content, timestamp)
 	case "GENERIC":
@@ -311,6 +320,11 @@ func (s *agyParseState) feedResult(row map[string]any, content, status string) {
 		if failure, _ := row["error"].(string); strings.TrimSpace(failure) != "" && strings.TrimSpace(text) == "" {
 			text = failure
 		}
+	} else if failure, ok := row["error"].(string); ok && strings.TrimSpace(failure) != "" {
+		call.IsError = true
+		if strings.TrimSpace(text) == "" {
+			text = failure
+		}
 	}
 	clipped, _ := clipText(strings.TrimSpace(text), MaxToolIO)
 	call.Output = &clipped
@@ -341,7 +355,7 @@ func agyToolInput(input any) (preview string, full *string) {
 	if !ok {
 		return preview, full
 	}
-	for _, key := range []string{"CommandLine", "Path", "AbsolutePath", "TargetFile", "Query", "query", "Url", "URL"} {
+	for _, key := range []string{"CommandLine", "Path", "AbsolutePath", "TargetFile", "Query", "query", "Url", "URL", "toolSummary", "Role", "Prompt", "TypeName", "Action"} {
 		if value, ok := object[key].(string); ok && strings.TrimSpace(value) != "" {
 			clipped, _ := clipText(strings.TrimSpace(value), 200)
 			return clipped, full

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 time, mygo, internal/agent, internal/herdr
- * [OUTPUT]: 对外提供 Shell.reconcileWorkbench, notifyAgentTransition, workbenchState
- * [POS]: nativeui 桌面工作台状态中枢，Agent 目录与运行时事件分发
+ * [OUTPUT]: 对外提供 Shell.reconcileWorkbench, notifyAgentTransition, markAgentReviewed, markAgentReviewedIfPending, markAgentReviewedForPane, workbenchState
+ * [POS]: nativeui 桌面工作台状态中枢，Agent 目录与运行时事件分发及状态调和
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 package nativeui
@@ -224,12 +224,13 @@ func (s *Shell) workbenchCards() []agent.AgentCardModel {
 
 // openAgentCard navigates client-locally to the Agent's owning pane (which
 // lands blocked agents on their Terminal), records the MRU visit and clears
-// unread. It never emits a Herdr focus RPC.
+// unread/review markers. It never emits a Herdr focus RPC.
 func (s *Shell) openAgentCard(card agent.AgentCardModel) {
 	if s.holdCommitNavigation() {
 		return
 	}
 	s.workbench.markers.Visit(card.Key)
+	s.markAgentReviewedIfPending(card.Key)
 	s.recordAgentVisit(card.Key)
 	if card.PaneID != "" {
 		s.selectPane(card.PaneID)
@@ -239,11 +240,39 @@ func (s *Shell) openAgentCard(card agent.AgentCardModel) {
 	}
 }
 
-// markAgentReviewed is the explicit review action (0.5 §12): it never runs
-// implicitly on visit.
+// markAgentReviewed is the explicit review action (0.5 §12): it clears
+// review-pending and unread markers and updates directory facts.
 func (s *Shell) markAgentReviewed(key agent.AgentKey) {
+	if s.workbench.markers == nil {
+		return
+	}
 	s.workbench.markers.MarkReviewed(key)
 	s.reconcileWorkbenchMarkersOnly()
+}
+
+// markAgentReviewedIfPending clears review-pending for the agent matching key
+// if it is currently waiting for review, reporting true when state changed.
+func (s *Shell) markAgentReviewedIfPending(key agent.AgentKey) bool {
+	if s.workbench.markers == nil {
+		return false
+	}
+	if !s.workbench.markers.Get(key).ReviewPending {
+		return false
+	}
+	s.markAgentReviewed(key)
+	return true
+}
+
+// markAgentReviewedForPane clears review-pending for the agent running on targetPaneID
+// when the pane or its tree row gains focus.
+func (s *Shell) markAgentReviewedForPane(targetPaneID string) bool {
+	if targetPaneID == "" {
+		return false
+	}
+	if card, ok := s.agentCardForPane(targetPaneID); ok {
+		return s.markAgentReviewedIfPending(card.Key)
+	}
+	return false
 }
 
 // reconcileWorkbenchMarkersOnly refreshes marker facts on the existing cards

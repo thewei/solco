@@ -13,9 +13,9 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 LaunchService（RuntimeFor / Registry / Manager）、agent.RunLaunchTransaction、herdr.Manager.AgentKinds
+ * [INPUT]: 依赖 LaunchService（RuntimeFor / Registry / Manager）、agent.RunLaunchTransaction、agent.Permission、herdr.Manager.AgentKinds
  * [OUTPUT]: 对外提供 SessionStarter（桌面与手机共用的「启动新会话」服务层：StartSession / Kinds）、SessionSpec、SessionResult、SessionError、TerminalKind；LaunchService.Sessions()
- * [POS]: 界面无关的共享层——Agent 走 agent.RunLaunchTransaction，Terminal 只建 Tab/Workspace；同 requestId 幂等（与历史继续共用一个 LaunchRegistry）。手机 Host（remote_launch.go）与桌面任何将来的入口都只经这里
+ * [POS]: 界面无关的共享层——Agent 走 agent.RunLaunchTransaction（Antigravity 默认 PermissionFullAccess 传参全部权限），Terminal 只建 Tab/Workspace；同 requestId 幂等（与历史继续共用一个 LaunchRegistry）。手机 Host（remote_launch.go）与桌面任何将来的入口都只经这里
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -27,7 +27,7 @@ const TerminalKind = "terminal"
 const kindsTTL = 10 * time.Minute
 
 // fallbackKinds are offered when the live CLI list cannot be read.
-var fallbackKinds = []history.AgentID{history.AgentClaudeCode, history.AgentCodex, history.AgentPi, history.AgentOMP}
+var fallbackKinds = []history.AgentID{history.AgentClaudeCode, history.AgentCodex, history.AgentPi, history.AgentOMP, history.AgentAntigravity}
 
 // SessionSpec is one new-session request: a Workspace (new Tab in it) or a
 // directory (its Workspace found or created). Agent == "" opens a Terminal.
@@ -39,6 +39,7 @@ type SessionSpec struct {
 	CWD         string
 	Agent       history.AgentID
 	Prompt      string
+	Permission  agent.Permission
 }
 
 // SessionResult is the new session's pane. PromptPending: the Agent exists but is blocked on a human
@@ -176,6 +177,15 @@ func (l *SessionStarter) StartSession(ctx context.Context, instance string, spec
 		return SessionResult{PaneID: rec.AgentKey, PromptPending: rec.PromptPending}, sessionError(err)
 	}
 
+	permission := spec.Permission
+	if permission == "" {
+		if spec.Agent == history.AgentAntigravity {
+			permission = agent.PermissionFullAccess
+		} else {
+			permission = agent.PermissionAskApproval
+		}
+	}
+
 	request := agent.StartAgentRequest{RequestID: spec.RequestID, Instance: instance, ProjectID: sessionProject(spec), Provider: spec.Agent, CWD: spec.CWD, Prompt: spec.Prompt}
 	rec, err := registry.Submit(ctx, request, func(ctx context.Context, r agent.StartAgentRequest) (agent.LaunchOutcomeRecord, error) {
 		outcome, failure := l.run(ctx, rt, agent.LaunchIntent{
@@ -183,7 +193,7 @@ func (l *SessionStarter) StartSession(ctx context.Context, instance string, spec
 			WorkspaceID:       spec.WorkspaceID,
 			ProjectPath:       r.CWD,
 			Mode:              agent.LaunchModeBuild,
-			Permission:        agent.PermissionAskApproval,
+			Permission:        permission,
 			Agent:             r.Provider,
 			Prompt:            r.Prompt,
 			SkipInitialPrompt: r.Prompt == "",

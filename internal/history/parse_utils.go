@@ -101,6 +101,12 @@ func cutParenthetical(text string) (string, bool) {
 	return text, false
 }
 
+// CleanTitleCandidate normalizes a raw first prompt or candidate string into
+// a clean, presentation-safe session title.
+func CleanTitleCandidate(raw string) string {
+	return cleanTitleCandidate(raw)
+}
+
 func cleanTitleCandidate(raw string) string {
 	text := stripTagBlock(stripTaskPreamble(raw), "system-reminder")
 	text = stripTagBlock(text, "local-command-caveat")

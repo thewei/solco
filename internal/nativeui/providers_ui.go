@@ -38,6 +38,10 @@ func statusHookFor(id agenthooks.ProviderID) (history.AgentID, bool) {
 		return history.AgentClaudeCode, true
 	case agenthooks.ProviderAntigravity:
 		return history.AgentAntigravity, true
+	case agenthooks.ProviderCursor:
+		return history.AgentCursor, true
+	case agenthooks.ProviderCodex:
+		return history.AgentCodex, true
 	default:
 		return "", false
 	}
@@ -357,7 +361,7 @@ func hookStateTone(state agenthooks.State) StatusTone {
 		return ToneSuccess
 	case agenthooks.StateOutdated:
 		return ToneWarning
-	case agenthooks.StateNotInstalled:
+	case agenthooks.StateNotInstalled, agenthooks.StateNeedsApproval:
 		return ToneAttention
 	case agenthooks.StateError:
 		return ToneError
@@ -375,6 +379,8 @@ func hookStateText(state agenthooks.State) string {
 		return "Not installed"
 	case agenthooks.StateOutdated:
 		return "Update available"
+	case agenthooks.StateNeedsApproval:
+		return "Needs approval in Codex"
 	case agenthooks.StateUnsupported:
 		return "Not supported"
 	default:

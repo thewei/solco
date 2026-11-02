@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/apphook"
 	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
@@ -273,7 +274,25 @@ func (s *Shell) handleAppHookStatus(evt apphook.StatusEvent) {
 		}
 	})
 	if session != nil {
+		previous, hadPrevious := s.hookIdentities[s.hookKey(evt.PaneID)]
 		s.rememberHookIdentity(evt.PaneID, session)
+		if !hadPrevious || previous.identity.Value != session.Value {
+			s.refreshUsageProjection(true)
+		}
+	}
+	if evt.Text != "" {
+		if a := s.paneAgent(evt.PaneID); a != nil && a.TerminalID != "" {
+			k := agent.AgentKey{InstanceID: s.activeInstance, TerminalID: a.TerminalID}
+			if s.agentSessionTitle[k] == "" {
+				if clean := history.CleanTitleCandidate(evt.Text); clean != "" {
+					if s.agentSessionTitle == nil {
+						s.agentSessionTitle = make(map[agent.AgentKey]string)
+					}
+					s.agentSessionTitle[k] = clean
+					s.reconcileWorkbench()
+				}
+			}
+		}
 	}
 
 	if !applied {

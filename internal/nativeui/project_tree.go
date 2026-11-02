@@ -1,8 +1,8 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 Herdr 权威 Workspace/Tab 顺序及 Pane layout、reorder.go 的受限拖动规则
- * [OUTPUT]: 提供侧栏 Workspace → Tab → Pane 交互树、排序与原生拖放入口
+ * [INPUT]: 依赖 Herdr 权威 Workspace/Tab 顺序及 Pane layout、reorder.go 的受限拖动规则、markAgentReviewedForPane 聚焦取消 Review
+ * [OUTPUT]: 提供侧栏 Workspace → Tab → Pane 交互树、排序与原生拖放入口，Pane 行聚焦时取消对应 Agent 的 Review 状态
  * [POS]: nativeui 的运行时导航树；状态标识不再干扰用户持久化的拖动顺序；单 Pane Tab 行的身份图取该 Pane 绑定 Agent 的品牌图（次选可识别程序品牌，其余 tab 字形，tabRowMark）；Agent working 的行（单 Pane Tab 行与 pane 行）行尾画 Agents 区卡片同款 Spinner（treeRowSpec.Working，Working 桶同语义）；pane 实测回 shell 提示符时死绑定不再上色（paneAgent 门控、liveAgentStatus 清空行 Status）；有活 Agent 的 pane 行与单 Pane Tab 行标签取 Agents 区同款标题（agentCardTitleForPane，会话标题优先）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -169,6 +169,9 @@ func (s *Shell) projectItems(c *ui.Context) {
 				})
 				if row.Clicked() {
 					s.selectPane(pane.ID)
+				}
+				if row.Focused() {
+					s.markAgentReviewedForPane(pane.ID)
 				}
 				row.ContextMenu(func(m *ui.Menu) { s.paneOverflowItems(m, pane.ID, label) })
 			}

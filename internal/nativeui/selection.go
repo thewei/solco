@@ -1,8 +1,8 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 Herdr 投影存在性判定（projectExists/tabByID/paneByID/layoutForTab）、runtime 的 pane.zoom mutation 与 Shell 的终端同步
- * [OUTPUT]: 对外提供 Shell.selectProject/selectTab/selectPane（用户选择唯一收口：落地投影状态并把 /workspace?pane=… 位置 Push 进 Router 历史）、applyProjectSelection/applyTabSelection/applyPaneSelection（无历史推送的落地体）、syncSelectionLocation（Back/Forward/⌘[⌘] 走历史时把位置查询静默镜像回选择）、selectionLocation
+ * [INPUT]: 依赖 Herdr 投影存在性判定（projectExists/tabByID/paneByID/layoutForTab）、runtime 的 pane.zoom mutation 与 Shell 的终端同步、markAgentReviewedForPane 聚焦取消 Review
+ * [OUTPUT]: 对外提供 Shell.selectProject/selectTab/selectPane（用户选择唯一收口：落地投影状态并把 /workspace?pane=… 位置 Push 进 Router 历史）、applyProjectSelection/applyTabSelection/applyPaneSelection（无历史推送的落地体，选中时自动清除对应 Agent 的 Review 状态）、syncSelectionLocation（Back/Forward/⌘[⌘] 走历史时把位置查询静默镜像回选择）、selectionLocation
  * [POS]: 选中状态与页面历史之间的唯一翻译层：用户选择→位置入栈，Router 走历史→选择恢复；reconcile/adopt 永远不经过这里，运行时对账不产生历史
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -131,6 +131,7 @@ func (s *Shell) applyPaneSelection(paneID string) {
 	s.setProjectExpanded(pane.ProjectID, true)
 	s.setTabExpanded(pane.TabID, true)
 	s.syncSelectionPresentation()
+	s.markAgentReviewedForPane(pane.ID)
 }
 
 // selectionLocation renders the workspace location recording the current

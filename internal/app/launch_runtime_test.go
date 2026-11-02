@@ -19,6 +19,7 @@ type fakeAppRuntime struct {
 	prompts   []string
 	identity  agent.StartedAgent
 	createdWS bool
+	agentKind string
 }
 
 func (f *fakeAppRuntime) CreateTabWithoutFocus(ctx context.Context, workspaceID, cwd string) (agent.TabCreated, error) {
@@ -43,7 +44,11 @@ func (f *fakeAppRuntime) WaitAgentIdle(ctx context.Context, paneID string, timeo
 	return nil
 }
 func (f *fakeAppRuntime) AgentByPane(ctx context.Context, paneID string) (*agent.StartedAgent, error) {
-	return &agent.StartedAgent{PaneID: paneID, Agent: "codex", AgentSession: "codex:s9", InteractiveReady: true}, nil
+	kind := "codex"
+	if f.agentKind != "" {
+		kind = f.agentKind
+	}
+	return &agent.StartedAgent{PaneID: paneID, Agent: kind, AgentSession: kind + ":s9", InteractiveReady: true}, nil
 }
 func (f *fakeAppRuntime) SendAgentKeys(ctx context.Context, paneID string, keys []string) error {
 	return nil

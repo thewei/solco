@@ -2,12 +2,15 @@ package agenthooks
 
 import (
 	"encoding/json"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestHome(t *testing.T) string {
@@ -371,4 +374,386 @@ func numberInt(t *testing.T, value any) int64 {
 
 func itoa(v int) string {
 	return strconv.Itoa(v)
+}
+
+func TestInstallCursorPreservesForeignHooksAndKeepsVersion(t *testing.T) {
+	home := newTestHome(t)
+	dir := filepath.Join(home, ".cursor")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seed := `{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [{"command": "rtk hook cursor", "matcher": "Shell"}],
+    "sessionStart": [{"command": "bash '/x/herdr-agent-state.sh' session"}]
+  }
+}`
+	path := filepath.Join(dir, "hooks.json")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManagerWithHome(home)
+	if row := findRow(t, m.Diagnose(), ProviderCursor); row.State != StateNotInstalled || len(row.Missing) != len(cursorHookEvents) {
+		t.Fatalf("fresh cursor row = %+v, want not-installed with every event missing", row)
+	}
+	if _, err := m.Install(ProviderCursor); err != nil {
+		t.Fatalf("Install cursor: %v", err)
+	}
+
+	var config map[string]any
+	decode(t, path, &config)
+	if numberInt(t, config["version"]) != 1 {
+		t.Fatalf("version = %v, want 1 kept", config["version"])
+	}
+	hooks := config["hooks"].(map[string]any)
+	for _, event := range cursorHookEvents {
+		if !wiringContains(arrayOf(hooks[event]), "solco-cursor-hook.sh") {
+			t.Errorf("event %s not wired", event)
+		}
+	}
+	if pre := arrayOf(hooks["preToolUse"]); len(pre) != 2 || !wiringContains(pre, "rtk hook cursor") {
+		t.Fatalf("preToolUse = %v, want the foreign hook kept beside ours", pre)
+	}
+	if start := arrayOf(hooks["sessionStart"]); len(start) != 2 || !wiringContains(start, "herdr-agent-state.sh") {
+		t.Fatalf("sessionStart = %v, want Herdr's hook kept beside ours", start)
+	}
+
+	before := snapshot(t, path)
+	if _, err := m.Install(ProviderCursor); err != nil {
+		t.Fatalf("second Install: %v", err)
+	}
+	if snapshot(t, path) != before {
+		t.Fatal("second Install rewrote the wiring")
+	}
+	if row := findRow(t, m.Diagnose(), ProviderCursor); row.State != StateOK || len(row.Missing) != 0 {
+		t.Fatalf("post-install row = %+v, want ok", row)
+	}
+}
+
+// Cursor's camelCase events and conversation_id reach the apphook socket as a
+// status plus a session id (the script is what the doctor installs, run here
+// against a stand-in socket).
+func TestCursorHookScriptReportsStatusAndSession(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	dir, err := os.MkdirTemp("/tmp", "solco-hook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	listener, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	script := filepath.Join(dir, "hook.sh")
+	if err := os.WriteFile(script, []byte(hookScriptTemplate), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct{ event, status string }{
+		{"sessionStart", "idle"}, {"beforeSubmitPrompt", "working"}, {"preToolUse", "working"},
+		{"postToolUse", "working"}, {"stop", "idle"}, {"sessionEnd", "released"},
+	}
+	for _, tc := range cases {
+		got := make(chan map[string]any, 1)
+		go func() {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			var payload map[string]any
+			_ = json.NewDecoder(conn).Decode(&payload)
+			got <- payload
+		}()
+		cmd := exec.Command("sh", script, "cursor")
+		cmd.Stdin = strings.NewReader(`{"hook_event_name":"` + tc.event + `","conversation_id":"chat-1"}`)
+		cmd.Env = append(os.Environ(), "HERDR_PANE_ID=p1", "SOLCO_SOCKET_PATH="+sock, "HERDR_ENV=0")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v\n%s", tc.event, err, out)
+		}
+		select {
+		case payload := <-got:
+			if payload["agent"] != "cursor" || payload["status"] != tc.status || payload["session_id"] != "chat-1" {
+				t.Fatalf("%s: payload = %v, want cursor/%s/chat-1", tc.event, payload, tc.status)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: nothing reached the socket", tc.event)
+		}
+	}
+}
+
+func TestScriptAntigravityEventsSocketReport(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	dir, err := os.MkdirTemp("/tmp", "solco-hook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	listener, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	script := filepath.Join(dir, "hook.sh")
+	if err := os.WriteFile(script, []byte(hookScriptTemplate), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		event      string
+		payload    string
+		wantStatus string
+		wantStdout string
+	}{
+		{
+			event:      "SessionStart",
+			payload:    `{"conversationId":"agy-1"}`,
+			wantStatus: "idle",
+			wantStdout: "{}\n",
+		},
+		{
+			event:      "PreInvocation",
+			payload:    `{"conversationId":"agy-1","lastUserInput":"Fix the sidebar"}`,
+			wantStatus: "working",
+			wantStdout: "{}\n",
+		},
+		{
+			event:      "PreToolUse",
+			payload:    `{"conversationId":"agy-1","toolCall":{"name":"run_command"}}`,
+			wantStatus: "working",
+			wantStdout: "{\"decision\":\"allow\"}\n",
+		},
+		{
+			event:      "PostToolUse",
+			payload:    `{"conversationId":"agy-1","toolCall":{"name":"run_command"}}`,
+			wantStatus: "working",
+			wantStdout: "{}\n",
+		},
+		{
+			event:      "Stop",
+			payload:    `{"conversationId":"agy-1","fullyIdle":true}`,
+			wantStatus: "idle",
+			wantStdout: "{}\n",
+		},
+	}
+
+	for _, tc := range cases {
+		got := make(chan map[string]any, 1)
+		go func() {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			var p map[string]any
+			_ = json.NewDecoder(conn).Decode(&p)
+			got <- p
+		}()
+		cmd := exec.Command("sh", script, "agy", tc.event)
+		cmd.Stdin = strings.NewReader(tc.payload)
+		cmd.Env = append(os.Environ(), "HERDR_PANE_ID=p1", "SOLCO_SOCKET_PATH="+sock, "HERDR_ENV=0")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", tc.event, err, out)
+		}
+		if string(out) != tc.wantStdout {
+			t.Fatalf("%s: stdout = %q, want %q", tc.event, string(out), tc.wantStdout)
+		}
+		select {
+		case payload := <-got:
+			if payload["agent"] != "agy" || payload["status"] != tc.wantStatus || payload["session_id"] != "agy-1" {
+				t.Fatalf("%s: payload = %v, want agy/%s/agy-1", tc.event, payload, tc.wantStatus)
+			}
+			if tc.event == "PreInvocation" && payload["text"] != "Fix the sidebar" {
+				t.Fatalf("%s: text = %v, want 'Fix the sidebar'", tc.event, payload["text"])
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: nothing reached the socket", tc.event)
+		}
+	}
+}
+
+func TestInstallCodexNeedsApprovalUntilCodexTrustsEachHook(t *testing.T) {
+	home := newTestHome(t)
+	dir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seed := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"command":"rtk hook codex","type":"command"}]}],` +
+		`"SessionStart":[{"hooks":[{"command":"bash '/x/herdr-agent-state.sh' session","timeout":10,"type":"command"}]}]}}`
+	path := filepath.Join(dir, "hooks.json")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(configPath, []byte("[features]\nhooks = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManagerWithHome(home)
+	if _, err := m.Install(ProviderCodex); err != nil {
+		t.Fatalf("Install codex: %v", err)
+	}
+	var config map[string]any
+	decode(t, path, &config)
+	hooks := config["hooks"].(map[string]any)
+	for _, event := range codexHookEvents {
+		if !wiringContains(arrayOf(hooks[event]), "solco-codex-hook.sh") {
+			t.Errorf("event %s not wired", event)
+		}
+	}
+	if pre := arrayOf(hooks["PreToolUse"]); len(pre) != 2 || !wiringContains(pre, "rtk hook codex") {
+		t.Fatalf("PreToolUse = %v, want the foreign hook kept beside ours", pre)
+	}
+	// Our entry sits after the foreign one in PreToolUse (group 1) and after
+	// Herdr's in SessionStart (group 1); the other events start at group 0.
+	row := findRow(t, m.Diagnose(), ProviderCodex)
+	if row.State != StateNeedsApproval || row.Actionable() {
+		t.Fatalf("untrusted row = %+v, want needs-approval with no Solco action", row)
+	}
+
+	// Codex's own trust records, written when the user approves in /hooks.
+	trust := ""
+	for _, key := range []string{
+		path + ":session_start:1:0", path + ":pre_tool_use:1:0", path + ":post_tool_use:0:0",
+		path + ":permission_request:0:0", path + ":stop:0:0",
+	} {
+		trust += "[hooks.state.\"" + key + "\"]\ntrusted_hash = \"sha256:x\"\n\n"
+	}
+	// One hook still missing its record keeps the row waiting.
+	partial := strings.Replace(trust, "[hooks.state.\""+path+":stop:0:0\"]\ntrusted_hash = \"sha256:x\"\n\n", "", 1)
+	if err := os.WriteFile(configPath, []byte("[features]\nhooks = true\n\n"+partial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if row := findRow(t, m.Diagnose(), ProviderCodex); row.State != StateNeedsApproval || !strings.Contains(row.Detail, "Stop") {
+		t.Fatalf("partial trust row = %+v, want needs-approval naming Stop", row)
+	}
+	if err := os.WriteFile(configPath, []byte("[features]\nhooks = true\n\n"+trust), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if row := findRow(t, m.Diagnose(), ProviderCodex); row.State != StateOK {
+		t.Fatalf("trusted row = %+v, want ok", row)
+	}
+	// config.toml is Codex's: installing never rewrote it.
+	if got, _ := os.ReadFile(configPath); !strings.HasSuffix(string(got), trust) {
+		t.Fatal("config.toml changed")
+	}
+}
+
+func TestCodexHookScriptIgnoresAnInheritedParentThread(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	dir, err := os.MkdirTemp("/tmp", "solco-hook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	listener, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	script := filepath.Join(dir, "hook.sh")
+	if err := os.WriteFile(script, []byte(hookScriptTemplate), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(thread string) bool {
+		got := make(chan struct{}, 1)
+		go func() {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+			got <- struct{}{}
+		}()
+		cmd := exec.Command("sh", script, "codex")
+		cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"child"}`)
+		cmd.Env = append(os.Environ(), "HERDR_PANE_ID=p1", "SOLCO_SOCKET_PATH="+sock, "HERDR_ENV=0", "CODEX_THREAD_ID="+thread)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		select {
+		case <-got:
+			return true
+		case <-time.After(1500 * time.Millisecond):
+			// unblock the pending Accept for the next run
+			if c, err := net.Dial("unix", sock); err == nil {
+				c.Close()
+			}
+			return false
+		}
+	}
+	if run("parent") {
+		t.Fatal("an event from a child codex inheriting its parent's thread id must not report")
+	}
+	if !run("child") {
+		t.Fatal("an event whose session is the pane's own thread must report")
+	}
+}
+
+// Cursor also runs ~/.claude/settings.json hooks with its own payload; the
+// Claude copy must stay silent there (Cursor's own copy reports instead).
+func TestClaudeHookScriptIgnoresCursorPayloads(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	dir, err := os.MkdirTemp("/tmp", "solco-hook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	listener, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	script := filepath.Join(dir, "hook.sh")
+	if err := os.WriteFile(script, []byte(hookScriptTemplate), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reports := func(payload string) bool {
+		got := make(chan struct{}, 1)
+		go func() {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+			got <- struct{}{}
+		}()
+		cmd := exec.Command("sh", script, "claude")
+		cmd.Stdin = strings.NewReader(payload)
+		cmd.Env = append(os.Environ(), "HERDR_PANE_ID=p1", "SOLCO_SOCKET_PATH="+sock, "HERDR_ENV=0")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		select {
+		case <-got:
+			return true
+		case <-time.After(1500 * time.Millisecond):
+			if c, err := net.Dial("unix", sock); err == nil {
+				c.Close()
+			}
+			return false
+		}
+	}
+	if reports(`{"hook_event_name":"stop","session_id":"s","cursor_version":"2026.10.22"}`) {
+		t.Fatal("Claude's hook reported for a Cursor payload")
+	}
+	if !reports(`{"hook_event_name":"Stop","session_id":"s"}`) {
+		t.Fatal("Claude's hook stayed silent for a real Claude payload")
+	}
 }

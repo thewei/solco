@@ -1,9 +1,9 @@
 package nativeui
 
 /**
- * [INPUT]: app.SessionStarter（桌面与手机共用的「启动新会话」服务层：Kinds / StartSession）、Shell.recentLaunchKinds（MRU，随 settings.Session 持久）、herdr.Manager.Projection
- * [OUTPUT]: 提供 Tab 条的「+」菜单按钮（newTabControl）：点 + 总是弹菜单（Terminal 在前，其后 MRU 排序的 Agent，上次用的标 last used）；⌘T/侧栏行 + 仍用 lastLaunchKind；选 Agent 直接经 SessionStarter 默认参数启动，Settings 默认 Chat 时待新 pane 的 Agent 卡出现即进入 Chat（空会话邀请态，会话身份由 Chat 渲染路径/hook 之后补绑；completeAgentOpen，不再经空白 draft）；orderLaunchKinds / rememberLaunchKind / startNewTab
- * [POS]: 新建 Tab 选 Agent 的唯一入口（2026-11-01 用户拍板，design: designs/ux-audit-4 议题 7，v1 不含 split-with-Agent）；Agent 走既有 launch transaction（与 Continue、手机 launch 同一个 SessionStarter），不造第二条启动路径；种类清单在后台读取，渲染路径不做 IO
+ * [INPUT]: app.SessionStarter（桌面与手机共用的「启动新会话」服务层：Kinds / StartSession）、agent.PermissionFullAccess、Shell.recentLaunchKinds（MRU，随 settings.Session 持久）、herdr.Manager.Projection
+ * [OUTPUT]: 提供 Tab 条与侧栏的「+」菜单按钮（newTabControl / newTabMenu）：点 + 总是弹菜单（Terminal 在前，其后 MRU 排序的 Agent，上次用的标 last used；Antigravity CLI 默认传参全部权限）；⌘T/侧栏行 + 仍用 lastLaunchKind；选 Agent 直接经 SessionStarter 默认参数启动，Settings 默认 Chat 时待新 pane 的 Agent 卡出现即进入 Chat（空会话邀请态，会话身份由 Chat 渲染路径/hook 之后补绑；completeAgentOpen，不再经空白 draft）；orderLaunchKinds / rememberLaunchKind / startNewTab
+ * [POS]: 新建 Tab/Pane 选 Agent 的唯一入口（2026-11-01 用户拍板，design: designs/ux-audit-4 议题 7，v1 不含 split-with-Agent；2026-11-02 增 Antigravity CLI 默认全权限）；Agent 走既有 launch transaction（与 Continue、手机 launch 同一个 SessionStarter），不造第二条启动路径；种类清单在后台读取，渲染路径不做 IO
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
@@ -176,6 +177,9 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 		WorkspaceID: project.ID,
 		CWD:         project.CWD,
 		Agent:       history.AgentID(kind.ID),
+	}
+	if spec.Agent == history.AgentAntigravity {
+		spec.Permission = agent.PermissionFullAccess
 	}
 	s.dispatch(func() {
 		result, err := starter.StartSession(context.Background(), instance, spec)

@@ -49,9 +49,9 @@ func NormalizeStatus(raw string) string {
 	switch s {
 	case "blocked", "waiting", "permission_request", "ask_user_question", "permissionrequest", "askuserquestion":
 		return "blocked"
-	case "working", "busy", "running", "pre_tool_use", "post_tool_use", "user_prompt_submit", "pretooluse", "posttooluse", "userpromptsubmit":
+	case "working", "busy", "running", "pre_tool_use", "post_tool_use", "user_prompt_submit", "pretooluse", "posttooluse", "userpromptsubmit", "pre_invocation", "preinvocation":
 		return "working"
-	case "idle", "session_start", "pre_invocation", "stop", "session_idle", "sessionstart", "preinvocation":
+	case "idle", "session_start", "stop", "session_idle", "sessionstart":
 		return "idle"
 	case "done", "complete", "completed":
 		return "done"

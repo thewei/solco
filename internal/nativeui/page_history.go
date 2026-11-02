@@ -496,27 +496,36 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 			selectionMark(c, selected)
 		}
 		agentTile(c, summary.Meta.Agent, 24)
-		ui.Column(c).Grow(1).MinWidth(0).Gap(2).PassThrough().Children(func() {
-			live, isLive := s.liveSessionFor(summary.Meta)
-			ui.Row(c).FillWidth().MinWidth(0).Gap(sp.S).AlignItems(ui.Center).PassThrough().Children(func() {
-				tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0), title).PassThrough()
-				if isLive && !s.hist.showTrash {
-					statusPill(c, liveSessionLabel(live.State), liveSessionTone(live.State))
-				}
-			})
-			if facts := sessionFactLine(summary.Meta, s.hist.provider == ""); facts != "" {
-				if isLive && live.Where != "" && !s.hist.showTrash {
-					facts = "in " + live.Where + " · " + facts
-				}
-				ui.Text(c, facts).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").PassThrough()
-			}
-		})
 		// Continue, ⓘ and ⋯ take the room between the title and the figures,
 		// so neither the token total nor the date moves when the pointer
-		// enters the row.
-		if !s.hist.showTrash && !selecting && (open || row.Hovered()) {
-			s.sessionRowActions(c, summary.Meta, open, menu)
+		// enters the row. The ⋯ stays built (zero width) while hidden, so a
+		// choice made with the pointer on its popup still lands; the gap
+		// exists only while the strip shows.
+		actions := !s.hist.showTrash && !selecting && (open || row.Hovered())
+		gap := float32(0)
+		if actions {
+			gap = sp.L
 		}
+		ui.Row(c).Grow(1).MinWidth(0).Gap(gap).AlignItems(ui.Center).PassThrough().Children(func() {
+			ui.Column(c).Grow(1).MinWidth(0).Gap(2).PassThrough().Children(func() {
+				live, isLive := s.liveSessionFor(summary.Meta)
+				ui.Row(c).FillWidth().MinWidth(0).Gap(sp.S).AlignItems(ui.Center).PassThrough().Children(func() {
+					tipped(c, ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0), title).PassThrough()
+					if isLive && !s.hist.showTrash {
+						statusPill(c, liveSessionLabel(live.State), liveSessionTone(live.State))
+					}
+				})
+				if facts := sessionFactLine(summary.Meta, s.hist.provider == ""); facts != "" {
+					if isLive && live.Where != "" && !s.hist.showTrash {
+						facts = "in " + live.Where + " · " + facts
+					}
+					ui.Text(c, facts).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").PassThrough()
+				}
+			})
+			if !s.hist.showTrash && !selecting {
+				s.sessionRowActions(c, summary.Meta, open, actions, menu)
+			}
+		})
 		// The token total keeps its slot even when unknown, so the dates
 		// below it stay on one vertical line.
 		ui.Column(c).Width(historyMetricWidth).Shrink(0).AlignItems(ui.End).Gap(2).PassThrough().Children(func() {

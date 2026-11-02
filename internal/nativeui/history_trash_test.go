@@ -714,3 +714,30 @@ func trashItemFixture(id, title string) sessiontrash.Item {
 		}},
 	}
 }
+
+// TestRowMenuDeliversAwayFromTheRow pins MyGo's rule that a popup's choice is
+// delivered to the element that opened it: the row's ⋯ only exists while the
+// pointer is on the row, so a choice made after the pointer travelled into the
+// popup must still land (the row keeps the button while its menu is open).
+func TestRowMenuDeliversAwayFromTheRow(t *testing.T) {
+	f := newTrashFixture(t)
+	tester := f.page()
+	title, ok := tester.Find("Tighten sidebar spacing")
+	if !ok {
+		t.Fatalf("row missing; texts=%q", tester.Texts())
+	}
+	tester.Move(title.X+title.W/2, title.Y+title.H/2)
+	tester.Frame()
+	if err := tester.Click("More actions for Tighten sidebar spacing"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	tester.Move(1150, 780)
+	if err := tester.ChooseMenuItem("Open"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if got := f.shell.router.Path(); got != "/history/"+trashKeySpacing {
+		t.Fatalf("route after the away-choice = %q, want the session's page", got)
+	}
+}

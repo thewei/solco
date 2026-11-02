@@ -258,9 +258,10 @@ func TestIsGeneratedAgentName(t *testing.T) {
 // "claude-code".
 func TestHerdrAgentKindUsesHerdrIDs(t *testing.T) {
 	for provider, want := range map[history.AgentID]string{
-		history.AgentClaudeCode: "claude",
-		history.AgentCodex:      "codex",
-		history.AgentPi:         "pi",
+		history.AgentClaudeCode:  "claude",
+		history.AgentAntigravity: "agy",
+		history.AgentCodex:       "codex",
+		history.AgentPi:          "pi",
 	} {
 		if got := HerdrAgentKind(provider); got != want {
 			t.Errorf("HerdrAgentKind(%s) = %q, want %q", provider, got, want)
@@ -396,6 +397,18 @@ func TestTransactionStartupArgsAndPlanKeysParity(t *testing.T) {
 	}
 	if got := AgentStartupArgs(history.AgentGemini, LaunchModeBuild, PermissionFullAccess); !equalArgs(got, []string{"--approval-mode=auto-edit"}) {
 		t.Fatalf("gemini args = %v", got)
+	}
+	if got := AgentStartupArgs(history.AgentAntigravity, LaunchModeBuild, PermissionFullAccess); !equalArgs(got, []string{"--dangerously-skip-permissions"}) {
+		t.Fatalf("antigravity full-access args = %v", got)
+	}
+	if got := AgentStartupArgs(history.AgentAntigravity, LaunchModeBuild, PermissionAutoApprove); !equalArgs(got, []string{"--dangerously-skip-permissions"}) {
+		t.Fatalf("antigravity auto-approve args = %v", got)
+	}
+	if got := AgentStartupArgs(history.AgentAntigravity, LaunchModePlan, PermissionFullAccess); !equalArgs(got, []string{"--mode", "plan", "--dangerously-skip-permissions"}) {
+		t.Fatalf("antigravity plan full-access args = %v", got)
+	}
+	if got := AgentStartupArgs(history.AgentAntigravity, LaunchModeBuild, PermissionAskApproval); got != nil {
+		t.Fatalf("antigravity ask-approval args = %v, want nil", got)
 	}
 	if got := PostLaunchPlanKeys(history.AgentCodex); !equalArgs(got, []string{"shift+tab"}) {
 		t.Fatalf("codex plan keys = %v", got)

@@ -12,7 +12,7 @@ import (
 /**
  * [INPUT]: 一个会话 transcript 的路径（Herdr agent_session 身份解析出的 path）与 Provider
  * [OUTPUT]: Subagent、SubagentsFor（该会话派出的子代理清单：类型/说明/子 transcript 路径/父调用链接键/最近写入时间）、ClaudeSubagents、Subagent.Active
- * [POS]: 侧栏 Agents 树、Header 弹层、Chat 子代理卡片与抽屉的只读数据源（2026-10-30 用户拍板，2026-10-31 扩到 omp/Codex，design: designs/agent-surfaces、designs/subagents）：Herdr 没有父子关系，只读各 Provider 自己落盘的文件——Claude `<会话>/subagents/agent-*.jsonl|.meta.json`、omp `<会话目录>/<名>.jsonl`（头部 parentSession）、Codex 独立 rollout（session_meta.source.subagent.thread_spawn）；三种布局都是未文档化实现细节，变了就读不到、静默退化为平铺。只读、不落盘、清单本身不解析对话内容
+ * [POS]: 侧栏 Agents 树、Header 弹层、Chat 子代理卡片与抽屉的只读数据源（2026-10-30 用户拍板，2026-10-31 扩到 omp/Codex/pi/Antigravity，design: designs/agent-surfaces、designs/subagents）：Herdr 没有父子关系，只读各 Provider 自己落盘的文件——Claude `<会话>/subagents/agent-*.jsonl|.meta.json`、omp `<会话目录>/<名>.jsonl`（头部 parentSession）、Codex 独立 rollout（session_meta.source.subagent.thread_spawn）、Antigravity `conversation_summaries.db`（parent_conversation_id）；只读、不落盘、清单本身不解析对话内容
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -95,6 +95,8 @@ func SubagentsFor(provider AgentID, sessionPath string) []Subagent {
 		return codexSubagents(sessionPath)
 	case AgentPi:
 		return piSubagents(sessionPath)
+	case AgentAntigravity:
+		return agySubagents(sessionPath)
 	default:
 		return nil
 	}
@@ -175,10 +177,10 @@ func ClaudeSubagents(sessionPath string) []Subagent {
 }
 
 // HasSubagents reports whether a provider has a sub-agent layout Solco reads
-// (every Chat provider except Cursor Agent and Antigravity).
+// (every Chat provider except Cursor Agent).
 func HasSubagents(provider AgentID) bool {
 	switch provider {
-	case AgentClaudeCode, AgentOMP, AgentCodex, AgentPi:
+	case AgentClaudeCode, AgentOMP, AgentCodex, AgentPi, AgentAntigravity:
 		return true
 	}
 	return false

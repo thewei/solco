@@ -9,8 +9,8 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 mygo/ui 的 ButtonBase、Spinner，agent_visual 的品牌 mark 与状态点、git_meta 的 git 事实
- * [OUTPUT]: 对外提供 Shell.agentCardRow（侧栏 Agents 区与 Agent 活动浮层共享的两行卡片，可选行尾控件）与 agentCardTextInset（卡片文字起点，卡片下方的说明行对齐用）；第一行 = 会话标题（agentCardLabel 以标题为主名，多卡同项目时 a11y 标签追项目消歧），第二行 = 项目名 + git 事实（同一 muted 样式）
+ * [INPUT]: 依赖 mygo/ui 的 ButtonBase、Spinner，agent_visual 的品牌 mark 与状态点、git_meta 的 git 事实、gorexIconButton 与 iconCheck
+ * [OUTPUT]: 对外提供 Shell.agentCardRow（侧栏 Agents 区与 Agent 活动浮层共享的两行卡片，可选行尾控件）、Shell.agentReviewAction（共享的 Mark Reviewed 尾部勾号动作按钮）与 agentCardTextInset（卡片文字起点，卡片下方的说明行对齐用）；第一行 = 会话标题（agentCardLabel 以标题为主名，多卡同项目时 a11y 标签追项目消歧），第二行 = 项目名 + git 事实（同一 muted 样式）
  * [POS]: Agent 卡片的唯一呈现实现（2026-10-07；2026-10-30 用户拍板：标题上移第一行、项目名下到第二行，推翻 F118 的「项目名即标题」）：品牌 mark + 角落状态点 + 标题行 + 项目/事实行；工作中卡片尾随 Spinner（card.Working，与目录 Working 桶同一语义）；点击语义留给调用方
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -127,6 +127,22 @@ func (s *Shell) agentCardRow(c *ui.Context, card agent.AgentCardModel, selected 
 		})
 	})
 	return row
+}
+
+// agentReviewAction renders the shared "Mark Reviewed" check button at the trailing
+// edge of an Agent card row when the card is in ReviewPending state.
+// If onReviewed is non-nil, it is called after markAgentReviewed finishes.
+func (s *Shell) agentReviewAction(c *ui.Context, card agent.AgentCardModel, onReviewed func()) {
+	if !card.ReviewPending {
+		return
+	}
+	k := gorexColorsOf(c.Theme().Dark)
+	if gorexIconButton(c, k, iconCheck, "Mark Reviewed", "Mark Reviewed", false, gorexRowBtn, gorexRowGlyph).Clicked() {
+		s.markAgentReviewed(card.Key)
+		if onReviewed != nil {
+			onReviewed()
+		}
+	}
 }
 
 // agentFactsView renders the git facts of the card's Pane cwd with

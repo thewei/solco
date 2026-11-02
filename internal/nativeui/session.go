@@ -82,12 +82,18 @@ func (s *Shell) persistableAgentFolds() []string {
 	if s.loading || s.activeIsRemote() || len(s.projection.Projects) == 0 {
 		return keys
 	}
-	live := make(map[string]bool, len(s.projection.Projects))
+	live := make(map[string]bool, len(s.projection.Projects)+10)
 	for _, project := range s.projection.Projects {
 		live[agentFoldKey("group", project.ID)] = true
 	}
 	for _, card := range s.workbenchCards() {
 		live[subagentFoldKey(card)] = true
+	}
+	for _, key := range []string{
+		"time:today", "time:yesterday", "time:week", "time:earlier",
+		"status:attention", "status:working", "status:review", "status:idle", "status:resolved",
+	} {
+		live[agentFoldKey("group", key)] = true
 	}
 	return slices.DeleteFunc(keys, func(key string) bool { return !live[key] })
 }
@@ -140,8 +146,10 @@ func (s *Shell) captureSession() settings.SessionSettings {
 		RightPanelWidth:   s.rightPanel.width,
 		RecentFiles:       s.recentFiles,
 		RecentHosts:       s.recentHosts,
-		RecentLaunchKinds: s.recentLaunchKinds,
-		AgentsSort:        s.agentsSort,
+		RecentLaunchKinds:   s.recentLaunchKinds,
+		AgentsSort:          s.agentsSort,
+		AgentsSortByTime:    s.agentsSortByTime,
+		AgentsSortAscending: s.agentsSortAscending,
 	}
 	livePrefix := s.activeInstance + "/"
 	for key, entry := range s.hookIdentities {
@@ -229,6 +237,8 @@ func (s *Shell) restoreSession() {
 	s.recentHosts = append([]string(nil), session.RecentHosts...)
 	s.recentLaunchKinds = append([]string(nil), session.RecentLaunchKinds...)
 	s.agentsSort = string(normalizeAgentSort(session.AgentsSort))
+	s.agentsSortByTime = session.AgentsSortByTime
+	s.agentsSortAscending = session.AgentsSortAscending
 	s.restoreSessionHooks(session)
 	s.projectsOpen = session.ProjectsOpen
 	s.agentsOpen = session.AgentsOpen

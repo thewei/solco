@@ -136,6 +136,8 @@ func hookNote(hook *agenthooks.Diagnosis) string {
 		return "Update to keep live status working"
 	case agenthooks.StateNotInstalled:
 		return "Install to show live status"
+	case agenthooks.StateNeedsApproval:
+		return "Trust it once in Codex (/hooks) to turn live status on"
 	case agenthooks.StateError:
 		return hook.Detail
 	default:

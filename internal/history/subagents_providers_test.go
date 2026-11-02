@@ -1,6 +1,7 @@
 package history
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -231,5 +232,78 @@ func TestSubagentStoppedNeedsTheProviderInterruptMarker(t *testing.T) {
 	}
 	if !byName["A"].Stopped || !byName["A"].Ended || byName["D"].Stopped || !byName["D"].Ended {
 		t.Fatalf("codex A=%+v D=%+v", byName["A"], byName["D"])
+	}
+}
+
+func TestAgySubagentsFollowsParentConversationAndSummaries(t *testing.T) {
+	home := t.TempDir()
+	brain := filepath.Join(home, ".gemini", "antigravity-cli", "brain")
+	parentID := "conv-parent"
+	parentPath := agyTranscriptFile(brain, parentID)
+	writeFile(t, parentPath, testAgyJSONL)
+
+	child1Path := agyTranscriptFile(brain, "child-1")
+	writeFile(t, child1Path, testAgyJSONL)
+
+	child2Path := filepath.Join(brain, "child-2", ".system_generated", "logs", "transcript.jsonl")
+	writeFile(t, child2Path, testAgyJSONL)
+
+	dbPath := agySummaryDB(brain)
+	writeFile(t, dbPath, "fake-db")
+
+	if !HasSubagents(AgentAntigravity) {
+		t.Fatal("HasSubagents(AgentAntigravity) must be true")
+	}
+
+	enc := func(parts ...string) string {
+		out := make([]string, len(parts))
+		for i, part := range parts {
+			if i == 4 || i == 6 {
+				// killed and nesting_depth are raw numbers
+				out[i] = part
+			} else {
+				out[i] = hex.EncodeToString([]byte(part))
+			}
+		}
+		return strings.Join(out, "|") + "\n"
+	}
+
+	prev := agySQLiteRunner
+	agySQLiteRunner = func(uri, script string) ([]byte, error) {
+		// Mock sqlite output:
+		// hex(conversation_id)|hex(title)|hex(agent_name)|hex(status)|killed|hex(last_modified_time)|nesting_depth
+		res := enc("child-1", "Alpha Scout", "scout", "CASCADE_RUN_STATUS_RUNNING", "0", "2026-11-02 07:00:00+00:00", "1") +
+			enc("child-2", "Beta Worker", "coder", "CASCADE_RUN_STATUS_IDLE", "1", "2026-11-02 06:30:00+00:00", "1")
+		return []byte(res), nil
+	}
+	t.Cleanup(func() { agySQLiteRunner = prev })
+
+	subs := SubagentsFor(AgentAntigravity, parentPath)
+	if len(subs) != 2 {
+		t.Fatalf("got %d subagents, want 2: %+v", len(subs), subs)
+	}
+
+	byID := map[string]Subagent{}
+	for _, s := range subs {
+		byID[s.ID] = s
+	}
+
+	c1, ok1 := byID["child-1"]
+	if !ok1 || c1.Type != "scout" || c1.Name != "scout" || c1.Description != "Alpha Scout" || c1.Ended || c1.Stopped || c1.Provider != AgentAntigravity {
+		t.Fatalf("child-1 mismatch: %+v", c1)
+	}
+
+	c2, ok2 := byID["child-2"]
+	if !ok2 || c2.Type != "coder" || c2.Name != "coder" || c2.Description != "Beta Worker" || !c2.Ended || !c2.Stopped || c2.Provider != AgentAntigravity {
+		t.Fatalf("child-2 mismatch: %+v", c2)
+	}
+
+	// ReadSubagent works for Antigravity subagents too
+	detail, err := ReadSubagent(AgentAntigravity, child1Path)
+	if err != nil {
+		t.Fatalf("ReadSubagent(AgentAntigravity) error: %v", err)
+	}
+	if detail.Result != "done." || len(detail.Messages) == 0 {
+		t.Fatalf("ReadSubagent unexpected detail: %+v", detail)
 	}
 }

@@ -1,8 +1,8 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 Shell 当前 Router/Workspace/Agent 投影、共享 agentCardRow 和 native Quick Panel
- * [OUTPUT]: 提供 Sidebar 的顶部视图标签条（Terminal/Changes/Sessions/Files/Hosts 五个等宽图标标签，Settings 路由不渲染）、Workspace 树、Git 引用导航、Sessions（项目头 + 范围行）/Settings 导航、Settings 的底部 Back 与其余所有路由的底部标准页脚（设备/会话切换芯片 deviceSwitcher + Settings 钮，Terminal/Sessions/Files/Hosts/Changes 共用）与 Agent 行点击/右键动作；Agents 区排序（头部悬停排序图标 → By Group/By Time/By Status 菜单，随 settings.Session.AgentsSort 持久；group 模式组行悬停 "+" 走 Tab 条同款 startNewTab）
+ * [INPUT]: 依赖 Shell 当前 Router/Workspace/Agent 投影、共享 agentCardRow/agentReviewAction 和 native Quick Panel
+ * [OUTPUT]: 提供 Sidebar 的顶部视图标签条（Terminal/Changes/Sessions/Files/Hosts 五个等宽图标标签，Settings 路由不渲染）、Workspace 树、Git 引用导航、Sessions（项目头 + 范围行）/Settings 导航、Settings 的底部 Back 与其余所有路由的底部标准页脚（设备/会话切换芯片 deviceSwitcher + Settings 钮，Terminal/Sessions/Files/Hosts/Changes 共用）与 Agent 行点击/聚焦取消 Review/右键动作（含 Mark Reviewed）；Agents 区排序（头部悬停排序图标 → By Workspace/By Time/By Status 分组菜单，下附 Sort by Updated Time 勾选与升降序切换，默认按 Pane 顺序排序，随 settings.Session.AgentsSort/AgentsSortByTime/AgentsSortAscending 持久；Workspace 分组模式组行悬停 "+" 走 Tab 条同款 startNewTab）
  * [POS]: 唯一左栏宿主，Git 引用树由 git_sidebar_tree 负责，Agent 详情复用 Quick Panel；视图切换在栏顶标签条（Settings 无），除 Settings 外全部路由共用页脚
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -608,55 +608,46 @@ func (s *Shell) agentItems(c *ui.Context) {
 	}
 	s.refreshSubagents() // throttled, background; keeps the nested rows live
 	dupProjects := duplicateAgentProjectLabels(cards)
+	paneOrder := s.paneOrderMap()
+
+	var groups []agentGroup
+	switch s.agentsSortMode() {
+	case agentSortTime:
+		groups = s.groupAgentCardsByTime(cards, paneOrder)
+	case agentSortStatus:
+		groups = s.groupAgentCardsByStatus(cards, paneOrder)
+	default:
+		groups = s.groupAgentCardsByWorkspace(cards, paneOrder)
+	}
+
 	// One Tab stop for the whole list; ↑/↓ walk the rows, ←/→ fold and unfold
 	// a group or a parent's sub-agents (list_nav.go).
 	s.navList(c, &s.nav.agents, false, ui.Column(c).FillWidth(), func() {
-		switch s.agentsSortMode() {
-		case agentSortTime:
-			// Flat, the Agent that worked last first.
-			for _, card := range agentCardsByTime(cards) {
-				s.agentCardItem(c, card, dupProjects, false, "")
-			}
-		case agentSortStatus:
-			// Flat in the directory's own order: needs you first.
-			for _, card := range cards {
-				s.agentCardItem(c, card, dupProjects, false, "")
-			}
-		default:
-			s.agentGroupItems(c, cards, dupProjects)
-		}
+		s.agentGroupItems(c, groups, dupProjects)
 	})
 }
 
-// agentGroupItems draws the grouped list — the default order: one faint
-// label per Workspace with its cards under it, and under the pointer the
-// group's "+", which starts a new Pane there through the Tab bar's own
-// flow (2026-11-02 user request).
-func (s *Shell) agentGroupItems(c *ui.Context, cards []agent.AgentCardModel, dupProjects map[string]bool) {
+// agentGroupItems draws the grouped list: Workspace, Time, or Status headers,
+// with foldable sections. Under Workspace mode, hover on the group header shows
+// "+" to start a new Pane in that project (2026-11-02).
+func (s *Shell) agentGroupItems(c *ui.Context, groups []agentGroup, dupProjects map[string]bool) {
 	s.ensureLaunchKinds() // the group "+" starts the kind last used, as ⌘T does
-	groups := groupAgentCards(cards)
+	isWorkspaceMode := s.agentsSortMode() == agentSortWorkspace
 	for _, group := range groups {
-		// The group's git facts (branch, files, +/-) are drawn once, at the
-		// label's right end, for the repository its first resolved card sits
-		// in; only a card in another repository keeps its own facts (2026-10-30
-		// UX audit 3, topic 1).
 		groupRoot, groupCWD := "", ""
-		for _, card := range group.Cards {
-			if root := s.agentGitRoot(card); root != "" {
-				groupRoot, groupCWD = root, s.agentCWD(card)
-				break
+		if isWorkspaceMode {
+			for _, card := range group.Cards {
+				if root := s.agentGitRoot(card); root != "" {
+					groupRoot, groupCWD = root, s.agentCWD(card)
+					break
+				}
 			}
 		}
 		foldKey := agentFoldKey("group", group.Key)
 		groupFolded := group.Name != "" && s.foldedAgents[foldKey]
 		if group.Name != "" {
-			// The label is the group's fold handle (2026-11-01). Folded, the
-			// right end swaps the git facts for the count and the state of
-			// the group's most urgent card (the cards arrive actionable-first),
-			// so a fold never hides an Agent that needs you. Under the pointer
-			// the right end is the group's "+" instead.
 			t := c.Theme()
-			project := s.groupProject(group)
+			project := group.Project
 			ui.Box(c.Key("agent-group-gap:" + group.Key)).Height(5).Shrink(0)
 			head := ui.ButtonBase(c.Key("agent-group:"+group.Key)).FillWidth().Height(24).Radius(treeRowRadius).
 				Padding(0, agentCardPadX, 0, 2).Gap(4).AlignItems(ui.Center).FocusRing(false).Label("Toggle " + group.Name)
@@ -678,10 +669,21 @@ func (s *Shell) agentGroupItems(c *ui.Context, cards []agent.AgentCardModel, dup
 					switch {
 					case groupFolded:
 						ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
-						statusIndicator(c, groupIndicatorState(group.Cards, time.Now()))
-					case groupRoot != "":
+						if group.State != opUnknown {
+							statusIndicator(c, group.State)
+						} else {
+							statusIndicator(c, groupIndicatorState(group.Cards, s.clock()))
+						}
+					case isWorkspaceMode && groupRoot != "":
 						branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
 						gitFactsView(c, branch, adds, dels, files, ok)
+					default:
+						ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+						if group.State != opUnknown {
+							statusIndicator(c, group.State)
+						} else {
+							statusIndicator(c, groupIndicatorState(group.Cards, s.clock()))
+						}
 					}
 				}
 				if project == nil {
@@ -735,7 +737,7 @@ func (s *Shell) agentGroupItems(c *ui.Context, cards []agent.AgentCardModel, dup
 			continue
 		}
 		for _, card := range group.Cards {
-			s.agentCardItem(c, card, dupProjects, group.Name != "", groupRoot)
+			s.agentCardItem(c, card, dupProjects, isWorkspaceMode, groupRoot)
 		}
 	}
 }
@@ -748,13 +750,16 @@ func (s *Shell) agentGroupItems(c *ui.Context, cards []agent.AgentCardModel, dup
 func (s *Shell) agentCardItem(c *ui.Context, card agent.AgentCardModel, dupProjects map[string]bool, grouped bool, groupRoot string) {
 	label, _ := agentCardLabel(card, dupProjects)
 	selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
-	row := s.agentCardRow(c, card, selected, dupProjects, grouped, grouped && groupRoot != "" && s.agentGitRoot(card) == groupRoot, nil)
+	row := s.agentCardRow(c, card, selected, dupProjects, grouped, grouped && groupRoot != "" && s.agentGitRoot(card) == groupRoot, func() {
+		s.agentReviewAction(c, card, nil)
+	})
 	subKey := subagentFoldKey(card)
 	if s.nav.agents.row(c, row, navRow{Key: "agent:" + strings.TrimPrefix(subKey, "sub:"), Folder: len(card.Subagents) > 0, Expanded: !s.subagentsFolded(card, time.Now())}) {
 		s.toggleSubagentFold(card)
 	}
 	row.FocusRing(false)
-	if s.nav.agents.showsCursor(row) {
+	if s.nav.agents.showsCursor(row) || row.Focused() {
+		s.markAgentReviewedIfPending(card.Key)
 		row.Background(designTokens(c.Theme().Dark).SidebarSelect)
 	}
 	if row.Clicked() {
@@ -771,6 +776,12 @@ func (s *Shell) agentCardItem(c *ui.Context, card agent.AgentCardModel, dupProje
 		if card.PaneID != "" {
 			s.paneOverflowItems(m, card.PaneID, label)
 		}
+		if card.ReviewPending {
+			m.Separator()
+			if m.Item("Mark Reviewed").Chosen() {
+				s.markAgentReviewed(card.Key)
+			}
+		}
 	})
 	// Sub-agents hang under the agent that spawned them, running or
 	// done; the card's chevron folds them. A row click opens the
@@ -781,17 +792,17 @@ func (s *Shell) agentCardItem(c *ui.Context, card agent.AgentCardModel, dupProje
 		func() { s.openChat(card) })
 }
 
-// agentGroup is one Workspace's cards in the sidebar Agents list.
+// agentGroup is one group of cards in the sidebar Agents list (grouped by
+// Workspace, Time, or Status).
 type agentGroup struct {
-	Key   string
-	Name  string
-	Cards []agent.AgentCardModel
+	Key     string
+	Name    string
+	Cards   []agent.AgentCardModel
+	Project *herdr.Project
+	State   operationalState
 }
 
-// groupAgentCards splits the (already actionable-first) cards by Workspace.
-// Groups keep the order their strongest card appears in, and each group
-// keeps the cards' order, so the list stays stable and the most urgent
-// Workspace leads.
+// groupAgentCards splits cards by Workspace; retained for backward compatibility.
 func groupAgentCards(cards []agent.AgentCardModel) []agentGroup {
 	var groups []agentGroup
 	at := map[string]int{}
@@ -808,34 +819,37 @@ func groupAgentCards(cards []agent.AgentCardModel) []agentGroup {
 	return groups
 }
 
-// agentSortMode is the sidebar Agents list's order (settings.Session.
+// agentSortMode is the sidebar Agents list's grouping mode (settings.Session.
 // AgentsSort).
 type agentSortMode string
 
 const (
-	agentSortGroup  agentSortMode = ""       // under their Workspace, the default
-	agentSortTime   agentSortMode = "time"   // last worked, newest first
-	agentSortStatus agentSortMode = "status" // the directory's needs-you-first order
+	agentSortWorkspace agentSortMode = "workspace"
+	agentSortGroup     agentSortMode = "" // alias / backward compatibility
+	agentSortTime      agentSortMode = "time"
+	agentSortStatus    agentSortMode = "status"
 )
 
-// agentSortModes is the sort menu's rows, in menu order.
+// agentSortModes is the sort menu's grouping rows, in menu order.
 var agentSortModes = []struct {
 	Mode  agentSortMode
 	Label string
 }{
-	{agentSortGroup, "By Group"},
+	{agentSortWorkspace, "By Workspace"},
 	{agentSortTime, "By Time"},
 	{agentSortStatus, "By Status"},
 }
 
 // normalizeAgentSort maps a stored sort onto a mode; anything unknown (an
-// old file, a typo) reads as the default.
+// old file, a typo) reads as the default (Workspace).
 func normalizeAgentSort(v string) agentSortMode {
 	switch agentSortMode(v) {
 	case agentSortTime, agentSortStatus:
 		return agentSortMode(v)
+	case agentSortWorkspace, "group", "":
+		return agentSortWorkspace
 	}
-	return agentSortGroup
+	return agentSortWorkspace
 }
 
 func (s *Shell) agentsSortMode() agentSortMode { return normalizeAgentSort(s.agentsSort) }
@@ -844,13 +858,312 @@ func (s *Shell) setAgentsSort(mode agentSortMode) { s.agentsSort = string(mode) 
 
 // agentSortMenu fills both of the Agents header's menus — the hover sort
 // icon's dropdown and the header's right-click menu; the checked row is the
-// current order.
+// current grouping mode, followed by an orthogonal toggle for sorting by updated time.
 func (s *Shell) agentSortMenu(m *ui.Menu) {
 	for _, opt := range agentSortModes {
 		if m.Item(opt.Label).Checked(s.agentsSortMode() == opt.Mode).Chosen() {
 			s.setAgentsSort(opt.Mode)
 		}
 	}
+	m.Separator()
+	if m.Item("Sort by Updated Time").Checked(s.agentsSortByTime).Chosen() {
+		s.agentsSortByTime = !s.agentsSortByTime
+	}
+	if s.agentsSortByTime {
+		if m.Item("Newest First").Checked(!s.agentsSortAscending).Chosen() {
+			s.agentsSortAscending = false
+		}
+		if m.Item("Oldest First").Checked(s.agentsSortAscending).Chosen() {
+			s.agentsSortAscending = true
+		}
+	}
+}
+
+// paneOrderMap builds a stable index for all panes based on their spatial
+// and hierarchical layout (Workspace -> Tab -> LayoutPane).
+func (s *Shell) paneOrderMap() map[string]int {
+	order := make(map[string]int, len(s.projection.Panes))
+	idx := 0
+	for _, prj := range s.projection.Projects {
+		for _, tab := range tabsForProject(s.projection, prj.ID) {
+			panes := panesForTab(s.projection, tab.ID)
+			sortPanesByLayout(s.projection, tab.ID, panes)
+			for _, p := range panes {
+				if _, ok := order[p.ID]; !ok {
+					order[p.ID] = idx
+					idx++
+				}
+			}
+		}
+	}
+	for _, p := range s.projection.Panes {
+		if _, ok := order[p.ID]; !ok {
+			order[p.ID] = idx
+			idx++
+		}
+	}
+	for _, a := range s.projection.Agents {
+		if a.PaneID != "" {
+			if _, ok := order[a.PaneID]; !ok {
+				order[a.PaneID] = idx
+				idx++
+			}
+		}
+	}
+	return order
+}
+
+// compareCardsByPaneOrder orders cards by the index of their owning pane,
+// falling back to title and key for deterministic tie-breaking.
+func compareCardsByPaneOrder(a, b agent.AgentCardModel, order map[string]int) int {
+	idxA, okA := order[a.PaneID]
+	idxB, okB := order[b.PaneID]
+	switch {
+	case okA && okB:
+		if idxA != idxB {
+			return idxA - idxB
+		}
+	case okA && !okB:
+		return -1
+	case !okA && okB:
+		return 1
+	}
+	if a.Title != b.Title {
+		if a.Title < b.Title {
+			return -1
+		}
+		return 1
+	}
+	if a.Key.TerminalID < b.Key.TerminalID {
+		return -1
+	}
+	if a.Key.TerminalID > b.Key.TerminalID {
+		return 1
+	}
+	return 0
+}
+
+// compareCardsByTime orders cards chronologically by LastActive.
+func compareCardsByTime(a, b agent.AgentCardModel, ascending bool) int {
+	if a.LastActive.IsZero() && b.LastActive.IsZero() {
+		return 0
+	}
+	if a.LastActive.IsZero() {
+		return 1
+	}
+	if b.LastActive.IsZero() {
+		return -1
+	}
+	if ascending {
+		switch {
+		case a.LastActive.Before(b.LastActive):
+			return -1
+		case a.LastActive.After(b.LastActive):
+			return 1
+		default:
+			return 0
+		}
+	}
+	switch {
+	case a.LastActive.After(b.LastActive):
+		return -1
+	case a.LastActive.Before(b.LastActive):
+		return 1
+	default:
+		return 0
+	}
+}
+
+// sortGroupCards orders cards within a single group according to the active
+// sort mode (update time or default pane order).
+func (s *Shell) sortGroupCards(cards []agent.AgentCardModel, paneOrder map[string]int) {
+	if s.agentsSortByTime {
+		slices.SortStableFunc(cards, func(a, b agent.AgentCardModel) int {
+			c := compareCardsByTime(a, b, s.agentsSortAscending)
+			if c != 0 {
+				return c
+			}
+			return compareCardsByPaneOrder(a, b, paneOrder)
+		})
+	} else {
+		slices.SortStableFunc(cards, func(a, b agent.AgentCardModel) int {
+			return compareCardsByPaneOrder(a, b, paneOrder)
+		})
+	}
+}
+
+// groupAgentCardsByWorkspace partitions cards by their Workspace (ProjectID).
+func (s *Shell) groupAgentCardsByWorkspace(cards []agent.AgentCardModel, paneOrder map[string]int) []agentGroup {
+	groupsByKey := make(map[string]*agentGroup)
+	var keysInOrder []string
+	for _, card := range cards {
+		key := card.ProjectID
+		g, exists := groupsByKey[key]
+		if !exists {
+			name := card.ProjectName
+			if name == "" {
+				name = "Workspace"
+			}
+			g = &agentGroup{Key: key, Name: name}
+			groupsByKey[key] = g
+			keysInOrder = append(keysInOrder, key)
+		}
+		g.Cards = append(g.Cards, card)
+	}
+
+	for _, g := range groupsByKey {
+		s.sortGroupCards(g.Cards, paneOrder)
+	}
+
+	groups := make([]agentGroup, 0, len(keysInOrder))
+	for _, k := range keysInOrder {
+		g := *groupsByKey[k]
+		g.Project = s.groupProject(g)
+		groups = append(groups, g)
+	}
+
+	if s.agentsSortByTime {
+		slices.SortStableFunc(groups, func(a, b agentGroup) int {
+			if len(a.Cards) == 0 || len(b.Cards) == 0 {
+				return len(b.Cards) - len(a.Cards)
+			}
+			return compareCardsByTime(a.Cards[0], b.Cards[0], s.agentsSortAscending)
+		})
+	} else {
+		slices.SortStableFunc(groups, func(a, b agentGroup) int {
+			if len(a.Cards) == 0 || len(b.Cards) == 0 {
+				return len(b.Cards) - len(a.Cards)
+			}
+			return compareCardsByPaneOrder(a.Cards[0], b.Cards[0], paneOrder)
+		})
+	}
+
+	return groups
+}
+
+// groupAgentCardsByTime partitions cards into time buckets: Today, Yesterday,
+// Last 7 Days, Earlier.
+func (s *Shell) groupAgentCardsByTime(cards []agent.AgentCardModel, paneOrder map[string]int) []agentGroup {
+	now := s.clock().Local()
+	day := func(t time.Time) time.Time { return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()) }
+	nowDay := day(now)
+
+	buckets := map[string][]agent.AgentCardModel{
+		"time:today":     nil,
+		"time:yesterday": nil,
+		"time:week":      nil,
+		"time:earlier":   nil,
+	}
+
+	for _, card := range cards {
+		if card.LastActive.IsZero() {
+			buckets["time:earlier"] = append(buckets["time:earlier"], card)
+			continue
+		}
+		at := card.LastActive.Local()
+		days := int(nowDay.Sub(day(at)).Hours()/24 + 0.5)
+		switch {
+		case days <= 0:
+			buckets["time:today"] = append(buckets["time:today"], card)
+		case days == 1:
+			buckets["time:yesterday"] = append(buckets["time:yesterday"], card)
+		case days < 7:
+			buckets["time:week"] = append(buckets["time:week"], card)
+		default:
+			buckets["time:earlier"] = append(buckets["time:earlier"], card)
+		}
+	}
+
+	defs := []struct {
+		Key   string
+		Label string
+	}{
+		{"time:today", "Today"},
+		{"time:yesterday", "Yesterday"},
+		{"time:week", "Last 7 Days"},
+		{"time:earlier", "Earlier"},
+	}
+
+	if s.agentsSortByTime && s.agentsSortAscending {
+		defs = []struct {
+			Key   string
+			Label string
+		}{
+			{"time:earlier", "Earlier"},
+			{"time:week", "Last 7 Days"},
+			{"time:yesterday", "Yesterday"},
+			{"time:today", "Today"},
+		}
+	}
+
+	var groups []agentGroup
+	for _, def := range defs {
+		bCards := buckets[def.Key]
+		if len(bCards) == 0 {
+			continue
+		}
+		s.sortGroupCards(bCards, paneOrder)
+		groups = append(groups, agentGroup{
+			Key:   def.Key,
+			Name:  def.Label,
+			Cards: bCards,
+		})
+	}
+	return groups
+}
+
+// agentCardStatusState maps an agent card onto its status group bucket.
+func agentCardStatusState(card agent.AgentCardModel) (key string, label string, state operationalState) {
+	switch {
+	case card.Attention == agent.OpNeedsAttention || card.RuntimePhase == agent.PhaseBlocked || card.RuntimePhase == agent.PhaseFailed:
+		return "status:attention", "Needs Attention", opNeedsAttention
+	case card.Working():
+		return "status:working", "Working", opWorking
+	case card.ReviewPending || card.Attention == agent.OpReadyForReview:
+		return "status:review", "Ready for Review", opReadyForReview
+	case card.Attention == agent.OpResolved:
+		return "status:resolved", "Resolved", opResolved
+	default:
+		return "status:idle", "Idle", opIdle
+	}
+}
+
+// groupAgentCardsByStatus partitions cards by their operational state:
+// Needs Attention, Working, Ready for Review, Idle, Resolved.
+func (s *Shell) groupAgentCardsByStatus(cards []agent.AgentCardModel, paneOrder map[string]int) []agentGroup {
+	buckets := map[string][]agent.AgentCardModel{}
+	for _, card := range cards {
+		k, _, _ := agentCardStatusState(card)
+		buckets[k] = append(buckets[k], card)
+	}
+
+	defs := []struct {
+		Key   string
+		Label string
+		State operationalState
+	}{
+		{"status:attention", "Needs Attention", opNeedsAttention},
+		{"status:working", "Working", opWorking},
+		{"status:review", "Ready for Review", opReadyForReview},
+		{"status:idle", "Idle", opIdle},
+		{"status:resolved", "Resolved", opResolved},
+	}
+
+	var groups []agentGroup
+	for _, def := range defs {
+		bCards := buckets[def.Key]
+		if len(bCards) == 0 {
+			continue
+		}
+		s.sortGroupCards(bCards, paneOrder)
+		groups = append(groups, agentGroup{
+			Key:   def.Key,
+			Name:  def.Label,
+			Cards: bCards,
+			State: def.State,
+		})
+	}
+	return groups
 }
 
 // agentCardsByTime orders the cards by when they last worked, newest first;

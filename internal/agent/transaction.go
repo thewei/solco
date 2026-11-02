@@ -1,5 +1,12 @@
 package agent
 
+/**
+ * [INPUT]: 依赖 history.AgentID, strings, filepath, fmt
+ * [OUTPUT]: LaunchIntent, AgentStartupArgs, HerdrAgentKind, BuildInitialPrompt, LaunchDisplayLabel, LaunchFingerprint, PostLaunchPlanKeys
+ * [POS]: internal/agent 的启动事务意图与参数推导层，负责不同 Agent 的 CLI 启动参数（模式/权限）及 Herdr Agent 种类映射（claude, agy 等）
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import (
 	"fmt"
 	"path/filepath"
@@ -76,6 +83,16 @@ func AgentStartupArgs(agent history.AgentID, mode LaunchMode, permission Permiss
 			approvalMode = "auto-edit"
 		}
 		return []string{"--approval-mode=" + approvalMode}
+	case history.AgentAntigravity:
+		var args []string
+		if mode == LaunchModePlan {
+			args = append(args, "--mode", "plan")
+		}
+		switch permission {
+		case PermissionAutoApprove, PermissionFullAccess:
+			args = append(args, "--dangerously-skip-permissions")
+		}
+		return args
 	default:
 		return nil
 	}
@@ -137,12 +154,16 @@ func LaunchFingerprint(intent LaunchIntent) string {
 }
 
 // HerdrAgentKind maps a provider onto the Herdr agent kind string: Herdr's own
-// id, which is the History id except for Claude Code ("claude").
+// id, which is the History id except for Claude Code ("claude") and Antigravity CLI ("agy").
 func HerdrAgentKind(agent history.AgentID) string {
-	if agent == history.AgentClaudeCode {
+	switch agent {
+	case history.AgentClaudeCode:
 		return "claude"
+	case history.AgentAntigravity:
+		return "agy"
+	default:
+		return string(agent)
 	}
-	return string(agent)
 }
 
 // suggestTaskTitle extracts a high-confidence task title from the prompt:

@@ -16,8 +16,8 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 mygo/plugins/terminal, mygo/ui, herdr, settings, gorex_style, brands 的 agentProvider/agentMark
- * [OUTPUT]: 对外提供 terminalCanvas, paneCard, paneCardHeader, paneStackInfo, paneLogoView, syncTerminals, closeAllTerminals, paneHeaderVisuals；画布内另渲染可拖拽的 split 分隔条（renderSplitDividers → splitGrowTarget/splitResizeAmount → resizePane），把拖拽解析成 Herdr pane.resize
+ * [INPUT]: 依赖 mygo/plugins/terminal, mygo/ui, herdr, settings, gorex_style, brands 的 agentProvider/agentMark、markAgentReviewedForPane 聚焦取消 Review
+ * [OUTPUT]: 对外提供 terminalCanvas, paneCard, paneCardHeader, paneStackInfo, paneLogoView, syncTerminals, closeAllTerminals, paneHeaderVisuals；画布内另渲染可拖拽的 split 分隔条（renderSplitDividers → splitGrowTarget/splitResizeAmount → resizePane），把拖拽解析成 Herdr pane.resize；终端聚焦时自动清除对应 Agent 的 Review 状态
  * [POS]: nativeui 的终端画布与 Gorex 窗格卡片主渲染器，管理活动的终端连接、最大化 Tab 的窗格数量角标、卡片拖拽放置（移动/拆分/交换）与窗格分栏拖拽调宽高（布局权威始终在 Herdr）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -504,8 +504,11 @@ func (s *Shell) paneCard(c *ui.Context, k *gorexColors, surface *terminalSurface
 			if surface.focused {
 				view.AutoFocus()
 			}
-			if view.Focused() && surface.paneID != s.selectedPaneID {
-				s.selectPane(surface.paneID)
+			if view.Focused() {
+				if surface.paneID != s.selectedPaneID {
+					s.selectPane(surface.paneID)
+				}
+				s.markAgentReviewedForPane(surface.paneID)
 			}
 		})
 		if dropAction != paneCardDropNone {

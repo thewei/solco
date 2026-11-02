@@ -26,6 +26,8 @@ type ProviderID string
 const (
 	ProviderClaude      ProviderID = "claude"
 	ProviderAntigravity ProviderID = "antigravity"
+	ProviderCursor      ProviderID = "cursor"
+	ProviderCodex       ProviderID = "codex"
 	ProviderAider       ProviderID = "aider"
 )
 
@@ -36,6 +38,10 @@ func (p ProviderID) DisplayName() string {
 		return "Claude Code"
 	case ProviderAntigravity:
 		return "Antigravity CLI"
+	case ProviderCursor:
+		return "Cursor"
+	case ProviderCodex:
+		return "Codex"
 	case ProviderAider:
 		return "Aider"
 	default:
@@ -51,7 +57,10 @@ const (
 	StateNotInstalled State = "not-installed"
 	StateOutdated     State = "outdated"
 	StateUnsupported  State = "unsupported"
-	StateError        State = "error"
+	// StateNeedsApproval: installed and wired, but the agent runs a hook only
+	// after the user trusts it (Codex). Solco cannot grant that and offers no action.
+	StateNeedsApproval State = "needs-approval"
+	StateError         State = "error"
 )
 
 // Diagnosis is one provider's reconciled hook row. Detail is composed
@@ -114,7 +123,17 @@ var claudeHookEvents = []string{"SessionStart", "PreToolUse", "PostToolUse", "Pe
 
 // antigravityHookEvents is the proven wiring set for Antigravity CLI,
 // grouped under the "solco-hook" owner key of ~/.gemini/config/hooks.json.
-var antigravityHookEvents = []string{"PreInvocation", "Stop"}
+var antigravityHookEvents = []string{"SessionStart", "PreInvocation", "PreToolUse", "PostToolUse", "Stop"}
+
+// cursorHookEvents is the wiring set for Cursor Agent (camelCase event names,
+// ~/.cursor/hooks.json). Cursor has no hook trust gate; the payload carries
+// conversation_id on every event, which the script reports as the session.
+var cursorHookEvents = []string{"sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse", "stop"}
+
+// codexHookEvents is the wiring set for Codex (~/.codex/hooks.json, the same
+// nested shape as Claude Code). Codex runs a hook only once the user trusts
+// it, so wiring alone is not "ok" (see codexUntrusted).
+var codexHookEvents = []string{"SessionStart", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop"}
 
 // antigravityOwnerKey is the hooks.json group this package owns. Foreign
 // groups (herdr, orca-status, …) are never touched.
@@ -132,6 +151,10 @@ func (m *Manager) spec(id ProviderID) (providerSpec, bool) {
 		return providerSpec{id: id, scriptName: "solco-claude-hook.sh", events: claudeHookEvents}, true
 	case ProviderAntigravity:
 		return providerSpec{id: id, scriptName: "solco-antigravity-hook.sh", events: antigravityHookEvents}, true
+	case ProviderCursor:
+		return providerSpec{id: id, scriptName: "solco-cursor-hook.sh", events: cursorHookEvents}, true
+	case ProviderCodex:
+		return providerSpec{id: id, scriptName: "solco-codex-hook.sh", events: codexHookEvents}, true
 	default:
 		return providerSpec{}, false
 	}
@@ -151,6 +174,18 @@ func (m *Manager) claudeSettingsPath() string {
 	return filepath.Join(m.home, ".claude", "settings.json")
 }
 
+func (m *Manager) codexHooksPath() string {
+	return filepath.Join(m.home, ".codex", "hooks.json")
+}
+
+func (m *Manager) codexConfigPath() string {
+	return filepath.Join(m.home, ".codex", "config.toml")
+}
+
+func (m *Manager) cursorHooksPath() string {
+	return filepath.Join(m.home, ".cursor", "hooks.json")
+}
+
 func (m *Manager) antigravityHooksPath() string {
 	return filepath.Join(m.home, ".gemini", "config", "hooks.json")
 }
@@ -164,7 +199,7 @@ func (m *Manager) socketPath() string {
 // Aider row that explains why it is not provisionable. Pure reads; safe
 // on route entry and manual refresh.
 func (m *Manager) Diagnose() []Diagnosis {
-	rows := []Diagnosis{m.diagnoseProvider(ProviderClaude), m.diagnoseProvider(ProviderAntigravity)}
+	rows := []Diagnosis{m.diagnoseProvider(ProviderClaude), m.diagnoseProvider(ProviderAntigravity), m.diagnoseProvider(ProviderCursor), m.diagnoseProvider(ProviderCodex)}
 	rows = append(rows, m.diagnoseAider())
 	return rows
 }
@@ -195,15 +230,20 @@ func (m *Manager) diagnoseProvider(id ProviderID) Diagnosis {
 	}
 	row.Version = version
 
-	wired, missing := m.wiringState(id, claudeHookEvents)
-	if id == ProviderAntigravity {
-		wired, missing = m.wiringState(id, antigravityHookEvents)
-	}
+	spec, _ := m.spec(id)
+	wired, missing := m.wiringState(id, spec.events)
 	row.Wired, row.Missing = wired, missing
 	if len(missing) > 0 && (row.State == StateOK || row.State == StateOutdated) {
 		// One Install action fixes script and wiring together, so any
 		// missing wiring presents as the same actionable state.
 		row.State = StateNotInstalled
+	}
+	if id == ProviderCodex && row.State == StateOK {
+		if untrusted := m.codexUntrusted(); len(untrusted) > 0 {
+			row.State = StateNeedsApproval
+			row.Detail = "Wired, but Codex runs a hook only after you trust it: open Codex and review hooks (/hooks); waiting on " + strings.Join(untrusted, ", ")
+			return row
+		}
 	}
 	row.Detail = m.describe(row)
 	return row
@@ -273,6 +313,14 @@ func (m *Manager) Install(id ProviderID) (Diagnosis, error) {
 		}
 	case ProviderAntigravity:
 		if err := m.wireAntigravity(); err != nil {
+			return Diagnosis{}, err
+		}
+	case ProviderCursor:
+		if err := m.wireCursor(); err != nil {
+			return Diagnosis{}, err
+		}
+	case ProviderCodex:
+		if err := m.wireCodex(); err != nil {
 			return Diagnosis{}, err
 		}
 	}
@@ -385,11 +433,22 @@ func (m *Manager) wireAntigravity() error {
 		if wiringContains(entries, filepath.Base(script)) {
 			continue
 		}
-		group[event] = append(entries, map[string]any{
-			"type":    "command",
-			"command": fmt.Sprintf("bash %s agy %s", shellQuote(script), event),
-			"timeout": json.Number("5"),
-		})
+		if event == "PreToolUse" || event == "PostToolUse" {
+			group[event] = append(entries, map[string]any{
+				"matcher": "*",
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": fmt.Sprintf("bash %s agy %s", shellQuote(script), event),
+					"timeout": json.Number("5"),
+				}},
+			})
+		} else {
+			group[event] = append(entries, map[string]any{
+				"type":    "command",
+				"command": fmt.Sprintf("bash %s agy %s", shellQuote(script), event),
+				"timeout": json.Number("5"),
+			})
+		}
 		changed = true
 	}
 	if enabled, ok := group["enabled"].(bool); !ok || !enabled {
@@ -397,6 +456,136 @@ func (m *Manager) wireAntigravity() error {
 		changed = true
 	}
 	root[antigravityOwnerKey] = group
+	if !changed {
+		return nil
+	}
+	return backupAndWriteJSON(path, root)
+}
+
+// wireCodex idempotently adds our command under each wanted event of
+// ~/.codex/hooks.json (nested {hooks:[{type,command,timeout}]} groups),
+// preserving every foreign hook. It never touches config.toml: trusting a
+// hook is the user's decision inside Codex.
+func (m *Manager) wireCodex() error {
+	path := m.codexHooksPath()
+	root, err := readJSONObject(path)
+	if err != nil {
+		return err
+	}
+	hooks := objectOf(root["hooks"])
+	changed := false
+	script := m.scriptPath(ProviderCodex)
+	command := fmt.Sprintf("bash %s codex", shellQuote(script))
+	for _, event := range codexHookEvents {
+		entries := arrayOf(hooks[event])
+		if wiringContains(entries, filepath.Base(script)) {
+			continue
+		}
+		hooks[event] = append(entries, map[string]any{
+			"hooks": []any{map[string]any{
+				"type":    "command",
+				"command": command,
+				"timeout": json.Number("10"),
+			}},
+		})
+		changed = true
+	}
+	root["hooks"] = hooks
+	if !changed {
+		return nil
+	}
+	return backupAndWriteJSON(path, root)
+}
+
+// codexUntrusted lists the wired events Codex has no trust record for. Codex
+// keeps one `[hooks.state."<hooks.json>:<snake_event>:<group>:<hook>"]` table
+// with a trusted_hash per approved hook in config.toml; only its presence is
+// read here (the hash itself is Codex's to compute and check).
+func (m *Manager) codexUntrusted() []string {
+	data, _ := os.ReadFile(m.codexConfigPath())
+	config := string(data)
+	root, err := readJSONObject(m.codexHooksPath())
+	if err != nil {
+		return nil
+	}
+	script := filepath.Base(m.scriptPath(ProviderCodex))
+	var untrusted []string
+	for _, event := range codexHookEvents {
+		for group, entry := range arrayOf(objectOf(root["hooks"])[event]) {
+			if !wiringContains([]any{entry}, script) {
+				continue
+			}
+			key := fmt.Sprintf("%s:%s:%d:0", m.codexHooksPath(), snakeCase(event), group)
+			if !tomlTableHas(config, `[hooks.state."`+key+`"]`, "trusted_hash") {
+				untrusted = append(untrusted, event)
+			}
+			break
+		}
+	}
+	sort.Strings(untrusted)
+	return untrusted
+}
+
+// snakeCase turns Codex's PascalCase event names into its state-key form
+// (PreToolUse -> pre_tool_use).
+func snakeCase(event string) string {
+	var b strings.Builder
+	for i, r := range event {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 {
+				b.WriteByte('_')
+			}
+			r += 'a' - 'A'
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// tomlTableHas reports whether the table headed by header carries key,
+// scanning lines until the next table header (no TOML dependency needed for
+// one presence check).
+func tomlTableHas(config, header, key string) bool {
+	in := false
+	for _, line := range strings.Split(config, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			in = line == header
+			continue
+		}
+		if in && strings.HasPrefix(line, key) {
+			return true
+		}
+	}
+	return false
+}
+
+// wireCursor idempotently adds our command under each wanted event of
+// ~/.cursor/hooks.json (flat {command} entries, `version` kept or set to 1),
+// preserving every foreign hook.
+func (m *Manager) wireCursor() error {
+	path := m.cursorHooksPath()
+	root, err := readJSONObject(path)
+	if err != nil {
+		return err
+	}
+	hooks := objectOf(root["hooks"])
+	changed := false
+	script := m.scriptPath(ProviderCursor)
+	command := fmt.Sprintf("bash %s cursor", shellQuote(script))
+	for _, event := range cursorHookEvents {
+		entries := arrayOf(hooks[event])
+		if wiringContains(entries, filepath.Base(script)) {
+			continue
+		}
+		hooks[event] = append(entries, map[string]any{"command": command})
+		changed = true
+	}
+	if _, ok := root["version"]; !ok {
+		root["version"] = json.Number("1")
+		changed = true
+	}
+	root["hooks"] = hooks
 	if !changed {
 		return nil
 	}
@@ -411,6 +600,10 @@ func (m *Manager) eventWired(id ProviderID, event string) bool {
 		data, err = os.ReadFile(m.claudeSettingsPath())
 	case ProviderAntigravity:
 		data, err = os.ReadFile(m.antigravityHooksPath())
+	case ProviderCursor:
+		data, err = os.ReadFile(m.cursorHooksPath())
+	case ProviderCodex:
+		data, err = os.ReadFile(m.codexHooksPath())
 	default:
 		return false
 	}
@@ -422,7 +615,7 @@ func (m *Manager) eventWired(id ProviderID, event string) bool {
 		return false
 	}
 	var entries []any
-	if id == ProviderClaude {
+	if id == ProviderClaude || id == ProviderCursor || id == ProviderCodex {
 		entries = arrayOf(objectOf(root["hooks"])[event])
 	} else {
 		entries = arrayOf(objectOf(root[antigravityOwnerKey])[event])

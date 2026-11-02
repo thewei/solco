@@ -76,10 +76,17 @@ type Shell struct {
 	// ("sub:<terminal id>"). Absent = open; persisted with the session.
 	foldedAgents map[string]bool
 
-	// agentsSort is the sidebar Agents list's order (settings.Session.
-	// AgentsSort): "" = by Workspace group, "time" = last worked first,
-	// "status" = needs-you first.
+	// agentsSort is the sidebar Agents list's grouping mode (settings.Session.
+	// AgentsSort): "" or "workspace" = by Workspace group, "time" = by time,
+	// "status" = by status.
 	agentsSort string
+	// agentsSortByTime toggles whether cards within groups are sorted by update time
+	// instead of the default Pane order.
+	agentsSortByTime bool
+	// agentsSortAscending is true for oldest-first when sorting by updated time.
+	agentsSortAscending bool
+	// clockFn overrides the time source in unit tests.
+	clockFn func() time.Time
 
 	// devices is the device switcher's local state (see device_state.go):
 	// panel/filter, per-machine failure/master/checking facts, the switch in
@@ -1021,4 +1028,11 @@ func (s *Shell) View(c *ui.Context) {
 		s.agentSwitcherOverlay(c)
 		s.commandCenterOverlay(c)
 	}
+}
+
+func (s *Shell) clock() time.Time {
+	if s.clockFn != nil {
+		return s.clockFn()
+	}
+	return time.Now()
 }

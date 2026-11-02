@@ -264,3 +264,100 @@ func TestPaneMenuOffersReleaseAgentForFinishedAgents(t *testing.T) {
 		t.Fatalf("working agent row must not offer Release Agent: %q", menu)
 	}
 }
+
+// TestSidebarAgentRowReviewActionAndMenu verifies that sidebar Agent rows
+// render the shared "Mark Reviewed" check button and right-click menu item
+// when ReviewPending is true, and clicking it clears the review marker.
+func TestSidebarAgentRowReviewActionAndMenu(t *testing.T) {
+	shell := workbenchTestShell(t)
+	shell.projection.Agents[0].Status = "done"
+	shell.reconcileWorkbench()
+
+	scoutKey := agent.AgentKey{InstanceID: "default", TerminalID: "term-1"}
+	if !shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("Scout must be ReviewPending after transitioning to done")
+	}
+
+	tester := ui.NewTester(shell.View, 1200, 800)
+	tester.Frame()
+
+	// Right click Scout in the sidebar: menu must offer Mark Reviewed.
+	if err := tester.RightClick("Scout"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tester.Menu()
+	if !containsText(menu, "Mark Reviewed") {
+		t.Fatalf("sidebar agent row menu %q missing Mark Reviewed", menu)
+	}
+	tester.CloseMenu()
+
+	// The trailing action button "Mark Reviewed" must be rendered.
+	if !tester.HasText("Mark Reviewed") {
+		t.Fatalf("sidebar agent row missing trailing 'Mark Reviewed' button; texts=%q", tester.Texts())
+	}
+
+	// Clicking the trailing check button clears ReviewPending.
+	if err := tester.Click("Mark Reviewed"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+
+	if shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("clicking Mark Reviewed must clear ReviewPending")
+	}
+	for _, card := range shell.workbenchCards() {
+		if card.Key == scoutKey && card.ReviewPending {
+			t.Fatal("reconciled card must reflect cleared ReviewPending")
+		}
+	}
+}
+
+// TestReviewPendingClearedOnPaneFocus verifies that when a pane or window
+// gains focus (selectPane / applyPaneSelection / terminal.View focus),
+// the corresponding agent's ReviewPending state is automatically cleared.
+func TestReviewPendingClearedOnPaneFocus(t *testing.T) {
+	shell := workbenchTestShell(t)
+	shell.projection.Agents[0].Status = "done"
+	shell.reconcileWorkbench()
+
+	scoutKey := agent.AgentKey{InstanceID: "default", TerminalID: "term-1"}
+	if !shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("Scout must be ReviewPending initially")
+	}
+
+	// Selecting the pane (e.g. user focused or switched to pane p1) clears review.
+	shell.selectPane("p1")
+
+	if shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("selecting pane must automatically clear ReviewPending")
+	}
+	for _, card := range shell.workbenchCards() {
+		if card.Key == scoutKey && card.ReviewPending {
+			t.Fatal("reconciled card must have ReviewPending = false")
+		}
+	}
+}
+
+// TestReviewPendingClearedOnOpenChat verifies that opening chat for an agent
+// automatically clears its ReviewPending state.
+func TestReviewPendingClearedOnOpenChat(t *testing.T) {
+	shell := workbenchTestShell(t)
+	shell.projection.Agents[0].Status = "done"
+	shell.reconcileWorkbench()
+
+	scoutKey := agent.AgentKey{InstanceID: "default", TerminalID: "term-1"}
+	if !shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("Scout must be ReviewPending initially")
+	}
+
+	scout, ok := shell.workbench.directory.Get(scoutKey)
+	if !ok {
+		t.Fatal("scout card not found in directory")
+	}
+
+	shell.openChat(scout)
+
+	if shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("openChat must automatically clear ReviewPending")
+	}
+}

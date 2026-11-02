@@ -9,8 +9,8 @@ import (
 )
 
 /**
- * [INPUT]: 依赖共享 StatusCenterSnapshot/StatusCenterEntry、agentCardRow、gorexToggleFace（过滤芯片与图标按钮同一状态脸）、surface_header 的 Chat/Terminal 记忆与 quick panel 的 Flyout 关闭
- * [OUTPUT]: 提供 Agent 活动浮层的分组表（quickPanelGroupSpecs/quickPanelBucketGroup）、过滤芯片（quickPanelChip/quickPanelChipCounts）、分组（quickPanelGroups）、分组标题（quickPanelGroupHeader）、条目行（quickPanelEntryRow：点击直达对应面板、行尾「标记已审阅」、右键菜单）与 openQuickPanelEntry/openAgentTerminal 直达动作
+ * [INPUT]: 依赖共享 StatusCenterSnapshot/StatusCenterEntry、agentCardRow、agentReviewAction、gorexToggleFace（过滤芯片与图标按钮同一状态脸）、surface_header 的 Chat/Terminal 记忆与 quick panel 的 Flyout 关闭
+ * [OUTPUT]: 提供 Agent 活动浮层的分组表（quickPanelGroupSpecs/quickPanelBucketGroup）、过滤芯片（quickPanelChip/quickPanelChipCounts）、分组（quickPanelGroups）、分组标题（quickPanelGroupHeader）、条目行（quickPanelEntryRow：点击直达对应面板、行尾复用 agentReviewAction「标记已审阅」、右键菜单）与 openQuickPanelEntry/openAgentTerminal 直达动作
  * [POS]: quick_panel 的内容构件；状态由同一目录投影生成，点击不再进入第二层浮层，无第二套弹层窗口或运行时状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -147,14 +147,7 @@ func (s *Shell) quickPanelEntryRow(c *ui.Context, entry StatusCenterEntry, dupPr
 	var row ui.Element
 	ui.Box(c).FillWidth().Children(func() {
 		row = s.agentCardRow(c, card, false, dupProjects, false, false, func() {
-			if !card.ReviewPending {
-				return
-			}
-			k := gorexColorsOf(t.Dark)
-			if gorexIconButton(c, k, iconCheck, "Mark Reviewed", "Mark Reviewed", false, gorexRowBtn, gorexRowGlyph).Clicked() {
-				s.markAgentReviewed(card.Key)
-				s.fitQuickPanel()
-			}
+			s.agentReviewAction(c, card, s.fitQuickPanel)
 		})
 		// Sub-agents hang under the agent that spawned them, running or
 		// done (the sidebar's rows; the chevron folds them, a click opens

@@ -71,8 +71,8 @@ func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
 	if got := countTextExact(tester.Texts(), "Install integration"); got != 2 {
 		t.Fatalf("fallback repair actions = %d, want 2; texts=%q", got, tester.Texts())
 	}
-	if got := countTextExact(tester.Texts(), "Install status hook"); got != 2 {
-		t.Fatalf("hook actions = %d, want 2; texts=%q", got, tester.Texts())
+	if got := countTextExact(tester.Texts(), "Install status hook"); got != 4 {
+		t.Fatalf("hook actions = %d, want 4 (Claude Code, Cursor, Codex, Antigravity); texts=%q", got, tester.Texts())
 	}
 
 	// The remaining fallback repair (claude's hook is still not installed)
@@ -119,8 +119,8 @@ func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
 	if got := countTextExact(tester.Texts(), "Install integration"); got != 1 {
 		t.Fatalf("fallback repair actions after hook install = %d, want 1; texts=%q", got, tester.Texts())
 	}
-	if got := countTextExact(tester.Texts(), "Install status hook"); got != 1 {
-		t.Fatalf("hook actions after install = %d, want 1; texts=%q", got, tester.Texts())
+	if got := countTextExact(tester.Texts(), "Install status hook"); got != 3 {
+		t.Fatalf("hook actions after install = %d, want 3 (Cursor, Codex, Antigravity); texts=%q", got, tester.Texts())
 	}
 }
 

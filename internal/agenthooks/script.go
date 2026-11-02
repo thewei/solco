@@ -1,7 +1,7 @@
 package agenthooks
 
 /**
- * [INPUT]: 内嵌的通用 Agent hook 脚本（v6，v5 基础上补齐会话中继的可选字段）
+ * [INPUT]: 内嵌的通用 Agent hook 脚本（v7：支持 Antigravity CLI 完整生命周期 SessionStart/PreInvocation/PreToolUse/PostToolUse/Stop 与 JSON stdout 应答，支持 Cursor camelCase 与 Codex 子线程闸）
  * [OUTPUT]: 对外提供 hookScriptTemplate、hookScriptMarker、hookScriptVersion
  * [POS]: agenthooks 的脚本供给源；install 原子写入 ~/.solco/hooks/ 下的 provider 副本
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -9,7 +9,7 @@ package agenthooks
 
 // hookScriptVersion is the version this build provisions; the marker line
 // inside the template must match.
-const hookScriptVersion = 6
+const hookScriptVersion = 7
 
 // hookScriptMarker identifies files installed by Solco; foreign files
 // at our install paths are never overwritten.
@@ -24,14 +24,27 @@ const hookScriptMarker = "installed by Solco"
 const hookScriptTemplate = `#!/bin/sh
 # installed by Solco
 # managed by Solco; reinstalling or updating the hook overwrites this file.
-# SOLCO_HOOK_VERSION=6
+# SOLCO_HOOK_VERSION=7
 
 set -eu
 
 AGENT="${1:-unknown}"
 EVENT_ARG="${2:-}"
+
+# Antigravity CLI 等要求 hook 命令退出时 stdout 为合法 JSON；兜底保证有 JSON 输出
+if [ "$AGENT" = "agy" ] || [ "$AGENT" = "antigravity" ]; then
+    trap 'exit_code=$?; [ $exit_code -ne 0 ] && printf "{}\n"; exit $exit_code' EXIT
+fi
+
 PANE_ID="${HERDR_PANE_ID:-${TMUX_PANE:-}}"
 if [ -z "$PANE_ID" ]; then
+    if [ "$AGENT" = "agy" ] || [ "$AGENT" = "antigravity" ]; then
+        if [ "$EVENT_ARG" = "PreToolUse" ]; then
+            printf '{"decision":"allow"}\n'
+        else
+            printf '{}\n'
+        fi
+    fi
     exit 0
 fi
 
@@ -55,6 +68,12 @@ if raw_input.strip():
     except Exception:
         pass
 
+# Cursor 会把 ~/.claude/settings.json 里的 Claude hook 一并执行，载荷是 Cursor
+# 原生的（带 cursor_version）。那一份不是 Claude：Claude 副本静默，由 Cursor
+# 自己的 hook 副本报状态与会话身份。
+if agent == "claude" and hook_data.get("cursor_version"):
+    sys.exit(0)
+
 event_name = (
     hook_data.get("hook_event_name")
     or hook_data.get("event")
@@ -63,13 +82,14 @@ event_name = (
     or ""
 )
 
-# 常见 prompt 载荷字段（Claude UserPromptSubmit.prompt / agy PreInvocation 等）：
+# 常见 prompt 载荷字段（Claude UserPromptSubmit.prompt / agy PreInvocation.lastUserInput 等）：
 # 作为语义文本随报告下发，journal 侧才可能有正文。
 prompt_text = (
     hook_data.get("prompt")
     or hook_data.get("user_query")
     or hook_data.get("message")
     or hook_data.get("text")
+    or hook_data.get("lastUserInput")
     or ""
 )
 
@@ -104,25 +124,39 @@ if not session_id:
                 break
     except Exception:
         pass
+# Codex 子进程（在父会话 pane 里再起的 codex）继承父的 CODEX_THREAD_ID，
+# 与自己的 session_id 不同——它的事件不是这个 pane 的会话（与 herdr 官方
+# codex 脚本同一道闸）。
+if agent == "codex":
+    _inherited = os.environ.get("CODEX_THREAD_ID")
+    if _inherited and session_id and _inherited != session_id:
+        sys.exit(0)
+
 status = "working"
 
-if event_name in ("SessionStart", "session_start"):
+# Cursor Agent 的事件名是 camelCase（sessionStart / beforeSubmitPrompt /
+# preToolUse / postToolUse / stop / sessionEnd）；Antigravity PreInvocation 标志模型调用开始（working）。
+if event_name in ("SessionStart", "session_start", "sessionStart"):
     status = "idle"
-elif event_name in ("PreInvocation", "pre_invocation"):
-    status = "idle"
-elif event_name in ("UserPromptSubmit", "user_prompt_submit", "PreToolUse", "pre_tool_use"):
+elif event_name in ("PreInvocation", "pre_invocation", "UserPromptSubmit", "user_prompt_submit", "beforeSubmitPrompt"):
+    status = "working"
+elif event_name in ("PreToolUse", "pre_tool_use", "preToolUse", "PostToolUse", "post_tool_use", "postToolUse"):
     status = "working"
 elif event_name in ("PermissionRequest", "permission_request", "AskUserQuestion", "ask_user_question"):
     status = "blocked"
-elif event_name in ("PostToolUse", "post_tool_use"):
-    status = "working"
 elif event_name in ("Stop", "stop", "session_idle"):
     status = "idle"
-elif event_name in ("SessionEnd", "session_end", "session_shutdown"):
+elif event_name in ("SessionEnd", "session_end", "session_shutdown", "sessionEnd"):
     status = "released"
 
 # 1. Report to Solco local Unix socket if available (managed panes only)
 if not (os.environ.get("HERDR_PANE_ID") or os.environ.get("TMUX_PANE")):
+    if agent in ("agy", "antigravity"):
+        if event_name in ("PreToolUse", "pre_tool_use", "preToolUse"):
+            sys.stdout.write('{"decision":"allow"}\n')
+        else:
+            sys.stdout.write('{}\n')
+        sys.stdout.flush()
     sys.exit(0)
 
 sock_path = os.environ.get("SOLCO_SOCKET_PATH") or os.path.expanduser("~/.solco/run/agent-status.sock")
@@ -148,12 +182,10 @@ if os.path.exists(sock_path):
     except Exception:
         pass
 
-# 2. 会话身份接管（v3；v6 补齐字段）：载荷/父进程参数拿到会话 id 后，直接向
+# 2. 会话身份接管（v3；v6 补齐字段；v7 支持 Antigravity 路径正规化）：载荷/父进程参数拿到会话 id 后，直接向
 # Herdr socket 报 pane.report_agent_session（source=solco，客户端上报
 # 语义）。Herdr 有了 typed session identity，Chat 入口链路即通；
-# herdr 官方 hook 组只在存在时兜底，不再是前置依赖。v6 起可选字段与
-# herdr 官方脚本同形状（transcript 路径 + SessionStart 来源），身份接管
-# 完全等价，官方 hook 组可以安全地只做降级备用。
+# herdr 官方 hook 组只在存在时兜底，不再是前置依赖。
 if session_id and os.environ.get("HERDR_ENV") == "1" and os.environ.get("HERDR_PANE_ID") and os.environ.get("HERDR_SOCKET_PATH"):
     try:
         _seq = time.time_ns()
@@ -169,8 +201,12 @@ if session_id and os.environ.get("HERDR_ENV") == "1" and os.environ.get("HERDR_P
             or hook_data.get("transcriptPath")
         )
         if isinstance(_transcript, str) and _transcript:
+            if os.path.basename(_transcript) == "transcript.jsonl":
+                _full = os.path.join(os.path.dirname(_transcript), "transcript_full.jsonl")
+                if os.path.exists(_full):
+                    _transcript = _full
             _params["agent_session_path"] = _transcript
-        if event_name in ("SessionStart", "session_start"):
+        if event_name in ("SessionStart", "session_start", "sessionStart"):
             _start_source = hook_data.get("source")
             if isinstance(_start_source, str) and _start_source:
                 _params["session_start_source"] = _start_source
@@ -193,5 +229,13 @@ try:
         tty.flush()
 except Exception:
     pass
+
+# 4. Antigravity CLI 等要求 stdout 必须输出合法 JSON
+if agent in ("agy", "antigravity"):
+    if event_name in ("PreToolUse", "pre_tool_use", "preToolUse"):
+        sys.stdout.write('{"decision":"allow"}\n')
+    else:
+        sys.stdout.write('{}\n')
+    sys.stdout.flush()
 PY
 `

@@ -42,9 +42,24 @@ func PeekLine(screen string) string {
 		if !strings.ContainsFunc(line, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
 			continue
 		}
+		if isTUIFooter(line) {
+			continue
+		}
 		return truncateUTF8(line, peekMaxBytes)
 	}
 	return ""
+}
+
+func isTUIFooter(line string) bool {
+	lower := strings.ToLower(line)
+	if strings.HasPrefix(lower, "esc to cancel") ||
+		strings.Contains(lower, "ctrl+g edit") ||
+		strings.Contains(lower, "navigate · tab amend") ||
+		strings.HasPrefix(lower, "space select · enter") ||
+		strings.Contains(lower, "type to filter • enter") {
+		return true
+	}
+	return false
 }
 
 func truncateUTF8(s string, max int) string {

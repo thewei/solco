@@ -1,9 +1,9 @@
 package nativeui
 
 /**
- * [INPUT]: Shell 假投影（herdr.Project/Agents）与假 newTabStarter（fakeStarter）、sidebarSectionHeader 的 Menu 型 Action 常驻槽、ui.Tester 的悬停/菜单模拟
- * [OUTPUT]: Agents 区排序回归——头部排序槽点击开菜单、指针离开行后选项仍必达（Menu 型 Action 的存在理由）、time/status 扁平顺序与分组默认、组行悬停 "+" 开种类菜单（离开行后选项仍必达）并走 startNewTab 且不折叠分组、AgentsSort 随会话捕获/恢复
- * [POS]: 2026-11-02 用户要求（Agents 标题排序菜单 + 分组行新建 Pane）；悬停条件菜单会丢选择（探针实证），故槽按钮键控常驻
+ * [INPUT]: Shell 假投影（herdr.Project/Panes/Agents）与假 newTabStarter（fakeStarter）、sidebarSectionHeader 的 Menu 型 Action 常驻槽、ui.Tester 的悬停/菜单模拟
+ * [OUTPUT]: Agents 区排序回归——头部排序槽点击开菜单、By Workspace/By Time/By Status 三种分组模式、默认按 Pane 顺序与组内 Sort by Updated Time（含 Newest/Oldest First）切换、各模式组行折叠与展开、会话跨重启持久化
+ * [POS]: 2026-11-02 用户要求（Agents 标题排序菜单 + Workspace/Time/Status 三维度分组 + 组内按更新时间勾选排序）；悬停条件菜单会丢选择（探针实证），故槽按钮键控常驻
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -21,20 +21,25 @@ import (
 )
 
 // agentsSortShell seeds two Workspace groups: the "core" agent is blocked and
-// worked two hours ago, the "site" agent worked last. Both Workspaces are in
-// the projection, so the groups carry their "+".
+// worked two hours ago, the "site" agent worked last. Both Workspaces and Panes
+// are in the projection, so the groups carry their "+" and default pane order.
 func agentsSortShell(t *testing.T) (*Shell, *ui.Tester) {
 	t.Helper()
 	s := NewShell()
 	s.loading = false
 	s.workbench.markers = agent.NewMarkerStore()
 	s.workbench.directory = agent.NewAgentDirectory()
+	late := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	s.clockFn = func() time.Time { return late }
 	s.projection.Agents = []herdr.Agent{{PaneID: "p1"}, {PaneID: "p2"}}
 	s.projection.Projects = []herdr.Project{
 		{ID: "w-core", Label: "core", CWD: "/core"},
 		{ID: "w-site", Label: "site", CWD: "/site"},
 	}
-	late := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	s.projection.Panes = []herdr.Pane{
+		{ID: "p1", ProjectID: "w-core"},
+		{ID: "p2", ProjectID: "w-site"},
+	}
 	s.workbench.directory.Replace([]agent.AgentCardModel{
 		{
 			Key: agent.AgentKey{TerminalID: "term-core"}, Provider: history.AgentPi,
@@ -77,7 +82,7 @@ func TestAgentsSortMenuDeliversAwayFromTheRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	menu := tester.Menu()
-	for _, want := range []string{"By Group", "By Time", "By Status"} {
+	for _, want := range []string{"By Workspace", "By Time", "By Status", "Sort by Updated Time"} {
 		if !containsText(menu, want) {
 			t.Fatalf("sort menu %q missing %q", menu, want)
 		}
@@ -94,12 +99,11 @@ func TestAgentsSortMenuDeliversAwayFromTheRow(t *testing.T) {
 	if !s.agentsOpen {
 		t.Fatal("opening the sort menu must not fold the section")
 	}
-	texts := tester.Texts()
-	if first, last := firstIndex(texts, "site-agent"), firstIndex(texts, "core-agent"); first < 0 || first > last {
-		t.Fatalf("time order wrong: site-agent@%d core-agent@%d", first, last)
+	if _, ok := tester.Find("Toggle Today"); !ok {
+		t.Fatal("time mode must show time group labels like Today")
 	}
 	if _, ok := tester.Find("Toggle core"); ok {
-		t.Fatal("time mode must drop the group labels")
+		t.Fatal("time mode must not show workspace group labels")
 	}
 }
 
@@ -110,7 +114,7 @@ func TestAgentsSortMenuChecksTheCurrentMode(t *testing.T) {
 	for _, tc := range []struct {
 		item string
 		want agentSortMode
-	}{{"By Status", agentSortStatus}, {"By Group", agentSortGroup}} {
+	}{{"By Status", agentSortStatus}, {"By Workspace", agentSortWorkspace}} {
 		tester.Move(20, 12)
 		tester.Frame()
 		if err := tester.Click("Sort Agents"); err != nil {
@@ -126,26 +130,20 @@ func TestAgentsSortMenuChecksTheCurrentMode(t *testing.T) {
 	}
 }
 
-// TestAgentsSortOrders pins each mode's list shape: grouped by default with
-// the urgent Workspace leading, time flat and newest first, status flat in
-// the directory's needs-you-first order.
+// TestAgentsSortOrders pins each mode's list shape: grouped by Workspace by
+// default, grouped by Time, or grouped by Status.
 func TestAgentsSortOrders(t *testing.T) {
 	for _, tc := range []struct {
 		mode     agentSortMode
-		grouped  bool
 		sequence []string
 	}{
-		{agentSortGroup, true, []string{"Toggle core", "core-agent", "Toggle site", "site-agent"}},
-		{agentSortTime, false, []string{"site-agent", "core-agent"}},
-		{agentSortStatus, false, []string{"core-agent", "site-agent"}},
+		{agentSortWorkspace, []string{"Toggle core", "core-agent", "Toggle site", "site-agent"}},
+		{agentSortTime, []string{"Toggle Today", "core-agent", "site-agent"}},
+		{agentSortStatus, []string{"Toggle Needs Attention", "core-agent", "Toggle Idle", "site-agent"}},
 	} {
 		s, tester := agentsSortShell(t)
 		s.setAgentsSort(tc.mode)
 		tester.Frame()
-		_, hasGroups := tester.Find("Toggle core")
-		if hasGroups != tc.grouped {
-			t.Fatalf("mode %q grouped = %v, want %v", tc.mode, hasGroups, tc.grouped)
-		}
 		texts := tester.Texts()
 		last := -1
 		for _, want := range tc.sequence {
@@ -158,6 +156,72 @@ func TestAgentsSortOrders(t *testing.T) {
 			}
 			last = at
 		}
+	}
+}
+
+// TestAgentsSortByTimeToggle tests the orthogonal "Sort by Updated Time"
+// checkbox: when enabled, newer cards precede older cards; when toggled to
+// Oldest First, older cards precede newer cards; when toggled off, cards revert
+// to default Pane order.
+func TestAgentsSortByTimeToggle(t *testing.T) {
+	s, tester := agentsSortShell(t)
+	s.setAgentsSort(agentSortTime)
+	tester.Frame()
+
+	// Default: Pane order (core-agent in p1 leads site-agent in p2)
+	texts := tester.Texts()
+	if firstIndex(texts, "core-agent") > firstIndex(texts, "site-agent") {
+		t.Fatal("default pane order should place core-agent before site-agent")
+	}
+
+	// Toggle "Sort by Updated Time" on
+	if err := tester.Click("Sort Agents"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tester.ChooseMenuItem("Sort by Updated Time"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if !s.agentsSortByTime {
+		t.Fatal("Sort by Updated Time should be active")
+	}
+
+	// Now newest active (site-agent, late) leads (core-agent, late - 2h)
+	texts = tester.Texts()
+	if firstIndex(texts, "site-agent") > firstIndex(texts, "core-agent") {
+		t.Fatal("with Sort by Updated Time active (newest first), site-agent should precede core-agent")
+	}
+
+	// Switch to Oldest First
+	if err := tester.Click("Sort Agents"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tester.ChooseMenuItem("Oldest First"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if !s.agentsSortAscending {
+		t.Fatal("Oldest First should be active")
+	}
+	texts = tester.Texts()
+	if firstIndex(texts, "core-agent") > firstIndex(texts, "site-agent") {
+		t.Fatal("with Oldest First active, core-agent should precede site-agent")
+	}
+
+	// Toggle "Sort by Updated Time" off -> reverts to Pane order
+	if err := tester.Click("Sort Agents"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tester.ChooseMenuItem("Sort by Updated Time"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if s.agentsSortByTime {
+		t.Fatal("Sort by Updated Time should be inactive after toggle")
+	}
+	texts = tester.Texts()
+	if firstIndex(texts, "core-agent") > firstIndex(texts, "site-agent") {
+		t.Fatal("reverting to default pane order should place core-agent before site-agent")
 	}
 }
 
@@ -223,16 +287,24 @@ func TestAgentsSortPersistsAcrossLaunch(t *testing.T) {
 	first := NewShell(WithSettings(app.NewSettingsService(store)))
 	first.activeInstance = "main"
 	first.setAgentsSort(agentSortStatus)
+	first.agentsSortByTime = true
+	first.agentsSortAscending = true
 	first.SaveSession()
 
 	second := NewShell(WithSettings(app.NewSettingsService(store)))
 	if second.agentsSortMode() != agentSortStatus {
 		t.Fatalf("restored sort = %q, want status", second.agentsSortMode())
 	}
-	if got := normalizeAgentSort("bogus"); got != agentSortGroup {
-		t.Fatalf("normalizeAgentSort(%q) = %q, want the group default", "bogus", got)
+	if !second.agentsSortByTime {
+		t.Fatal("restored agentsSortByTime = false, want true")
 	}
-	if got := normalizeAgentSort(""); got != agentSortGroup {
-		t.Fatalf("normalizeAgentSort(\"\") = %q, want the group default", got)
+	if !second.agentsSortAscending {
+		t.Fatal("restored agentsSortAscending = false, want true")
+	}
+	if got := normalizeAgentSort("bogus"); got != agentSortWorkspace {
+		t.Fatalf("normalizeAgentSort(%q) = %q, want the workspace default", "bogus", got)
+	}
+	if got := normalizeAgentSort(""); got != agentSortWorkspace {
+		t.Fatalf("normalizeAgentSort(\"\") = %q, want the workspace default", got)
 	}
 }

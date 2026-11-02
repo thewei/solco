@@ -162,12 +162,30 @@ func usageIdentityMatches(provider history.AgentID, kind, value string, meta his
 }
 
 // liveSessionTitle reads one agent's session file directly for its current
-// title. Only a path identity names a file; an id relies on the catalog.
+// title. A path identity names a file directly; an id resolves through the
+// provider's live source locator.
 func liveSessionTitle(provider history.AgentID, kind, value string) (string, bool) {
-	if kind != "path" || value == "" {
+	if value == "" {
 		return "", false
 	}
-	summary, err := history.SummarizeSource(history.SessionFileRef{Agent: provider, FilePath: value})
+	filePath := value
+	nativeID := ""
+	if kind == "id" {
+		home, _ := os.UserHomeDir()
+		resolved, err := history.ResolveLiveSource(home, provider, kind, "", value)
+		if err != nil || resolved == "" {
+			return "", false
+		}
+		filePath = resolved
+		nativeID = value
+	} else if kind != "path" {
+		return "", false
+	}
+	info, err := os.Stat(filePath)
+	if err != nil || info.Size() == 0 {
+		return "", false
+	}
+	summary, err := history.SummarizeSource(history.SessionFileRef{Agent: provider, FilePath: filePath, NativeID: nativeID})
 	if err != nil {
 		return "", false
 	}
