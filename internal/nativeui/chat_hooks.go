@@ -76,8 +76,8 @@ func (s *Shell) reconcileBlockedInteractions() {
 	// gone) must retire: only the OSC 7501 path cancelled before, so agents
 	// reporting through Herdr hooks left a stale question behind.
 	for _, pending := range s.interactionBroker.Pending() {
-		if pending.Picker {
-			continue // retired by watchPicker, not by the agent's status
+		if pending.Picker || pending.ParkedWorking {
+			continue // retired by watchPicker / the transcript, not by the agent's status
 		}
 		if agent := s.paneAgent(pending.AgentPaneID); agent == nil || agent.Status != "blocked" {
 			s.interactionBroker.CancelForPane(pending.AgentPaneID)
@@ -451,6 +451,7 @@ func (s *Shell) detectPaneInteraction(paneID string) {
 	}
 	s.interactionMisses.clear(paneID)
 	interaction := conversation.PendingInteraction{Kind: kind, Prompt: prompt, Options: options}
+	interaction.ParkedWorking = s.parkedAsk(paneID)
 	if chatsession.IsOmpReviewSheet(screen) {
 		interaction.EscapeOption = "Cancel"
 	}
@@ -464,9 +465,17 @@ func (s *Shell) detectPaneInteraction(paneID string) {
 func (s *Shell) redetectAfterAnswer(paneID string) {
 	time.AfterFunc(1500*time.Millisecond, func() {
 		s.applyOnWindow(func() {
-			if agent := s.paneAgent(paneID); agent != nil && agent.Status == "blocked" {
+			agent := s.paneAgent(paneID)
+			switch {
+			case agent == nil:
+			case agent.Status == "blocked":
 				s.interactionMisses.clear(paneID) // the answer changed the screen: look again at once
 				s.reconcileBlockedInteractions()
+			case s.parkedAsk(paneID):
+				// Pi's dialog moved on to its Submit review while the host
+				// still says `working`: read the screen for it.
+				s.interactionMisses.clear(paneID)
+				s.dispatch(func() { s.detectPaneInteraction(paneID) })
 			}
 		})
 	})
@@ -493,13 +502,15 @@ func (s *Shell) publishTranscriptQuestion(paneID string) bool {
 	}
 	question := ask.Questions[s.chatAskStep]
 	interaction := conversation.PendingInteraction{
-		Kind:         conversation.InteractionQuestion,
-		Prompt:       question.Prompt,
-		Options:      question.Options,
-		Header:       question.Header,
-		Descriptions: question.Descriptions,
-		Start:        question.Start,
-		Multi:        question.Multi,
+		Kind:          conversation.InteractionQuestion,
+		Prompt:        question.Prompt,
+		Options:       question.Options,
+		Header:        question.Header,
+		Descriptions:  question.Descriptions,
+		Start:         question.Start,
+		Multi:         question.Multi,
+		CommitRow:     question.CommitRow,
+		ParkedWorking: ask.ParksWorking,
 	}
 	interaction.Step, interaction.Steps = s.chatAskStep, len(ask.Questions)
 	s.publishInteraction(paneID, interaction)
@@ -512,9 +523,31 @@ func (s *Shell) reconcileChatQuestion() {
 	if s.chatPaneID == "" {
 		return
 	}
-	if agent := s.paneAgent(s.chatPaneID); agent != nil && agent.Status == "blocked" {
+	parked := s.parkedAsk(s.chatPaneID)
+	if !parked {
+		// A card born from a parked dialog (Pi's ask_user_question) retires
+		// when its call has a result — answered or declined in the terminal.
+		for _, pending := range s.interactionBroker.PendingForPane(s.chatPaneID) {
+			if pending.ParkedWorking {
+				s.interactionBroker.CancelForPane(s.chatPaneID)
+				break
+			}
+		}
+	}
+	if agent := s.paneAgent(s.chatPaneID); agent != nil && (agent.Status == "blocked" || parked) {
 		s.publishTranscriptQuestion(s.chatPaneID)
 	}
+}
+
+// parkedAsk reports a chat pane whose transcript ends on an unanswered
+// ask_user_question call: Pi's dialog is open although its host still reads
+// `working` (the extension sends no blocked signal).
+func (s *Shell) parkedAsk(paneID string) bool {
+	if s.chatPaneID != paneID || s.chatReadOnly {
+		return false
+	}
+	ask, ok := chatsession.TranscriptQuestion(s.chatTurns)
+	return ok && ask.ParksWorking
 }
 
 // publishInteraction stamps the pane/conversation identity on a detected

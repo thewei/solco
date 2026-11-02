@@ -441,7 +441,7 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 			}
 			paneID = chosen.AgentPaneID
 			answered = *chosen
-			keys = conversation.MultiSelectKeys(chosen.Options, picks)
+			keys = chosen.MultiKeys(picks)
 			return
 		}
 		planned, err := chosen.AnswerKeys(option, text != "")
@@ -470,8 +470,15 @@ func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, optio
 		case <-ctx.Done():
 			err = ctx.Err()
 		case <-time.After(settle):
-			err = b.shell.runtime.PromptAgent(ctx, b.shell.activeInstance, paneID, text)
-			if err != nil && strings.Contains(err.Error(), "blocked and requires interactive input") {
+			if answered.ParkedWorking {
+				// Pi's dialog reads `working` to its host, so agent.prompt would
+				// refuse as busy: the text goes straight into the focused
+				// "Type something." input.
+				err = b.shell.runtime.SendPaneInput(ctx, b.shell.activeInstance, paneID, text, []string{"enter"})
+			} else {
+				err = b.shell.runtime.PromptAgent(ctx, b.shell.activeInstance, paneID, text)
+			}
+			if err != nil && !answered.ParkedWorking && strings.Contains(err.Error(), "blocked and requires interactive input") {
 				// The answer goes into the very prompt the agent is blocked
 				// on (omp's "Custom answer" editor): agent.prompt refuses
 				// that by design, so type it into the pane directly.

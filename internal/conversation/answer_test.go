@@ -50,3 +50,26 @@ func TestAnswerKeysNavigateRelativeToStart(t *testing.T) {
 		t.Fatalf("escape option = %v", got)
 	}
 }
+
+// Pi's multi-select dialog (verified on a real pane): enter on an option row
+// toggles it, so the commit walks down to the row after "Type something.".
+func TestMultiKeysWalkToTheCommitRow(t *testing.T) {
+	p := PendingInteraction{Options: []string{"Small", "Medium", "Large"}, Multi: true, CommitRow: 4}
+	got := p.MultiKeys([]string{"Small", "Large"})
+	want := []string{"space", "down", "down", "space", "down", "down", "enter"}
+	if len(got) != len(want) {
+		t.Fatalf("keys = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("keys = %v, want %v", got, want)
+		}
+	}
+	if none := p.MultiKeys(nil); len(none) != 5 || none[4] != "enter" {
+		t.Fatalf("no picks = %v", none)
+	}
+	omp := PendingInteraction{Options: []string{"x", "y"}, Multi: true}
+	if got := omp.MultiKeys([]string{"y"}); len(got) != 3 || got[2] != "enter" {
+		t.Fatalf("omp rule must stay: %v", got)
+	}
+}

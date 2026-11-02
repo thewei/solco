@@ -72,3 +72,29 @@ func MultiSelectKeys(options, picks []string) []string {
 	}
 	return append(keys, "enter")
 }
+
+// MultiKeys is the key sequence that ticks picks of this multi-select prompt
+// and submits it: MultiSelectKeys unless the prompt has a separate commit row
+// (CommitRow), in which case it ticks the picked rows (space, down between),
+// walks down to the commit row and presses enter there — enter on an option
+// row toggles it instead of committing.
+func (p PendingInteraction) MultiKeys(picks []string) []string {
+	if p.CommitRow <= 0 {
+		return MultiSelectKeys(p.Options, picks)
+	}
+	var keys []string
+	at := 0
+	for index, option := range p.Options {
+		if !slices.Contains(picks, option) {
+			continue
+		}
+		for ; at < index; at++ {
+			keys = append(keys, "down")
+		}
+		keys = append(keys, "space")
+	}
+	for ; at < p.CommitRow; at++ {
+		keys = append(keys, "down")
+	}
+	return append(keys, "enter")
+}

@@ -54,6 +54,17 @@ type PendingInteraction struct {
 	// Commit is the key that confirms the highlighted row ("" = enter).
 	// Claude Code's model picker takes `s` for "this session only".
 	Commit string
+	// CommitRow, for a multi-select question whose commit row ("Next") sits
+	// below the options (Pi's ask_user-question dialog: Type something. then
+	// Next), is that row's index; the cursor opens on row 0 and enter on an
+	// option toggles it, so the commit means walking down to this row. 0 = the
+	// omp rule (enter on the last picked row submits).
+	CommitRow int
+	// ParkedWorking marks a prompt the agent's host keeps reporting as
+	// `working` while it is open (Pi's ask_user_question dialog sends no
+	// blocked signal): the card is born from the transcript's unanswered call
+	// and retired when that call gets its result, never by the status.
+	ParkedWorking bool
 	// OptionKeys, when set (one entry per Option), are the exact named keys
 	// that choose each option; they replace arrow navigation. Cursor Agent's
 	// approval sheet answers to `y` / `n`, not to a highlighted row.

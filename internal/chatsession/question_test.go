@@ -85,3 +85,28 @@ func TestAgyAskQuestionIsPendingThroughTheRealReader(t *testing.T) {
 		t.Fatalf("ask = %+v ok=%v", ask, ok)
 	}
 }
+
+// Pi's ask_user_question (rpiv extension), verified on a real pane
+// (2026-11-02): rows are the options then "Type something." (and, for a
+// multi-select question, a commit row after it); the host reports the agent
+// `working` while the dialog is open, so the call parks the card.
+func TestTranscriptQuestionReadsPiAskUserQuestion(t *testing.T) {
+	input := `{"questions":[{"header":"Pick","multiSelect":false,"question":"Which color?","options":[{"label":"Red","description":"r"},{"label":"Green","description":"g"}]},{"header":"Many","multiSelect":true,"question":"Which sizes?","options":[{"label":"Small","description":"s"},{"label":"Medium","description":"m"},{"label":"Large","description":"l"}]}]}`
+	ask, ok := TranscriptQuestion([]conversation.TimelineTurn{planTurn("ask_user_question", input, "")})
+	if !ok || len(ask.Questions) != 2 || !ask.ParksWorking {
+		t.Fatalf("ask = %+v ok=%v", ask, ok)
+	}
+	single, multi := ask.Questions[0], ask.Questions[1]
+	if single.Multi || len(single.Options) != 3 || single.Options[2] != PiTypeSomethingOption || single.Start != 0 {
+		t.Fatalf("single = %+v", single)
+	}
+	if !multi.Multi || len(multi.Options) != 3 || multi.CommitRow != 4 {
+		t.Fatalf("multi = %+v (Type something. is row 3, the commit row 4)", multi)
+	}
+	if _, ok := TranscriptQuestion([]conversation.TimelineTurn{planTurn("ask_user_question", input, "User has answered your questions")}); ok {
+		t.Fatal("an answered dialog is not pending")
+	}
+	if omp, _ := TranscriptQuestion([]conversation.TimelineTurn{planTurn("ask", `{"questions":[{"question":"a","options":["x","y"]}]}`, "")}); omp.ParksWorking {
+		t.Fatal("omp's ask reports blocked itself and must not park")
+	}
+}

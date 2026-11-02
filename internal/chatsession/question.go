@@ -23,6 +23,10 @@ const AskOtherOption = "Other (type your own)"
 // after its own options (its TUI draws "Write-in...").
 const AgyWriteInOption = "Write-in..."
 
+// PiTypeSomethingOption is the free-text row Pi's ask_user_question dialog
+// (@juicesharp/rpiv-ask-user-question) appends after the authored options.
+const PiTypeSomethingOption = "Type something."
+
 // AskQuestion is one single-select question of an `ask` call.
 type AskQuestion struct {
 	Header       string
@@ -36,6 +40,10 @@ type AskQuestion struct {
 	// Multi marks a multi-select question: ticked with space, submitted with
 	// enter; it carries no Other row and no recommended start.
 	Multi bool
+	// CommitRow is the row index of a multi-select question's separate commit
+	// row (Pi's dialog: Type something. is row len(options), Next follows); 0
+	// when enter on the last picked row submits (omp).
+	CommitRow int
 }
 
 // TranscriptAsk is the pending `ask` call read from the transcript: the call
@@ -44,6 +52,9 @@ type AskQuestion struct {
 type TranscriptAsk struct {
 	ToolID    string
 	Questions []AskQuestion
+	// ParksWorking marks Pi's ask_user_question: its dialog never reports the
+	// agent blocked, so the card is derived while the status reads `working`.
+	ParksWorking bool
 }
 
 // TranscriptQuestion returns the `ask` (omp/pi) or `ask_question` (Antigravity
@@ -63,10 +74,11 @@ func TranscriptQuestion(turns []conversation.TimelineTurn) (TranscriptAsk, bool)
 		return TranscriptAsk{}, false
 	}
 	tool := last.Steps[len(last.Steps)-1].Tool
-	if tool == nil || (tool.Name != "ask" && tool.Name != "ask_question") || tool.Output != nil || tool.Input == nil {
+	if tool == nil || (tool.Name != "ask" && tool.Name != "ask_question" && tool.Name != "ask_user_question") || tool.Output != nil || tool.Input == nil {
 		return TranscriptAsk{}, false
 	}
 	agy := tool.Name == "ask_question"
+	piDialog := tool.Name == "ask_user_question"
 	var payload struct {
 		Questions []struct {
 			Header      string            `json:"header"`
@@ -81,7 +93,7 @@ func TranscriptQuestion(turns []conversation.TimelineTurn) (TranscriptAsk, bool)
 	if json.Unmarshal([]byte(*tool.Input), &payload) != nil || len(payload.Questions) == 0 {
 		return TranscriptAsk{}, false
 	}
-	ask := TranscriptAsk{ToolID: tool.ID}
+	ask := TranscriptAsk{ToolID: tool.ID, ParksWorking: piDialog}
 	if ask.ToolID == "" {
 		ask.ToolID = *tool.Input
 	}
@@ -109,13 +121,21 @@ func TranscriptQuestion(turns []conversation.TimelineTurn) (TranscriptAsk, bool)
 		if len(item.Options) < 2 {
 			return TranscriptAsk{}, false
 		}
+		if multi && piDialog {
+			// Rows: the options, "Type something." (an inline input), then
+			// the commit row; none of the last two is offered here.
+			item.CommitRow = len(item.Options) + 1
+		}
 		if !multi {
-			if r := question.Recommended; !agy && r != nil && *r > 0 && *r < len(item.Options) {
+			if r := question.Recommended; !agy && !piDialog && r != nil && *r > 0 && *r < len(item.Options) {
 				item.Start = *r
 			}
 			other := AskOtherOption
 			if agy {
 				other = AgyWriteInOption
+			}
+			if piDialog {
+				other = PiTypeSomethingOption
 			}
 			item.Options = append(item.Options, other)
 			item.Descriptions = append(item.Descriptions, "")

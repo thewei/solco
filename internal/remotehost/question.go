@@ -119,13 +119,19 @@ func (s *Server) derive(ctx context.Context, instance, paneID string, cur *askCu
 	if p, handled := s.derivePicker(ctx, instance, paneID, cur, now); handled {
 		return p, p.ID != ""
 	}
-	if !blocked {
-		return conversation.PendingInteraction{}, false
-	}
 	var found conversation.PendingInteraction
 	var toolID string
 	step := 0
 	ok := false
+	parked := false // Pi's ask_user_question dialog: open while the host says `working`
+	if reader != nil {
+		if ask, has := reader.Ask(); has {
+			parked = ask.ParksWorking
+		}
+	}
+	if !blocked && !parked {
+		return conversation.PendingInteraction{}, false
+	}
 	if reader != nil {
 		if ask, has := reader.Ask(); has {
 			if cur.toolID != ask.ToolID {
@@ -136,7 +142,7 @@ func (s *Server) derive(ctx context.Context, instance, paneID string, cur *askCu
 				found = conversation.PendingInteraction{
 					Kind: conversation.InteractionQuestion, Prompt: q.Prompt, Options: q.Options,
 					Header: q.Header, Descriptions: q.Descriptions, Start: q.Start, Multi: q.Multi,
-					Step: cur.step, Steps: len(ask.Questions),
+					Step: cur.step, Steps: len(ask.Questions), CommitRow: q.CommitRow, ParkedWorking: ask.ParksWorking,
 				}
 				toolID, step, ok = ask.ToolID, cur.step, true
 			}
@@ -153,7 +159,7 @@ func (s *Server) derive(ctx context.Context, instance, paneID string, cur *askCu
 			} else if agentPrompt, hit := chatsession.DetectAgentPrompt(screen); hit {
 				cur.screenInter, cur.screenOK = agentPrompt, true
 			} else if kind, prompt, options, hit := chatsession.DetectScreenPrompt(screen); hit {
-				cur.screenInter = conversation.PendingInteraction{Kind: kind, Prompt: prompt, Options: options}
+				cur.screenInter = conversation.PendingInteraction{Kind: kind, Prompt: prompt, Options: options, ParkedWorking: parked}
 				if chatsession.IsOmpReviewSheet(screen) {
 					cur.screenInter.EscapeOption = "Cancel"
 				}
@@ -190,7 +196,7 @@ func toWire(p conversation.PendingInteraction) *chatInteraction {
 
 // interactionFrame is the card to ship with a chat state, "" status = none.
 func (s *Server) interactionFrame(ctx context.Context, instance, paneID, status string, reader *chatsession.Reader) *chatInteraction {
-	if status != "blocked" && !s.pickerWatching(instance, paneID) {
+	if status != "blocked" && !(status == "working" && askParked(reader)) && !s.pickerWatching(instance, paneID) {
 		return nil
 	}
 	cur := s.askFor(instance, paneID)
@@ -225,10 +231,6 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 	if !ok {
 		return
 	}
-	if target.Status != "blocked" && !s.pickerWatching(instance, paneID) {
-		writeError(w, http.StatusConflict, "interaction_gone", "")
-		return
-	}
 	var reader *chatsession.Reader
 	if target.Path != "" {
 		if rd, err := chatsession.Open(target.Provider, target.Path); err == nil {
@@ -236,6 +238,10 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 				reader = rd
 			}
 		}
+	}
+	if target.Status != "blocked" && !(target.Status == "working" && askParked(reader)) && !s.pickerWatching(instance, paneID) {
+		writeError(w, http.StatusConflict, "interaction_gone", "")
+		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), chatSendTimeout)
 	defer cancel()
@@ -261,7 +267,7 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 				return
 			}
 		}
-		keys = conversation.MultiSelectKeys(p.Options, req.Options)
+		keys = p.MultiKeys(req.Options)
 	} else {
 		typed := slices.ContainsFunc(toWire(p).TextOptions, func(o string) bool { return o == req.Option })
 		if len(req.Options) > 0 || (typed && req.Text == "") || (!typed && req.Text != "") {
@@ -297,8 +303,15 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 			writeError(w, http.StatusGatewayTimeout, "delivery_uncertain", "")
 			return
 		}
-		err := backend.PromptAgent(ctx, instance, paneID, req.Text)
-		if err != nil && strings.Contains(err.Error(), "blocked and requires interactive input") {
+		var err error
+		if p.ParkedWorking {
+			// Pi's dialog reads `working` to its host: agent.prompt would
+			// refuse as busy, so type into the focused input directly.
+			err = backend.SendPaneInput(ctx, instance, paneID, req.Text, []string{"enter"})
+		} else {
+			err = backend.PromptAgent(ctx, instance, paneID, req.Text)
+		}
+		if err != nil && !p.ParkedWorking && strings.Contains(err.Error(), "blocked and requires interactive input") {
 			// The answer goes into the very prompt the agent is blocked on
 			// (omp's custom-answer editor): agent.prompt refuses that by
 			// design, so type it into the pane directly.
@@ -311,4 +324,14 @@ func (s *Server) handleChatAnswer(w http.ResponseWriter, r *http.Request, dev De
 	}
 	slog.Info("remote host chat answer sent", "device", dev.ID, "pane", paneID, "kind", string(p.Kind), "keys", len(keys))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// askParked reports a transcript that ends on Pi's unanswered
+// ask_user_question call.
+func askParked(reader *chatsession.Reader) bool {
+	if reader == nil {
+		return false
+	}
+	ask, has := reader.Ask()
+	return has && ask.ParksWorking
 }
