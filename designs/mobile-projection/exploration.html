@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solco Mobile · 桌面投影 · 探索稿</title>
+<style>
+/* tokens = solco-mobile src/theme/tokens.ts */
+:root{--canvas:#08090C;--surface:#111318;--raised:#171A21;--pressed:#1D212A;--bd:#252A35;--bd2:#353C4B;--tx:#F5F6FA;--mut:#969CAA;--sub:#676D7B;--ac:#7C8CFF;--acs:#232944;--at:#F4B35F;--ats:#2D241A;--ok:#5FD38D;--oks:#17271F;--er:#FF7474;--add:#12261A;--del:#2A1517}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:#050506;color:var(--tx);font:13px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif;display:flex;overflow:hidden}
+.stage{flex:1;min-width:0;overflow:auto;padding:18px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.side{width:300px;flex:none;border-left:1px solid var(--bd);background:#0a0b0e;display:flex;flex-direction:column;overflow:auto;transition:margin .2s}
+body.fold .side{margin-right:-300px}
+.side h3{font:600 11px ui-monospace,monospace;color:var(--sub);letter-spacing:.07em;text-transform:uppercase;padding:14px 16px 6px}
+.side button{all:unset;cursor:pointer;display:block;padding:8px 16px;color:var(--mut);font-size:13px}
+.side button:hover{background:var(--surface)}
+.side button.on{color:var(--tx);background:var(--raised);box-shadow:inset 2px 0 var(--ac)}
+.story{margin:auto 0 0;padding:14px 16px;border-top:1px solid var(--bd);color:var(--mut);font-size:12px;line-height:1.6}
+.story b{color:var(--tx)}
+.fold-btn{position:fixed;right:306px;top:10px;z-index:9;all:unset;cursor:pointer;background:var(--raised);border:1px solid var(--bd);border-radius:8px;padding:3px 9px;color:var(--mut)}
+body.fold .fold-btn{right:8px}
+.state{font:11px ui-monospace,monospace;color:var(--sub)}
+.cap{max-width:820px;text-align:center;color:var(--mut);font-size:12px}
+.row{display:flex;gap:26px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.col{display:flex;flex-direction:column;align-items:center;gap:8px}
+/* phone */
+.phone{width:290px;height:600px;background:var(--canvas);border:1px solid #30343f;border-radius:32px;overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 18px 50px #000}
+.sbar{height:24px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:0 20px;font-size:10px;color:var(--mut)}
+.top{flex:none;display:flex;align-items:center;gap:8px;padding:4px 12px 8px}
+.top .ttl{flex:1;font-weight:650;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{width:30px;height:30px;border-radius:10px;background:var(--raised);display:grid;place-items:center;color:var(--mut);font-size:14px;flex:none}
+.dev{display:flex;align-items:center;gap:6px;background:var(--raised);border:1px solid var(--bd);border-radius:999px;padding:4px 10px 4px 8px;font-size:12px;color:var(--tx);max-width:170px;white-space:nowrap;overflow:hidden}
+.dev i{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
+.scope{flex:none;display:flex;gap:6px;padding:0 12px 8px}
+.chip{padding:4px 10px;border-radius:999px;background:var(--raised);border:1px solid var(--bd);font-size:11.5px;color:var(--mut);white-space:nowrap}
+.chip.on{background:var(--acs);border-color:var(--ac);color:var(--tx)}
+.body{flex:1;min-height:0;overflow:auto;padding:0 12px 10px;display:flex;flex-direction:column;gap:8px}
+.lbl{font:600 10.5px system-ui;color:var(--sub);letter-spacing:.07em;text-transform:uppercase;padding:6px 2px 0}
+.card{background:var(--surface);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.r{display:flex;align-items:center;gap:9px;padding:9px 12px;border-top:1px solid var(--bd);min-height:44px}
+.r:first-child{border-top:0}
+.r .t{flex:1;min-width:0}
+.r .t b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .t small{color:var(--sub);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.r.sub{padding-left:30px;background:#0e1014;min-height:38px}
+.slot{width:16px;height:16px;flex:none;display:grid;place-items:center}
+.slot i{display:block}
+.s-work i{width:12px;height:12px;border-radius:50%;border:2px solid var(--ac);border-top-color:transparent;animation:sp 1s linear infinite}
+.s-idle i{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--sub)}
+.s-need i{width:9px;height:9px;border-radius:50%;background:var(--at);box-shadow:0 0 0 4px #f4b35f22}
+.s-svc i{width:10px;height:10px;border-radius:3px;background:var(--ok)}
+.s-fail i{width:9px;height:9px;border-radius:50%;background:var(--er)}
+@keyframes sp{to{transform:rotate(360deg)}}
+.pill{font-size:10.5px;padding:1px 7px;border-radius:99px;background:var(--raised);color:var(--mut);white-space:nowrap}
+.pill.at{background:var(--ats);color:var(--at)}.pill.ok{background:var(--oks);color:var(--ok)}
+.tabs{flex:none;display:flex;border-top:1px solid var(--bd);background:var(--surface);padding:7px 4px 12px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:10px;color:var(--sub);position:relative}
+.tab i{font-style:normal;font-size:17px}.tab.on{color:var(--tx)}
+.tab em{position:absolute;top:-2px;left:56%;background:var(--at);color:#111;font:700 9px system-ui;border-radius:8px;padding:0 5px;font-style:normal}
+.cmpbar{flex:none;margin:0 10px 10px;background:var(--surface);border:1px solid var(--bd2);border-radius:18px;padding:10px 12px;color:var(--sub);font-size:13px;display:flex;justify-content:space-between}
+.send{width:26px;height:26px;border-radius:50%;background:var(--tx);color:#111;display:grid;place-items:center;font-size:13px}
+.mono{font:11px/1.5 ui-monospace,Menlo,monospace}
+.ln{display:flex;gap:8px;padding:1px 10px}.ln.a{background:var(--add)}.ln.d{background:var(--del)}.ln span:first-child{color:var(--sub);width:18px;text-align:right;flex:none}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--raised);border-top:1px solid var(--bd2);border-radius:20px 20px 0 0;padding:10px 0 16px;box-shadow:0 -20px 40px #000a;z-index:5}
+.sheet.full{top:30px}
+.dim{position:absolute;inset:0;background:#000a;z-index:4}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--bd2);margin:0 auto 8px}
+.btn{padding:9px;border-radius:11px;background:var(--pressed);text-align:center;font-weight:600;font-size:12px;flex:1}
+.btn.pri{background:var(--tx);color:#111}
+.note{font-size:11px;color:var(--at);background:var(--ats);border-radius:10px;padding:7px 10px;margin:4px 12px}
+/* notification shade */
+.shade{width:290px;background:#14161b;border-radius:22px;padding:12px;border:1px solid var(--bd)}
+.nt{background:#1d2027;border-radius:16px;padding:10px 12px;display:flex;gap:10px;align-items:center}
+.nt .ic{width:22px;height:22px;border-radius:7px;background:var(--ac);display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff}
+/* desktop */
+.desk{width:760px;background:#1b1c1f;border:1px solid #33353b;border-radius:12px;overflow:hidden;position:relative;box-shadow:0 18px 50px #000}
+.dbar{height:38px;background:#222328;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid #2e3036}
+.dtab{padding:4px 12px;border-radius:7px;color:#9a9ca5;font-size:12px;display:flex;gap:6px;align-items:center}.dtab.on{background:#2d2f36;color:#eee}
+.dplus{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:#bbb;font-size:15px;cursor:pointer}.dplus:hover,.dplus.on{background:#34363e}
+.menu{position:absolute;top:36px;width:210px;background:#25272d;border:1px solid #3a3d46;border-radius:10px;padding:5px;box-shadow:0 12px 30px #000a;z-index:5}
+.menu div{padding:6px 9px;border-radius:6px;font-size:12.5px;display:flex;gap:8px;align-items:center;color:#ddd;cursor:pointer}.menu div:hover{background:#34363e}
+.menu hr{border:0;border-top:1px solid #34363e;margin:4px 0}.menu small{margin-left:auto;color:#777;font-size:11px}
+.dbody{height:330px;display:flex;flex-direction:column;justify-content:flex-end;padding:18px 70px;gap:10px}
+.bub{align-self:flex-end;background:#2a2c33;border-radius:16px;padding:8px 14px;font-size:13px;max-width:70%}
+.wk{color:#9a9ca5;font-size:12px;display:flex;gap:8px;align-items:center}
+.dcmp{background:#202126;border:1px solid #3a3d46;border-radius:16px;padding:12px 14px;color:#777;display:flex;justify-content:space-between}
+.hide{display:none!important}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+<button class="fold-btn" onclick="document.body.classList.toggle('fold')" title="Esc">›</button>
+<aside class="side" id="side"></aside>
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const slot=(k)=>`<span class="slot s-${k}"><i></i></span>`;
+const IC={a:'◉',c:'±',f:'▤',s:'↺'};
+const status='<div class="sbar"><span>9:41</span><span>5G ▮▮▮</span></div>';
+
+/* ---------- reusable pieces ---------- */
+const devChip=(t='This Mac · default')=>`<div class="dev"><i></i>${t} ▾</div>`;
+const scopeBar=(p='solco',b='main')=>`<div class="scope"><div class="chip on">▣ ${p} ▾</div><div class="chip">⎇ ${b} ▾</div></div>`;
+const tabbar=(on)=>`<div class="tabs">${[['a','Agents',2],['c','Changes',0],['f','Files',0],['s','Sessions',0]].map(([k,n,b])=>`<div class="tab ${on===k?'on':''}"><i>${IC[k]}</i>${n}${b?`<em>${b}</em>`:''}</div>`).join('')}</div>`;
+const agentRow=(t,sm,st,extra='')=>`<div class="r">${slot(st)}<div class="t"><b>${t}</b><small>${sm}</small></div>${extra}</div>`;
+const subRow=(t,sm,st,k='')=>`<div class="r sub">${slot(st)}<div class="t"><b>${t}</b><small>${sm}</small></div><span class="pill">${k}</span></div>`;
+
+/* ---------- views ---------- */
+const V={};
+
+/* NAV */
+V.nav={title:'导航方案',story:'<b>A 投影标签</b>：底栏 = 桌面侧栏的视图标签；Changes/Files/Sessions 共用「项目头」（桌面同款规则）；Agents 跨项目。<br><b>B 项目枢纽</b>：项目抬成一级入口，枢纽内分段切换。<br><b>C 抽屉加行</b>：改动最小，Files/Changes 藏在抽屉里。<br><br>推荐 A：设备芯片同时承载 Herdr 会话（item 4）与设备（item 5）。',
+ variants:{A:'A 投影标签（推荐）',B:'B 项目枢纽',C:'C 抽屉加行'},
+ states:{A:{agents:'Agents',files:'Files',changes:'Changes'},B:{now:'Now',project:'项目枢纽'},C:{home:'首页',drawer:'抽屉'}},
+ def:{A:'agents',B:'now',C:'drawer'},
+ render(v,s){
+  if(v==='A'){
+   if(s==='agents') return phone(`<div class="top">${devChip()}<span class="ttl"></span><div class="ib">＋</div><div class="ib">⚙</div></div>
+    <div class="body"><div class="lbl">Needs you · 1</div><div class="card">${agentRow('Fix flaky relay test','claude · solco · 2m','need','<span class="pill at">approve?</span>')}</div>
+    <div class="lbl">Working · 2</div><div class="card">${agentRow('Refactor sidebar tree','codex · solco · 11m','work')}${agentRow('Write release notes','omp · site · 4m','work')}</div>
+    <div class="lbl">Idle · 3</div><div class="card">${agentRow('Mobile status line','pi · solco-mobile · 1h','idle')}${agentRow('Docs sweep','claude · docs · 3h','idle')}</div></div>${tabbar('a')}`);
+   if(s==='files') return phone(`<div class="top">${devChip()}<span class="ttl"></span><div class="ib">⌕</div></div>${scopeBar()}
+    <div class="body"><div class="card">${['▸ internal','▸ frontend','▾ docs','&nbsp;&nbsp;&nbsp;client-product-architecture.md','&nbsp;&nbsp;&nbsp;mygo-native-execution-rules.md','▸ designs','README.md','go.mod'].map(x=>`<div class="r" style="min-height:38px"><div class="t"><b style="font-weight:500">${x}</b></div></div>`).join('')}</div></div>${tabbar('f')}`);
+   return phone(`<div class="top">${devChip()}<span class="ttl"></span><div class="ib">⋯</div></div>${scopeBar()}
+    <div class="body"><div class="card"><div class="r"><div class="t"><b>⎇ main · ↑2</b><small>3 files changed · +48 −12</small></div></div></div>
+    <div class="lbl">Changes · 3</div><div class="card">${['M internal/remotehost/tree.go','M frontend/src/chat.css','A designs/mobile-projection'].map(x=>`<div class="r"><div class="t"><b style="font-weight:500">${x}</b></div></div>`).join('')}</div></div>${tabbar('c')}`);
+  }
+  if(v==='B'){
+   if(s==='now') return phone(`<div class="top"><span class="ttl">Now</span><div class="ib">＋</div></div><div class="body"><div class="lbl">Needs you · 1</div><div class="card">${agentRow('Fix flaky relay test','claude · solco','need')}</div><div class="lbl">Working</div><div class="card">${agentRow('Refactor sidebar tree','codex · solco','work')}</div></div>
+     <div class="tabs">${['Now','Projects','Sessions','Me'].map((n,i)=>`<div class="tab ${i===0?'on':''}"><i>${['◉','▣','↺','☺'][i]}</i>${n}</div>`).join('')}</div>`);
+   return phone(`<div class="top"><span class="ttl">solco</span><div class="ib">⋯</div></div><div class="scope"><div class="chip on">Agents</div><div class="chip">Files</div><div class="chip">Changes</div></div><div class="body"><div class="card">${agentRow('Fix flaky relay test','claude · 2m','need')}${agentRow('Refactor sidebar tree','codex · 11m','work')}</div></div>
+     <div class="tabs">${['Now','Projects','Sessions','Me'].map((n,i)=>`<div class="tab ${i===1?'on':''}"><i>${['◉','▣','↺','☺'][i]}</i>${n}</div>`).join('')}</div>`);
+  }
+  if(s==='home') return phone(`<div class="top"><div class="ib">≡</div><span class="ttl" style="text-align:center">MacBook</span><div class="ib">⚙</div></div><div class="body"><div class="lbl">Needs you</div><div class="card">${agentRow('Fix flaky relay test','claude · solco','need')}</div><div class="lbl">Working</div><div class="card">${agentRow('Refactor sidebar tree','codex · solco','work')}</div></div><div class="cmpbar"><span>New session…</span><span class="send">↑</span></div>`);
+  return phone(`<div class="dim"></div><div style="position:absolute;inset:0 70px 0 0;background:var(--canvas);z-index:5;padding:30px 0;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--bd)">
+    ${['MacBook · Connected','Sessions','Quota','<b style="color:var(--tx)">Files</b> <small>(new)</small>','<b style="color:var(--tx)">Changes</b> <small>(new)</small>','<b style="color:var(--tx)">Services</b> <small>(new)</small>','Herdr session · default ▾'].map(x=>`<div class="r" style="color:var(--mut)"><div class="t">${x}</div></div>`).join('')}</div>`);
+ }};
+
+/* PUSHDOWN */
+V.pushdown={title:'下放：Files / Changes / Services',story:'<b>Files</b>：只读 + Attach to chat。<br><b>Changes</b>：G1 只读（已有）→ G2 暂存/提交（带确认）→ G3 Push/Pull。破坏性动作不下放。<br><b>Services</b>：并入 Background 分组，只读。',
+ variants:{files:'Files',changes:'Changes',services:'Services'},
+ states:{files:{tree:'目录',preview:'预览',deny:'越界/过大'},changes:{g1:'G1 只读',g2:'G2 提交',g3:'G3 同步'},services:{list:'列表',card:'服务卡片'}},
+ def:{files:'tree',changes:'g2',services:'list'},
+ render(v,s){
+  if(v==='files'){
+   if(s==='tree') return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">docs</span><div class="ib">⌕</div></div><div class="body"><div class="card">${['client-product-architecture.md · 41 KB','mygo-native-execution-rules.md · 9 KB','github-release-updates.md · 6 KB','screenshots/ ▸'].map(x=>`<div class="r"><div class="t"><b style="font-weight:500">${x}</b></div></div>`).join('')}</div><div class="note" style="margin:0">.git、node_modules、dist 默认隐藏（desktop 同一套 ignore 规则）</div></div>${tabbar('f')}`);
+   if(s==='preview') return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">tree.go</span><div class="ib">⋯</div></div><div class="body mono" style="padding:0;gap:0">${['package remotehost','','// BuildTree projects Herdr…','func BuildTree(p herdr.Projection) Tree {','\tfor _, w := range p.Workspaces {','\t\t…'].map((x,i)=>`<div class="ln"><span>${i+1}</span><span>${x||'&nbsp;'}</span></div>`).join('')}</div><div style="padding:8px 12px 14px;display:flex;gap:8px;flex:none"><div class="btn">Copy path</div><div class="btn pri">Attach to chat</div></div>`);
+   return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">dist/app.js</span></div><div class="body"><div class="note" style="margin:0">这个文件 12.4 MB，超过预览上限（8 MiB）。</div><div class="note" style="margin:0;background:#2a1517;color:var(--er)">../../etc/hosts 被拒绝：路径越出项目根（Host 的 contained 规则）。</div></div>${tabbar('f')}`);
+  }
+  if(v==='changes'){
+   if(s==='g1') return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">Changes</span></div>${scopeBar()}<div class="body"><div class="card">${['M tree.go  +32 −4','M chat.css  +14 −8','A README.md  +120'].map(x=>`<div class="r"><div class="t"><b style="font-weight:500">${x}</b></div></div>`).join('')}</div></div>${tabbar('c')}`);
+   if(s==='g2') return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">Changes</span><div class="ib">⋯</div></div>${scopeBar()}<div class="body"><div class="lbl">Staged · 1</div><div class="card"><div class="r"><span class="pill ok">✓</span><div class="t"><b style="font-weight:500">M tree.go</b></div></div></div><div class="lbl">Unstaged · 2</div><div class="card">${['M chat.css','A README.md'].map(x=>`<div class="r"><span class="pill">+</span><div class="t"><b style="font-weight:500">${x}</b></div></div>`).join('')}</div></div>
+     <div style="padding:6px 12px 6px;flex:none"><div class="cmpbar" style="margin:0 0 6px"><span>Commit message</span></div><div style="display:flex;gap:8px"><div class="btn">Stage all</div><div class="btn pri">Commit (1)</div></div></div>${tabbar('c')}`);
+   return phone(`<div class="dim"></div><div class="top"><span class="ttl">Changes</span></div>${scopeBar()}<div class="sheet"><div class="grab"></div><div style="padding:4px 16px"><b>Push 2 commits?</b><div style="color:var(--mut);margin:4px 0 12px">main → origin/main. 这会改变远端。</div><div style="display:flex;gap:8px"><div class="btn">Cancel</div><div class="btn pri">Push</div></div></div></div>`);
+  }
+  if(s==='list') return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">Background</span></div><div class="body"><div class="lbl">solco · running</div><div class="card">${agentRow('vite dev server',':5173 · 3h','svc')}${agentRow('postgres',':5432 · 2d','svc')}</div><div class="note" style="margin:0">v1 只读：没有 Stop 按钮（会杀进程，需要你单独决定）。</div></div>${tabbar('a')}`);
+  return phone(`<div class="dim"></div><div class="sheet"><div class="grab"></div><div style="padding:4px 16px 8px"><div style="display:flex;gap:9px;align-items:center">${slot('svc')}<b>vite dev server</b><span class="pill ok" style="margin-left:auto">running</span></div>
+   <div class="mono" style="color:var(--mut);margin:10px 0;line-height:1.7">port&nbsp;&nbsp;&nbsp;5173<br>since&nbsp;&nbsp;3h 12m<br>cwd&nbsp;&nbsp;&nbsp;~/solco/frontend<br>cmd&nbsp;&nbsp;&nbsp;vite --host</div><div style="display:flex;gap:8px"><div class="btn">Copy URL</div><div class="btn">Close</div></div></div></div>`);
+ }};
+
+/* DEVICES */
+V.devices={title:'设备 & Herdr 会话',story:'一个芯片，一块面板：Herdr 会话（折叠成一行）+ 设备（桌面已连过的机器）。<br>切换是事务：<b>成功才换</b>，失败/取消不改变当前；不移动 Mac 窗口所在设备。<br>需要登录/MFA 的设备手机只提示「在 Mac 上登录」，不收凭据。<br><br><b>限制</b>：设备上 Files/Git/Sessions 读的是本机，必须按实例关闭。',
+ variants:{panel:'芯片面板',signin:'需要登录',limit:'设备上的标签'},
+ states:{panel:{closed:'折叠',sessions:'展开会话',devices:'设备'},signin:{a:'提示'},limit:{a:'标签'}},
+ def:{panel:'devices',signin:'a',limit:'a'},
+ render(v,s){
+  const panel=(inner)=>phone(`<div class="top">${devChip(v==='limit'?'build-box (device)':'This Mac · default')}<span class="ttl"></span><div class="ib">＋</div></div><div class="dim" style="top:60px"></div><div class="card" style="position:absolute;left:10px;right:10px;top:62px;z-index:6;background:var(--raised)">${inner}</div>`);
+  const sessionRow=(open)=>`<div class="r"><div class="t"><small>Herdr session</small><b>default</b></div><span style="color:var(--sub)">${open?'▴':'▾'}</span></div>`;
+  const devs=`<div class="lbl" style="padding:8px 12px 0">Devices</div>
+   <div class="r">${slot('svc')}<div class="t"><b>This Mac</b><small>Connected</small></div></div>
+   <div class="r"><span class="slot"><i style="width:8px;height:8px;border-radius:50%;background:var(--ok)"></i></span><div class="t"><b>build-box</b><small>Online · dev@10.0.0.8</small></div></div>
+   <div class="r"><span class="slot"><i style="width:8px;height:8px;border-radius:50%;background:var(--at)"></i></span><div class="t"><b>gpu-lab</b><small>Needs sign-in on your Mac</small></div><span class="pill at">locked</span></div>`;
+  if(v==='panel'){
+   if(s==='closed') return phone(`<div class="top">${devChip()}<span class="ttl"></span><div class="ib">＋</div></div><div class="body"><div class="lbl">Working · 2</div><div class="card">${agentRow('Refactor sidebar tree','codex · solco','work')}</div></div>${tabbar('a')}`);
+   if(s==='sessions') return panel(`${sessionRow(true)}${['default ✓','work','scratch'].map(x=>`<div class="r" style="padding-left:30px"><div class="t"><b style="font-weight:500">${x}</b></div></div>`).join('')}${devs}`);
+   return panel(`${sessionRow(false)}${devs}`);
+  }
+  if(v==='signin') return panel(`${sessionRow(false)}${devs}<div class="note">gpu-lab 需要登录或多重验证。请在 Mac 上用 Solco 的 Sign In…；手机不会收集任何凭据。</div>`);
+  return phone(`<div class="top">${devChip('build-box (device)')}<span class="ttl"></span><div class="ib">＋</div></div><div class="body"><div class="lbl">Working · 1</div><div class="card">${agentRow('deploy-staging','codex · ~/infra · 4m','work')}</div><div class="note" style="margin:0">Files / Changes / Sessions 在设备上不可用：它们读的是 Mac 本机。Chat 可用性待真机确认，Terminal 可用。</div></div>
+   <div class="tabs"><div class="tab on"><i>◉</i>Agents</div><div class="tab" style="opacity:.3"><i>±</i>Changes</div><div class="tab" style="opacity:.3"><i>▤</i>Files</div><div class="tab" style="opacity:.3"><i>↺</i>Sessions</div></div>`);
+ }};
+
+/* BACKGROUND */
+V.background={title:'子代理 + 后台服务',story:'一个 <b>Background</b> 分组：子代理（圆）与服务（方块）共用嵌套行，<b>形状说话、颜色表紧急度</b>（桌面状态槽位规则）。<br>子代理行 → 打开 Chat 并弹出底部全高抽屉；服务行 → 只读卡片。<br>Host：tree 的 pane 上加 <code>background[]</code>。',
+ variants:{home:'Agents 列表',chat:'Chat 内',drawer:'子代理抽屉'},
+ states:{home:{folded:'折叠',open:'展开'},chat:{a:'卡片'},drawer:{a:'抽屉'}},
+ def:{home:'open',chat:'a',drawer:'a'},
+ render(v,s){
+  if(v==='home') return phone(`<div class="top">${devChip()}<span class="ttl"></span><div class="ib">＋</div></div><div class="body"><div class="lbl">Working · 1</div><div class="card"><div class="r">${slot('work')}<div class="t"><b>Refactor sidebar tree</b><small>codex · solco · 11m</small></div><span class="pill">${s==='open'?'▾':'▸'} 2 · 1 running</span></div>
+    ${s==='open'?`${subRow('Explore: list tree callers','sub-agent · 38s','work','agent')}${subRow('Review diff','sub-agent · done 2m','idle','agent')}${subRow('vite dev server',':5173 · 3h','svc','service')}`:''}</div></div>${tabbar('a')}`);
+  if(v==='chat') return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">Refactor sidebar tree</span><div class="ib">⋯</div></div><div class="body" style="gap:10px"><div style="align-self:flex-end;background:var(--pressed);border-radius:16px;padding:8px 12px;max-width:80%">拆一下侧栏树的渲染</div><div style="color:var(--mut)">我先让两个子代理分别查调用方和评审 diff。</div>
+   <div class="card"><div class="r" style="background:var(--raised)"><span style="color:var(--mut)">⌁</span><div class="t"><b>2 sub-agents</b></div><span class="pill">1 running</span></div>${subRow('Explore: list tree callers','Explore · 38s','work','›')}${subRow('Review diff','Review · done','idle','›')}</div></div><div class="cmpbar"><span>Message</span><span class="send">↑</span></div>`);
+  return phone(`<div class="top"><div class="ib">‹</div><span class="ttl">Refactor sidebar tree</span></div><div class="dim"></div><div class="sheet full"><div class="grab"></div><div style="padding:0 14px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">${slot('work')}<b>Explore: list tree callers</b><span class="pill" style="margin-left:auto">Explore</span></div>
+   <div class="card" style="padding:10px;color:var(--mut);font-size:12px;line-height:1.6">Prompt · 搜索 sidebarTree 的所有调用方…<br><br><span style="color:var(--tx)">Read</span> internal/nativeui/sidebar.go<br><span style="color:var(--tx)">Grep</span> sidebarTreeRow<br><span class="mono">12 tool calls · 38s</span></div><div class="note" style="margin:8px 0">只读转录；Host 已有 GET …/chat/subagents/{id}。</div></div></div>`);
+ }};
+
+/* NEW TAB (desktop) */
+V.newtab={title:'桌面 ＋ 菜单 / 空白 Chat',story:'点＋<b>总是</b>出菜单：Terminal / 各 Agent（MRU 在前，标注 last used）。<br>选 Agent 且默认视图是 Chat → <b>立刻</b>进空白新会话页；写第一条消息 → 立刻渲染（Working）→ 后台起 Agent（<code>SessionSpec.Prompt</code>）→ 绑定后原位换成真实数据。',
+ variants:{flow:'流程'},states:{flow:{menu:'1 菜单',draft:'2 空白页',sent:'3 已发送'}},def:{flow:'menu'},
+ render(v,s){
+  const bar=`<div class="dbar"><div class="dtab on">▮ solco · zsh</div><div class="dtab">◉ pi-3f2a1c</div><div class="dplus ${s==='menu'?'on':''}">＋</div></div>`;
+  const menu=`<div class="menu" style="left:196px"><div>▮ Terminal</div><hr><div>Claude Code <small>last used</small></div><div>Codex</div><div>pi</div><div>omp</div><div>Cursor Agent</div><div>Antigravity</div></div>`;
+  let body;
+  if(s==='menu') body=`<div class="dbody"><div class="wk">solco · main</div></div>`;
+  else if(s==='draft') body=`<div class="dbody"><div class="wk" style="justify-content:center;color:#666">New Claude Code session in solco</div></div>`;
+  else body=`<div class="dbody"><div class="bub">给 relay 测试加上重试，并跑一遍</div><div class="wk"><span class="slot s-work"><i></i></span>Starting Claude Code…</div></div>`;
+  const comp=`<div style="padding:0 70px 16px"><div class="dcmp"><span>${s==='sent'?'Working…':s==='draft'?'Message Claude Code':'—'}</span><span style="color:#ddd">↑</span></div></div>`;
+  return `<div class="desk">${bar}${s==='menu'?menu:''}${body}${s==='menu'?'':comp}</div>`;
+ }};
+
+/* NOTIF */
+V.notif={title:'常驻通知（已实现）',story:'前台/后台都在；点开进 App；原位更新，不闪。<br>Mac 不可达：<code>Can’t reach your Mac — retrying</code>。',
+ variants:{shade:'通知栏'},states:{shade:{live:'有 Agent',none:'无 Agent',down:'不可达'}},def:{shade:'live'},
+ render(v,s){
+  const t={live:'Needs you: 10 · Working: 4 · Idle: 2',none:'No agents running',down:'Can’t reach your Mac — retrying'}[s];
+  return `<div class="shade"><div class="nt"><div class="ic">S</div><div><b>Solco · MacBook</b><div style="color:var(--mut)">${t}</div></div></div></div>`;
+ }};
+
+function phone(inner){return `<div class="phone">${status}${inner}</div>`}
+
+/* ---------- shell ---------- */
+let topic='nav',variant='A',state='agents';
+function readHash(){const h=Object.fromEntries(new URLSearchParams(location.hash.slice(1)));if(h.t&&V[h.t])topic=h.t;const T=V[topic];variant=h.v&&T.variants[h.v]?h.v:Object.keys(T.variants)[0];state=h.s&&T.states[variant][h.s]?h.s:T.def[variant]}
+function go(t,v,s){topic=t;const T=V[t];variant=v||Object.keys(T.variants)[0];state=s||T.def[variant];location.hash=`t=${t}&v=${variant}&s=${state}`;draw()}
+function draw(){
+  const T=V[topic];
+  $('#stage').innerHTML=`<div class="state">${T.title} · ${T.variants[variant]} · ${T.states[variant][state]}</div><div class="row"><div class="col">${T.render(variant,state)}</div></div><div class="cap">${T.story.split('<br>')[0]}</div>`;
+  let h='<h3>Topics</h3>'+Object.entries(V).map(([k,x])=>`<button class="${k===topic?'on':''}" onclick="go('${k}')">${x.title}</button>`).join('');
+  h+='<h3>Variants</h3>'+Object.entries(T.variants).map(([k,n])=>`<button class="${k===variant?'on':''}" onclick="go('${topic}','${k}')">${n}</button>`).join('');
+  h+='<h3>States</h3>'+Object.entries(T.states[variant]).map(([k,n])=>`<button class="${k===state?'on':''}" onclick="go('${topic}','${variant}','${k}')">${n}</button>`).join('');
+  h+=`<div class="story"><b>Story</b><br>${T.story}</div>`;
+  $('#side').innerHTML=h;
+}
+addEventListener('keydown',e=>{if(e.key==='Escape')document.body.classList.toggle('fold')});
+addEventListener('hashchange',()=>{readHash();draw()});
+readHash();draw();
+</script>
+</body>
+</html>
