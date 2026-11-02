@@ -4,8 +4,9 @@
 Chat WebView 页（产品决策 2026-10-11）的唯一源码：一份嵌入式 SPA 同时服务桌面（`mygo build` 内嵌 `dist`，经 `mygo://localhost` 加载）与手机（`build:mobile` 产出单文件 `dist-mobile/mobile.html`，solco-mobile 经 `scripts/sync-chat-page.mjs` 生成 `src/generated/chat-page.ts` 快照）。页面只与自己的桥（`mygo-runtime`）对话；页面代码禁止出现按客户端分叉的分支。`src/` 变更未完成直至：`bun run build` + `bun run build:mobile` + solco-mobile `pnpm sync:chat-page` + `pnpm check:chat-page`。
 
 成员清单
-main.tsx: 桌面入口，createRoot 挂 `App`，引入 highlight.js github 主题与 `theme.css`（`vite.config.ts`，target safari15）
-mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），渲染同一个 `App`，零客户端分支
+main.tsx: 桌面入口，createRoot 挂 `App`，引入 highlight.js github 主题、`nozoom` 与 `theme.css`（`vite.config.ts`，target safari15）
+mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），渲染同一个 `App`，引入 `nozoom`，零客户端分支
+nozoom.ts: 双指缩放关闭（副作用导入）：gesture 事件与 Ctrl+wheel 的默认缩放被取消——页面是原生窗口里的 App UI，双指放大不原生；普通滚动不受影响
 App.tsx: 页面根：桥接状态（`chat.*` / events 订阅）、`data-theme`/`data-contrast`/`data-prose` 写入 html、sticky-bottom 跟尾、会话绑定与开关（`bindLiveAgent` 等）
 mygo.ts: `mygo generate` 生成的类型化桥客户端——唯一桥 API 面，禁止手改
 turn.tsx: 转录行渲染器：用户气泡（提及 chips、折叠）、助手纯文本、run 折叠（thinking+工具）、工具行、changes 卡、脚注（时间/复制/重发）、`Markdown`→`CodeBlock`——fenced 块统一脸：SVG 以 `<img>` data URL 预览（Preview|Code），mermaid 经懒加载库渲染图（Diagram|Code，strict 模式，350ms 流式去抖，解析失败回落源码+一行 `mmerr` 提示，主题翻转经 MutationObserver 重绘），超 30 行折叠、复制取 `textContent`

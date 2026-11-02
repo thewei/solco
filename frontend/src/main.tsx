@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "highlight.js/styles/github.css";
+import "./nozoom";
 import "./theme.css";
 
 // One embedded SPA serves both WebView pages from the app content origin:
