@@ -1,8 +1,9 @@
 # internal/changelog
 
-Settings → About 页的数据源包。
+Settings → About 页与更新检查系统的数据源包。
 
-- `changelog.go`：`Current()` 解析嵌入的 `snapshot.md`——`## v…` 开一个发布（第二个 `## v` 结束前一个），`### 名称` 开分组，`- 条目` 归入当前分组；只返回最新一个发布。
-- `snapshot.md`：发布流程（`.agents/skills/solco-release`）在发布时从仓库根 `CHANGELOG.md` 截取目标版本小节写入，并随版本 bump 提交；dev 构建显示上一个已发布版本的改进。
+- `changelog.go`：`Current()` 解析最新版本、`All()` 解析所有版本、`Between()` 提取跨版本更新集、`CompareVersions()` 负责版本比较、`ParseReleases()` 解析 Markdown 格式的更新说明。
+- `snapshot.md`：发布流程（`.agents/skills/solco-release`）在发布时同步的完整 CHANGELOG 快照，供离线展示与跨版本对比。
 
-法则: 只读嵌入快照，不读网络、不读运行时文件；解析规则与 CHANGELOG.md 的写作约定一一对应。
+法则: 纯数据解析包，不直接产生副作用，解析规则与 CHANGELOG.md 的写作约定一一对应。
+[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

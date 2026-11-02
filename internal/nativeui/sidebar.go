@@ -115,7 +115,17 @@ func (s *Shell) sidebar(c *ui.Context) {
 		standardFoot := func() {
 			foot(func() {
 				s.deviceSwitcher(c)
-				if gorexIconButton(c, gorexColorsOf(t.Dark), iconSettings, "Settings", "Settings", false, gorexIconBtn, gorexIconGlyph).Clicked() {
+				btn := gorexIconButton(c, gorexColorsOf(t.Dark), iconSettings, "Settings", "Settings", false, gorexIconBtn, gorexIconGlyph)
+				if s.hasUpdate() {
+					btn.DrawOver(func(p *ui.Painter, r ui.Rect) {
+						dotX := r.X + r.W - 8
+						dotY := r.Y + 3
+						dotSize := float32(6.5)
+						p.Fill(ui.Rect{X: dotX - 1, Y: dotY - 1, W: dotSize + 2, H: dotSize + 2}, t.Surface, (dotSize+2)/2)
+						p.Fill(ui.Rect{X: dotX, Y: dotY, W: dotSize, H: dotSize}, t.Danger, dotSize/2)
+					})
+				}
+				if btn.Clicked() {
 					s.router.Push(routeSettings)
 				}
 			})

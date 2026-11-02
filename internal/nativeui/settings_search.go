@@ -58,7 +58,7 @@ var settingsLabels = map[string][][2]string{
 		{"", "Copy Diagnostics"}, {"Logs", "Logs"},
 	},
 	"/settings/about": {
-		{"Links", "GitHub Repository"}, {"Links", "Release Notes"},
+		{"Links", "Software Update"}, {"Links", "GitHub Repository"}, {"Links", "Release Notes"},
 		{"What's new", "What's new in this version"},
 	},
 	"/settings/workboard": {

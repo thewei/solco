@@ -80,7 +80,7 @@ if grep -q '<!-- draft' "$notes_file"; then
 fi
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p internal/changelog
-  cp "$notes_file" internal/changelog/snapshot.md
+  cp CHANGELOG.md internal/changelog/snapshot.md
 fi
 printf 'release notes: curated CHANGELOG.md section for v%s\n' "$target"
 

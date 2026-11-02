@@ -368,6 +368,8 @@ type Shell struct {
 	paneShellIdle map[string]bool
 	// previews owns persistent preview window controllers (GWB-007).
 	previews *previewManager
+	// updates manages update discovery and release notes aggregation.
+	updates *updateManager
 	// git owns the 0.10 Git Workbench orchestration (single cache).
 	git *gitService
 	// surface owns the WorkspacePrimarySurface state machine (plan §5/§6).
@@ -725,6 +727,7 @@ func NewShell(opts ...ShellOption) *Shell {
 	s.portProbe = services.NewPortProbe()
 	s.git = newGitService()
 	s.previews = newPreviewManager()
+	s.updates = newUpdateManager()
 	// Preview external-open failures surface as the shell's status toast.
 	s.previews.report = func(msg string) { s.status = msg }
 	s.scriptBusy = make(map[string]bool)
@@ -833,6 +836,11 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	// Our hook layer: start in-app Unix domain socket server and tail the
 	// event spool for backward compatibility.
 	s.AttachHookServer()
+	// Silent background check for application updates (2s after launch)
+	time.AfterFunc(2*time.Second, func() {
+		s.checkForUpdates(false)
+	})
+
 	// Appearance changes (system or Settings) re-publish the chat
 	// projection and the Files preview target, whose theme fields carry
 	// the resolved appearance to their WebView pages.

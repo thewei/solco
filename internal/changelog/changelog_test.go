@@ -57,6 +57,66 @@ func TestCurrentParsesTheNewestReleaseOnly(t *testing.T) {
 	}
 }
 
+func TestAllParsesAllReleases(t *testing.T) {
+	orig := snapshot
+	snapshot = sample
+	t.Cleanup(func() { snapshot = orig })
+
+	all := All()
+	if len(all) != 2 {
+		t.Fatalf("All() returned %d releases, want 2", len(all))
+	}
+	if all[0].Version != "0.11.0" || all[1].Version != "0.10.0" {
+		t.Fatalf("versions = %s, %s", all[0].Version, all[1].Version)
+	}
+}
+
+func TestBetweenFiltersReleasesSpan(t *testing.T) {
+	orig := snapshot
+	snapshot = sample
+	t.Cleanup(func() { snapshot = orig })
+
+	// From 0.9.0 to 0.11.0: both 0.11.0 and 0.10.0
+	span := Between("0.9.0", "0.11.0")
+	if len(span) != 2 {
+		t.Fatalf("Between(0.9.0, 0.11.0) = %d releases, want 2", len(span))
+	}
+
+	// From 0.10.0 to 0.11.0: only 0.11.0
+	span1 := Between("0.10.0", "0.11.0")
+	if len(span1) != 1 || span1[0].Version != "0.11.0" {
+		t.Fatalf("Between(0.10.0, 0.11.0) = %+v, want [0.11.0]", span1)
+	}
+
+	// From 0.11.0 to 0.11.0: empty
+	span0 := Between("0.11.0", "0.11.0")
+	if len(span0) != 0 {
+		t.Fatalf("Between(0.11.0, 0.11.0) = %d releases, want 0", len(span0))
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	cases := []struct {
+		v1, v2 string
+		want   int
+	}{
+		{"0.12.0", "0.11.0", 1},
+		{"0.11.0", "0.12.0", -1},
+		{"0.12.0", "0.12.0", 0},
+		{"v0.12.0", "0.12.0", 0},
+		{"0.12.1", "0.12.0", 1},
+		{"1.0.0", "0.12.0", 1},
+		{"dev", "0.12.0", -1},
+		{"0.12.0", "dev", 1},
+	}
+	for _, tc := range cases {
+		got := CompareVersions(tc.v1, tc.v2)
+		if got != tc.want {
+			t.Errorf("CompareVersions(%q, %q) = %d, want %d", tc.v1, tc.v2, got, tc.want)
+		}
+	}
+}
+
 func TestCurrentWithoutReleaseSectionIsNotOK(t *testing.T) {
 	orig := snapshot
 	snapshot = "# Changelog\n\nnothing here yet\n"

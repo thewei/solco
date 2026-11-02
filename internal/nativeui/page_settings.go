@@ -73,7 +73,17 @@ func (s *Shell) settingsNav(c *ui.Context) {
 	for _, section := range settingsSections {
 		section := section
 		selected := s.router.Path() == section.path
-		if navTileButton(c, section.icon, section.tone, section.label, selected).Clicked() && !selected {
+		btn := navTileButton(c, section.icon, section.tone, section.label, selected)
+		if section.path == "/settings/about" && s.hasUpdate() {
+			btn.DrawOver(func(p *ui.Painter, r ui.Rect) {
+				dotX := r.X + r.W - 14
+				dotY := r.Y + r.H/2 - 3
+				dotSize := float32(6.5)
+				p.Fill(ui.Rect{X: dotX - 1, Y: dotY - 1, W: dotSize + 2, H: dotSize + 2}, c.Theme().Surface, (dotSize+2)/2)
+				p.Fill(ui.Rect{X: dotX, Y: dotY, W: dotSize, H: dotSize}, c.Theme().Danger, dotSize/2)
+			})
+		}
+		if btn.Clicked() && !selected {
 			s.router.Push(section.path)
 		}
 	}
