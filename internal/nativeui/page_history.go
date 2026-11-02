@@ -477,7 +477,7 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 	}
 	selecting := s.historySelecting()
 	selected := selecting && s.hist.selected[key]
-	open := !selecting && !s.hist.showTrash && s.hist.preview.key == key
+	open := !selecting && s.hist.preview.key == key
 	row := ui.ButtonBase(c.Key("session:"+key)).FillWidth().Padding(sp.M, rowInset).Gap(sp.L).AlignItems(ui.Center).
 		FocusRing(false).Label(title).Transition(rowEnter)
 	switch {
@@ -486,11 +486,9 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 	case row.Hovered(), !selecting && s.hist.preview.key == key:
 		row.Background(tokens.PanelHover)
 	}
-	// A click reads the session (⏎ too) and the info (ⓘ) card is the row's
-	// fold: → opens it, ← closes it. In the Trash, which has no page to
-	// open, the click is the fold itself; while selecting a row ticks.
-	folds := !selecting && s.hist.showTrash
-	activated := s.nav.sessions.row(c, row, navRow{Key: key, Folder: folds, Expanded: folds && s.hist.preview.key == key})
+	// A click reads the session (⏎ too); while selecting — always in the
+	// Trash, which has no page to open — a row ticks.
+	activated := s.nav.sessions.row(c, row, navRow{Key: key})
 	row.Children(func() {
 		if selecting {
 			selectionMark(c, selected)
@@ -501,7 +499,7 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 		// enters the row. The ⋯ stays built (zero width) while hidden, so a
 		// choice made with the pointer on its popup still lands; the gap
 		// exists only while the strip shows.
-		actions := !s.hist.showTrash && !selecting && (open || row.Hovered())
+		actions := !selecting && (open || row.Hovered())
 		gap := float32(0)
 		if actions {
 			gap = sp.L
@@ -522,7 +520,7 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 					ui.Text(c, facts).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Ellipsis("…").PassThrough()
 				}
 			})
-			if !s.hist.showTrash && !selecting {
+			if !selecting {
 				s.sessionRowActions(c, summary.Meta, open, actions, menu)
 			}
 		})
@@ -556,8 +554,6 @@ func (s *Shell) sessionRow(c *ui.Context, summary history.SessionSummary) {
 		switch {
 		case selecting:
 			s.setHistorySelected([]string{key}, !selected)
-		case s.hist.showTrash:
-			s.toggleHistoryPreview(key)
 		default:
 			s.router.Push("/history/" + key)
 		}
