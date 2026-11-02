@@ -450,10 +450,19 @@ type Shell struct {
 	// and the last selection it scrolled to (tabbar.go).
 	tabBarScroll      ui.ScrollState
 	tabBarSelected    string
-	tabBarRevealUntil time.Time // the selected chip is kept scrolled into view until then
-	subagentsBusy     bool
-	subagentsAt       time.Time
-	subagentsTick     *time.Timer // re-read while a listed sub-agent is running
+	tabBarRevealUntil time.Time                                // the selected chip is kept scrolled into view until then
+	onReorder         func(from, to treeNodeDrag, before bool) // test seam: a drop that passed canReorderTree
+	tabRects          map[string]ui.Rect                       // each Tab chip's box last frame (tabbar.go)
+	tabGapBefore      map[string]float32                       // the open width before each chip last frame
+	tabDrop           tabDropSide                              // the chip a dragged Tab hovers and the half of it
+	tabBarWidth       float32                                  // the bar's width last frame: sizes this frame's chips
+	allTabs           struct {                                 // the bar\'s All Tabs menu
+		open   bool
+		filter string
+	}
+	subagentsBusy bool
+	subagentsAt   time.Time
+	subagentsTick *time.Timer // re-read while a listed sub-agent is running
 
 	// inspector owns the 0.8 read-only Agent inspector state.
 	inspector inspectorState

@@ -8,8 +8,6 @@ package nativeui
  */
 
 import (
-	"sort"
-
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/herdr"
 )
@@ -262,9 +260,9 @@ func tabsForProject(projection herdr.Projection, projectID string) []herdr.Tab {
 			result = append(result, tab)
 		}
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return result[i].Number < result[j].Number
-	})
+	// Herdr's snapshot lists a workspace's Tabs in their real order; Tab.Number
+	// is a stable creation number that tab.move never renumbers, so sorting by
+	// it would undo every reorder.
 	return result
 }
 

@@ -17,11 +17,11 @@ func TestDropInsertionIndex(t *testing.T) {
 		index    int
 		ok       bool
 	}{
-		{"a", "c", true, 1, true},
-		{"a", "c", false, 2, true},
+		{"a", "c", true, 2, true},
+		{"a", "c", false, 3, true},
 		{"d", "b", true, 1, true},
 		{"d", "b", false, 2, true},
-		{"a", "b", true, 0, false},
+		{"a", "b", true, 1, false},
 		{"b", "a", false, 1, false},
 		{"a", "a", true, 0, false},
 		{"missing", "c", true, 0, false},
@@ -212,7 +212,9 @@ func TestNativeTreeFollowsHerdrOrderAndLayout(t *testing.T) {
 		t.Fatalf("workspace ordering = %+v", projects)
 	}
 	tabs := tabsForProject(p, "w1")
-	if tabs[0].ID != "t1" || tabs[1].ID != "t2" {
+	// Tab.Number is a creation number tab.move never renumbers: the snapshot's
+	// list order is the Tab order.
+	if tabs[0].ID != "t2" || tabs[1].ID != "t1" {
 		t.Fatalf("tab ordering = %+v", tabs)
 	}
 	panes := panesForTab(p, "t1")

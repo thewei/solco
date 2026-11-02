@@ -100,8 +100,11 @@ func tabZoomed(p herdr.Projection, tabID string) bool {
 	return false
 }
 
-// dropInsertionIndex gives the final zero-based index AFTER removing the
-// dragged item. No-op drops do not roundtrip to Herdr.
+// dropInsertionIndex gives Herdr's insert_index: the slot in the CURRENT list
+// (before the dragged item is lifted out) the item is inserted ahead of, so a
+// rightward move is not shifted down by one (live-probed on Herdr 0.9.5:
+// tab.move/workspace.move with insert_index N lands in final slot N-1 when it
+// moves right). No-op drops do not roundtrip to Herdr.
 func dropInsertionIndex(ids []string, source, target string, before bool) (int, bool) {
 	from, to := -1, -1
 	for i, id := range ids {
@@ -119,15 +122,15 @@ func dropInsertionIndex(ids []string, source, target string, before bool) (int, 
 	if !before {
 		at++
 	}
-	if from < at {
-		at--
-	}
-	return at, at != from
+	return at, at != from && at != from+1
 }
 
 func (s *Shell) reorderTree(from, to treeNodeDrag, before bool) {
 	if !s.canReorderTree(from, to) {
 		return
+	}
+	if s.onReorder != nil {
+		s.onReorder(from, to, before)
 	}
 	instance := s.activeInstance
 	switch from.Kind {

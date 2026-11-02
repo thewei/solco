@@ -136,8 +136,9 @@ func (m *Manager) CloseProject(session, projectID string) (Projection, error) {
 	})
 }
 
-// MoveProject reorders a Herdr workspace in its session; insert_index is
-// the final index after removing it from its old position.
+// MoveProject reorders a Herdr workspace in its session; insert_index is the
+// slot in the current order it is inserted ahead of (before the item is lifted
+// out), so moving right by one needs index+2.
 func (m *Manager) MoveProject(session, projectID string, index uint) (Projection, error) {
 	if strings.TrimSpace(projectID) == "" {
 		return Projection{}, fmt.Errorf("project id is required")

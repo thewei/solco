@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Tab strip — 拖拽排序 + 浏览器式收缩 · 探索</title>
+<style>
+:root{--bg:#16171a;--bar:#1d1e22;--chip:#2a2c31;--chip-h:#24262a;--ink:#e6e7ea;--mute:#8d9099;--line:#33353b;--blue:#4c8dff;--green:#3ecf6a;--amber:#f0b429;--red:#ef5350}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;padding:20px 24px 60px}
+h1{font-size:16px;margin:0 0 4px}h2{font-size:13px;margin:26px 0 4px}
+p.sub{color:var(--mute);margin:0 0 14px;max-width:880px}
+.ctl{display:flex;gap:22px;align-items:center;flex-wrap:wrap;background:var(--bar);border:1px solid var(--line);border-radius:10px;padding:10px 14px;position:sticky;top:0;z-index:50}
+.ctl label{display:flex;gap:8px;align-items:center;color:var(--mute)}
+.ctl b{color:var(--ink);min-width:22px;display:inline-block}
+.opt{margin-top:8px}
+.opt .tag{display:inline-block;font-weight:600;background:var(--chip);border-radius:6px;padding:1px 8px;margin-right:8px}
+.note{color:var(--mute);margin:6px 0 8px;max-width:900px}
+.note li{margin:2px 0}
+.win{background:var(--bar);border:1px solid var(--line);border-radius:12px;padding:8px 10px;overflow:visible;position:relative}
+.bar{display:flex;align-items:center;gap:2px;height:28px;position:relative}
+.strip{display:flex;gap:2px;align-items:center;height:28px;min-width:0;position:relative}
+.strip.scroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.tab{height:28px;flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 6px 0 8px;border-radius:8px;color:var(--mute);background:transparent;cursor:default;user-select:none;position:relative;white-space:nowrap;transition:width .16s ease,background .12s}
+.tab:hover{background:var(--chip-h);color:var(--ink)}
+.tab.sel{background:var(--chip);color:var(--ink)}
+.tab .mk{width:16px;height:16px;border-radius:4px;flex:0 0 16px;display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff}
+.tab .t{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.tab .pn{font-size:10px;color:var(--mute)}
+.tab .st{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center}
+.dot{width:8px;height:8px;border-radius:50%}
+.ring{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--mute)}
+.sq{width:8px;height:8px;border-radius:2px;background:var(--green)}
+.spin{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--blue);border-top-color:transparent;animation:r .8s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+.x{width:16px;height:16px;border-radius:4px;display:none;place-items:center;font-size:12px;line-height:1;flex:0 0 16px}
+.x:hover{background:#3a3c42}
+.tab.sel .x,.tab:hover .x{display:grid}
+.tab:hover .st.hasx,.tab.sel .st.hasx{display:none}
+.tab.compact .t,.tab.compact .pn{display:none}
+.tab.compact{padding:0 6px;justify-content:center}
+.tab.compact .x{display:none!important}
+.tab.compact.sel .x{display:none!important}
+.tab.drag{opacity:.35}
+.ghost{position:fixed;pointer-events:none;z-index:200;box-shadow:0 6px 20px #0008;background:var(--chip);color:var(--ink);transform:rotate(-1deg)}
+.ins{position:absolute;top:2px;bottom:2px;width:2px;border-radius:2px;background:var(--blue);pointer-events:none;z-index:20;display:none}
+.plus,.nav{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--mute);flex:0 0 28px}
+.plus:hover,.nav:hover{background:var(--chip-h);color:var(--ink)}
+.nav.off{opacity:.4;pointer-events:none}
+.card{position:absolute;z-index:120;top:36px;min-width:250px;max-width:320px;background:#0f1012;border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:0 10px 30px #000a;pointer-events:none;display:none}
+.card .h{font-weight:600;margin-bottom:2px;white-space:normal}.card .m{color:var(--mute);font-size:12px}
+.card .r{display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px}
+.kbd{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--mute)}
+.menu{position:absolute;right:8px;top:40px;z-index:130;width:320px;background:#0f1012;border:1px solid var(--line);border-radius:10px;padding:6px;box-shadow:0 10px 30px #000a;display:none}
+.menu input{width:100%;background:var(--chip);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 8px;margin-bottom:4px;outline:none}
+.menu .it{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px}
+.menu .it:hover{background:var(--chip)}.menu .it .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu .it.hid{color:var(--ink)}.menu .it.vis{color:var(--mute)}
+.pro{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.pro div{background:var(--bar);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--mute)}
+.pro b{color:var(--ink);display:block;margin-bottom:2px}
+.hint{color:var(--mute);font-size:12px;margin-top:6px}
+.sw{display:grid;place-items:center;height:6px}
+</style>
+</head>
+<body>
+<h1>Tab strip · 拖拽排序 + 浏览器式收缩</h1>
+<p class="sub">三种结构不同的方案,共用同一份 Tab 数据。<b>每个条都是真的可拖拽</b>(按住 chip 横向拖,蓝线是落点,松手才"提交");悬停 ~0.5s 出信息卡;右侧滑块改 Tab 数量和窗口宽度,看每个方案在拥挤时的表现。选中项(蓝色高亮名称之外的 chip 背景)始终可见。</p>
+<div class="ctl">
+  <label>Tab 数量 <input id="n" type="range" min="3" max="24" value="12"><b id="nv">12</b></label>
+  <label>标题栏宽度 <input id="w" type="range" min="420" max="1100" value="760"><b id="wv">760</b>px</label>
+  <label><input id="pins" type="checkbox"> 前 2 个固定(方案 B)</label>
+  <span class="hint">拖拽 = 仅预览;松手后调用 Herdr <code>tab.move</code>(桌面侧栏已有同一条提交路径)。</span>
+</div>
+
+<div id="host"></div>
+
+<div class="pro">
+<div><b>共同点(所有方案)</b>拖拽排序提交路径 = 现有 <code>reorderTree</code>(Herdr <code>tab.move</code>);预览不改 runtime;× 只在悬停/选中出现;状态槽位保持 16pt(圆=Agent,圆角方=服务);⌥⌘1–9 / 点击 / 右键菜单不变。</div>
+<div><b>不做(三案共有的边界)</b>不做 Tab 跨 Workspace 拖拽(Herdr <code>tab.move</code> 不支持);不做第二套 Tab 状态;不加 Tab 分组/固定的持久化(方案 B 的"固定"只是本机 UI 偏好,不进 Herdr)。</div>
+<div><b>实现成本参照</b>MyGo 已有 <code>Element.Drag / Drop</code>(sidebar 行已用)。A≈中,B≈中高(菜单+固定),C≈高(悬停展开要动态宽度动画)。</div>
+</div>
+
+<script>
+const AGENTS=[["C","#d97757"],["X","#10a37f"],["π","#7c5cff"],["O","#e0527a"],["▶","#555"]];
+const TITLES=["修复进入 Agent 会话时的滚动","优化会话详情页 Header","COPY: Fix Mac host","ZOOM: Add zoom transitions","ALMA: Deploy preview","KYC: 优化 KYC 流程","CARD: Limit change flow","FOLD: 修复 ChatView 折叠","我希望 ChatView 支持 mermaid","AGENTS: Add sortable cards","Terminal ~/solco","node :57373","Sessions 索引性能","Quota 页面卡片","手机端 Files 只读","Hosts 设备切换","Settings 搜索","Git 面板 diff","Tab 条探索","Release 0.11.0","Voice 听写","Remote Access","Queue 卡片排序","UX audit round 5"];
+const STATES=["working","idle","attention","review","idle","working","idle","service","working","idle","idle","service"];
+let tabs=[],sel=2,pinCount=0;
+function mk(n){tabs=[];for(let i=0;i<n;i++){const a=AGENTS[i%AGENTS.length];tabs.push({id:"t"+i,title:TITLES[i%TITLES.length],mk:a,st:STATES[i%STATES.length],panes:(i%5==2)?3:1,ws:"solco"})}}
+function stEl(s){return s==="working"?'<i class="spin"></i>':s==="idle"?'<i class="ring"></i>':s==="service"?'<i class="sq"></i>':s==="attention"?'<i class="dot" style="background:var(--amber)"></i>':'<i class="dot" style="background:var(--green)"></i>'}
+function stName(s){return {working:"Working",idle:"Idle",attention:"Needs you",review:"Ready for review",service:"Service running"}[s]}
+
+/* generic chip DOM */
+function chip(t,i,{compact=false,w=null,pinned=false}={}){
+  const e=document.createElement("div");e.className="tab"+(i===sel?" sel":"")+(compact?" compact":"");e.dataset.i=i;
+  if(w!=null)e.style.width=w+"px";
+  e.innerHTML=`<span class="mk" style="background:${t.mk[1]}">${t.mk[0]}</span><span class="t">${t.title}</span>${t.panes>1?`<span class="pn">${t.panes}</span>`:""}<span class="st hasx">${stEl(t.st)}</span><span class="x" title="Close Tab">×</span>`;
+  e.onclick=ev=>{if(ev.target.classList.contains("x")){tabs.splice(i,1);if(sel>=tabs.length)sel=tabs.length-1;render();return}sel=i;render()};
+  return e}
+
+/* drag engine: pointer-based, horizontal, preview-only until drop */
+function enableDrag(strip,onDrop,getEls){
+  let st=null;
+  strip.addEventListener("pointerdown",ev=>{const c=ev.target.closest(".tab");if(!c||ev.target.classList.contains("x")||ev.button)return;
+    st={c,i:+c.dataset.i,x0:ev.clientX,y0:ev.clientY,on:false};strip.setPointerCapture(ev.pointerId)});
+  strip.addEventListener("pointermove",ev=>{if(!st)return;
+    if(!st.on){if(Math.abs(ev.clientX-st.x0)<5)return;st.on=true;st.c.classList.add("drag");
+      st.g=st.c.cloneNode(true);st.g.classList.add("ghost");st.g.classList.remove("drag");st.g.style.width=st.c.offsetWidth+"px";document.body.appendChild(st.g);
+      st.ins=strip.parentElement.querySelector(".ins");}
+    st.g.style.left=(ev.clientX-st.c.offsetWidth/2)+"px";st.g.style.top=(ev.clientY-14)+"px";
+    const els=getEls();let at=els.length;
+    for(let k=0;k<els.length;k++){const r=els[k].getBoundingClientRect();if(ev.clientX<r.left+r.width/2){at=k;break}}
+    st.at=at;const pr=strip.parentElement.getBoundingClientRect();
+    const ref=at<els.length?els[at].getBoundingClientRect().left-2:els[els.length-1].getBoundingClientRect().right+1;
+    st.ins.style.display="block";st.ins.style.left=(ref-pr.left)+"px"});
+  const end=()=>{if(!st)return;if(st.on){st.g.remove();st.ins.style.display="none";let to=st.at;if(st.i<to)to--;
+      if(to!==st.i){const [m]=tabs.splice(st.i,1);tabs.splice(to,0,m);sel=sel===st.i?to:sel;}
+      render()}st=null};
+  strip.addEventListener("pointerup",end);strip.addEventListener("pointercancel",end)}
+
+/* hover card */
+function hoverCard(win,strip){
+  const card=win.querySelector(".card");let timer=null;
+  strip.addEventListener("pointerover",ev=>{const c=ev.target.closest(".tab");clearTimeout(timer);if(!c||document.querySelector(".ghost")){card.style.display="none";return}
+    timer=setTimeout(()=>{const t=tabs[+c.dataset.i];const r=c.getBoundingClientRect(),p=win.getBoundingClientRect();
+      card.innerHTML=`<div class="h">${t.title}</div><div class="m">${t.ws} · ${t.panes} pane${t.panes>1?"s":""}</div><div class="r">${stEl(t.st)} ${stName(t.st)}</div><div class="r"><span class="kbd">⌥⌘${(+c.dataset.i)+1<9?(+c.dataset.i)+1:"9"}</span><span class="m">Select Tab</span></div>`;
+      card.style.left=Math.max(4,Math.min(r.left-p.left,p.width-330))+"px";card.style.display="block"},450)});
+  strip.addEventListener("pointerleave",()=>{clearTimeout(timer);card.style.display="none"});
+  strip.addEventListener("pointerdown",()=>{clearTimeout(timer);card.style.display="none"})}
+
+function shell(title,tag,notes){
+  const d=document.createElement("div");d.className="opt";
+  d.innerHTML=`<h2><span class="tag">${tag}</span>${title}</h2><ul class="note">${notes.map(n=>`<li>${n}</li>`).join("")}</ul><div class="win"><div class="bar"><div class="nav off">‹</div><div class="strip"></div><div class="nav off">›</div><div class="plus">＋</div><div style="flex:1"></div></div><div class="ins"></div><div class="card"></div><div class="menu"></div></div>`;
+  return d}
+
+/* ---- A: Chrome 式等分收缩 ---- */
+function renderA(host,W){
+  const d=shell("等分收缩 + 选中项保宽(Chrome/Edge 路线)","A",[
+    "所有 Tab 等分可用宽度:180 → 最小 <b>44pt 仅图标+状态点</b>,选中项永远 ≥160pt 保留标题。",
+    "标题被收起的 Tab 靠 <b>悬停信息卡</b>(标题/Workspace/pane 数/状态/快捷键)读全。",
+    "挤到极限(全部 44pt 仍放不下)才出现 ‹ › 横向滚动——和今天一致。",
+    "<b>代价</b>:大量 Tab 时都是图标,靠品牌图+状态点区分,同一 Agent 多开时不好认(靠悬停卡弥补)。"]);
+  host.appendChild(d);const strip=d.querySelector(".strip");
+  const avail=W-28*3-8-12;const n=tabs.length;
+  const selW=160;let each=Math.floor((avail-selW-(n-1)*2)/Math.max(1,n-1));each=Math.max(44,Math.min(180,each));
+  const total=(n-1)*each+selW+(n-1)*2;
+  strip.style.maxWidth=avail+"px";if(total>avail)strip.classList.add("scroll");
+  tabs.forEach((t,i)=>{const isSel=i===sel;const w=isSel?Math.max(selW,Math.min(240,each)):each;strip.appendChild(chip(t,i,{compact:!isSel&&w<96,w}))});
+  enableDrag(strip,null,()=>[...strip.children]);hoverCard(d.querySelector(".win"),strip)}
+
+/* ---- B: 固定 + 紧凑 + 全部 Tab 菜单 ---- */
+function renderB(host,W,pin){
+  const d=shell("固定 Tab + 最小宽度 + 「全部 Tab」菜单(Edge/Arc 路线)","B",[
+    "非选中 Tab 保持 <b>≥110pt 的可读标题</b>(截断而非收成图标);放不下时 <b>不滚动</b>,尾部折进 <b>▾ 全部 Tab</b> 菜单(带搜索,按 Herdr 顺序,显示状态点)。",
+    "可选「固定」:前 N 个只显示图标+状态(36pt),永远不被挤出——适合常驻的 Terminal/服务 Tab。固定仅是本机界面偏好。",
+    "菜单里点任何 Tab = 选中并把它换进可见区(最后一个可见槽被让出),不会出现用户找不到的 Tab。",
+    "<b>代价</b>:多一个入口;固定状态要存本机设置(不进 Herdr);拖拽跨「可见区 / 菜单」不可达,需先在菜单里选中。"]);
+  host.appendChild(d);const strip=d.querySelector(".strip");const win=d.querySelector(".win");
+  const avail=W-28*2-60-8-12;const pinned=pin?2:0;let used=pinned*(36+2),vis=[];
+  for(let i=0;i<tabs.length;i++){const w=i<pinned?36:(i===sel?170:112);if(used+w+2>avail&&!(i===sel))break;if(used+w+2>avail&&i===sel){vis.pop();used=0;}vis.push(i);used+=w+2}
+  if(!vis.includes(sel)){vis.pop();vis.push(sel)}
+  vis.forEach(i=>{const t=tabs[i];strip.appendChild(chip(t,i,{compact:i<pinned,w:i<pinned?36:(i===sel?170:112)}))});
+  const hidden=tabs.map((t,i)=>i).filter(i=>!vis.includes(i));
+  const bar=d.querySelector(".bar");const plus=bar.querySelector(".plus");
+  d.querySelectorAll(".nav").forEach(n=>n.style.display="none");
+  if(hidden.length){const all=document.createElement("div");all.className="nav";all.style.cssText="width:auto;padding:0 8px;gap:4px;display:flex;align-items:center;font-size:12px";all.innerHTML=`▾ <span style="color:var(--ink)">${hidden.length}</span>`;bar.insertBefore(all,plus);
+    const menu=d.querySelector(".menu");
+    all.onclick=()=>{menu.style.display=menu.style.display==="block"?"none":"block";
+      menu.innerHTML='<input placeholder="Search Tabs…">'+tabs.map((t,i)=>`<div class="it ${vis.includes(i)?"vis":"hid"}" data-i="${i}"><span class="mk" style="background:${t.mk[1]};width:16px;height:16px;border-radius:4px;display:grid;place-items:center;font-size:9px;color:#fff">${t.mk[0]}</span><span class="t">${t.title}</span>${stEl(t.st)}</div>`).join("");
+      const inp=menu.querySelector("input");inp.oninput=()=>menu.querySelectorAll(".it").forEach(e=>e.style.display=e.textContent.toLowerCase().includes(inp.value.toLowerCase())?"flex":"none");
+      menu.querySelectorAll(".it").forEach(e=>e.onclick=()=>{sel=+e.dataset.i;render()})}}
+  enableDrag(strip,null,()=>[...strip.children]);hoverCard(win,strip)}
+
+/* ---- C: 手风琴(选中展开,悬停展开) ---- */
+function renderC(host,W){
+  const d=shell("手风琴:仅选中项展开,悬停就地展开(Vivaldi/Zen 路线)","C",[
+    "<b>永远只有选中项显示标题</b>(≤240pt),其余全是 36pt 图标+状态:无论 3 个还是 24 个 Tab 条长度几乎不变,<b>不需要滚动</b>。",
+    "鼠标停在某个收起的 Tab 上 ~0.35s,它<b>就地展开</b>成完整 chip(推开邻居,不盖住),离开即收回——信息卡由展开本身承担。",
+    "拖拽时全部收起、仅被拖项带标题的幽灵跟手,落点蓝线;拖动手感最稳(目标宽度恒定)。",
+    "<b>代价</b>:「一眼看标题」的能力最弱(只有选中项);悬停展开导致邻居位移,快速扫过会抖——需要 dwell 延迟与防抖;MyGo 要做宽度动画。"]);
+  host.appendChild(d);const strip=d.querySelector(".strip");const win=d.querySelector(".win");
+  const avail=W-28*3-8-12;let hov=-1;
+  const paint=()=>{strip.innerHTML="";tabs.forEach((t,i)=>{const open=i===sel||i===hov;const e=chip(t,i,{compact:!open,w:open?(i===sel?200:180):36});e.onclick=chipClick(e,i);strip.appendChild(e)})};
+  function chipClick(e,i){return ev=>{if(ev.target.classList.contains("x")){tabs.splice(i,1);if(sel>=tabs.length)sel=tabs.length-1;render();return}sel=i;render()}}
+  paint();strip.style.maxWidth=avail+"px";
+  let timer=null;strip.addEventListener("pointerover",ev=>{if(document.querySelector(".ghost"))return;const c=ev.target.closest(".tab");clearTimeout(timer);if(!c){return}const i=+c.dataset.i;if(i===hov)return;timer=setTimeout(()=>{hov=i;paint()},350)});
+  strip.addEventListener("pointerleave",()=>{clearTimeout(timer);if(hov!==-1){hov=-1;paint()}});
+  enableDrag(strip,null,()=>[...strip.children])}
+
+function render(){
+  const W=+document.getElementById("w").value;const n=+document.getElementById("n").value;
+  document.getElementById("nv").textContent=n;document.getElementById("wv").textContent=W;
+  const host=document.getElementById("host");host.innerHTML="";
+  host.style.maxWidth=(W+24)+"px";
+  renderA(host,W);renderB(host,W,document.getElementById("pins").checked);renderC(host,W)}
+document.getElementById("n").oninput=()=>{const n=+document.getElementById("n").value;while(tabs.length<n){const i=tabs.length;const a=AGENTS[i%AGENTS.length];tabs.push({id:"t"+i+"_"+Math.random(),title:TITLES[i%TITLES.length],mk:a,st:STATES[i%STATES.length],panes:(i%5==2)?3:1,ws:"solco"})}tabs.length=Math.min(tabs.length,n);if(sel>=tabs.length)sel=tabs.length-1;render()};
+document.getElementById("w").oninput=render;document.getElementById("pins").onchange=render;
+mk(12);render();
+</script>
+</body>
+</html>
