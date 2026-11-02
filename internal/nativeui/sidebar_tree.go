@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: row level, MyGo Context/Painter, TreeLine token 与 Shell 的 density 偏好
- * [OUTPUT]: 侧栏层级共用的对齐网格（treeGlyphX/treeGuideX）、导向线绘制、disclosure chevron、统一行构建器 sidebarTreeRow、可折叠分组头 sidebarSectionHeader（含尾端文字动作 Trailing/sectionTextAction）、行高 token treeRowHeight，以及键盘光标脸与两个构建器返回的 clicked（鼠标点击或键盘激活）
+ * [OUTPUT]: 侧栏层级共用的对齐网格（treeGlyphX/treeGuideX）、导向线绘制、disclosure chevron、统一行构建器 sidebarTreeRow、可折叠分组头 sidebarSectionHeader（含尾端文字动作 Trailing/sectionTextAction；Menu 型 Action 是常驻键控槽内按钮——静止画计数、悬停画图标、菜单选择必达，悬停条件元素在选项落下那帧已消失会丢选择，2026-11-02 探针实证）、行高 token treeRowHeight，以及键盘光标脸与两个构建器返回的 clicked（鼠标点击或键盘激活）
  * [POS]: Git 引用树、Files 树与 Hosts 列表共享的呈现层；数据、折叠状态、动作与菜单仍由各自的树持有，键盘移动归 listNav（list_nav.go）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -278,13 +278,36 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 		// The count ends at the row's right edge — where a row's check mark and
 		// size end — and gives way to the hover action in the same slot.
 		ui.Row(c).Size(gorexRowBtn+2, gorexRowBtn).Shrink(0).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-			if spec.Action == nil || !row.Hovered() {
+			switch {
+			case spec.Action == nil:
 				count()
-				return
-			}
-			add := gorexIconButton(c, gorexColorsOf(t.Dark), spec.Action.Glyph, spec.Action.Label, spec.Action.tooltip(), false, gorexRowBtn, gorexRowGlyph)
-			if add.Clicked() {
-				spec.Action.Run()
+			case spec.Action.Menu != nil:
+				// A menu action is one small menu button in the slot: the
+				// count when the row rests, the glyph under the pointer. It
+				// is keyed and built every frame, so the item chosen from
+				// its popup always delivers — a hover-conditional menu's
+				// element would be gone by the frame after the choice and
+				// the choice would be dropped (probed 2026-11-02).
+				slot := ui.ButtonBase(c.Key(spec.Key+":action")).Size(gorexRowBtn+2, gorexRowBtn).
+					Radius(treeRowRadius).Center().FocusRing(false).Label(spec.Action.Label)
+				slot.Menu(spec.Action.Menu)
+				if slot.Hovered() {
+					slot.Background(t.SurfaceHover)
+				}
+				slot.Children(func() {
+					if !row.Hovered() {
+						count()
+						return
+					}
+					ui.Icon(c, spec.Action.Glyph).FontSize(gorexRowGlyph).TextColor(t.TextMuted)
+				})
+			case !row.Hovered():
+				count()
+			default:
+				add := gorexIconButton(c, gorexColorsOf(t.Dark), spec.Action.Glyph, spec.Action.Label, spec.Action.tooltip(), false, gorexRowBtn, gorexRowGlyph)
+				if add.Clicked() {
+					spec.Action.Run()
+				}
 			}
 		})
 	})

@@ -265,6 +265,10 @@ type SessionSettings struct {
 	// (an agent id or "terminal"; newest first): + repeats the first, the
 	// menu lists them in this order with Terminal last.
 	RecentLaunchKinds []string `json:"recent_launch_kinds,omitempty"`
+	// AgentsSort is the sidebar Agents list's order: "" or "group" (by
+	// Workspace, the default), "time" (last worked, newest first) or
+	// "status" (needs you first). Anything else reads as the default.
+	AgentsSort string `json:"agents_sort,omitempty"`
 	// HookSessions remember, per "<instance>/<pane>", the session identity an
 	// Agent's hooks announced: Herdr's own agent list carries none for some
 	// providers (Claude Code), and without it Chat cannot rebind after a

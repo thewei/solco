@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 Shell 当前 Router/Workspace/Agent 投影、共享 agentCardRow 和 native Quick Panel
- * [OUTPUT]: 提供 Sidebar 的顶部视图标签条（Terminal/Changes/Sessions/Files/Hosts 五个等宽图标标签，Settings 路由不渲染）、Workspace 树、Git 引用导航、Sessions（项目头 + 范围行）/Settings 导航、Settings 的底部 Back 与其余所有路由的底部标准页脚（设备/会话切换芯片 deviceSwitcher + Settings 钮，Terminal/Sessions/Files/Hosts/Changes 共用）与 Agent 行点击/右键动作
+ * [OUTPUT]: 提供 Sidebar 的顶部视图标签条（Terminal/Changes/Sessions/Files/Hosts 五个等宽图标标签，Settings 路由不渲染）、Workspace 树、Git 引用导航、Sessions（项目头 + 范围行）/Settings 导航、Settings 的底部 Back 与其余所有路由的底部标准页脚（设备/会话切换芯片 deviceSwitcher + Settings 钮，Terminal/Sessions/Files/Hosts/Changes 共用）与 Agent 行点击/右键动作；Agents 区排序（头部悬停排序图标 → By Group/By Time/By Status 菜单，随 settings.Session.AgentsSort 持久；group 模式组行悬停 "+" 走 Tab 条同款 startNewTab）
  * [POS]: 唯一左栏宿主，Git 引用树由 git_sidebar_tree 负责，Agent 详情复用 Quick Panel；视图切换在栏顶标签条（Settings 无），除 Settings 外全部路由共用页脚
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,6 +10,7 @@ package nativeui
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,8 +73,14 @@ func (s *Shell) sidebar(c *ui.Context) {
 			s.sidebarInnerNav(c)
 		} else if ui.Sidebar(c, &s.selected, func() {
 			// The Agents/Pin/Workspace sections wear the same tree header as
-			// the Git references and the Hosts groups.
-			s.sidebarSection(c, sidebarSectionSpec{Key: "section:agents", Title: "Agents", Count: len(s.workbenchCards())}, &s.agentsOpen, func() {
+			// the Git references and the Hosts groups. The Agents header's
+			// hover icon opens the list's sort menu (2026-11-02 user request):
+			// by Workspace group, by last activity, by state.
+			s.sidebarSection(c, sidebarSectionSpec{
+				Key: "section:agents", Title: "Agents", Count: len(s.workbenchCards()),
+				Action: &treeRowAction{Label: "Sort Agents", Glyph: iconSort, Menu: s.agentSortMenu},
+				Menu:   s.agentSortMenu,
+			}, &s.agentsOpen, func() {
 				s.agentItems(c)
 			})
 			if pins := s.pinnedPaneIDs(); len(pins) > 0 {
@@ -601,118 +608,153 @@ func (s *Shell) agentItems(c *ui.Context) {
 	}
 	s.refreshSubagents() // throttled, background; keeps the nested rows live
 	dupProjects := duplicateAgentProjectLabels(cards)
-	// Agents group under their Workspace (2026-10-30): a faint label names
-	// the group, so the cards' second line carries only the git facts.
-	groups := groupAgentCards(cards)
 	// One Tab stop for the whole list; ↑/↓ walk the rows, ←/→ fold and unfold
 	// a group or a parent's sub-agents (list_nav.go).
 	s.navList(c, &s.nav.agents, false, ui.Column(c).FillWidth(), func() {
-		for _, group := range groups {
-			// The group's git facts (branch, files, +/-) are drawn once, at the
-			// label's right end, for the repository its first resolved card sits
-			// in; only a card in another repository keeps its own facts (2026-10-30
-			// UX audit 3, topic 1).
-			groupRoot, groupCWD := "", ""
-			for _, card := range group.Cards {
-				if root := s.agentGitRoot(card); root != "" {
-					groupRoot, groupCWD = root, s.agentCWD(card)
-					break
-				}
+		switch s.agentsSortMode() {
+		case agentSortTime:
+			// Flat, the Agent that worked last first.
+			for _, card := range agentCardsByTime(cards) {
+				s.agentCardItem(c, card, dupProjects, false, "")
 			}
-			foldKey := agentFoldKey("group", group.Key)
-			groupFolded := group.Name != "" && s.foldedAgents[foldKey]
-			if group.Name != "" {
-				// The label is the group's fold handle (2026-11-01). Folded, the
-				// right end swaps the git facts for the count and the state of
-				// the group's most urgent card (the cards arrive actionable-first),
-				// so a fold never hides an Agent that needs you.
-				t := c.Theme()
-				ui.Box(c.Key("agent-group-gap:" + group.Key)).Height(5).Shrink(0)
-				head := ui.ButtonBase(c.Key("agent-group:"+group.Key)).FillWidth().Height(24).Radius(treeRowRadius).
-					Padding(0, agentCardPadX, 0, 2).Gap(4).AlignItems(ui.Center).FocusRing(false).Label("Toggle " + group.Name)
-				switch {
-				case s.nav.agents.showsCursor(head):
-					head.Background(designTokens(t.Dark).SidebarSelect)
-				case head.Hovered():
-					head.Background(t.SurfaceHover)
-				}
-				head.Transition(rowFade)
-				if s.nav.agents.row(c, head, navRow{Key: "agent-group:" + group.Key, Section: true, Folder: true, Expanded: !groupFolded}) {
-					s.toggleAgentFold(foldKey)
-				}
-				head.Children(func() {
-					treeChevron(c, true, !groupFolded, t.TextMuted)
-					ui.Text(c, group.Name).FontSize(Typography().Micro).
-						TextColor(t.TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).PassThrough()
-					switch {
-					case groupFolded:
-						ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
-						statusIndicator(c, groupIndicatorState(group.Cards, time.Now()))
-					case groupRoot != "":
-						branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
-						gitFactsView(c, branch, adds, dels, files, ok)
-					}
-				})
-				head.ContextMenu(func(m *ui.Menu) {
-					if m.Item("Fold All Groups").Chosen() {
-						s.setAgentFolds(groups, "group", true)
-					}
-					if m.Item("Unfold All Groups").Chosen() {
-						s.setAgentFolds(groups, "group", false)
-					}
-					m.Separator()
-					if m.Item("Fold All Sub-agents").Chosen() {
-						s.setAgentFolds(groups, "sub", true)
-					}
-					if m.Item("Unfold All Sub-agents").Chosen() {
-						s.setAgentFolds(groups, "sub", false)
-					}
-				})
-				if head.Clicked() {
-					s.toggleAgentFold(foldKey)
-				}
+		case agentSortStatus:
+			// Flat in the directory's own order: needs you first.
+			for _, card := range cards {
+				s.agentCardItem(c, card, dupProjects, false, "")
 			}
-			if groupFolded {
-				continue
-			}
-			for _, card := range group.Cards {
-				card := card
-				label, _ := agentCardLabel(card, dupProjects)
-				selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
-				row := s.agentCardRow(c, card, selected, dupProjects, group.Name != "", group.Name != "" && groupRoot != "" && s.agentGitRoot(card) == groupRoot, nil)
-				subKey := subagentFoldKey(card)
-				if s.nav.agents.row(c, row, navRow{Key: "agent:" + strings.TrimPrefix(subKey, "sub:"), Folder: len(card.Subagents) > 0, Expanded: !s.subagentsFolded(card, time.Now())}) {
-					s.toggleSubagentFold(card)
-				}
-				row.FocusRing(false)
-				if s.nav.agents.showsCursor(row) {
-					row.Background(designTokens(c.Theme().Dark).SidebarSelect)
-				}
-				if row.Clicked() {
-					// N19 #4: a sidebar Agent click jumps straight to the pane's
-					// remembered surface (Chat or Terminal) instead of the detail
-					// popover; the popover stays on the tray and header entry
-					// points.
-					s.openAgentFromSidebar(card)
-				}
-				row.ContextMenu(func(m *ui.Menu) {
-					if m.Item("Open Chat").Chosen() {
-						s.openChat(card)
-					}
-					if card.PaneID != "" {
-						s.paneOverflowItems(m, card.PaneID, label)
-					}
-				})
-				// Sub-agents hang under the agent that spawned them, running or
-				// done; the card's chevron folds them. A row click opens the
-				// sub-agent's own drawer in Chat, like the page's cards do
-				// (2026-10-31 sub-agent views).
-				s.nestedSubagentRows(c, card, &s.nav.agents,
-					func(sub history.Subagent) { s.openSubagentDrawer(card, sub) },
-					func() { s.openChat(card) })
-			}
+		default:
+			s.agentGroupItems(c, cards, dupProjects)
 		}
 	})
+}
+
+// agentGroupItems draws the grouped list — the default order: one faint
+// label per Workspace with its cards under it, and under the pointer the
+// group's "+", which starts a new Pane there through the Tab bar's own
+// flow (2026-11-02 user request).
+func (s *Shell) agentGroupItems(c *ui.Context, cards []agent.AgentCardModel, dupProjects map[string]bool) {
+	s.ensureLaunchKinds() // the group "+" starts the kind last used, as ⌘T does
+	groups := groupAgentCards(cards)
+	for _, group := range groups {
+		// The group's git facts (branch, files, +/-) are drawn once, at the
+		// label's right end, for the repository its first resolved card sits
+		// in; only a card in another repository keeps its own facts (2026-10-30
+		// UX audit 3, topic 1).
+		groupRoot, groupCWD := "", ""
+		for _, card := range group.Cards {
+			if root := s.agentGitRoot(card); root != "" {
+				groupRoot, groupCWD = root, s.agentCWD(card)
+				break
+			}
+		}
+		foldKey := agentFoldKey("group", group.Key)
+		groupFolded := group.Name != "" && s.foldedAgents[foldKey]
+		if group.Name != "" {
+			// The label is the group's fold handle (2026-11-01). Folded, the
+			// right end swaps the git facts for the count and the state of
+			// the group's most urgent card (the cards arrive actionable-first),
+			// so a fold never hides an Agent that needs you. Under the pointer
+			// the right end is the group's "+" instead.
+			t := c.Theme()
+			project := s.groupProject(group)
+			ui.Box(c.Key("agent-group-gap:" + group.Key)).Height(5).Shrink(0)
+			head := ui.ButtonBase(c.Key("agent-group:"+group.Key)).FillWidth().Height(24).Radius(treeRowRadius).
+				Padding(0, agentCardPadX, 0, 2).Gap(4).AlignItems(ui.Center).FocusRing(false).Label("Toggle " + group.Name)
+			switch {
+			case s.nav.agents.showsCursor(head):
+				head.Background(designTokens(t.Dark).SidebarSelect)
+			case head.Hovered():
+				head.Background(t.SurfaceHover)
+			}
+			head.Transition(rowFade)
+			if s.nav.agents.row(c, head, navRow{Key: "agent-group:" + group.Key, Section: true, Folder: true, Expanded: !groupFolded}) {
+				s.toggleAgentFold(foldKey)
+			}
+			head.Children(func() {
+				treeChevron(c, true, !groupFolded, t.TextMuted)
+				ui.Text(c, group.Name).FontSize(Typography().Micro).
+					TextColor(t.TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).PassThrough()
+				switch {
+				case head.Hovered() && project != nil:
+					add := gorexIconButton(c, gorexColorsOf(t.Dark), iconPlus, "New Pane in "+group.Name, "New Pane in "+group.Name, false, gorexRowBtn, gorexRowGlyph)
+					if add.Clicked() {
+						s.startNewTab(*project, s.lastLaunchKind(s.launchKinds))
+					}
+				case groupFolded:
+					ui.Text(c, itoa(len(group.Cards))).FontSize(Typography().Micro).TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+					statusIndicator(c, groupIndicatorState(group.Cards, time.Now()))
+				case groupRoot != "":
+					branch, adds, dels, files, ok := s.gitMetaForCWD(groupCWD)
+					gitFactsView(c, branch, adds, dels, files, ok)
+				}
+			})
+			head.ContextMenu(func(m *ui.Menu) {
+				if m.Item("Fold All Groups").Chosen() {
+					s.setAgentFolds(groups, "group", true)
+				}
+				if m.Item("Unfold All Groups").Chosen() {
+					s.setAgentFolds(groups, "group", false)
+				}
+				m.Separator()
+				if m.Item("Fold All Sub-agents").Chosen() {
+					s.setAgentFolds(groups, "sub", true)
+				}
+				if m.Item("Unfold All Sub-agents").Chosen() {
+					s.setAgentFolds(groups, "sub", false)
+				}
+			})
+			if head.Clicked() {
+				s.toggleAgentFold(foldKey)
+			}
+		}
+		if groupFolded {
+			continue
+		}
+		for _, card := range group.Cards {
+			s.agentCardItem(c, card, dupProjects, group.Name != "", groupRoot)
+		}
+	}
+}
+
+// agentCardItem draws one Agent card row and its wiring: keyboard row, click
+// (to the pane's remembered surface), context menu and the nested sub-agent
+// rows. grouped hides the project label under a Workspace group; groupRoot
+// is the group's shared repository root, whose git facts the group label
+// already carries.
+func (s *Shell) agentCardItem(c *ui.Context, card agent.AgentCardModel, dupProjects map[string]bool, grouped bool, groupRoot string) {
+	label, _ := agentCardLabel(card, dupProjects)
+	selected := card.PaneID != "" && card.PaneID == s.selectedPaneID
+	row := s.agentCardRow(c, card, selected, dupProjects, grouped, grouped && groupRoot != "" && s.agentGitRoot(card) == groupRoot, nil)
+	subKey := subagentFoldKey(card)
+	if s.nav.agents.row(c, row, navRow{Key: "agent:" + strings.TrimPrefix(subKey, "sub:"), Folder: len(card.Subagents) > 0, Expanded: !s.subagentsFolded(card, time.Now())}) {
+		s.toggleSubagentFold(card)
+	}
+	row.FocusRing(false)
+	if s.nav.agents.showsCursor(row) {
+		row.Background(designTokens(c.Theme().Dark).SidebarSelect)
+	}
+	if row.Clicked() {
+		// N19 #4: a sidebar Agent click jumps straight to the pane's
+		// remembered surface (Chat or Terminal) instead of the detail
+		// popover; the popover stays on the tray and header entry
+		// points.
+		s.openAgentFromSidebar(card)
+	}
+	row.ContextMenu(func(m *ui.Menu) {
+		if m.Item("Open Chat").Chosen() {
+			s.openChat(card)
+		}
+		if card.PaneID != "" {
+			s.paneOverflowItems(m, card.PaneID, label)
+		}
+	})
+	// Sub-agents hang under the agent that spawned them, running or
+	// done; the card's chevron folds them. A row click opens the
+	// sub-agent's own drawer in Chat, like the page's cards do
+	// (2026-10-31 sub-agent views).
+	s.nestedSubagentRows(c, card, &s.nav.agents,
+		func(sub history.Subagent) { s.openSubagentDrawer(card, sub) },
+		func() { s.openChat(card) })
 }
 
 // agentGroup is one Workspace's cards in the sidebar Agents list.
@@ -740,6 +782,78 @@ func groupAgentCards(cards []agent.AgentCardModel) []agentGroup {
 		groups[i].Cards = append(groups[i].Cards, card)
 	}
 	return groups
+}
+
+// agentSortMode is the sidebar Agents list's order (settings.Session.
+// AgentsSort).
+type agentSortMode string
+
+const (
+	agentSortGroup  agentSortMode = ""       // under their Workspace, the default
+	agentSortTime   agentSortMode = "time"   // last worked, newest first
+	agentSortStatus agentSortMode = "status" // the directory's needs-you-first order
+)
+
+// agentSortModes is the sort menu's rows, in menu order.
+var agentSortModes = []struct {
+	Mode  agentSortMode
+	Label string
+}{
+	{agentSortGroup, "By Group"},
+	{agentSortTime, "By Time"},
+	{agentSortStatus, "By Status"},
+}
+
+// normalizeAgentSort maps a stored sort onto a mode; anything unknown (an
+// old file, a typo) reads as the default.
+func normalizeAgentSort(v string) agentSortMode {
+	switch agentSortMode(v) {
+	case agentSortTime, agentSortStatus:
+		return agentSortMode(v)
+	}
+	return agentSortGroup
+}
+
+func (s *Shell) agentsSortMode() agentSortMode { return normalizeAgentSort(s.agentsSort) }
+
+func (s *Shell) setAgentsSort(mode agentSortMode) { s.agentsSort = string(mode) }
+
+// agentSortMenu fills both of the Agents header's menus — the hover sort
+// icon's dropdown and the header's right-click menu; the checked row is the
+// current order.
+func (s *Shell) agentSortMenu(m *ui.Menu) {
+	for _, opt := range agentSortModes {
+		if m.Item(opt.Label).Checked(s.agentsSortMode() == opt.Mode).Chosen() {
+			s.setAgentsSort(opt.Mode)
+		}
+	}
+}
+
+// agentCardsByTime orders the cards by when they last worked, newest first;
+// unknown instants sink, ties keep the directory's stable order.
+func agentCardsByTime(cards []agent.AgentCardModel) []agent.AgentCardModel {
+	out := append([]agent.AgentCardModel(nil), cards...)
+	slices.SortStableFunc(out, func(a, b agent.AgentCardModel) int {
+		switch {
+		case a.LastActive.After(b.LastActive):
+			return -1
+		case a.LastActive.Before(b.LastActive):
+			return 1
+		}
+		return 0
+	})
+	return out
+}
+
+// groupProject resolves a group's Herdr Workspace from the live projection;
+// nil when the runtime no longer reports it — then the group carries no "+".
+func (s *Shell) groupProject(group agentGroup) *herdr.Project {
+	for i := range s.projection.Projects {
+		if s.projection.Projects[i].ID == group.Key {
+			return &s.projection.Projects[i]
+		}
+	}
+	return nil
 }
 
 func (s *Shell) handleSidebarSelection(selected string) {

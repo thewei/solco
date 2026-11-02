@@ -80,4 +80,7 @@ var (
 	// iconPlay runs the pane header's project command control: the Lucide
 	// outline play triangle in the shared light stroke.
 	iconPlay = icon(`<polygon points="6 3 20 12 6 21"/>`)
+	// iconSort marks a list-order menu (the sidebar Agents header): Lucide's
+	// arrow-up-down in the shared light stroke.
+	iconSort = icon(`<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>`)
 )

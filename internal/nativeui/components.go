@@ -148,11 +148,17 @@ func sectionLabel(c *ui.Context, label string) {
 }
 
 // treeRowAction is a row's hover icon button. Tooltip defaults to Label.
+// A Menu action turns the icon into a menu button instead of a click: the
+// menu is attached to an element that is built every frame (the slot), so a
+// chosen item always delivers — a hover-conditional element would be gone
+// by the frame after the choice and the choice would be lost.
 type treeRowAction struct {
 	Label   string
 	Tooltip string
 	Glyph   *ui.SVG
 	Run     func()
+	// Menu, when set, is the icon's dropdown; Run stays unused.
+	Menu func(*ui.Menu)
 }
 
 func (a treeRowAction) tooltip() string {

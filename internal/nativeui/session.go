@@ -141,6 +141,7 @@ func (s *Shell) captureSession() settings.SessionSettings {
 		RecentFiles:       s.recentFiles,
 		RecentHosts:       s.recentHosts,
 		RecentLaunchKinds: s.recentLaunchKinds,
+		AgentsSort:        s.agentsSort,
 	}
 	livePrefix := s.activeInstance + "/"
 	for key, entry := range s.hookIdentities {
@@ -227,6 +228,7 @@ func (s *Shell) restoreSession() {
 	s.recentFiles = append([]string(nil), session.RecentFiles...)
 	s.recentHosts = append([]string(nil), session.RecentHosts...)
 	s.recentLaunchKinds = append([]string(nil), session.RecentLaunchKinds...)
+	s.agentsSort = string(normalizeAgentSort(session.AgentsSort))
 	s.restoreSessionHooks(session)
 	s.projectsOpen = session.ProjectsOpen
 	s.agentsOpen = session.AgentsOpen

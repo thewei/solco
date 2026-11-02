@@ -76,6 +76,11 @@ type Shell struct {
 	// ("sub:<terminal id>"). Absent = open; persisted with the session.
 	foldedAgents map[string]bool
 
+	// agentsSort is the sidebar Agents list's order (settings.Session.
+	// AgentsSort): "" = by Workspace group, "time" = last worked first,
+	// "status" = needs-you first.
+	agentsSort string
+
 	// devices is the device switcher's local state (see device_state.go):
 	// panel/filter, per-machine failure/master/checking facts, the switch in
 	// flight, the lost-connection record, and the Add Device sheet's draft.
