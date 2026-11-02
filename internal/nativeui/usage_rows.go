@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 agent (AgentKey), history (AgentID, HistoryService, ResolveLiveSource, SummarizeSource, CleanTitleCandidate)
+ * [OUTPUT]: 对外提供 usageLineFor, liveSessionTitle, refreshUsageProjection, purgeAgentSessionState
+ * [POS]: internal/nativeui 的会话标题与用量行投影逻辑，供 Agent 树、卡片、侧栏与状态栏消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 package nativeui
 
 import (

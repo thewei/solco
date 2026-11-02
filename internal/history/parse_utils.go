@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖标准库 encoding/json, path/filepath, strconv, strings, time, unicode/utf8
+ * [OUTPUT]: CleanTitleCandidate, cleanTitleCandidate, clipText, epochMS, toolInput, formatTokens, projectName
+ * [POS]: internal/history 的纯文本、时间戳、JSON 字段解析工具集，被各 Provider 解析器及 nativeui 会话标题解析消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 package history
 
 import (

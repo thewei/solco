@@ -18,6 +18,9 @@ func TestPeekLineTakesTheLastLineThatSaysSomething(t *testing.T) {
 		"a\x1b[31mred\x1b[0m":             "a[31mred[0m", // stray ESC dropped, the rest is plain text
 		"tab\tseparated":                  "tab separated",
 		"  中文输出完成  ":                      "中文输出完成",
+		"Working on task\nesc to cancel · tab amend": "Working on task",
+		"Running command\nctrl+g edit":               "Running command",
+		"esc to cancel":                              "",
 	}
 	for in, want := range cases {
 		if got := PeekLine(in); got != want {
