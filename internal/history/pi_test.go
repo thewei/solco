@@ -10,6 +10,7 @@ package history
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -323,5 +324,70 @@ func TestPiAssistantCarriesTheContextItsRequestFilled(t *testing.T) {
 	}
 	if transcript.Mainline[0].ContextTokens != nil {
 		t.Fatal("a user message has no context report")
+	}
+}
+
+// Pi's todo extension prints only the increment; the whole list is the
+// result's details.tasks, which the parser keeps for the Tasks tray. Other
+// tools and refused calls carry none.
+func TestPiTodoResultKeepsTheWholeListAsDetails(t *testing.T) {
+	const jsonl = `{"type":"session","version":3,"id":"pi-todo","timestamp":"2026-11-02T02:00:00.000Z","cwd":"/w"}
+{"type":"message","timestamp":"2026-11-02T02:00:01.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"todo","arguments":{"action":"update","id":1,"status":"in_progress"}},{"type":"toolCall","id":"c2","name":"bash","arguments":{"command":"ls"}}]}}
+{"type":"message","timestamp":"2026-11-02T02:00:02.000Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"todo","content":[{"type":"text","text":"Updated #1 (pending → in_progress)"}],"details":{"action":"update","tasks":[{"id":1,"subject":"A","status":"in_progress"}]}}}
+{"type":"message","timestamp":"2026-11-02T02:00:03.000Z","message":{"role":"toolResult","toolCallId":"c2","toolName":"bash","content":[{"type":"text","text":"x"}],"details":{"tasks":[{"id":9}]}}}
+`
+	decoder, err := NewLiveDecoder(AgentPi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sync := decoder.Append([]byte(jsonl))
+	var todo, bash *ToolCall
+	for i := range sync.Messages {
+		for j := range sync.Messages[i].ToolCalls {
+			call := &sync.Messages[i].ToolCalls[j]
+			switch call.Name {
+			case "todo":
+				todo = call
+			case "bash":
+				bash = call
+			}
+		}
+	}
+	if todo == nil || todo.Details == nil || *todo.Details != `{"tasks":[{"id":1,"status":"in_progress","subject":"A"}]}` {
+		t.Fatalf("todo details = %+v", todo)
+	}
+	if bash == nil || bash.Details != nil {
+		t.Fatalf("a non-todo tool must carry no details: %+v", bash)
+	}
+}
+
+// A turn Pi/omp ended early is an assistant row with empty content: it must
+// still mark the turn Stopped (an error says why), and a compaction row must
+// leave one marker (never the summary body) for Chat's divider.
+func TestPiStoppedTurnsAndCompactionMarker(t *testing.T) {
+	const jsonl = `{"type":"session","version":3,"id":"pi-stop","timestamp":"2026-11-02T02:00:00.000Z","cwd":"/w"}
+{"type":"message","timestamp":"2026-11-02T02:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"go"}]}}
+{"type":"message","timestamp":"2026-11-02T02:00:02.000Z","message":{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"Operation aborted"}}
+{"type":"message","timestamp":"2026-11-02T02:00:03.000Z","message":{"role":"user","content":[{"type":"text","text":"again"}]}}
+{"type":"message","timestamp":"2026-11-02T02:00:04.000Z","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Request timed out."}}
+{"type":"compaction","timestamp":"2026-11-02T02:00:05.000Z","summary":"SECRET BODY","tokensBefore":1000}
+{"type":"message","timestamp":"2026-11-02T02:00:06.000Z","message":{"role":"user","content":[{"type":"text","text":"later"}]}}
+`
+	decoder, err := NewLiveDecoder(AgentPi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := decoder.Append([]byte(jsonl)).Messages
+	if len(messages) != 6 {
+		t.Fatalf("got %d messages: %+v", len(messages), messages)
+	}
+	if a := messages[1]; a.Role != RoleAssistant || !a.Stopped || a.Text != "" {
+		t.Fatalf("aborted row = %+v", a)
+	}
+	if e := messages[3]; !e.Stopped || e.Text != "Error: Request timed out." {
+		t.Fatalf("error row = %+v", e)
+	}
+	if c := messages[4]; c.Kind != MessageCompactSummary || strings.Contains(c.Text, "SECRET") {
+		t.Fatalf("compaction row = %+v", c)
 	}
 }

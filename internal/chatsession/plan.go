@@ -83,6 +83,14 @@ func latestPlan(turns []conversation.TimelineTurn) *ChatPlan {
 				items = codexPlanItems(deref(tool.Input))
 			case "todo":
 				items = ompPlanItems(deref(tool.Output))
+				if tool.Details != nil && len(items) == 0 {
+					// Pi's snapshot is the whole list as of this call: an
+					// empty one (clear, everything deleted) retires the tray
+					// instead of resurrecting an older call's list.
+					if items = piPlanItems(*tool.Details); len(items) == 0 {
+						return nil
+					}
+				}
 			}
 			if len(items) > 0 {
 				return &ChatPlan{Items: items, Turn: index}
@@ -317,6 +325,33 @@ func ompPlanItems(output string) []ChatPlanItem {
 			}
 		}
 		items = append(items, ChatPlanItem{Text: text, Status: status, Phase: phase})
+	}
+	return items
+}
+
+// piPlanItems reads the whole list Pi's todo extension attaches to each
+// result (`{"tasks":[{subject,status,activeForm}]}`): its text output is only
+// an increment. Deleted tasks are gone from the list, as the extension shows.
+func piPlanItems(snapshot string) []ChatPlanItem {
+	if snapshot == "" {
+		return nil
+	}
+	var payload struct {
+		Tasks []struct {
+			Subject string `json:"subject"`
+			Status  string `json:"status"`
+		} `json:"tasks"`
+	}
+	if json.Unmarshal([]byte(snapshot), &payload) != nil {
+		return nil
+	}
+	var items []ChatPlanItem
+	for _, task := range payload.Tasks {
+		text := strings.TrimSpace(task.Subject)
+		if text == "" || task.Status == "deleted" {
+			continue
+		}
+		items = append(items, ChatPlanItem{Text: text, Status: normalizePlanStatus(task.Status)})
 	}
 	return items
 }

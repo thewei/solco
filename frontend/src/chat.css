@@ -284,6 +284,25 @@ html[data-host="phone"] .turn:not(.open):not(.last) .foot {
   font-size: 13px;
 }
 
+/* The provider compacted the context here: a hairline with a quiet label. */
+.compact-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 6px;
+  color: var(--i4);
+  font-size: 12px;
+}
+
+.compact-divider::before,
+.compact-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--i4);
+  opacity: 0.35;
+}
+
 /* ---- reading text ---- */
 
 .prose {

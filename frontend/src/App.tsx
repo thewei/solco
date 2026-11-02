@@ -1344,6 +1344,11 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                     ref={row ? list.measure : undefined}
                     style={row ? { transform: `translateY(${row.start - listMargin}px)` } : undefined}
                   >
+                    {turn.compactedBefore ? (
+                      <div className="compact-divider" role="separator">
+                        <span>Context compacted</span>
+                      </div>
+                    ) : null}
                     <TurnBoundary>
                       <TurnRow
                         // Only Claude's streaming tail marks a turn live; the agent

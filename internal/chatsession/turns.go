@@ -55,16 +55,18 @@ type ChatChange struct {
 // and the (possibly grouped) tool activity. Steps preserves the original
 // interleaving for the timeline rendering.
 type ChatTurn struct {
-	User      bool       `json:"user"`
-	Text      string     `json:"text,omitempty"`
-	Narration string     `json:"narration,omitempty"`
-	Thinking  *string    `json:"thinking,omitempty"`
-	Failed    bool       `json:"failed,omitempty"`
-	Compacted bool       `json:"compacted,omitempty"`
-	Live      bool       `json:"live,omitempty"`
-	TsMS      *int64     `json:"tsMs,omitempty"`
-	Tools     []ChatTool `json:"tools,omitempty"`
-	Steps     []ChatStep `json:"steps,omitempty"`
+	User      bool    `json:"user"`
+	Text      string  `json:"text,omitempty"`
+	Narration string  `json:"narration,omitempty"`
+	Thinking  *string `json:"thinking,omitempty"`
+	Failed    bool    `json:"failed,omitempty"`
+	Compacted bool    `json:"compacted,omitempty"`
+	// CompactedBefore draws the "Context compacted" divider above this row.
+	CompactedBefore bool       `json:"compactedBefore,omitempty"`
+	Live            bool       `json:"live,omitempty"`
+	TsMS            *int64     `json:"tsMs,omitempty"`
+	Tools           []ChatTool `json:"tools,omitempty"`
+	Steps           []ChatStep `json:"steps,omitempty"`
 	// Changes lists the files this settled turn's edit tools touched (the
 	// changes card); see chatTurnChanges for the data-source contract.
 	Changes []ChatChange `json:"changes,omitempty"`
@@ -83,14 +85,15 @@ func Turns(turns []conversation.TimelineTurn, root string, snap *gitworkbench.Ch
 	}
 	for index, turn := range turns {
 		item := ChatTurn{
-			User:      turn.UserRow,
-			Text:      turn.Text,
-			Narration: turn.Narration,
-			Thinking:  turn.Thinking,
-			Failed:    turn.Failed,
-			Compacted: turn.Compacted,
-			Live:      turn.Live,
-			TsMS:      turn.TsMS,
+			User:            turn.UserRow,
+			Text:            turn.Text,
+			Narration:       turn.Narration,
+			Thinking:        turn.Thinking,
+			Failed:          turn.Failed,
+			Compacted:       turn.Compacted,
+			CompactedBefore: turn.CompactedBefore,
+			Live:            turn.Live,
+			TsMS:            turn.TsMS,
 		}
 		for _, run := range turn.ToolRuns {
 			tool := ChatTool{Name: run.Name, Input: run.InputPreview, IsError: run.IsError}

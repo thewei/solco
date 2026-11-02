@@ -412,6 +412,8 @@ export interface ChatTurn {
   thinking?: string;
   failed?: boolean;
   compacted?: boolean;
+  /** CompactedBefore draws the "Context compacted" divider above this row. */
+  compactedBefore?: boolean;
   live?: boolean;
   tsMs?: number;
   tools?: ChatTool[];

@@ -455,3 +455,24 @@ func TestFollowUpQueueEditReplacesUnclaimedText(t *testing.T) {
 		t.Fatalf("edit of a failed item = %+v, %v", got, err)
 	}
 }
+
+// A compact-summary row opens no turn; the next row that does carries the
+// divider flag, and a provider-stopped assistant item marks its turn Failed.
+func TestDeriveTimelineCompactionDividerAndStoppedTurn(t *testing.T) {
+	turns := DeriveTimeline([]ConversationItem{
+		{Kind: KindUser, Role: "user", Text: "one", Seq: 0},
+		{Kind: KindAssistant, Role: "assistant", Seq: 1, Stopped: true},
+		{Kind: KindCompactSummary, Role: "system", Text: "── Context compacted ──", Seq: 2},
+		{Kind: KindUser, Role: "user", Text: "two", Seq: 3},
+		{Kind: KindAssistant, Role: "assistant", Text: "ok", Seq: 4},
+	})
+	if len(turns) != 4 {
+		t.Fatalf("turns = %+v", turns)
+	}
+	if !turns[1].Failed || turns[2].Failed {
+		t.Fatalf("Stopped must mark only its own turn: %+v", turns)
+	}
+	if turns[0].CompactedBefore || !turns[2].CompactedBefore || turns[3].CompactedBefore {
+		t.Fatalf("divider flags = %v %v %v %v", turns[0].CompactedBefore, turns[1].CompactedBefore, turns[2].CompactedBefore, turns[3].CompactedBefore)
+	}
+}

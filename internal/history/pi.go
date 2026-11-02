@@ -175,7 +175,23 @@ func (s *piParseState) feedPiLine(line string) {
 			text := piBlocksText(content)
 			thinking := piBlocksThinking(content)
 			tools := piBlocksTools(content)
-			if text == "" && thinking == nil && len(tools) == 0 {
+			// A turn Pi/omp ended early (aborted, or failed with a provider
+			// error) is recorded as an assistant row with empty content: it
+			// still marks the turn Stopped, and an error says why.
+			stopReason, _ := messageObj["stopReason"].(string)
+			stopped := stopReason == "aborted" || stopReason == "error"
+			if stopReason == "error" {
+				if reason, _ := messageObj["errorMessage"].(string); strings.TrimSpace(reason) != "" {
+					failure := "Error: " + strings.TrimSpace(reason)
+					if text != "" {
+						text += "\n\n" + failure
+					} else {
+						text = failure
+					}
+					content = append(piContentBlocks(content), map[string]any{"type": "text", "text": failure})
+				}
+			}
+			if text == "" && thinking == nil && len(tools) == 0 && !stopped {
 				return
 			}
 			if modelStr, ok := messageObj["model"].(string); ok && modelStr != "" {
@@ -221,6 +237,9 @@ func (s *piParseState) feedPiLine(line string) {
 			if s.model != nil {
 				last.Model = s.model
 			}
+			if stopped {
+				last.Stopped = true
+			}
 			if contextUsed > 0 {
 				last.ContextTokens = &contextUsed
 			}
@@ -257,9 +276,25 @@ func (s *piParseState) feedPiLine(line string) {
 			if isErr, ok := messageObj["isError"].(bool); ok && isErr {
 				toolCall.IsError = true
 			}
+			toolCall.Details = piTodoSnapshot(toolCall.Name, messageObj["details"])
 		default:
 			s.unknownLines++
 		}
+	case "compaction":
+		// The provider replaced earlier turns with a summary: keep one marker
+		// row (never the summary body) so Chat can draw its divider.
+		timestamp := epochMS(row["timestamp"])
+		if timestamp > s.lastTS {
+			s.lastTS = timestamp
+		}
+		s.messages = append(s.messages, TranscriptMessage{
+			Seq:       int64(len(s.messages)),
+			Role:      RoleSystem,
+			Kind:      MessageCompactSummary,
+			Text:      "── Context compacted ──",
+			ToolCalls: []ToolCall{},
+			Timestamp: optionalTimestamp(timestamp),
+		})
 	case "model_change", "thinking_level_change", "custom":
 		// Known non-content events skipped silently.
 	case "custom_message":
@@ -449,6 +484,45 @@ func piBlocksTools(content any) []ToolCall {
 		}
 	}
 	return tools
+}
+
+// piContentBlocks returns content as a block list (a plain string becomes one
+// text block) so an error line can join the ordered parts.
+func piContentBlocks(content any) []any {
+	switch v := content.(type) {
+	case []any:
+		return append([]any(nil), v...)
+	case string:
+		if v != "" {
+			return []any{map[string]any{"type": "text", "text": v}}
+		}
+	}
+	return nil
+}
+
+// piTodoSnapshot keeps the whole task list Pi's todo extension attaches to
+// every result as `details.tasks` — its text output is only the increment
+// ("Updated #2 (pending → in_progress)"), so the Tasks tray reads this
+// snapshot instead of replaying operations. nil for any other tool or an
+// error result (no list); an empty list is kept — `clear` is a statement.
+func piTodoSnapshot(name string, details any) *string {
+	if name != "todo" {
+		return nil
+	}
+	obj, ok := details.(map[string]any)
+	if !ok {
+		return nil
+	}
+	tasks, ok := obj["tasks"].([]any)
+	if !ok {
+		return nil
+	}
+	data, err := json.Marshal(map[string]any{"tasks": tasks})
+	if err != nil {
+		return nil
+	}
+	snapshot, _ := clipText(string(data), MaxToolIO)
+	return &snapshot
 }
 
 func piToolResultText(content any) string {

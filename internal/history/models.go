@@ -180,6 +180,10 @@ type ToolCall struct {
 	Output       *string `json:"output,omitempty"`
 	IsError      bool    `json:"is_error"`
 	SidechainRef *string `json:"sidechain_ref,omitempty"`
+	// Details is the provider's own structured result snapshot when its text
+	// output is only an increment (Pi's todo extension: `{"tasks":[…]}`).
+	// Presentation reads it; nothing writes or interprets it back.
+	Details *string `json:"details,omitempty"`
 }
 
 type MessageKind string
@@ -212,6 +216,9 @@ type TranscriptMessage struct {
 	// this message (input + cache + output of the last usage report), when
 	// the transcript states one. Presentation (context ring) only.
 	ContextTokens *int64 `json:"context_tokens,omitempty"`
+	// Stopped marks an assistant message the provider itself ended early
+	// (Pi/omp stopReason "aborted" or "error"); Chat draws its Stopped line.
+	Stopped bool `json:"stopped,omitempty"`
 	// Parts is the message's blocks in the order the provider produced them
 	// (text / thinking / tool-call interleaved). Text, Thinking and ToolCalls
 	// above are the per-kind aggregates; a parser that merges several

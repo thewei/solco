@@ -108,3 +108,28 @@ func TestChatPlanReplaysCursorMergeTodos(t *testing.T) {
 		t.Fatalf("a non-merge call replaces the list: %+v", plan)
 	}
 }
+
+// Pi's todo extension prints only the increment ("Updated #2 …"); the whole
+// list rides in the result's details, which the parser keeps as Details. The
+// newest call wins; an empty list (clear) retires the tray; deleted tasks
+// are not rows.
+func TestChatPlanReadsPiTodoSnapshot(t *testing.T) {
+	snap := func(tasks string) conversation.TimelineTurn {
+		turn := planTurn("todo", `{"action":"update"}`, "Updated #1 (pending → in_progress)")
+		details := `{"tasks":` + tasks + `}`
+		turn.Steps[0].Tool.Details = &details
+		return turn
+	}
+	first := snap(`[{"id":1,"subject":"Research","status":"completed"},{"id":2,"subject":"Build","status":"in_progress"},{"id":3,"subject":"Drop me","status":"deleted"},{"id":4,"subject":"Ship","status":"pending"}]`)
+	plan := PlanOf([]conversation.TimelineTurn{first})
+	if plan == nil || len(plan.Items) != 3 || plan.Items[0].Status != planDone || plan.Items[1].Status != planActive || plan.Items[2].Text != "Ship" {
+		t.Fatalf("pi todo plan = %+v", plan)
+	}
+	if got := PlanOf([]conversation.TimelineTurn{first, snap(`[]`)}); got != nil {
+		t.Fatalf("an empty snapshot (clear) must retire the tray, got %+v", got)
+	}
+	refused := planTurn("todo", `{"action":"create"}`, "Error: blockedBy: #1 is another item in this batch")
+	if got := PlanOf([]conversation.TimelineTurn{first, refused}); got == nil || len(got.Items) != 3 {
+		t.Fatalf("a refused call carries no snapshot and must fall back, got %+v", got)
+	}
+}

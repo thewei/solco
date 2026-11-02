@@ -47,6 +47,9 @@ type TimelineTurn struct {
 	Compacted bool
 	// Failed marks a failed/aborted turn (the partial scene stays visible).
 	Failed bool
+	// CompactedBefore marks the first row after the provider compacted the
+	// context (a compact-summary row precedes it): the page draws a divider.
+	CompactedBefore bool
 	// UserRow carries a user message (its own row kind).
 	UserRow    bool
 	Text       string
@@ -76,21 +79,33 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 			current = nil
 		}
 	}
+	// A compact-summary row opens no turn; the next row that does carries the
+	// divider flag.
+	compactPending := false
+	mark := func(turn *TimelineTurn) {
+		if compactPending {
+			turn.CompactedBefore = true
+			compactPending = false
+		}
+	}
 
 	for _, item := range items {
 		switch item.Kind {
 		case KindUser:
 			flush()
-			turns = append(turns, TimelineTurn{
+			row := TimelineTurn{
 				UserRow:  true,
 				Text:     item.Text,
 				FirstSeq: item.Seq, LastSeq: item.Seq,
 				TsMS: item.TimestampMS,
-			})
+			}
+			mark(&row)
+			turns = append(turns, row)
 		case KindAssistant:
 			if current == nil || current.UserRow {
 				flush()
 				current = &TimelineTurn{FirstSeq: item.Seq, TsMS: item.TimestampMS}
+				mark(current)
 			}
 			if current.TsMS == nil {
 				current.TsMS = item.TimestampMS
@@ -124,7 +139,7 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 					addTimelineStep(current, TimelineStep{Kind: StepTool, Tool: &call, TsMS: item.TimestampMS})
 				}
 			}
-			if strings.Contains(strings.ToLower(item.Text), "aborted") || item.Truncated && strings.Contains(item.Text, "stopped") {
+			if item.Stopped || strings.Contains(strings.ToLower(item.Text), "aborted") || item.Truncated && strings.Contains(item.Text, "stopped") {
 				current.Failed = true
 			}
 			current.LastSeq = item.Seq
@@ -132,6 +147,7 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 			if current == nil || current.UserRow {
 				flush()
 				current = &TimelineTurn{FirstSeq: item.Seq, TsMS: item.TimestampMS}
+				mark(current)
 			}
 			if current.TsMS == nil {
 				current.TsMS = item.TimestampMS
@@ -142,6 +158,9 @@ func DeriveTimeline(items []ConversationItem) []TimelineTurn {
 			}
 			current.LastSeq = item.Seq
 		case KindMeta, KindCompactSummary, KindReasoning, KindActivity:
+			if item.Kind == KindCompactSummary {
+				compactPending = true
+			}
 			// Meta/compact rows do not open turns; reasoning merges into the
 			// current turn's thinking when one is open.
 			if current != nil && item.Kind == KindReasoning && item.Text != "" {

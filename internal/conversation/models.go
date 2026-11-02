@@ -33,6 +33,9 @@ type ConversationToolCall struct {
 	Input   *string `json:"input,omitempty"`
 	Output  *string `json:"output,omitempty"`
 	IsError bool    `json:"is_error"`
+	// Details mirrors history.ToolCall.Details (a provider's structured
+	// result snapshot, e.g. Pi's whole todo list).
+	Details *string `json:"details,omitempty"`
 }
 
 // ConversationSummary is the list-page projection.
@@ -59,6 +62,9 @@ type ConversationItem struct {
 	TimestampMS *int64                 `json:"timestamp_ms,omitempty"`
 	Model       *string                `json:"model,omitempty"`
 	Truncated   bool                   `json:"truncated"`
+	// Stopped mirrors history.TranscriptMessage.Stopped (the provider ended
+	// this assistant message early: aborted / error).
+	Stopped bool `json:"stopped,omitempty"`
 	// Parts is the item's blocks in provider order (text / thinking / tool
 	// interleaved) when the source merged several provider messages into one
 	// item and kept the order; empty means Text → Thinking → ToolCalls.
