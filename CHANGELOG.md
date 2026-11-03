@@ -5,6 +5,31 @@ Internal from the release's commits (see `.agents/skills/solco-release`). The
 current release's section is snapshotted into `internal/changelog/snapshot.md`
 at release time and shown in Settings → About.
 
+## v0.12.1 — 2026-11-03
+
+### New
+
+- Remote Desktop: watch and fully control this Mac from the phone (off by default; Settings → Remote Desktop, approval dialog on the Mac)
+- Remote Desktop: remembered phones with Forget, privacy blackout, lock-screen unlock, and a menu-bar indicator while a session is live
+- Remote Desktop: peer-to-peer video with adaptive bitrate; reconnects in about 8 s after the phone changes network
+- Git: panel redesigned after Fork — commit list with ref chips, review strip, status tiles, pull/squash/reflog/tag/stash/submodule actions
+- Git: auto-fetch for the open repository, persistent sidebar folds, double-click to check out
+- Automations: a native view over the new Solco automations plugin (drafts need approval before they fire)
+- Services: the sidebar shows each project's scripts and services, tinted by whether their port answers
+- Agents: toggles in Settings choose which Agents the New Tab menu offers, and a first-run guide walks new installs through setup
+- Chat: `/` and `$` skills autocomplete anywhere in the draft; a New Pane Agent launch shows Chat starting at once
+- Settings: red dot on updates and a multi-release changelog summary in About
+- Phone: the Host follows the Mac's IP changes, so paired phones keep finding it
+
+### Fixed
+
+- Chat: a launched Agent pane now opens on Chat reliably instead of flashing Terminal
+- Chat: the workspace home opens on each pane's remembered surface
+- Git: selected file rows use the neutral selection tint, and the sidebar keeps its vibrancy with a changes list
+- Phone Git: pull and push follow the branch's upstream
+- Remote Desktop: a capture stream that stops on its own is restarted instead of failing the session
+
+
 ## v0.12.0 — 2026-11-02
 
 ### New
