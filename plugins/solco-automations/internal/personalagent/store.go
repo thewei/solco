@@ -256,6 +256,18 @@ var migrations = []string{
 		revision INTEGER NOT NULL DEFAULT 1,
 		updated_at INTEGER NOT NULL DEFAULT 0
 	);`,
+	// v5: the legacy-rule ledger. Definitions stay in automations.yaml; this
+	// table only says who dispatches a rule and where its watermark is.
+	`CREATE TABLE legacy_rules (
+		name TEXT PRIMARY KEY,
+		state TEXT NOT NULL,
+		last_occurrence INTEGER NOT NULL DEFAULT 0,
+		queued INTEGER NOT NULL DEFAULT 0,
+		handback INTEGER NOT NULL DEFAULT 0,
+		revision INTEGER NOT NULL DEFAULT 1,
+		adopted_at INTEGER NOT NULL DEFAULT 0,
+		updated_at INTEGER NOT NULL DEFAULT 0
+	);`,
 }
 
 func (s *Store) migrate() error {

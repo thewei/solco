@@ -25,6 +25,10 @@ var eventPriority = map[string]int{
 	"pr.merged":      2,
 	"goal.progress":  0,
 	"git.main_red":   3,
+	"rule.fired":     1,
+	"rule.missed":    2,
+	"rule.skipped":   0,
+	"rule.queued":    0,
 }
 
 // EventKinds lists the kinds a heartbeat rule may name.

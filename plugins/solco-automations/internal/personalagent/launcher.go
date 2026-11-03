@@ -32,6 +32,17 @@ func NewHostLauncher(session, workDirRoot string) *HostLauncher {
 }
 
 func (l *HostLauncher) automation(spec LaunchSpec) config.Automation {
+	if spec.Auto != nil {
+		// A legacy rule: its own definition, named so the run's workspace label
+		// carries the run id (Find) and its branch keeps the rule's prefix
+		// (`auto/<rule>-`, which the cleanup TTL matches).
+		a := *spec.Auto
+		a.Name = spec.Auto.Name + " " + spec.RunID
+		if a.Session == "" {
+			a.Session = l.Session
+		}
+		return a
+	}
 	repo := spec.RepoPath
 	if repo == "" {
 		repo = filepath.Join(l.WorkDirRoot, "personal")

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 // ErrUncertain means a launch's outcome is unknown. The run is parked as
@@ -41,6 +43,9 @@ type LaunchSpec struct {
 	RepoPath string
 	Prompt   string
 	Timeout  time.Duration
+	// Auto carries a legacy rule's whole definition (headless, MCP, args,
+	// workspace mode …) so the launcher runs it the way the old runner did.
+	Auto *config.Automation
 }
 
 // Launcher is the Herdr seam. The production adapter drives the same
@@ -74,6 +79,12 @@ type Dispatcher struct {
 	// OnProvisionError is a test hook: it runs after a failed Provision and
 	// before reconciliation.
 	OnProvisionError func(Run)
+	// Rules resolves a legacy automation by name (the definitions stay in
+	// automations.yaml); a rule's task then runs that definition verbatim.
+	Rules func(name string) (config.Automation, bool)
+	// OnSettled sees every status a run reaches (claimed, running, done, …),
+	// so the old history log and its toasts stay whole for rules.
+	OnSettled func(Task, Run)
 
 	wg      sync.WaitGroup
 	active  atomic.Int32
@@ -122,7 +133,25 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		policy = BuildPrompt
 	}
 	prompt := policy(asst, task)
-	if d.Policy == nil {
+	var auto *config.Automation
+	timeout := d.timeout()
+	if name, isRule := LegacyRuleName(task.RuleID); isRule {
+		a, ok := config.Automation{}, false
+		if d.Rules != nil {
+			a, ok = d.Rules(name)
+		}
+		if !ok {
+			_ = d.Store.FinishRun(run.ID, RunFailed, "the automation is no longer defined in automations.yaml")
+			d.settle(run.ID)
+			return d.reload(run.ID), fmt.Errorf("automation %q is gone", name)
+		}
+		// A rule is the person's own prompt: it goes out verbatim, with no
+		// Solco fences or memory added.
+		auto, prompt = &a, a.Prompt
+		if a.TimeoutMinutes > 0 {
+			timeout = time.Duration(a.TimeoutMinutes) * time.Minute
+		}
+	} else if d.Policy == nil {
 		// The Assistant's approved memory, bounded and credential-free. A read
 		// that fails (a busy database) only costs the launch its memory.
 		if mc, err := d.Store.BuildContext(asst.ID, ContextRequest{Query: task.Title + " " + task.Brief}); err == nil && mc.Text != "" {
@@ -133,8 +162,10 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		RunID: run.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath,
 		Label:   markerLabel(task.Title, run.ID),
 		Prompt:  prompt,
-		Timeout: d.timeout(),
+		Timeout: timeout,
+		Auto:    auto,
 	}
+	d.settle(run.ID)
 	// The label is stored before anything is created, so an uncertain run can
 	// be found again by its marker.
 	if err := d.Store.SetLabel(run.ID, spec.Label); err != nil {
@@ -163,12 +194,14 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 	if err := d.Store.RecordLaunch(run.ID, sess); err != nil {
 		return d.reload(run.ID), err
 	}
+	d.settle(run.ID)
 	return d.work(ctx, run.ID, sess, spec, false)
 }
 
 // work waits for the Agent and records how it ended. await=true is the restart
 // path: the Agent is already working, only wait.
 func (d *Dispatcher) work(ctx context.Context, runID string, sess Session, spec LaunchSpec, await bool) (Run, error) {
+	defer d.settle(runID)
 	var err error
 	if await {
 		err = d.Launcher.Await(ctx, sess, spec)
@@ -200,7 +233,24 @@ func (d *Dispatcher) work(ctx context.Context, runID string, sess Session, spec 
 
 func (d *Dispatcher) park(run Run, why error) (Run, error) {
 	_, _ = d.Store.parkUncertain(run.ID, why.Error())
+	d.settle(run.ID)
 	return d.reload(run.ID), why
+}
+
+// settle tells the observer where a run stands now.
+func (d *Dispatcher) settle(runID string) {
+	if d.OnSettled == nil {
+		return
+	}
+	run, err := d.Store.GetRun(runID)
+	if err != nil {
+		return
+	}
+	task, err := d.Store.GetTask(run.TaskID)
+	if err != nil {
+		return
+	}
+	d.OnSettled(task, run)
 }
 
 func (d *Dispatcher) reload(id string) Run {
