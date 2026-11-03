@@ -4,6 +4,12 @@ What changed for someone using the plugin. Dates are release dates.
 
 ## Unreleased
 
+- **Headless runs**: `headless: true` (`add --headless`) runs the agent in its own
+  non-interactive mode — claude `-p`, codex `exec`, pi/omp `-p` — so no
+  first-run trust dialog can stop an unattended run. The prompt travels in a
+  0600 file, not typed into the pane; a non-zero exit fails the run and names
+  the pane holding the output. Not for workflows, templates or the hc backend.
+- `history --json` runs carry `seen`; `seen <run-id|--all>` marks them read.
 - The plugin's own words are English throughout: `schedule_text` renders as
   English ("Daily 09:00", "Weekdays 09:00", "Every 6 hours", …) and a done
   toast reads `✓ <name> done · 38m`.

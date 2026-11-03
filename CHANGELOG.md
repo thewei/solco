@@ -15,6 +15,7 @@ at release time and shown in Settings → About.
 - Git: panel redesigned after Fork — commit list with ref chips, review strip, status tiles, pull/squash/reflog/tag/stash/submodule actions
 - Git: auto-fetch for the open repository, persistent sidebar folds, double-click to check out
 - Automations: a native view over the new Solco automations plugin (drafts need approval before they fire)
+- Automations: run headless so no trust dialog can stop an unattended run, and unread failed/finished runs show in the Header count and a new Automations tab
 - Services: the sidebar shows each project's scripts and services, tinted by whether their port answers
 - Agents: toggles in Settings choose which Agents the New Tab menu offers, and a first-run guide walks new installs through setup
 - Chat: `/` and `$` skills autocomplete anywhere in the draft; a New Pane Agent launch shows Chat starting at once

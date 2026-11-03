@@ -25,15 +25,21 @@ func TestAboutPageShowsVersionLinksAndReleaseNotes(t *testing.T) {
 	tester.Frame()
 	texts := strings.Join(tester.Texts(), "\n")
 
+	// Read the committed snapshot instead of pinning one release's wording:
+	// every release rewrites it.
+	rel, ok := changelog.Current()
+	if !ok || len(rel.Groups) == 0 || len(rel.Groups[0].Items) == 0 {
+		t.Fatalf("committed changelog snapshot has no release with items: %+v", rel)
+	}
 	for _, want := range []string{
 		"Solco",
 		"Version ", // the running version ("dev" headless)
 		"GitHub Repository",
 		"Release Notes",
 		"Check for Updates",
-		"What's new in v0.12.0", // the committed snapshot's latest release
-		"Released 2026-11-02",
-		"Mobile: phone-native bottom tabs", // the first New bullet
+		"What's new in v" + rel.Version, // the committed snapshot's latest release
+		"Released " + rel.Date,
+		strings.TrimSpace(rel.Groups[0].Items[0][:min(len(rel.Groups[0].Items[0]), 24)]), // the first bullet
 	} {
 		if !strings.Contains(texts, want) {
 			t.Errorf("About page is missing %q; texts=%q", want, texts)

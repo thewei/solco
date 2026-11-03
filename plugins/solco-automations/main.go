@@ -43,6 +43,8 @@ Usage:
                                        --workspace --workspace-id --mcp-config
                                        --timeout-minutes --catch-up-minutes
                                        --draft                    create as a draft (not scheduled)
+                                       --headless                 run the agent non-interactively
+                                                                  (claude -p, codex exec, pi/omp -p)
                                        --rationale "..."          the analysis behind the draft
                                        --on-overlap skip|queue    what a due occurrence does when the
                                                                   previous run is still working
@@ -319,6 +321,8 @@ func addCmd(args []string) error {
 			opts.CleanupTTLHours, err = flagInt(args, &i)
 		case "--draft":
 			opts.Draft = true
+		case "--headless":
+			opts.Headless = true
 		default:
 			return fmt.Errorf("unknown flag %q; see herdr-automations add in the usage", args[i])
 		}
@@ -493,7 +497,7 @@ func putCmd(args []string) error {
 	}
 	a := config.Automation{
 		Name: in.Name, Cron: in.Cron, Repo: in.Repo, Workspace: in.Workspace, WorkspaceID: in.WorkspaceID,
-		Agent: in.Agent, Model: in.Model, Template: in.Template, Prompt: in.Prompt, Workflow: in.Workflow,
+		Agent: in.Agent, Model: in.Model, Template: in.Template, Prompt: in.Prompt, Headless: in.Headless, Workflow: in.Workflow,
 		MCPConfig: in.MCPConfig, AgentArgs: in.AgentArgs, TimeoutMinutes: in.TimeoutMinutes,
 		CatchUpMinutes: in.CatchUpMinutes, Disabled: in.Disabled,
 		Draft: in.Draft, Rationale: in.Rationale, OnOverlap: in.OnOverlap,

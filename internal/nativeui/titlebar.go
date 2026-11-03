@@ -393,8 +393,12 @@ func (s *Shell) titlebarActivity(c *ui.Context, k *gorexColors) {
 		// and review counts (one aggregation); tasks whose Agent is already
 		// listed are not counted twice.
 		taskAttention, taskReview := headerTaskCounts(s.actionableTasks(), summary.Entries)
-		attention, review := summary.NeedsAttention+taskAttention, summary.ReviewPending+taskReview
-		waiting, total = headerTally(attention, review, len(summary.Entries), taskAttention+taskReview)
+		// Automation runs nobody has opened count the same way (failed =
+		// attention, finished = review); they have no Agent row of their own.
+		autoAttention, autoReview := s.automationsHeaderCounts()
+		attention := summary.NeedsAttention + taskAttention + autoAttention
+		review := summary.ReviewPending + taskReview + autoReview
+		waiting, total = headerTally(attention, review, len(summary.Entries), taskAttention+taskReview+autoAttention+autoReview)
 		parts := make([]string, 0, 3)
 		if attention > 0 {
 			parts = append(parts, strconv.Itoa(attention)+" attention")

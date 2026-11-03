@@ -273,6 +273,7 @@ automations:
     prompt: "…"                   # OR workflow: <name>  (delegates to hwf run)
     mcp_config: ~/.config/mcp/github.json   # optional → --mcp-config
     agent_args: ["--verbose"]               # optional, verbatim agent flags
+    headless: true                # optional: run the agent non-interactively (claude -p, codex exec, pi/omp -p) — no trust dialog; reads, does not write, unless the agent's own settings allow it
     timeout_minutes: 60           # optional bound on the run
     catch_up_minutes: 120         # how late a sleep-delayed run may still start; -1 never
     disabled: true                # optional: keep it, don't schedule it

@@ -384,6 +384,8 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	// panel closed; the refresh throttles itself (and does nothing without
 	// the plugin).
 	s.refreshWorkboardTasks(false)
+	// The automations inbox feeds the same count (once a minute at most).
+	s.refreshAutomationsBackground()
 	if s.router.Path() == routeWorkspace {
 		// Terminal attachments stay managed even while Diff/Commit is the
 		// visible surface (GWB-041/043): sync reconciles invalid ones, the

@@ -17,7 +17,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/automations"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
@@ -57,6 +60,8 @@ type automationsList struct {
 	newDraft       automationsDraft // ＋ New sheet
 	edit           automationsDraft // Edit sheet (original != "")
 	askOpen        bool             // ✦ Let an Agent Draft sheet
+	// pollPending marks one scheduled re-read while a run is in flight.
+	pollPending bool
 }
 
 // automationsDraft is the form the New and Edit sheets share.
@@ -64,12 +69,14 @@ type automationsDraft struct {
 	open      bool
 	original  string // edit only: the name `put --original` targets
 	name      string
-	trigger   int // 0 cron, 1 one-shot
 	cronSel   string
 	cron      string
-	once      string
 	repo      string
-	agent     string
+	agent     string // an agent's label when the catalog is known, free text otherwise
+	model     string
+	mode      int  // 0 fresh worktree per run, 1 the repository root
+	headless  int  // 0 the Agent's interface, 1 its non-interactive mode
+	keepMode  bool // the entry runs in an existing workspace; the form leaves that alone
 	prompt    string
 	rationale string
 	advanced  bool
@@ -109,7 +116,7 @@ func presetCron(label string) string {
 // (v1: no direct wiring — the user pastes it to an agent themselves).
 const automationsAskText = `Draft an automation for Solco's Automations plugin (com.whstudio.solco.automations, created with herdr-automations add --draft --rationale):
 - Goal: what should this automation reliably accomplish?
-- Trigger: a cron expression or a one-shot time (RFC3339), and the repository it acts on
+- Trigger: a cron expression, and the repository it acts on
 - Guardrails: what it must not touch; what timeout_minutes to set; skip or queue when runs overlap
 - Cost: the expected duration of one run and the agent/model
 Analyze first, then produce a structured prompt; state goal/inputs/guardrails/cost in the rationale. Always create as a draft (--draft); it stays off until I approve it in Solco myself.`
@@ -219,6 +226,16 @@ func (s *Shell) automationsListBody(c *ui.Context) {
 		if st.result.Paused {
 			inlineNotice(c, ToneWarning, "The plugin's daemon is paused: automations will not fire until it resumes.", nil)
 		}
+		if st.schedulerMissing() {
+			// Herdr starts the plugin's daemon only with its own server, so a
+			// plugin linked or upgraded into a running Herdr has none — every
+			// automation then looks scheduled and never fires.
+			inlineNoticeActions(c, ToneWarning, "The scheduler is not running, so nothing will fire on schedule.", func() {
+				if regularButton(c, "Start Scheduler").Clicked() {
+					s.startAutomationsScheduler()
+				}
+			})
+		}
 		if st.errText != "" {
 			inlineNotice(c, ToneError, st.errText, func() {
 				st.errText = ""
@@ -228,7 +245,15 @@ func (s *Shell) automationsListBody(c *ui.Context) {
 		rows := s.automationsVisible()
 		switch {
 		case len(st.result.Automations) == 0 && !st.loading && !st.failed:
-			emptyState(c, "No automations", "Let an agent draft one, or create a draft yourself.")
+			emptyState(c, "No automations", "Let an agent draft one, create a draft yourself, or start from a template.", func() {
+				ui.Row(c).Gap(Spacing().S).AlignItems(ui.Center).Wrap().Children(func() {
+					for _, tpl := range automationTemplates {
+						if compactButton(c, tpl.label).Clicked() {
+							s.openAutomationsTemplate(tpl)
+						}
+					}
+				})
+			})
 		case len(rows) == 0 && !st.loading:
 			emptyState(c, "Nothing in this filter", "Try another filter.")
 		case len(rows) == 0 && st.loading:
@@ -455,6 +480,7 @@ func automationNextText(t time.Time) string {
 func (s *Shell) openAutomationsDrawer(name string) {
 	s.automations.list.selected = name
 	s.loadAutomationHistory(name)
+	s.markAutomationSeen(name) // opening the drawer is reading the result
 }
 
 // automationsDrawer is the right-hand detail: identity, rationale, prompt,
@@ -496,13 +522,18 @@ func (s *Shell) automationsDrawer(c *ui.Context, a automations.Automation) {
 				if compactPrimaryButton(c, "Approve").Clicked() {
 					s.automationsWrite("approve", a.Name, func(ctx context.Context, client *automations.Client) error {
 						return client.Approve(ctx, a.Name)
-					}, func() { s.pendingToast = "Approved " + a.Name + " — scheduling begins" })
+					}, func() { s.pendingToast = "Approved " + a.Name + " — it runs on its schedule" })
 				}
 			} else {
 				if compactPrimaryButton(c, "▶ Run Now").Clicked() {
 					s.automationsWrite("run", a.Name, func(ctx context.Context, client *automations.Client) error {
 						return client.Run(ctx, a.Name)
-					}, func() { s.pendingToast = "Run Now requested for " + a.Name })
+					}, func() {
+						s.pendingToast = "Started " + a.Name + " — it appears under Last 5 runs"
+						s.loadAutomationHistory(a.Name)
+						s.automations.list.pollPending = false
+						s.pollAutomationsWhileActive()
+					})
 				}
 				pauseResume, verb := "Pause", "pause"
 				if a.Disabled {
@@ -547,6 +578,7 @@ func (s *Shell) automationsFacts(c *ui.Context, a automations.Automation) {
 		{"Repository", fallbackText(tildePath(a.Repo), "—")},
 		{"Mode", fallbackText(a.WorkspaceMode, "—")},
 		{"Agent", fallbackText(a.Agent, "—")},
+		{"Run as", runAsLabel(a.Headless)},
 		{"On overlap", overlapLabel(a.OnOverlap)},
 		{"Cleanup", cleanupLabel(a.CleanupTTLHours)},
 	}
@@ -554,13 +586,20 @@ func (s *Shell) automationsFacts(c *ui.Context, a automations.Automation) {
 		ui.Column(c).FillWidth().Gap(sp.XXS).Children(func() {
 			for _, fact := range facts {
 				ui.Row(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, fact[0]).FontSize(typ.BodySmall).TextColor(t.TextMuted).Width(52).Shrink(0)
+					ui.Text(c, fact[0]).FontSize(typ.BodySmall).TextColor(t.TextMuted).Width(76).Shrink(0)
 					tipped(c, ui.Text(c, fact[1]).FontSize(typ.BodySmall).TextColor(t.Text).
 						SingleLine().Ellipsis("…").Grow(1).MinWidth(0), fact[1])
 				})
 			}
 		})
 	})
+}
+
+func runAsLabel(headless bool) string {
+	if headless {
+		return "Headless"
+	}
+	return "Interactive"
 }
 
 func overlapLabel(v string) string {
@@ -624,6 +663,13 @@ func (s *Shell) automationsRunRow(c *ui.Context, a automations.Automation, run a
 			ui.Text(c, strings.TrimSpace(detail)).FontSize(typ.Caption).TextColor(t.TextMuted).
 				SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 		})
+		if text := automationRunProblem(run); text != "" {
+			// The plugin's own account of why the run stopped (a trust
+			// prompt, a missing agent …); a red pill alone made the user
+			// open the pane to learn it.
+			tipped(c, ui.Text(c, text).FontSize(typ.Caption).TextColor(designTokens(t.Dark).StatusColor(ToneError, t.Dark)).
+				MaxLines(2).Ellipsis("…"), text)
+		}
 		ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {
 			if run.PaneID != "" && paneByID(s.projection, run.PaneID) != nil {
 				if compactButton(c, "Open Pane").Clicked() {
@@ -639,6 +685,22 @@ func (s *Shell) automationsRunRow(c *ui.Context, a automations.Automation, run a
 			}
 		})
 	})
+}
+
+// automationRunProblem is the line a failed, invalid or skipped run carries:
+// the plugin's own error text, bounded and single-spaced. Runs that went well
+// have none.
+func automationRunProblem(run automations.Run) string {
+	switch run.Status {
+	case "failed", "invalid", "skipped", "missed":
+	default:
+		return ""
+	}
+	text := strings.Join(strings.Fields(run.Error), " ")
+	if r := []rune(text); len(r) > 280 {
+		text = string(r[:280]) + "…"
+	}
+	return text
 }
 
 // automationRunTone maps the plugin's run vocabulary onto a status tone.
@@ -715,12 +777,111 @@ func (s *Shell) openAutomationsAsk() {
 	s.automations.list.askOpen = true
 }
 
-// openAutomationsNew opens the ＋ New sheet; creation is always a draft.
-func (s *Shell) openAutomationsNew() {
-	s.hideQuickPanel()
-	s.automations.list.newDraft = automationsDraft{
-		open: true, cronSel: automationsCronPresets[0].label,
+// automationTemplate is a starter for the empty list: a schedule and a
+// read-only prompt, so a first draft is one click and cannot change a file
+// by itself. Templates seed the ＋ New form; creation is still a draft.
+type automationTemplate struct {
+	name, label, preset, prompt, rationale string
+}
+
+var automationTemplates = []automationTemplate{
+	{
+		name: "ci-triage", label: "CI triage", preset: "Weekdays 09:00",
+		prompt:    "Check the most recent CI runs on the default branch. For every failure, find the cause in the logs and report it with the failing step. Do not change any files.",
+		rationale: "Goal: know why CI is red before the day starts. Reads only; guardrail: no edits, no pushes.",
+	},
+	{
+		name: "dependency-review", label: "Dependency review", preset: "Mondays 09:00",
+		prompt:    "List outdated dependencies and any known security advisories. Say which upgrades are worth doing this week and what could break. Do not change any files.",
+		rationale: "Goal: a weekly view of dependency risk. Reads only; guardrail: no edits.",
+	},
+	{
+		name: "yesterday-recap", label: "Yesterday's commits", preset: "Daily 09:00",
+		prompt:    "Summarize yesterday's commits on the default branch: what changed by area and anything risky. Do not change any files.",
+		rationale: "Goal: a morning recap of repository activity. Reads only; guardrail: no edits.",
+	},
+}
+
+// automationAgentKinds is the launchable Agents the form offers, in the
+// catalog's order (Terminal is not an Agent). Empty until the catalog loads.
+func (s *Shell) automationAgentKinds() []app.SessionKind {
+	var out []app.SessionKind
+	for _, kind := range s.launchKinds {
+		if kind.ID != app.TerminalKind {
+			out = append(out, kind)
+		}
 	}
+	return out
+}
+
+// automationAgentLabels is the form's agent options.
+func automationAgentLabels(kinds []app.SessionKind) []string {
+	labels := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		labels = append(labels, kind.Label)
+	}
+	return labels
+}
+
+// automationAgentLabel names a plugin agent by the catalog's label. The
+// plugin takes the kind `herdr agent start --kind` takes (claude, agy …),
+// which is not always Solco's own agent id (claude-code); one that matches no
+// catalog entry stays as typed.
+func automationAgentLabel(kinds []app.SessionKind, herdrKind string) string {
+	for _, kind := range kinds {
+		if agent.HerdrAgentKind(history.AgentID(kind.ID)) == herdrKind {
+			return kind.Label
+		}
+	}
+	return herdrKind
+}
+
+// automationAgentID is the inverse: the Herdr kind the plugin takes for a
+// label. The first real run saved "claude-code" here, a kind Herdr refuses.
+func automationAgentID(kinds []app.SessionKind, label string) string {
+	label = strings.TrimSpace(label)
+	for _, kind := range kinds {
+		if kind.Label == label {
+			return agent.HerdrAgentKind(history.AgentID(kind.ID))
+		}
+	}
+	return label
+}
+
+// openAutomationsNew opens the ＋ New sheet; creation is always a draft. The
+// repository starts at the folder the user is working in and the Agent at
+// the one launched last, so the common case needs no typing.
+func (s *Shell) openAutomationsNew() {
+	s.openAutomationsDraftFrom(automationTemplate{})
+}
+
+// openAutomationsTemplate seeds the ＋ New sheet from a starter.
+func (s *Shell) openAutomationsTemplate(t automationTemplate) {
+	s.openAutomationsDraftFrom(t)
+}
+
+func (s *Shell) openAutomationsDraftFrom(t automationTemplate) {
+	s.hideQuickPanel()
+	s.ensureLaunchKinds()
+	kinds := s.automationAgentKinds()
+	d := automationsDraft{open: true, cronSel: automationsCronPresets[0].label, name: t.name,
+		prompt: t.prompt, rationale: t.rationale, repo: s.selectedTabCWD()}
+	if t.preset != "" {
+		d.cronSel = t.preset
+	}
+	if t.rationale != "" {
+		d.advanced = true
+	}
+	if len(kinds) > 0 {
+		pick := kinds[0]
+		if last := s.lastLaunchKind(s.launchKinds); last.ID != app.TerminalKind {
+			pick = last
+		}
+		d.agent = pick.Label
+	} else {
+		d.agent = "claude"
+	}
+	s.automations.list.newDraft = d
 }
 
 // openAutomationsEdit prefills the edit sheet from the automation's row.
@@ -729,16 +890,26 @@ func (s *Shell) openAutomationsEdit(name string) {
 	if a == nil {
 		return
 	}
+	s.ensureLaunchKinds()
 	d := automationsDraft{
-		open: true, original: a.Name, name: a.Name, repo: a.Repo,
-		agent: a.Agent, prompt: a.Prompt, rationale: a.Rationale, advanced: true,
+		open: true, original: a.Name, name: a.Name, repo: a.Repo, model: a.Model,
+		agent:  automationAgentLabel(s.automationAgentKinds(), a.Agent),
+		prompt: a.Prompt, rationale: a.Rationale, advanced: true,
+	}
+	switch a.WorkspaceMode {
+	case "root":
+		d.mode = 1
+	case "", "worktree":
+	default:
+		d.keepMode = true
 	}
 	if a.OnOverlap == "queue" {
 		d.overlap = 1
 	}
-	if a.OnceAt != nil && *a.OnceAt != "" {
-		d.trigger, d.once = 1, *a.OnceAt
-	} else if cron := presetCronOf(a.Cron); cron != "" {
+	if a.Headless {
+		d.headless = 1
+	}
+	if cron := presetCronOf(a.Cron); cron != "" {
 		d.cronSel = cron
 	} else {
 		d.cronSel, d.cron = automationsCronCustom, a.Cron
@@ -808,8 +979,18 @@ func (s *Shell) automationsAskSheet(c *ui.Context) {
 	})
 }
 
-// automationsDraftSheet renders the shared New/Edit form (contract §5:
-// name/cron(Preset+Custom)/once/repo/agent/prompt/rationale(fold)/Advanced).
+// pickAutomationFolder is the repository picker; a test swaps it.
+var pickAutomationFolder = func() (string, error) {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Title: "Choose the repository", Directory: true})
+	if err != nil || len(paths) == 0 {
+		return "", err
+	}
+	return paths[0], nil
+}
+
+// automationsDraftSheet renders the shared New/Edit form: name, schedule
+// (preset or cron), repository, how a run gets its folder, agent and model,
+// prompt, and the folded rationale/overlap/limits.
 func (s *Shell) automationsDraftSheet(c *ui.Context, d *automationsDraft, title, submitLabel, op string) {
 	if !d.open {
 		return
@@ -817,35 +998,94 @@ func (s *Shell) automationsDraftSheet(c *ui.Context, d *automationsDraft, title,
 	ui.Modal(c, &d.open, func() {
 		sp := Spacing()
 		t := c.Theme()
+		kinds := s.automationAgentKinds()
 		ui.Column(c).Width(480).MaxWidth(560).Gap(sp.L).Children(func() {
 			modalTitle(c, title)
-			textField(c, &d.name).Label("Name").Placeholder("nightly-ci-triage").AutoFocus().FillWidth()
-			segmentedControl(c, &d.trigger, "Cron", "One-shot").Label("Trigger")
-			if d.trigger == 0 {
-				selectField(c, &d.cronSel, cronPresetLabels()).Label("Preset")
+			// Every field carries a visible caption (captionedField): a
+			// .Label alone is only the accessibility name, and the sheet
+			// shipped captionless — a bare dropdown and an empty box.
+			if d.original != "" {
+				// The plugin keys history and runs by name; an edit keeps it.
+				captionedField(c, "Name", "", func() {
+					ui.Text(c, d.name).FontSize(Typography().Body)
+				})
+			} else {
+				captionedField(c, "Name", "", func() {
+					textField(c, &d.name).Label("Name").Placeholder("nightly-ci-triage").AutoFocus().FillWidth()
+				})
+			}
+			captionedField(c, "Schedule", "", func() {
+				selectField(c, &d.cronSel, cronPresetLabels()).Label("Schedule").FillWidth()
 				if d.cronSel == automationsCronCustom {
 					textField(c, &d.cron).Label("Cron Expression").Placeholder("0 9 * * 1-5").FillWidth()
 				} else if cron := presetCron(d.cronSel); cron != "" {
-					ui.Text(c, cron).FontSize(Typography().Caption).TextColor(t.TextMuted)
+					ui.Text(c, "cron "+cron).FontSize(Typography().Caption).TextColor(t.TextMuted)
 				}
-			} else {
-				textField(c, &d.once).Label("One-shot Time (RFC3339)").Placeholder("2026-11-03T09:00:00+08:00").FillWidth()
+			})
+			captionedField(c, "Repository", "", func() {
+				ui.Row(c).FillWidth().Gap(sp.S).Children(func() {
+					textField(c, &d.repo).Label("Repository").Placeholder("~/Workspaces/my-project").Grow(1).MinWidth(0)
+					if regularButton(c, "Choose…").Clicked() {
+						s.chooseAutomationFolder(d)
+					}
+				})
+			})
+			if !d.keepMode {
+				captionedField(c, "Each run starts in",
+					"An Agent asks to trust a folder the first time it opens it, and a run waits at that question. Open the repository with this Agent once before relying on a schedule.", func() {
+						segmentedControl(c, &d.mode, "Fresh Worktree", "Repository Root").Label("Each run starts in")
+					})
 			}
-			textField(c, &d.repo).Label("Repository").Placeholder("~/Workspaces/wh-studio/solco").FillWidth()
-			textField(c, &d.agent).Label("Agent").Placeholder("claude").FillWidth()
-			textArea(c, &d.prompt).Label("Prompt").FillWidth().Height(88)
+			ui.Row(c).FillWidth().Gap(sp.M).Children(func() {
+				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+					captionedField(c, "Agent", "", func() {
+						if len(kinds) > 0 {
+							selectField(c, &d.agent, automationAgentLabels(kinds)).Label("Agent").FillWidth()
+						} else {
+							textField(c, &d.agent).Label("Agent").Placeholder("claude").FillWidth()
+						}
+					})
+				})
+				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+					captionedField(c, "Model", "", func() {
+						textField(c, &d.model).Label("Model").Placeholder("The Agent's default").FillWidth()
+					})
+				})
+			})
+			captionedField(c, "Run as",
+				"Headless uses the Agent's non-interactive mode (Claude Code, Codex, Pi, Oh My Pi): no startup dialog can stop it, and it reads but does not change files unless the Agent's own settings allow it.", func() {
+					segmentedControl(c, &d.headless, "Interactive", "Headless").Label("Run as")
+				})
+			captionedField(c, "Prompt", "", func() {
+				textArea(c, &d.prompt).Label("Prompt").Placeholder("What should the Agent do on each run?").FillWidth().Height(88)
+			})
 			if compactButton(c, "Advanced…").Clicked() {
 				d.advanced = !d.advanced
 			}
 			if d.advanced {
-				textArea(c, &d.rationale).Label("Rationale (goal / inputs / guardrails / cost)").FillWidth().Height(64)
-				segmentedControl(c, &d.overlap, "Skip", "Queue").Label("On Overlap")
-				ui.Row(c).FillWidth().Gap(sp.M).Children(func() {
-					textField(c, &d.timeout).Label("Timeout (min)").Placeholder("60").Grow(1)
-					textField(c, &d.catchUp).Label("Catch-up Window (min)").Placeholder("120").Grow(1)
-					textField(c, &d.cleanup).Label("Cleanup TTL (hours)").Placeholder("0").Grow(1)
+				captionedField(c, "Rationale", "Goal, inputs, guardrails and cost — what you are approving.", func() {
+					textArea(c, &d.rationale).Label("Rationale").FillWidth().Height(64)
 				})
-				ui.Text(c, "0 = the plugin's default.").FontSize(Typography().Caption).TextColor(t.TextMuted)
+				captionedField(c, "On overlap", "", func() {
+					segmentedControl(c, &d.overlap, "Skip", "Queue").Label("On overlap")
+				})
+				ui.Row(c).FillWidth().Gap(sp.M).Children(func() {
+					for _, f := range []struct {
+						caption, placeholder string
+						value                *string
+					}{
+						{"Timeout (min)", "60", &d.timeout},
+						{"Catch-up (min)", "120", &d.catchUp},
+						{"Cleanup (hours)", "0", &d.cleanup},
+					} {
+						ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+							captionedField(c, f.caption, "", func() {
+								textField(c.Key("auto-"+f.caption), f.value).Label(f.caption).Placeholder(f.placeholder).FillWidth()
+							})
+						})
+					}
+				})
+				ui.Text(c, "Empty or 0 uses the plugin's default.").FontSize(Typography().Caption).TextColor(t.TextMuted)
 			}
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {
@@ -859,6 +1099,19 @@ func (s *Shell) automationsDraftSheet(c *ui.Context, d *automationsDraft, title,
 	})
 }
 
+// chooseAutomationFolder fills the form's repository from the folder picker.
+// The picker sees this machine's disk, which is the only one the gate serves.
+func (s *Shell) chooseAutomationFolder(d *automationsDraft) {
+	go func() {
+		folder, err := pickAutomationFolder()
+		s.applyOnUI(func() {
+			if err == nil && strings.TrimSpace(folder) != "" {
+				d.repo = folder
+			}
+		})
+	}()
+}
+
 func cronPresetLabels() []string {
 	labels := make([]string, 0, len(automationsCronPresets))
 	for _, p := range automationsCronPresets {
@@ -867,22 +1120,18 @@ func cronPresetLabels() []string {
 	return labels
 }
 
-// automationsDraftReady is whether the form carries what the plugin needs:
-// a name, a prompt and one trigger.
+// automationsDraftReady is whether the form carries what the plugin needs to
+// run: a name, a prompt, a schedule and a repository. (An edit's name is
+// fixed.) The plugin still judges every value; this only keeps the sheet
+// from sending a request that cannot succeed.
 func (s *Shell) automationsDraftReady(d *automationsDraft) bool {
-	if strings.TrimSpace(d.name) == "" || strings.TrimSpace(d.prompt) == "" {
+	if strings.TrimSpace(d.name) == "" || strings.TrimSpace(d.prompt) == "" || strings.TrimSpace(d.repo) == "" {
 		return false
 	}
-	if d.original != "" {
-		return true // an edit may clear the trigger; the plugin judges
+	if d.cronSel == automationsCronCustom {
+		return strings.TrimSpace(d.cron) != ""
 	}
-	if d.trigger == 1 {
-		return strings.TrimSpace(d.once) != ""
-	}
-	if d.cronSel != automationsCronCustom {
-		return true
-	}
-	return strings.TrimSpace(d.cron) != ""
+	return true
 }
 
 // submitAutomationsDraft closes the sheet and writes through the plugin:
@@ -895,19 +1144,27 @@ func (s *Shell) submitAutomationsDraft(d *automationsDraft, op string) {
 	if !s.automationsAvailable() {
 		return
 	}
+	kinds := s.automationAgentKinds()
 	fields := automations.Fields{
-		Repo: snapshot.repo, Agent: snapshot.agent, Prompt: snapshot.prompt,
-		Rationale: snapshot.rationale,
+		Repo: strings.TrimSpace(snapshot.repo), Agent: automationAgentID(kinds, snapshot.agent),
+		Model: strings.TrimSpace(snapshot.model), Prompt: snapshot.prompt, Rationale: snapshot.rationale,
 	}
-	if snapshot.trigger == 1 {
-		fields.OnceAt = snapshot.once
-	} else if snapshot.cronSel != automationsCronCustom {
+	if snapshot.cronSel != automationsCronCustom {
 		fields.Cron = presetCron(snapshot.cronSel)
 	} else {
-		fields.Cron = snapshot.cron
+		fields.Cron = strings.TrimSpace(snapshot.cron)
 	}
+	if !snapshot.keepMode {
+		fields.Workspace = "worktree"
+		if snapshot.mode == 1 {
+			fields.Workspace = "root"
+		}
+	}
+	fields.Headless = snapshot.headless == 1
 	if snapshot.overlap == 1 {
 		fields.OnOverlap = "queue"
+	} else {
+		fields.OnOverlap = "skip"
 	}
 	fields.TimeoutMinutes = atoiNative(snapshot.timeout)
 	fields.CatchUpMinutes = atoiNative(snapshot.catchUp)
@@ -920,6 +1177,8 @@ func (s *Shell) submitAutomationsDraft(d *automationsDraft, op string) {
 	}, func() {
 		if snapshot.original == "" {
 			s.pendingToast = "Draft created — open it in the list to approve."
+			s.automations.list.selected = snapshot.name // land on the new draft's drawer
+			s.loadAutomationHistory(snapshot.name)
 		} else {
 			s.pendingToast = "Saved."
 		}

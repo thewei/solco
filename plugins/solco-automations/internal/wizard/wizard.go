@@ -24,7 +24,7 @@ type Options struct {
 	Name, Cron, Repo, Workspace, WorkspaceID, Agent, Model string
 	Prompt, Workflow, MCPConfig, Rationale, OnOverlap      string
 	TimeoutMinutes, CatchUpMinutes, CleanupTTLHours        int
-	Draft                                                  bool
+	Draft, Headless                                        bool
 }
 
 func Run(opts Options) error {
@@ -150,7 +150,7 @@ func Run(opts Options) error {
 		Name: name, Cron: cronExpr, Repo: repo,
 		Workspace: config.Workspace(workspace), WorkspaceID: workspaceID,
 		Agent: agent, Model: model,
-		Prompt: prompt, Workflow: workflow,
+		Prompt: prompt, Headless: opts.Headless, Workflow: workflow,
 		MCPConfig: mcp, TimeoutMinutes: timeout,
 		CatchUpMinutes: opts.CatchUpMinutes,
 		Draft:          opts.Draft, Rationale: opts.Rationale,

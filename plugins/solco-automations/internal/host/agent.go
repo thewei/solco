@@ -56,6 +56,9 @@ func (w agentWork) start(s Session) error {
 	deadline := time.Now().Add(w.knobs.paneReady)
 	for {
 		err := w.ops.AgentStart(name, w.a.Agent, s.PaneID, w.args())
+		if err != nil && w.ops.HasCode(err, herdr.CodeKindMismatch) {
+			return w.settle(s, err)
+		}
 		if err == nil || !w.ops.HasCode(err, herdr.CodePaneBusy) {
 			return err
 		}
@@ -67,6 +70,29 @@ func (w agentWork) start(s Session) error {
 	}
 }
 
+// settle is what a kind mismatch at start is given instead of being a verdict:
+// time for the pane to show which agent it really is. It ends one of three
+// ways — the expected agent registers and the run goes on; a startup dialog is
+// found, which no amount of waiting answers, so the run stops there with the
+// reason; or the window closes and the mismatch is reported as it came.
+func (w agentWork) settle(s Session, mismatch error) error {
+	deadline := time.Now().Add(w.knobs.agentReady)
+	for {
+		if err := w.blockedBy(s); err != nil {
+			return err
+		}
+		kind, status, err := w.ops.AgentIdentity(s.PaneID)
+		if err == nil && kind == w.a.Agent && status != "" && status != "unknown" {
+			log.Printf("%s registered as %s after a kind mismatch, carrying on", s.PaneID, kind)
+			return nil
+		}
+		if !time.Now().Before(deadline) {
+			return mismatch
+		}
+		time.Sleep(w.knobs.statusPoll)
+	}
+}
+
 // submit gets the prompt in front of the agent and confirms it started working.
 //
 // A freshly started agent is reported ready before it can actually accept
@@ -75,6 +101,11 @@ func (w agentWork) start(s Session) error {
 // reached the composer, so each step here checks the status rather than
 // trusting the previous call's verdict.
 func (w agentWork) submit(s Session) error {
+	// Nothing is typed into an agent that is asking a person a question: the
+	// first keystroke would be an answer.
+	if err := w.blockedBy(s); err != nil {
+		return err
+	}
 	err := w.ops.AgentSubmit(s.PaneID, w.a.Prompt)
 	if err == nil {
 		return nil
@@ -85,8 +116,13 @@ func (w agentWork) submit(s Session) error {
 
 	// The text is probably in the composer, just not submitted. Give the agent
 	// a moment, then press Enter for it, then fall back to typing it again.
+	// Each nudge re-checks the screen: a dialog that came up late would take
+	// the Enter as its answer.
 	if w.working(s, w.knobs.promptSettle) {
 		return nil
+	}
+	if err := w.blockedBy(s); err != nil {
+		return err
 	}
 	log.Printf("prompt stalled on %s, submitting the pending composer", s.PaneID)
 	if err := w.ops.AgentSubmitPending(s.PaneID); err != nil {
@@ -96,6 +132,9 @@ func (w agentWork) submit(s Session) error {
 		return nil
 	}
 
+	if err := w.blockedBy(s); err != nil {
+		return err
+	}
 	log.Printf("still idle on %s, retyping the prompt", s.PaneID)
 	if err := w.ops.AgentSubmit(s.PaneID, w.a.Prompt); err != nil && !w.ops.HasCode(err, herdr.CodeStalled) {
 		return fmt.Errorf("prompt: %w", err)

@@ -22,17 +22,21 @@ min_herdr_version = "0.9.3" # 与 solco-hooks 一致
 | `rationale` | string | "" | Agent 起草时的分析（与 prompt 一起保存，纯展示） |
 | `on_overlap` | `skip\|queue` | skip | queue = 命中重叠时记一次 pending，上个 run 结束后补跑一次（不叠多次） |
 | `cleanup_ttl_hours` | int | 0（关） | >0 时 daemon 每日自动清理已合并且超龄的 run worktree |
+| `headless` | bool | false | 2026-11-03：用 Agent 自带非交互模式运行（claude `-p`、codex `exec`、pi/omp `-p`），无启动/信任对话框；提示词经 0600 文件传入、不在窗格打字；仅 worktree/root 模式，不与 workflow/template/hc 同用；默认只读，写权限取决于 Agent 自己的设置或 `agent_args` |
 
 ## 3. CLI（二进制名保持 `herdr-automations`）
+
+once_at 已移除；`add` 用 `--name`；`run --bg` 后台触发（Run Now）。
 
 上游命令全保留（daemon/service/add/list/run/pause/resume/history/put/rm/seen/cleanup/pane/install-cli/version）。变更与新增：
 
 ```
-add            新增 --draft、--rationale "..."、--on-overlap skip|queue、--cleanup-ttl-hours N
+add            新增 --headless、--draft、--rationale "..."、--on-overlap skip|queue、--cleanup-ttl-hours N
 approve <name> draft→active（非 draft 报错 refusals 原样）
 list [--json]  每条增加 draft/rationale/on_overlap/cleanup_ttl_hours/next_run/last_run/history30
-history [name] [--json]
-put            透传新字段（drawer 的编辑保存走 put --original <name>）
+history [name] [--json]   run 条目含 seen（是否已读）
+seen <run-id|--all>        标记已读（Solco 收件箱：Header 计数与第五页签读它，不另存状态）
+put            JSON 经 stdin，透传新字段（含 headless）（drawer 的编辑保存走 put --original <name>）
 cleanup        新增 --ttl <hours>（覆盖 per-automation cleanup_ttl_hours，--dry-run 保留）
 ```
 

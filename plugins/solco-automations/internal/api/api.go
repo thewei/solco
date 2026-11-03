@@ -39,6 +39,7 @@ type Automation struct {
 	Model          string           `json:"model,omitempty"`
 	Template       string           `json:"template,omitempty"`
 	Prompt         string           `json:"prompt,omitempty"`
+	Headless       bool             `json:"headless,omitempty"`
 	Workflow       string           `json:"workflow,omitempty"`
 	MCPConfig      string           `json:"mcp_config,omitempty"`
 	AgentArgs      []string         `json:"agent_args,omitempty"`
@@ -109,6 +110,9 @@ type RunSummary struct {
 	Worktree        string         `json:"worktree,omitempty"`
 	WorkspaceID     string         `json:"workspace_id,omitempty"`
 	PaneID          string         `json:"pane_id,omitempty"`
+	// Seen is whether the run was opened (history's own flag); the clients'
+	// unread counts read it from here instead of fetching the whole history.
+	Seen bool `json:"seen"`
 }
 
 // List reads the config and the latest run of each automation.
@@ -127,7 +131,7 @@ func List() (Listing, error) {
 	for _, a := range cfg.Automations {
 		entry := Automation{
 			Name: a.Name, Cron: a.Cron, Repo: a.Repo, Workspace: a.Workspace, WorkspaceID: a.WorkspaceID,
-			Agent: a.Agent, Model: a.Model, Template: a.Template, Prompt: a.Prompt, Workflow: a.Workflow,
+			Agent: a.Agent, Model: a.Model, Template: a.Template, Prompt: a.Prompt, Headless: a.Headless, Workflow: a.Workflow,
 			MCPConfig: a.MCPConfig, AgentArgs: a.AgentArgs, TimeoutMinutes: a.TimeoutMinutes,
 			CatchUpMinutes: a.CatchUpMinutes, Disabled: a.Disabled, Line: a.Line,
 			Draft: a.Draft, Rationale: a.Rationale, OnOverlap: a.OnOverlap,
@@ -256,6 +260,6 @@ func toSummary(r history.Record) RunSummary {
 		RunID: r.RunID, Status: r.Status,
 		StartedAt:       r.Started,
 		DurationSeconds: int(r.At.Sub(r.Started).Seconds()),
-		Worktree:        r.Worktree, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID,
+		Worktree:        r.Worktree, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, Seen: r.Seen,
 	}
 }

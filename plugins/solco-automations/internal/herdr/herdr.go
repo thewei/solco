@@ -251,17 +251,33 @@ func (c Client) AgentSubmit(target, text string) error {
 		"--timeout", "30000")
 }
 
+// CodeKindMismatch is herdr's answer when `agent start` looked at the pane
+// and saw a different agent than the one it was asked to start. Right after
+// launch that is often not a verdict: an agent that is still unpacking a
+// toolchain, or sitting on its first-run dialog, is read as whatever it looks
+// like at that instant (measured 2026-11-03: Claude Code read as omp for
+// seconds, then registered as claude). The pane gets the chance to settle.
+const CodeKindMismatch = "agent_kind_mismatch"
+
 // AgentStatus reports the agent's current state: idle, working, blocked…
 func (c Client) AgentStatus(target string) (string, error) {
+	_, status, err := c.AgentIdentity(target)
+	return status, err
+}
+
+// AgentIdentity reports which agent herdr has registered in the pane, and its
+// state. An agent not yet detected is an error (CodeAgentGone), not a blank.
+func (c Client) AgentIdentity(target string) (kind, status string, err error) {
 	var res struct {
 		Agent struct {
+			Agent       string `json:"agent"`
 			AgentStatus string `json:"agent_status"`
 		} `json:"agent"`
 	}
 	if err := c.run(&res, "agent", "get", target); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return res.Agent.AgentStatus, nil
+	return res.Agent.Agent, res.Agent.AgentStatus, nil
 }
 
 // AgentSubmitPending presses Enter on the pane, submitting anything already

@@ -20,6 +20,8 @@ type ops interface {
 	AgentSubmit(target, text string) error
 	AgentSubmitPending(paneID string) error
 	AgentStatus(target string) (string, error)
+	// AgentIdentity is AgentStatus plus which agent herdr registered there.
+	AgentIdentity(target string) (kind, status string, err error)
 	AgentWait(target string, timeout time.Duration) error
 
 	PaneRun(paneID string, command ...string) error

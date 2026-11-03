@@ -472,3 +472,43 @@ func TestSessionIsRefusedUnderHC(t *testing.T) {
 		t.Fatalf("got %+v", cfg.Invalid)
 	}
 }
+
+func TestHeadlessLoadsForAKindWithAVerifiedModeAndRefusesTheRest(t *testing.T) {
+	withConfig(t, `
+automations:
+  - name: ok
+    cron: "0 9 * * 1-5"
+    repo: /tmp
+    agent: claude
+    headless: true
+    prompt: "Triage"
+  - name: odd-agent
+    cron: "0 9 * * 1-5"
+    repo: /tmp
+    agent: cursor
+    headless: true
+    prompt: "Triage"
+  - name: flow
+    cron: "0 9 * * 1-5"
+    repo: /tmp
+    headless: true
+    workflow: bump
+`)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Automations) != 1 || cfg.Automations[0].Name != "ok" || !cfg.Automations[0].Headless {
+		t.Fatalf("loaded %+v, want only the claude headless entry", cfg.Automations)
+	}
+	got := map[string]string{}
+	for _, d := range cfg.Invalid {
+		got[d.Name] = d.Message
+	}
+	if !strings.Contains(got["odd-agent"], "no verified headless mode") {
+		t.Errorf("odd-agent: %q", got["odd-agent"])
+	}
+	if !strings.Contains(got["flow"], "workflow cannot be headless") {
+		t.Errorf("flow: %q", got["flow"])
+	}
+}

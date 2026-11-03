@@ -44,6 +44,7 @@ automations:
     cleanup_ttl_hours: 72         # daily pass removes merged run worktrees older than this
     mcp_config: ~/.config/mcp/github.json   # optional → passed as --mcp-config
     agent_args: ["--verbose"]               # optional, verbatim agent flags
+    headless: true                # optional: run the agent non-interactively (claude -p, codex exec, pi/omp -p) — no trust dialog; reads, does not write, unless the agent's own settings allow it
     timeout_minutes: 60           # optional, default 60
     catch_up_minutes: 120         # optional: how late a sleep-delayed run may start; -1 never
     # disabled: true              # keep the entry, stop scheduling it

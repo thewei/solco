@@ -12,7 +12,7 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo 的 Flyout（Tray/Parent 锚定、Popover 系统材质、菜单式关闭与 Escape）、gorexIconButton（右上角页签图标）、agent_card 共享卡片、agent_quick_panel 的分组/过滤芯片与条目行
- * [OUTPUT]: 对外提供 Shell.QuickPanelView（Agents 为主：标题 + 右上 Agents/Quota/Services/Tasks 四枚图标页签，Agents 列表按状态分组带过滤芯片；Quota 额度卡片 / Services / Tasks——仅 herdr-projects 门打开时）、Shell.selectQuickPanelTab、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
+ * [OUTPUT]: 对外提供 Shell.QuickPanelView（Agents 为主：标题 + 右上 Agents/Quota/Services/Tasks 图标页签（Automations 仅插件门打开时第五枚），Agents 列表按状态分组带过滤芯片；Quota 额度卡片 / Services / Tasks——仅 herdr-projects 门打开时 / Automations 未读收件——仅 automations 门打开时）、Shell.selectQuickPanelTab、Shell.ToggleQuickPanel（托盘）、Shell.toggleAgentActivityPanel（标题栏按钮）、QuickPanelHeightFor（内容驱动高度纯函数）
  * [POS]: Agent 活动的唯一浮层：托盘/标题栏打开，一层到底——点击 Agent 直达其面板并收起浮层，没有第二层详情；同一 Flyout 生命周期，锚定/贴边/翻转/关闭归框架
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -42,6 +42,9 @@ const (
 	quickPanelServicesTab = 1
 	quickPanelTasksTab    = 2
 	quickPanelQuotaTab    = 3
+	// quickPanelAutomationsTab lists automation runs nobody has opened; it
+	// exists only while the automations plugin gate is open.
+	quickPanelAutomationsTab = 4
 )
 
 // quickPanelTabItem is one tab: its stable id and the icon that stands for
@@ -63,6 +66,9 @@ func (s *Shell) quickPanelTabItems() []quickPanelTabItem {
 	if s.workboardAvailable() {
 		items = append(items, quickPanelTabItem{quickPanelTasksTab, "Tasks", iconTask})
 	}
+	if s.automationsAvailable() {
+		items = append(items, quickPanelTabItem{quickPanelAutomationsTab, "Automations", iconBolt})
+	}
 	return items
 }
 
@@ -76,6 +82,8 @@ func quickPanelTabTitle(tab int) string {
 		return "Services"
 	case quickPanelTasksTab:
 		return "Tasks"
+	case quickPanelAutomationsTab:
+		return "Automations"
 	}
 	return "Agents"
 }
@@ -176,6 +184,9 @@ func (s *Shell) quickPanelTabBody(c *ui.Context, tab int) {
 	case quickPanelQuotaTab:
 		s.quickPanelQuota(c)
 		return
+	case quickPanelAutomationsTab:
+		s.quickPanelAutomations(c)
+		return
 	}
 	if s.offline {
 		ui.Row(c).FillWidth().Padding(sp.S, sp.M, 0).Gap(sp.S).AlignItems(ui.Center).Children(func() {
@@ -254,6 +265,8 @@ func (s *Shell) selectQuickPanelTab(id int) {
 		s.refreshWorkboardTasks(true)
 	case quickPanelQuotaTab:
 		s.refreshUsage(false)
+	case quickPanelAutomationsTab:
+		s.refreshAutomations(true)
 	}
 	s.fitQuickPanel()
 }
@@ -262,6 +275,9 @@ func (s *Shell) selectQuickPanelTab(id int) {
 // Agents the moment its plugin gate closes.
 func (s *Shell) quickPanelTabIndex() int {
 	if s.quickPanelTab == quickPanelTasksTab && !s.workboardAvailable() {
+		return 0
+	}
+	if s.quickPanelTab == quickPanelAutomationsTab && !s.automationsAvailable() {
 		return 0
 	}
 	return s.quickPanelTab
@@ -365,6 +381,9 @@ func (s *Shell) openQuickPanelFlyout(base mygo.FlyoutOptions) {
 	if s.quickPanelTabIndex() == quickPanelQuotaTab {
 		s.refreshUsage(false)
 	}
+	if s.quickPanelTabIndex() == quickPanelAutomationsTab {
+		s.refreshAutomations(true)
+	}
 	base.Width = QuickPanelWidth
 	base.Height = s.quickPanelContentHeight()
 	base.Focusable = true
@@ -415,6 +434,8 @@ func (s *Shell) quickPanelContentHeight() int {
 		return s.quickPanelTasksHeight()
 	case quickPanelQuotaTab:
 		return s.quickPanelQuotaHeight()
+	case quickPanelAutomationsTab:
+		return s.quickPanelAutomationsHeight()
 	}
 	entries := s.filterStatusEntries(s.BuildStatusCenterSnapshot())
 	captions := 0

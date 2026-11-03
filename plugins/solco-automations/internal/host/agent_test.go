@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,124 @@ func TestStartGivesUpOnAPaneThatNeverComesUp(t *testing.T) {
 	}
 	if ops.starts < 2 {
 		t.Errorf("tried %d times, want more than one attempt", ops.starts)
+	}
+}
+
+// The first real run of this plugin (2026-11-03): herdr read a Claude Code
+// that was still starting as `omp` and refused with agent_kind_mismatch in
+// under a second; the pane registered as claude moments later. The mismatch
+// is a moment, not a verdict.
+func TestStartWaitsOutAKindMismatchUntilTheAgentRegisters(t *testing.T) {
+	polls := 0
+	ops := &fakeOps{
+		agentStart: func(string, string, string, []string) error {
+			return apiErr("agent start", herdr.CodeKindMismatch)
+		},
+		agentIdentity: func(string) (string, string, error) {
+			polls++
+			if polls < 3 {
+				return "omp", "idle", nil
+			}
+			return "claude", "idle", nil
+		},
+	}
+	a := config.Automation{Agent: "claude"}
+
+	if err := agentWorkWith(ops, a).start(Session{PaneID: "p"}); err != nil {
+		t.Fatalf("want the agent to settle into claude, got %v", err)
+	}
+	if polls != 3 {
+		t.Errorf("polled %d times, want 3", polls)
+	}
+	if ops.starts != 1 {
+		t.Errorf("started %d times, want 1: the agent was already there", ops.starts)
+	}
+}
+
+func TestStartReportsTheMismatchWhenThePaneNeverSettles(t *testing.T) {
+	ops := &fakeOps{
+		agentStart: func(string, string, string, []string) error {
+			return apiErr("agent start", herdr.CodeKindMismatch)
+		},
+		agentIdentity: func(string) (string, string, error) { return "omp", "idle", nil },
+	}
+	w := agentWorkWith(ops, config.Automation{Agent: "claude"})
+	w.knobs.agentReady = 20 * time.Millisecond
+
+	err := w.start(Session{PaneID: "p"})
+	if !herdr.HasCode(err, herdr.CodeKindMismatch) {
+		t.Fatalf("want the mismatch reported as herdr said it, got %v", err)
+	}
+}
+
+func TestStartStopsAtAFolderTrustDialogAndSaysSo(t *testing.T) {
+	ops := &fakeOps{
+		agentStart: func(string, string, string, []string) error {
+			return apiErr("agent start", herdr.CodeKindMismatch)
+		},
+		paneRead: func(string, int) (string, error) {
+			return " Quick safety check: Is this a project you created or one you trust?\n ❯ No, exit\n   Yes, I trust this folder", nil
+		},
+	}
+
+	err := agentWorkWith(ops, config.Automation{Agent: "claude"}).start(Session{PaneID: "w1:p1"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError naming the dialog, got %v", err)
+	}
+	if blocked.Pane != "w1:p1" || !strings.Contains(err.Error(), "trust this folder") {
+		t.Errorf("the message should say what is asking and where: %v", err)
+	}
+	if ops.submits != 0 || ops.pending != 0 {
+		t.Errorf("typed into a trust dialog: submits=%d enters=%d", ops.submits, ops.pending)
+	}
+}
+
+func TestSubmitNeverTypesIntoAStartupDialog(t *testing.T) {
+	for name, screen := range map[string]string{
+		"claude mcp approval": "  2 new MCP servers found in this project\n  ❯ [✔] vibe-annotations\n Space to select · Esc to reject all",
+		"codex trust":         "Do you trust the contents of this directory?",
+		"cursor trust":        "Workspace Trust Required",
+		"agy trust":           "Do you trust the contents of this project?",
+	} {
+		t.Run(name, func(t *testing.T) {
+			ops := &fakeOps{paneRead: func(string, int) (string, error) { return screen, nil }}
+
+			err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"})
+			var blocked *BlockedError
+			if !errors.As(err, &blocked) {
+				t.Fatalf("want a BlockedError, got %v", err)
+			}
+			if ops.submits != 0 || ops.pending != 0 {
+				t.Errorf("the keystrokes were an answer to the dialog: submits=%d enters=%d", ops.submits, ops.pending)
+			}
+		})
+	}
+}
+
+// A dialog that appears after the prompt was typed would take the nudge's
+// Enter as its answer.
+func TestSubmitDoesNotPressEnterOnADialogThatCameUpLate(t *testing.T) {
+	ops := &fakeOps{
+		agentSubmit: func(string, string) error { return apiErr("agent prompt", herdr.CodeStalled) },
+		agentStatus: func(string) (string, error) { return "idle", nil },
+	}
+	reads := 0
+	ops.paneRead = func(string, int) (string, error) {
+		reads++
+		if reads == 1 {
+			return "", nil // clean when the prompt went in
+		}
+		return "Workspace Trust Required", nil
+	}
+
+	err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError, got %v", err)
+	}
+	if ops.pending != 0 {
+		t.Errorf("pressed Enter %d times over a dialog", ops.pending)
 	}
 }
 

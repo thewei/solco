@@ -51,12 +51,18 @@ func stubAutomationsClient(t *testing.T, answer func(args []string) (string, err
 		return automations.NewClientWithExec(func(_ context.Context, args ...string) (string, error) {
 			calls = append(calls, strings.Join(args, " "))
 			return answer(args)
+		}).WithDaemonStarter(func(log string) error {
+			calls = append(calls, "daemon "+log)
+			return nil
 		})
 	}
 	automationsGo = func(f func()) { f() }
+	// The background lane runs inline here, so a poll timer would recurse.
+	automationsPollGap, automationsStartSettle = 0, 0
 	t.Cleanup(func() {
 		newAutomationsClient = automations.NewClient
 		automationsGo = func(f func()) { go f() }
+		automationsPollGap, automationsStartSettle = 8*time.Second, 1500*time.Millisecond
 	})
 	return &calls
 }

@@ -10,6 +10,7 @@ package nativeui
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/thewei/solco/internal/automations"
@@ -128,10 +129,113 @@ func (s *Shell) applyAutomationsList(result automations.ListResult, err error) {
 		return
 	}
 	list.errText = ""
-	list.result = result
-	if sel := list.selected; sel != "" && list.automation(sel) == nil {
-		list.selected = "" // the row the drawer held is gone
+	var before string
+	if sel := list.selected; sel != "" {
+		before = list.lastRunKey(sel)
 	}
+	list.result = result
+	if sel := list.selected; sel != "" {
+		switch {
+		case list.automation(sel) == nil:
+			list.selected = "" // the row the drawer held is gone
+		case list.lastRunKey(sel) != before:
+			// A run started or finished since the drawer read its history;
+			// without this the drawer kept showing the old list until it was
+			// reopened.
+			list.historyLoading = ""
+			s.loadAutomationHistory(sel)
+			// A run that ends while its drawer is on screen is being read.
+			if s.router != nil && s.router.Path() == routeAutomations {
+				s.markAutomationSeen(sel)
+			}
+		}
+	}
+	s.pollAutomationsWhileActive()
+}
+
+// lastRunKey identifies the newest run the list shows for one automation, by
+// id and status, so a change in either is noticed.
+func (l *automationsList) lastRunKey(name string) string {
+	a := l.automation(name)
+	if a == nil || a.LastRun == nil {
+		return ""
+	}
+	return a.LastRun.RunID + "/" + a.LastRun.Status
+}
+
+// schedulerMissing is whether something should be firing and nothing is: the
+// read succeeded, an automation is waiting on its schedule, and the plugin
+// reports no daemon.
+func (l *automationsList) schedulerMissing() bool {
+	if l.loadedAt.IsZero() || l.failed || l.result.Scheduler != 0 {
+		return false
+	}
+	for _, a := range l.result.Automations {
+		if !a.Draft && !a.Disabled {
+			return true
+		}
+	}
+	return false
+}
+
+// active is whether any run is still going; the list is then
+// re-read on a short timer so its status turns without the user reopening
+// the page.
+func (l *automationsList) active() bool {
+	for _, a := range l.result.Automations {
+		if a.LastRun != nil && (a.LastRun.Status == "running" || a.LastRun.Status == "queued" || a.LastRun.Status == "scheduled") {
+			return true
+		}
+	}
+	return false
+}
+
+// pollAutomationsWhileActive schedules one more read while a run is in
+// flight and the page is on screen. One timer at a time; each read decides
+// whether to arm the next.
+func (s *Shell) pollAutomationsWhileActive() {
+	list := &s.automations.list
+	if automationsPollGap <= 0 || list.pollPending || !list.active() || !s.automationsAvailable() {
+		return
+	}
+	if s.router == nil || s.router.Path() != routeAutomations {
+		return
+	}
+	list.pollPending = true
+	automationsGo(func() {
+		time.Sleep(automationsPollGap)
+		s.applyOnWindow(func() {
+			s.automations.list.pollPending = false
+			s.refreshAutomations(true)
+		})
+	})
+}
+
+// startAutomationsScheduler launches the plugin's daemon (it logs beside the
+// plugin's state) and re-reads the list once it has had time to register.
+func (s *Shell) startAutomationsScheduler() {
+	if !s.automationsAvailable() {
+		return
+	}
+	logPath := ""
+	if state := s.automations.list.result.State; state != "" {
+		logPath = filepath.Join(state, "daemon.log")
+	}
+	client := newAutomationsClient(s.automations.avail.Root, herdr.ParseRef(s.activeInstance).Session)
+	slog.Info("automations scheduler start requested")
+	automationsGo(func() {
+		err := client.StartScheduler(logPath)
+		time.Sleep(automationsStartSettle)
+		s.applyOnWindow(func() {
+			if err != nil {
+				slog.Warn("automations scheduler start failed", "error", err)
+				s.pendingToast = automationsFailureToast(err)
+			} else {
+				s.pendingToast = "Scheduler started."
+			}
+			s.refreshAutomations(true)
+		})
+	})
 }
 
 // loadAutomationHistory reads one automation's runs for the drawer.
@@ -169,4 +273,9 @@ func (s *Shell) loadAutomationHistory(name string) {
 var (
 	newAutomationsClient = automations.NewClient
 	automationsGo        = func(f func()) { go f() }
+	// automationsPollGap is the wait between reads while a run is going
+	// (0 disables polling); automationsStartSettle is how long a freshly
+	// started daemon gets to write its pid before the list is re-read.
+	automationsPollGap     = 8 * time.Second
+	automationsStartSettle = 1500 * time.Millisecond
 )

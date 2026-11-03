@@ -65,6 +65,11 @@ type knobs struct {
 	// shell was still not up.
 	paneReady     time.Duration
 	paneReadyPoll time.Duration
+	// agentReady is how long an agent that herdr misreads right after launch
+	// gets to register as itself. It is generous because what slows a start
+	// is outside the plugin's hands — a project toolchain unpacking on first
+	// use took more than a few seconds on the first real run.
+	agentReady time.Duration
 	// waitSlice bounds one herdr wait call. herdr reports a vanished pane only
 	// when the call it was given returns, so this is how long a cancelled run
 	// keeps its slot — not something to make long.
@@ -82,6 +87,7 @@ func defaultKnobs() knobs {
 	return knobs{
 		paneReady:        2 * time.Minute,
 		paneReadyPoll:    5 * time.Second,
+		agentReady:       90 * time.Second,
 		waitSlice:        30 * time.Second,
 		statusPoll:       2 * time.Second,
 		promptSettle:     20 * time.Second,
@@ -124,9 +130,9 @@ func (h *live) Do(s Session, a config.Automation, timeout time.Duration) error {
 	return h.in(a).workFor(a).do(s, timeout)
 }
 
-// work is one way of getting an automation's work done in a session. Two
-// adapters satisfy it — an agent taking a prompt, and a herdr-workflows
-// delegation — and they share nothing but the question they answer: did it
+// work is one way of getting an automation's work done in a session. Three
+// adapters satisfy it — an agent taking a prompt, the same agent run
+// headless, and a herdr-workflows delegation — and they share nothing but the question they answer: did it
 // work?
 type work interface {
 	do(s Session, timeout time.Duration) error
@@ -135,6 +141,9 @@ type work interface {
 func (h *live) workFor(a config.Automation) work {
 	if a.Workflow != "" {
 		return hwfWork{ops: h.ops, knobs: h.knobs, name: a.Workflow}
+	}
+	if a.Headless {
+		return headlessWork{ops: h.ops, knobs: h.knobs, a: a}
 	}
 	return agentWork{ops: h.ops, knobs: h.knobs, a: a}
 }

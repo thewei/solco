@@ -21,6 +21,7 @@ type fakeOps struct {
 	agentSubmit     func(target, text string) error
 	submitPending   func(paneID string) error
 	agentStatus     func(target string) (string, error)
+	agentIdentity   func(target string) (string, string, error)
 	agentWait       func(target string, d time.Duration) error
 	paneRun         func(paneID string, command ...string) error
 	paneRead        func(paneID string, lines int) (string, error)
@@ -90,6 +91,13 @@ func (f *fakeOps) AgentStatus(target string) (string, error) {
 	return f.agentStatus(target)
 }
 
+func (f *fakeOps) AgentIdentity(target string) (string, string, error) {
+	if f.agentIdentity == nil {
+		return "", "working", nil
+	}
+	return f.agentIdentity(target)
+}
+
 func (f *fakeOps) AgentWait(target string, d time.Duration) error {
 	f.waits++
 	if f.agentWait == nil {
@@ -141,6 +149,7 @@ func fast() knobs {
 	return knobs{
 		paneReady:        time.Minute,
 		paneReadyPoll:    time.Millisecond,
+		agentReady:       time.Minute,
 		waitSlice:        30 * time.Second,
 		statusPoll:       time.Millisecond,
 		promptSettle:     5 * time.Millisecond,

@@ -78,6 +78,12 @@ type Automation struct {
 	Model string `yaml:"model,omitempty"`
 	// Prompt submitted to the agent. Mutually exclusive with Workflow.
 	Prompt string `yaml:"prompt,omitempty"`
+	// Headless runs the agent's own non-interactive command (claude -p,
+	// codex exec …) in the pane instead of its TUI: no startup dialog can
+	// stop it, and its exit status is the verdict. The agent's default
+	// permissions apply, which cannot ask anyone — a read-only run unless
+	// agent_args grant more.
+	Headless bool `yaml:"headless,omitempty"`
 	// Workflow delegates execution to herdr-workflows: `hwf run <name>`.
 	Workflow string `yaml:"workflow,omitempty"`
 	// MCPConfig is a path to an MCP servers JSON passed to the agent
@@ -232,6 +238,16 @@ func (a *Automation) validate(backend Backend) error {
 	if a.Workflow != "" && backend == BackendHC {
 		return fmt.Errorf("%s: workflow drives the Herdr TUI; it cannot run under backend: hc", a.Name)
 	}
+	if a.Headless {
+		switch {
+		case a.Workflow != "":
+			return fmt.Errorf("%s: headless runs a prompt; a workflow cannot be headless", a.Name)
+		case a.Template != "" || backend == BackendHC:
+			return fmt.Errorf("%s: headless needs the herdr backend and no template", a.Name)
+		case !KindRunsHeadless(a.Agent):
+			return fmt.Errorf("%s: agent %q has no verified headless mode (claude, codex, pi and omp do)", a.Name, a.Agent)
+		}
+	}
 	if a.Model != "" && !KindAcceptsModel(a.Agent) {
 		return fmt.Errorf("%s: agent %q takes no --model; put the flag it does take in agent_args", a.Name, a.Agent)
 	}
@@ -286,6 +302,23 @@ var promptArgKinds = map[string]bool{
 // KindTakesPromptArg reports whether this agent kind takes its prompt as a
 // trailing argument.
 func KindTakesPromptArg(kind string) bool { return promptArgKinds[kind] }
+
+// headlessKinds maps an agent kind to the arguments that put its executable in
+// non-interactive mode, ahead of the prompt. Each is measured on a real
+// install (2026-11-03): claude -p, codex exec, pi -p and omp -p print and exit,
+// and none stops at a trust dialog.
+var headlessKinds = map[string][]string{
+	"claude": {"-p"},
+	"codex":  {"exec"},
+	"pi":     {"-p"},
+	"omp":    {"-p"},
+}
+
+// KindRunsHeadless reports whether this agent kind has a verified headless mode.
+func KindRunsHeadless(kind string) bool { _, ok := headlessKinds[kind]; return ok }
+
+// HeadlessFlags are the arguments that make the agent run non-interactively.
+func HeadlessFlags(kind string) []string { return headlessKinds[kind] }
 
 // Dir is where automations.yaml lives.
 func Dir() string { return hostpath.ConfigDir() }
