@@ -52,9 +52,19 @@ for (const row of decisions) {
     errors.push(row.id + ": an exclusion needs recorded source review/evidence");
   if (row.status === "verified") {
     if (typeof row.evidence !== "string" || row.evidence.length < 12) errors.push(row.id + ": actual verification evidence is required");
-    if (typeof row.target_test !== "string" || !existsSync(join(repo, row.target_test.split("#")[0])))
-      errors.push(row.id + ": verified target test path must exist");
+    const bad = targetProblem(row.target_test);
+    if (bad) errors.push(row.id + ": " + bad);
   }
+}
+
+
+function targetProblem(target) {
+  if (typeof target !== "string") return "no target_test";
+  const [file, name] = target.split("#");
+  const full = join(repo, file);
+  if (!existsSync(full)) return "target file does not exist: " + file;
+  if (name && !readFileSync(full, "utf8").includes(name)) return "target test " + name + " is not in " + file;
+  return null;
 }
 
 const ownMap = new Map();
@@ -66,8 +76,8 @@ for (const row of own) {
   if (typeof row.scenario !== "string" || row.scenario.length < 12) errors.push(row.id + ": scenario must be described");
   if (!["planned", "verified"].includes(row.status)) errors.push(row.id + ": Solco-native cases are mandatory; exclusion is not allowed");
   if (row.status === "verified") {
-    if (typeof row.target_test !== "string" || !existsSync(join(repo, row.target_test.split("#")[0])))
-      errors.push(row.id + ": verified target test path must exist");
+    const bad = targetProblem(row.target_test);
+    if (bad) errors.push(row.id + ": " + bad);
     if (typeof row.evidence !== "string" || row.evidence.length < 12) errors.push(row.id + ": verification evidence is required");
   }
 }
