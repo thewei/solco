@@ -498,3 +498,21 @@ func TestAutomationNextTextNamesTheFuture(t *testing.T) {
 		}
 	}
 }
+
+// A background refresh of an already-read list must not bring the spinner
+// back: with an empty list it flipped "No automations" to "Loading…" and back
+// on every poll, which read as the page flashing.
+func TestAutomationsSpinnerOnlyForTheFirstRead(t *testing.T) {
+	var l automationsList
+	if l.initialLoad() {
+		t.Fatal("nothing in flight is not a load")
+	}
+	l.loading = true
+	if !l.initialLoad() {
+		t.Fatal("the first read in flight must show the spinner")
+	}
+	l.loadedAt = time.Now()
+	if l.initialLoad() {
+		t.Fatal("a refresh after the first read must keep the last answer, not a spinner")
+	}
+}

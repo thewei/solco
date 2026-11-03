@@ -164,6 +164,15 @@ func (s *Shell) applyAutomationsList(result automations.ListResult, err error) {
 	s.pollAutomationsWhileActive()
 }
 
+// initialLoad is whether the page is waiting for its very first read — the
+// only time a spinner belongs on it. Later background refreshes (the Header
+// count, the due-window poll) keep showing the last answer; reading them as
+// "loading" flipped an empty list between "No automations" and a spinner
+// every few seconds.
+func (l *automationsList) initialLoad() bool {
+	return l.loading && l.loadedAt.IsZero()
+}
+
 // lastRunKey identifies the newest run the list shows for one automation, by
 // id and status, so a change in either is noticed.
 func (l *automationsList) lastRunKey(name string) string {

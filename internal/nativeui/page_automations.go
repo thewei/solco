@@ -244,7 +244,7 @@ func (s *Shell) automationsListBody(c *ui.Context) {
 		}
 		rows := s.automationsVisible()
 		switch {
-		case len(st.result.Automations) == 0 && !st.loading && !st.failed:
+		case len(st.result.Automations) == 0 && !st.initialLoad() && !st.failed:
 			emptyState(c, "No automations", "Let an agent draft one, create a draft yourself, or start from a template.", func() {
 				ui.Row(c).Gap(Spacing().S).AlignItems(ui.Center).Wrap().Children(func() {
 					for _, tpl := range automationTemplates {
@@ -254,9 +254,9 @@ func (s *Shell) automationsListBody(c *ui.Context) {
 					}
 				})
 			})
-		case len(rows) == 0 && !st.loading:
+		case len(rows) == 0 && !st.initialLoad():
 			emptyState(c, "Nothing in this filter", "Try another filter.")
-		case len(rows) == 0 && st.loading:
+		case len(rows) == 0 && st.initialLoad():
 			loadingState(c, "Loading automations…")
 		default:
 			ui.Column(c).FillWidth().Padding(0, sp.XL, sp.L).Gap(2).Children(func() {
