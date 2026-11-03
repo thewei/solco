@@ -295,3 +295,5 @@ proc_brands.go: procBrandTints 品牌色表 + procBrandAsset（procBrand 的键�
 run_command_button.go: pane 头运行控件 Run 成功后经 rememberScriptPane 记录 pane→命令名（定义与检测命令 package.json/Makefile/justfile 一视同仁），服务归因与标题由此覆盖全部运行入口
 service_origin.go: 服务标题对齐的推断层（2026-11-03 用户拍板）：扫描 lane 把 Pane 前台进程组的 argv 与该目录命令目录（用户定义 List("")+dirContains、检测命令 scripts.Detect）经 scripts.MatchArgv 两层匹配（Typed 输入行 wrapper > Body 脚本体子进程 > Segment 复合段），paneID→条目名随 serviceIndex 在 win.Update 发布（serviceOrigins）；per-root 缓存 30s TTL、32 roots 上限、originMu 防扫描并发；render 零 IO；远程盘 Detect 拒绝 → 无推断保持进程名，推断无状态重启即得
 service_origin_test.go: 推断端到端（真机 argv 形状：bun.native wrapper、node+pnpm.cjs 解释器链、devspace/mcp-feedback body）、用户定义子目录包含、TTL 缓存、boundedArgv 上限、serviceRowModels 推断标题
+remote_desktop.go: Remote Desktop 的桌面端呈现（2026-11-03）：`Shell.rdesk`（仅窗口通道）、`shellAuthorizer`（approveOpen + 前置窗口 + mygo 通知；弹窗 Deny / View Only / Allow Control，关闭=拒绝）、设置页 `/settings/remote-desktop`（开关 → 状态卡 → 权限两行各带「Allow…」跳系统设置 → Ask-before-each / 质量 → 当前会话 + Disconnect）、页面可见期每 2 s 轮询权限与会话；会话变化即刻重投托盘（`remoteDesktopTrayLabel`：菜单栏标题加 🖥、tooltip 带观看者名）并在快捷面板 Agents 页顶部显示带 Disconnect 的横幅（`quickPanelRemoteDesktop`）；ICE 暂仅主机候选（过滤虚拟网卡，保留 utun）
+
