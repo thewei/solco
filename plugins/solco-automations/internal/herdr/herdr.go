@@ -443,3 +443,37 @@ func (c Client) CurrentSession() string {
 	}
 	return ""
 }
+
+// WorkspaceInfo is one entry of `herdr workspace list`.
+type WorkspaceInfo struct {
+	WorkspaceID string `json:"workspace_id"`
+	Label       string `json:"label"`
+}
+
+// WorkspaceList returns every workspace in the client's Herdr session.
+func (c Client) WorkspaceList() ([]WorkspaceInfo, error) {
+	var res struct {
+		Workspaces []WorkspaceInfo `json:"workspaces"`
+	}
+	if err := c.run(&res, "workspace", "list"); err != nil {
+		return nil, err
+	}
+	return res.Workspaces, nil
+}
+
+// PaneIDs returns the pane ids of one workspace, in Herdr's order.
+func (c Client) PaneIDs(workspaceID string) ([]string, error) {
+	var res struct {
+		Panes []struct {
+			PaneID string `json:"pane_id"`
+		} `json:"panes"`
+	}
+	if err := c.run(&res, "pane", "list", "--workspace", workspaceID); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(res.Panes))
+	for _, p := range res.Panes {
+		ids = append(ids, p.PaneID)
+	}
+	return ids, nil
+}

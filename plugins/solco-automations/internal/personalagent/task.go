@@ -1,0 +1,533 @@
+package personalagent
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+)
+
+// Task kinds.
+const (
+	KindResearch = "research" // read-only analysis, no repo writes
+	KindCoding   = "coding"   // works in an isolated worktree, never merges
+	KindManual   = "manual"   // a single Agent in a plain workspace
+)
+
+// Task states (docs/personal-agent-go-mvp-plan.md §5.2).
+const (
+	TaskDraft          = "draft"
+	TaskQueued         = "queued"
+	TaskClaimed        = "claimed"
+	TaskStarting       = "starting"
+	TaskRunning        = "running"
+	TaskBlocked        = "blocked"
+	TaskReviewRequired = "review_required"
+	TaskDone           = "done"
+	TaskFailed         = "failed"
+	TaskCancelled      = "cancelled"
+	TaskUncertain      = "uncertain"
+)
+
+// Run statuses.
+const (
+	RunClaimed   = "claimed"
+	RunStarting  = "starting"
+	RunRunning   = "running"
+	RunBlocked   = "blocked"
+	RunDone      = "done"
+	RunFailed    = "failed"
+	RunCancelled = "cancelled"
+	RunUncertain = "uncertain"
+)
+
+// Task is one delegated unit of work owned by one Assistant.
+type Task struct {
+	ID           string `json:"id"`
+	AssistantID  string `json:"assistantId"`
+	GoalID       string `json:"goalId"`
+	RuleID       string `json:"ruleId"`
+	ParentTaskID string `json:"parentTaskId"`
+	Kind         string `json:"kind"`
+	Title        string `json:"title"`
+	Brief        string `json:"brief"`
+	RepoPath     string `json:"repoPath"`
+	Agent        string `json:"agent"`
+	Model        string `json:"model"`
+	State        string `json:"state"`
+	NeedsYou     bool   `json:"needsYou"`
+	ReviewState  string `json:"reviewState"`
+	Attempt      int    `json:"attempt"`
+	Revision     int    `json:"revision"`
+	CreatedAt    int64  `json:"createdAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
+}
+
+// Run is one attempt at one task: the claim, then the real Herdr identity.
+type Run struct {
+	ID             string `json:"id"`
+	TaskID         string `json:"taskId"`
+	RuleID         string `json:"ruleId"`
+	EventID        string `json:"eventId"`
+	IdempotencyKey string `json:"idempotencyKey"`
+	Status         string `json:"status"`
+	Claimant       string `json:"claimant"`
+	HerdrSession   string `json:"herdrSession"`
+	WorkspaceID    string `json:"workspaceId"`
+	PaneID         string `json:"paneId"`
+	AgentSessionID string `json:"agentSessionId"`
+	Label          string `json:"label"`
+	Result         string `json:"result"`
+	Error          string `json:"error"`
+	CreatedAt      int64  `json:"createdAt"`
+	StartedAt      int64  `json:"startedAt"`
+	FinishedAt     int64  `json:"finishedAt"`
+}
+
+// Session is the Herdr place a run happens, exactly as Herdr reported it.
+// Fields Herdr did not report stay empty; nothing is guessed from a title.
+type Session struct {
+	HerdrSession   string `json:"herdrSession"`
+	WorkspaceID    string `json:"workspaceId"`
+	PaneID         string `json:"paneId"`
+	AgentSessionID string `json:"agentSessionId,omitempty"`
+}
+
+// CreateTaskInput is the body of `assistant task create`.
+type CreateTaskInput struct {
+	AssistantID  string `json:"assistantId"`
+	GoalID       string `json:"goalId,omitempty"`
+	RuleID       string `json:"ruleId,omitempty"`
+	ParentTaskID string `json:"parentTaskId,omitempty"`
+	Kind         string `json:"kind"`
+	Title        string `json:"title"`
+	Brief        string `json:"brief"`
+	RepoPath     string `json:"repoPath,omitempty"`
+	Agent        string `json:"agent,omitempty"`
+	Model        string `json:"model,omitempty"`
+	// Draft keeps the task out of the queue until a person approves it.
+	Draft bool `json:"draft,omitempty"`
+}
+
+const taskCols = `id,assistant_id,goal_id,rule_id,parent_task_id,kind,title,brief,repo_path,agent,model,state,needs_you,review_state,attempt,revision,created_at,updated_at`
+
+func scanTask(r rowScanner) (Task, error) {
+	var t Task
+	var needs int
+	err := r.Scan(&t.ID, &t.AssistantID, &t.GoalID, &t.RuleID, &t.ParentTaskID, &t.Kind, &t.Title, &t.Brief, &t.RepoPath,
+		&t.Agent, &t.Model, &t.State, &needs, &t.ReviewState, &t.Attempt, &t.Revision, &t.CreatedAt, &t.UpdatedAt)
+	t.NeedsYou = needs != 0
+	return t, err
+}
+
+type queryRower interface {
+	QueryRow(string, ...any) *sql.Row
+}
+
+func getTaskTx(q queryRower, id string) (Task, error) {
+	t, err := scanTask(q.QueryRow(`SELECT `+taskCols+` FROM tasks WHERE id=?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return t, ErrNotFound
+	}
+	return t, wrapBusy(err)
+}
+
+const runCols = `id,task_id,rule_id,event_id,idempotency_key,status,claimant,herdr_session,workspace_id,pane_id,agent_session_id,label,result,error,created_at,started_at,finished_at`
+
+func scanRun(r rowScanner) (Run, error) {
+	var x Run
+	err := r.Scan(&x.ID, &x.TaskID, &x.RuleID, &x.EventID, &x.IdempotencyKey, &x.Status, &x.Claimant, &x.HerdrSession,
+		&x.WorkspaceID, &x.PaneID, &x.AgentSessionID, &x.Label, &x.Result, &x.Error, &x.CreatedAt, &x.StartedAt, &x.FinishedAt)
+	return x, err
+}
+
+func getRunTx(q queryRower, id string) (Run, error) {
+	r, err := scanRun(q.QueryRow(`SELECT `+runCols+` FROM runs WHERE id=?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return r, ErrNotFound
+	}
+	return r, wrapBusy(err)
+}
+
+// CreateTask records a delegated unit of work. It is queued at once unless the
+// input asks for a draft; a disabled Assistant accepts nothing.
+func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, error) {
+	in.Title = strings.TrimSpace(in.Title)
+	if in.AssistantID == "" || in.Title == "" || strings.TrimSpace(in.Brief) == "" {
+		return Task{}, false, ErrInvalid
+	}
+	switch in.Kind {
+	case KindResearch, KindCoding, KindManual:
+	default:
+		return Task{}, false, fmt.Errorf("%w: kind %q", ErrInvalid, in.Kind)
+	}
+	if in.Agent == "" {
+		in.Agent = "claude"
+	}
+	return execute(s, requestID, "task.create", in, func(tx *sql.Tx) (Task, error) {
+		a, err := getAssistantTx(tx, in.AssistantID)
+		if err != nil {
+			return Task{}, err
+		}
+		if a.Status != StatusActive {
+			return Task{}, ErrAssistantDisabled
+		}
+		state := TaskQueued
+		if in.Draft {
+			state = TaskDraft
+		}
+		now := s.nowMS()
+		id := newID("t")
+		_, err = tx.Exec(`INSERT INTO tasks(`+taskCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			id, in.AssistantID, in.GoalID, in.RuleID, in.ParentTaskID, in.Kind, in.Title, in.Brief, in.RepoPath, in.Agent, in.Model,
+			state, 0, "", 1, 1, now, now)
+		if err != nil {
+			return Task{}, err
+		}
+		return getTaskTx(tx, id)
+	})
+}
+
+// GetTask reads one task.
+func (s *Store) GetTask(id string) (Task, error) { return getTaskTx(s.db, id) }
+
+// GetRun reads one run.
+func (s *Store) GetRun(id string) (Run, error) { return getRunTx(s.db, id) }
+
+// ListTasks returns an Assistant's tasks (every Assistant's when id is empty),
+// newest first.
+func (s *Store) ListTasks(assistantID string) ([]Task, error) {
+	q := `SELECT ` + taskCols + ` FROM tasks`
+	args := []any{}
+	if assistantID != "" {
+		q += ` WHERE assistant_id=?`
+		args = append(args, assistantID)
+	}
+	rows, err := s.db.Query(q+` ORDER BY created_at DESC, id`, args...)
+	if err != nil {
+		return nil, wrapBusy(err)
+	}
+	defer rows.Close()
+	out := []Task{}
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, wrapBusy(rows.Err())
+}
+
+// ListRuns returns a task's runs (all runs when taskID is empty), newest first.
+func (s *Store) ListRuns(taskID string) ([]Run, error) {
+	q := `SELECT ` + runCols + ` FROM runs`
+	args := []any{}
+	if taskID != "" {
+		q += ` WHERE task_id=?`
+		args = append(args, taskID)
+	}
+	rows, err := s.db.Query(q+` ORDER BY created_at DESC, id`, args...)
+	if err != nil {
+		return nil, wrapBusy(err)
+	}
+	defer rows.Close()
+	out := []Run{}
+	for rows.Next() {
+		r, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, wrapBusy(rows.Err())
+}
+
+// ClaimTask is the durable step before any launch. Exactly one caller gets
+// fresh=true and may launch; everyone else — including a caller after a crash —
+// sees the same Run and must not launch again.
+func (s *Store) ClaimTask(taskID, claimant string) (Run, bool, error) {
+	type claim struct {
+		Run   Run
+		Fresh bool
+	}
+	c, _, err := execute(s, "", "task.claim", nil, func(tx *sql.Tx) (claim, error) {
+		t, err := getTaskTx(tx, taskID)
+		if err != nil {
+			return claim{}, err
+		}
+		key := fmt.Sprintf("task:%s:%d", t.ID, t.Attempt)
+		var existing string
+		err = tx.QueryRow(`SELECT id FROM runs WHERE idempotency_key=?`, key).Scan(&existing)
+		if err == nil {
+			r, err := getRunTx(tx, existing)
+			return claim{Run: r}, err
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return claim{}, err
+		}
+		if t.State != TaskQueued {
+			return claim{}, fmt.Errorf("%w: %s", ErrNotClaimable, t.State)
+		}
+		a, err := getAssistantTx(tx, t.AssistantID)
+		if err != nil {
+			return claim{}, err
+		}
+		if a.Status != StatusActive {
+			return claim{}, ErrAssistantDisabled
+		}
+		now := s.nowMS()
+		id := newID("r")
+		if _, err := tx.Exec(`INSERT INTO runs(id,task_id,rule_id,idempotency_key,status,claimant,created_at) VALUES(?,?,?,?,?,?,?)`,
+			id, t.ID, t.RuleID, key, RunClaimed, claimant, now); err != nil {
+			return claim{}, err
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET state=?, revision=revision+1, updated_at=? WHERE id=?`, TaskClaimed, now, t.ID); err != nil {
+			return claim{}, err
+		}
+		r, err := getRunTx(tx, id)
+		return claim{Run: r, Fresh: true}, err
+	})
+	return c.Run, c.Fresh, err
+}
+
+// setRun moves a run and its task together, in one transaction, refusing a
+// transition the current status does not allow.
+func (s *Store) setRun(runID string, from []string, runStatus, taskState string, patch func(*sql.Tx, int64) error) error {
+	_, _, err := execute(s, "", "run.set", nil, func(tx *sql.Tx) (struct{}, error) {
+		r, err := getRunTx(tx, runID)
+		if err != nil {
+			return struct{}{}, err
+		}
+		ok := false
+		for _, f := range from {
+			ok = ok || r.Status == f
+		}
+		if !ok {
+			return struct{}{}, fmt.Errorf("%w: run is %s", ErrBadState, r.Status)
+		}
+		now := s.nowMS()
+		finished := int64(0)
+		switch runStatus {
+		case RunDone, RunFailed, RunCancelled:
+			finished = now
+		}
+		if _, err := tx.Exec(`UPDATE runs SET status=?, finished_at=CASE WHEN ?>0 THEN ? ELSE finished_at END WHERE id=?`,
+			runStatus, finished, finished, runID); err != nil {
+			return struct{}{}, err
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET state=?, revision=revision+1, updated_at=? WHERE id=?`, taskState, now, r.TaskID); err != nil {
+			return struct{}{}, err
+		}
+		if patch != nil {
+			if err := patch(tx, now); err != nil {
+				return struct{}{}, err
+			}
+		}
+		return struct{}{}, nil
+	})
+	return err
+}
+
+// MarkStarting records that the launch is about to be attempted. A crash from
+// here until RecordLaunch leaves the run `uncertain`, never silently retried.
+func (s *Store) MarkStarting(runID string) error {
+	return s.setRun(runID, []string{RunClaimed}, RunStarting, TaskStarting, func(tx *sql.Tx, now int64) error {
+		_, err := tx.Exec(`UPDATE runs SET started_at=? WHERE id=?`, now, runID)
+		return err
+	})
+}
+
+// SetLabel stores the Herdr label the launch will carry, before the launch, so
+// an uncertain run can be found again by it.
+func (s *Store) SetLabel(runID, label string) error {
+	_, _, err := execute(s, "", "run.label", nil, func(tx *sql.Tx) (struct{}, error) {
+		_, err := tx.Exec(`UPDATE runs SET label=? WHERE id=?`, label, runID)
+		return struct{}{}, err
+	})
+	return err
+}
+
+// RecordLaunch stores the real Herdr identity Herdr reported and marks the run
+// running. It also accepts an `uncertain` run: reconciliation found the pane.
+func (s *Store) RecordLaunch(runID string, sess Session) error {
+	return s.setRun(runID, []string{RunStarting, RunUncertain}, RunRunning, TaskRunning, func(tx *sql.Tx, _ int64) error {
+		_, err := tx.Exec(`UPDATE runs SET herdr_session=?, workspace_id=?, pane_id=?, agent_session_id=?, error='' WHERE id=?`,
+			sess.HerdrSession, sess.WorkspaceID, sess.PaneID, sess.AgentSessionID, runID)
+		return err
+	})
+}
+
+// BlockRun marks a run that is waiting for a person (a dialog, a permission).
+func (s *Store) BlockRun(runID, reason string) error {
+	return s.setRun(runID, []string{RunRunning, RunStarting}, RunBlocked, TaskBlocked, func(tx *sql.Tx, _ int64) error {
+		if _, err := tx.Exec(`UPDATE tasks SET needs_you=1 WHERE id=(SELECT task_id FROM runs WHERE id=?)`, runID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID)
+		return err
+	})
+}
+
+// FinishRun ends a run. done → the task is done, except a coding task, which
+// waits for a person's review; failed/cancelled map straight over.
+func (s *Store) FinishRun(runID, status, note string) error {
+	var state string
+	switch status {
+	case RunDone:
+		state = TaskDone
+	case RunFailed:
+		state = TaskFailed
+	case RunCancelled:
+		state = TaskCancelled
+	default:
+		return fmt.Errorf("%w: finish with %q", ErrInvalid, status)
+	}
+	return s.setRun(runID, []string{RunClaimed, RunStarting, RunRunning, RunBlocked, RunUncertain}, status, state, func(tx *sql.Tx, _ int64) error {
+		col := "result"
+		if status != RunDone {
+			col = "error"
+		}
+		if _, err := tx.Exec(`UPDATE runs SET `+col+`=? WHERE id=?`, note, runID); err != nil {
+			return err
+		}
+		if status == RunDone {
+			_, err := tx.Exec(`UPDATE tasks SET state=CASE WHEN kind=? THEN ? ELSE state END,
+				review_state=CASE WHEN kind=? THEN 'pending' ELSE review_state END,
+				needs_you=CASE WHEN kind=? THEN 1 ELSE 0 END WHERE id=(SELECT task_id FROM runs WHERE id=?)`,
+				KindCoding, TaskReviewRequired, KindCoding, KindCoding, runID)
+			return err
+		}
+		_, err := tx.Exec(`UPDATE tasks SET needs_you=? WHERE id=(SELECT task_id FROM runs WHERE id=?)`, boolInt(status == RunFailed), runID)
+		return err
+	})
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// Recover is called once at daemon start. A run that was claimed or starting
+// when the previous process died has an unknown outcome — Herdr may or may not
+// have created its pane — so it becomes `uncertain`; it is never re-launched.
+func (s *Store) Recover() (int, error) {
+	n, _, err := execute(s, "", "recover", nil, func(tx *sql.Tx) (int, error) {
+		rows, err := tx.Query(`SELECT id, task_id FROM runs WHERE status IN (?,?)`, RunClaimed, RunStarting)
+		if err != nil {
+			return 0, err
+		}
+		type pair struct{ run, task string }
+		var found []pair
+		for rows.Next() {
+			var p pair
+			if err := rows.Scan(&p.run, &p.task); err != nil {
+				_ = rows.Close()
+				return 0, err
+			}
+			found = append(found, p)
+		}
+		_ = rows.Close()
+		now := s.nowMS()
+		for _, p := range found {
+			if _, err := tx.Exec(`UPDATE runs SET status=? WHERE id=?`, RunUncertain, p.run); err != nil {
+				return 0, err
+			}
+			if _, err := tx.Exec(`UPDATE tasks SET state=?, needs_you=1, revision=revision+1, updated_at=? WHERE id=?`, TaskUncertain, now, p.task); err != nil {
+				return 0, err
+			}
+		}
+		return len(found), nil
+	})
+	return n, err
+}
+
+// parkUncertain moves a starting run whose outcome cannot be established to
+// `uncertain` and asks a person (needs_you) — it is never retried by itself.
+func (s *Store) parkUncertain(runID, reason string) (struct{}, error) {
+	return struct{}{}, s.setRun(runID, []string{RunClaimed, RunStarting, RunRunning}, RunUncertain, TaskUncertain, func(tx *sql.Tx, _ int64) error {
+		if _, err := tx.Exec(`UPDATE tasks SET needs_you=1 WHERE id=(SELECT task_id FROM runs WHERE id=?)`, runID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID)
+		return err
+	})
+}
+
+// QueuedTasks lists tasks ready to be claimed, oldest first, for Assistants
+// that are active.
+func (s *Store) QueuedTasks() ([]Task, error) {
+	rows, err := s.db.Query(`SELECT `+prefixed("t", taskCols)+` FROM tasks t JOIN assistants a ON a.id=t.assistant_id
+		WHERE t.state=? AND a.status=? ORDER BY t.created_at, t.id`, TaskQueued, StatusActive)
+	if err != nil {
+		return nil, wrapBusy(err)
+	}
+	defer rows.Close()
+	out := []Task{}
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, wrapBusy(rows.Err())
+}
+
+func prefixed(alias, cols string) string {
+	parts := strings.Split(cols, ",")
+	for i, p := range parts {
+		parts[i] = alias + "." + p
+	}
+	return strings.Join(parts, ",")
+}
+
+// RunsWithStatus lists runs in one status.
+func (s *Store) RunsWithStatus(status string) ([]Run, error) {
+	rows, err := s.db.Query(`SELECT `+runCols+` FROM runs WHERE status=? ORDER BY created_at, id`, status)
+	if err != nil {
+		return nil, wrapBusy(err)
+	}
+	defer rows.Close()
+	out := []Run{}
+	for rows.Next() {
+		r, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, wrapBusy(rows.Err())
+}
+
+// RetryTask makes a deliberate new attempt of a failed or cancelled task. An
+// uncertain task is never retried this way: Reconcile settles it first.
+func (s *Store) RetryTask(requestID, taskID string, expectedRevision int) (Task, bool, error) {
+	payload := map[string]any{"id": taskID, "rev": expectedRevision}
+	return execute(s, requestID, "task.retry", payload, func(tx *sql.Tx) (Task, error) {
+		t, err := getTaskTx(tx, taskID)
+		if err != nil {
+			return Task{}, err
+		}
+		if t.Revision != expectedRevision {
+			return Task{}, ErrStaleRevision
+		}
+		if t.State != TaskFailed && t.State != TaskCancelled {
+			return Task{}, fmt.Errorf("%w: task is %s", ErrBadState, t.State)
+		}
+		a, err := getAssistantTx(tx, t.AssistantID)
+		if err != nil {
+			return Task{}, err
+		}
+		if a.Status != StatusActive {
+			return Task{}, ErrAssistantDisabled
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET state=?, attempt=attempt+1, needs_you=0, revision=revision+1, updated_at=? WHERE id=?`,
+			TaskQueued, s.nowMS(), taskID); err != nil {
+			return Task{}, err
+		}
+		return getTaskTx(tx, taskID)
+	})
+}

@@ -63,3 +63,8 @@
 - 2026-11-03 `NewShell` 里任何读 `s.settings` 的初始化必须放在 `for _, opt := range opts` 之后（WithSettings 才换入已存设置）：Split/Unified 偏好曾因此每次重启回 Unified（TestSavedDiffLayoutSurvivesRestart）。
 - 2026-11-03 为跑单测临时 `git stash -- <file>` 会把并行会话在同一文件里的未提交改动一并收走（已原样 pop 回来）→ 变异验证用复制备份文件再还原，不要 stash。
 - 2026-11-03 `ui.Context.SetTheme` **会重置窗口根背景为主题底色**（`c.root.bg = t.Background`），抹掉 `Shell.View` 为 vibrancy 设的 `Root().Background(Transparent)`：changes_panel 为压掉选中蓝在列表外 `SetTheme(quiet)…SetTheme(real)`，结果每次评审区出现（点提交）整块侧栏失去材质闪白。无头 Tester 默认 vibrancy 关 + 只比 RGB 看不出 → 复现需 `tester.SetVibrancy(true)` 并比 **alpha**（侧栏透明像素数）；落点 internal/nativeui/changes_panel.go，守卫 `TestReviewingACommitKeepsTheSidebarVibrancy` / `TestSetThemeIsOnlyCalledWhereTheRootIsRestored`。教训：闪/白屏类 bug 先问"无头环境和真机在哪个开关上不同"（vibrancy、ReduceMotion、前后台），再下"无法复现"的结论。
+- 2026-11-03 `go get` 走默认代理会卡 >5 min → `GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct`（秒级）；别把 `GOFLAGS=-mod=mod` 留在 shell 里。
+- 2026-11-03 macOS 没有 `setsid`，BSD `sed -i` 要 `sed -i ''`；`a && b` 链里它们静默失败会让后续半截编辑生效 → 脚本用 `nohup … &`，改文件优先用编辑工具/python。
+- 2026-11-03 独立命名 Herdr 会话做 e2e：`nohup herdr --session <name> server &`，CLI 用 `herdr --session <name> …`，收尾 `herdr session stop <name>`；plugin daemon 用 `HERDR_PLUGIN_STATE_DIR/CONFIG_DIR` + `SOLCO_ASSISTANTS_*` env 隔离（plugins/solco-automations/scripts/e2e-assistants.sh）。
+- 2026-11-03 daemon 在 `--standby` 且二进制路径≠已安装路径时会自我 relaunch 退出（daemon.go shouldRelaunch）→ 判忙必须包含所有在途 run（含 Assistants dispatcher），否则会把还在等 Agent 的 run 丢在 `running`；沙箱里的二进制天然≠已安装，会放大该问题。
+- 2026-11-03 herdr 的 `agent_not_running` 一码两义（工作区已关 / 窗格里没 Agent）→ 区分要再查 workspace list；活工作区无 Agent = `uncertain` 交给人，不当取消。

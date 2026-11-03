@@ -86,16 +86,23 @@ func Run(standby bool) error {
 	tick := time.NewTicker(tickInterval)
 	defer tick.Stop()
 
+	assistants := startPersonal()
+	defer assistants.close()
+	pump := time.NewTicker(pumpInterval)
+	defer pump.Stop()
+
 	evaluate(state, runs, n) // don't wait a full tick to notice what is already due
 
 	for {
 		select {
+		case <-pump.C:
+			assistants.tick()
 		case <-tick.C:
 			// A run in flight records how it ended first, as in restart. Only a
 			// daemon a TUI session started, running TUI automations, ends with
 			// the last session (ADR 0010): hc needs no session, and the login
 			// service owns its own lifetime (launchd would only relaunch it).
-			if !standby && resolved == config.BackendHerdr && !runs.Busy() && noSessionLeft(herdr.Client{}.RunningSessions) {
+			if !standby && resolved == config.BackendHerdr && !runs.Busy() && !assistants.busy() && noSessionLeft(herdr.Client{}.RunningSessions) {
 				log.Printf("no Herdr session is running, shutting down")
 				return nil
 			}
@@ -104,7 +111,7 @@ func Run(standby bool) error {
 			if standby {
 				installed = hostpath.InstalledBinary()
 			}
-			if shouldRelaunch(standby, stamp, exe, installed) && !runs.Busy() {
+			if shouldRelaunch(standby, stamp, exe, installed) && !runs.Busy() && !assistants.busy() {
 				log.Printf("running %s, installed is %s: leaving for the service to relaunch", exe, installed)
 				return nil
 			}

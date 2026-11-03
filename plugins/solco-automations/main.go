@@ -67,6 +67,8 @@ Usage:
   solco-automations cleanup [--ttl <hours>] [--dry-run] [--yes]
                                      Remove run worktrees whose work already landed
                                      (--ttl N overrides every automation's cleanup_ttl_hours)
+  solco-automations assistant <create|list|show|rename|disable|enable|overview|task|run> ...
+                                     Assistants: persistent identities with their own tasks (JSON on stdin)
   solco-automations pane             Interactive board (used by the Herdr pane)
   solco-automations install-cli [dir] Put this command on your PATH (default ~/.local/bin)
   solco-automations version          Print the version
@@ -131,6 +133,8 @@ func main() {
 		}
 	case "put":
 		err = putCmd(args)
+	case "assistant":
+		err = assistantCmd(args)
 	case "rm":
 		if len(args) != 1 {
 			err = fmt.Errorf("usage: solco-automations rm <name>")
