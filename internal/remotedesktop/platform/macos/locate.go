@@ -15,12 +15,12 @@ const EnvHelper = "SOLCO_REMOTE_HELPER"
 // Located is where the helper was found and how much to trust it.
 type Located struct {
 	Path string
-	// Bundled is true for the copy inside the app bundle (Contents/Helpers); only that copy is
+	// Bundled is true for the copy inside the app bundle (Contents/Helpers or Contents/Resources); only that copy is
 	// signature-checked at launch — an explicit override or a sibling dev build is the developer's call.
 	Bundled bool
 }
 
-// Locate finds the helper: the SOLCO_REMOTE_HELPER override, then Contents/Helpers next to the
+// Locate finds the helper: the SOLCO_REMOTE_HELPER override, then Contents/Helpers or Contents/Resources next to the
 // running app's Contents/MacOS, then a sibling checkout's SwiftPM build (development).
 func Locate(exe, cwd string, getenv func(string) string) (Located, bool) {
 	if p := getenv(EnvHelper); p != "" {
@@ -32,9 +32,13 @@ func Locate(exe, cwd string, getenv func(string) string) (Located, bool) {
 	if exe != "" {
 		dir := filepath.Dir(exe)
 		if strings.HasSuffix(dir, filepath.Join("Contents", "MacOS")) {
-			p := filepath.Join(filepath.Dir(dir), "Helpers", HelperName)
-			if isExecutable(p) {
-				return Located{Path: p, Bundled: true}, true
+			// Helpers: embedded by scripts/embed-remote-helper.sh (local installs);
+			// Resources: shipped by `mygo build` from resources/darwin (release CI).
+			for _, sub := range []string{"Helpers", "Resources"} {
+				p := filepath.Join(filepath.Dir(dir), sub, HelperName)
+				if isExecutable(p) {
+					return Located{Path: p, Bundled: true}, true
+				}
 			}
 		}
 	}

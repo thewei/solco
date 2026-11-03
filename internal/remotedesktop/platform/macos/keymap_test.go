@@ -2,6 +2,7 @@ package macos
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -68,6 +69,13 @@ func TestLocatePrefersEnvThenBundleThenSibling(t *testing.T) {
 	bundled := write("Solco.app/Contents/Helpers/" + HelperName)
 	if got, ok := Locate(dir+"/Solco.app/Contents/MacOS/Solco", "", func(string) string { return "" }); !ok || got.Path != bundled || !got.Bundled {
 		t.Fatalf("bundle: %+v %v", got, ok)
+	}
+	if err := os.Remove(bundled); err != nil {
+		t.Fatal(err)
+	}
+	shipped := write("Solco.app/Contents/Resources/" + HelperName)
+	if got, ok := Locate(dir+"/Solco.app/Contents/MacOS/Solco", "", func(string) string { return "" }); !ok || got.Path != shipped || !got.Bundled {
+		t.Fatalf("resources: %+v %v", got, ok)
 	}
 	sibling := write("solco-remote-helper/.build/release/" + HelperName)
 	if got, ok := Locate("", dir+"/solco-worktrees/remote-desktop", func(string) string { return "" }); !ok || got.Path != sibling {

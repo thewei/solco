@@ -63,6 +63,17 @@ jobs:
       - name: Install NSIS, for the Windows installer
         if: matrix.name == 'Windows'
         run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: Fetch the Remote Desktop helper
+        if: matrix.name == 'macOS'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # scripts/publish-remote-helper.sh builds it on a Mac and pins the tag; `mygo build`
+          # ships resources/darwin/ as Contents/Resources and signs it with the app.
+          mkdir -p resources/darwin
+          gh release download "$(cat scripts/remote-helper.pin)" --repo "$GITHUB_REPOSITORY" \
+            --pattern solco-remote-helper --dir resources/darwin
+          chmod +x resources/darwin/solco-remote-helper
       - name: Build and upload release updates
         env:
           GH_TOKEN: ${{ github.token }}
