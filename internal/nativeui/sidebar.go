@@ -409,8 +409,15 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 		// Padding carries no vertical inset on purpose: the graph glyph is
 		// the row's pitch, and rows must tile edge to edge for the lane
 		// wires to run unbroken (the compact All Commits list, 2026-10-14).
-		row := ui.Row(c).Gap(8).Padding(0, 8).Radius(treeRowRadius).AlignItems(ui.Center).MinWidth(0)
+		row := ui.Row(c).Gap(commitRowGap).Padding(0, 8).Radius(treeRowRadius).AlignItems(ui.Center).MinWidth(0)
 		muted, ref := t.TextMuted, pal.ref
+		// A commit the checked-out branch does not contain (another branch's
+		// work, not merged in) rests in the muted colour, Fork-style.
+		unmerged := view.merged != nil && !view.merged[cm.Hash]
+		subjectColor := t.Text
+		if unmerged {
+			subjectColor, ref = t.TextMuted, t.TextMuted
+		}
 		switch {
 		case s.git.flashHash == cm.Hash:
 			// The commit a sidebar click just located.
@@ -430,8 +437,15 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 		if row.Clicked() {
 			s.reviewCommit(cm.Hash)
 		}
+		if row.DoubleClicked() {
+			s.checkoutCommitRow(cm)
+		}
 		// Long commit subjects preserve the full metadata in the tooltip.
-		tipped(c, row, cm.Subject+"\n"+cm.Author+" · "+gdCommitTime(cm.Time)+"\n"+cm.Hash)
+		tip := cm.Subject + "\n" + cm.Author + " · " + gdCommitTime(cm.Time) + "\n" + cm.Hash
+		if unmerged {
+			tip += "\nNot merged into the current branch"
+		}
+		tipped(c, row, tip)
 		row.ContextMenu(func(m *ui.Menu) {
 			if m.Item("Cherry-pick Commit…").Chosen() {
 				s.confirmCherryPickCommit(cm.Hash, cm.Subject)
@@ -440,6 +454,35 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 				s.confirmRevertCommit(cm.Hash, cm.Subject)
 			}
 			m.Separator()
+			if m.Item("Interactive Rebase Onto Here…").Disabled(s.git.opBusy).Chosen() {
+				s.openRebaseSheet(cm.Hash, cm.Short)
+			}
+			m.Submenu("Reset Current Branch to Here", func(sub *ui.Menu) {
+				for _, mode := range []gitworkbench.ResetMode{gitworkbench.ResetSoft, gitworkbench.ResetMixed, gitworkbench.ResetHard} {
+					if sub.Item(resetModeText[mode][0] + "…").Disabled(s.git.opBusy).Chosen() {
+						s.confirmResetTo(cm.Hash, cm.Subject, mode)
+					}
+				}
+			})
+			m.Separator()
+			if m.Item("Compare to Local Changes").Chosen() {
+				s.compareToWorktree(cm.Hash)
+			}
+			if m.Item("Save as Patch…").Chosen() {
+				s.savePatch(cm.Hash, cm.Subject)
+			}
+			m.Separator()
+			if m.Item("New Branch Here…").Disabled(s.git.opBusy).Chosen() {
+				s.openCreateAt("git-create-branch-at", cm.Hash)
+			}
+			if m.Item("New Tag Here…").Disabled(s.git.opBusy).Chosen() {
+				s.openTagDialog(cm.Hash)
+			}
+			if m.Item("Check Out This Commit…").Disabled(s.git.opBusy).Chosen() {
+				s.confirmCheckoutCommit(cm.Hash, cm.Subject)
+			}
+			m.Separator()
+			s.commitLinkItems(m, cm.Hash)
 			if m.Item("Copy Commit Hash").Chosen() {
 				s.copyToClipboard(cm.Hash)
 			}
@@ -460,23 +503,26 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 				s.reviewCommit(cmp.Or(chip.review, cm.Hash))
 				s.revealInSidebar(chip.target)
 			})
-			ui.Text(c, cm.Subject).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine()
+			gitCommitSubject(c, cm.Subject, subjectColor)
 			if !filtering && fold.foldable(cm.Hash) {
 				s.foldToggle(c, cm.Hash, foldedCounts[cm.Hash])
 			}
 			// Author and age give way first when the center is narrow.
 			if centerW >= gitCommitsShowAuthor {
-				ui.Text(c, cm.Author).FontSize(Typography().BodySmall).TextColor(muted).Width(90).SingleLine()
+				ui.Row(c).Width(commitAuthorColW).Shrink(0).Gap(5).AlignItems(ui.Center).Children(func() {
+					authorAvatar(c, cm.Author, commitAvatarSize)
+					ui.Text(c, cm.Author).FontSize(Typography().BodySmall).TextColor(muted).Grow(1).MinWidth(0).SingleLine()
+				})
 			}
-			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(ref).Width(64).SingleLine()
+			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(ref).Width(commitHashColW).SingleLine()
 			if centerW >= gitCommitsShowAge {
-				ui.Text(c, gdRelativeTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(muted).Width(62).SingleLine()
+				ui.Text(c, gdRelativeTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(muted).Width(commitDateColW).SingleLine()
 			}
 		})
 	}).Grow(1).MinHeight(0).Padding(4, 8)
 	list.Children(func() {
 		if len(entries) == 0 {
-			ui.Text(c, "No matching commits").FontSize(Typography().Body).TextColor(t.TextMuted).Padding(12)
+			quietNote(c, "No matching commits")
 		}
 	})
 }

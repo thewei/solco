@@ -45,6 +45,7 @@ func newGraphFixture(t *testing.T) *graphFixture {
 	shell := gitSurfaceTestShell(t, root)
 	shell.git.rootOf[root] = root
 	shell.git.refreshing = true
+	openAllGitSections(shell)
 	f := &graphFixture{shell: shell, root: root, queue: make(chan func(), 16)}
 	shell.uiApplyOverride = func(fn func()) { f.queue <- fn }
 	ctx := context.Background()

@@ -52,7 +52,9 @@ type ControlTokens struct {
 }
 
 // Typography returns the shared type scale. It follows macOS' own: 13pt
-// section titles, 12pt body, 11pt secondary, with nothing below 10pt.
+// section titles, 12pt body, 11pt secondary and captions, with nothing below
+// 10.5pt (2026-11-03, user request: Caption and Micro were a step too small to
+// read comfortably, so both moved up one half-point).
 func Typography() TypographyTokens {
 	return TypographyTokens{
 		Title:     20,
@@ -60,8 +62,8 @@ func Typography() TypographyTokens {
 		Section:   13,
 		Body:      12,
 		BodySmall: 11,
-		Caption:   10.5,
-		Micro:     10,
+		Caption:   11,
+		Micro:     10.5,
 	}
 }
 

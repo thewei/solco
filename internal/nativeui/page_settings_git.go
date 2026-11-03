@@ -50,6 +50,20 @@ func (s *Shell) settingsGit(c *ui.Context) {
 	s.probeCommitKey()
 	sp := Spacing()
 	t := c.Theme()
+	settingsGroup(c, "Repository",
+		row("Auto-fetch", "Fetches the open repository's remote in the background. It only fetches: it never merges or pushes.", func() {
+			label := autoFetchLabel(s.settings.Workbench.AutoFetchMinutes)
+			if selectField(c, &label, autoFetchLabels()).Label("Auto-fetch").Width(190).Changed() {
+				for _, ch := range autoFetchChoices {
+					if ch.label == label {
+						minutes := ch.minutes
+						s.applySettings(func(v *settings.Settings) error { v.Workbench.AutoFetchMinutes = minutes; return nil })
+						s.rearmAutoFetch()
+					}
+				}
+			}
+		}),
+	)
 	settingsCard(c, "Commit message rules", func() {
 		textArea(c, &s.settingsGitPromptDraft).FillWidth().Height(112).Label("Git commit rules")
 		ui.Row(c).Gap(sp.S).Children(func() {

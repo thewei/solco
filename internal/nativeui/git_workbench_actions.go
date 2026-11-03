@@ -3,6 +3,7 @@ package nativeui
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/settings"
 )
 
 /**
@@ -56,14 +57,61 @@ func (s *Shell) gitActionItems(m *ui.Menu) {
 		s.unstageFiles(unstage)
 	}
 	m.Separator()
+	canSync := !s.git.opBusy && !busySequencer && snap.Branch != ""
+	// The four rarer remote variants share one submenu; plain Fetch / Pull /
+	// Push are the toolbar icons.
+	m.Submenu("Fetch & Pull Options", func(sub *ui.Menu) {
+		if sub.Item("Fetch All Remotes").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
+			s.fetchAll(false)
+		}
+		if sub.Item("Fetch All and Prune").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
+			s.fetchAll(true)
+		}
+		sub.Separator()
+		if sub.Item("Pull and Merge").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
+			s.pullWith(gitworkbench.PullMerge, "Pull and Merge")
+		}
+		if sub.Item("Pull and Rebase").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
+			s.pullWith(gitworkbench.PullRebase, "Pull and Rebase")
+		}
+	})
+	m.Separator()
 	if m.Item("Stash All Changes").Disabled(s.git.opBusy || busySequencer || len(snap.Files) == 0).Chosen() {
 		s.stashChanges()
+	}
+	if m.Item("Save Stash…").Disabled(s.git.opBusy || busySequencer || len(snap.Files) == 0).Chosen() {
+		s.openSaveStashDialog()
+	}
+	if len(s.git.stashes) > 0 {
+		m.Submenu("Recent Stashes", func(sub *ui.Menu) {
+			s.recentStashItems(sub)
+		})
+	}
+	if m.Item("Save Changes as Patch…").Disabled(s.git.opBusy || len(snap.Files) == 0).Chosen() {
+		s.saveWorkingPatch()
+	}
+	if m.Item("Apply Patch…").Disabled(s.git.opBusy || busySequencer).Chosen() {
+		s.applyPatchFile()
 	}
 	if m.Item("Undo Last Commit…").Disabled(s.git.opBusy || busySequencer || snap.NoHead || snap.Branch == "").Chosen() {
 		s.undoLastCommit()
 	}
+	m.Separator()
 	if m.Item("View Commits").Chosen() {
 		s.showGitCommits()
+	}
+	if m.Item("Hide Stashes in Commit List").Checked(s.settings.Workbench.HideStashes).Chosen() {
+		hide := !s.settings.Workbench.HideStashes
+		s.applySettings(func(st *settings.Settings) error {
+			st.Workbench.HideStashes = hide
+			return nil
+		})
+	}
+	if m.Item("Reflog…").Chosen() {
+		s.openReflogSheet()
+	}
+	if m.Item("Add Submodule…").Disabled(s.git.opBusy || busySequencer).Chosen() {
+		s.openAddSubmoduleDialog()
 	}
 	m.Separator()
 	if m.Item("Git Settings…").Chosen() {

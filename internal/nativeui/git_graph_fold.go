@@ -219,6 +219,40 @@ type gitCommitView struct {
 	shown  []gitworkbench.CommitInfo
 	counts map[string]int
 	graphs map[string]gitGraphRow
+	// merged holds the commits the checked-out branch reaches; nil when no
+	// branch is checked out (detached or unreadable), so nothing reads as
+	// unmerged then.
+	merged map[string]bool
+}
+
+// gitHeadAncestors is the set of commits reachable from the checked-out
+// branch's tip within the loaded window, or nil when no loaded commit carries
+// the HEAD ref.
+func gitHeadAncestors(commits []gitworkbench.CommitInfo) map[string]bool {
+	parents := make(map[string][]string, len(commits))
+	var stack []string
+	for _, cm := range commits {
+		parents[cm.Hash] = cm.Parents
+		for _, r := range cm.Refs {
+			if r.Head {
+				stack = append(stack, cm.Hash)
+			}
+		}
+	}
+	if len(stack) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(commits))
+	for len(stack) > 0 {
+		h := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if seen[h] {
+			continue
+		}
+		seen[h] = true
+		stack = append(stack, parents[h]...)
+	}
+	return seen
 }
 
 func (s *Shell) commitView() *gitCommitView {
@@ -229,7 +263,7 @@ func (s *Shell) commitView() *gitCommitView {
 		(len(src) == 0 || &v.src[0] == &src[0]) {
 		return v
 	}
-	v := &gitCommitView{src: src, folded: key, fold: newGitFold(src)}
+	v := &gitCommitView{src: src, folded: key, fold: newGitFold(src), merged: gitHeadAncestors(src)}
 	folded := map[string]bool{}
 	for _, h := range list {
 		folded[h] = true

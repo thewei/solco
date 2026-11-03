@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // gitRefNode is a disposable slash-delimited tree. The only persistent state
@@ -131,7 +132,7 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 	visit = func(n *gitRefNode, level int) {
 		folder := len(n.children) > 0
 		key := s.gitFoldKey(scope + "/" + n.full)
-		closed := s.gitTreeClosed[key]
+		closed := s.gitFolded(key)
 		value := n.full
 		// HEAD/current branch is identified by the snapshot, never inferred from name.
 		current := false
@@ -145,11 +146,21 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}
 		item := gitTreeItem{title: n.name, tooltip: value, kind: gitRefKinds[scope], glyph: leafGlyph,
 			level: level, folder: folder, closed: closed, current: current}
+		if current && !folder {
+			item.badge = upstreamBadge(s.git.upstream)
+		}
 		if scope == "local" && !current && !folder {
 			item.hint = "Double-click to check out " + value
 		}
+		remoteRoot := scope == "remote" && folder && level == 0
 		if folder {
 			item.kind, item.glyph = "Folder", iconFolder
+			if remoteRoot {
+				item.kind, item.glyph = "Remote", iconCloud
+				if url := s.remoteURL(n.full); url != "" {
+					item.tooltip = url
+				}
+			}
 		} else {
 			item.ref = gitRefNamespace[scope] + value
 		}
@@ -162,7 +173,7 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}
 		s.gitTreeRow(c, item, func() {
 			if folder {
-				s.gitTreeClosed[key] = !s.gitTreeClosed[key]
+				s.setGitFolded(key, !s.gitFolded(key))
 			} else {
 				click(value)
 			}
@@ -170,11 +181,15 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 			if n.leaf {
 				menu(value, m)
 			}
+			if remoteRoot {
+				s.remoteMenu(m, n.full)
+				m.Separator()
+			}
 			if eye != nil && m.Item(eye.label()).Chosen() {
 				eye.toggle()
 			}
 			if folder && m.Item("Collapse Folder").Chosen() {
-				s.gitTreeClosed[key] = true
+				s.setGitFolded(key, true)
 			}
 		})
 		if folder && !closed {
@@ -194,6 +209,9 @@ type gitTreeItem struct {
 	glyph                   *ui.SVG
 	level                   int
 	folder, closed, current bool
+	// badge is a short muted fact at the row's right end (the current
+	// branch's ahead/behind against its upstream, as Fork's "1↓1↑").
+	badge string
 	// hint is said once, on the first click that only selects the row, to
 	// tell what a double click will do (check out a branch).
 	hint string
@@ -227,9 +245,41 @@ func (e *gitEye) label() string {
 // (folders keep folding on one click, which changes nothing in the repo).
 func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu func(*ui.Menu)) {
 	var trailing func()
-	if it.current {
+	if it.badge != "" {
 		trailing = func() {
-			ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Text).Shrink(0)
+			// "↑6 ↓1": each half is its own text so the gaps
+			// are real, one step above the muted caption it used to be.
+			ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(0).Children(func() {
+				th := c.Theme()
+				// Only the ↑/↓ counts split; a word badge ("not set up") stays whole.
+				var parts []string
+				switch {
+				case it.badge == "":
+				case strings.HasPrefix(it.badge, "↑") || strings.HasPrefix(it.badge, "↓"):
+					parts = strings.Fields(it.badge)
+				default:
+					parts = []string{it.badge}
+				}
+				pal := gdPaletteFor(th)
+				for _, part := range parts {
+					// ↑ ahead wears the add colour, ↓ behind the delete one, each
+					// in a tinted pill; a word badge stays plain text.
+					tone := th.TextMuted.Mix(th.Text, 0.55)
+					switch {
+					case strings.HasPrefix(part, "↑"):
+						tone = pal.addText
+					case strings.HasPrefix(part, "↓"):
+						tone = pal.delText
+					default:
+						ui.Text(c, part).FontSize(Typography().BodySmall).FontWeight(WeightMedium).TextColor(tone).SingleLine()
+						continue
+					}
+					ui.Row(c).Height(16).Padding(0, 6).Shrink(0).Center().Radius(Radius().Pill).
+						Background(tone.Alpha(0.16)).Children(func() {
+						ui.Text(c, part).FontSize(Typography().BodySmall).FontWeight(WeightMedium).TextColor(tone).SingleLine()
+					})
+				}
+			})
 		}
 	}
 	key := gitRefRowKey(it.title, it.tooltip)
@@ -277,3 +327,19 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 // gitRefRowKey is a ref row's identity: its title and tooltip, which no two
 // rows of one tree share.
 func gitRefRowKey(title, tooltip string) string { return "git-ref:" + title + "@" + tooltip }
+
+// upstreamBadge is "↑1 ↓2" for a branch ahead/behind its upstream, "" when
+// level or untracked.
+func upstreamBadge(st gitworkbench.UpstreamStatus) string {
+	if !st.OK {
+		return ""
+	}
+	var parts []string
+	if st.Ahead > 0 {
+		parts = append(parts, "↑"+itoa(st.Ahead))
+	}
+	if st.Behind > 0 {
+		parts = append(parts, "↓"+itoa(st.Behind))
+	}
+	return strings.Join(parts, " ")
+}

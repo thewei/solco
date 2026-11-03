@@ -118,9 +118,9 @@ func TestGitGraphWidthFollowsLanes(t *testing.T) {
 	}
 }
 
-// The commit under review shows its whole message (selectable, so it can be
-// copied by hand) and Copy Message copies subject and body together.
-func TestGitCommitCardCopiesTheFullMessage(t *testing.T) {
+// The commit under review is one strip (author, hash, date, subject, body) and
+// its menu's Copy Message copies subject and body together.
+func TestGitCommitStripCopiesTheFullMessage(t *testing.T) {
 	got := captureClipboard(t)
 	s := gitSurfaceTestShell(t, t.TempDir())
 	s.git.rootOf[s.git.root] = s.git.root
@@ -144,22 +144,67 @@ func TestGitCommitCardCopiesTheFullMessage(t *testing.T) {
 	tester := ui.NewTester(s.View, 1280, 800)
 	tester.Frame()
 	tester.Frame()
-	for _, want := range []string{"Fix the parser", "It dropped the last token.", "Copy Message", "Cherry-pick…", "Revert…"} {
+	for _, want := range []string{"Fix the parser", "It dropped the last token.", "Tester", "0123456", "Commit actions"} {
 		if !tester.HasText(want) {
-			t.Fatalf("the commit card lacks %q; texts=%q", want, tester.Texts())
+			t.Fatalf("the commit strip lacks %q; texts=%q", want, tester.Texts())
 		}
 	}
-	if err := tester.Click("Copy Message"); err != nil {
-		t.Fatal(err)
+	choose := func(item string) {
+		t.Helper()
+		if err := tester.Click("Commit actions"); err != nil {
+			t.Fatal(err)
+		}
+		tester.Frame()
+		if menu := menuText(tester.Menu()); !strings.Contains(menu, "Cherry-pick…") || !strings.Contains(menu, "Revert…") {
+			t.Fatalf("the commit menu lost its actions: %s", menu)
+		}
+		if err := tester.ChooseMenuItem(item); err != nil {
+			t.Fatal(err)
+		}
 	}
+	choose("Copy Message")
 	if len(*got) != 1 || (*got)[0] != "Fix the parser\n\nIt dropped the last token." {
 		t.Fatalf("Copy Message copied %q", *got)
 	}
-	if err := tester.Click("Copy hash"); err != nil {
+	choose("Copy Commit Hash")
+	if len(*got) != 2 || (*got)[1] != cm.Hash {
+		t.Fatalf("Copy Commit Hash copied %q", *got)
+	}
+}
+
+// A chosen file row wears the neutral selection tint, focused or not — never
+// the theme's blue accent MyGo paints on a chosen list row (user report
+// 2026-11-03: it read far brighter than the Commits list's own selection).
+func TestChosenFileRowIsNeutralNotAccent(t *testing.T) {
+	s := gitSurfaceTestShell(t, t.TempDir())
+	s.git.rootOf[s.git.root] = s.git.root
+	s.git.refreshing = true
+	s.showSurface(WorkspaceSurfaceDiff)
+	cm := gitworkbench.CommitInfo{Hash: "0123456789abcdef0123456789abcdef01234567", Short: "0123456", Subject: "Fix", Author: "T", Time: time.Now()}
+	s.git.commits = []gitworkbench.CommitInfo{cm}
+	s.commitsMode = true
+	s.git.source = gdSourceCommit
+	s.git.commitHash = cm.Hash
+	s.git.commitMeta = &cm
+	snap := *s.git.snapshot
+	s.git.commitSnap = &snap
+	s.git.gdFilesFor = nil
+	s.rebuildDiffRows()
+	tester := ui.NewTester(s.View, 1280, 800)
+	tester.Frame()
+	tester.Frame()
+	name, ok := tester.Find("README")
+	if !ok {
+		t.Fatalf("no file row; texts=%q", tester.Texts())
+	}
+	if err := tester.Click("README"); err != nil {
 		t.Fatal(err)
 	}
-	if len(*got) != 2 || (*got)[1] != cm.Hash {
-		t.Fatalf("Copy hash copied %q", *got)
+	tester.Frame()
+	tester.Frame()
+	px := pixelAt(tester, int(name.X+name.W+60), int(name.Y+name.H/2))
+	if int(px[2])-int(px[0]) > 40 {
+		t.Fatalf("a chosen file row is blue (%v): the accent leaked through the list's own selection face", px)
 	}
 }
 
@@ -210,9 +255,9 @@ func TestSidebarHeaderCollapsesProjectNameWhenNarrow(t *testing.T) {
 	}
 }
 
-// A section's count ends where a row's trailing mark (the current branch's
-// check) ends — one right column — and the current branch wears the
-// selection face instead of resting on the check alone.
+// A section's count ends where a row's trailing badge (ahead/behind) ends —
+// one right column — and the current branch is told apart by the selection
+// face alone (no check mark, 2026-11-03 user request).
 func TestSidebarCountsShareTheRowsRightEdge(t *testing.T) {
 	_, tester, _ := treeTestShell(t)
 	header, ok := tester.Find("Toggle Branches")
@@ -230,8 +275,10 @@ func TestSidebarCountsShareTheRowsRightEdge(t *testing.T) {
 	if !near(header.X+header.W, row.X+row.W) {
 		t.Fatalf("header and row end at %v and %v", header.X+header.W, row.X+row.W)
 	}
-	if got, want := count.X+count.W, header.X+header.W-treeRowPad; !near(got, want) {
-		t.Fatalf("the count ends at %v, want the row's content edge %v", got, want)
+	// A non-zero count sits in a pill with 6pt side padding; the pill, not the
+	// digit, ends at the content edge.
+	if got, want := count.X+count.W+6, header.X+header.W-treeRowPad; !near(got, want) {
+		t.Fatalf("the count pill ends at %v, want the row's content edge %v", got, want)
 	}
 	// The checked-out row is filled; an ordinary branch is not.
 	face := func(r ui.Rect) [4]uint8 { return pixelAt(tester, int(r.X+r.W-2), int(r.Y+1)) }

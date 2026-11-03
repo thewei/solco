@@ -15,8 +15,10 @@ import (
 // push, branch deletion and soft undo. Every mutation runs only on explicit
 // user intent through the single-flight Runner; nothing here runs
 // automatically, and destructive operations are confirmed by the UI first.
-// The package-level bans stay: no force, no reset --hard, no clean, and no
-// network operation except the explicitly invoked fetch/pull/push here.
+// The package-level bans stay: no force push, no clean, no reset --hard on a
+// dirty tree (ResetTo's hard mode demands a clean one, user-approved 2026-11-03),
+// and no network operation except the explicitly invoked fetch/pull/push/
+// delete-remote-branch/submodule-update here.
 
 // NetworkTimeout bounds one explicit network operation (fetch/pull/push).
 const NetworkTimeout = 120 * time.Second
@@ -108,7 +110,7 @@ func (r *Runner) StashPush(ctx context.Context, root, message string) error {
 
 // StashList enumerates the stash entries, newest first.
 func (r *Runner) StashList(ctx context.Context, root string) ([]Stash, error) {
-	out, err := r.Read(ctx, root, "stash", "list", "--format=%gd\t%H\t%P\t%s")
+	out, err := r.Read(ctx, root, "stash", "list", "--format=%gd\t%H\t%P\t%gs")
 	if err != nil {
 		return nil, err
 	}
@@ -136,6 +138,16 @@ func (r *Runner) StashPop(ctx context.Context, root, ref string) error {
 			err: fmt.Errorf("invalid stash ref %q", ref)}
 	}
 	_, err := r.Mutate(ctx, root, "stash", "pop", ref)
+	return err
+}
+
+// StashApply re-applies one stash entry and keeps it (Pop applies and drops).
+func (r *Runner) StashApply(ctx context.Context, root, ref string) error {
+	if !validStashRef(ref) {
+		return &Error{Class: ErrRefusal, OpClass: OpMutate, Op: "stash",
+			err: fmt.Errorf("invalid stash ref %q", ref)}
+	}
+	_, err := r.Mutate(ctx, root, "stash", "apply", ref)
 	return err
 }
 
@@ -200,6 +212,10 @@ type UpstreamStatus struct {
 	OK     bool
 }
 
+// Diverged reports history on both sides of the upstream: Git refuses a
+// plain push and a fast-forward pull for it.
+func (u UpstreamStatus) Diverged() bool { return u.OK && u.Ahead > 0 && u.Behind > 0 }
+
 // Upstream reads the tracking status of the current branch: no network.
 func (r *Runner) Upstream(ctx context.Context, root string) (UpstreamStatus, error) {
 	var st UpstreamStatus
@@ -243,11 +259,22 @@ func (r *Runner) PullFFOnly(ctx context.Context, root, remote, branch string) er
 // Push publishes the branch to the remote; setUpstream sets tracking the
 // first time a branch is published.
 func (r *Runner) Push(ctx context.Context, root, remote, branch string, setUpstream bool) error {
+	return r.PushTo(ctx, root, remote, branch, branch, setUpstream)
+}
+
+// PushTo publishes local branch src as dst on the remote: a branch whose
+// upstream has another name (or lives on a second remote) must land on that
+// upstream, not on a same-named branch of the first remote.
+func (r *Runner) PushTo(ctx context.Context, root, remote, src, dst string, setUpstream bool) error {
 	args := []string{"push"}
 	if setUpstream {
 		args = append(args, "-u")
 	}
-	args = append(args, remote, branch)
+	spec := src
+	if dst != "" && dst != src {
+		spec = src + ":" + dst
+	}
+	args = append(args, remote, spec)
 	_, err := r.network(ctx, root, args...)
 	return err
 }
@@ -334,6 +361,27 @@ func (r *Runner) CreateTag(ctx context.Context, root, name string) error {
 		return fmt.Errorf("invalid tag name %q", name)
 	}
 	_, err := r.Mutate(ctx, root, "tag", name)
+	return err
+}
+
+// CreateTagAt tags one exact commit.
+func (r *Runner) CreateTagAt(ctx context.Context, root, name, hash string) error {
+	if !validFullCommitID(hash) {
+		return &Error{Class: ErrRefusal, OpClass: OpMutate, Op: "tag", err: errors.New("a full Git commit hash is required")}
+	}
+	if _, err := r.Read(ctx, root, "check-ref-format", "--allow-onelevel", name); err != nil || strings.TrimSpace(name) == "" {
+		return fmt.Errorf("invalid tag name %q", name)
+	}
+	_, err := r.Mutate(ctx, root, "tag", name, hash)
+	return err
+}
+
+// PushTag publishes one existing tag (explicit; plain Push never sends tags).
+func (r *Runner) PushTag(ctx context.Context, root, remote, name string) error {
+	if _, err := r.Read(ctx, root, "rev-parse", "--verify", "--quiet", "refs/tags/"+name); err != nil {
+		return &Error{Class: ErrStaleState, OpClass: OpMutate, Op: "push", err: fmt.Errorf("%q is not a tag", name)}
+	}
+	_, err := r.network(ctx, root, "push", remote, "refs/tags/"+name)
 	return err
 }
 

@@ -19,6 +19,10 @@ type CommitDraft struct {
 	Body    string
 	Paths   []string
 	Amend   bool
+	// NoVerify skips the pre-commit and commit-msg hooks (--no-verify);
+	// SignOff appends a Signed-off-by trailer (-s). Both are per commit.
+	NoVerify bool
+	SignOff  bool
 }
 
 // CommitPreflight is the stale-state fence captured at Commit-surface open
@@ -162,8 +166,17 @@ func (r *Runner) Commit(ctx context.Context, root string, draft CommitDraft, pre
 	}
 
 	paths := append([]string(nil), draft.Paths...)
+	// A staged rename travels as two index sides. The pathspec must carry
+	// the old path too, or its deletion stays staged for the next commit
+	// and the rename lands split across two commits (device E2E 2026-11-03).
+	if snap != nil {
+		for _, p := range draft.Paths {
+			if cf, ok := snap.ByPath(p); ok && cf.OldPath != "" && cf.OldPath != cf.Path {
+				paths = append(paths, cf.OldPath)
+			}
+		}
+	}
 	sort.Strings(paths)
-
 	// 1. Stage selected untracked paths only (never `git add -A`).
 	var untracked []string
 	for _, p := range paths {
@@ -183,6 +196,12 @@ func (r *Runner) Commit(ctx context.Context, root string, draft CommitDraft, pre
 	args := []string{"commit", "-F", "-"}
 	if draft.Amend {
 		args = append(args, "--amend", "--no-edit")
+	}
+	if draft.NoVerify {
+		args = append(args, "--no-verify")
+	}
+	if draft.SignOff {
+		args = append(args, "--signoff")
 	}
 	args = append(args, "--")
 	args = append(args, paths...)

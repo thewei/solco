@@ -48,6 +48,28 @@ func modalTitle(c *ui.Context, title string) ui.Element {
 	return ui.Text(c, title).FontSize(Typography().Heading).FontWeight(WeightSemibold)
 }
 
+// gitConfirmActions names what a Git confirm's button does, so it reads
+// "Remove" or "Discard" instead of a bare "Confirm".
+var gitConfirmActions = map[string]string{
+	"git-discard": "Discard", "git-delete-untracked": "Delete", "git-drop-stash": "Delete", "git-stash-clear": "Drop All",
+	"git-delete-branch": "Delete", "git-delete-remote-branch": "Delete", "git-delete-tag": "Delete", "git-delete-remote-tag": "Delete",
+	"git-merge-ff": "Merge", "git-merge-no-ff": "Merge", "git-merge-squash": "Squash", "git-rebase": "Rebase",
+	"git-cherry-pick": "Cherry-pick", "git-revert-commit": "Revert", "git-undo-commit": "Undo", "git-sequencer-abort": "Abort",
+	"git-checkout-detached": "Check Out", "git-checkout-remote": "Check Out", "git-restore-file": "Restore",
+	"git-remove-worktree": "Remove", "git-remove-submodule": "Remove", "git-remove-remote": "Remove",
+}
+
+// confirmActionText is the confirm button's label for a confirm kind.
+func confirmActionText(kind string) string {
+	if text, ok := gitConfirmActions[kind]; ok {
+		return text
+	}
+	if strings.HasPrefix(kind, "git-reset-") {
+		return "Reset"
+	}
+	return "Confirm"
+}
+
 func (s *Shell) dialogs(c *ui.Context) {
 	if s.mergeDialogOpen && (s.git == nil || s.mergeRepoRoot == "" || s.mergeRepoRoot != s.git.root) {
 		s.mergeDialogOpen = false
@@ -58,12 +80,15 @@ func (s *Shell) dialogs(c *ui.Context) {
 			ui.Column(c).Width(430).MaxWidth(480).Gap(Spacing().L).Children(func() {
 				modalTitle(c, "Merge Branch")
 				tipped(c, ui.Text(c, s.mergeTarget).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine(), s.mergeTarget)
-				segmentedControl(c, &s.mergeStrategy, "Fast-forward only", "Create merge commit").FillWidth()
-				if s.mergeStrategy == 0 {
-					ui.Text(c, "Moves the branch forward if it has not diverged. No merge commit.").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
-				} else {
-					ui.Text(c, "Creates a merge commit. You may need to resolve conflicts.").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
+				segmentedControl(c, &s.mergeStrategy, "Fast-forward only", "Create merge commit", "Squash").FillWidth()
+				hint := "Moves the branch forward if it has not diverged. No merge commit."
+				switch s.mergeStrategy {
+				case 1:
+					hint = "Creates a merge commit. You may need to resolve conflicts."
+				case 2:
+					hint = "Brings every change in as staged changes without a merge commit; you commit them yourself."
 				}
+				ui.Text(c, hint).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
 				ui.Row(c).FillWidth().Gap(Spacing().M).Justify(ui.End).Children(func() {
 					if regularButton(c, "Cancel Merge").Clicked() {
 						s.mergeDialogOpen = false
@@ -71,9 +96,12 @@ func (s *Shell) dialogs(c *ui.Context) {
 					if regularPrimaryButton(c, "Review Merge").Clicked() {
 						target, strategy := s.mergeTarget, s.mergeStrategy
 						s.mergeDialogOpen = false
-						if strategy == 1 {
+						switch strategy {
+						case 1:
 							s.confirmMergeNoFFBranch(target)
-						} else {
+						case 2:
+							s.confirmMergeSquash(target)
+						default:
 							s.confirmMergeBranch(target)
 						}
 					}
@@ -103,8 +131,10 @@ func (s *Shell) dialogs(c *ui.Context) {
 	if s.dialogOpen {
 		ui.Modal(c, &s.dialogOpen, func() {
 			modalTitle(c, s.dialogTitle)
-			field := textField(c, &s.dialogValue).Label(s.dialogLabel).AutoFocus().Width(360)
-			submit := field.Submitted()
+			submit := false
+			captionedField(c, s.dialogLabel, "", func() {
+				submit = textField(c, &s.dialogValue).Label(s.dialogLabel).AutoFocus().Width(360).Submitted()
+			})
 			ui.Row(c).Gap(Spacing().M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {
 					s.dialogOpen = false
@@ -124,6 +154,8 @@ func (s *Shell) dialogs(c *ui.Context) {
 			}
 		})
 	}
+	s.gitNoticeDialog(c)
+	s.gitMoreDialogs(c)
 	s.newTaskDialog(c)
 	s.newProjectDialog(c)
 	s.newAutomationDialog(c)
@@ -141,7 +173,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 		// button: AlertDialog focuses and Enter-clicks its LAST button, so
 		// Cancel goes last (Enter dismisses safely; Escape still cancels by
 		// label) and Confirm is index 0 (2026-10-06 F69).
-		if ui.AlertDialog(c, &s.confirmOpen, s.confirmTitle, s.confirmMessage, "Confirm", "Cancel") == 0 {
+		if ui.AlertDialog(c, &s.confirmOpen, s.confirmTitle, s.confirmMessage, confirmActionText(s.confirmKind), "Cancel") == 0 {
 			kind, target := s.confirmKind, s.confirmTarget
 			s.confirmOpen = false
 			s.submitConfirm(kind, target)
@@ -165,16 +197,14 @@ func (s *Shell) submitTextDialog(kind, target, value string) {
 		s.mutate(func() (herdr.Projection, error) { return s.runtime.RenamePane(s.activeInstance, target, value) })
 	case "git-add-worktree":
 		s.addWorktree(value)
-	case "git-create-branch", "git-create-tag":
+	case "git-create-branch":
 		if s.git == nil || s.git.root == "" || s.git.root != target {
 			s.pendingToast = "Repository changed. Reopen the dialog to continue."
 			return
 		}
-		if kind == "git-create-branch" {
-			s.confirmCreateBranch(value)
-		} else {
-			s.createTag(value)
-		}
+		s.confirmCreateBranch(value)
+	case "git-rename-branch", "git-create-branch-at", "git-rename-stash":
+		s.submitRefDialog(kind, target, value)
 	case "files-new-file", "files-new-dir", "files-rename":
 		s.runFilesMutation(kind, target, value)
 	case workboardPlanBackDialog:

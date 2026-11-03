@@ -40,7 +40,7 @@ func TestClickingAStashLocatesTheCommitItWasMadeOn(t *testing.T) {
 	if len(f.shell.git.stashes) != 1 || f.shell.git.stashes[0].Base != f.tip(t, "main") {
 		t.Fatalf("a stash is attached to the commit it was made on: %+v", f.shell.git.stashes)
 	}
-	if err := f.tester.Click(f.shell.git.stashes[0].Ref + "  " + f.shell.git.stashes[0].Subject); err != nil {
+	if err := f.tester.Click(stashTitle(f.shell.git.stashes[0].Subject)); err != nil {
 		t.Fatal(err)
 	}
 	want := f.tip(t, "main")
@@ -65,7 +65,7 @@ func TestClickingAStashLocatesTheCommitItWasMadeOn(t *testing.T) {
 // view, opening the section it was folded in.
 func TestClickingAChipRevealsItsSidebarRow(t *testing.T) {
 	f := newGraphFixture(t)
-	f.shell.gitTreeClosed[f.shell.gitFoldKey("section/Branches")] = true
+	f.shell.setGitFolded(f.shell.gitFoldKey("section/Branches"), true)
 	f.shell.commitsMode = true
 	f.tester.Frame()
 	f.tester.Frame()
@@ -77,7 +77,7 @@ func TestClickingAChipRevealsItsSidebarRow(t *testing.T) {
 	if f.shell.git.commitHash != want {
 		t.Fatalf("the chip should open its commit: %q want %q", f.shell.git.commitHash, want)
 	}
-	if f.shell.gitTreeClosed[f.shell.gitFoldKey("section/Branches")] || f.shell.gitTreeClosed[f.shell.gitFoldKey("local/feature")] {
+	if f.shell.gitFolded(f.shell.gitFoldKey("section/Branches")) || f.shell.gitFolded(f.shell.gitFoldKey("local/feature")) {
 		t.Fatal("the section and folder above the row must open")
 	}
 	f.tester.Frame()
@@ -130,6 +130,9 @@ func TestCommitChipsCarryTheirKindsGlyph(t *testing.T) {
 	}
 	if byName["main"].glyph != iconBranch || !byName["main"].branch {
 		t.Fatalf("a branch wears the branch glyph: %+v", byName["main"])
+	}
+	if !byName["main"].current || byName["feature/login"].current {
+		t.Fatalf("only the checked-out branch's chip is current: %+v", byName)
 	}
 	if byName["feature/signup"].glyph != iconWorktree {
 		t.Fatalf("a branch checked out in another worktree wears the worktree glyph: %+v", byName["feature/signup"])

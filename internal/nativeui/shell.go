@@ -176,7 +176,9 @@ type Shell struct {
 	mergeDialogOpen      bool
 	mergeTarget          string
 	mergeRepoRoot        string
-	mergeStrategy        int // 0: FF-only, 1: create merge commit
+	mergeStrategy        int // 0: FF-only, 1: create merge commit, 2: squash
+	gitMore              gitMoreState
+	gitNotice            gitNoticeState
 
 	terminals map[string]*terminalSurface
 	// statusStore arbitrates the pane status lane between the native
@@ -773,7 +775,6 @@ func NewShell(opts ...ShellOption) *Shell {
 	s.gitTreeClosed = make(map[string]bool)
 	s.nav.hosts.OnMove = s.followHostCursor
 	s.unstagedOpen, s.stagedOpen = true, true
-	s.git.splitLayout = s.settings.Workbench.SplitDiff
 	// Stores fall back to memory when no user-data dir is injected
 	// (headless tests); production wires scripts.json through WithUserDataDir.
 	s.scriptStore, _ = scripts.NewStore("")
@@ -782,6 +783,10 @@ func NewShell(opts ...ShellOption) *Shell {
 	for _, opt := range opts {
 		opt(s)
 	}
+	// Read after the options: WithSettings swaps the service in, and the saved
+	// Split/Unified choice lives there (it was read from the defaults before,
+	// so every restart came back Unified — device E2E 2026-11-03).
+	s.git.splitLayout = s.settings.Workbench.SplitDiff
 	// The Settings → Agents toggle gate reads the live settings service, so
 	// every launch surface (Tab menus, sidebar, phone, Continue) filters and
 	// refuses without a restart.

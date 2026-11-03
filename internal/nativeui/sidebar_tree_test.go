@@ -39,6 +39,7 @@ func treeTestShell(t *testing.T) (*Shell, *ui.Tester, string) {
 	shell.git.tags = []gitworkbench.Tag{{Name: "v1.0"}}
 	shell.git.stashes = []gitworkbench.Stash{{Ref: "stash@{0}", Subject: "WIP parser"}}
 	shell.git.worktrees = []gitworkbench.Worktree{{Path: root, Branch: "main"}}
+	openAllGitSections(shell)
 	if shell.router.Path() != routeWorkspace {
 		shell.router.Push(routeWorkspace)
 	}
@@ -180,7 +181,7 @@ func TestGitSectionPlusAppearsUnderThePointerAndOpensTheCreateDialog(t *testing.
 	if !shell.dialogOpen || shell.dialogKind != "git-create-branch" || shell.dialogTarget != root || shell.dialogAction != "Create" {
 		t.Fatalf("dialog = open %v kind %q target %q action %q", shell.dialogOpen, shell.dialogKind, shell.dialogTarget, shell.dialogAction)
 	}
-	if shell.gitTreeClosed[shell.gitFoldKey("section/Branches")] {
+	if shell.gitFolded(shell.gitFoldKey("section/Branches")) {
 		t.Fatal("pressing + must not fold the section")
 	}
 	if !tester.HasText("Create") || !tester.HasText("Branch name") {
@@ -192,10 +193,11 @@ func TestGitSectionContextMenusCarryTheCreationActions(t *testing.T) {
 	shell, tester, _ := treeTestShell(t)
 	for _, c := range []struct{ section, item, kind string }{
 		{"Branches", "New Branch…", "git-create-branch"},
-		{"Tags", "New Tag…", "git-create-tag"},
+		{"Tags", "New Tag…", "tag-dialog"},
 		{"Worktrees", "Add Worktree…", "git-add-worktree"},
 	} {
 		shell.dialogOpen = false
+		shell.gitMore.tag.open = false
 		tester.Frame() // the dialog's modal leaves before the next click
 		if err := tester.RightClick("Toggle " + c.section); err != nil {
 			t.Fatal(err)
@@ -208,7 +210,11 @@ func TestGitSectionContextMenusCarryTheCreationActions(t *testing.T) {
 			t.Fatal(err)
 		}
 		tester.Frame()
-		if !shell.dialogOpen || shell.dialogKind != c.kind {
+		if c.kind == "tag-dialog" {
+			if !shell.gitMore.tag.open {
+				t.Fatalf("%s: the tag dialog did not open", c.item)
+			}
+		} else if !shell.dialogOpen || shell.dialogKind != c.kind {
 			t.Fatalf("%s: dialog open %v kind %q, want %q", c.item, shell.dialogOpen, shell.dialogKind, c.kind)
 		}
 	}
@@ -223,10 +229,15 @@ func TestGitSectionContextMenusCarryTheCreationActions(t *testing.T) {
 
 func TestCreateDialogRefusesAChangedRepository(t *testing.T) {
 	shell, _, _ := treeTestShell(t)
-	shell.openCreateDialog("git-create-tag", "New Tag", "Tag name")
+	shell.openCreateDialog("git-create-branch", "New Branch", "Branch name")
 	target := shell.dialogTarget
 	shell.git.root = "/somewhere/else"
-	shell.submitTextDialog("git-create-tag", target, "v2")
+	shell.submitTextDialog("git-create-branch", target, "v2")
+	if shell.pendingToast == "" || shell.git.opBusy {
+		t.Fatalf("a create submitted after the repository changed must be refused (toast %q, busy %v)", shell.pendingToast, shell.git.opBusy)
+	}
+	shell.pendingToast = ""
+	shell.createTagAt(target, "", "v2", "")
 	if shell.pendingToast == "" || shell.git.opBusy {
 		t.Fatalf("a create submitted after the repository changed must be refused (toast %q, busy %v)", shell.pendingToast, shell.git.opBusy)
 	}
@@ -252,8 +263,7 @@ func TestCreateDialogsMakeTheBranchAndTheTag(t *testing.T) {
 	shell := gitSurfaceTestShell(t, dir)
 	shell.git.rootOf[dir] = dir
 	shell.git.refreshing = true
-	shell.openCreateDialog("git-create-tag", "New Tag", "Tag name")
-	shell.submitTextDialog(shell.dialogKind, shell.dialogTarget, "v9")
+	shell.createTagAt(dir, "", "v9", "")
 	// The Git lanes run on goroutines and headless drops their UI-lane
 	// completions, so the repository itself is the arbiter.
 	waitFor(t, 5*time.Second, func() bool { return gitOut(t, dir, "tag", "--list", "v9") == "v9" })
@@ -319,7 +329,7 @@ func TestSidebarHeadProjectSearchFiltersAndEnterPicksTheFirstMatch(t *testing.T)
 func TestSidebarHeadBranchPulldownSearchesSwitchesAndCreates(t *testing.T) {
 	shell, tester, _ := treeTestShell(t)
 	// Fold the Branches section so only the pull-down lists branch names.
-	shell.gitTreeClosed[shell.gitFoldKey("section/Branches")] = true
+	shell.setGitFolded(shell.gitFoldKey("section/Branches"), true)
 	tester.Frame()
 	if err := tester.Click("Switch branch"); err != nil {
 		t.Fatalf("branch chip missing: %v; texts=%q", err, tester.Texts())
@@ -362,7 +372,7 @@ func TestSidebarHeadBranchPulldownSearchesSwitchesAndCreates(t *testing.T) {
 
 func TestSidebarHeadBranchRowsCarryMergeAndDeleteInTheirContextMenu(t *testing.T) {
 	shell, tester, _ := treeTestShell(t)
-	shell.gitTreeClosed[shell.gitFoldKey("section/Branches")] = true
+	shell.setGitFolded(shell.gitFoldKey("section/Branches"), true)
 	tester.Frame()
 	if err := tester.Click("Switch branch"); err != nil {
 		t.Fatal(err)

@@ -70,11 +70,21 @@ func (s *Shell) gitCleanState(c *ui.Context, title, detail string) {
 				})
 				if branch != "" {
 					switch {
-					case st.OK && st.Ahead > 0:
+					case st.Diverged():
+						// Push is refused for sure and a fast-forward pull too:
+						// the one way forward is to bring the remote's work in.
+						if compactPrimaryButton(c, "Merge "+st.Remote+"/"+st.Branch+"…").Disabled(busy).Clicked() {
+							s.openMergeDialog(st.Remote + "/" + st.Branch)
+						}
+					case !st.OK:
+						if compactPrimaryButton(c, "Publish Branch").Disabled(busy).Clicked() {
+							s.pushRepo()
+						}
+					case st.Ahead > 0:
 						if compactPrimaryButton(c, "Push "+itoa(st.Ahead)+" commit"+pluralS(st.Ahead)).Disabled(busy).Clicked() {
 							s.pushRepo()
 						}
-					case st.OK && st.Behind > 0:
+					case st.Behind > 0:
 						if compactPrimaryButton(c, "Pull "+itoa(st.Behind)+" commit"+pluralS(st.Behind)).Disabled(busy).Clicked() {
 							s.pullRepo()
 						}
@@ -120,6 +130,9 @@ func (s *Shell) upstreamChips(c *ui.Context, st gitworkbench.UpstreamStatus, pal
 		if st.Behind > 0 {
 			ui.Text(c, "↓"+itoa(st.Behind)+" behind").FontSize(Typography().BodySmall).
 				FontWeight(WeightSemibold).TextColor(pal.delText)
+		}
+		if st.Diverged() {
+			ui.Text(c, "Diverged — merge or rebase before pushing").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 		}
 	}
 }

@@ -9,18 +9,21 @@ package nativeui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/settings"
 )
 
 func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
 	s := gitSurfaceTestShell(t, t.TempDir())
+	s.git.stashes = []gitworkbench.Stash{{Ref: "stash@{0}", Hash: strings.Repeat("a", 40), Subject: "WIP"}}
 	s.showSurface(WorkspaceSurfaceDiff)
 	tt := ui.NewTester(s.View, 960, 640)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
@@ -49,16 +52,18 @@ func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
 	}
 	tt.Frame()
 	menu := strings.Join(tt.Menu(), " | ")
-	for _, want := range []string{"Stash All Changes", "View Commits", "Git Settings"} {
+	for _, want := range []string{"Stash All Changes", "Save Stash…", "Recent Stashes", "Save Changes as Patch", "View Commits", "Hide Stashes in Commit List", "Git Settings"} {
 		if !strings.Contains(menu, want) {
 			t.Fatalf("Actions lost %s: %s", want, menu)
 		}
 	}
 	// Fetch / Pull / Push are toolbar icons now; Refresh lives in the
-	// sidebar header. Neither repeats in the pull-down.
-	for _, dup := range []string{"Fetch", "Pull", "Push", "Refresh"} {
-		if strings.Contains(menu, dup) {
-			t.Fatalf("duplicate %s in Actions: %s", dup, menu)
+	// sidebar header. Neither repeats in the pull-down; only their different
+	// variants (Fetch All Remotes, Pull and Rebase …) do.
+	for _, item := range tt.Menu() {
+		switch item {
+		case "Fetch", "Pull", "Push", "Refresh":
+			t.Fatalf("duplicate %s in Actions: %s", item, menu)
 		}
 	}
 	tt.CloseMenu()
@@ -282,5 +287,51 @@ func TestGitQuickAIRejectsStaleDraft(t *testing.T) {
 	}
 	if s.gitQuickSubject != "feat: my newer draft" || s.commitQuickError == "" || s.git.committing {
 		t.Fatal("stale AI result overwrote user draft")
+	}
+}
+
+// The saved Split/Unified choice is the layout a new window opens in: the
+// Shell read it from the defaults before WithSettings swapped the saved
+// service in, so every restart came back Unified (device E2E 2026-11-03).
+func TestSavedDiffLayoutSurvivesRestart(t *testing.T) {
+	saved := settings.Default()
+	saved.Workbench.SplitDiff = true
+	shell := NewShell(WithSettings(app.NewSettingsService(settings.NewMemoryStore(saved))))
+	if !shell.git.splitLayout {
+		t.Fatal("a window opened with Split saved came up Unified")
+	}
+}
+
+// A Pull the fast-forward-only rule refuses on a diverged branch says so in
+// words instead of git's exit line (device E2E 2026-11-03).
+func TestPullRefusalOnDivergedBranchSaysSo(t *testing.T) {
+	root := t.TempDir()
+	shell := gitSurfaceTestShell(t, root)
+	shell.uiApplyOverride = func(fn func()) { fn() }
+	shell.git.upstream = gitworkbench.UpstreamStatus{OK: true, Branch: "main", Remote: "origin", Ahead: 2, Behind: 1}
+	done := make(chan struct{})
+	shell.runGitNetworkOp("Pull", func(context.Context, string) (string, error) {
+		defer close(done)
+		return "", errors.New("git pull: exit status 128")
+	})
+	<-done
+	deadline := time.Now().Add(5 * time.Second)
+	for shell.pendingToast == "" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(shell.pendingToast, "diverged") {
+		t.Fatalf("toast = %q, want the diverged wording", shell.pendingToast)
+	}
+}
+
+// TestEmptyWorkspaceCenterOffersNewWorkspace: the sidebar header's hover "+"
+// was the only way to a Workspace; the empty center names it too (device
+// E2E 2026-11-03).
+func TestEmptyWorkspaceCenterOffersNewWorkspace(t *testing.T) {
+	shell := NewShell()
+	tt := ui.NewTester(func(c *ui.Context) { shell.workspaceHomeCenter(c) }, 900, 600)
+	tt.Frame()
+	if _, ok := tt.Find("New Workspace from Folder…"); !ok {
+		t.Fatal("the empty workspace center has no way to create a Workspace")
 	}
 }

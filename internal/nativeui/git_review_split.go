@@ -165,6 +165,12 @@ func (s *Shell) gitQuickCommitComposer(c *ui.Context) {
 	if len(snap.Files) == 0 && s.gitQuickSubject == "" && s.gitQuickBody == "" && !s.gitQuickAmend {
 		return
 	}
+	// A merge/rebase/cherry-pick in progress owns the next step (the banner's
+	// Continue/Abort): a disabled Commit bar beneath it only invites a typed
+	// message that nothing can send (device E2E 2026-11-03).
+	if s.git.sequencerChecked && s.git.sequencer.Active() {
+		return
+	}
 	ui.Column(c).FillWidth().Shrink(0).Padding(8, 12).
 		BorderWidth(1, 0, 0, 0).BorderColor(s.tokens(t.Dark).BorderSubtle).Children(func() {
 		contentColumn(c, formColumnWidth, func() {
@@ -207,7 +213,7 @@ func (s *Shell) gitQuickCommitForm(c *ui.Context, snap *gitworkbench.ChangesSnap
 				}
 			}
 			ui.Spacer(c)
-			ui.Text(c, pluralFiles(len(snap.Files))).FontSize(Typography().Micro).TextColor(t.TextMuted)
+			ui.Text(c, pluralFiles(len(snap.Files))).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			s.gitQuickCommitActions(c, blocked)
 		})
 		if s.commitQuickError != "" {
@@ -222,23 +228,34 @@ func (s *Shell) gitQuickCommitActions(c *ui.Context, blocked bool) {
 	button := compactPrimaryButton(c, "Commit")
 	button.Disabled(blocked || s.commitQuickRunning)
 	if button.Clicked() {
-		s.openCommitSurface()
-		s.surface.commit.Subject = s.gitQuickSubject
-		s.surface.commit.Body = s.gitQuickBody
-		s.surface.commit.Amend = s.gitQuickAmend
-		// Do not overwrite a user-written amend message with HEAD.
-		s.surface.commit.AmendPrefilled = s.gitQuickAmend &&
-			(s.gitQuickSubject != "" || s.gitQuickBody != "")
+		s.openQuickCommit(false)
 	}
 	// The dropdown is independent of Commit: it only requests an AI
 	// candidate and fills Subject after root/snapshot/draft checks.
 	dropdown := gorexIconButton(c, gorexColorsOf(t.Dark), iconChevronDown, "Commit options", "Commit options",
 		false, gorexPaneBtn, gorexPaneGlyph)
 	dropdown.Menu(func(m *ui.Menu) {
+		if m.Item("Commit and Push…").Disabled(blocked || s.commitQuickRunning).Chosen() {
+			s.openQuickCommit(true)
+		}
+		m.Separator()
 		if m.Item("Draft Subject with AI").Disabled(blocked || s.commitQuickRunning || !s.commitGeneratorUsable()).Chosen() {
 			s.startQuickAICommit()
 		}
 	})
+}
+
+// openQuickCommit opens the Commit dialog with the composer's draft; push
+// makes its success continue with a Push (Commit and Push…).
+func (s *Shell) openQuickCommit(push bool) {
+	s.openCommitSurface()
+	s.surface.commit.Subject = s.gitQuickSubject
+	s.surface.commit.Body = s.gitQuickBody
+	s.surface.commit.Amend = s.gitQuickAmend
+	// Do not overwrite a user-written amend message with HEAD.
+	s.surface.commit.AmendPrefilled = s.gitQuickAmend &&
+		(s.gitQuickSubject != "" || s.gitQuickBody != "")
+	s.gitMore.pushAfterCommit = push
 }
 
 // showGitCommits switches both the upper navigator and lower reviewer.
@@ -268,6 +285,7 @@ func (s *Shell) gitCommitHistoryPane(c *ui.Context) {
 				}
 			}
 		})
+		s.gitCommitColumnHead(c)
 		s.commitsPane(c, gdPaletteFor(t))
 	})
 }
@@ -290,12 +308,10 @@ func (s *Shell) gitCommitReview(c *ui.Context) {
 			})
 			return
 		}
+		s.gitCommitStrip(c)
 		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 			s.gitFileNavigationColumn(c, func() {
-				ui.Column(c).Grow(1).MinHeight(0).MinWidth(0).Children(func() {
-					s.gitCommitCard(c)
-					s.gitCommitFiles(c)
-				})
+				s.gitCommitFiles(c)
 			})
 			ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 				ui.Row(c).FillWidth().Padding(6, 12, 0).Gap(Spacing().S).AlignItems(ui.Center).Children(func() {
@@ -318,7 +334,7 @@ func (s *Shell) gitCommitFiles(c *ui.Context) {
 		}, 10, func() {
 			ui.Text(c, "Changed Files").FontSize(Typography().BodySmall).FontWeight(WeightSemibold).SingleLine()
 			if snap != nil {
-				ui.Textf(c, "%d", len(snap.Files)).FontSize(Typography().Micro).TextColor(t.TextMuted)
+				ui.Textf(c, "%d", len(snap.Files)).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			}
 		})
 		if snap == nil {
@@ -337,7 +353,7 @@ func (s *Shell) gitCommitFiles(c *ui.Context) {
 			})
 		list.Children(func() {
 			if len(rows) == 0 {
-				ui.Text(c, "No matching files").Padding(12).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+				quietNote(c, "No matching files")
 			}
 		})
 	})
@@ -357,16 +373,30 @@ func splitCommitMessage(message, subject string) (string, string) {
 	return strings.TrimSpace(head), strings.TrimSpace(body)
 }
 
-// gitCommitCard is the commit under review: its message — selectable, the
-// body folded past three lines — who and when, the short hash, and the
-// commit's own actions.
-func (s *Shell) gitCommitCard(c *ui.Context) {
+// gitCommitStrip is the commit under review, one header across the whole
+// review (Fork's layout, 2026-11-03: it used to be a card squeezed into the
+// file column above the file list): the author's avatar and name, the short
+// hash, the date and the subject on one line, with the commit's actions
+// behind one menu. A message body sits on a line of its own beneath, folded
+// past three lines.
+func (s *Shell) gitCommitStrip(c *ui.Context) {
 	t := c.Theme()
 	cm := s.git.commitMeta
-	ui.Column(c).FillWidth().Shrink(0).Padding(8, 10, 10).Gap(6).
+	ui.Column(c).FillWidth().Shrink(0).Padding(8, 12).Gap(6).
 		BorderWidth(0, 0, 1, 0).BorderColor(s.tokens(t.Dark).BorderSubtle).Children(func() {
 		if cm == nil {
-			ui.Text(c, "Reading commit…").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+			busyNote(c, "Reading commit…")
+			return
+		}
+		if s.git.compare {
+			ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Working tree compared with "+cm.Short).FontSize(Typography().Body).FontWeight(WeightSemibold).Shrink(0).SingleLine()
+				tipped(c, ui.Text(c, "What changed between that commit and the files on disk now — staged and unstaged, untracked files not included.").
+					FontSize(Typography().BodySmall).TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine(), cm.Subject)
+				if compactButton(c, "Back to Commit").Clicked() {
+					s.reviewCommitAs(cm.Hash, false)
+				}
+			})
 			return
 		}
 		subject, body := splitCommitMessage(s.git.commitBody, cm.Subject)
@@ -374,44 +404,49 @@ func (s *Shell) gitCommitCard(c *ui.Context) {
 		if body != "" {
 			message += "\n\n" + body
 		}
-		ui.Column(c).FillWidth().Gap(4).Selectable().Children(func() {
-			ui.Text(c, subject).FontSize(Typography().Body).FontWeight(WeightSemibold)
-			if body != "" {
-				text := ui.Text(c, body).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
-				if !s.gitCommitBodyOpen {
-					text.MaxLines(gitCommitBodyFold)
+		ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+			authorAvatar(c, cm.Author, 20)
+			ui.Text(c, cm.Author).FontSize(Typography().Body).FontWeight(WeightSemibold).Shrink(0).SingleLine()
+			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0).Selectable()
+			ui.Text(c, gdCommitTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0).SingleLine()
+			ui.Text(c, subject).FontSize(Typography().Body).FontWeight(WeightSemibold).Grow(1).MinWidth(0).SingleLine().Selectable()
+			menu := gorexIconButton(c, gorexColorsOf(t.Dark), iconActions, "Commit actions", "Commit actions", false, gorexRowBtn, gorexRowGlyph)
+			menu.Menu(func(m *ui.Menu) {
+				if m.Item("Copy Commit Hash").Chosen() {
+					s.copyToClipboard(cm.Hash)
 				}
-			}
-		})
-		if strings.Count(body, "\n") >= gitCommitBodyFold || len(body) > 180 {
-			label := "Show more"
-			if s.gitCommitBodyOpen {
-				label = "Show less"
-			}
-			fold := ui.ButtonBase(c).Padding(0).FocusRing(false).Label(label).Children(func() {
-				ui.Text(c, label).FontSize(Typography().Caption).TextColor(t.Accent)
+				if m.Item("Copy Message").Chosen() {
+					s.copyToClipboard(message)
+					s.pendingToast = "Copied commit message"
+				}
+				m.Separator()
+				if m.Item("Cherry-pick…").Chosen() {
+					s.confirmCherryPickCommit(cm.Hash, cm.Subject)
+				}
+				if m.Item("Revert…").Chosen() {
+					s.confirmRevertCommit(cm.Hash, cm.Subject)
+				}
 			})
-			if fold.Clicked() {
-				s.gitCommitBodyOpen = !s.gitCommitBodyOpen
-			}
-		}
-		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			tipped(c, ui.Text(c, cm.Author+" · "+gdRelativeTime(cm.Time)).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0), gdCommitTime(cm.Time))
-			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().Caption).TextColor(t.TextMuted).Shrink(0).Selectable()
-			if gorexIconButton(c, gorexColorsOf(t.Dark), iconCopy, "Copy hash", "Copy Commit Hash", false, gorexRowBtn, gorexRowGlyph).Clicked() {
-				s.copyToClipboard(cm.Hash)
-			}
 		})
-		ui.Row(c).FillWidth().Gap(6).Wrap().Children(func() {
-			if compactButton(c, "Copy Message").Clicked() {
-				s.copyToClipboard(message)
-				s.pendingToast = "Copied commit message"
+		if body == "" {
+			return
+		}
+		ui.Column(c).FillWidth().Gap(2).Children(func() {
+			text := ui.Text(c, body).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Selectable()
+			if !s.gitCommitBodyOpen {
+				text.MaxLines(gitCommitBodyFold)
 			}
-			if compactButton(c, "Cherry-pick…").Clicked() {
-				s.confirmCherryPickCommit(cm.Hash, cm.Subject)
-			}
-			if compactButton(c, "Revert…").Clicked() {
-				s.confirmRevertCommit(cm.Hash, cm.Subject)
+			if strings.Count(body, "\n") >= gitCommitBodyFold || len(body) > 180 {
+				label := "Show more"
+				if s.gitCommitBodyOpen {
+					label = "Show less"
+				}
+				fold := ui.ButtonBase(c).Padding(0).FocusRing(false).Label(label).Children(func() {
+					ui.Text(c, label).FontSize(Typography().Caption).TextColor(t.Accent)
+				})
+				if fold.Clicked() {
+					s.gitCommitBodyOpen = !s.gitCommitBodyOpen
+				}
 			}
 		})
 	})

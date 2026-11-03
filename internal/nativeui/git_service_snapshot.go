@@ -132,9 +132,35 @@ func (s *Shell) refreshGitOnActivation() {
 	s.git.cache.Invalidate(s.git.root)
 	s.git.expectDrift = true
 	s.ensureGitSnapshot(true)
+	s.loadSequencer()
 	if wasRefreshing {
 		s.git.expectDrift = false
 	}
+}
+
+// loadSequencer refreshes only the merge/revert/cherry-pick probe (one
+// bounded read of .git sequencer files plus the unmerged count). The
+// activation sync runs it so a sequencer state created outside Solco shows
+// its banner without a manual refresh; the explicit Refresh and the
+// post-mutation path probe it through loadBranches instead.
+func (s *Shell) loadSequencer() {
+	if s.git == nil || s.git.root == "" {
+		return
+	}
+	root := s.git.root
+	gen := s.git.sequencerGen.Add(1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), gitworkbench.ReadTimeout)
+		defer cancel()
+		sequencer, err := s.git.runner.SequencerState(ctx, root)
+		s.applyGuarded(s.git.sequencerGen.Load, gen, func() {
+			if s.git == nil || root != s.git.root {
+				return
+			}
+			s.git.sequencer = sequencer
+			s.git.sequencerChecked = err == nil
+		})
+	}()
 }
 
 // loadBranches refreshes the local branch list, the upstream tracking
@@ -145,6 +171,7 @@ func (s *Shell) loadBranches() {
 		return
 	}
 	root := s.git.root
+	s.ensureAutoFetch()
 	s.git.branchesLoading = true
 	s.git.commitsLoading = true
 	gen := s.git.branchesGen.Add(1)
@@ -160,6 +187,8 @@ func (s *Shell) loadBranches() {
 		stashes, _ := s.git.runner.StashList(ctx, root)
 		tags, _ := s.git.runner.ListTags(ctx, root)
 		worktrees, _ := s.git.runner.ListWorktrees(ctx, root)
+		remotes, _ := s.git.runner.ListRemotes(ctx, root)
+		submodules, _ := s.git.runner.ListSubmodules(ctx, root)
 		commits, _ := s.git.runner.ListCommitGraph(ctx, root, graphQuery)
 		sequencer, sequencerErr := s.git.runner.SequencerState(ctx, root)
 		s.applyGuarded(s.git.branchesGen.Load, gen, func() {
@@ -174,6 +203,7 @@ func (s *Shell) loadBranches() {
 			s.git.stashes = stashes
 			s.git.tags = tags
 			s.git.worktrees = worktrees
+			s.git.remotes, s.git.submodules = remotes, submodules
 			// A graph re-read (eye, widened window) that started after this
 			// one began owns the list.
 			if s.git.graphGen.Load() == graphGen {

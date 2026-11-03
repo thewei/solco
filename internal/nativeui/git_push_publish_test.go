@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -204,5 +205,87 @@ func TestPushOutlivesTheWorkingTreeBudget(t *testing.T) {
 			t.Fatal("the 31s push never completed")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestPushRejectedToastSaysWhy: the remote moved after the last fetch, so the
+// stale "ahead 1" Push is refused — the toast must carry Git's reason, not
+// "exit status 1" (user report 2026-11-03: Push "did not pass", no reason).
+func TestPushRejectedToastSaysWhy(t *testing.T) {
+	root, origin, branch := pushFixture(t)
+	clone := filepath.Join(t.TempDir(), "clone")
+	for _, args := range [][]string{
+		{"clone", "-q", origin, clone},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	for _, args := range [][]string{
+		{"-C", clone, "config", "user.email", "t@example.com"},
+		{"-C", clone, "config", "user.name", "t"},
+		{"-C", clone, "commit", "-q", "--allow-empty", "-m", "remote moved"},
+		{"-C", clone, "push", "-q", "origin", "HEAD:" + branch},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	shell := gitSurfaceTestShell(t, root)
+	shell.git.upstream = gitworkbench.UpstreamStatus{OK: true, Remote: "origin", Branch: branch, Ahead: 1}
+	shell.showSurface(WorkspaceSurfaceDiff)
+	tt := ui.NewTester(shell.View, 1280, 760)
+
+	toast := clickAndWaitPush(t, shell, tt, "Push")
+	if !strings.HasPrefix(toast, "Push failed: ") || !strings.Contains(toast, "pull first") || strings.Contains(toast, "exit status") {
+		t.Fatalf("toast = %q, want the pull-first reason", toast)
+	}
+}
+
+// TestDivergedBranchBlocksPushWithAHint: ahead and behind means Git refuses
+// the push for sure, so the header Push is dimmed (with the reason in its
+// tooltip) and the clean view offers the merge instead.
+func TestDivergedBranchBlocksPushWithAHint(t *testing.T) {
+	root, _, branch := pushFixture(t)
+	shell := gitSurfaceTestShell(t, root)
+	shell.git.upstream = gitworkbench.UpstreamStatus{OK: true, Remote: "origin", Branch: branch, Ahead: 1, Behind: 2}
+	shell.showSurface(WorkspaceSurfaceDiff)
+	tt := ui.NewTester(shell.View, 1280, 760)
+	tt.Frame()
+	if err := tt.Click("Push"); err == nil && shell.git.opBusy {
+		t.Fatal("a diverged branch started a push")
+	}
+
+	shell.git.snapshot = &gitworkbench.ChangesSnapshot{Root: root, Branch: branch, Signature: "sig-clean"}
+	tt = ui.NewTester(shell.View, 1280, 760)
+	tt.Frame()
+	if _, ok := tt.Find("Merge origin/" + branch + "…"); !ok {
+		t.Fatal("the clean diverged view must offer the merge")
+	}
+	if _, ok := tt.Find("Push 1 commit"); ok {
+		t.Fatal("the clean diverged view still offers a guaranteed-to-fail Push")
+	}
+}
+
+// TestRebaseConflictOpensTheExplainingDialog: an integration op that cannot
+// land opens a dialog (not a toast) that says what happened and names files.
+func TestRebaseConflictOpensTheExplainingDialog(t *testing.T) {
+	root := t.TempDir()
+	shell := gitSurfaceTestShell(t, root)
+	shell.uiApplyOverride = func(fn func()) { fn() }
+	done := make(chan struct{})
+	shell.runGitOp("Rebase", func(context.Context, string) (string, error) {
+		defer close(done)
+		return "", &gitworkbench.Error{Class: gitworkbench.ErrConflict, Op: "rebase", Paths: []string{"a.txt", "b/c.txt"},
+			Stderr: "boom"}
+	})
+	<-done
+	deadline := time.Now().Add(5 * time.Second)
+	for !shell.gitNotice.open && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	n := shell.gitNotice
+	if !n.open || n.title != "Rebase Stopped on Conflicts" || len(n.paths) != 2 || shell.pendingToast != "" {
+		t.Fatalf("notice = %+v, toast %q", n, shell.pendingToast)
 	}
 }

@@ -17,12 +17,13 @@ type Branch struct {
 	Name      string
 	Current   bool
 	HeadShort string
+	Upstream  string // what it tracks, "origin/main"; "" when nothing
 }
 
 // ListBranches enumerates local branches cheaply (no network).
 func (r *Runner) ListBranches(ctx context.Context, root string) ([]Branch, error) {
 	out, err := r.Read(ctx, root,
-		"for-each-ref", "--format=%(refname:short)%09%(objectname:short)%09%(HEAD)", "refs/heads")
+		"for-each-ref", "--format=%(refname:short)%09%(objectname:short)%09%(HEAD)%09%(upstream:short)", "refs/heads")
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +39,9 @@ func (r *Runner) ListBranches(ctx context.Context, root string) ([]Branch, error
 		}
 		if len(parts) > 2 && strings.TrimSpace(parts[2]) == "*" {
 			b.Current = true
+		}
+		if len(parts) > 3 {
+			b.Upstream = strings.TrimSpace(parts[3])
 		}
 		branches = append(branches, b)
 	}
@@ -118,6 +122,77 @@ func (r *Runner) CreateBranch(ctx context.Context, root, name string) (SwitchRes
 		return SwitchResult{}, err
 	}
 	return SwitchResult{Branch: name, Created: true}, nil
+}
+
+// CheckoutRemoteBranch checks out a remote-tracking branch: the local branch
+// of the same name when one exists, otherwise a new one that tracks it (what
+// Fork's "Check Out…" on a remote branch does).
+func (r *Runner) CheckoutRemoteBranch(ctx context.Context, root, ref string) (SwitchResult, error) {
+	full, err := r.resolveBranchRef(ctx, root, ref)
+	if err != nil {
+		return SwitchResult{}, err
+	}
+	if !strings.HasPrefix(full, "refs/remotes/") {
+		return r.SwitchBranch(ctx, root, ref)
+	}
+	_, local, _ := strings.Cut(ref, "/")
+	if r.validateLocalBranch(ctx, root, local) == nil {
+		return r.SwitchBranch(ctx, root, local)
+	}
+	if err := r.ValidateBranchName(ctx, root, local); err != nil {
+		return SwitchResult{}, err
+	}
+	if _, err := r.Mutate(ctx, root, "switch", "--track", "--create", local, full); err != nil {
+		return SwitchResult{}, err
+	}
+	return SwitchResult{Branch: local, Created: true}, nil
+}
+
+// RenameBranch renames a local branch (`git branch -m`); the new name is
+// checked by check-ref-format first.
+func (r *Runner) RenameBranch(ctx context.Context, root, name, to string) error {
+	if err := r.validateLocalBranch(ctx, root, name); err != nil {
+		return err
+	}
+	if err := r.ValidateBranchName(ctx, root, to); err != nil {
+		return err
+	}
+	_, err := r.Mutate(ctx, root, "branch", "-m", name, to)
+	return err
+}
+
+// CreateBranchAt creates and checks out a branch at one exact commit.
+func (r *Runner) CreateBranchAt(ctx context.Context, root, name, hash string) (SwitchResult, error) {
+	if !validFullCommitID(hash) {
+		return SwitchResult{}, &Error{Class: ErrRefusal, OpClass: OpMutate, Op: "switch", err: errors.New("a full Git commit hash is required")}
+	}
+	if err := r.ValidateBranchName(ctx, root, name); err != nil {
+		return SwitchResult{}, err
+	}
+	if _, err := r.Mutate(ctx, root, "switch", "--create", name, hash); err != nil {
+		return SwitchResult{}, err
+	}
+	return SwitchResult{Branch: name, Created: true}, nil
+}
+
+// resolveBranchRef turns a branch name the UI listed — a local branch or a
+// remote-tracking "origin/main" — into its full ref, after checking Git lists
+// it: a full ref cannot be read as a command-line option.
+func (r *Runner) resolveBranchRef(ctx context.Context, root, name string) (string, error) {
+	if err := r.validateLocalBranch(ctx, root, name); err == nil {
+		return "refs/heads/" + name, nil
+	}
+	remotes, err := r.ListRemoteBranches(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	for _, b := range remotes {
+		if b.Remote+"/"+b.Name == name {
+			return "refs/remotes/" + name, nil
+		}
+	}
+	return "", &Error{Class: ErrRefusal, OpClass: OpMutate, Op: "merge",
+		err: fmt.Errorf("%q is not a branch", name)}
 }
 
 // validateLocalBranch refuses anything that is not an existing local branch

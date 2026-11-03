@@ -30,12 +30,30 @@ func (s *Shell) gdChangedTreeList(c *ui.Context, pal *gdPalette, rows []gitworkb
 		}
 		state.Selection = choice
 	}
+	// MyGo paints a chosen row in the theme's accent (opaque blue while the
+	// list has focus), which sat far brighter than the neutral selection the
+	// Commits list wears (user report 2026-11-03). The list is built under a
+	// theme whose accent is clear, so the row's own SidebarSelect/Strong tint
+	// (renderChangesRow) is the only face; every other control is built
+	// outside this block and keeps the real accent.
+	real := c.Theme()
+	quiet := *real
+	quiet.Accent, quiet.AccentText = ui.RGBA(0, 0, 0, 0), real.Text
+	c.SetTheme(&quiet)
 	list := ui.List(c, state, len(rows), func(i int) {
 		if i < 0 || i >= len(rows) {
 			return
 		}
 		s.renderChangesRow(c, pal, rows[i], state, pane, choice, onClick)
 	}).Grow(1).MinHeight(0).Padding(3, sidebarGutter)
+	c.SetTheme(real)
+	// SetTheme also resets the window root's background to the theme canvas,
+	// which silently switched the sidebar's vibrancy off whenever a changes
+	// list was on screen (the sidebar flashed opaque on every commit click,
+	// user report 2026-11-03). Put back what Shell.View sets.
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	}
 	// A plain click opens the file: the list replaced the choice with that
 	// one row. Choice-growing clicks (Cmd, Shift) stay preview-free.
 	if changed := list.Changed(); changed && *selected >= 0 && *selected < len(rows) {
@@ -111,7 +129,7 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 		if node.Dir {
 			ui.Icon(c, iconFolder).FontSize(treeGlyphW).TextColor(muted).Shrink(0)
 			ui.Box(c).Width(treeTitleGap).Shrink(0).PassThrough()
-			tipped(c, ui.Text(c, node.Name).FontSize(Typography().Body).SingleLine().Grow(1).Shrink(1).MinWidth(0), node.Path)
+			tipped(c, ui.Text(c, node.Name).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Grow(1).Shrink(1).MinWidth(0), node.Path)
 			if !s.gdReviewingCommit() && (pane == gdViewUnstaged || pane == gdViewStaged) {
 				paths := gitDirectoryPaths(s.gitSnapshot(), node.Path, pane)
 				if len(paths) > 0 {
@@ -156,17 +174,19 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 			}
 			if gdCountable(&cf) && (cf.Additions > 0 || cf.Deletions > 0) {
 				tipped(c, ui.Textf(c, "+%s -%s", gdCompact(cf.Additions), gdCompact(cf.Deletions)).
-					Font(gdCodeFont()).FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(muted).Shrink(0), gdLines(cf.Additions, "added")+", "+gdLines(cf.Deletions, "removed"))
+					Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(muted).Shrink(0), gdLines(cf.Additions, "added")+", "+gdLines(cf.Deletions, "removed"))
 			}
 			letter := gdStatusLetterColor(cf.Status, pal, t)
-			switch {
-			case selected && focused:
-				letter = t.AccentText
-			case viewed:
+			if viewed {
 				letter = t.TextMuted
 			}
-			ui.Text(c, gdStatusLetter(&cf)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(letter).
-				Width(12).TextAlign(ui.End).Shrink(0) // flush right: the letter ends where the pane header's Stage/Unstage ends
+			// A small tinted tile instead of a bare letter: the status reads as
+			// a mark at a glance, the letter is the accessible detail. It sits
+			// flush right, where the pane header's Stage/Unstage ends.
+			ui.Box(c).Size(16, 16).Shrink(0).Radius(treeRowRadius).Background(letter.Alpha(0.16)).Center().Children(func() {
+				ui.Text(c, gdStatusLetter(&cf)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).
+					TextColor(letter).PassThrough()
+			})
 		})
 	})
 	// Directory disclosure is independent of List.Changed: selecting the
@@ -255,6 +275,7 @@ func (s *Shell) gdRowContextMenu(m *ui.Menu, cf *gitworkbench.ChangeFile) {
 			s.openFileInEditor(cf.Path)
 		}
 	}
+	s.gdFileLogItems(m, cf)
 	if m.Item("Copy Path").Chosen() {
 		s.copyToClipboard(cf.Path)
 	}

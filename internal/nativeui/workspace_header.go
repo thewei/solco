@@ -42,6 +42,7 @@ func (s *Shell) toggleDiffLayout() {
 // openCommitSurface retains the existing stale-state preflight, but moves
 // the commit editor into a native modal over the underlying Diff Review.
 func (s *Shell) openCommitSurface() {
+	s.gitMore.pushAfterCommit = false
 	if s.surface.current() == WorkspaceSurfaceCommit {
 		s.commitDialogOpen = true
 		return
@@ -89,6 +90,7 @@ func (s *Shell) holdCommitNavigation() bool {
 
 // cancelCommitSurface leaves Commit back to the previous Diff state.
 func (s *Shell) cancelCommitSurface() {
+	s.gitMore.pushAfterCommit = false
 	s.commitDialogOpen = false
 	s.commitDiscardPrompt = false
 	s.resetCommitAIFlow()

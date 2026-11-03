@@ -24,6 +24,7 @@ func TestGitSectionsAlwaysFoldAndReopen(t *testing.T) {
 	s.git.tags = []gitworkbench.Tag{{Name: "v3.2.1"}}
 	s.git.stashes = []gitworkbench.Stash{{Ref: "stash@{0}", Subject: "WIP secret"}}
 	s.git.worktrees = []gitworkbench.Worktree{{Branch: "other", Path: "/tmp/git-other"}}
+	openAllGitSections(s)
 	s.showSurface(WorkspaceSurfaceDiff)
 	tester := ui.NewTester(s.View, 1200, 800)
 	tester.SetPreferences(ui.Preferences{ReduceMotion: true})
@@ -43,14 +44,14 @@ func TestGitSectionsAlwaysFoldAndReopen(t *testing.T) {
 				t.Fatalf("%s close %d: %v", tc.section, i, err)
 			}
 			tester.Frame()
-			if !s.gitTreeClosed["section/"+tc.section] {
+			if !s.gitFolded("section/" + tc.section) {
 				t.Fatalf("%s was not closed, pass %d", tc.section, i)
 			}
 			if err := tester.Click("Toggle " + tc.section); err != nil {
 				t.Fatalf("%s reopen %d: %v", tc.section, i, err)
 			}
 			tester.Frame()
-			if s.gitTreeClosed["section/"+tc.section] {
+			if s.gitFolded("section/" + tc.section) {
 				t.Fatalf("%s was not reopened, pass %d", tc.section, i)
 			}
 		}
@@ -71,7 +72,7 @@ func TestGitNestedFoldersReopenAfterFiltering(t *testing.T) {
 		}
 		tt.Frame()
 		tt.Frame()
-		if !s.gitTreeClosed["local/feature"] {
+		if !s.gitFolded("local/feature") {
 			t.Fatalf("feature folder did not close on pass %d", i)
 		}
 		if slices.Contains(tt.Texts(), "editor") {
@@ -82,7 +83,7 @@ func TestGitNestedFoldersReopenAfterFiltering(t *testing.T) {
 		}
 		tt.Frame()
 		tt.Frame()
-		if s.gitTreeClosed["local/feature"] || !slices.Contains(tt.Texts(), "editor") {
+		if s.gitFolded("local/feature") || !slices.Contains(tt.Texts(), "editor") {
 			t.Fatal("feature could not be reopened")
 		}
 	}
@@ -102,7 +103,7 @@ func TestGitNestedFoldersReopenAfterFiltering(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if !s.gitTreeClosed["search/beta/local/feature"] || tt.HasText("beta") {
+	if !s.gitFolded("search/beta/local/feature") || tt.HasText("beta") {
 		t.Fatal("filtered folder click did not actually close matching children")
 	}
 	if err := tt.Click("feature"); err != nil {
@@ -110,12 +111,12 @@ func TestGitNestedFoldersReopenAfterFiltering(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if s.gitTreeClosed["search/beta/local/feature"] || !tt.HasText("beta") {
+	if s.gitFolded("search/beta/local/feature") || !tt.HasText("beta") {
 		t.Fatal("filtered folder could not reopen")
 	}
 	s.gitRefsFilter = ""
 	tt.Frame()
-	if !s.gitTreeClosed["local/feature"] {
+	if !s.gitFolded("local/feature") {
 		t.Fatal("search clobbered previous normal fold state")
 	}
 	if err := tt.Click("feature"); err != nil {
