@@ -407,7 +407,14 @@ func (s *Shell) syncWorkspaceForSelection() {
 		// surface, else Terminal (§6 with the pane-surface memory). No
 		// terminal sync here — applyProjection and syncSelectionPresentation
 		// own it around every selection change.
-		if s.panePrefersChat(s.selectedPaneID) && s.workspaceChatAvailable() {
+		if s.launchHold() {
+			// The launch holds the surface (chat_launch.go): bind the pane's
+			// Chat once it is available, never fall back to Terminal for a
+			// pane that is still booting.
+			if s.workspaceChatAvailable() {
+				s.openWorkspaceChat()
+			}
+		} else if s.panePrefersChat(s.selectedPaneID) && s.workspaceChatAvailable() {
 			s.openWorkspaceChat()
 		} else {
 			s.surface.resetToTerminal(ctx)
@@ -428,6 +435,9 @@ func (s *Shell) syncWorkspaceForSelection() {
 // pane's remembered view: switching panes inside a Tab lands each pane
 // where it was last used (2026-10-31 pane-surface memory).
 func (s *Shell) reconcilePaneSurface() {
+	if s.launchHold() {
+		return
+	}
 	switch s.surface.current() {
 	case WorkspaceSurfaceChat:
 		if !s.panePrefersChat(s.selectedPaneID) {

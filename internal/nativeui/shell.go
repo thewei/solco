@@ -656,6 +656,10 @@ type Shell struct {
 	generation  atomic.Uint64
 	// uiApplyOverride, when set (tests only), replaces win.Update for guarded
 	// background applies so headless tests can observe the production apply
+	// pendingLaunch holds the Chat surface for one in-flight New Pane →
+	// Agent launch, from the click until the pane lands or the launch
+	// fails (chat_launch.go, 2026-11-03).
+	pendingLaunch *pendingLaunch
 	// path. Production never sets it; nil keeps the drop-in-headless rule.
 	uiApplyOverride func(fn func())
 }

@@ -69,6 +69,7 @@ func (s *Shell) applyProjectSelection(projectID string) {
 	s.selectedPaneID = ""
 	s.reconcileLocalSelection(s.projection)
 	s.syncSelectionPresentation()
+	s.retireForeignLaunch(projectID)
 }
 
 func (s *Shell) selectTab(tabID string) {
@@ -93,6 +94,7 @@ func (s *Shell) applyTabSelection(tabID string) {
 	s.selectedPaneID = ""
 	s.reconcileLocalSelection(s.projection)
 	s.syncSelectionPresentation()
+	s.retireForeignLaunch(s.selectedProjectID)
 }
 
 func (s *Shell) selectPane(paneID string) {
@@ -132,6 +134,7 @@ func (s *Shell) applyPaneSelection(paneID string) {
 	s.setTabExpanded(pane.TabID, true)
 	s.syncSelectionPresentation()
 	s.markAgentReviewedForPane(pane.ID)
+	s.retireForeignLaunch(s.selectedProjectID)
 }
 
 // selectionLocation renders the workspace location recording the current

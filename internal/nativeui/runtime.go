@@ -349,6 +349,10 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	defer s.tryPendingReveal()
 	slog.Debug("apply Herdr projection", "instance", s.activeInstance, "projects", len(projection.Projects), "tabs", len(projection.Tabs), "panes", len(projection.Panes), "agents", len(projection.Agents), "restart_watcher", restartWatcher)
 	s.reconcileLocalSelection(projection)
+	// A pending launch follows its new Tab the moment a projection carries
+	// it; the diff needs the previous projection, so this runs before the
+	// assignment (chat_launch.go).
+	s.adoptPendingLaunchTab(projection)
 	s.projection = projection
 	s.restampHookIdentities()
 	// A reconciled projection is the authority that the runtime is healthy

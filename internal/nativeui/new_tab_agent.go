@@ -172,8 +172,9 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 	if starter == nil || instance == "" {
 		return
 	}
+	requestID := fmt.Sprintf("tab-%s-%d", kind.ID, time.Now().UnixNano())
 	spec := app.SessionSpec{
-		RequestID:   fmt.Sprintf("tab-%s-%d", kind.ID, time.Now().UnixNano()),
+		RequestID:   requestID,
 		WorkspaceID: project.ID,
 		CWD:         project.CWD,
 		Agent:       history.AgentID(kind.ID),
@@ -181,6 +182,11 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 	if spec.Agent == history.AgentAntigravity {
 		spec.Permission = agent.PermissionFullAccess
 	}
+	// The launch holds the Chat surface from the click (2026-11-03): the
+	// launching card shows immediately, the new Tab is followed the moment
+	// a projection carries it, and no intermediate projection can flip the
+	// surface while the pane boots in the background.
+	s.beginLaunch(project.ID, kind, requestID)
 	s.dispatch(func() {
 		result, err := starter.StartSession(context.Background(), instance, spec)
 		var projection *herdr.Projection
@@ -193,8 +199,15 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 			if err != nil {
 				slog.Warn("new tab agent failed", "instance", instance, "agent", kind.ID, "error", err)
 				s.pendingToast = "Could not start " + kind.Label + ": " + err.Error()
+				s.failLaunch(kind.Label, err)
+				return
 			}
-			if result.PaneID == "" || s.activeInstance != instance {
+			if s.activeInstance != instance {
+				s.finishLaunch()
+				return
+			}
+			if result.PaneID == "" {
+				s.failLaunch(kind.Label, errTransactionNoPane)
 				return
 			}
 			if projection != nil {
@@ -206,6 +219,7 @@ func (s *Shell) startNewTab(project herdr.Project, kind app.SessionKind) {
 			if err == nil && s.settings.General.AgentChatFirst() {
 				s.pendingAgentOpen = &pendingAgentOpen{PaneID: result.PaneID, At: time.Now()}
 			}
+			s.finishLaunch()
 		})
 	})
 }

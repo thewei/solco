@@ -130,6 +130,17 @@ func (s *Shell) chatComposerRow(c *ui.Context) {
 func (s *Shell) workspaceChatSurface(c *ui.Context) {
 	t := c.Theme()
 	sp := Spacing()
+	if s.launchHold() {
+		// A New Pane → Agent launch holds the surface (chat_launch.go): the
+		// unified header stays, the body is the launching/failed card, and
+		// no composer exists to type into.
+		k := gorexColorsOf(t.Dark)
+		ui.Column(c).Grow(1).MinWidth(0).Background(designTokens(t.Dark).Content).Children(func() {
+			s.chatSurfaceHeader(c, k)
+			s.renderLaunchState(c)
+		})
+		return
+	}
 	card, hasCard := s.agentCardForSelectedPane()
 	if hasCard && (s.chatPaneID != card.PaneID || (s.chatConversationID == "" && !s.chatLoading)) {
 		s.rebindWorkspaceChat()
