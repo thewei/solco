@@ -18,15 +18,23 @@ What changed for someone using the plugin. Dates are release dates.
   first-run trust dialog can stop an unattended run. The prompt travels in a
   0600 file, not typed into the pane; a non-zero exit fails the run and names
   the pane holding the output. Not for workflows, templates or the hc backend.
-- **Claude's folder-trust question is answered for the run's own folder**: an
-  interactive run that meets "Is this a project you created or one you trust?"
-  presses Down/Enter on "Yes, I trust this folder" — but only when the path on
-  screen is the run's worktree or the automation's repository, reading the
+- **The folder-trust question is answered for the run's own folder** (Claude
+  Code and Codex): an interactive run that meets "Is this a project you
+  created or one you trust?" (Claude: Down/Enter on "Yes, I trust this
+  folder") or "Trust this folder?" (Codex: Enter on "Trust and continue" —
+  Codex names the repository root, trust is per repository) answers it — but
+  only when the path on screen is the run's worktree or the automation's
+  repository, reading the
   highlight before Enter and the screen after every key, at most five presses.
   Any other folder, any other dialog (project MCP approval is code execution)
-  and Codex/Cursor/Antigravity trust questions (unmeasured) still stop the run
+  and Cursor/Antigravity trust questions (unmeasured) still stop the run
   untouched. herdr's `agent_not_ready` at start is now treated like
   `agent_kind_mismatch`: the screen is read before the run is called failed.
+- A run that ends with the agent still on a startup dialog is no longer "done":
+  the screen is checked once more after the wait (Codex opens its "hooks need
+  review" panel after the prompt was typed, which left the agent idle behind
+  it), and that panel is refused like the other dialogs — its "trust all" runs
+  hook commands.
 - `history --json` runs carry `seen`; `seen <run-id|--all>` marks them read.
 - The plugin's own words are English throughout: `schedule_text` renders as
   English ("Daily 09:00", "Weekdays 09:00", "Every 6 hours", …) and a done

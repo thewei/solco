@@ -110,7 +110,30 @@ func (s *Shell) setAgentEnabled(id history.AgentID, on bool) {
 	})
 	if on && !before {
 		s.installAgentWiring(id)
+		s.trustAutomationFolders(id)
 	}
+}
+
+// trustAutomationFolders pre-answers Claude Code's "trust this folder" for
+// the folder Herdr keeps worktrees in, so an Automations run in a fresh
+// worktree never stops on it (user-approved 2026-11-03). One added entry in
+// Claude's own config, off the render path; an existing record is never
+// touched. Codex has no folder inheritance and is answered at run time by the
+// plugin instead.
+func (s *Shell) trustAutomationFolders(id history.AgentID) {
+	if id != history.AgentClaudeCode || s.providers.hooks == nil {
+		return
+	}
+	s.dispatch(func() {
+		changed, err := s.providers.hooks.TrustWorktrees()
+		if err != nil {
+			slog.Warn("claude worktree trust failed", "error", err)
+			return
+		}
+		if changed {
+			slog.Info("claude worktree trust recorded")
+		}
+	})
 }
 
 // installAgentWiring turns on the agent's Solco status hook the moment it

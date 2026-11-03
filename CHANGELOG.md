@@ -20,7 +20,7 @@ at release time and shown in Settings → About.
 
 - Automations: an empty page no longer flashes a "Loading…" spinner every few seconds — only the first read shows one
 - Automations: the scheduler's login service no longer shares its name with the upstream plugin's
-- Automations: an interactive Claude run answers its own "trust this folder" question (only for the run's own worktree or repository) instead of failing; project MCP approvals are still yours to give
+- Automations: turning on Claude Code in Settings → Agents also records Claude's trust for the worktree folder, so runs no longer stop on "trust this folder"; a run that still meets that question (Claude or Codex) answers it for its own worktree or repository only — project MCP approvals are still yours to give
 - Automations: an Agent picked in the form is saved under the kind Herdr accepts
 - Dialogs: the remote, New Task and New Automation forms label every field above them
 

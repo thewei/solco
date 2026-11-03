@@ -10,6 +10,7 @@ package nativeui
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/settings"
 )
 
@@ -34,6 +35,9 @@ func (s *Shell) finishOnboarding() {
 		v.General.Onboarded = true
 		return nil
 	})
+	if s.agentEnabled(history.AgentClaudeCode) {
+		s.trustAutomationFolders(history.AgentClaudeCode) // default-on agents never fire the toggle
+	}
 	s.router.Replace(routeWorkspace)
 }
 

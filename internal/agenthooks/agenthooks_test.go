@@ -2,6 +2,7 @@ package agenthooks
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -812,5 +813,72 @@ func TestUpgradeScriptsReplacesOnlyOlderScriptsOfOurs(t *testing.T) {
 	}
 	if again := m.UpgradeScripts(); len(again) != 0 {
 		t.Fatalf("second pass upgraded %v", again)
+	}
+}
+
+func TestTrustWorktreesAddsOneKeyAndKeepsTheRestByteForByte(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".claude.json")
+	orig := "{\n  \"numStartups\": 3,\n  \"projects\": {\n    \"/a\": {\"hasTrustDialogAccepted\": true}\n  },\n  \"tail\": \"é&<>\"\n}\n"
+	if err := os.WriteFile(path, []byte(orig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManagerWithHome(home)
+	changed, err := m.TrustWorktrees()
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	got, _ := os.ReadFile(path)
+	var parsed struct {
+		Projects map[string]struct {
+			Trusted bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(got, &parsed); err != nil {
+		t.Fatalf("result is not valid JSON: %v\n%s", err, got)
+	}
+	if !parsed.Projects[filepath.Join(home, ".herdr", "worktrees")].Trusted || !parsed.Projects["/a"].Trusted {
+		t.Errorf("want the new record and the old one, got %+v", parsed.Projects)
+	}
+	// Everything but the spliced entry is the original text.
+	if !strings.Contains(string(got), "\"tail\": \"é&<>\"\n}\n") || !strings.HasPrefix(string(got), "{\n  \"numStartups\": 3,\n  \"projects\": {") {
+		t.Errorf("the rest of the file moved:\n%s", got)
+	}
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+		t.Errorf("mode changed to %v", info.Mode().Perm())
+	}
+	if again, err := m.TrustWorktrees(); err != nil || again {
+		t.Errorf("a second call must be a no-op, changed=%v err=%v", again, err)
+	}
+}
+
+func TestTrustWorktreesNeverOverridesAnExistingRecord(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".claude.json")
+	dir := filepath.Join(home, ".herdr", "worktrees")
+	orig := fmt.Sprintf("{\"projects\":{%q:{\"hasTrustDialogAccepted\":false}}}", dir)
+	_ = os.WriteFile(path, []byte(orig), 0o600)
+	if changed, err := NewManagerWithHome(home).TrustWorktrees(); err != nil || changed {
+		t.Fatalf("an explicit no stays: changed=%v err=%v", changed, err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != orig {
+		t.Errorf("file rewritten: %s", got)
+	}
+}
+
+func TestTrustWorktreesHandlesEmptyProjectsAndAbsentFile(t *testing.T) {
+	home := t.TempDir()
+	m := NewManagerWithHome(home)
+	if changed, err := m.TrustWorktrees(); err != nil || changed {
+		t.Fatalf("no file: changed=%v err=%v", changed, err)
+	}
+	path := filepath.Join(home, ".claude.json")
+	_ = os.WriteFile(path, []byte(`{"projects":{}}`), 0o600)
+	if changed, err := m.TrustWorktrees(); err != nil || !changed {
+		t.Fatalf("empty projects: changed=%v err=%v", changed, err)
+	}
+	got, _ := os.ReadFile(path)
+	if !json.Valid(got) {
+		t.Fatalf("invalid JSON: %s", got)
 	}
 }

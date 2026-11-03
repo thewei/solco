@@ -20,24 +20,27 @@ import (
 // stops, types nothing, and says what is on screen and where. The workspace
 // stays open for exactly that.
 //
-// One exception, by the user's explicit decision (2026-11-03): Claude Code's
-// "trust this folder" question, when the folder it names is this run's own
-// directory — the worktree the plugin just created, or the repository the
-// person put in the automation. That one is answered "Yes, I trust this
-// folder" (see acceptClaudeTrust); every other dialog, and a trust question
-// about any other folder, still stops the run.
+// One exception, by the user's explicit decision (2026-11-03): the "trust this
+// folder" question of Claude Code and Codex, when the folder it names is this
+// run's own directory — the worktree the plugin just created, or the
+// repository the person put in the automation. That one is answered with the
+// agent's own "yes" row (see acceptTrust; the agent records the trust itself);
+// every other dialog, and a trust question about any other folder, still
+// stops the run.
 //
-// Measured: the Claude Code pair on 2026-11-03 (a fresh worktree path, and a
-// repo with unapproved project MCP servers); Cursor and Antigravity are the
-// strings Solco's own terminal-dialog guard already matches; Codex is its
-// documented wording and has not been measured here.
+// Measured on 2026-11-03: the Claude Code pair (a fresh worktree path, and a
+// repo with unapproved project MCP servers) and Codex 0.164's trust question
+// (names the repository root, even from a worktree; trust is per repository,
+// not inherited from a parent directory). Cursor and Antigravity are the
+// strings Solco's own terminal-dialog guard already matches, unmeasured here.
 var startupDialogs = []struct {
 	marker *regexp.Regexp
 	what   string
 }{
 	{regexp.MustCompile(`Quick safety check: Is this a project you created`), "Claude Code is asking whether to trust this folder"},
 	{regexp.MustCompile(`new MCP servers? found in this project`), "Claude Code is asking which project MCP servers to enable"},
-	{regexp.MustCompile(`Do you trust the contents of this directory\?`), "Codex is asking whether to trust this folder"},
+	{regexp.MustCompile(`Trust this folder\? Codex can read, edit, and run files here`), "Codex is asking whether to trust this folder"},
+	{regexp.MustCompile(`hooks? need review before they can run`), "Codex is asking you to review its lifecycle hooks (its \"t trust all\" runs hook commands)"},
 	{regexp.MustCompile(`Workspace Trust Required`), "Cursor Agent is asking whether to trust this folder"},
 	{regexp.MustCompile(`Do you trust the contents of this project\?`), "Antigravity CLI is asking whether to trust this folder"},
 }
@@ -64,33 +67,57 @@ func (w agentWork) blockedBy(s Session) error {
 	if !hit {
 		return nil
 	}
-	if claudeTrust.MatchString(screen) && w.acceptClaudeTrust(s, screen) {
+	if w.acceptTrust(s, screen) {
 		return nil
 	}
 	return &BlockedError{Pane: s.PaneID, What: what}
 }
 
-var (
-	claudeTrust     = regexp.MustCompile(`Quick safety check: Is this a project you created`)
-	claudeWorkspace = regexp.MustCompile(`(?m)Accessing workspace:\s*\n\s*(\S[^\n]*?)\s*$`)
-)
+// trustDialog describes one agent's "trust this folder" question: how to
+// recognise it, where it names the folder, which menu row is the yes, and
+// which glyph marks the cursor row.
+type trustDialog struct {
+	marker *regexp.Regexp
+	folder *regexp.Regexp
+	yes    string
+	cursor string
+}
 
-// acceptClaudeTrust answers Claude Code's folder-trust question with "Yes, I
-// trust this folder" and reports whether the dialog is gone. It acts only when
-// the path on screen is this run's own directory; the highlight is read from
-// the screen before Enter, never assumed (the menu opens on "No, exit"), and
-// every key is followed by a fresh read. Anything unexpected leaves the dialog
-// untouched and the run stops as it always did.
-func (w agentWork) acceptClaudeTrust(s Session, screen string) bool {
-	if !w.ownsFolder(s, screen) {
+var trustDialogs = []trustDialog{
+	{ // Claude Code: the menu opens on "No, exit".
+		marker: regexp.MustCompile(`Quick safety check: Is this a project you created`),
+		folder: regexp.MustCompile(`(?m)Accessing workspace:\s*\n\s*(\S[^\n]*?)\s*$`),
+		yes:    "Yes, I trust this folder",
+		cursor: "❯",
+	},
+	{ // Codex: the menu opens on "Trust and continue"; it names the repository root, also for a worktree.
+		marker: regexp.MustCompile(`Trust this folder\? Codex can read, edit, and run files here`),
+		folder: regexp.MustCompile(`(?m)Folder access\s*\n\s*(/\S[^\n]*?)\s*$`),
+		yes:    "Trust and continue",
+		cursor: "›",
+	},
+}
+
+// acceptTrust answers an agent's folder-trust question with its "yes" row and
+// reports whether the dialog is gone. It acts only when the path on screen is
+// this run's own directory; the highlight is read from the screen before
+// Enter, never assumed, and every key is followed by a fresh read. Anything
+// unexpected leaves the dialog untouched and the run stops as it always did.
+func (w agentWork) acceptTrust(s Session, screen string) bool {
+	var d *trustDialog
+	for i := range trustDialogs {
+		if trustDialogs[i].marker.MatchString(screen) {
+			d = &trustDialogs[i]
+		}
+	}
+	if d == nil || !w.ownsFolder(s, d, screen) {
 		return false
 	}
 	for range 5 {
-		sel := selectedLine(screen)
 		key := "down"
-		if strings.Contains(sel, "Yes, I trust this folder") {
+		if strings.Contains(selectedLine(screen, d.cursor), d.yes) {
 			key = "enter"
-		} else if !strings.Contains(screen, "Yes, I trust this folder") {
+		} else if !strings.Contains(screen, d.yes) {
 			return false
 		}
 		if err := w.ops.PaneSendKeys(s.PaneID, key); err != nil {
@@ -101,7 +128,7 @@ func (w agentWork) acceptClaudeTrust(s Session, screen string) bool {
 		if err != nil {
 			return false
 		}
-		if !claudeTrust.MatchString(next) {
+		if !d.marker.MatchString(next) {
 			return true
 		}
 		screen = next
@@ -111,9 +138,10 @@ func (w agentWork) acceptClaudeTrust(s Session, screen string) bool {
 
 // ownsFolder says whether the folder the dialog names is this run's: the
 // worktree the plugin created for it (its directory ends in the run branch,
-// slashes turned into dashes) or the automation's own repository.
-func (w agentWork) ownsFolder(s Session, screen string) bool {
-	m := claudeWorkspace.FindStringSubmatch(screen)
+// slashes turned into dashes) or the automation's own repository (compared
+// through symlinks: /tmp is /private/tmp).
+func (w agentWork) ownsFolder(s Session, d *trustDialog, screen string) bool {
+	m := d.folder.FindStringSubmatch(screen)
 	if m == nil {
 		return false
 	}
@@ -127,13 +155,23 @@ func (w agentWork) ownsFolder(s Session, screen string) bool {
 			repo = filepath.Join(home, repo[2:])
 		}
 	}
-	return repo != "" && shown == filepath.Clean(repo)
+	if repo == "" {
+		return false
+	}
+	return realPath(shown) == realPath(filepath.Clean(repo))
 }
 
-// selectedLine is the menu row the cursor (❯) is on, or "".
-func selectedLine(screen string) string {
+func realPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}
+
+// selectedLine is the menu row the cursor glyph is on, or "".
+func selectedLine(screen, cursor string) string {
 	for _, line := range strings.Split(screen, "\n") {
-		if strings.Contains(line, "❯") {
+		if strings.HasPrefix(strings.TrimSpace(line), cursor) {
 			return line
 		}
 	}

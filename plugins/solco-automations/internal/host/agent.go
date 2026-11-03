@@ -29,7 +29,9 @@ func (w agentWork) do(s Session, timeout time.Duration) error {
 	if err := w.await(s, timeout); err != nil {
 		return fmt.Errorf("waiting for the agent: %w", err)
 	}
-	return nil
+	// An agent sitting on a startup dialog looks idle: a run that ends there
+	// did not run (Codex opens its hook review after the prompt was typed).
+	return w.blockedBy(s)
 }
 
 // args assembles what gets forwarded to the agent executable. Model and MCP

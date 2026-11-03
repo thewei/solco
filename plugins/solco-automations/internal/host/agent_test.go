@@ -124,7 +124,8 @@ func TestStartStopsAtAFolderTrustDialogAndSaysSo(t *testing.T) {
 func TestSubmitNeverTypesIntoAStartupDialog(t *testing.T) {
 	for name, screen := range map[string]string{
 		"claude mcp approval": "  2 new MCP servers found in this project\n  ❯ [✔] vibe-annotations\n Space to select · Esc to reject all",
-		"codex trust":         "Do you trust the contents of this directory?",
+		"codex hooks review":  "⚠ 5 hooks need review before they can run.\n  Event  Installed  Active  Review",
+		"codex trust":         "Folder access\n  /elsewhere\n  Trust this folder? Codex can read, edit, and run files here",
 		"cursor trust":        "Workspace Trust Required",
 		"agy trust":           "Do you trust the contents of this project?",
 	} {
@@ -557,5 +558,70 @@ func TestStartAnswersTheTrustDialogWhenHerdrSaysNotReady(t *testing.T) {
 	}
 	if !answeredYes {
 		t.Errorf("the dialog was never answered; keys %v", ops.keys)
+	}
+}
+
+// ── Codex's folder-trust dialog (measured on 0.164): opens on "Trust and
+// continue", names the repository root even for a worktree ──
+
+const codexTrustScreen = "  Folder access\n  %s\n  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings\n  can run code automatically, even without a model request. Continue only if you trust these files. Your trust\n  decision will be saved.\n› 1. Trust and continue\n  2. Back to Agent Command Center\n  enter continue · esc back\n"
+
+func codexTrustPane(path string, onYes *bool) *fakeOps {
+	gone := false
+	ops := &fakeOps{}
+	ops.paneRead = func(string, int) (string, error) {
+		if gone {
+			return "› \n", nil
+		}
+		return fmt.Sprintf(codexTrustScreen, path), nil
+	}
+	ops.sendKeys = func(_ string, keys ...string) error {
+		if len(keys) == 1 && keys[0] == "enter" {
+			gone = true
+			*onYes = true
+		}
+		return nil
+	}
+	return ops
+}
+
+func TestCodexTrustForTheAutomationsRepositoryIsAnswered(t *testing.T) {
+	var yes bool
+	ops := codexTrustPane("/Users/me/work/solco", &yes)
+	// The run is in a worktree, but Codex names the repository it belongs to.
+	w := agentWorkWith(ops, config.Automation{Agent: "codex", Repo: "/Users/me/work/solco"})
+	if err := w.blockedBy(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"}); err != nil || !yes {
+		t.Fatalf("err=%v yes=%v keys=%v", err, yes, ops.keys)
+	}
+	if strings.Join(ops.keys, ",") != "enter" {
+		t.Errorf("the menu opens on yes; want a single Enter, got %v", ops.keys)
+	}
+}
+
+func TestCodexTrustForAnyOtherFolderStillStopsTheRun(t *testing.T) {
+	var yes bool
+	ops := codexTrustPane("/Users/me/somewhere/else", &yes)
+	w := agentWorkWith(ops, config.Automation{Agent: "codex", Repo: "/Users/me/work/solco"})
+	var blocked *BlockedError
+	if err := w.blockedBy(Session{PaneID: "w1:p1"}); !errors.As(err, &blocked) || len(ops.keys) != 0 {
+		t.Fatalf("want refusal with no keys, got %v keys=%v", err, ops.keys)
+	}
+}
+
+// A dialog that opens after the prompt was typed leaves the agent idle behind
+// it; the run must not be reported done.
+func TestRunEndingOnAStartupDialogIsNotDone(t *testing.T) {
+	reads := 0
+	ops := &fakeOps{paneRead: func(string, int) (string, error) {
+		reads++
+		if reads == 1 { // before the prompt is typed the pane is clean
+			return "› \n", nil
+		}
+		return "⚠ 5 hooks need review before they can run.\n", nil
+	}}
+	w := agentWorkWith(ops, config.Automation{Agent: "codex", Prompt: "p"})
+	var blocked *BlockedError
+	if err := w.do(Session{PaneID: "w1:p1"}, time.Second); !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError, got %v", err)
 	}
 }
