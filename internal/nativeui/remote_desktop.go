@@ -72,6 +72,7 @@ func (s *Shell) remoteDesktopService() *remotedesktop.Service {
 	r.svc = remotedesktop.NewService(remotedesktop.Config{
 		Backend:    backend,
 		Authorizer: shellAuthorizer{s},
+		Trust:      shellTrust{s},
 		// Direct host candidates only for now: LAN and Tailscale. Tunnels stay in (a Tailscale phone arrives on one);
 		// VM bridges and system links do not.
 		InterfaceFilter: func(name string) bool {
@@ -202,6 +203,59 @@ func (a shellAuthorizer) Authorize(ctx context.Context, req remotedesktop.AuthRe
 	}
 }
 
+// shellTrust keeps the remembered approvals in the saved settings. The Host calls it from request
+// goroutines, so every touch hops onto the window lane where settings are owned.
+type shellTrust struct{ s *Shell }
+
+func (t shellTrust) Granted(deviceID string) (protocol.Mode, bool) {
+	var mode protocol.Mode
+	var ok bool
+	t.s.callOnWindow(func() {
+		for _, g := range t.s.settings.RemoteDesktop.Trusted {
+			if g.DeviceID == deviceID {
+				mode, ok = protocol.Mode(g.Mode), protocol.Mode(g.Mode).Valid()
+				return
+			}
+		}
+	})
+	return mode, ok
+}
+
+func (t shellTrust) Remember(device protocol.DeviceInfo, mode protocol.Mode) {
+	if device.ID == "" || !mode.Valid() {
+		return
+	}
+	t.s.applyOnWindow(func() {
+		t.s.setRemoteDesktop(func(v *settings.RemoteDesktopSettings) {
+			g := settings.RemoteDesktopTrust{DeviceID: device.ID, Name: strings.TrimSpace(device.Name), Mode: string(mode), Since: time.Now().Unix()}
+			for i := range v.Trusted {
+				if v.Trusted[i].DeviceID == device.ID {
+					v.Trusted[i] = g
+					return
+				}
+			}
+			v.Trusted = append(v.Trusted, g)
+		})
+	})
+}
+
+func (t shellTrust) Forget(deviceID string) {
+	t.s.applyOnWindow(func() { t.s.rdForgetTrust(deviceID) })
+}
+
+// rdForgetTrust drops one remembered approval (window lane).
+func (s *Shell) rdForgetTrust(deviceID string) {
+	s.setRemoteDesktop(func(v *settings.RemoteDesktopSettings) {
+		kept := v.Trusted[:0:0]
+		for _, g := range v.Trusted {
+			if g.DeviceID != deviceID {
+				kept = append(kept, g)
+			}
+		}
+		v.Trusted = kept
+	})
+}
+
 func rdDeviceName(d protocol.DeviceInfo) string {
 	if n := strings.TrimSpace(d.Name); n != "" {
 		return n
@@ -237,6 +291,8 @@ func (s *Shell) remoteDesktopDialog(c *ui.Context) {
 		ui.Column(c).Width(400).Gap(sp.L).Children(func() {
 			modalTitle(c, fmt.Sprintf("Allow “%s” to use this Mac?", rdDeviceName(req.Device)))
 			ui.Text(c, "It will see your whole screen. With Allow Control it can also click and type as you.").
+				FontSize(typ.BodySmall).TextColor(t.TextMuted)
+			ui.Text(c, "Solco remembers your answer for this phone. Forget it any time in Settings → Remote Desktop.").
 				FontSize(typ.BodySmall).TextColor(t.TextMuted)
 			if !canControl {
 				ui.Text(c, "Accessibility is off, so this connection can only watch.").
@@ -340,8 +396,8 @@ func (s *Shell) settingsRemoteDesktop(c *ui.Context) {
 		}
 	}
 	settingsGroup(c, "Connection",
-		row("Ask before each connection", "The phone waits until you allow it here. Turn off only on a Mac you trust phones with.", func() {
-			if on, changed := settingSwitch(c, "Ask before each connection", !cfg.SkipApproval); changed {
+		row("Ask before connecting", "A new phone waits until you allow it here; Solco then remembers that phone. Turn off only on a Mac you trust every paired phone with.", func() {
+			if on, changed := settingSwitch(c, "Ask before connecting", !cfg.SkipApproval); changed {
 				s.setRemoteDesktop(func(v *settings.RemoteDesktopSettings) { v.SkipApproval = !on })
 			}
 		}),
@@ -352,7 +408,31 @@ func (s *Shell) settingsRemoteDesktop(c *ui.Context) {
 			}
 		}),
 	)
+	s.rdTrustedRows(c, svc)
 	s.rdSessionRows(c, svc)
+}
+
+// rdTrustedRows lists the phones that connect without asking; Forget ends their session and asks again next time.
+func (s *Shell) rdTrustedRows(c *ui.Context, svc *remotedesktop.Service) {
+	trusted := s.settings.RemoteDesktop.Trusted
+	if len(trusted) == 0 || s.settings.RemoteDesktop.SkipApproval {
+		return
+	}
+	var rows []settingsRow
+	for _, g := range trusted {
+		g := g
+		mode := "Full control"
+		if g.Mode == string(protocol.ModeViewOnly) {
+			mode = "View only"
+		}
+		name := rdDeviceName(protocol.DeviceInfo{Name: g.Name})
+		rows = append(rows, row(name, mode+" · connects without asking", func() {
+			if compactButton(c.Key("rd-trust:"+g.DeviceID), "Forget").Clicked() {
+				svc.ForgetDevice(g.DeviceID)
+			}
+		}))
+	}
+	settingsGroup(c, "Remembered phones", rows...)
 }
 
 func (s *Shell) rdStatusCard(c *ui.Context, svc *remotedesktop.Service, remoteOn bool) {

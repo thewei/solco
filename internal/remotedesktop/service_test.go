@@ -339,3 +339,73 @@ func waitUntil(t *testing.T, cond func() bool) {
 	}
 	t.Fatal("condition not reached")
 }
+
+type fakeTrust struct {
+	mu     sync.Mutex
+	grants map[string]protocol.Mode
+}
+
+func (f *fakeTrust) Granted(id string) (protocol.Mode, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	m, ok := f.grants[id]
+	return m, ok
+}
+func (f *fakeTrust) Remember(d protocol.DeviceInfo, m protocol.Mode) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.grants[d.ID] = m
+}
+func (f *fakeTrust) Forget(id string) { f.mu.Lock(); defer f.mu.Unlock(); delete(f.grants, id) }
+
+func TestRememberedApprovalSkipsThePromptWithinItsMode(t *testing.T) {
+	b := &fakeBackend{avail: true, perms: protocol.PermissionStatus{ScreenRecording: true, Accessibility: true}}
+	trust := &fakeTrust{grants: map[string]protocol.Mode{"d": protocol.ModeFullControl, "v": protocol.ModeViewOnly}}
+	s := NewService(Config{Backend: b, Trust: trust}) // no Authorizer: any prompt would be refused
+	s.SetSettings(Settings{Enabled: true, RequireApproval: true})
+	ctx := context.Background()
+	offer := protocol.Offer{Protocol: protocol.Version, SDP: "x"}
+
+	// A remembered phone is not asked: the request gets past approval and dies on the bogus SDP instead.
+	if _, err := s.Open(ctx, protocol.DeviceInfo{ID: "d"}, offer); codeOf(err) == protocol.CodeDenied {
+		t.Fatalf("remembered phone was asked: %v", err)
+	}
+	// A view-only grant does not cover a Control request: it asks again (and is refused here).
+	offer.Mode = protocol.ModeFullControl
+	if _, err := s.Open(ctx, protocol.DeviceInfo{ID: "v"}, offer); codeOf(err) != protocol.CodeDenied {
+		t.Fatalf("view grant covered control: %v", err)
+	}
+	// A phone nobody approved is asked.
+	if _, err := s.Open(ctx, protocol.DeviceInfo{ID: "new"}, offer); codeOf(err) != protocol.CodeDenied {
+		t.Fatalf("stranger was not asked: %v", err)
+	}
+}
+
+func TestApprovalIsRememberedAndForgottenOnRevoke(t *testing.T) {
+	b := &fakeBackend{avail: true, perms: protocol.PermissionStatus{ScreenRecording: true, Accessibility: true}}
+	trust := &fakeTrust{grants: map[string]protocol.Mode{}}
+	allow := authFn(func(context.Context, AuthRequest) (Decision, error) {
+		return Decision{Allow: true, Mode: protocol.ModeViewOnly}, nil
+	})
+	s := NewService(Config{Backend: b, Trust: trust, Authorizer: allow})
+	s.SetSettings(Settings{Enabled: true, RequireApproval: true})
+	dev := protocol.DeviceInfo{ID: "d", Name: "Phone"}
+
+	_, _ = s.Open(context.Background(), dev, protocol.Offer{Protocol: protocol.Version, SDP: "x"})
+	if m, ok := trust.Granted("d"); !ok || m != protocol.ModeViewOnly {
+		t.Fatalf("approval not remembered at the granted mode: %v %v", m, ok)
+	}
+	s.DisconnectDevice("d") // the revoke path
+	if _, ok := trust.Granted("d"); ok {
+		t.Fatal("revoked phone still remembered")
+	}
+
+	// A refusal is never remembered.
+	deny := authFn(func(context.Context, AuthRequest) (Decision, error) { return Decision{}, nil })
+	s2 := NewService(Config{Backend: b, Trust: trust, Authorizer: deny})
+	s2.SetSettings(Settings{Enabled: true, RequireApproval: true})
+	_, _ = s2.Open(context.Background(), dev, protocol.Offer{Protocol: protocol.Version, SDP: "x"})
+	if _, ok := trust.Granted("d"); ok {
+		t.Fatal("a refusal was remembered")
+	}
+}

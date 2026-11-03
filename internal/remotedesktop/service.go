@@ -10,7 +10,7 @@
 // No framework code is imported here; the Host and nativeui import this package, never the reverse.
 //
 // [INPUT]: platform.Backend, rtc, session, protocol
-// [OUTPUT]: Service (Info/Open/Sessions/Disconnect/DisconnectDevice/Permissions/RequestPermission/SetSettings/Close), Authorizer, Settings
+// [OUTPUT]: Service (Info/Open/Sessions/Disconnect/DisconnectDevice/ForgetDevice/Permissions/RequestPermission/SetSettings/Close), Authorizer, TrustStore, Settings
 // [POS]: the facade; remotehost.Options.RemoteDesktop is satisfied by a thin adapter over it
 package remotedesktop
 
@@ -56,10 +56,25 @@ type Authorizer interface {
 	Authorize(ctx context.Context, req AuthRequest) (Decision, error)
 }
 
+// TrustStore remembers which phones the Mac user already said yes to, and at what level, so a paired
+// phone is asked about once. The Service only reads and writes through it; where the grants live
+// (settings) and which thread touches them is the app's business. Both methods must be safe for
+// concurrent use.
+type TrustStore interface {
+	// Granted returns the highest mode the user allowed this phone to use without asking again.
+	Granted(deviceID string) (protocol.Mode, bool)
+	// Remember records the user's answer for the phone (never called for a refusal).
+	Remember(device protocol.DeviceInfo, mode protocol.Mode)
+	// Forget drops the phone's grant: its next request asks again.
+	Forget(deviceID string)
+}
+
 // Config wires a Service.
 type Config struct {
 	Backend    platform.Backend
 	Authorizer Authorizer
+	// Trust, when set, lets an approved phone connect without a prompt next time (nil = ask every time).
+	Trust TrustStore
 	// ICEServers supplies STUN/TURN entries per session (nil = host candidates only: LAN and Tailscale).
 	ICEServers      func(ctx context.Context) []rtc.ICEServer
 	InterfaceFilter func(name string) bool
@@ -220,12 +235,19 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 		mode = protocol.ModeFullControl
 	}
 	if set.RequireApproval {
-		dec, err := s.authorize(ctx, device, mode)
-		if err != nil {
-			return protocol.Answer{}, err
-		}
-		if dec.Mode == protocol.ModeViewOnly {
-			mode = protocol.ModeViewOnly
+		if granted, ok := s.trusted(device.ID); ok && modeRank(granted) >= modeRank(mode) {
+			s.log.Info("remote desktop approval remembered", "device", device.ID, "mode", string(mode))
+		} else {
+			dec, err := s.authorize(ctx, device, mode)
+			if err != nil {
+				return protocol.Answer{}, err
+			}
+			if dec.Mode == protocol.ModeViewOnly {
+				mode = protocol.ModeViewOnly
+			}
+			if s.cfg.Trust != nil {
+				s.cfg.Trust.Remember(device, mode)
+			}
 		}
 	}
 	if !perms.Accessibility {
@@ -287,6 +309,21 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 	return protocol.Answer{SessionID: id, SDP: sdp, State: sess.State()}, nil
 }
 
+// modeRank orders the grants: watching is below controlling.
+func modeRank(m protocol.Mode) int {
+	if m == protocol.ModeViewOnly {
+		return 1
+	}
+	return 2
+}
+
+func (s *Service) trusted(deviceID string) (protocol.Mode, bool) {
+	if s.cfg.Trust == nil || deviceID == "" {
+		return "", false
+	}
+	return s.cfg.Trust.Granted(deviceID)
+}
+
 func (s *Service) authorize(ctx context.Context, device protocol.DeviceInfo, mode protocol.Mode) (Decision, error) {
 	if s.cfg.Authorizer == nil {
 		return Decision{}, protocol.Errf(protocol.CodeDenied, "no approval surface")
@@ -335,9 +372,17 @@ func (s *Service) Disconnect(id string) {
 	}
 }
 
-// DisconnectDevice ends the session of a phone (revoke / forget); the Host calls it with the device
-// that lost its token.
+// DisconnectDevice ends the session of a phone (revoke / forget) and drops its remembered approval; the
+// Host calls it with the device that lost its token.
 func (s *Service) DisconnectDevice(deviceID string) {
+	s.ForgetDevice(deviceID)
+}
+
+// ForgetDevice drops a phone's remembered approval and ends its session: it is asked again next time.
+func (s *Service) ForgetDevice(deviceID string) {
+	if s.cfg.Trust != nil {
+		s.cfg.Trust.Forget(deviceID)
+	}
 	s.mu.Lock()
 	act := s.active
 	s.mu.Unlock()

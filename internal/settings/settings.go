@@ -63,6 +63,18 @@ type RemoteDesktopSettings struct {
 	SkipApproval bool `json:"skip_approval,omitempty"`
 	// Tier is the default quality: "smooth" | "standard" | "high" ("" = standard).
 	Tier string `json:"tier,omitempty"`
+	// Trusted are the phones the user already approved: a phone listed here connects without a prompt
+	// at (or below) its Mode until the user forgets it or revokes the phone in Remote Access.
+	Trusted []RemoteDesktopTrust `json:"trusted,omitempty"`
+}
+
+// RemoteDesktopTrust is one remembered approval. DeviceID is the Host's paired-device id (a re-paired
+// phone is a new id, so it is asked again); Mode is "full" or "view".
+type RemoteDesktopTrust struct {
+	DeviceID string `json:"device_id"`
+	Name     string `json:"name,omitempty"`
+	Mode     string `json:"mode"`
+	Since    int64  `json:"since,omitempty"` // unix seconds
 }
 
 // RemoteAccessSettings is the Remote Access page's choice. Mode is "" / "off",

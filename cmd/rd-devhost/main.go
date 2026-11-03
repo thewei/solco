@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -49,7 +50,7 @@ func (stubBackend) PromptAgent(context.Context, string, string, string) error { 
 func (stubBackend) SendAgentKeys(context.Context, string, string, []string) error {
 	return errStub
 }
-func (stubBackend) ReadPane(context.Context, string, string) (string, error) { return "", errStub }
+func (stubBackend) ReadPane(context.Context, string, string) (string, error)  { return "", errStub }
 func (stubBackend) ObserveCommand(string, string, int, int) ([]string, error) { return nil, errStub }
 
 type authorizer struct{ how string }
@@ -114,6 +115,7 @@ func main() {
 	svc := remotedesktop.NewService(remotedesktop.Config{
 		Backend:         auto.New(macos.Options{Logger: log}),
 		Authorizer:      authorizer{*approve},
+		Trust:           newMemTrust(),
 		InterfaceFilter: func(name string) bool { return !remotehost.IsVirtualInterface(name) || strings.HasPrefix(name, "utun") },
 		Log:             log,
 	})
@@ -156,3 +158,24 @@ func main() {
 	svc.Close()
 	srv.Close()
 }
+
+// memTrust remembers approvals for the life of the dev host (the app keeps them in its settings).
+type memTrust struct {
+	mu sync.Mutex
+	m  map[string]protocol.Mode
+}
+
+func newMemTrust() *memTrust { return &memTrust{m: map[string]protocol.Mode{}} }
+
+func (t *memTrust) Granted(id string) (protocol.Mode, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	m, ok := t.m[id]
+	return m, ok
+}
+func (t *memTrust) Remember(d protocol.DeviceInfo, m protocol.Mode) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.m[d.ID] = m
+}
+func (t *memTrust) Forget(id string) { t.mu.Lock(); defer t.mu.Unlock(); delete(t.m, id) }
