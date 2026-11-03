@@ -16,6 +16,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,9 +39,9 @@ const (
 const (
 	// gatherTimeout bounds ICE candidate gathering before the answer is sent with what exists.
 	// LAN host candidates are immediate; a slow/blocked STUN server must not hold the session up.
-	gatherTimeout = 3 * time.Second
+	gatherTimeout = 2500 * time.Millisecond
 	// gatherGrace is how long the answer waits for more candidates once a srflx/relay one exists.
-	gatherGrace = 1500 * time.Millisecond
+	gatherGrace = 700 * time.Millisecond
 	// disconnectGrace is how long a transient ICE "disconnected" may recover before the peer is
 	// declared gone (Wi-Fi roam, a brief stall).
 	disconnectGrace = 8 * time.Second
@@ -92,7 +94,9 @@ type Options struct {
 	IncludeLoopback bool
 	// StartKbps seeds the bandwidth estimator (the tier's own target), so a good link is not ramped up from scratch.
 	StartKbps int
-	Handlers  Handlers
+	// Trace receives link diagnostics (ICE state, nominated pair types — never addresses); nil is silent.
+	Trace    func(event string, kv ...any)
+	Handlers Handlers
 }
 
 // Peer is one answered WebRTC connection.
@@ -108,6 +112,7 @@ type Peer struct {
 	timer   *time.Timer
 
 	startedAt  time.Time
+	trace      func(event string, kv ...any)
 	framesSent atomic.Uint64
 	bytesSent  atomic.Uint64
 	keyReqs    atomic.Uint64
@@ -168,6 +173,8 @@ func newAPI(opts Options) (*webrtc.API, error) {
 	}
 	if opts.IncludeLoopback {
 		se.SetIncludeLoopbackCandidate(true)
+	} else {
+		se.SetIPFilter(ipFilter())
 	}
 	return webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(ir), webrtc.WithSettingEngine(se)), nil
 }
@@ -180,14 +187,23 @@ func Answer(ctx context.Context, offerSDP string, opts Options) (*Peer, string, 
 		return nil, "", err
 	}
 	var ice []webrtc.ICEServer
-	for _, s := range opts.ICEServers {
+	for _, s := range pruneICEServers(opts.ICEServers) {
 		ice = append(ice, webrtc.ICEServer{URLs: s.URLs, Username: s.Username, Credential: s.Credential})
 	}
 	pc, err := api.NewPeerConnection(webrtc.Configuration{ICEServers: ice})
 	if err != nil {
 		return nil, "", err
 	}
-	p := &Peer{pc: pc, handlers: opts.Handlers, startedAt: time.Now()}
+	p := &Peer{pc: pc, handlers: opts.Handlers, startedAt: time.Now(), trace: opts.Trace}
+	if opts.Trace != nil {
+		pc.OnICEConnectionStateChange(func(st webrtc.ICEConnectionState) {
+			kv := []any{"state", st.String(), "after_ms", time.Since(p.startedAt).Milliseconds()}
+			if st == webrtc.ICEConnectionStateConnected || st == webrtc.ICEConnectionStateCompleted {
+				kv = append(kv, "pair", selectedPairKinds(pc))
+			}
+			opts.Trace("ice", kv...)
+		})
+	}
 	fail := func(err error) (*Peer, string, error) {
 		_ = pc.Close()
 		return nil, "", err
@@ -398,6 +414,58 @@ func (p *Peer) Close() {
 		p.timer.Stop()
 	}
 	p.mu.Unlock()
+	p.tracePairs()
 	_ = p.pc.Close()
 	p.emit(StateClosed)
+}
+
+// selectedPairKinds names the nominated pair by candidate types only ("host/host", "relay/srflx").
+func selectedPairKinds(pc *webrtc.PeerConnection) string {
+	sctp := pc.SCTP()
+	if sctp == nil || sctp.Transport() == nil || sctp.Transport().ICETransport() == nil {
+		return "unknown"
+	}
+	pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair()
+	if err != nil || pair == nil || pair.Local == nil || pair.Remote == nil {
+		return "unknown"
+	}
+	return pair.Local.Typ.String() + "/" + pair.Remote.Typ.String()
+}
+
+// tracePairs says, per candidate-pair kind, how many checks went out and how many answers came back — the
+// one number that separates "no route" from "route but no answer". Types and counts only.
+func (p *Peer) tracePairs() {
+	if p.trace == nil {
+		return
+	}
+	type tally struct{ pairs, sent, got int }
+	byKind := map[string]*tally{}
+	cands := map[string]string{}
+	stats := p.pc.GetStats()
+	for _, st := range stats {
+		if c, ok := st.(webrtc.ICECandidateStats); ok {
+			cands[c.ID] = c.CandidateType.String()
+		}
+	}
+	for _, st := range stats {
+		pr, ok := st.(webrtc.ICECandidatePairStats)
+		if !ok {
+			continue
+		}
+		k := cands[pr.LocalCandidateID] + "/" + cands[pr.RemoteCandidateID]
+		t := byKind[k]
+		if t == nil {
+			t = &tally{}
+			byKind[k] = t
+		}
+		t.pairs++
+		t.sent += int(pr.RequestsSent)
+		t.got += int(pr.ResponsesReceived)
+	}
+	var out []string
+	for k, t := range byKind {
+		out = append(out, fmt.Sprintf("%s=%d/%d/%d", k, t.pairs, t.sent, t.got))
+	}
+	sort.Strings(out)
+	p.trace("pairs", "pairs_sent_got", strings.Join(out, " "), "after_ms", time.Since(p.startedAt).Milliseconds())
 }

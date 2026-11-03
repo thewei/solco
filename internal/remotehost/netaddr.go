@@ -77,9 +77,46 @@ func isVirtualInterface(name string) bool {
 	return false
 }
 
-// IsVirtualInterface reports an interface a phone can never reach (VM bridges, tunnels, system links).
-// Remote Desktop media keeps tunnels out of this list itself, because a Tailscale phone arrives on one.
-func IsVirtualInterface(name string) bool { return isVirtualInterface(name) }
+// ICEInterface reports whether Remote Desktop media may gather ICE candidates on an interface. Ordinary
+// interfaces pass; VM bridges and system links never do; a tunnel (utun*) passes only when it carries a
+// Tailscale address, because that is the one tunnel a phone can arrive on. A proxy's TUN (198.18/15), a
+// VPN's own link or a system utun used to multiply every candidate by every STUN/TURN server (measured
+// 2026-11-03: host=10 srflx=52 relay=36), and the burst of connectivity checks they brought was enough
+// to stall the relay's keepalive on the same Mac.
+func ICEInterface(name string) bool {
+	if !isVirtualInterface(name) {
+		return true
+	}
+	if !strings.HasPrefix(name, "utun") {
+		return false
+	}
+	ifc, err := net.InterfaceByName(name)
+	if err != nil {
+		return false
+	}
+	addrs, err := ifc.Addrs()
+	if err != nil {
+		return false
+	}
+	var ips []netip.Addr
+	for _, a := range addrs {
+		if ipn, ok := a.(*net.IPNet); ok {
+			if ip, ok := netip.AddrFromSlice(ipn.IP); ok {
+				ips = append(ips, ip.Unmap())
+			}
+		}
+	}
+	return carriesTailscale(ips)
+}
+
+func carriesTailscale(ips []netip.Addr) bool {
+	for _, ip := range ips {
+		if isTailscale(ip) {
+			return true
+		}
+	}
+	return false
+}
 
 func isTailscale(a netip.Addr) bool { return tailscaleV4.Contains(a) || tailscaleV6.Contains(a) }
 

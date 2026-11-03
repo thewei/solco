@@ -22,7 +22,7 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 internal/remotedesktop（Service/Authorizer/Settings）与其 platform/auto + macos 后端、protocol 线格式、remotehost.IsVirtualInterface、settings.RemoteDesktop、controls.go 的开关/分段/按钮、settingsGroup/row/statusPill 共享设置组件、activateWindow、mygo.NewNotification
+ * [INPUT]: 依赖 internal/remotedesktop（Service/Authorizer/Settings）与其 platform/auto + macos 后端、protocol 线格式、remotehost.ICEInterface、settings.RemoteDesktop、controls.go 的开关/分段/按钮、settingsGroup/row/statusPill 共享设置组件、activateWindow、mygo.NewNotification
  * [OUTPUT]: remoteDesktopSettingsPath、Shell.settingsRemoteDesktop（/settings/remote-desktop：开关 → 状态卡 → 权限（Screen Recording / Accessibility 分开列、系统设置直达、自动复检）→ 连接（每次询问、画质）→ 当前会话与一键断开）、Shell.remoteDesktopDialog（手机请求连接的批准模态：拒绝 / 仅查看 / 允许控制）、Shell.remoteDesktopService、Shell.syncRemoteDesktop、Shell.stopRemoteDesktop、remoteDesktopSeam
  * [POS]: Remote Desktop（手机看 Mac 整个桌面并操控，用户 2026-11-03 批准）在桌面端的唯一呈现与挂载点：默认关闭；开启后手机经 Remote Host 的 /remote-desktop 信令请求连接，Service 先查权限与忙闲，再由本文件弹出批准模态（默认每次询问，窗口被拉到最前并发系统通知），
  *        用户可降级为“仅查看”；会话只在 Mac 用户一键断开、撤销手机、关闭开关或退出时结束；屏幕内容、剪贴板与输入文本永不进日志与设置；Swift helper 由 Service 的 macOS 后端按需拉起，Solco 自己不抓屏、不注入输入
@@ -83,8 +83,8 @@ func (s *Shell) remoteDesktopService() *remotedesktop.Service {
 		Trust:      shellTrust{s},
 		// One ICE list for the whole remote stack: the Host's own (static STUN/TURN + the relay's short-lived
 		// TURN credentials). It is used only for a phone that arrives off the LAN (srflx/relay in its offer);
-		// LAN and Tailscale phones connect on host candidates alone. Tunnels stay in (a Tailscale phone arrives
-		// on one); VM bridges and system links do not.
+		// LAN and Tailscale phones connect on host candidates alone. Only a Tailscale tunnel stays in
+		// (a Tailscale phone arrives on it); VM bridges, system links and any other tunnel do not.
 		ICEServers: s.remoteICEServers,
 		// The Mac login password lives only in the encrypted credential file; the session reads it for the
 		// instant of typing and the phone can never ask for it.
@@ -92,12 +92,10 @@ func (s *Shell) remoteDesktopService() *remotedesktop.Service {
 			pw, ok := appSecrets.Get(rdUnlockKey)
 			return pw, ok && pw != ""
 		},
-		AutoUnlock: r.autoUnlock.Load,
-		InterfaceFilter: func(name string) bool {
-			return !remotehost.IsVirtualInterface(name) || strings.HasPrefix(name, "utun")
-		},
-		OnChange: func() { s.applyOnWindow(func() { s.rdRefreshSessions() }) },
-		Log:      slog.Default(),
+		AutoUnlock:      r.autoUnlock.Load,
+		InterfaceFilter: remotehost.ICEInterface,
+		OnChange:        func() { s.applyOnWindow(func() { s.rdRefreshSessions() }) },
+		Log:             slog.Default(),
 	})
 	r.svc.SetSettings(remoteDesktopSettingsFrom(s.settings.RemoteDesktop))
 	return r.svc

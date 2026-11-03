@@ -31,6 +31,7 @@ import (
 	"github.com/thewei/solco/internal/remotedesktop/platform/auto"
 	"github.com/thewei/solco/internal/remotedesktop/platform/macos"
 	"github.com/thewei/solco/internal/remotedesktop/protocol"
+	"github.com/thewei/solco/internal/remotedesktop/rtc"
 	"github.com/thewei/solco/internal/remotehost"
 )
 
@@ -119,11 +120,23 @@ func main() {
 		panic(err)
 	}
 
+	// The Host's STUN/TURN list (relay-issued TURN included), exactly what the app's Shell hands the service.
+	var host *remotehost.Server
 	svc := remotedesktop.NewService(remotedesktop.Config{
+		ICEServers: func(ctx context.Context) []rtc.ICEServer {
+			if host == nil {
+				return nil
+			}
+			var out []rtc.ICEServer
+			for _, sv := range host.ICEServers(ctx) {
+				out = append(out, rtc.ICEServer{URLs: sv.URLs, Username: sv.Username, Credential: sv.Credential})
+			}
+			return out
+		},
 		Backend:         auto.New(macos.Options{Logger: log}),
 		Authorizer:      authorizer{*approve},
 		Trust:           newMemTrust(),
-		InterfaceFilter: func(name string) bool { return !remotehost.IsVirtualInterface(name) || strings.HasPrefix(name, "utun") },
+		InterfaceFilter: remotehost.ICEInterface,
 		Log:             log,
 	})
 	svc.SetSettings(remotedesktop.Settings{Enabled: true, RequireApproval: *approve == "dialog", DefaultTier: protocol.Tier(*tier)})
@@ -140,6 +153,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	host = srv
 	srv.SetP2P(remotehost.P2PConfig{Enabled: true})
 	if err := srv.Start(); err != nil {
 		panic(err)

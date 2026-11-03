@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -192,6 +193,7 @@ func (s *Service) Info(ctx context.Context) protocol.Info {
 
 // Open admits one phone: checks, approval, helper, WebRTC answer. On error nothing is left running.
 func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer protocol.Offer) (protocol.Answer, error) {
+	began := time.Now()
 	if offer.Protocol != protocol.Version {
 		return protocol.Answer{}, protocol.Errf(protocol.CodeProtocolUnsupported, "protocol %d", offer.Protocol)
 	}
@@ -293,6 +295,9 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 	peer, sdp, err := rtc.Answer(ctx, offer.SDP, rtc.Options{
 		ICEServers: s.iceServersFor(ctx, offer.SDP), InterfaceFilter: s.cfg.InterfaceFilter,
 		StartKbps: protocol.Specs[tier].BitrateKbps,
+		Trace: func(event string, kv ...any) {
+			s.log.Info("remote desktop "+event, append([]any{"session", id}, kv...)...)
+		},
 		Handlers: rtc.Handlers{
 			OnBandwidth:       sess.OnBandwidth,
 			OnControl:         sess.OnControl,
@@ -324,7 +329,8 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 	s.active = sess
 	s.mu.Unlock()
 	sess.Attach(peer)
-	s.log.Info("remote desktop session admitted", "session", id, "device", device.ID, "mode", string(mode), "tier", string(tier))
+	s.log.Info("remote desktop session admitted", "session", id, "device", device.ID, "mode", string(mode), "tier", string(tier),
+		"offer", candidateKinds(offer.SDP), "answer", candidateKinds(sdp), "took_ms", time.Since(began).Milliseconds())
 	return protocol.Answer{SessionID: id, SDP: sdp, State: sess.State()}, nil
 }
 
@@ -441,4 +447,24 @@ func (s *Service) iceServersFor(ctx context.Context, sdp string) []rtc.ICEServer
 // offersOffLAN reports whether an SDP offer carries a server-reflexive or relayed candidate.
 func offersOffLAN(sdp string) bool {
 	return strings.Contains(sdp, " typ srflx") || strings.Contains(sdp, " typ relay")
+}
+
+// candidateKinds counts an SDP's ICE candidates by type ("host=2 srflx=1 relay=0"): types only, so no address
+// reaches a log line. It is how a slow or failed link says whether the pair explosion is back.
+func candidateKinds(sdp string) string {
+	var host, srflx, relay int
+	for _, line := range strings.Split(sdp, "\n") {
+		if !strings.HasPrefix(line, "a=candidate:") {
+			continue
+		}
+		switch {
+		case strings.Contains(line, " typ host"):
+			host++
+		case strings.Contains(line, " typ srflx"):
+			srflx++
+		case strings.Contains(line, " typ relay"):
+			relay++
+		}
+	}
+	return fmt.Sprintf("host=%d srflx=%d relay=%d", host, srflx, relay)
 }

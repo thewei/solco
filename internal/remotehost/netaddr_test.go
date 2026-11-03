@@ -186,3 +186,20 @@ func TestReconfigureFailsCleanlyWhenThePortIsTaken(t *testing.T) {
 		t.Fatal("bind over a busy port succeeded")
 	}
 }
+
+func TestICEInterfaceKeepsOnlyTailscaleTunnels(t *testing.T) {
+	for _, name := range []string{"bridge100", "feth1893", "awdl0", "llw0", "utun1024-missing"} {
+		if ICEInterface(name) {
+			t.Errorf("%s must not gather ICE candidates", name)
+		}
+	}
+	if !ICEInterface("en0") || !ICEInterface("en7") {
+		t.Fatal("ordinary interfaces must pass")
+	}
+	proxy := []netip.Addr{netip.MustParseAddr("198.18.0.1")}
+	vpn := []netip.Addr{netip.MustParseAddr("10.8.0.2")}
+	ts := []netip.Addr{netip.MustParseAddr("fe80::1"), netip.MustParseAddr("100.101.102.103")}
+	if carriesTailscale(proxy) || carriesTailscale(vpn) || !carriesTailscale(ts) {
+		t.Fatal("only a tunnel with a Tailscale address stays")
+	}
+}

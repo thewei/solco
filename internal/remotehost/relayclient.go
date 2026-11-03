@@ -56,8 +56,11 @@ const (
 	// 保活：NAT/代理/中间层会静默清除空闲的 WSS 流（2026-11 实测：注册后
 	// 数秒即死，hreq 投进半开套接字）。CF hibernation 在协议层自动应答
 	// ping、不唤醒 DO；pong 超时即 CloseNow 触发快速重拨。
-	relayPingInterval = 20 * time.Second
-	relayPongTimeout  = 10 * time.Second
+	// 2026-11-03 实测（Mac 开全局代理 TUN）：半开套接字平均悬挂 ~30 s（20 s 间隔 + 10 s 超时），
+	// 期间手机的 /remote-desktop/session 请求被投进黑洞、整个重连卡死；缩到 6 s + 4 s，
+	// 最坏 10 s 内发现并重拨（一次 ping 帧的流量可忽略）。
+	relayPingInterval = 6 * time.Second
+	relayPongTimeout  = 4 * time.Second
 	// closeReplaced is the relay's close code when another agent took the
 	// hash: redialling would just fight the winner, so it is terminal.
 	closeReplaced websocket.StatusCode = 4000
