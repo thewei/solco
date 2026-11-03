@@ -196,6 +196,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.approval(rest, body)
 	case "task":
 		return a.task(rest, body)
+	case "coordinator":
+		return a.coordinator(rest, body)
 	case "run":
 		return a.run(rest, body)
 	}
@@ -204,7 +206,7 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 
 func (a *API) task(args []string, body []byte) (any, error) {
 	if len(args) == 0 {
-		return nil, coded("invalid", "usage: assistant task <create|list|show|retry>")
+		return nil, coded("invalid", "usage: assistant task <create|list|show|ack|retry|publish|deps|graph>")
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {
@@ -252,8 +254,64 @@ func (a *API) task(args []string, body []byte) (any, error) {
 		}
 		x, replayed, err := a.Store.RetryTask(in.RequestID, rest[0], in.ExpectedRevision)
 		return ok("task", x, "replayed", replayed), err
+	case "publish":
+		var in common
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant task publish <id>")
+		}
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		x, replayed, err := a.Store.PublishTask(in.RequestID, rest[0], in.ExpectedRevision)
+		return ok("task", x, "replayed", replayed), err
+	case "deps":
+		var in struct {
+			common
+			DependsOn []string `json:"dependsOn"`
+		}
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant task deps <id>")
+		}
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		x, replayed, err := a.Store.AddDependencies(in.RequestID, rest[0], in.DependsOn, in.ExpectedRevision)
+		return ok("task", x, "replayed", replayed), err
+	case "graph":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant task graph <assistantId>")
+		}
+		nodes, err := a.Store.TaskGraph(rest[0])
+		return ok("nodes", nodes), err
 	}
 	return nil, coded("invalid", "unknown task command %q", cmd)
+}
+
+func (a *API) coordinator(args []string, body []byte) (any, error) {
+	if len(args) < 2 {
+		return nil, coded("invalid", "usage: assistant coordinator <show|start|stop> <assistantId>")
+	}
+	cmd, id := args[0], args[1]
+	var in common
+	switch cmd {
+	case "show":
+		c, err := a.Store.GetCoordinator(id)
+		return ok("coordinator", c), err
+	case "start", "stop":
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		var c Coordinator
+		var replayed bool
+		var err error
+		if cmd == "start" {
+			c, replayed, err = a.Store.StartCoordinator(in.RequestID, id)
+		} else {
+			c, replayed, err = a.Store.StopCoordinator(in.RequestID, id)
+		}
+		return ok("coordinator", c, "replayed", replayed), err
+	}
+	return nil, coded("invalid", "unknown coordinator command %q", cmd)
 }
 
 func (a *API) run(args []string, _ []byte) (any, error) {
@@ -306,7 +364,7 @@ func (a *API) overview() (any, error) {
 		row := OverviewRow{ID: x.ID, Name: x.Name, Status: x.Status, Revision: x.Revision, Tasks: len(tasks)}
 		for _, t := range tasks {
 			switch t.State {
-			case TaskQueued, TaskClaimed:
+			case TaskQueued, TaskClaimed, TaskWaiting:
 				row.Queued++
 			case TaskStarting, TaskRunning:
 				row.Running++

@@ -314,6 +314,25 @@ var migrations = []string{
 		pending TEXT NOT NULL DEFAULT '[]',
 		revision INTEGER NOT NULL DEFAULT 0
 	);`,
+	// v9: the task dependency graph and each Assistant's Coordinator (E01).
+	`CREATE TABLE task_deps (
+		task_id TEXT NOT NULL,
+		depends_on TEXT NOT NULL,
+		PRIMARY KEY (task_id, depends_on)
+	);
+	CREATE INDEX task_deps_by_dep ON task_deps(depends_on);
+	CREATE TABLE coordinators (
+		assistant_id TEXT PRIMARY KEY,
+		state TEXT NOT NULL,
+		task_id TEXT NOT NULL DEFAULT '',
+		herdr_session TEXT NOT NULL DEFAULT '',
+		workspace_id TEXT NOT NULL DEFAULT '',
+		pane_id TEXT NOT NULL DEFAULT '',
+		agent_session_id TEXT NOT NULL DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);`,
 }
 
 func (s *Store) migrate() error {

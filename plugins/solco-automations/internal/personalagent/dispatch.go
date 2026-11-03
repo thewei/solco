@@ -49,6 +49,8 @@ type LaunchSpec struct {
 	// WorkDir, when set, is the folder the Agent works in (a coding task's own
 	// worktree); the launcher opens a plain workspace there.
 	WorkDir string
+	// AssistantID owns the run; a Coordinator's folder is named after it.
+	AssistantID string
 }
 
 // Launcher is the Herdr seam. The production adapter drives the same
@@ -139,6 +141,9 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		policy = BuildPrompt
 	}
 	prompt := policy(asst, task)
+	if task.Kind == KindCoordinator && d.Policy == nil {
+		prompt = CoordinatorPrompt(asst)
+	}
 	var auto *config.Automation
 	timeout := d.timeout()
 	if name, isRule := LegacyRuleName(task.RuleID); isRule {
@@ -178,7 +183,7 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		prompt += fmt.Sprintf("\n\nYou are working in an isolated git worktree on branch %s (baseline %s). Commit your work on this branch; do not switch branches, merge, push or touch any other checkout.", info.Branch, shortHash(info.BaseHead))
 	}
 	spec := LaunchSpec{
-		RunID: run.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath,
+		RunID: run.ID, TaskID: task.ID, AssistantID: task.AssistantID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath,
 		Label:   markerLabel(task.Title, run.ID),
 		Prompt:  prompt,
 		Timeout: timeout,
@@ -208,6 +213,7 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 			sess = found
 		default:
 			_ = d.Store.FinishRun(run.ID, RunFailed, "could not start: "+perr.Error())
+			d.settle(run.ID)
 			return d.reload(run.ID), perr
 		}
 	}
@@ -259,9 +265,6 @@ func (d *Dispatcher) park(run Run, why error) (Run, error) {
 
 // settle tells the observer where a run stands now.
 func (d *Dispatcher) settle(runID string) {
-	if d.OnSettled == nil {
-		return
-	}
 	run, err := d.Store.GetRun(runID)
 	if err != nil {
 		return
@@ -270,7 +273,10 @@ func (d *Dispatcher) settle(runID string) {
 	if err != nil {
 		return
 	}
-	d.OnSettled(task, run)
+	d.Store.syncCoordinator(task, run)
+	if d.OnSettled != nil {
+		d.OnSettled(task, run)
+	}
 }
 
 func (d *Dispatcher) reload(id string) Run {
@@ -310,6 +316,9 @@ func (d *Dispatcher) Reconcile(ctx context.Context, runID string) (Run, error) {
 // and runs each in its own goroutine. It returns how many it started.
 func (d *Dispatcher) Pump(ctx context.Context) int {
 	started := 0
+	if _, err := d.Store.Promote(); err != nil {
+		log.Printf("personal agent: promoting waiting tasks: %v", err)
+	}
 	tasks, err := d.Store.QueuedTasks()
 	if err != nil {
 		log.Printf("personal agent: listing queued tasks: %v", err)

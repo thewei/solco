@@ -12,6 +12,9 @@ const (
 	KindResearch = "research" // read-only analysis, no repo writes
 	KindCoding   = "coding"   // works in an isolated worktree, never merges
 	KindManual   = "manual"   // a single Agent in a plain workspace
+	// KindCoordinator is an Assistant's long-lived Coordinator Agent. It is made
+	// only by StartCoordinator, never through CreateTask.
+	KindCoordinator = "coordinator"
 )
 
 // Task states (docs/personal-agent-go-mvp-plan.md §5.2).
@@ -27,6 +30,8 @@ const (
 	TaskFailed         = "failed"
 	TaskCancelled      = "cancelled"
 	TaskUncertain      = "uncertain"
+	// TaskWaiting is a published task whose dependencies are not all done.
+	TaskWaiting = "waiting"
 )
 
 // Run statuses.
@@ -112,6 +117,8 @@ type CreateTaskInput struct {
 	Model        string `json:"model,omitempty"`
 	// Draft keeps the task out of the queue until a person approves it.
 	Draft bool `json:"draft,omitempty"`
+	// DependsOn lists tasks of the same Assistant that must be done first.
+	DependsOn []string `json:"dependsOn,omitempty"`
 }
 
 const taskCols = `id,assistant_id,goal_id,rule_id,parent_task_id,kind,title,brief,repo_path,agent,model,state,needs_you,review_state,attempt,revision,created_at,updated_at`
@@ -186,9 +193,23 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 				return Task{}, fmt.Errorf("%w: goal %q is not this assistant's", ErrInvalid, in.GoalID)
 			}
 		}
+		if in.ParentTaskID != "" {
+			p, err := getTaskTx(tx, in.ParentTaskID)
+			if err != nil || p.AssistantID != in.AssistantID {
+				return Task{}, fmt.Errorf("%w: parent %q is not this assistant's task", ErrInvalid, in.ParentTaskID)
+			}
+		}
+		deps, err := checkDeps(tx, in.AssistantID, "", in.DependsOn)
+		if err != nil {
+			return Task{}, err
+		}
 		state := TaskQueued
 		if in.Draft {
 			state = TaskDraft
+		} else if open, err := anyOpenDep(tx, deps); err != nil {
+			return Task{}, err
+		} else if open {
+			state = TaskWaiting
 		}
 		now := s.nowMS()
 		id := newID("t")
@@ -197,6 +218,11 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 			state, 0, "", 1, 1, now, now)
 		if err != nil {
 			return Task{}, err
+		}
+		for _, d := range deps {
+			if _, err := tx.Exec(`INSERT INTO task_deps(task_id,depends_on) VALUES(?,?)`, id, d); err != nil {
+				return Task{}, err
+			}
 		}
 		if err := emitTask(tx, id, "task.added", now); err != nil {
 			return Task{}, err

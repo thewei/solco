@@ -49,6 +49,10 @@ func (l *HostLauncher) automation(spec LaunchSpec) config.Automation {
 	}
 	if repo == "" {
 		repo = filepath.Join(l.WorkDirRoot, "personal")
+		if spec.Kind == KindCoordinator && spec.AssistantID != "" {
+			// Each Coordinator has a folder of its own.
+			repo = filepath.Join(repo, "coordinators", spec.AssistantID)
+		}
 		_ = os.MkdirAll(repo, 0o700)
 	}
 	mode := config.WorkspaceRoot
