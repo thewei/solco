@@ -118,3 +118,55 @@ func containsStr(s, sub string) bool {
 	}
 	return false
 }
+
+// The control channel's wire (data-channel JSON) is pinned beside the HTTP signalling: the phone's
+// builders and Zod parsers are tested against these exact bytes.
+func TestRemoteDesktopControlGolden(t *testing.T) {
+	phoneToMac := map[string]string{
+		"pointer-move":   `{"type":"pointer.move","seq":7,"x":0.5,"y":0.25,"displayId":"1"}`,
+		"pointer-button": `{"type":"pointer.button","seq":8,"x":0.5,"y":0.25,"button":"left","down":true,"clickCount":2,"displayId":"1"}`,
+		"pointer-scroll": `{"type":"pointer.scroll","seq":9,"dx":0,"dy":-120}`,
+		"key":            `{"type":"key","code":"KeyC","down":true}`,
+		"text-insert":    `{"type":"text.insert","text":"你好, world"}`,
+		"clipboard-set":  `{"type":"clipboard.set","text":"copied on the phone"}`,
+		"clipboard-get":  `{"type":"clipboard.get"}`,
+		"display-select": `{"type":"display.select","displayId":"2"}`,
+		"quality-set":    `{"type":"quality.set","tier":"high"}`,
+		"keyframe":       `{"type":"keyframe.request"}`,
+		"ping":           `{"type":"ping","t":1700000000000}`,
+		"session-end":    `{"type":"session.end"}`,
+		"release-all":    `{"type":"input.release_all"}`,
+		"stats-request":  `{"type":"stats.request"}`,
+	}
+	for name, raw := range phoneToMac {
+		if _, err := protocol.Decode([]byte(raw)); err != nil {
+			t.Fatalf("%s: the Mac refuses its own golden: %v", name, err)
+		}
+		golden(t, "remote-desktop-ctl-"+name+".json", []byte(raw))
+	}
+
+	st := protocol.SessionState{
+		Mode: protocol.ModeFullControl, DisplayID: "1", Tier: protocol.TierStandard, Width: 1728, Height: 1080, FPS: 30, Hardware: true,
+		Displays: []protocol.DisplayInfo{
+			{ID: "1", Name: "Built-in Retina Display", X: 0, Y: 0, Width: 1440, Height: 900, PixelWidth: 2880, PixelHeight: 1800, Scale: 2, IsMain: true},
+			{ID: "2", Name: "DELL U2723QE", X: 1440, Y: -200, Width: 1920, Height: 1080, PixelWidth: 3840, PixelHeight: 2160, Scale: 2},
+		},
+	}
+	macToPhone := map[string]any{
+		"session-state":  protocol.SessionStateMsg{SessionState: st},
+		"clipboard-text": protocol.ClipboardText{Text: "copied on the Mac"},
+		"error":          protocol.ErrorMsg{Code: protocol.CodeViewOnly},
+		"error-message":  protocol.ErrorMsg{Code: protocol.CodePermissionRequired, Message: "accessibility"},
+		"pong":           protocol.Pong{T: 1700000000000},
+		"stats": protocol.StatsMsg{ConnectionStats: protocol.ConnectionStats{
+			RTTMillis: 12.5, BitrateKbps: 4200, FPS: 29.7, FramesSent: 1800, FramesDropped: 2, KeyframesSent: 15, KeyframeRequest: 1, PathType: "host", UptimeSeconds: 60,
+		}},
+	}
+	for name, msg := range macToPhone {
+		raw, err := protocol.Marshal(msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		golden(t, "remote-desktop-ctl-"+name+".json", raw)
+	}
+}

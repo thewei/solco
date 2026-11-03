@@ -1,0 +1,10 @@
+{
+  "type": "pointer.button",
+  "seq": 8,
+  "x": 0.5,
+  "y": 0.25,
+  "button": "left",
+  "down": true,
+  "clickCount": 2,
+  "displayId": "1"
+}
