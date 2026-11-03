@@ -74,12 +74,12 @@ func (s LaunchSpec) titleHint() string {
 // Provision opens the workspace for a run.
 func (l *HostLauncher) Provision(spec LaunchSpec) (Session, error) {
 	hs, err := l.Host.Provision(l.automation(spec))
-	return Session{HerdrSession: hs.HerdrSession, WorkspaceID: hs.WorkspaceID, PaneID: hs.PaneID}, err
+	return Session{HerdrSession: hs.HerdrSession, WorkspaceID: hs.WorkspaceID, PaneID: hs.PaneID, Branch: hs.Branch}, err
 }
 
 // Work starts the Agent, hands it the prompt and waits.
 func (l *HostLauncher) Work(ctx context.Context, sess Session, spec LaunchSpec) error {
-	return l.mapErr(l.Host.Do(host.Session{WorkspaceID: sess.WorkspaceID, PaneID: sess.PaneID, HerdrSession: sess.HerdrSession}, l.automation(spec), spec.Timeout))
+	return l.mapErr(l.Host.Do(host.Session{WorkspaceID: sess.WorkspaceID, PaneID: sess.PaneID, HerdrSession: sess.HerdrSession, Branch: sess.Branch}, l.automation(spec), spec.Timeout))
 }
 
 // Await waits for an Agent that is already working: Herdr's own wait on the pane.

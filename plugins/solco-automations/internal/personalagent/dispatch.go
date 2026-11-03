@@ -276,11 +276,13 @@ func (d *Dispatcher) Reconcile(ctx context.Context, runID string) (Run, error) {
 	}
 	if !ok {
 		_ = d.Store.FinishRun(run.ID, RunFailed, "no workspace was created for this run")
+		d.settle(run.ID)
 		return d.reload(run.ID), nil
 	}
 	if err := d.Store.RecordLaunch(run.ID, sess); err != nil {
 		return run, err
 	}
+	d.settle(run.ID)
 	return d.reload(run.ID), nil
 }
 

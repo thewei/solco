@@ -21,9 +21,9 @@
 {"id": "SOLCO-R02", "batch": "E4", "scenario": "常驻 Host 保持同一个配对身份/证书指纹/设备撤销权限", "status": "planned", "target_test": null, "evidence": null}
 {"id": "SOLCO-R03", "batch": "B3", "scenario": "手机离线重连不重发审批/Run，撤销手机后 HTTP/WS 拒绝", "status": "planned", "target_test": null, "evidence": null}
 {"id": "SOLCO-R04", "batch": "A2", "scenario": "无真实 SessionRef 时不可由 Pane 标题或路径猜 Agent", "status": "planned", "target_test": null, "evidence": null}
-{"id": "SOLCO-R05", "batch": "D2", "scenario": "D 迁移期间现有旧手机 `/automations` 不退化/不双派", "status": "planned", "target_test": null, "evidence": null}
-{"id": "SOLCO-D01", "batch": "D1", "scenario": "旧自动化 Cron/queue/catchup/draft/TTL/30 天历史有同等测试", "status": "planned", "target_test": null, "evidence": null}
-{"id": "SOLCO-D02", "batch": "D1", "scenario": "逐条规则迁移水位线准确，旧/新不会执行同一个 occurrence", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-R05", "batch": "D2", "scenario": "D 迁移期间现有旧手机 `/automations` 不退化/不双派", "status": "verified", "target_test": "plugins/solco-automations/internal/daemon/personal_rules_test.go", "evidence": "TestLegacySchedulerSkipsOwnedRules (no double dispatch) + TestRuleRunsWriteTheOldHistory (old list/history readers keep their data); old /automations Host code untouched, root go test green"}
+{"id": "SOLCO-D01", "batch": "D1", "scenario": "旧自动化 Cron/queue/catchup/draft/TTL/30 天历史有同等测试", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/rules_test.go", "evidence": "TestCatchUpAndMissedMatchTheOldScheduler/TestOverlapSkipAndQueueMatchTheOldScheduler/TestDraftDisabledAndPausedNeverFire/TestRuleHistoryRetention/TestRuleTaskRunsTheRulesOwnDefinition green with -race; schedule.Plan is the shared policy"}
+{"id": "SOLCO-D02", "batch": "D1", "scenario": "逐条规则迁移水位线准确，旧/新不会执行同一个 occurrence", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/rules_test.go", "evidence": "TestAdoptMakesPersonalTheOnlyDispatcher + TestRollbackHandsStateBackOnce + daemon TestRollbackReturnsTheRuleToTheLegacyScheduler: watermark carried, restart cannot replay"}
 {"id": "SOLCO-D03", "batch": "E4", "scenario": "旧 `~/.herdr-projects` 仅显式备份/导出，绝不卸载即清空", "status": "planned", "target_test": null, "evidence": null}
 {"id": "SOLCO-E01", "batch": "E2", "scenario": "Git head 变化后旧 Merge 批准失效，脏文件/符号链接受保护", "status": "planned", "target_test": null, "evidence": null}
 {"id": "SOLCO-E02", "batch": "E1", "scenario": "多 Assistant Coordinator 并发时不共享其他助手权限/会话", "status": "planned", "target_test": null, "evidence": null}

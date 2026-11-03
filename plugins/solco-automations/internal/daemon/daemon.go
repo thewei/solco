@@ -23,6 +23,7 @@ import (
 	"github.com/thewei/solco/plugins/solco-automations/internal/host"
 	"github.com/thewei/solco/plugins/solco-automations/internal/hostpath"
 	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
+	"github.com/thewei/solco/plugins/solco-automations/internal/personalagent"
 	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
 	"github.com/thewei/solco/plugins/solco-automations/internal/schedule"
 )
@@ -86,12 +87,12 @@ func Run(standby bool) error {
 	tick := time.NewTicker(tickInterval)
 	defer tick.Stop()
 
-	assistants := startPersonal()
+	assistants := startPersonal(n)
 	defer assistants.close()
 	pump := time.NewTicker(pumpInterval)
 	defer pump.Stop()
 
-	evaluate(state, runs, n) // don't wait a full tick to notice what is already due
+	evaluateWith(state, runs, n, assistants) // don't wait a full tick to notice what is already due
 
 	for {
 		select {
@@ -124,8 +125,9 @@ func Run(standby bool) error {
 			if time.Since(lastMaintain) >= maintainInterval {
 				lastMaintain = time.Now()
 				maintain()
+				assistants.prune()
 			}
-			evaluate(state, runs, n)
+			evaluateWith(state, runs, n, assistants)
 		case s := <-sigs:
 			log.Printf("received %v, shutting down", s)
 			return nil
@@ -159,12 +161,30 @@ func noSessionLeft(list func() ([]string, error)) bool {
 
 // evaluate asks the schedule what should happen now, and does it.
 func evaluate(state *scheduleState, runs *runner.Runner, n *notify.Notifier) {
+	evaluateWith(state, runs, n, nil)
+}
+
+// evaluateWith is evaluate for a daemon that also runs Assistants: the rules
+// the Assistants ledger owns are dispatched there, so this scheduler must not
+// see them (one occurrence, one dispatcher). A rule just rolled back is
+// resumed from the watermark the ledger hands over, not from an older one.
+func evaluateWith(state *scheduleState, runs *runner.Runner, n *notify.Notifier, own *personal) {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Printf("config error, leaving the schedule untouched: %v", err)
 		return
 	}
-	dirty, invalid := reportInvalid(cfg, state)
+	dirty := false
+	for name, at := range own.handbacks() {
+		state.LastOccurrence[name] = at
+		dirty = true
+		log.Printf("%s: handed back to the legacy scheduler", name)
+	}
+	if owned := own.ownedRules(); len(owned) > 0 {
+		cfg = personalagent.FilterOwned(cfg, owned)
+	}
+	changedInvalid, invalid := reportInvalid(cfg, state)
+	dirty = dirty || changedInvalid
 
 	res := schedule.Plan(cfg, schedule.State{LastOccurrence: state.LastOccurrence}, time.Now())
 	state.LastOccurrence = res.State.LastOccurrence
@@ -252,6 +272,19 @@ func recordQueued(name string, trigger history.Trigger) {
 		RunID:      history.NewID(name, "queued"),
 		Automation: name, Trigger: trigger, Status: history.StatusQueued,
 		At: time.Now(), Error: "previous run still in flight",
+	})
+	if err != nil {
+		log.Printf("history append failed: %v", err)
+	}
+}
+
+// recordSkipped notes an occurrence passed over because the previous run of
+// the same automation was still working.
+func recordSkipped(name string, trigger history.Trigger, why string) {
+	err := history.Append(history.Record{
+		RunID:      history.NewID(name, "skipped"),
+		Automation: name, Trigger: trigger, Status: history.StatusSkipped,
+		At: time.Now(), Error: why,
 	})
 	if err != nil {
 		log.Printf("history append failed: %v", err)

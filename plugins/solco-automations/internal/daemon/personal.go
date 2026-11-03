@@ -4,10 +4,25 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
 	"github.com/thewei/solco/plugins/solco-automations/internal/personalagent"
+)
+
+// ruleEvery is how often the owned rules are evaluated: a few seconds of
+// precision is plenty for cron, and the config is a file read.
+const ruleEvery = 10 * time.Second
+
+// ruleHistoryKeep / ruleHistoryMax mirror the old history log's retention.
+const (
+	ruleHistoryKeep = 30 * 24 * time.Hour
+	ruleHistoryMax  = 5000
 )
 
 // pumpInterval is how often queued Assistant tasks are looked for. Much
@@ -24,23 +39,42 @@ type personal struct {
 	ctx     context.Context
 	watch   *personalagent.Watcher
 	beat    *personalagent.Beater
+	rules   *personalagent.RuleScheduler
 	polling atomic.Bool
+
+	notifier *notify.Notifier
+	lastRule time.Time
+	mu       sync.Mutex
+	seen     map[string]string // run id -> last status written to history
 }
 
-func startPersonal() *personal {
+func startPersonal(n *notify.Notifier) *personal {
 	store, err := personalagent.Open(personalagent.DBPath())
 	if err != nil {
 		log.Printf("assistants: store unavailable, Assistants are paused: %v", err)
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	p := &personal{store: store, ctx: ctx, cancel: cancel}
+	p := &personal{store: store, ctx: ctx, cancel: cancel, notifier: n, seen: map[string]string{}}
 	p.disp = &personalagent.Dispatcher{
 		Store:       store,
 		Launcher:    personalagent.NewHostLauncher(os.Getenv("SOLCO_ASSISTANTS_HERDR_SESSION"), personalagent.WorkDirRoot()),
 		Claimant:    "daemon",
 		MaxParallel: 2,
+		Rules: func(name string) (config.Automation, bool) {
+			cfg, err := config.Load()
+			if err != nil {
+				return config.Automation{}, false
+			}
+			a := cfg.Find(name)
+			if a == nil {
+				return config.Automation{}, false
+			}
+			return *a, true
+		},
+		OnSettled: p.settled,
 	}
+	p.rules = &personalagent.RuleScheduler{Store: store, Load: config.Load}
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
 	if n, err := store.Recover(); err != nil {
@@ -76,6 +110,10 @@ func (p *personal) tick() {
 	} else if r.Woke > 0 {
 		log.Printf("assistants: %d heartbeat wake(s) queued", r.Woke)
 	}
+	if time.Since(p.lastRule) >= ruleEvery {
+		p.lastRule = time.Now()
+		p.tickRules()
+	}
 	if n := p.disp.Pump(p.ctx); n > 0 {
 		log.Printf("assistants: started %d task(s)", n)
 	}
@@ -102,3 +140,130 @@ func (p *personal) close() {
 // busy reports a personal run in flight: the daemon must not hand itself over
 // to a newer binary while it still waits on Agents.
 func (p *personal) busy() bool { return p != nil && p.disp.Busy() }
+
+// ownedRules is what the old scheduler must leave alone (nil without a store).
+func (p *personal) ownedRules() map[string]bool {
+	if p == nil {
+		return nil
+	}
+	owned, err := p.store.OwnedLegacy()
+	if err != nil {
+		log.Printf("assistants: rule ledger: %v", err)
+		return nil
+	}
+	return owned
+}
+
+// handbacks returns the watermarks of rules just given back to the old
+// scheduler, once.
+func (p *personal) handbacks() map[string]time.Time {
+	if p == nil {
+		return nil
+	}
+	h, err := p.store.TakeHandbacks()
+	if err != nil {
+		log.Printf("assistants: rule handback: %v", err)
+		return nil
+	}
+	return h
+}
+
+// tickRules fires the owned rules and keeps the old history log whole about
+// the occurrences that did not become runs.
+func (p *personal) tickRules() {
+	rep, err := p.rules.Tick()
+	if err != nil {
+		log.Printf("assistants: rules: %v", err)
+		return
+	}
+	var missed []string
+	for _, n := range rep.Notes {
+		switch n.Status {
+		case "missed":
+			recordMissed(n.Name, n.Count, n.Detail)
+			missed = append(missed, n.Name)
+		case "queued":
+			recordQueued(n.Name, history.Trigger(n.Trigger))
+		case "skipped":
+			if n.Detail == "an occurrence is already queued" {
+				recordQueueFull(n.Name, history.Trigger(n.Trigger))
+			} else if strings.HasPrefix(n.Detail, "paused") {
+				recordPassedOver(n.Name, n.Count)
+			} else {
+				recordSkipped(n.Name, history.Trigger(n.Trigger), n.Detail)
+			}
+		}
+	}
+	p.notifier.Tick(missed, nil)
+	if rep.Fired > 0 {
+		log.Printf("assistants: %d scheduled rule occurrence(s) queued", rep.Fired)
+	}
+}
+
+// settled writes a rule's run into the old history log (and raises the old
+// toasts), so `history --json`, the desktop page and the phone read one story.
+func (p *personal) settled(t personalagent.Task, r personalagent.Run) {
+	name, isRule := personalagent.LegacyRuleName(t.RuleID)
+	if !isRule {
+		return
+	}
+	var st history.Status
+	switch r.Status {
+	case personalagent.RunClaimed, personalagent.RunStarting:
+		st = history.StatusScheduled
+	case personalagent.RunRunning:
+		st = history.StatusRunning
+	case personalagent.RunDone:
+		st = history.StatusDone
+	case personalagent.RunFailed:
+		st = history.StatusFailed
+	case personalagent.RunCancelled:
+		st = history.StatusCancelled
+	case personalagent.RunBlocked:
+		// The old runner failed a run that stopped on a dialog it must not answer.
+		st = history.StatusFailed
+	default:
+		return // uncertain: wait for reconciliation to say something true
+	}
+	p.mu.Lock()
+	if p.seen[r.ID] == string(st) {
+		p.mu.Unlock()
+		return
+	}
+	p.seen[r.ID] = string(st)
+	if st == history.StatusDone || st == history.StatusFailed || st == history.StatusCancelled {
+		delete(p.seen, r.ID)
+	}
+	p.mu.Unlock()
+	errMsg := r.Error
+	if st != history.StatusFailed && st != history.StatusCancelled {
+		errMsg = ""
+	}
+	var took time.Duration
+	if r.FinishedAt > 0 {
+		start := r.StartedAt
+		if start == 0 {
+			start = r.CreatedAt
+		}
+		took = time.Duration(r.FinishedAt-start) * time.Millisecond
+	}
+	if err := history.Append(history.Record{
+		RunID: r.ID, Automation: name, Trigger: history.TriggerCron, Status: st, At: time.Now(),
+		Session: r.HerdrSession, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, Worktree: r.Branch, Error: errMsg,
+	}); err != nil {
+		log.Printf("history append failed: %v", err)
+	}
+	p.notifier.Outcome(name, st, errMsg, took)
+}
+
+// prune is the daily chore for the rules' tasks.
+func (p *personal) prune() {
+	if p == nil {
+		return
+	}
+	if n, err := p.store.PruneRuleHistory(ruleHistoryKeep, ruleHistoryMax); err != nil {
+		log.Printf("assistants: rule history prune failed: %v", err)
+	} else if n > 0 {
+		log.Printf("assistants: pruned %d rule task(s) past retention", n)
+	}
+}

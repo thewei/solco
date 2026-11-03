@@ -268,6 +268,9 @@ var migrations = []string{
 		adopted_at INTEGER NOT NULL DEFAULT 0,
 		updated_at INTEGER NOT NULL DEFAULT 0
 	);`,
+	// v6: the worktree branch a run provisioned (history and the folder-trust
+	// check both name it); never on the wire.
+	`ALTER TABLE runs ADD COLUMN branch TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate() error {

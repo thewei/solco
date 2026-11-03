@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 // SchemaVersion is the wire version of every CLI answer.
@@ -60,6 +63,12 @@ type API struct {
 	// Dispatcher is only set where a Launcher exists (the daemon); commands
 	// that need Herdr answer `unavailable` without it.
 	Dispatcher *Dispatcher
+	// Config reads the legacy definitions (default config.Load); LegacyLast
+	// reads the old scheduler's watermarks (default: its schedule.json).
+	Config     func() (*config.Config, error)
+	LegacyLast func() map[string]time.Time
+	// Now is a test seam.
+	Now func() time.Time
 }
 
 type envelope map[string]any
@@ -112,7 +121,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|overview>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|overview>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
@@ -175,6 +184,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.heartbeat(rest, body)
 	case "event":
 		return a.events(rest, body)
+	case "rule":
+		return a.rule(rest, body)
 	case "approval":
 		return a.approval(rest, body)
 	case "task":

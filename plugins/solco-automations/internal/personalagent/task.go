@@ -82,6 +82,9 @@ type Run struct {
 	CreatedAt      int64  `json:"createdAt"`
 	StartedAt      int64  `json:"startedAt"`
 	FinishedAt     int64  `json:"finishedAt"`
+	// Branch is the run worktree's branch when it has one (internal; the
+	// legacy history record carries it so the app can find the checkout).
+	Branch string `json:"-"`
 }
 
 // Session is the Herdr place a run happens, exactly as Herdr reported it.
@@ -91,6 +94,8 @@ type Session struct {
 	WorkspaceID    string `json:"workspaceId"`
 	PaneID         string `json:"paneId"`
 	AgentSessionID string `json:"agentSessionId,omitempty"`
+	// Branch is the worktree branch Provision made, when it made one.
+	Branch string `json:"branch,omitempty"`
 }
 
 // CreateTaskInput is the body of `assistant task create`.
@@ -132,12 +137,12 @@ func getTaskTx(q queryRower, id string) (Task, error) {
 	return t, wrapBusy(err)
 }
 
-const runCols = `id,task_id,rule_id,event_id,idempotency_key,status,claimant,herdr_session,workspace_id,pane_id,agent_session_id,label,result,error,created_at,started_at,finished_at`
+const runCols = `id,task_id,rule_id,event_id,idempotency_key,status,claimant,herdr_session,workspace_id,pane_id,agent_session_id,label,result,error,created_at,started_at,finished_at,branch`
 
 func scanRun(r rowScanner) (Run, error) {
 	var x Run
 	err := r.Scan(&x.ID, &x.TaskID, &x.RuleID, &x.EventID, &x.IdempotencyKey, &x.Status, &x.Claimant, &x.HerdrSession,
-		&x.WorkspaceID, &x.PaneID, &x.AgentSessionID, &x.Label, &x.Result, &x.Error, &x.CreatedAt, &x.StartedAt, &x.FinishedAt)
+		&x.WorkspaceID, &x.PaneID, &x.AgentSessionID, &x.Label, &x.Result, &x.Error, &x.CreatedAt, &x.StartedAt, &x.FinishedAt, &x.Branch)
 	return x, err
 }
 
@@ -369,8 +374,8 @@ func (s *Store) SetLabel(runID, label string) error {
 // running. It also accepts an `uncertain` run: reconciliation found the pane.
 func (s *Store) RecordLaunch(runID string, sess Session) error {
 	return s.setRun(runID, []string{RunStarting, RunUncertain}, RunRunning, TaskRunning, func(tx *sql.Tx, _ int64) error {
-		_, err := tx.Exec(`UPDATE runs SET herdr_session=?, workspace_id=?, pane_id=?, agent_session_id=?, error='' WHERE id=?`,
-			sess.HerdrSession, sess.WorkspaceID, sess.PaneID, sess.AgentSessionID, runID)
+		_, err := tx.Exec(`UPDATE runs SET herdr_session=?, workspace_id=?, pane_id=?, agent_session_id=?, branch=CASE WHEN ?='' THEN branch ELSE ? END, error='' WHERE id=?`,
+			sess.HerdrSession, sess.WorkspaceID, sess.PaneID, sess.AgentSessionID, sess.Branch, sess.Branch, runID)
 		return err
 	})
 }
