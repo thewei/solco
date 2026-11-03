@@ -48,3 +48,14 @@ func TestUnitCarriesTheDaemonAndItsEnvironment(t *testing.T) {
 		}
 	}
 }
+
+// The upstream plugin's service has the same binary name; sharing its label or
+// unit would let one install replace the other's scheduler.
+func TestServiceNamesDoNotCollideWithTheUpstreamPlugin(t *testing.T) {
+	if Label == "dev.dnzzl.herdr-automations" || UnitName == "herdr-automations.service" {
+		t.Fatalf("service names collide with upstream: %s, %s", Label, UnitName)
+	}
+	if !strings.Contains(unitPath(), UnitName) {
+		t.Errorf("unit path %q lacks %q", unitPath(), UnitName)
+	}
+}

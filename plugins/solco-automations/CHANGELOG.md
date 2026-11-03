@@ -4,6 +4,9 @@ What changed for someone using the plugin. Dates are release dates.
 
 ## Unreleased
 
+- The login service is this fork's own (`com.whstudio.solco.automations` launchd label,
+  `solco-automations.service` systemd unit), so installing it no longer replaces
+  the upstream plugin's scheduler of the same binary name.
 - **Headless runs**: `headless: true` (`add --headless`) runs the agent in its own
   non-interactive mode — claude `-p`, codex `exec`, pi/omp `-p` — so no
   first-run trust dialog can stop an unattended run. The prompt travels in a

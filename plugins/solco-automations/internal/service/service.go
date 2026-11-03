@@ -16,8 +16,14 @@ import (
 	"strings"
 )
 
-// Label names the service in launchd and systemd.
-const Label = "dev.dnzzl.herdr-automations"
+// Label names the service in launchd, UnitName in systemd. Both are this
+// fork's own: the upstream plugin installs a service of the same binary name
+// under dev.dnzzl.herdr-automations / herdr-automations.service, and sharing
+// either would make one install silently replace the other's scheduler.
+const (
+	Label    = "com.whstudio.solco.automations"
+	UnitName = "solco-automations.service"
+)
 
 // Spec is what the service runs, settled at install time.
 type Spec struct {
@@ -47,7 +53,7 @@ func Install(program string, env map[string]string, logs string) (string, error)
 		if err := systemctl("daemon-reload"); err != nil {
 			return "", err
 		}
-		return path, systemctl("enable", "--now", "herdr-automations.service")
+		return path, systemctl("enable", "--now", UnitName)
 	}
 	return "", fmt.Errorf("no service support on %s; run `herdr-automations daemon` yourself", runtime.GOOS)
 }
@@ -59,7 +65,7 @@ func Uninstall() error {
 		_ = launchctl("bootout", domain()+"/"+Label)
 		return removeIfThere(plistPath())
 	case "linux":
-		_ = systemctl("disable", "--now", "herdr-automations.service")
+		_ = systemctl("disable", "--now", UnitName)
 		if err := removeIfThere(unitPath()); err != nil {
 			return err
 		}
@@ -85,7 +91,7 @@ func plistPath() string {
 
 func unitPath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "systemd", "user", "herdr-automations.service")
+	return filepath.Join(home, ".config", "systemd", "user", UnitName)
 }
 
 func domain() string { return "gui/" + strconv.Itoa(os.Getuid()) }
@@ -121,7 +127,7 @@ func plist(s Spec) string {
 
 func unit(s Spec) string {
 	var b strings.Builder
-	b.WriteString("[Unit]\nDescription=herdr-automations scheduler\n\n[Service]\n")
+	b.WriteString("[Unit]\nDescription=Solco automations scheduler\n\n[Service]\n")
 	b.WriteString(fmt.Sprintf("ExecStart=%q daemon --standby\n", s.Exe))
 	for _, k := range sortedKeys(s.Env) {
 		b.WriteString(fmt.Sprintf("Environment=%q\n", k+"="+s.Env[k]))

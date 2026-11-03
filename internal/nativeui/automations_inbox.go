@@ -63,7 +63,11 @@ func (s *Shell) refreshAutomationsBackground() {
 	if !s.automationsAvailable() || list.loading {
 		return
 	}
-	if !list.loadedAt.IsZero() && timeNow().Sub(list.loadedAt) < automationsBackgroundGap {
+	gap := automationsBackgroundGap
+	if list.busy(timeNow()) {
+		gap = automationsPollGap
+	}
+	if !list.loadedAt.IsZero() && timeNow().Sub(list.loadedAt) < gap {
 		return
 	}
 	s.refreshAutomations(true)

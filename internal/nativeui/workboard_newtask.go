@@ -181,10 +181,18 @@ func (s *Shell) newTaskDialog(c *ui.Context) {
 		t := c.Theme()
 		ui.Column(c).Width(420).MaxWidth(480).Gap(sp.L).Children(func() {
 			modalTitle(c, "New Task")
-			textField(c, &d.title).Label("Title").Placeholder("Title").AutoFocus().FillWidth()
-			textArea(c, &d.desc).Label("Description").Placeholder("Description (optional)").FillWidth().Height(72)
-			segmentedControl(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
-			textField(c, &d.after).Label("After").Placeholder("Wait for tasks, e.g. r/12, r/13 (optional)").FillWidth()
+			captionedField(c, "Title", "", func() {
+				textField(c, &d.title).Label("Title").Placeholder("Title").AutoFocus().FillWidth()
+			})
+			captionedField(c, "Description", "", func() {
+				textArea(c, &d.desc).Label("Description").Placeholder("Description (optional)").FillWidth().Height(72)
+			})
+			captionedField(c, "Kind", "", func() {
+				segmentedControl(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
+			})
+			captionedField(c, "After", "", func() {
+				textField(c, &d.after).Label("After").Placeholder("Wait for tasks, e.g. r/12, r/13 (optional)").FillWidth()
+			})
 			if project := s.newTaskProject(); project != "" && s.libraryStore() != nil && d.kind != newTaskChat {
 				s.newTaskContext(c, d, project)
 			}

@@ -12,7 +12,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Backend.Subscribe（Herdr events.subscribe）、server.go 的 currentTree 与 trackConn
- * [OUTPUT]: 对外提供 GET /api/v3/events 的 WebSocket 处理器：hello{revision} 之后推 tree.changed{revision}，并每 5 s 发一个 hb 心跳帧（手机据此在约 13 s 内发现「死而不知」的连接；老手机的 schema 忽略未知帧，新手机在收到第一个 hb 后才启用静默检测，所以不需要 capability 也不动黄金文件）
+ * [OUTPUT]: 对外提供 GET /api/v3/events 的 WebSocket 处理器：hello{revision} 之后推 tree.changed{revision}，并每 5 s 发一个 hb 心跳帧，另有 Server.NotifyAutomation 排队的 `automation{kind,name,runId}` 一次性帧（自动化步骤变化，不带提示词/理由/错误文本）（手机据此在约 13 s 内发现「死而不知」的连接；老手机的 schema 忽略未知帧，新手机在收到第一个 hb 后才启用静默检测，所以不需要 capability 也不动黄金文件）
  * [POS]: 树变化通知通道：Herdr 事件与 Server.Poke（桌面标题快照变化，无 Herdr 事件）只当「重读触发器」（和桌面同一纪律），去抖 150 ms 重算树，内容真变才推；窗格集合变化时重订阅（Herdr 的 agent_status 订阅按窗格），订阅失败指数退避；不转发 Herdr 全局焦点（手机导航本地）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -71,6 +71,22 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, dev Device
 				return
 			case <-tick.C:
 				if writeFrame(ctx, conn, map[string]any{"t": "hb"}) != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	// One-off frames the Mac raises itself (an automation's step), queued per socket.
+	notices, unsubscribe := s.subscribeNotices()
+	defer unsubscribe()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case frame := <-notices:
+				if writeFrame(ctx, conn, frame) != nil {
 					cancel()
 					return
 				}

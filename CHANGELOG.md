@@ -5,6 +5,20 @@ Internal from the release's commits (see `.agents/skills/solco-release`). The
 current release's section is snapshotted into `internal/changelog/snapshot.md`
 at release time and shown in Settings → About.
 
+## Unreleased
+
+### New
+
+- Automations: run headless so no trust dialog can stop an unattended run
+- Automations: unread failed/finished runs count in the Header and show in a new Automations tab of its popover
+- Automations: a Mac notification and a phone notification for each step — a draft waiting for approval, a run starting, finishing or failing
+
+### Fixed
+
+- Automations: the scheduler's login service no longer shares its name with the upstream plugin's
+- Automations: an Agent picked in the form is saved under the kind Herdr accepts
+- Dialogs: the remote, New Task and New Automation forms label every field above them
+
 ## v0.12.2 — 2026-11-03
 
 ### New
@@ -15,7 +29,6 @@ at release time and shown in Settings → About.
 - Git: panel redesigned after Fork — commit list with ref chips, review strip, status tiles, pull/squash/reflog/tag/stash/submodule actions
 - Git: auto-fetch for the open repository, persistent sidebar folds, double-click to check out
 - Automations: a native view over the new Solco automations plugin (drafts need approval before they fire)
-- Automations: run headless so no trust dialog can stop an unattended run, and unread failed/finished runs show in the Header count and a new Automations tab
 - Services: the sidebar shows each project's scripts and services, tinted by whether their port answers
 - Agents: toggles in Settings choose which Agents the New Tab menu offers, and a first-run guide walks new installs through setup
 - Chat: `/` and `$` skills autocomplete anywhere in the draft; a New Pane Agent launch shows Chat starting at once

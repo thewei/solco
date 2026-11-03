@@ -143,9 +143,10 @@ type Server struct {
 	asks        map[string]*askCursor             // instance\x00pane → Question state
 	trees       map[string]*treeState
 	peeks       peekCache
-	poke        chan struct{} // closed and replaced by Poke; every events pump waits on the current one
-	netStop     chan struct{} // closed by Close; stops the address watcher (watch.go)
-	netDone     chan struct{} // closed by the watcher goroutine on exit; Close joins it
+	poke        chan struct{}                    // closed and replaced by Poke; every events pump waits on the current one
+	notices     map[chan map[string]any]struct{} // open events sockets' queues for one-off frames (NotifyAutomation)
+	netStop     chan struct{}                    // closed by Close; stops the address watcher (watch.go)
+	netDone     chan struct{}                    // closed by the watcher goroutine on exit; Close joins it
 
 	relay       *relayClient // non-nil while the relay tunnel is running
 	relayStatus RelayStatus  // what Settings shows; written by startRelay and the client
@@ -837,6 +838,42 @@ func (s *Server) Poke() {
 	close(s.poke)
 	s.poke = make(chan struct{})
 	s.mu.Unlock()
+}
+
+// NotifyAutomation tells every open events socket that one automation took a
+// step (kind: draft|started|done|failed; the Mac computed it, the phone only
+// words it). It carries a name and a run id and nothing else: no prompt, no
+// rationale, no error text. A socket whose queue is full drops the frame
+// rather than stall the Mac.
+func (s *Server) NotifyAutomation(kind, name, runID string) {
+	frame := map[string]any{"t": "automation", "kind": kind, "name": name}
+	if runID != "" {
+		frame["runId"] = runID
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for q := range s.notices {
+		select {
+		case q <- frame:
+		default:
+		}
+	}
+}
+
+// subscribeNotices registers one events socket's frame queue.
+func (s *Server) subscribeNotices() (q chan map[string]any, unsubscribe func()) {
+	q = make(chan map[string]any, 16)
+	s.mu.Lock()
+	if s.notices == nil {
+		s.notices = map[chan map[string]any]struct{}{}
+	}
+	s.notices[q] = struct{}{}
+	s.mu.Unlock()
+	return q, func() {
+		s.mu.Lock()
+		delete(s.notices, q)
+		s.mu.Unlock()
+	}
 }
 
 func (s *Server) pokeChannel() <-chan struct{} {

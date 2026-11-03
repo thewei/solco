@@ -38,6 +38,7 @@ type automationsState struct {
 	lastDetect time.Time
 	detecting  bool
 	list       automationsList
+	watcher    automations.Watcher // list → notifiable steps (automations_notify.go)
 }
 
 // automationsAvailable is the one gate every automations surface and command
@@ -119,6 +120,7 @@ func (s *Shell) applyAutomationsList(result automations.ListResult, err error) {
 	list.loading = false
 	if !s.automationsAvailable() {
 		s.automations.list = automationsList{}
+		s.automations.watcher.Reset()
 		return
 	}
 	list.loadedAt = timeNow()
@@ -134,6 +136,7 @@ func (s *Shell) applyAutomationsList(result automations.ListResult, err error) {
 		before = list.lastRunKey(sel)
 	}
 	list.result = result
+	s.notifyAutomationSteps(result.Automations)
 	if sel := list.selected; sel != "" {
 		switch {
 		case list.automation(sel) == nil:
@@ -178,6 +181,24 @@ func (l *automationsList) schedulerMissing() bool {
 	return false
 }
 
+// busy is whether the list should be re-read on the short timer: a run is
+// going, or a scheduled one is due within the window — so the step that
+// follows (started, finished) reaches the notifications without the page open.
+func (l *automationsList) busy(now time.Time) bool {
+	if l.active() {
+		return true
+	}
+	for _, a := range l.result.Automations {
+		if a.Draft || a.Disabled || a.NextRun == "" {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339, a.NextRun); err == nil && t.Sub(now) < automationsDueWindow {
+			return true
+		}
+	}
+	return false
+}
+
 // active is whether any run is still going; the list is then
 // re-read on a short timer so its status turns without the user reopening
 // the page.
@@ -191,14 +212,11 @@ func (l *automationsList) active() bool {
 }
 
 // pollAutomationsWhileActive schedules one more read while a run is in
-// flight and the page is on screen. One timer at a time; each read decides
-// whether to arm the next.
+// flight or about to start, on any page — the steps are notified from these
+// reads. One timer at a time; each read decides whether to arm the next.
 func (s *Shell) pollAutomationsWhileActive() {
 	list := &s.automations.list
-	if automationsPollGap <= 0 || list.pollPending || !list.active() || !s.automationsAvailable() {
-		return
-	}
-	if s.router == nil || s.router.Path() != routeAutomations {
+	if automationsPollGap <= 0 || list.pollPending || !s.automationsAvailable() || !list.busy(timeNow()) {
 		return
 	}
 	list.pollPending = true
@@ -276,6 +294,9 @@ var (
 	// automationsPollGap is the wait between reads while a run is going
 	// (0 disables polling); automationsStartSettle is how long a freshly
 	// started daemon gets to write its pid before the list is re-read.
-	automationsPollGap     = 8 * time.Second
+	automationsPollGap = 8 * time.Second
+	// automationsDueWindow is how close a scheduled run must be before the
+	// list is polled on the short timer to catch its start.
+	automationsDueWindow   = 90 * time.Second
 	automationsStartSettle = 1500 * time.Millisecond
 )

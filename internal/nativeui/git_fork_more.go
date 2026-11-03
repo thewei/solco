@@ -323,16 +323,25 @@ func (s *Shell) remoteDialog(c *ui.Context) {
 		ui.Column(c).Gap(Spacing().M).Children(func() {
 			switch d.mode {
 			case "add":
-				f := textField(c.Key("remote-name"), &d.name).Label("Remote name").Placeholder("origin").AutoFocus().Width(380)
-				u := textField(c.Key("remote-url"), &d.url).Label("Address").Placeholder("https://github.com/you/repo.git or git@host:you/repo.git").Width(380)
-				submit = f.Submitted() || u.Submitted()
+				captionedField(c, "Remote name", "", func() {
+					f := textField(c.Key("remote-name"), &d.name).Label("Remote name").Placeholder("origin").AutoFocus().Width(380)
+					submit = submit || f.Submitted()
+				})
+				captionedField(c, "Address", "", func() {
+					u := textField(c.Key("remote-url"), &d.url).Label("Address").Placeholder("https://github.com/you/repo.git or git@host:you/repo.git").Width(380)
+					submit = submit || u.Submitted()
+				})
 			case "url":
 				ui.Text(c, d.original).FontSize(Typography().Body).FontWeight(WeightSemibold)
-				u := textField(c.Key("remote-url"), &d.url).Label("Address").AutoFocus().Width(380)
-				submit = u.Submitted()
+				captionedField(c, "Address", "", func() {
+					u := textField(c.Key("remote-url"), &d.url).Label("Address").AutoFocus().Width(380)
+					submit = u.Submitted()
+				})
 			case "rename":
-				f := textField(c.Key("remote-new"), &d.newName).Label("New name for " + d.original).AutoFocus().Width(380)
-				submit = f.Submitted()
+				captionedField(c, "New name for "+d.original, "", func() {
+					f := textField(c.Key("remote-new"), &d.newName).Label("New name for " + d.original).AutoFocus().Width(380)
+					submit = f.Submitted()
+				})
 			}
 			ui.Row(c).Gap(Spacing().M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {

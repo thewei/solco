@@ -162,6 +162,9 @@ func TestGoldenAPIv3(t *testing.T) {
 	h.back.set(proj)
 	src.events <- herdr.RuntimeEvent{Event: "pane.updated"}
 	golden(t, "events-tree-changed.json", readRaw(t, events))
+	// automation: one step of a plugin automation, worded by the phone (no prompt, no error text)
+	h.srv.NotifyAutomation("failed", "nightly-ci-triage", "run-7")
+	golden(t, "events-automation.json", readRaw(t, events))
 
 	// terminal: frame header, ping, bad input, refused input
 	term, _, err := h.dial("/api/v3/terminals/term_b/stream?cols=51&rows=19", true)

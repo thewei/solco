@@ -75,6 +75,10 @@ func showAgentNotification(instanceID string, runtimeAgent herdr.Agent, notifica
 // mutation, safe headless; the frame-local pendingToast is consumed by the
 // next View pass.
 func (s *Shell) routeAgentNotification(id string) {
+	if name, ok := parseAutomationNotificationID(id); ok {
+		s.routeAutomationNotification(name)
+		return
+	}
 	s.activateWindow()
 	key, ok := parseAgentNotificationID(id)
 	if !ok {

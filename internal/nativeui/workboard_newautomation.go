@@ -53,17 +53,31 @@ func (s *Shell) newAutomationDialog(c *ui.Context) {
 		t := c.Theme()
 		ui.Column(c).Width(440).MaxWidth(500).Gap(sp.L).Children(func() {
 			modalTitle(c, "New Automation")
-			textField(c, &d.name).Label("Name").Placeholder("Name").AutoFocus().FillWidth()
-			textArea(c, &d.prompt).Label("Prompt").Placeholder("What each firing's task is to do").FillWidth().Height(88)
-			segmentedControl(c, &d.trigger, "Schedule", "Event").Label("Trigger")
+			captionedField(c, "Name", "", func() {
+				textField(c, &d.name).Label("Name").Placeholder("Name").AutoFocus().FillWidth()
+			})
+			captionedField(c, "Prompt", "", func() {
+				textArea(c, &d.prompt).Label("Prompt").Placeholder("What each firing's task is to do").FillWidth().Height(88)
+			})
+			captionedField(c, "Trigger", "", func() {
+				segmentedControl(c, &d.trigger, "Schedule", "Event").Label("Trigger")
+			})
 			if d.trigger == automationOnSchedule {
-				textField(c, &d.schedule).Label("Schedule").Placeholder("every 2h · daily 09:00 · mon 09:00 · cron \"0 9 * * 1\"").FillWidth()
+				captionedField(c, "Schedule", "", func() {
+					textField(c, &d.schedule).Label("Schedule").Placeholder("every 2h · daily 09:00 · mon 09:00 · cron \"0 9 * * 1\"").FillWidth()
+				})
 			} else {
-				selectField(c, &d.event, workboard.AutomationEvents).Label("Event")
+				captionedField(c, "Event", "", func() {
+					selectField(c, &d.event, workboard.AutomationEvents).Label("Event")
+				})
 				ui.Checkbox(c, &d.everyRepo, "A task of any project")
-				textField(c, &d.cond).Label("Only if").Placeholder("only if, e.g. branch = feature/* (optional)").FillWidth()
+				captionedField(c, "Only if", "", func() {
+					textField(c, &d.cond).Label("Only if").Placeholder("only if, e.g. branch = feature/* (optional)").FillWidth()
+				})
 			}
-			segmentedControl(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
+			captionedField(c, "Kind", "", func() {
+				segmentedControl(c, &d.kind, "Task", "Research only", "Chat only").Label("Kind")
+			})
 			ui.Text(c, "Each firing adds a task in "+d.project+" and puts an agent on it.").FontSize(Typography().Caption).TextColor(t.TextMuted)
 			ui.Row(c).FillWidth().Gap(sp.M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {
