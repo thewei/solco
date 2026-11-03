@@ -30,6 +30,7 @@ Git workbench 是 Solco 的本地 Git 域服务：Runner 负责仓库读取与�
 - `models_test.go`：领域模型约束测试。
 - `mutation_matrix_test.go`：Git 操作拒绝/保护矩阵测试。
 - `fork_more.go`：Fork 对齐的大件域能力（ResetTo、DeleteRemoteBranch、Set/UnsetUpstream、FormatPatch/StashPatch/WorkingPatch、CompareToWorktree、FileHistory、Blame、远程增改删、子模块列表/更新、RebasePlan/InteractiveRebase；冲突即 abort，Hard reset 仅干净树）。
+- `fork_more2.go`：Fork 第三批域能力（Pull ff/merge/rebase、FetchAll(+prune)、MergeSquash、CheckoutDetached、RestoreFile、ApplyPatch、CreateTagAnnotated、DeleteRemoteTag、RemoveWorktree、UnmergedPaths/ResolveConflict、Reflog、Add/RemoveSubmodule、StashPushPaths/StashClear、ParseWebRepo/CommitURL；冲突型集成动作失败即回滚并带冲突文件，Commit 增 NoVerify/SignOff）。
 - `operations.go`：同步、Stash（含其提交与 base 提交，`StashSnapshot` 把 tracked 变更与第三父的未跟踪文件合成一次审阅，供图谱把 stash 挂到所属提交）、Tag、Worktree、含完整父 SHA 的历史提交及 sequencer 操作，供原生历史图谱使用。
 - `operations_test.go`：真实 Git 操作和保护回归。
 - `line_patch.go`：按所选行构造单 hunk 补丁并经 `git apply --cached --recount [--reverse] -`（Runner.Stdin）暂存/取消暂存部分行；未选中的删除行回退为上下文、未选中的新增行丢弃。

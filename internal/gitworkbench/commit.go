@@ -19,6 +19,10 @@ type CommitDraft struct {
 	Body    string
 	Paths   []string
 	Amend   bool
+	// NoVerify skips the pre-commit and commit-msg hooks (--no-verify);
+	// SignOff appends a Signed-off-by trailer (-s). Both are per commit.
+	NoVerify bool
+	SignOff  bool
 }
 
 // CommitPreflight is the stale-state fence captured at Commit-surface open
@@ -192,6 +196,12 @@ func (r *Runner) Commit(ctx context.Context, root string, draft CommitDraft, pre
 	args := []string{"commit", "-F", "-"}
 	if draft.Amend {
 		args = append(args, "--amend", "--no-edit")
+	}
+	if draft.NoVerify {
+		args = append(args, "--no-verify")
+	}
+	if draft.SignOff {
+		args = append(args, "--signoff")
 	}
 	args = append(args, "--")
 	args = append(args, paths...)
