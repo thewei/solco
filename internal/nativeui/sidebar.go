@@ -91,8 +91,6 @@ func (s *Shell) sidebar(c *ui.Context) {
 			}
 			if s.assistantsAvailable() {
 				s.assistantsSection(c)
-			} else {
-				s.projectsSection(c)
 			}
 			s.workspaceSection(c)
 			// The widget's own Surface fill is dropped (2026-10-06): the

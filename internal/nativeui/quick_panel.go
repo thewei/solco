@@ -35,12 +35,11 @@ import (
 const QuickPanelWidth = 340
 
 // The panel's tabs are named by a stable id (s.quickPanelTab): Agents leads
-// the header, the others are trailing icons. Tasks exists only while the
-// herdr-projects plugin gate is open.
+// the header, the others are trailing icons (the numbers stay stable; 2 was
+// the retired herdr-projects Tasks tab).
 const (
 	quickPanelAgentsTab   = 0
 	quickPanelServicesTab = 1
-	quickPanelTasksTab    = 2
 	quickPanelQuotaTab    = 3
 	// quickPanelAutomationsTab lists automation runs nobody has opened; it
 	// exists only while the automations plugin gate is open.
@@ -63,9 +62,6 @@ func (s *Shell) quickPanelTabItems() []quickPanelTabItem {
 		{quickPanelQuotaTab, "Quota", iconQuota},
 		{quickPanelServicesTab, "Services", iconServer},
 	}
-	if s.workboardAvailable() {
-		items = append(items, quickPanelTabItem{quickPanelTasksTab, "Tasks", iconTask})
-	}
 	if s.automationsAvailable() {
 		items = append(items, quickPanelTabItem{quickPanelAutomationsTab, "Automations", iconBolt})
 	}
@@ -80,8 +76,6 @@ func quickPanelTabTitle(tab int) string {
 		return "Quota"
 	case quickPanelServicesTab:
 		return "Services"
-	case quickPanelTasksTab:
-		return "Tasks"
 	case quickPanelAutomationsTab:
 		return "Automations"
 	}
@@ -178,9 +172,6 @@ func (s *Shell) quickPanelTabBody(c *ui.Context, tab int) {
 	case quickPanelServicesTab:
 		s.quickPanelServices(c)
 		return
-	case quickPanelTasksTab:
-		s.quickPanelTasks(c)
-		return
 	case quickPanelQuotaTab:
 		s.quickPanelQuota(c)
 		return
@@ -261,8 +252,6 @@ func (s *Shell) quickPanelChrome(c *ui.Context) {
 func (s *Shell) selectQuickPanelTab(id int) {
 	s.quickPanelTab = id
 	switch id {
-	case quickPanelTasksTab:
-		s.refreshWorkboardTasks(true)
 	case quickPanelQuotaTab:
 		s.refreshUsage(false)
 	case quickPanelAutomationsTab:
@@ -271,12 +260,9 @@ func (s *Shell) selectQuickPanelTab(id int) {
 	s.fitQuickPanel()
 }
 
-// quickPanelTabIndex is the tab to show: the Tasks tab collapses back to
-// Agents the moment its plugin gate closes.
+// quickPanelTabIndex is the tab to show: the Automations tab collapses
+// back to Agents the moment its plugin gate closes.
 func (s *Shell) quickPanelTabIndex() int {
-	if s.quickPanelTab == quickPanelTasksTab && !s.workboardAvailable() {
-		return 0
-	}
 	if s.quickPanelTab == quickPanelAutomationsTab && !s.automationsAvailable() {
 		return 0
 	}
@@ -375,9 +361,6 @@ func (s *Shell) openQuickPanelFlyout(base mygo.FlyoutOptions) {
 	// The actionable rows' usage captions refresh right before showing,
 	// forced past the throttle.
 	s.refreshUsageProjection(true)
-	if s.quickPanelTabIndex() == quickPanelTasksTab {
-		s.refreshWorkboardTasks(true)
-	}
 	if s.quickPanelTabIndex() == quickPanelQuotaTab {
 		s.refreshUsage(false)
 	}
@@ -430,8 +413,6 @@ func (s *Shell) quickPanelContentHeight() int {
 	switch s.quickPanelTabIndex() {
 	case quickPanelServicesTab:
 		return QuickPanelHeight
-	case quickPanelTasksTab:
-		return s.quickPanelTasksHeight()
 	case quickPanelQuotaTab:
 		return s.quickPanelQuotaHeight()
 	case quickPanelAutomationsTab:

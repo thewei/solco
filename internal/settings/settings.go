@@ -169,11 +169,6 @@ type GeneralSettings struct {
 	// shows the truthful "preview off" states instead. Always persisted,
 	// same reason as WebViewChat.
 	WebViewFilesPreview bool `json:"webview_files_preview"`
-	// WorkboardView picks how the herdr-projects work board shows up when
-	// the plugin is installed: "board" (the default: Project/task rows open
-	// the plugin's own board Tab) or "native" (Solco's Project and task
-	// pages). User decision 2026-10-26; the native pages stay under trial.
-	WorkboardView string `json:"workboard_view,omitempty"`
 	// TabsPlacement says where a Workspace's Tabs live: "" or "titlebar" (the
 	// default — a browser-style Tab bar takes the breadcrumb's place and the
 	// sidebar tree lists only Workspaces) or "sidebar" (the tree lists Tabs
@@ -197,10 +192,6 @@ func (g GeneralSettings) TabsInTitleBar() bool { return g.TabsPlacement != "side
 
 // AgentChatFirst reports the Chat default; anything but "chat" keeps the TUI.
 func (g GeneralSettings) AgentChatFirst() bool { return g.AgentView == "chat" }
-
-// WorkboardNative reports the opt-in native work board pages; anything but
-// "native" (including unset) keeps the plugin's own board.
-func (g GeneralSettings) WorkboardNative() bool { return g.WorkboardView == "native" }
 
 // EffectiveOpacity returns the window shell opacity, clamped to [0.50, 1.00].
 // Unset or invalid values (<= 0 or > 1.00) safely default to 1.00 (fully opaque).

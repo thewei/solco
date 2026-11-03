@@ -7,7 +7,6 @@
 package nativeui
 
 import (
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
@@ -79,51 +78,15 @@ func (s *Shell) workspaceHomeCenter(c *ui.Context) {
 				ui.Text(c, s.activeInstance).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			}
 		})
-		if s.workboardAvailable() {
-			ui.Column(c).Width(560).MaxWidth(640).Children(func() {
-				dockPanel(c, func() {
-					field := textArea(c, &s.homeDraft).Grow(1).Height(56).
-						Placeholder("Describe a task for this project…").Label("New task prompt")
-					if field.Shortcut(0, ui.KeyEnter) {
-						s.submitHomePrompt()
-					}
-					ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-						ui.Box(c).Grow(1)
-						if regularPrimaryButton(c, "New Task").Disabled(strings.TrimSpace(s.homeDraft) == "" || field.Composing()).Clicked() {
-							s.submitHomePrompt()
-						}
-					})
-				})
-			})
-		}
 		ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
 			// The sidebar header's hover "+" was the only way to a Workspace
 			// (device E2E 2026-11-03): the empty center names it too.
 			ghostPill(c, "home-new-workspace", "New Workspace from Folder…", s.createWorkspaceFromFolder)
-			if s.workboardAvailable() {
-				ghostPill(c, "home-new-task", "New Task", func() { s.openWorkboardAdd(false) })
-			}
 			ghostPill(c, "home-files", "Browse Files", s.showViewFiles)
 			ghostPill(c, "home-sessions", "Sessions", s.showViewHistory)
 			ghostPill(c, "home-hosts", "Hosts", s.showViewHosts)
 		})
 	})
-}
-
-// submitHomePrompt turns the home prompt into the real New Task dialog:
-// the typed text becomes the task title and the dialog owns the rest. The
-// write path stays the plugin's own CLI transaction; without a Git root
-// openWorkboardAdd refuses with its own toast.
-func (s *Shell) submitHomePrompt() {
-	text := strings.TrimSpace(s.homeDraft)
-	if text == "" {
-		return
-	}
-	s.homeDraft = ""
-	s.openWorkboardAdd(false)
-	if s.workboard.newTask.open {
-		s.workboard.newTask.title = text
-	}
 }
 
 // terminalSurface renders the Terminal primary surface. The terminal canvas

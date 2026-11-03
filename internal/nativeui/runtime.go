@@ -380,10 +380,6 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	// The floating Quick Panel shares this reconciled state but gets no
 	// input of its own while open; push the repaint to it.
 	s.invalidateQuickPanel()
-	// The Header aggregate and Project glyphs read the board even with the
-	// panel closed; the refresh throttles itself (and does nothing without
-	// the plugin).
-	s.refreshWorkboardTasks(false)
 	// The automations inbox feeds the same count (once a minute at most).
 	s.refreshAutomationsBackground()
 	if s.router.Path() == routeWorkspace {

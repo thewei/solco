@@ -299,9 +299,6 @@ type Shell struct {
 	commandCenterReveal       int
 	commandCenterQueryFocused bool
 	commandCenterIndexCache   *commandcenter.Index
-	// workboard is the herdr-projects plugin gate (workboard_ui.go): every
-	// workboard surface hides unless detection reports it Supported.
-	workboard workboardState
 	// automations is the com.whstudio.solco.automations plugin gate
 	// (automations_ui.go): the page, its sidebar tab and every command hide
 	// unless detection reports it Supported.
@@ -637,19 +634,6 @@ type Shell struct {
 	filesPublishMu      sync.Mutex
 	filesPublishing     bool
 	filesPublishPending bool
-	// projectsWebview is the Projects page's embedded WebView (product
-	// decision 2026-10-31); projectsWebviewBroken latches a failed creation.
-	// projectsLast is the last snapshot sent (change detection), projectsSeq
-	// numbers them, projectsSubject is what the page last opened on.
-	projectsWebview       *mygo.WebView
-	projectsWebviewBroken bool
-	projectsLast          []byte
-	projectsSeq           int64
-	projectsPublishing    bool
-	projectsSubject       string
-	projectsBinding       bool
-	projectsChatFailed    string // projectsChatKey of the bind that failed
-	projectsChatBound     string // projectsChatKey of the bind that succeeded
 	// chatLiveCommitted is the committed live projection length at the last	// applied sync — the pending-echo baseline coordinate (0.6 §12).
 	chatLiveCommitted int
 	// chatLiveStart is the projection index the live chat window starts at
@@ -953,13 +937,8 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	// refresh; the Refresh button stays as the explicit fallback.
 	win.OnFocus(func() {
 		s.refreshGitOnActivation()
-		s.detectWorkboard(false)
 		s.detectAutomations(false)
-		// A task added by the plugin's CLI/TUI raises no Herdr event: re-read
-		// the board on activation (throttled; a no-op while the gate is closed).
-		s.refreshWorkboardTasks(false)
 	})
-	s.detectWorkboard(true)
 	s.detectAutomations(true)
 	s.reloadInstances(true)
 	s.startHistoryScan()

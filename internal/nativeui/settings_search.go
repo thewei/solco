@@ -8,7 +8,7 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 settingsSections 导航表、workboardSettingsSection 与门禁、usage.All 的家名、controls.go 的 searchField、components.go 的 navTileButtonDetail
+ * [INPUT]: 依赖 settingsSections 导航表、usage.All 的家名、controls.go 的 searchField、components.go 的 navTileButtonDetail
  * [OUTPUT]: settingsEntry、settingsEntries（设置项标签索引：每个页面一条 + 每个静态设置行一条 + 配额每家一条）、matchSettings（大小写不敏感子串过滤）、Shell.settingsSearch（侧栏顶的搜索框与命中列表）
  * [POS]: 设置侧栏搜索（2026-10-30 UX audit 3，议题 4）：命中项是「设置项 + 所在页」，点击进入该页并清空搜索；索引是手写标签表，TestSettingsIndexCoversEveryRow 扫描源码里的 row("…") 防止漂移；动态行（Agents 的每个 agent、Work Board 插件设置）只以页面级条目出现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -67,14 +67,10 @@ var settingsLabels = map[string][][2]string{
 		{"Links", "Software Update"}, {"Links", "GitHub Repository"}, {"Links", "Release Notes"},
 		{"What's new", "What's new in this version"},
 	},
-	"/settings/workboard": {
-		{"View", "Work board"}, {"Scope", "Applies to"},
-	},
 }
 
 // settingsEntries is the whole index: each page by name, its rows, and one
-// "Show in Quota" per provider. The Work Board page joins only while its
-// plugin gate is open, like its navigation entry.
+// "Show in Quota" per provider.
 func (s *Shell) settingsEntries() []settingsEntry {
 	var out []settingsEntry
 	add := func(section settingsSection) {
@@ -90,9 +86,6 @@ func (s *Shell) settingsEntries() []settingsEntry {
 	}
 	for _, section := range settingsSections {
 		add(section)
-	}
-	if s.workboardAvailable() {
-		add(workboardSettingsSection)
 	}
 	return out
 }

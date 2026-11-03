@@ -1244,8 +1244,11 @@ func automationsFailureToast(err error) string {
 	if text == "" {
 		return "The plugin refused this operation."
 	}
-	if r := []rune(text); len(r) > workboardToastMax {
-		text = string(r[:workboardToastMax]) + "…"
+	if r := []rune(text); len(r) > automationToastMax {
+		text = string(r[:automationToastMax]) + "…"
 	}
 	return text
 }
+
+// automationToastMax bounds a plugin refusal shown in a toast.
+const automationToastMax = 160

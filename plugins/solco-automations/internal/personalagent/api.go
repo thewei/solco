@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -124,7 +125,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|legacy-export>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
@@ -142,6 +143,18 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return ok("inbox", in), err
 	case "overview":
 		return a.overview()
+	case "legacy-export":
+		// Explicit, read-only: copies the retired herdr-projects data aside; nothing is ever removed from it.
+		dst, rest := flagValue(rest, "--to")
+		src, _ := flagValue(rest, "--from")
+		if dst == "" {
+			dst = filepath.Join(WorkDirRoot(), "legacy-export")
+		}
+		if src == "" {
+			src = LegacyHome()
+		}
+		res, err := ExportLegacy(src, dst, time.Now())
+		return ok("export", res), err
 	case "list":
 		list, err := a.Store.ListAssistants()
 		return ok("assistants", list), err

@@ -156,11 +156,6 @@ func (s *Shell) dialogs(c *ui.Context) {
 	}
 	s.gitNoticeDialog(c)
 	s.gitMoreDialogs(c)
-	s.newTaskDialog(c)
-	s.newProjectDialog(c)
-	s.newAutomationDialog(c)
-	s.delegateDialog(c)
-	s.pickDialog(c)
 	s.deviceAddDialog(c)
 	s.usageConsentDialog(c)
 	s.voiceConsentDialog(c)
@@ -207,8 +202,6 @@ func (s *Shell) submitTextDialog(kind, target, value string) {
 		s.submitRefDialog(kind, target, value)
 	case "files-new-file", "files-new-dir", "files-rename":
 		s.runFilesMutation(kind, target, value)
-	case workboardPlanBackDialog:
-		s.submitWorkboardPlanBack(target, value)
 	}
 }
 
@@ -243,21 +236,6 @@ func (s *Shell) submitConfirm(kind, target string) {
 		s.emptyTrash()
 	case automationsRemoveConfirm:
 		s.removeAutomation(target)
-	case workboardApproveConfirm:
-		s.runWorkboardAction("approve", target)
-	case workboardApprovePlanConfirm:
-		s.runWorkboardAction("approve-plan", target)
-	case workboardStartNowConfirm:
-		s.runWorkboardAction("start-now", target)
-	case workboardStopConfirm:
-		s.runWorkboardAction("stop", target)
-	case workboardStopAllConfirm:
-		s.stopAllProjectTasks(target)
-	case boardArchiveDoneConfirm, boardArchiveProjectConfirm, boardRestoreProjectConfirm,
-		boardClearConfirm, boardCoordinatorNewConfirm, boardAutopilotOnConfirm,
-		boardAutomationRunConfirm, boardAutomationRemoveConfirm:
-		op, _ := boardManageConfirmed(kind)
-		s.runBoardManage(op, target)
 	default:
 		s.runGitConfirm(kind, target)
 	}

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/personalagent"
 )
@@ -453,4 +454,32 @@ func (b *AssistantsBridge) write(ctx context.Context, run func(context.Context, 
 	}
 	b.shell.applyOnWindow(func() { b.shell.refreshAssistants(true) })
 	return nil
+}
+
+// bindChatToCard is openChat's binding without its navigation: a page that embeds the Chat (the Assistants
+// Coordinator tab) keeps the route where it is. False says the agent has no chat source yet.
+func (s *Shell) bindChatToCard(card agent.AgentCardModel) bool {
+	s.chatPaneID = card.PaneID
+	if card.PaneID != "" {
+		s.selectPane(card.PaneID)
+	}
+	if s.bindLiveAgent(card.Key) {
+		return true
+	}
+	if card.ConversationID != "" {
+		s.bindChatConversation(card.ConversationID)
+		return true
+	}
+	if s.liveSourcePending(card.Key) {
+		s.rebindWorkspaceChat()
+		return true
+	}
+	return false
+}
+
+// openPane shows one pane of this session.
+func (s *Shell) openPane(id string) {
+	s.hideQuickPanel()
+	s.router.Push(routeWorkspace)
+	s.selectPane(id)
 }

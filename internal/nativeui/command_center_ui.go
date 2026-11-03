@@ -219,10 +219,8 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 		// is installed, enabled and in the verified 0.12.x window.
 		commandcenter.Action{ID: "app.automations", Title: "Automations", Section: "App", Shortcut: acceleratorLabel(accelAutomations),
 			Keywords: []string{"scheduled", "cron", "定时", "runs"}, Kind: commandcenter.TargetRoute, TargetID: routeAutomations, Available: s.automationsAvailable()},
-		// The herdr-projects work board: derived from the plugin gate, so it
-		// exists only while the plugin is installed, enabled and supported.
-		commandcenter.Action{ID: "app.work-board", Title: "Open Work Board", Section: "App",
-			Keywords: []string{"projects", "tasks", "coordinator", "herdr-projects"}, Kind: commandcenter.TargetRoute, TargetID: "action:open-workboard", Available: s.workboardAvailable()},
+		commandcenter.Action{ID: "app.assistants", Title: "Assistants", Section: "App",
+			Keywords: []string{"assistant", "goal", "task", "coordinator", "memory", "助手"}, Kind: commandcenter.TargetRoute, TargetID: routeAssistants, Available: s.assistantsAvailable()},
 	)
 	return actions
 }
@@ -491,8 +489,6 @@ func (s *Shell) executeCommandCenterResult(result commandcenter.Result) {
 			s.goChanges()
 		case "action:open-files":
 			s.goFiles()
-		case "action:open-workboard":
-			s.openWorkBoard()
 		default:
 			if action.TargetID != "" {
 				s.router.Push(action.TargetID)

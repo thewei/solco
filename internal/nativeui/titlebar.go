@@ -389,16 +389,18 @@ func (s *Shell) titlebarActivity(c *ui.Context, k *gorexColors) {
 	var tone StatusTone
 	waiting, total := 0, 0
 	if summary != nil {
-		// Work-board tasks that need the human fold into the same attention
-		// and review counts (one aggregation); tasks whose Agent is already
-		// listed are not counted twice.
-		taskAttention, taskReview := headerTaskCounts(s.actionableTasks(), summary.Entries)
+		// Assistant work that needs the human (the inbox count the core derived)
+		// folds into the same attention count; it has no Agent row of its own.
+		assistantAttention := 0
+		if s.assistantsAvailable() {
+			assistantAttention = s.assistants.overview.NeedsYou
+		}
 		// Automation runs nobody has opened count the same way (failed =
 		// attention, finished = review); they have no Agent row of their own.
 		autoAttention, autoReview := s.automationsHeaderCounts()
-		attention := summary.NeedsAttention + taskAttention + autoAttention
-		review := summary.ReviewPending + taskReview + autoReview
-		waiting, total = headerTally(attention, review, len(summary.Entries), taskAttention+taskReview+autoAttention+autoReview)
+		attention := summary.NeedsAttention + assistantAttention + autoAttention
+		review := summary.ReviewPending + autoReview
+		waiting, total = headerTally(attention, review, len(summary.Entries), assistantAttention+autoAttention+autoReview)
 		parts := make([]string, 0, 3)
 		if attention > 0 {
 			parts = append(parts, strconv.Itoa(attention)+" attention")

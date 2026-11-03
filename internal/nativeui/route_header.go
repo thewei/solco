@@ -53,16 +53,10 @@ func (s *Shell) routeHeader() (routeHeaderSpec, bool) {
 		return s.hostsRouteHeader(), true
 	case strings.HasPrefix(path, "/settings/"):
 		return routeHeaderSpec{parent: "Settings", title: settingsSectionFor(path).label}, true
-	case path == routeProject:
-		return s.projectRouteHeader(), true
 	case path == routeAutomations:
 		return routeHeaderSpec{title: "Automations"}, true
 	case path == routeAssistants:
 		return routeHeaderSpec{title: "Assistants"}, true
-	case path == routeTask:
-		return s.taskRouteHeader(), true
-	case path == routeArchived:
-		return s.archivedRouteHeader(), true
 	case strings.HasPrefix(path, "/inspector/"):
 		return s.inspectorRouteHeader(strings.TrimPrefix(path, "/inspector/")), true
 	case path == "/chat":
@@ -136,9 +130,6 @@ func settingsSectionFor(path string) settingsSection {
 		if section.path == path {
 			return section
 		}
-	}
-	if path == workboardSettingsSection.path {
-		return workboardSettingsSection
 	}
 	return settingsSections[0]
 }

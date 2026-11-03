@@ -527,6 +527,8 @@ Detailed execution/audit documents:
 - `docs/mygo-native-0.10.0-git-workbench-primary-surface-plan.md`
 - `docs/prompts/mygo-native-0.10.0-git-workbench-primary-surface-implementation-prompt.md`
 
+> **Retired 2026-11-03 (Assistants plan, E06).** The work board integration below no longer exists: `internal/workboard`, the native Project/task/archived pages, the Projects WebView and bridge, the Tasks tab, the Settings → Work Board page and the `General.WorkboardView` switch are deleted, and the sidebar shows Assistants instead. Solco never touches `~/.herdr-projects`; `assistant legacy-export` copies it aside on request (read-only). The text is kept as history.
+
 ### Approved Next (2026-10-26) — herdr-projects work board (the one plugin exception)
 
 Solco presents the task board of one specific Herdr plugin,

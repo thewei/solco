@@ -14,7 +14,6 @@ import (
 	"github.com/thewei/solco/internal/automations"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/personalagent"
-	"github.com/thewei/solco/internal/workboard"
 )
 
 /**
@@ -131,16 +130,12 @@ func TestAssistantsProbeFailureLeavesNoTrace(t *testing.T) {
 	}
 }
 
-func TestAssistantsSectionReplacesProjectsAndOpensThePage(t *testing.T) {
+func TestAssistantsSectionAppearsAndOpensThePage(t *testing.T) {
 	stubAssistants(t, false)
 	s := openAssistantsShell(t)
-	s.workboard.avail = workboard.Availability{Installed: true, Enabled: true, Version: "1.2.26", Root: "/plugin", Supported: true}
 	tt := ui.NewTester(s.View, 1200, 800)
 	if !tt.HasText("Assistants") || !tt.HasText("Ada") {
 		t.Fatalf("sidebar missing the Assistants section: %q", tt.Texts())
-	}
-	if tt.HasText("Projects") {
-		t.Fatalf("Projects section must give way while Assistants are on: %q", tt.Texts())
 	}
 	if err := tt.Click("Ada"); err != nil {
 		t.Fatal(err)

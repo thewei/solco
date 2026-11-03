@@ -122,11 +122,6 @@ func main() {
 	// stay native. Binding before App.Run keeps `mygo generate` complete.
 	mygo.BindAs("filesPreview", nativeui.NewFilesPreviewBridge(shell))
 
-	// The WebView Projects page (product decision 2026-10-31) reads the work
-	// board only through this bridge; every write goes back into the existing
-	// Shell functions. Binding before App.Run keeps `mygo generate` complete.
-	mygo.BindAs("projects", nativeui.NewProjectsBridge(shell))
-
 	// The WebView Assistants page (product decision 2026-11-03) reads and
 	// writes only through the plugin's `assistant …` CLI behind this bridge.
 	mygo.BindAs("assistants", nativeui.NewAssistantsBridge(shell))
