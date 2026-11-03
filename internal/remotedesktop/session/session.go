@@ -65,6 +65,10 @@ type Config struct {
 	Capturer  platform.Capturer
 	// OnEnd is called once, after teardown, with the reason.
 	OnEnd func(reason protocol.ErrorCode)
+	// UnlockSecret yields the saved Mac login password (ok=false when none is saved); it is called only to type it.
+	UnlockSecret func() (password string, ok bool)
+	// AutoUnlock reports whether the Mac's owner switched on unlocking by itself when the lock screen is up.
+	AutoUnlock func() bool
 	// Stats supplies transport stats (RTT, path) for the stats message and Info; optional.
 	Stats func() LinkStats
 	Now   func() time.Time
@@ -125,6 +129,7 @@ type Session struct {
 	capMu      sync.Mutex  // serialises capture (re)starts
 	restarts   []time.Time // recent unplanned capture restarts (guarded by mu)
 	hideCursor bool        // the phone asked for the Mac's pointer to stay out of the video
+	unlocking  atomic.Bool // an unlock attempt is typing
 	tunedKbps  int         // the encoder's current target, as last set (guarded by mu)
 	lastTune   time.Time   // when the link estimate last retargeted the encoder (guarded by mu)
 
@@ -188,8 +193,10 @@ func (s *Session) Prepare(ctx context.Context) (protocol.SessionState, error) {
 	if !ok {
 		return protocol.SessionState{}, protocol.Errf(protocol.CodeDisplayNotFound, "no such display")
 	}
+	can := s.unlockAvailable()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.state.CanUnlock = can
 	s.setDisplayLocked(d, displays)
 	return s.state, nil
 }
@@ -199,7 +206,8 @@ func (s *Session) Attach(link Link) {
 	s.mu.Lock()
 	s.link = link
 	s.mu.Unlock()
-	s.wg.Add(3)
+	s.wg.Add(4)
+	go func() { defer s.wg.Done(); s.screenLoop() }()
 	go func() { defer s.wg.Done(); s.frameLoop() }()
 	go func() { defer s.wg.Done(); s.eventLoop() }()
 	go func() { defer s.wg.Done(); s.tickLoop() }()
@@ -233,6 +241,7 @@ func (s *Session) setDisplayLocked(d protocol.DisplayInfo, all []protocol.Displa
 	s.state = protocol.SessionState{
 		Mode: s.cfg.Mode, DisplayID: d.ID, Displays: all, Tier: s.cfg.Tier,
 		Width: w, Height: h, FPS: spec.FPS, Hardware: s.state.Hardware, Cursor: !s.hideCursor,
+		Blackout: s.state.Blackout, Locked: s.state.Locked, CanUnlock: s.state.CanUnlock,
 	}
 }
 
@@ -335,6 +344,7 @@ func (s *Session) OnLinkState(st LinkState) {
 			return
 		}
 		s.sendState()
+		go s.wakeScreen()
 	case LinkDisconnected:
 		// Possibly transient: stop trusting input immediately, keep the session for the transport's grace.
 		s.releaseAll("link_disconnected")
@@ -396,6 +406,12 @@ func (s *Session) Close(reason protocol.ErrorCode) {
 	s.mu.Unlock()
 
 	s.releaseAll("close")
+	s.mu.Lock()
+	dark := s.state.Blackout
+	s.mu.Unlock()
+	if scr, ok := s.screen(); ok && dark {
+		_ = scr.SetBlackout(false) // the helper also restores on exit; this is the polite order
+	}
 	s.cancel()
 	stopCtx, stop := context.WithTimeout(context.Background(), 3*time.Second)
 	_ = s.cap.StopCapture(stopCtx)

@@ -66,6 +66,10 @@ type RemoteDesktopSettings struct {
 	// Trusted are the phones the user already approved: a phone listed here connects without a prompt
 	// at (or below) its Mode until the user forgets it or revokes the phone in Remote Access.
 	Trusted []RemoteDesktopTrust `json:"trusted,omitempty"`
+	// UnlockSaved says the Mac login password is in the encrypted credential file (never the password itself);
+	// AutoUnlock lets a Control session type it by itself when the lock screen is up. Both off by default.
+	UnlockSaved bool `json:"unlock_saved,omitempty"`
+	AutoUnlock  bool `json:"auto_unlock,omitempty"`
 }
 
 // RemoteDesktopTrust is one remembered approval. DeviceID is the Host's paired-device id (a re-paired

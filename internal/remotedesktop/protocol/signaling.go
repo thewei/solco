@@ -54,6 +54,12 @@ type SessionState struct {
 	FPS       int           `json:"fps"`
 	Hardware  bool          `json:"hardware"`
 	Cursor    bool          `json:"cursor"` // the Mac's pointer is drawn in the video
+	// Blackout: the Mac's own screens are blacked out (anti-peek); the video is unaffected.
+	Blackout bool `json:"blackout,omitempty"`
+	// Locked: the Mac's lock screen is up. CanUnlock: the Mac holds a saved login password the phone may
+	// ask it to type (never sent to the phone).
+	Locked    bool `json:"locked,omitempty"`
+	CanUnlock bool `json:"canUnlock,omitempty"`
 }
 
 // DeviceInfo identifies the phone to the authorizer and the session list. ID is the paired device id.

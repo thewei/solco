@@ -26,6 +26,8 @@ const (
 	TypeDisplaySelect = "display.select"
 	TypeQualitySet    = "quality.set"
 	TypeCursorSet     = "cursor.set"
+	TypePrivacySet    = "privacy.set"
+	TypeUnlockRequest = "unlock.request"
 	TypeKeyframe      = "keyframe.request"
 	TypePing          = "ping"
 	TypeSessionEnd    = "session.end"
@@ -125,6 +127,12 @@ type CursorSet struct {
 	Visible bool   `json:"visible"`
 }
 
+// PrivacySet blacks the Mac's own screens out (On) or brings them back; the video the phone sees is unchanged.
+type PrivacySet struct {
+	Type string `json:"type"`
+	On   bool   `json:"on"`
+}
+
 type Ping struct {
 	Type string `json:"type"`
 	T    int64  `json:"t"`
@@ -210,9 +218,11 @@ func Decode(data []byte) (any, error) {
 		target = &QualitySet{}
 	case TypeCursorSet:
 		target = &CursorSet{}
+	case TypePrivacySet:
+		target = &PrivacySet{}
 	case TypePing:
 		target = &Ping{}
-	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest:
+	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest, TypeUnlockRequest:
 		return &env, nil
 	default:
 		return nil, Errf(CodeBadRequest, "unknown message type")

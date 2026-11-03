@@ -78,6 +78,11 @@ type Config struct {
 	Trust TrustStore
 	// ICEServers supplies STUN/TURN entries per session, used only when the phone's offer shows it is
 	// off the LAN (nil = host candidates only: LAN and Tailscale).
+	// UnlockSecret yields the saved Mac login password for a Control session's lock-screen unlock (nil = none
+	// saved); AutoUnlock says whether a locked screen is unlocked without the phone asking. Both are called off
+	// the UI lane and must be safe for concurrent use.
+	UnlockSecret    func() (string, bool)
+	AutoUnlock      func() bool
 	ICEServers      func(ctx context.Context) []rtc.ICEServer
 	InterfaceFilter func(name string) bool
 	// OnChange fires after the session set, settings or readiness changed (Settings page refresh,
@@ -269,6 +274,7 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 	var sess *session.Session
 	sess = session.New(session.Config{
 		ID: id, Device: device, Mode: mode, Tier: tier, DisplayID: offer.DisplayID, Capturer: capr, Log: s.log,
+		UnlockSecret: s.cfg.UnlockSecret, AutoUnlock: s.cfg.AutoUnlock,
 		OnEnd: func(protocol.ErrorCode) { s.ended(sess) },
 	})
 	if _, err := sess.Prepare(ctx); err != nil {

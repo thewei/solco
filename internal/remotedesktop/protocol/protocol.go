@@ -35,6 +35,9 @@ const (
 	CodeViewOnly            ErrorCode = "view_only"            // an input message arrived in a view-only session
 	CodeNotConnected        ErrorCode = "not_connected"        // control sent before the link was up
 	CodeSessionEnded        ErrorCode = "session_ended"        // the session is over (Mac stopped it, revoked, link lost)
+	CodeUnlockUnavailable   ErrorCode = "unlock_unavailable"   // no Mac password saved (or this Mac cannot unlock)
+	CodeUnlockFailed        ErrorCode = "unlock_failed"        // the lock screen was still up after the attempt
+	CodePrivacyUnavailable  ErrorCode = "privacy_unavailable"  // this backend cannot black the screen out
 	CodeInternal            ErrorCode = "internal"
 )
 

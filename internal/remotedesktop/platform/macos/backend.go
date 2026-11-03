@@ -371,6 +371,27 @@ func (c *capturer) TuneBitrate(kbps int) {
 	_ = c.conn.Send(helperipc.OpCaptureTune, helperipc.TuneArgs{BitrateKbps: &kbps})
 }
 
+// SetBlackout / LockState / Wake / Unlock implement platform.Screen over the helper.
+func (c *capturer) SetBlackout(on bool) error {
+	return asProtocolErr(c.conn.Call(context.Background(), helperipc.OpPrivacySet, helperipc.PrivacyArgs{On: on}, nil))
+}
+
+func (c *capturer) LockState(ctx context.Context) (bool, error) {
+	var out helperipc.ScreenState
+	err := c.conn.Call(ctx, helperipc.OpScreenState, nil, &out)
+	return out.Locked, asProtocolErr(err)
+}
+
+func (c *capturer) Wake(ctx context.Context) error {
+	return asProtocolErr(c.conn.Call(ctx, helperipc.OpScreenWake, nil, nil))
+}
+
+func (c *capturer) Unlock(ctx context.Context, password string) (bool, error) {
+	var out helperipc.ScreenState
+	err := c.conn.Call(ctx, helperipc.OpScreenUnlock, helperipc.UnlockArgs{Password: password}, &out)
+	return out.Locked, asProtocolErr(err)
+}
+
 func (c *capturer) Frames() <-chan platform.Frame { return c.frames }
 func (c *capturer) Events() <-chan platform.Event { return c.events }
 func (c *capturer) Input() platform.Input         { return &input{conn: c.conn} }

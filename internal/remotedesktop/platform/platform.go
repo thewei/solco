@@ -67,6 +67,20 @@ type Capturer interface {
 	Close() error
 }
 
+// Screen is the optional capability of a Capturer that can act on the physical screen: black it out, see
+// whether the lock screen is up, wake it and type the saved login password into it. The session
+// type-asserts it, so a backend without these simply offers none of them.
+type Screen interface {
+	// SetBlackout blacks every physical display out (on) or restores it; capture is unaffected.
+	SetBlackout(on bool) error
+	// LockState reports whether the lock screen is up.
+	LockState(ctx context.Context) (locked bool, err error)
+	// Wake wakes a sleeping display.
+	Wake(ctx context.Context) error
+	// Unlock types password into the lock screen and reports whether it is still up afterwards.
+	Unlock(ctx context.Context, password string) (stillLocked bool, err error)
+}
+
 // Frame is one encoded access unit.
 type Frame struct {
 	CaptureID uint32

@@ -22,6 +22,10 @@ const (
 	OpInputReleaseAll    = "input.release_all"
 	OpClipboardRead      = "clipboard.read"
 	OpClipboardWrite     = "clipboard.write"
+	OpPrivacySet         = "privacy.set"
+	OpScreenState        = "screen.state"
+	OpScreenWake         = "screen.wake"
+	OpScreenUnlock       = "screen.unlock"
 	OpShutdown           = "shutdown"
 )
 
@@ -146,4 +150,19 @@ type TuneArgs struct {
 
 type PermissionRequestArgs struct {
 	Kind protocol.PermissionKind `json:"kind"`
+}
+
+// PrivacyArgs blacks the physical screens out (On) or restores them.
+type PrivacyArgs struct {
+	On bool `json:"on"`
+}
+
+// ScreenState answers screen.state and screen.unlock: whether the lock screen is up (after the attempt).
+type ScreenState struct {
+	Locked bool `json:"locked"`
+}
+
+// UnlockArgs carries the Mac login password to the helper for one typing; it is never logged or kept.
+type UnlockArgs struct {
+	Password string `json:"password"`
 }

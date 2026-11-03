@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -60,7 +61,13 @@ type remoteDesktopState struct {
 	pending     *rdApproval
 	approveOpen bool
 	err         string
+
+	unlockDraft string      // the password being typed; cleared on Save
+	autoUnlock  atomic.Bool // mirror of settings.RemoteDesktop.AutoUnlock for the session goroutines
 }
+
+// rdUnlockKey is the credential key of the Mac login password in Solco's encrypted store.
+const rdUnlockKey = "remotedesktop.unlock"
 
 // remoteDesktopService builds the Service on first use. It costs nothing until a phone connects:
 // the macOS backend launches the helper per session.
@@ -79,6 +86,13 @@ func (s *Shell) remoteDesktopService() *remotedesktop.Service {
 		// LAN and Tailscale phones connect on host candidates alone. Tunnels stay in (a Tailscale phone arrives
 		// on one); VM bridges and system links do not.
 		ICEServers: s.remoteICEServers,
+		// The Mac login password lives only in the encrypted credential file; the session reads it for the
+		// instant of typing and the phone can never ask for it.
+		UnlockSecret: func() (string, bool) {
+			pw, ok := appSecrets.Get(rdUnlockKey)
+			return pw, ok && pw != ""
+		},
+		AutoUnlock: r.autoUnlock.Load,
 		InterfaceFilter: func(name string) bool {
 			return !remotehost.IsVirtualInterface(name) || strings.HasPrefix(name, "utun")
 		},
@@ -120,6 +134,7 @@ func (s *Shell) remoteDesktopSeam() remotehost.RemoteDesktop {
 
 // syncRemoteDesktop pushes the saved switches into the Service (launch and every change).
 func (s *Shell) syncRemoteDesktop() {
+	s.rdesk.autoUnlock.Store(s.settings.RemoteDesktop.AutoUnlock && s.settings.RemoteDesktop.UnlockSaved)
 	s.remoteDesktopService().SetSettings(remoteDesktopSettingsFrom(s.settings.RemoteDesktop))
 }
 
@@ -425,8 +440,59 @@ func (s *Shell) settingsRemoteDesktop(c *ui.Context) {
 			}
 		}),
 	)
+	s.rdUnlockRows(c)
 	s.rdTrustedRows(c, svc)
 	s.rdSessionRows(c, svc)
+}
+
+// rdUnlockRows is the opt-in saved login password: typed once here, stored encrypted on this Mac, typed into
+// the lock screen only during a Control session you approved. The page never shows it again.
+func (s *Shell) rdUnlockRows(c *ui.Context) {
+	cfg := s.settings.RemoteDesktop
+	sp := Spacing()
+	settingsGroup(c, "Lock screen",
+		row("Mac login password", "Optional. Stored encrypted on this Mac only and never sent to a phone. Solco types it into the lock screen only while a phone you approved has Control.", func() {
+			ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+				if cfg.UnlockSaved {
+					statusPill(c, "Saved", ToneSuccess)
+				}
+				textField(c, &s.rdesk.unlockDraft).Width(220).Label("Mac login password").Placeholder("Mac login password").Password()
+				if regularButton(c, "Save").Label("Save password").Clicked() {
+					pw := s.rdesk.unlockDraft
+					if pw == "" || len(pw) > 512 {
+						s.pendingToast = "Password must contain 1–512 characters."
+						return
+					}
+					if err := appSecrets.Set(rdUnlockKey, pw); err != nil {
+						s.pendingToast = "Could not save the password: " + firstErrLine(err)
+						return
+					}
+					s.rdesk.unlockDraft = ""
+					s.setRemoteDesktop(func(v *settings.RemoteDesktopSettings) { v.UnlockSaved = true })
+					s.pendingToast = "Password saved."
+				}
+				remove := regularButton(c, "Remove").Label("Remove password")
+				remove.Disabled(!cfg.UnlockSaved)
+				if remove.Clicked() {
+					if err := appSecrets.Delete(rdUnlockKey); err != nil {
+						s.pendingToast = "Could not remove the password: " + firstErrLine(err)
+						return
+					}
+					s.setRemoteDesktop(func(v *settings.RemoteDesktopSettings) { v.UnlockSaved, v.AutoUnlock = false, false })
+					s.pendingToast = "Password removed."
+				}
+			})
+		}),
+		row("Unlock automatically", "When the Mac is locked during a Control session, Solco types the saved password (two tries). Off: the phone shows an Unlock button instead.", func() {
+			if !cfg.UnlockSaved {
+				ui.Text(c, "Save a password first").FontSize(Typography().BodySmall).TextColor(c.Theme().TextMuted)
+				return
+			}
+			if on, changed := settingSwitch(c, "Unlock automatically", cfg.AutoUnlock); changed {
+				s.setRemoteDesktop(func(v *settings.RemoteDesktopSettings) { v.AutoUnlock = on })
+			}
+		}),
+	)
 }
 
 // rdTrustedRows lists the phones that connect without asking; Forget ends their session and asks again next time.

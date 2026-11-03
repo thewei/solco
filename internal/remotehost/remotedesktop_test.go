@@ -133,6 +133,8 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 		"display-select": `{"type":"display.select","displayId":"2"}`,
 		"quality-set":    `{"type":"quality.set","tier":"high"}`,
 		"cursor-set":     `{"type":"cursor.set","visible":false}`,
+		"privacy-set":    `{"type":"privacy.set","on":true}`,
+		"unlock-request": `{"type":"unlock.request"}`,
 		"keyframe":       `{"type":"keyframe.request"}`,
 		"ping":           `{"type":"ping","t":1700000000000}`,
 		"session-end":    `{"type":"session.end"}`,
@@ -153,12 +155,16 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 			{ID: "2", Name: "DELL U2723QE", X: 1440, Y: -200, Width: 1920, Height: 1080, PixelWidth: 3840, PixelHeight: 2160, Scale: 2},
 		},
 	}
+	locked := st
+	locked.Blackout, locked.Locked, locked.CanUnlock = true, true, true
 	macToPhone := map[string]any{
-		"session-state":  protocol.SessionStateMsg{SessionState: st},
-		"clipboard-text": protocol.ClipboardText{Text: "copied on the Mac"},
-		"error":          protocol.ErrorMsg{Code: protocol.CodeViewOnly},
-		"error-message":  protocol.ErrorMsg{Code: protocol.CodePermissionRequired, Message: "accessibility"},
-		"pong":           protocol.Pong{T: 1700000000000},
+		"session-state":        protocol.SessionStateMsg{SessionState: st},
+		"session-state-locked": protocol.SessionStateMsg{SessionState: locked},
+		"error-unlock-failed":  protocol.ErrorMsg{Code: protocol.CodeUnlockFailed},
+		"clipboard-text":       protocol.ClipboardText{Text: "copied on the Mac"},
+		"error":                protocol.ErrorMsg{Code: protocol.CodeViewOnly},
+		"error-message":        protocol.ErrorMsg{Code: protocol.CodePermissionRequired, Message: "accessibility"},
+		"pong":                 protocol.Pong{T: 1700000000000},
 		"stats": protocol.StatsMsg{ConnectionStats: protocol.ConnectionStats{
 			RTTMillis: 12.5, BitrateKbps: 4200, FPS: 29.7, FramesSent: 1800, FramesDropped: 2, KeyframesSent: 15, KeyframeRequest: 1, PathType: "host", UptimeSeconds: 60,
 		}},

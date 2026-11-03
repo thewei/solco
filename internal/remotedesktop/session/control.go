@@ -36,6 +36,8 @@ func (s *Session) handle(data []byte) {
 		go s.setTier(m.Tier)
 	case *protocol.CursorSet:
 		go s.setCursor(m.Visible)
+	case *protocol.PrivacySet:
+		go s.setBlackout(m.On)
 	default:
 		s.handleInput(msg)
 	}
@@ -55,6 +57,8 @@ func (s *Session) handleSimple(typ string) {
 		if s.allowInput() {
 			go s.readClipboard()
 		}
+	case protocol.TypeUnlockRequest:
+		go s.requestUnlock()
 	}
 }
 
