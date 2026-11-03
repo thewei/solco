@@ -409,3 +409,21 @@ func TestApprovalIsRememberedAndForgottenOnRevoke(t *testing.T) {
 		t.Fatal("a refusal was remembered")
 	}
 }
+
+func TestICEServersOnlyForAnOffLANOffer(t *testing.T) {
+	var asked atomic.Int32
+	s := NewService(Config{Backend: &fakeBackend{}, ICEServers: func(context.Context) []rtc.ICEServer {
+		asked.Add(1)
+		return []rtc.ICEServer{{URLs: []string{"stun:example.invalid:3478"}}}
+	}})
+	ctx := context.Background()
+	lan := "a=candidate:1 1 udp 2130706431 192.168.1.5 5000 typ host\r\n"
+	if got := s.iceServersFor(ctx, lan); got != nil || asked.Load() != 0 {
+		t.Fatalf("a LAN offer was given ICE servers: %v", got)
+	}
+	for _, typ := range []string{"srflx", "relay"} {
+		if got := s.iceServersFor(ctx, lan+"a=candidate:2 1 udp 1694498815 203.0.113.9 5000 typ "+typ+" raddr 0.0.0.0 rport 0\r\n"); len(got) != 1 {
+			t.Fatalf("a %s offer was not given ICE servers: %v", typ, got)
+		}
+	}
+}

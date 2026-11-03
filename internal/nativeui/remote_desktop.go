@@ -14,6 +14,7 @@ import (
 	"github.com/thewei/solco/internal/remotedesktop/platform/auto"
 	"github.com/thewei/solco/internal/remotedesktop/platform/macos"
 	"github.com/thewei/solco/internal/remotedesktop/protocol"
+	"github.com/thewei/solco/internal/remotedesktop/rtc"
 	"github.com/thewei/solco/internal/remotedesktop/session"
 	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/settings"
@@ -73,8 +74,11 @@ func (s *Shell) remoteDesktopService() *remotedesktop.Service {
 		Backend:    backend,
 		Authorizer: shellAuthorizer{s},
 		Trust:      shellTrust{s},
-		// Direct host candidates only for now: LAN and Tailscale. Tunnels stay in (a Tailscale phone arrives on one);
-		// VM bridges and system links do not.
+		// One ICE list for the whole remote stack: the Host's own (static STUN/TURN + the relay's short-lived
+		// TURN credentials). It is used only for a phone that arrives off the LAN (srflx/relay in its offer);
+		// LAN and Tailscale phones connect on host candidates alone. Tunnels stay in (a Tailscale phone arrives
+		// on one); VM bridges and system links do not.
+		ICEServers: s.remoteICEServers,
 		InterfaceFilter: func(name string) bool {
 			return !remotehost.IsVirtualInterface(name) || strings.HasPrefix(name, "utun")
 		},
@@ -83,6 +87,19 @@ func (s *Shell) remoteDesktopService() *remotedesktop.Service {
 	})
 	r.svc.SetSettings(remoteDesktopSettingsFrom(s.settings.RemoteDesktop))
 	return r.svc
+}
+
+// remoteICEServers is the Host's STUN/TURN list in the media transport's shape (none while the Host is not built).
+func (s *Shell) remoteICEServers(ctx context.Context) []rtc.ICEServer {
+	srv := s.remote.srv
+	if srv == nil {
+		return nil
+	}
+	var out []rtc.ICEServer
+	for _, sv := range srv.ICEServers(ctx) {
+		out = append(out, rtc.ICEServer{URLs: sv.URLs, Username: sv.Username, Credential: sv.Credential})
+	}
+	return out
 }
 
 func remoteDesktopSettingsFrom(v settings.RemoteDesktopSettings) remotedesktop.Settings {

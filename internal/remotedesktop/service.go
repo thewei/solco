@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,7 +76,8 @@ type Config struct {
 	Authorizer Authorizer
 	// Trust, when set, lets an approved phone connect without a prompt next time (nil = ask every time).
 	Trust TrustStore
-	// ICEServers supplies STUN/TURN entries per session (nil = host candidates only: LAN and Tailscale).
+	// ICEServers supplies STUN/TURN entries per session, used only when the phone's offer shows it is
+	// off the LAN (nil = host candidates only: LAN and Tailscale).
 	ICEServers      func(ctx context.Context) []rtc.ICEServer
 	InterfaceFilter func(name string) bool
 	// OnChange fires after the session set, settings or readiness changed (Settings page refresh,
@@ -274,7 +276,7 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 		return protocol.Answer{}, err
 	}
 	peer, sdp, err := rtc.Answer(ctx, offer.SDP, rtc.Options{
-		ICEServers: s.iceServers(ctx), InterfaceFilter: s.cfg.InterfaceFilter,
+		ICEServers: s.iceServersFor(ctx, offer.SDP), InterfaceFilter: s.cfg.InterfaceFilter,
 		Handlers: rtc.Handlers{
 			OnControl:         sess.OnControl,
 			OnPointer:         sess.OnPointer,
@@ -408,9 +410,18 @@ func newID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func (s *Service) iceServers(ctx context.Context) []rtc.ICEServer {
-	if s.cfg.ICEServers == nil {
+// iceServersFor gives STUN/TURN entries only to a phone that arrives from off the LAN. Such a phone
+// gathered reflexive or relayed candidates itself (it asks for ICE servers only off-LAN), so its offer
+// says so; a phone on the LAN or Tailscale offers host candidates alone and a dead STUN server must never
+// delay it.
+func (s *Service) iceServersFor(ctx context.Context, sdp string) []rtc.ICEServer {
+	if s.cfg.ICEServers == nil || !offersOffLAN(sdp) {
 		return nil
 	}
 	return s.cfg.ICEServers(ctx)
+}
+
+// offersOffLAN reports whether an SDP offer carries a server-reflexive or relayed candidate.
+func offersOffLAN(sdp string) bool {
+	return strings.Contains(sdp, " typ srflx") || strings.Contains(sdp, " typ relay")
 }

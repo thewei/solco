@@ -181,6 +181,11 @@ func (s *Server) p2pICEServers(ctx context.Context) []ICEServer {
 	return append(out, s.relayTurn(ctx)...)
 }
 
+// ICEServers is the list both ends use, for the Remote Desktop media path: the same static STUN/TURN
+// entries and the relay's short-lived TURN credentials the P2P DataChannel uses, so one setting and one
+// credential cache serve both.
+func (s *Server) ICEServers(ctx context.Context) []ICEServer { return s.p2pICEServers(ctx) }
+
 // relayTurn asks the configured relay for TURN credentials (POST /turn). A
 // relay without TURN answers 404 and a failure is remembered briefly, so a
 // bad network never stalls every signalling request.

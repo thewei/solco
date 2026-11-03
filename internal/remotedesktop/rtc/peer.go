@@ -36,6 +36,8 @@ const (
 	// gatherTimeout bounds ICE candidate gathering before the answer is sent with what exists.
 	// LAN host candidates are immediate; a slow/blocked STUN server must not hold the session up.
 	gatherTimeout = 3 * time.Second
+	// gatherGrace is how long the answer waits for more candidates once a srflx/relay one exists.
+	gatherGrace = 1500 * time.Millisecond
 	// disconnectGrace is how long a transient ICE "disconnected" may recover before the peer is
 	// declared gone (Wi-Fi roam, a brief stall).
 	disconnectGrace = 8 * time.Second
@@ -181,11 +183,21 @@ func Answer(ctx context.Context, offerSDP string, opts Options) (*Peer, string, 
 		return fail(err)
 	}
 	gathered := webrtc.GatheringCompletePromise(pc)
+	// A dead TURN entry must not hold the answer for the whole timeout: once a reflexive or relayed candidate
+	// exists, wait only a short grace for the rest (the phone's own gather does the same).
+	early := make(chan struct{})
+	var earlyOnce sync.Once
+	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c != nil && (c.Typ == webrtc.ICECandidateTypeSrflx || c.Typ == webrtc.ICECandidateTypeRelay) {
+			earlyOnce.Do(func() { time.AfterFunc(gatherGrace, func() { close(early) }) })
+		}
+	})
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return fail(err)
 	}
 	select {
 	case <-gathered:
+	case <-early:
 	case <-time.After(gatherTimeout):
 	case <-ctx.Done():
 		return fail(ctx.Err())
