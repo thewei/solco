@@ -4,11 +4,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/notify"
-	"github.com/DnzzL/herdr-automations/internal/runner"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
+	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
 )
 
 type fakeSink struct {
@@ -173,7 +173,7 @@ func TestTheDaemonStopsOnlyOnceNoSessionIsLeft(t *testing.T) {
 // launchd relaunches it through the shim onto the installed one. A daemon a
 // TUI session started is re-executed in place instead (#8), so it stays.
 func TestOnlyTheServiceLeavesForTheInstalledBinary(t *testing.T) {
-	const run, other = "/p/1/bin/herdr-automations", "/p/2/bin/herdr-automations"
+	const run, other = "/p/1/bin/solco-automations", "/p/2/bin/solco-automations"
 	cases := []struct {
 		name             string
 		standby          bool

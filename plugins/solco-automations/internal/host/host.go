@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 // Session is a provisioned place for a run to happen: a workspace and the pane

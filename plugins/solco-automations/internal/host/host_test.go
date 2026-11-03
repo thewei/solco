@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
 )
 
 // fakeOps scripts Herdr's answers. A nil field means "this call is fine and

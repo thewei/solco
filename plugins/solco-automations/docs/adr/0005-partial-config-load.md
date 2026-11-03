@@ -36,6 +36,6 @@ Line numbers come from decoding through `yaml.Node`. They also retired
 - **`Save` refuses while `Invalid` is non-empty.** It marshals what the Config
   holds, and the Config no longer holds the broken entries — so writing one back
   would delete them. The wizard does read-append-save, which would have made
-  `herdr-automations add` silently eat an automation with a typo in it. Caught in
+  `solco-automations add` silently eat an automation with a typo in it. Caught in
   review; the fix is a refusal rather than round-tripping raw nodes, because a
   broken entry is something you want to fix before adding another anyway.

@@ -16,15 +16,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/cleanup"
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/host"
-	"github.com/DnzzL/herdr-automations/internal/hostpath"
-	"github.com/DnzzL/herdr-automations/internal/notify"
-	"github.com/DnzzL/herdr-automations/internal/runner"
-	"github.com/DnzzL/herdr-automations/internal/schedule"
+	"github.com/thewei/solco/plugins/solco-automations/internal/cleanup"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/host"
+	"github.com/thewei/solco/plugins/solco-automations/internal/hostpath"
+	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
+	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
+	"github.com/thewei/solco/plugins/solco-automations/internal/schedule"
 )
 
 // tickInterval is how often the wall clock is consulted. Short enough that a
@@ -40,7 +40,7 @@ const maintainInterval = 24 * time.Hour
 // rather than reported: the service and the TUI's startup hook can both start
 // one, and whichever comes second takes over when the first one stops.
 func Run(standby bool) error {
-	log.SetPrefix("[herdr-automations] ")
+	log.SetPrefix("[solco-automations] ")
 
 	release, err := acquireLock()
 	for err != nil && standby && errors.Is(err, ErrAlreadyRunning) {

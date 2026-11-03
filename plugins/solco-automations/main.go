@@ -1,4 +1,4 @@
-// herdr-automations — the trigger layer for Herdr agents: cron-scheduled
+// solco-automations — the trigger layer for Herdr agents: cron-scheduled
 // prompts (or herdr-workflows delegations) launched in fresh worktrees.
 package main
 
@@ -14,31 +14,31 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/api"
-	"github.com/DnzzL/herdr-automations/internal/cleanup"
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/daemon"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/pane"
-	"github.com/DnzzL/herdr-automations/internal/runner"
-	"github.com/DnzzL/herdr-automations/internal/schedule"
-	"github.com/DnzzL/herdr-automations/internal/service"
-	"github.com/DnzzL/herdr-automations/internal/shim"
-	"github.com/DnzzL/herdr-automations/internal/wizard"
+	"github.com/thewei/solco/plugins/solco-automations/internal/api"
+	"github.com/thewei/solco/plugins/solco-automations/internal/cleanup"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/daemon"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/pane"
+	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
+	"github.com/thewei/solco/plugins/solco-automations/internal/schedule"
+	"github.com/thewei/solco/plugins/solco-automations/internal/service"
+	"github.com/thewei/solco/plugins/solco-automations/internal/shim"
+	"github.com/thewei/solco/plugins/solco-automations/internal/wizard"
 )
 
 // Version is stamped by the release build; "dev" for local builds.
 var Version = "dev"
 
-const usage = `herdr-automations — cron for your Herdr agents
+const usage = `solco-automations — cron for your Herdr agents
 
 Usage:
-  herdr-automations daemon [--standby]
+  solco-automations daemon [--standby]
                                      Run the scheduler (--standby: wait while another one runs)
-  herdr-automations service install|uninstall|status
+  solco-automations service install|uninstall|status
                                      Run the scheduler as a login service (launchd, systemd)
-  herdr-automations add [flags]      Create an automation (interactive; flags answer questions)
+  solco-automations add [flags]      Create an automation (interactive; flags answer questions)
                                        --name --cron --repo --agent --model --prompt --workflow
                                        --workspace --workspace-id --mcp-config
                                        --timeout-minutes --catch-up-minutes
@@ -49,27 +49,27 @@ Usage:
                                        --on-overlap skip|queue    what a due occurrence does when the
                                                                   previous run is still working
                                        --cleanup-ttl-hours N      daily merged-worktree cleanup
-  herdr-automations approve <name>   Approve a draft: scheduling starts
-  herdr-automations list [--json]    List automations with schedule and last run
-  herdr-automations run <name> [--bg]
+  solco-automations approve <name>   Approve a draft: scheduling starts
+  solco-automations list [--json]    List automations with schedule and last run
+  solco-automations run <name> [--bg]
                                      Trigger an automation now (--bg: detach, return at once)
-  herdr-automations pause <name|--all>
+  solco-automations pause <name|--all>
                                      Stop scheduling one automation, or all of them
-  herdr-automations resume <name|--all>
+  solco-automations resume <name|--all>
                                      Resume what pause stopped
-  herdr-automations history [name] [--json]
+  solco-automations history [name] [--json]
                                      Show recent runs
-  herdr-automations put [--original <name>] [--dry-run] < automation.json
+  solco-automations put [--original <name>] [--dry-run] < automation.json
                                      Write one automation (the app panel's form)
-  herdr-automations rm <name>        Delete one automation
-  herdr-automations seen <run-id|--all>
+  solco-automations rm <name>        Delete one automation
+  solco-automations seen <run-id|--all>
                                      Mark a run, or every finished run, as opened (the app panel's inbox)
-  herdr-automations cleanup [--ttl <hours>] [--dry-run] [--yes]
+  solco-automations cleanup [--ttl <hours>] [--dry-run] [--yes]
                                      Remove run worktrees whose work already landed
                                      (--ttl N overrides every automation's cleanup_ttl_hours)
-  herdr-automations pane             Interactive board (used by the Herdr pane)
-  herdr-automations install-cli [dir] Put this command on your PATH (default ~/.local/bin)
-  herdr-automations version          Print the version
+  solco-automations pane             Interactive board (used by the Herdr pane)
+  solco-automations install-cli [dir] Put this command on your PATH (default ~/.local/bin)
+  solco-automations version          Print the version
 
 Config:  %s
 History: %s
@@ -97,7 +97,7 @@ func main() {
 		err = addCmd(args)
 	case "approve":
 		if len(args) != 1 {
-			err = fmt.Errorf("usage: herdr-automations approve <name>")
+			err = fmt.Errorf("usage: solco-automations approve <name>")
 		} else if err = config.Approve(args[0]); err == nil {
 			fmt.Printf("Approved %s — the daemon schedules it within 30s\n", args[0])
 		}
@@ -133,13 +133,13 @@ func main() {
 		err = putCmd(args)
 	case "rm":
 		if len(args) != 1 {
-			err = fmt.Errorf("usage: herdr-automations rm <name>")
+			err = fmt.Errorf("usage: solco-automations rm <name>")
 		} else {
 			err = config.Remove(args[0])
 		}
 	case "seen":
 		if len(args) != 1 {
-			err = fmt.Errorf("usage: herdr-automations seen <run-id|--all>")
+			err = fmt.Errorf("usage: solco-automations seen <run-id|--all>")
 		} else if args[0] == "--all" {
 			err = history.MarkAllSeen()
 		} else {
@@ -171,7 +171,7 @@ func list() error {
 		return err
 	}
 	if len(cfg.Automations) == 0 && len(cfg.Invalid) == 0 {
-		fmt.Printf("No automations. Create one with `herdr-automations add` or edit %s\n", config.Path())
+		fmt.Printf("No automations. Create one with `solco-automations add` or edit %s\n", config.Path())
 		return nil
 	}
 	if len(cfg.Automations) == 0 {
@@ -255,7 +255,7 @@ func printWorktrees(cfg *config.Config) {
 	}
 	line := "\n" + plan.Summary()
 	if len(plan.Removable) > 0 {
-		line += " — herdr-automations cleanup"
+		line += " — solco-automations cleanup"
 	}
 	fmt.Println(line)
 }
@@ -324,7 +324,7 @@ func addCmd(args []string) error {
 		case "--headless":
 			opts.Headless = true
 		default:
-			return fmt.Errorf("unknown flag %q; see herdr-automations add in the usage", args[i])
+			return fmt.Errorf("unknown flag %q; see solco-automations add in the usage", args[i])
 		}
 		if err != nil {
 			return err
@@ -454,7 +454,7 @@ func runCmd(args []string) error {
 	if a.Draft {
 		// The refusal says the way out, because the caller is usually a
 		// person who just wrote the entry.
-		return fmt.Errorf("%s is a draft — approve it first: herdr-automations approve %s", a.Name, a.Name)
+		return fmt.Errorf("%s is a draft — approve it first: solco-automations approve %s", a.Name, a.Name)
 	}
 	return runner.Default().Run(*a, history.TriggerManual)
 }
@@ -464,7 +464,7 @@ func runCmd(args []string) error {
 // failed to load are left as they are.
 func pauseCmd(args []string, disabled bool) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: herdr-automations %s <name|--all>", map[bool]string{true: "pause", false: "resume"}[disabled])
+		return fmt.Errorf("usage: solco-automations %s <name|--all>", map[bool]string{true: "pause", false: "resume"}[disabled])
 	}
 	name, what := args[0], args[0]
 	if name == "--all" {
@@ -489,7 +489,7 @@ func putCmd(args []string) error {
 	if len(args) == 2 && args[0] == "--original" {
 		original = args[1]
 	} else if len(args) != 0 {
-		return fmt.Errorf("usage: herdr-automations put [--original <name>] [--dry-run] < automation.json")
+		return fmt.Errorf("usage: solco-automations put [--original <name>] [--dry-run] < automation.json")
 	}
 	var in api.Automation
 	if err := json.NewDecoder(os.Stdin).Decode(&in); err != nil {
@@ -510,7 +510,7 @@ func putCmd(args []string) error {
 // panel cannot wait an hour on exec, and the run must outlive the app.
 func runDetached(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: herdr-automations run <name> --bg")
+		return fmt.Errorf("usage: solco-automations run <name> --bg")
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -576,7 +576,7 @@ func showHistory(name string) error {
 // without Herdr's startup hook, for the desktop app.
 func serviceCmd(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: herdr-automations service install|uninstall|status")
+		return fmt.Errorf("usage: solco-automations service install|uninstall|status")
 	}
 	switch args[0] {
 	case "install":
@@ -615,7 +615,7 @@ func serviceCmd(args []string) error {
 		}
 		fmt.Println()
 	default:
-		return fmt.Errorf("usage: herdr-automations service install|uninstall|status")
+		return fmt.Errorf("usage: solco-automations service install|uninstall|status")
 	}
 	return nil
 }

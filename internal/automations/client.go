@@ -1,7 +1,7 @@
 package automations
 
 /**
- * [INPUT]: 依赖 Detect 给出的 plugin_root、`<root>/bin/herdr-automations <cmd> --json` 插件 CLI（无 run.sh，直接二进制）
+ * [INPUT]: 依赖 Detect 给出的 plugin_root、`<root>/bin/solco-automations <cmd> --json` 插件 CLI（无 run.sh，直接二进制）
  * [OUTPUT]: 对外提供 Client（List / History 读；Add（永远 `add --name … --draft`）/ Approve / Run（`run <name> --bg`，立即返回）/ Pause / Resume / Remove / Put（读出该条目的原始 JSON，改动后经 stdin 交给 `put --original`，插件的 problem 原文当错误）/ StartScheduler 写）、可注入的 Exec/ExecIn 与契约 §3 的类型（Automation / Run / ListResult / HistoryResult）
  * [POS]: 插件 CLI 的唯一调用点；写入不自造语义：触发器/覆盖/清理的语法与校验全归插件，拒绝原文透传为错误；以人类身份运行——剥掉 HERDR_PANE_ID 等 Agent 身份变量，不从启动环境带进任何 Agent 身份
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -513,7 +513,7 @@ func cliExec(root, session string) ExecIn {
 		if root == "" {
 			return "", errors.New("automations: plugin root unknown")
 		}
-		cmd := exec.CommandContext(ctx, filepath.Join(root, "bin", "herdr-automations"), args...)
+		cmd := exec.CommandContext(ctx, filepath.Join(root, "bin", "solco-automations"), args...)
 		cmd.Env = cliEnv(session)
 		if stdin != "" {
 			cmd.Stdin = strings.NewReader(stdin)
@@ -533,7 +533,7 @@ func cliExec(root, session string) ExecIn {
 	}
 }
 
-// daemonStarter runs `herdr-automations daemon` in its own session so it
+// daemonStarter runs `solco-automations daemon` in its own session so it
 // outlives the window, appending its output to logPath (0600). The process is
 // reaped in the background; a second daemon exits on its own.
 func daemonStarter(root, session string) func(logPath string) error {
@@ -541,7 +541,7 @@ func daemonStarter(root, session string) func(logPath string) error {
 		if root == "" {
 			return errors.New("automations: plugin root unknown")
 		}
-		cmd := exec.Command(filepath.Join(root, "bin", "herdr-automations"), "daemon")
+		cmd := exec.Command(filepath.Join(root, "bin", "solco-automations"), "daemon")
 		cmd.Env = cliEnv(session)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if logPath != "" {

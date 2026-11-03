@@ -11,7 +11,7 @@ set -eu
 
 D="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$D/../.." && pwd)"
-BIN="${BIN:-$ROOT/bin/herdr-automations}"
+BIN="${BIN:-$ROOT/bin/solco-automations}"
 SOCK=hademo
 CAST="$D/board.cast"
 GIF="${GIF:-$ROOT/docs/board.gif}"
@@ -20,7 +20,7 @@ export HERDR_PLUGIN_CONFIG_DIR="$D/cfg"
 export HERDR_PLUGIN_STATE_DIR="$D/state"
 export EDITOR=vim VISUAL=vim TERM=xterm-256color
 
-[ -x "$BIN" ] || { echo "build first: go build -o bin/herdr-automations ." >&2; exit 1; }
+[ -x "$BIN" ] || { echo "build first: go build -o bin/solco-automations ." >&2; exit 1; }
 python3 "$D/seed.py" "$D/state"
 tmux -L "$SOCK" kill-server 2>/dev/null || true
 rm -f "$CAST"

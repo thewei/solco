@@ -21,7 +21,7 @@ func fakeHost(t *testing.T, root string) {
 		if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(root, "bin", "herdr-automations"), []byte(plugin), 0o755); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "bin", "solco-automations"), []byte(plugin), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -40,7 +40,7 @@ func TestShimRunsTheInstalledPluginBinary(t *testing.T) {
 	if err := Install(dir); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(filepath.Join(dir, "herdr-automations"), "run", "two words").CombinedOutput()
+	out, err := exec.Command(filepath.Join(dir, "solco-automations"), "run", "two words").CombinedOutput()
 	if err != nil {
 		t.Fatalf("shim: %v\n%s", err, out)
 	}
@@ -58,7 +58,7 @@ func TestShimSaysSoWhenThePluginIsNotInstalled(t *testing.T) {
 	if err := Install(dir); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(filepath.Join(dir, "herdr-automations")).CombinedOutput()
+	out, err := exec.Command(filepath.Join(dir, "solco-automations")).CombinedOutput()
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) || exit.ExitCode() != 127 {
 		t.Fatalf("shim err = %v, want exit 127", err)
@@ -78,7 +78,7 @@ func TestShimSaysSoWhenHerdrIsNotOnPath(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("HERDR_BIN_PATH", "")
 
-	out, err := exec.Command(filepath.Join(dir, "herdr-automations")).CombinedOutput()
+	out, err := exec.Command(filepath.Join(dir, "solco-automations")).CombinedOutput()
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) || exit.ExitCode() != 127 {
 		t.Fatalf("shim err = %v, want exit 127", err)
@@ -102,7 +102,7 @@ func TestInstallTwiceIsFine(t *testing.T) {
 
 func TestInstallRefusesToOverwriteAFileItDidNotWrite(t *testing.T) {
 	dir := t.TempDir()
-	theirs := filepath.Join(dir, "herdr-automations")
+	theirs := filepath.Join(dir, "solco-automations")
 	if err := os.WriteFile(theirs, []byte("#!/bin/sh\necho mine\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestFindReturnsOurShimOnPathAndNothingElse(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := Find(); ok {
-		t.Fatal("took someone else's herdr-automations for our shim")
+		t.Fatal("took someone else's solco-automations for our shim")
 	}
 	if err := os.Remove(filepath.Join(dir, name)); err != nil {
 		t.Fatal(err)

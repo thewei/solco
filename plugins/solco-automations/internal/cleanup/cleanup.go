@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/host"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/host"
 )
 
 // BranchPrefix marks the branches runs create; anything else in the repo is

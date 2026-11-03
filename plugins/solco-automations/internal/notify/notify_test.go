@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
 )
 
 // fakeSink scripts Herdr's answers, in the shape of fakeOps (host/host_test.go).

@@ -4,6 +4,12 @@ What changed for someone using the plugin. Dates are release dates.
 
 ## Unreleased
 
+- **Detached from upstream naming**: the binary is `solco-automations` (was
+  `herdr-automations`; `bin/`, the `install-cli` shim, the plugin manifest, the
+  skill name and every message follow) and the Go module is
+  `github.com/thewei/solco/plugins/solco-automations`. The MIT notice and the
+  fork credit stay. After updating, rebuild (`sh scripts/install.sh`) and
+  reinstall the shim with `install-cli` if you used one.
 - The login service is this fork's own (`com.whstudio.solco.automations` launchd label,
   `solco-automations.service` systemd unit), so installing it no longer replaces
   the upstream plugin's scheduler of the same binary name.

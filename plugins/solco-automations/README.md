@@ -94,32 +94,32 @@ schedules, accumulating worktrees — it reports and waits for you.
 ## Quick start
 
 ```bash
-herdr plugin install DnzzL/herdr-automations   # prebuilt binary, no toolchain needed
-herdr plugin action invoke install-cli --plugin dnzzl.automations   # shim in ~/.local/bin
-herdr-automations add                          # wizard: validates cron, previews next 3 runs
+herdr plugin link ./plugins/solco-automations   # from a Solco checkout; builds bin/solco-automations
+herdr plugin action invoke install-cli --plugin com.whstudio.solco.automations   # shim in ~/.local/bin
+solco-automations add                          # wizard: validates cron, previews next 3 runs
 ```
 
 Prebuilt for macOS and Linux (arm64/amd64), checksum-verified at install; anything
 else builds from source and needs Go.
 
 Herdr doesn't put plugin binaries on `PATH`, so `install-cli` writes a small
-`herdr-automations` shim that asks Herdr where the plugin lives on every call:
+`solco-automations` shim that asks Herdr where the plugin lives on every call:
 `herdr plugin update` keeps it working. The action runs in the background and
-prints nothing; if `herdr-automations` is then not found, add `~/.local/bin` to
+prints nothing; if `solco-automations` is then not found, add `~/.local/bin` to
 your `PATH`. To put the shim in another directory:
 
 ```bash
-"$(herdr plugin list --plugin dnzzl.automations --json | sed -n 's/.*"plugin_root":"\([^"]*\)".*/\1/p')"/bin/herdr-automations install-cli ~/bin
+"$(herdr plugin list --plugin com.whstudio.solco.automations --json | sed -n 's/.*"plugin_root":"\([^"]*\)".*/\1/p')"/bin/solco-automations install-cli ~/bin
 ```
 
 **Three ways to add an automation**, all writing the same file:
 
-1. `herdr-automations add` — the wizard: validates the cron, previews the next three
+1. `solco-automations add` — the wizard: validates the cron, previews the next three
    runs, and warns if another automation is already due at the same time
 
    ![The add wizard: naming an automation, validating its cron, previewing the next runs](docs/wizard.gif)
 
-2. **Edit the YAML** — `herdr plugin config-dir dnzzl.automations` → `automations.yaml`
+2. **Edit the YAML** — `herdr plugin config-dir com.whstudio.solco.automations` → `automations.yaml`
    (or press `e` on the board to open it at the right line). Full reference in
    [`automations.example.yaml`](automations.example.yaml)
 3. **Ask your agent** — see below
@@ -127,10 +127,10 @@ your `PATH`. To put the shim in another directory:
 The daemon picks up edits within 30 seconds, no restart.
 
 ```bash
-herdr-automations list             # schedule, model and last run per automation
-herdr-automations run issue-triage # trigger now, don't wait for cron
-herdr-automations history         # what ran, when, how it ended
-herdr-automations cleanup         # drop the run worktrees whose work already landed
+solco-automations list             # schedule, model and last run per automation
+solco-automations run issue-triage # trigger now, don't wait for cron
+solco-automations history         # what ran, when, how it ended
+solco-automations cleanup         # drop the run worktrees whose work already landed
 ```
 
 ### Let your agent do the scheduling
@@ -140,7 +140,7 @@ once with [`npx skills`](https://github.com/vercel-labs/skills), which links it
 into every agent it finds (Claude Code, Codex, OpenCode, …):
 
 ```bash
-npx skills add DnzzL/herdr-automations
+npx skills add ./plugins/solco-automations   # from a Solco checkout
 ```
 
 Then, in any new agent session, plain language is enough:
@@ -159,7 +159,7 @@ skill is a copy: after upgrading the plugin, run `npx skills update` to match.
 A live overlay listing every automation with its next run and last status:
 
 ```bash
-herdr plugin pane open --plugin dnzzl.automations --entrypoint board --placement overlay
+herdr plugin pane open --plugin com.whstudio.solco.automations --entrypoint board --placement overlay
 ```
 
 | Key | Does |
@@ -176,10 +176,10 @@ Bind it to a chord so you never type that command again — in `~/.config/herdr/
 [[keys.command]]
 key = "prefix+a"
 type = "shell"
-command = "herdr plugin pane open --plugin dnzzl.automations --entrypoint board --placement overlay"
+command = "herdr plugin pane open --plugin com.whstudio.solco.automations --entrypoint board --placement overlay"
 ```
 
-The plugin also registers an action (`herdr plugin action invoke run-now --plugin dnzzl.automations`)
+The plugin also registers an action (`herdr plugin action invoke run-now --plugin com.whstudio.solco.automations`)
 that prompts for which automation to fire.
 
 ### In the Herdr desktop app
@@ -217,10 +217,10 @@ one is open. Closing a run's space calls the run off, as in the TUI.
 as a login service (a launchd agent on macOS, a systemd user unit on Linux):
 
 ```bash
-git clone https://github.com/DnzzL/herdr-automations && cd herdr-automations
+cd plugins/solco-automations                             # inside a Solco checkout
 sh scripts/install.sh                                    # prebuilt binary into bin/
-ln -s "$PWD/bin/herdr-automations" ~/.local/bin/         # where the panel looks for it
-herdr-automations service install                        # scheduler at login, now
+ln -s "$PWD/bin/solco-automations" ~/.local/bin/         # where the panel looks for it
+solco-automations service install                        # scheduler at login, now
 cp -R app/mods/automations ~/.config/herdr-app/mods/     # the panel
 ```
 
@@ -337,13 +337,13 @@ session to attach — see [ADR 0010](docs/adr/0010-the-daemon-belongs-to-no-sess
 
 ## What this does to your machine
 
-`herdr-automations` schedules and records. It never runs your prompt itself: it asks
+`solco-automations` schedules and records. It never runs your prompt itself: it asks
 Herdr to provision a workspace or tab and start an agent, and that agent runs under whatever
 permissions Herdr gives it. So the honest statement is about the scheduler, and the
 agent's own posture is Herdr's to describe.
 
-- **Writes to two places** — the plugin config dir (`herdr plugin config-dir dnzzl.automations`) and `~/.local/state/herdr/plugins/dnzzl.automations` for the run log. Nothing else on disk is touched by the plugin itself
-- **Creates git worktrees and branches** in the repos you name, `auto/<name>-<timestamp>`. It never removes one on its own — `herdr-automations cleanup` is the only thing that deletes, it asks first, and it only touches `auto/` branches already contained in your default branch
+- **Writes to two places** — the plugin config dir (`herdr plugin config-dir com.whstudio.solco.automations`) and `~/.local/state/herdr/plugins/com.whstudio.solco.automations` for the run log. Nothing else on disk is touched by the plugin itself
+- **Creates git worktrees and branches** in the repos you name, `auto/<name>-<timestamp>`. It never removes one on its own — `solco-automations cleanup` is the only thing that deletes, it asks first, and it only touches `auto/` branches already contained in your default branch
 - **Opens no ports**, phones nothing home, and downloads nothing at runtime — the only network access is `herdr plugin install` fetching a checksum-verified release binary
 - **Raises a Herdr toast** on a failed run, a missed run, or a broken `automations.yaml` entry — in every running Herdr session: a panel inside the Herdr window, not an OS notification, and not sent anywhere
 - **`herdr plugin uninstall`** removes the plugin and leaves your config and history where they are
@@ -355,7 +355,7 @@ agent's own posture is Herdr's to describe.
 So the scheduler works off the wall clock, not a timer: an occurrence that came due
 while the machine was asleep **runs when it wakes**, as long as it's within
 `catch_up_minutes` (default 2 hours). Anything older is recorded as `missed` in the
-history rather than silently skipped, so `herdr-automations history` always tells you
+history rather than silently skipped, so `solco-automations history` always tells you
 what didn't happen. Set `catch_up_minutes: -1` for automations that are pointless late.
 
 Timers alone don't survive sleep — macOS suspends the monotonic clock, so a job armed
@@ -364,7 +364,7 @@ for 9am Monday can simply never fire. Hence the wall-clock loop.
 **Two automations due at the same minute — what runs?** Both. Herdr is a multi-agent
 runtime and `0 9 * * 1` means 9:00, so the scheduler doesn't queue, throttle or
 quietly stagger anything behind your back. What it does instead is tell you: the
-wizard warns while you're still choosing the cron, and `herdr-automations list`
+wizard warns while you're still choosing the cron, and `solco-automations list`
 reports every overlap in the next week. If running them together isn't what you
 want, move a cron — one character, and the file still says what happens.
 
@@ -377,7 +377,7 @@ branch, so the only trace a run leaves is its line in `history.jsonl`.
 is still open is a run nobody has looked at, which makes the Herdr sidebar the inbox.
 Closing it is how you say you're done.
 
-`herdr-automations cleanup` removes only the ones whose work already landed — the
+`solco-automations cleanup` removes only the ones whose work already landed — the
 branch is an ancestor of the default branch, so either it was merged or the agent
 produced no commit at all. Anything with a workspace still open, or commits that
 exist nowhere else, is kept and told why. It prints its verdicts, asks once, and
@@ -412,7 +412,7 @@ An automation is one prompt on a clock. That is the whole boundary.
 ## Development
 
 ```bash
-go build -o bin/herdr-automations . && go test ./...
+go build -o bin/solco-automations . && go test ./...
 herdr plugin link .        # use your checkout as the installed plugin
 go test -tags hc ./internal/host/ -run Live   # against the real herdr-core, Herdr app open
 scripts/dev-app.sh         # copy the panel into the app (a symlink is not reloaded)

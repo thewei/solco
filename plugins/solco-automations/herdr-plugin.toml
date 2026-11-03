@@ -9,22 +9,22 @@ platforms = ["linux", "macos"]
 command = ["sh", "scripts/install.sh"]
 
 [[startup]]
-command = ["./bin/herdr-automations", "daemon"]
+command = ["./bin/solco-automations", "daemon"]
 
 [[actions]]
 id = "run-now"
 title = "Automations: run now"
 contexts = ["workspace"]
-command = ["./bin/herdr-automations", "run", "--pick"]
+command = ["./bin/solco-automations", "run", "--pick"]
 
 [[actions]]
 id = "install-cli"
-title = "Automations: put herdr-automations on your PATH"
+title = "Automations: put solco-automations on your PATH"
 contexts = ["workspace"]
-command = ["./bin/herdr-automations", "install-cli"]
+command = ["./bin/solco-automations", "install-cli"]
 
 [[panes]]
 id = "board"
 title = "Automations"
 placement = "overlay"
-command = ["./bin/herdr-automations", "pane"]
+command = ["./bin/solco-automations", "pane"]

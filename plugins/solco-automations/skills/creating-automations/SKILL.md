@@ -1,6 +1,6 @@
 ---
-name: herdr-automations
-description: Schedule a recurring agent task with herdr-automations (cron + prompt), or edit/inspect existing ones. Use whenever the user wants something to run on a schedule — "every morning", "each Monday", "nightly", "every week", "on a cron", "recurring", "automate this", "schedule an agent", "run this while I sleep" — and for triage/dependency-bump/report/standup chores that repeat. Also use to list, disable, or debug scheduled automations and their run history. New automations are created as drafts and approved by a human.
+name: solco-automations
+description: Schedule a recurring agent task with solco-automations (cron + prompt), or edit/inspect existing ones. Use whenever the user wants something to run on a schedule — "every morning", "each Monday", "nightly", "every week", "on a cron", "recurring", "automate this", "schedule an agent", "run this while I sleep" — and for triage/dependency-bump/report/standup chores that repeat. Also use to list, disable, or debug scheduled automations and their run history. New automations are created as drafts and approved by a human.
 ---
 
 # Scheduling Herdr automations
@@ -19,7 +19,7 @@ Ask the CLI rather than guessing:
 herdr plugin config-dir com.whstudio.solco.automations    # → <dir>/automations.yaml
 ```
 
-Fallback when Herdr isn't installed: `~/.config/herdr-automations/automations.yaml`.
+Fallback when Herdr isn't installed: `~/.config/solco-automations/automations.yaml`.
 
 ## Entry format
 
@@ -64,7 +64,7 @@ Exactly one of `prompt` / `workflow` is required.
 # 1. Analyse, then draft. The rationale is what the approver reads — write
 #    the goal, the inputs, the guardrails and the cost, not a restatement
 #    of the prompt.
-herdr-automations add --draft \
+solco-automations add --draft \
   --name issue-triage \
   --cron "0 9 * * 1-5" \
   --repo ~/Projects/myapp \
@@ -73,15 +73,15 @@ herdr-automations add --draft \
   --prompt "Triage new GitHub issues: …"
 
 # 2. A person approves (the app's drawer, or the CLI):
-herdr-automations approve issue-triage
+solco-automations approve issue-triage
 
 # 3. Inspect and operate:
-herdr-automations list --json       # draft/rationale/next_run/last_run/history30 per entry
-herdr-automations history --json    # runs; status queued = waiting to catch up
-herdr-automations run issue-triage  # refused while it is a draft
-herdr-automations pause issue-triage
-herdr-automations resume issue-triage
-herdr-automations rm issue-triage
+solco-automations list --json       # draft/rationale/next_run/last_run/history30 per entry
+solco-automations history --json    # runs; status queued = waiting to catch up
+solco-automations run issue-triage  # refused while it is a draft
+solco-automations pause issue-triage
+solco-automations resume issue-triage
+solco-automations rm issue-triage
 ```
 
 Edits from a form go through `put --original <name> < automation.json`, which
@@ -94,7 +94,7 @@ carries the new fields (`draft`, `rationale`, `on_overlap`,
   come to change.
 - Names must be unique. Spaces are allowed; the branch name is slugified.
 - Every entry is validated on load. A bad one is skipped with a diagnostic and
-  the rest still run, so check `herdr-automations list` after writing: it names
+  the rest still run, so check `solco-automations list` after writing: it names
   what did not load, with the line to fix.
 - Times are local to the machine running the Herdr server.
 - **Always set `model`** on kinds that accept it (`claude`, `codex`, `cursor`,
@@ -108,7 +108,7 @@ carries the new fields (`draft`, `rationale`, `on_overlap`,
   drops the occurrence; `queue` holds exactly one and runs it when free.
   Choose `queue` only for chores where a late run is still worth having.
 - Automations due at the same minute **all start**: Herdr is a multi-agent
-  runtime and nothing here serialises. `herdr-automations list` reports the
+  runtime and nothing here serialises. `solco-automations list` reports the
   overlaps; stagger the crons if running them at once is not what you want.
 - The daemon reloads within 30 seconds; no restart needed.
 - Occurrences missed while the machine slept run on wake within `catch_up_minutes`
@@ -141,10 +141,10 @@ Ask only when it's genuinely ambiguous. Otherwise translate directly:
 ## Verify
 
 ```bash
-herdr-automations list             # entry present, cron parsed, draft flagged
-herdr-automations approve <name>   # a human's yes; until then it will not schedule
-herdr-automations run <name>       # optional immediate test run (refused while a draft)
-herdr-automations history <name>   # what happened
+solco-automations list             # entry present, cron parsed, draft flagged
+solco-automations approve <name>   # a human's yes; until then it will not schedule
+solco-automations run <name>       # optional immediate test run (refused while a draft)
+solco-automations history <name>   # what happened
 ```
 
 Report the next scheduled run time, and that the automation stays unscheduled

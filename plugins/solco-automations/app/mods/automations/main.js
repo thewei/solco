@@ -1,6 +1,6 @@
-// Automations: scheduled agent prompts (herdr-automations), as a side panel.
+// Automations: scheduled agent prompts (solco-automations), as a side panel.
 //
-// Everything goes through the herdr-automations CLI (`… --json`): this mod
+// Everything goes through the solco-automations CLI (`… --json`): this mod
 // never reads or writes automations.yaml or history.jsonl itself. The files
 // are watched only to know when to ask again.
 
@@ -62,8 +62,8 @@ export default class Automations extends View {
 
   // The CLI on PATH, else where install.sh and the dev symlink put it.
   async locate() {
-    try { if ((await exec("herdr-automations", ["version"])).code === 0) return "herdr-automations"; } catch {}
-    return `${home()}/.local/bin/herdr-automations`;
+    try { if ((await exec("solco-automations", ["version"])).code === 0) return "solco-automations"; } catch {}
+    return `${home()}/.local/bin/solco-automations`;
   }
 
   async cli(args) {

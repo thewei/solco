@@ -6,10 +6,10 @@ package api
 import (
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/daemon"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/schedule"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/daemon"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/schedule"
 )
 
 // Listing is `ls --json`.

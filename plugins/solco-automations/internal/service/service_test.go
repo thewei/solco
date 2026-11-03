@@ -6,7 +6,7 @@ import (
 )
 
 var spec = Spec{
-	Exe:  "/opt/ha/herdr-automations",
+	Exe:  "/opt/ha/solco-automations",
 	Logs: "/state/daemon.log",
 	Env: map[string]string{
 		"PATH":                    "/Users/me/.local/bin:/usr/bin",
@@ -21,7 +21,7 @@ func TestPlistCarriesTheDaemonAndItsEnvironment(t *testing.T) {
 	p := plist(spec)
 	for _, want := range []string{
 		"<string>" + Label + "</string>",
-		"<string>/opt/ha/herdr-automations</string>",
+		"<string>/opt/ha/solco-automations</string>",
 		"<string>daemon</string>", "<string>--standby</string>",
 		"<key>PATH</key>", "<string>/Users/me/.local/bin:/usr/bin</string>",
 		"<string>/cfg &amp; co</string>", // escaped, or launchd rejects the file
@@ -37,7 +37,7 @@ func TestPlistCarriesTheDaemonAndItsEnvironment(t *testing.T) {
 func TestUnitCarriesTheDaemonAndItsEnvironment(t *testing.T) {
 	u := unit(spec)
 	for _, want := range []string{
-		`ExecStart="/opt/ha/herdr-automations" daemon --standby`,
+		`ExecStart="/opt/ha/solco-automations" daemon --standby`,
 		`Environment="PATH=/Users/me/.local/bin:/usr/bin"`,
 		`Environment="HERDR_PLUGIN_CONFIG_DIR=/cfg & co"`,
 		"Restart=always",

@@ -20,7 +20,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/DnzzL/herdr-automations/internal/hostpath"
+	"github.com/thewei/solco/plugins/solco-automations/internal/hostpath"
 )
 
 // CronParser accepts the standard 5-field crontab syntax plus descriptors

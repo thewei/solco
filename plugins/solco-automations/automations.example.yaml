@@ -1,5 +1,5 @@
 # Copy to your plugin config dir (herdr plugin config-dir com.whstudio.solco.automations)
-# as automations.yaml — or let `herdr-automations add` write it for you.
+# as automations.yaml — or let `solco-automations add` write it for you.
 automations:
   - name: issue-triage
     cron: "0 9 * * 1-5"
@@ -27,7 +27,7 @@ automations:
     disabled: true
 
   # A draft: visible in `list`, never scheduled until someone runs
-  # `herdr-automations approve weekly-review-draft`. The rationale is what the
+  # `solco-automations approve weekly-review-draft`. The rationale is what the
   # approver reads.
   - name: weekly-review-draft
     cron: "0 10 * * 1"

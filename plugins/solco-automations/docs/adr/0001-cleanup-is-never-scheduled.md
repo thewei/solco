@@ -10,7 +10,7 @@ to reap them on a timer.
 ## Decision
 
 Nothing in `internal/cleanup` runs on a schedule. Removal is always an explicit
-act — `herdr-automations cleanup`, or `c` on the board — and the default is to
+act — `solco-automations cleanup`, or `c` on the board — and the default is to
 keep.
 
 ## Why

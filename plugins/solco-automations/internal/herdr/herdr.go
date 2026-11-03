@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/hostpath"
+	"github.com/thewei/solco/plugins/solco-automations/internal/hostpath"
 )
 
 // Client talks to the herdr CLI. The zero value is ready, and talks to

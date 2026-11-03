@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
 )
 
 func agentWorkWith(ops ops, a config.Automation) agentWork {

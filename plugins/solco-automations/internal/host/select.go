@@ -1,8 +1,8 @@
 package host
 
 import (
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/hc"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/hc"
 )
 
 // Resolve settles auto: herdr-core when it answers, else the TUI's server.

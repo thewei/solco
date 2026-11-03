@@ -17,9 +17,9 @@ import (
 )
 
 // Label names the service in launchd, UnitName in systemd. Both are this
-// fork's own: the upstream plugin installs a service of the same binary name
-// under dev.dnzzl.herdr-automations / herdr-automations.service, and sharing
-// either would make one install silently replace the other's scheduler.
+// fork's own: the upstream plugin installs its service under
+// dev.dnzzl.herdr-automations / herdr-automations.service, and sharing either
+// would make one install silently replace the other's scheduler.
 const (
 	Label    = "com.whstudio.solco.automations"
 	UnitName = "solco-automations.service"
@@ -55,7 +55,7 @@ func Install(program string, env map[string]string, logs string) (string, error)
 		}
 		return path, systemctl("enable", "--now", UnitName)
 	}
-	return "", fmt.Errorf("no service support on %s; run `herdr-automations daemon` yourself", runtime.GOOS)
+	return "", fmt.Errorf("no service support on %s; run `solco-automations daemon` yourself", runtime.GOOS)
 }
 
 // Uninstall stops the service and removes its file.

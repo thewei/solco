@@ -22,7 +22,7 @@ fits before you write it.
 runs the same checks as CI.
 
 ```bash
-go build -o bin/herdr-automations . && go test ./...
+go build -o bin/solco-automations . && go test ./...
 go vet ./... && gofmt -l .          # both must be clean; CI enforces them
 herdr plugin link .                 # run your checkout as the installed plugin
 ```
@@ -30,8 +30,8 @@ herdr plugin link .                 # run your checkout as the installed plugin
 `herdr plugin link` replaces any GitHub install of the plugin, and the daemon
 re-executes itself when the binary changes, so a rebuild is enough to test.
 
-Config lives in `herdr plugin config-dir dnzzl.automations`, run history in
-`~/.local/state/herdr/plugins/dnzzl.automations`. Both survive uninstalls; delete
+Config lives in `herdr plugin config-dir com.whstudio.solco.automations`, run history in
+`~/.local/state/herdr/plugins/com.whstudio.solco.automations`. Both survive uninstalls; delete
 them by hand if you want a clean slate.
 
 ## House style

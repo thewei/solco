@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 // acquireLock keeps a single scheduler alive per machine. Two daemons would

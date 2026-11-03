@@ -28,7 +28,7 @@ func TestClientAgainstTheRealPluginBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	build := exec.Command("go", "build", "-o", filepath.Join(root, "bin", "herdr-automations"), ".")
+	build := exec.Command("go", "build", "-o", filepath.Join(root, "bin", "solco-automations"), ".")
 	build.Dir = pluginDir
 	build.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	if out, err := build.CombinedOutput(); err != nil {

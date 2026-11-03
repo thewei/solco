@@ -61,7 +61,7 @@ func usable(path string) bool {
 
 // ConfigDir resolves the config directory. Under Herdr the env var is
 // authoritative; from a plain shell we ask the herdr CLI, so
-// `herdr-automations list` in a terminal always sees what the daemon sees.
+// `solco-automations list` in a terminal always sees what the daemon sees.
 func ConfigDir() string {
 	if d := os.Getenv("HERDR_PLUGIN_CONFIG_DIR"); d != "" {
 		return d
@@ -86,7 +86,7 @@ func StateDir() string {
 }
 
 // Root locates the plugin checkout: Herdr sets it, otherwise derive it from
-// the binary's location (bin/herdr-automations lives inside the checkout).
+// the binary's location (bin/solco-automations lives inside the checkout).
 func Root() (string, error) {
 	if r := os.Getenv("HERDR_PLUGIN_ROOT"); r != "" {
 		return r, nil
@@ -128,7 +128,7 @@ func installedBinary(raw []byte) string {
 	}
 	for _, p := range list.Result.Plugins {
 		if p.ID == PluginID && p.Root != "" {
-			return filepath.Join(p.Root, "bin", "herdr-automations")
+			return filepath.Join(p.Root, "bin", "solco-automations")
 		}
 	}
 	return ""

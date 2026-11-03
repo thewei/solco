@@ -442,13 +442,13 @@ func TestAutomationsRemoveIsConfirmed(t *testing.T) {
 func TestAutomationsRefusalBecomesTheToast(t *testing.T) {
 	calls := stubAutomationsClient(t, func([]string) (string, error) {
 		// The CLI wrapper's shape: "automations: <verb>: <exit>: <refusal>".
-		return "", errors.New("automations: approve: exit status 1: draft-sweep is a draft — approve it first: herdr-automations approve draft-sweep")
+		return "", errors.New("automations: approve: exit status 1: draft-sweep is a draft — approve it first: solco-automations approve draft-sweep")
 	})
 	s := openAutomationsShell(t, calls)
 	s.automationsWrite("approve", "draft-sweep", func(ctx context.Context, client *automations.Client) error {
 		return client.Approve(ctx, "draft-sweep")
 	}, nil)
-	if s.pendingToast != "draft-sweep is a draft — approve it first: herdr-automations approve draft-sweep" {
+	if s.pendingToast != "draft-sweep is a draft — approve it first: solco-automations approve draft-sweep" {
 		t.Fatalf("toast = %q, want the plugin's own refusal", s.pendingToast)
 	}
 }

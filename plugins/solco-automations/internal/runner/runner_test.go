@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/host"
-	"github.com/DnzzL/herdr-automations/internal/notify"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/host"
+	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
 )
 
 // fakeSink is notify's test seam (internal/notify/notify_test.go), reused here

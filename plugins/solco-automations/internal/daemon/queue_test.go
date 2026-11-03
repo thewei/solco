@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/host"
-	"github.com/DnzzL/herdr-automations/internal/runner"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/host"
+	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
 )
 
 // blockingHost provisions at once and holds every Do until released.

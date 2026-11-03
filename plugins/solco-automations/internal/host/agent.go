@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
 )
 
 // agentWork starts an interactive agent, hands it the prompt, and waits for it

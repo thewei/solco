@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/host"
-	"github.com/DnzzL/herdr-automations/internal/notify"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/host"
+	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
 )
 
 // Runner runs automations on a host. It holds the in-flight set, which used to
@@ -68,7 +68,7 @@ func (r *Runner) Busy() bool {
 // Fire ever reaches here.
 func (r *Runner) Run(a config.Automation, trigger history.Trigger) error {
 	if a.Draft {
-		return fmt.Errorf("%s is a draft — approve it first: herdr-automations approve %s", a.Name, a.Name)
+		return fmt.Errorf("%s is a draft — approve it first: solco-automations approve %s", a.Name, a.Name)
 	}
 	if _, busy := r.inFlight.LoadOrStore(a.Name, true); busy {
 		r.record(history.NewID(a.Name, ""), a.Name, trigger, history.StatusSkipped, host.Session{},

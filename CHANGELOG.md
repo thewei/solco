@@ -9,6 +9,7 @@ at release time and shown in Settings → About.
 
 ### New
 
+- Automations: the plugin's binary and Go module are now Solco's own (`solco-automations`); rebuild the plugin after updating (MIT credit to the upstream project stays)
 - Automations: run headless so no trust dialog can stop an unattended run
 - Automations: unread failed/finished runs count in the Header and show in a new Automations tab of its popover
 - Automations: a Mac notification and a phone notification for each step — a draft waiting for approval, a run starting, finishing or failing

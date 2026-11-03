@@ -114,7 +114,7 @@ func presetCron(label string) string {
 
 // automationsAskText is what ✦ Let an Agent Draft offers to copy into Chat
 // (v1: no direct wiring — the user pastes it to an agent themselves).
-const automationsAskText = `Draft an automation for Solco's Automations plugin (com.whstudio.solco.automations, created with herdr-automations add --draft --rationale):
+const automationsAskText = `Draft an automation for Solco's Automations plugin (com.whstudio.solco.automations, created with solco-automations add --draft --rationale):
 - Goal: what should this automation reliably accomplish?
 - Trigger: a cron expression, and the repository it acts on
 - Guardrails: what it must not touch; what timeout_minutes to set; skip or queue when runs overlap

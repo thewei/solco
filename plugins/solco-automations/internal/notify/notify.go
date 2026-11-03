@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
 )
 
 // bodyLimit bounds a toast body to one short line. hwf recovers a delegated

@@ -1,4 +1,4 @@
-// Package wizard implements `herdr-automations add`: a plain stdin Q&A that
+// Package wizard implements `solco-automations add`: a plain stdin Q&A that
 // appends a validated entry to automations.yaml and previews the next runs.
 // Flags answer questions before they are asked — the Solco app creates
 // automations entirely through flags, with `--draft` as its default first
@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/schedule"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/schedule"
 )
 
 // Options carries what flags answered before the first question is asked.
@@ -170,9 +170,9 @@ func Run(opts Options) error {
 	fmt.Printf("\nSaved %q to %s\n", name, config.Path())
 	if opts.Draft {
 		// The daemon will not schedule a draft: approval is the point.
-		fmt.Printf("It stays unscheduled until someone approves it:\n  herdr-automations approve %s\n", name)
+		fmt.Printf("It stays unscheduled until someone approves it:\n  solco-automations approve %s\n", name)
 	} else {
-		fmt.Printf("The daemon picks it up within 30s. Test it now with: herdr-automations run %s\n", name)
+		fmt.Printf("The daemon picks it up within 30s. Test it now with: solco-automations run %s\n", name)
 	}
 	return nil
 }

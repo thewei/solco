@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/DnzzL/herdr-automations/internal/runner"
+	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
 )
 
 // A daemon killed with the Herdr server leaves its pidfile behind, and the
@@ -181,7 +181,7 @@ func TestFailedReExecKeepsTheLock(t *testing.T) {
 // daemon started from, and that is the one to watch and re-exec.
 func TestReinstallReExecsTheBinaryAtTheStartupPath(t *testing.T) {
 	root := t.TempDir()
-	exe := filepath.Join(root, "checkout", "bin", "herdr-automations")
+	exe := filepath.Join(root, "checkout", "bin", "solco-automations")
 	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
 		t.Fatal(err)
 	}

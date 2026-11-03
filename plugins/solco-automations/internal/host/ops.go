@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
 )
 
 // ops is this package's internal seam: the individual Herdr calls, one method

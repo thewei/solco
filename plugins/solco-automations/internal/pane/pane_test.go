@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/DnzzL/herdr-automations/internal/cleanup"
-	"github.com/DnzzL/herdr-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/cleanup"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
 )
 
 // board loads the model over a config file written for the test.
@@ -185,7 +185,7 @@ func TestTheCursorSurvivesTheConfigShrinkingUnderIt(t *testing.T) {
 
 func TestAnEmptyConfigSaysHowToStart(t *testing.T) {
 	m := board(t, "automations: []\n")
-	if got := m.View(); !strings.Contains(got, "herdr-automations add") {
+	if got := m.View(); !strings.Contains(got, "solco-automations add") {
 		t.Errorf("view = %q, want it to say how to add one", got)
 	}
 }

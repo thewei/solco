@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 // headlessWork runs the agent's own non-interactive command in the pane.

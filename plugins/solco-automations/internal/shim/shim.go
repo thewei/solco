@@ -1,4 +1,4 @@
-// Package shim puts `herdr-automations` on the user's PATH. Herdr runs plugin
+// Package shim puts `solco-automations` on the user's PATH. Herdr runs plugin
 // binaries from its own install directory and never exposes them to a shell,
 // and that directory moves between Herdr versions and on every plugin update.
 // So the shim hardcodes nothing: each call asks Herdr where the plugin lives
@@ -14,14 +14,14 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/DnzzL/herdr-automations/internal/hostpath"
+	"github.com/thewei/solco/plugins/solco-automations/internal/hostpath"
 )
 
-const name = "herdr-automations"
+const name = "solco-automations"
 
 // marker identifies a shim we wrote, so a rerun may replace it and nothing
 // else.
-const marker = "# Written by `herdr-automations install-cli`."
+const marker = "# Written by `solco-automations install-cli`."
 
 // script resolves the plugin root on every call. sed rather than jq: jq is not
 // everywhere. HERDR_BIN_PATH is only trusted while it still exists, like
@@ -31,21 +31,21 @@ var script = `#!/bin/sh
 herdr=${HERDR_BIN_PATH:-herdr}
 [ -x "$herdr" ] || herdr=herdr
 if ! command -v "$herdr" >/dev/null 2>&1; then
-	echo "herdr-automations: herdr not found on PATH" >&2
+	echo "solco-automations: herdr not found on PATH" >&2
 	exit 127
 fi
 root=$("$herdr" plugin list --plugin ` + hostpath.PluginID + ` --json 2>/dev/null | sed -n 's/.*"plugin_root":"\([^"]*\)".*/\1/p')
 if [ -z "$root" ]; then
-	echo "herdr-automations: plugin not installed (herdr plugin install DnzzL/herdr-automations)" >&2
+	echo "solco-automations: plugin not installed (herdr plugin link <solco checkout>/plugins/solco-automations)" >&2
 	exit 127
 fi
-exec "$root/bin/herdr-automations" "$@"
+exec "$root/bin/solco-automations" "$@"
 `
 
 // ErrNotOurs: something other than our shim already sits at the target path.
-var ErrNotOurs = errors.New("not a herdr-automations shim")
+var ErrNotOurs = errors.New("not a solco-automations shim")
 
-// Find returns the shim on PATH, if the herdr-automations found there is one
+// Find returns the shim on PATH, if the solco-automations found there is one
 // we wrote. Anything else by that name is not ours to point a service at.
 func Find() (string, bool) {
 	path, err := exec.LookPath(name)

@@ -154,7 +154,7 @@ func TestInstalledBinaryReadsThePluginRoot(t *testing.T) {
 	raw := []byte(`{"id":"cli:plugin","result":{"plugins":[
 		{"plugin_id":"someone.else","plugin_root":"/x"},
 		{"plugin_id":"com.whstudio.solco.automations","plugin_root":"/p/77472-0/checkout","version":"0.11.2"}]}}`)
-	if got, want := installedBinary(raw), "/p/77472-0/checkout/bin/herdr-automations"; got != want {
+	if got, want := installedBinary(raw), "/p/77472-0/checkout/bin/solco-automations"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 	for _, bad := range []string{``, `{}`, `not json`, `{"result":{"plugins":[{"plugin_id":"someone.else","plugin_root":"/x"}]}}`} {

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 // scheduleState is schedule.State on disk, plus the diagnostics already

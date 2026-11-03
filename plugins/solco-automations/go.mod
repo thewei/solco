@@ -1,4 +1,4 @@
-module github.com/DnzzL/herdr-automations
+module github.com/thewei/solco/plugins/solco-automations
 
 go 1.26
 

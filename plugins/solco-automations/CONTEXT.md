@@ -17,7 +17,7 @@ what the board shows. An occurrence that was never attempted is not a run —
 it's `missed`.
 
 **Trigger** — why a run started: `cron` (on time), `catchup` (late but inside
-the window) or `manual` (`r` on the board, or `herdr-automations run`).
+the window) or `manual` (`r` on the board, or `solco-automations run`).
 
 **Session** — a provisioned workspace plus the pane its agent lives in. What
 `host.Provision` hands back. The place a run happens. Predates Herdr sessions;

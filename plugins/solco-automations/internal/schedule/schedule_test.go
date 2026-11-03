@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 func at(t *testing.T, s string) time.Time {

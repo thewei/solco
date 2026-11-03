@@ -9,19 +9,19 @@ now, pause them all, or write a new one with its next runs previewed.
 
 ## Before you add it
 
-This mod is the face of [herdr-automations](https://github.com/DnzzL/herdr-automations),
+This mod is the face of solco-automations (a fork of [DnzzL/herdr-automations](https://github.com/DnzzL/herdr-automations), MIT),
 a Go scheduler. The panel draws and asks; the binary schedules, launches runs in
 herdr-core and keeps the files. Install it first, or the panel shows an error:
 
 ```bash
-git clone https://github.com/DnzzL/herdr-automations && cd herdr-automations
+cd plugins/solco-automations                        # inside a Solco checkout
 sh scripts/install.sh                               # prebuilt binary into bin/
-ln -s "$PWD/bin/herdr-automations" ~/.local/bin/    # where the panel looks
-herdr-automations service install                   # the scheduler, at login and now
+ln -s "$PWD/bin/solco-automations" ~/.local/bin/    # where the panel looks
+solco-automations service install                   # the scheduler, at login and now
 ```
 
-Then put `backend: hc` at the top of the file `herdr-automations list` names, so
-runs open in the app. The mod **runs programs**: `herdr-automations` (every read
+Then put `backend: hc` at the top of the file `solco-automations list` names, so
+runs open in the app. The mod **runs programs**: `solco-automations` (every read
 and write) and `hc templates`. It reaches no network and writes no file itself.
 
 ## What you see
@@ -69,7 +69,7 @@ top to bottom:
 - **Inbox**: finished runs (done, failed, cancelled) not yet seen. Clicking one
   marks it seen, then focuses its terminal (`pane.focus {terminal}`) if still live,
   else opens the automation's detail.
-- **▶ / Run now**: `herdr-automations run <name> --bg`, returns at once; the run
+- **▶ / Run now**: `solco-automations run <name> --bg`, returns at once; the run
   appears as a new space.
 - **Switch**: `pause --all` / `resume --all`. **Pause** in detail: `pause <name>`.
 - **Delete** asks once: the button turns into "Confirm delete".
@@ -118,11 +118,11 @@ top to bottom:
 
 - `herdr-app check mods/automations` passes.
 - With the binary installed, the tab bar shows "Automations" with its clock icon,
-  and the panel lists every automation `herdr-automations list` shows.
+  and the panel lists every automation `solco-automations list` shows.
 - `+`, a name, a preset, a repo and a prompt: "Next:" shows three times; `Save`
   adds the entry to `automations.yaml` with the file's comments intact.
 - `▶` opens a new space within seconds; when the agent finishes, the run is in the
   inbox, and clicking it focuses its terminal.
 - The switch writes `paused: true`; the header reads "All paused".
-- `herdr-automations service uninstall` brings up the "Scheduler stopped" banner
+- `solco-automations service uninstall` brings up the "Scheduler stopped" banner
   within 30s; `Start` takes it away.

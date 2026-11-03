@@ -1,5 +1,5 @@
 #!/bin/sh
-# Regenerates docs/wizard.gif — `herdr-automations add` answering from scratch.
+# Regenerates docs/wizard.gif — `solco-automations add` answering from scratch.
 #
 #   nix-shell -p asciinema asciinema-agg tmux --run scripts/demo/record-wizard.sh
 #
@@ -8,7 +8,7 @@ set -eu
 
 D="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$D/../.." && pwd)"
-BIN="${BIN:-$ROOT/bin/herdr-automations}"
+BIN="${BIN:-$ROOT/bin/solco-automations}"
 SOCK=hawiz
 CAST="$D/wizard.cast"
 GIF="${GIF:-$ROOT/docs/wizard.gif}"
@@ -24,7 +24,7 @@ export HERDR_PLUGIN_CONFIG_DIR=/tmp/herdr-demo
 export HERDR_PLUGIN_STATE_DIR="$D/state"
 export TERM=xterm-256color
 
-[ -x "$BIN" ] || { echo "build first: go build -o bin/herdr-automations ." >&2; exit 1; }
+[ -x "$BIN" ] || { echo "build first: go build -o bin/solco-automations ." >&2; exit 1; }
 rm -rf "$HERDR_PLUGIN_CONFIG_DIR" "$CAST"
 mkdir -p "$HERDR_PLUGIN_CONFIG_DIR"
 tmux -L "$SOCK" kill-server 2>/dev/null || true

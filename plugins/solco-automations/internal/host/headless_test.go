@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 func headlessWith(ops ops, a config.Automation) headlessWork {

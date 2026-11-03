@@ -11,12 +11,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/DnzzL/herdr-automations/internal/cleanup"
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/herdr"
-	"github.com/DnzzL/herdr-automations/internal/history"
-	"github.com/DnzzL/herdr-automations/internal/runner"
-	"github.com/DnzzL/herdr-automations/internal/schedule"
+	"github.com/thewei/solco/plugins/solco-automations/internal/cleanup"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
+	"github.com/thewei/solco/plugins/solco-automations/internal/schedule"
 )
 
 var (
@@ -385,7 +385,7 @@ func (m model) View() string {
 		return s + failStyle.Render("config error: "+m.err.Error()) + "\n"
 	}
 	if len(m.rows) == 0 {
-		return s + dimStyle.Render("No automations yet — run `herdr-automations add` or edit "+config.Path()) + "\n"
+		return s + dimStyle.Render("No automations yet — run `solco-automations add` or edit "+config.Path()) + "\n"
 	}
 	for i, r := range m.rows {
 		// Pad the plain text first: styling before padding would make the

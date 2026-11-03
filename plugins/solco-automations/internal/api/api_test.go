@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DnzzL/herdr-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
 )
 
 func setup(t *testing.T, yaml string) {

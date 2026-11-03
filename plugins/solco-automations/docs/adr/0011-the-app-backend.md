@@ -38,7 +38,7 @@ the window closed.
    not the binary it runs; launchd relaunches it through the shim onto the new
    build.
 4. **The panel's only seam is the CLI.** The mod runs
-   `herdr-automations … --json` through `exec` and watches the config folder.
+   `solco-automations … --json` through `exec` and watches the config folder.
    It never parses YAML or cron, and never writes the files itself. Read state
    for the inbox is a `read` event in `history.jsonl`.
 5. **Sessions are a TUI notion.** `session:` (ADR 0010) is refused under

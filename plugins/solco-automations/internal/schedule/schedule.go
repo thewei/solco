@@ -16,8 +16,8 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
-	"github.com/DnzzL/herdr-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
 )
 
 // State is what the scheduler has to remember between ticks: the occurrence

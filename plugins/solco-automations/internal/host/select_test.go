@@ -3,7 +3,7 @@ package host
 import (
 	"testing"
 
-	"github.com/DnzzL/herdr-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 func TestForPicksTheNamedBackend(t *testing.T) {

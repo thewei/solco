@@ -4,7 +4,7 @@
 # nothing from the recording machine reaches the picture.
 set -eu
 D="$(cd "$(dirname "$0")" && pwd)"
-BIN="${BIN:-$D/../../bin/herdr-automations}"
+BIN="${BIN:-$D/../../bin/solco-automations}"
 DEMO="${DEMO:-/tmp/herdr-app-demo}"
 rm -rf "$DEMO" && mkdir -p "$DEMO/cfg" "$DEMO/state" /tmp/myapp
 export HERDR_PLUGIN_CONFIG_DIR="$DEMO/cfg" HERDR_PLUGIN_STATE_DIR="$DEMO/state"
