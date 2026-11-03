@@ -23,6 +23,7 @@ type personal struct {
 	cancel  context.CancelFunc
 	ctx     context.Context
 	watch   *personalagent.Watcher
+	beat    *personalagent.Beater
 	polling atomic.Bool
 }
 
@@ -41,6 +42,7 @@ func startPersonal() *personal {
 		MaxParallel: 2,
 	}
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
+	p.beat = &personalagent.Beater{Store: store}
 	if n, err := store.Recover(); err != nil {
 		log.Printf("assistants: recovery failed: %v", err)
 	} else if n > 0 {
@@ -67,6 +69,12 @@ func (p *personal) tick() {
 				log.Printf("assistants: %d watched change(s) queued", n)
 			}
 		}()
+	}
+	// Heartbeats are a few indexed reads and, at most, one task insert each.
+	if r, err := p.beat.Tick(); err != nil {
+		log.Printf("assistants: heartbeat: %v", err)
+	} else if r.Woke > 0 {
+		log.Printf("assistants: %d heartbeat wake(s) queued", r.Woke)
 	}
 	if n := p.disp.Pump(p.ctx); n > 0 {
 		log.Printf("assistants: started %d task(s)", n)

@@ -121,10 +121,18 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 	if policy == nil {
 		policy = BuildPrompt
 	}
+	prompt := policy(asst, task)
+	if d.Policy == nil {
+		// The Assistant's approved memory, bounded and credential-free. A read
+		// that fails (a busy database) only costs the launch its memory.
+		if mc, err := d.Store.BuildContext(asst.ID, ContextRequest{Query: task.Title + " " + task.Brief}); err == nil && mc.Text != "" {
+			prompt += "\n\n" + mc.Text
+		}
+	}
 	spec := LaunchSpec{
 		RunID: run.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath,
 		Label:   markerLabel(task.Title, run.ID),
-		Prompt:  policy(asst, task),
+		Prompt:  prompt,
 		Timeout: d.timeout(),
 	}
 	// The label is stored before anything is created, so an uncertain run can

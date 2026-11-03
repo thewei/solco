@@ -105,8 +105,8 @@ type WatchOutcome struct {
 func (s *Store) DueCommitments(now time.Time) ([]Commitment, error) {
 	rows, err := s.db.Query(`SELECT `+prefixed("c", commitmentCols)+` FROM commitments c
 		JOIN goals g ON g.id=c.goal_id JOIN assistants a ON a.id=c.assistant_id
-		WHERE c.kind=? AND c.state=? AND g.state=? AND a.status=? AND c.next_check_at<=?
-		ORDER BY c.next_check_at, c.id`, CommitmentPRWatch, GoalActive, GoalActive, StatusActive, now.UnixMilli())
+		WHERE c.kind=? AND c.state=? AND g.state=? AND a.status=? AND (c.next_check_at<=? OR c.last_checked_at>?)
+		ORDER BY c.next_check_at, c.id`, CommitmentPRWatch, GoalActive, GoalActive, StatusActive, now.UnixMilli(), now.UnixMilli())
 	if err != nil {
 		return nil, wrapBusy(err)
 	}
@@ -178,13 +178,17 @@ func (s *Store) RecordWatch(commitmentID string, o WatchOutcome, now time.Time) 
 				return struct{}{}, err
 			}
 			resource := fmt.Sprintf("%s#%d", spec.Repo, spec.Number)
+			kind := "pr.changed"
+			if o.State.Merged {
+				kind = "pr.merged"
+			}
 			eid := newID("e")
-			res, err := tx.Exec(`INSERT OR IGNORE INTO events(id,assistant_id,commitment_id,source,resource,revision,task_id,seen_at) VALUES(?,?,?,?,?,?,?,?)`,
-				eid, c.AssistantID, c.ID, eventSourcePR, resource, rev, "", nowMS)
+			created, err := emitTx(tx, Event{ID: eid, AssistantID: c.AssistantID, CommitmentID: c.ID, Source: eventSourcePR, Kind: kind,
+				Resource: resource, Revision: rev, Detail: fmt.Sprintf("%s: %s", resource, strings.TrimPrefix(kind, "pr."))}, nowMS)
 			if err != nil {
 				return struct{}{}, err
 			}
-			if n, _ := res.RowsAffected(); n == 1 {
+			if created {
 				tid := newID("t")
 				agent := spec.Agent
 				if agent == "" {
@@ -196,6 +200,9 @@ func (s *Store) RecordWatch(commitmentID string, o WatchOutcome, now time.Time) 
 					return struct{}{}, err
 				}
 				if _, err := tx.Exec(`UPDATE events SET task_id=? WHERE id=?`, tid, eid); err != nil {
+					return struct{}{}, err
+				}
+				if err := emitTask(tx, tid, "task.added", nowMS); err != nil {
 					return struct{}{}, err
 				}
 				t, err := getTaskTx(tx, tid)
@@ -274,9 +281,6 @@ func (w *Watcher) Poll(ctx context.Context) (int, error) {
 		}
 		st, ferr := w.Fetcher.FetchPR(ctx, spec.Repo, spec.Number)
 		out := WatchOutcome{NextIn: w.interval()}
-		if spec.IntervalSeconds > 0 {
-			out.NextIn = time.Duration(spec.IntervalSeconds) * time.Second
-		}
 		if spec.IntervalSeconds > 0 {
 			out.NextIn = time.Duration(spec.IntervalSeconds) * time.Second
 		}

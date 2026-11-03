@@ -193,6 +193,9 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 		if err != nil {
 			return Task{}, err
 		}
+		if err := emitTask(tx, id, "task.added", now); err != nil {
+			return Task{}, err
+		}
 		return getTaskTx(tx, id)
 	})
 }
@@ -374,12 +377,14 @@ func (s *Store) RecordLaunch(runID string, sess Session) error {
 
 // BlockRun marks a run that is waiting for a person (a dialog, a permission).
 func (s *Store) BlockRun(runID, reason string) error {
-	return s.setRun(runID, []string{RunRunning, RunStarting}, RunBlocked, TaskBlocked, func(tx *sql.Tx, _ int64) error {
+	return s.setRun(runID, []string{RunRunning, RunStarting}, RunBlocked, TaskBlocked, func(tx *sql.Tx, now int64) error {
 		if _, err := tx.Exec(`UPDATE tasks SET needs_you=1 WHERE id=(SELECT task_id FROM runs WHERE id=?)`, runID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID)
-		return err
+		if _, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID); err != nil {
+			return err
+		}
+		return emitRunTask(tx, runID, "task.blocked", now)
 	})
 }
 
@@ -397,7 +402,7 @@ func (s *Store) FinishRun(runID, status, note string) error {
 	default:
 		return fmt.Errorf("%w: finish with %q", ErrInvalid, status)
 	}
-	return s.setRun(runID, []string{RunClaimed, RunStarting, RunRunning, RunBlocked, RunUncertain}, status, state, func(tx *sql.Tx, _ int64) error {
+	return s.setRun(runID, []string{RunClaimed, RunStarting, RunRunning, RunBlocked, RunUncertain}, status, state, func(tx *sql.Tx, now int64) error {
 		col := "result"
 		if status != RunDone {
 			col = "error"
@@ -406,14 +411,21 @@ func (s *Store) FinishRun(runID, status, note string) error {
 			return err
 		}
 		if status == RunDone {
-			_, err := tx.Exec(`UPDATE tasks SET state=CASE WHEN kind=? THEN ? ELSE state END,
+			if _, err := tx.Exec(`UPDATE tasks SET state=CASE WHEN kind=? THEN ? ELSE state END,
 				review_state=CASE WHEN kind=? THEN 'pending' ELSE review_state END,
-				needs_you=CASE WHEN kind=? OR rule_id<>'' THEN 1 ELSE 0 END WHERE id=(SELECT task_id FROM runs WHERE id=?)`,
-				KindCoding, TaskReviewRequired, KindCoding, KindCoding, runID)
+				needs_you=CASE WHEN kind=? OR (rule_id<>'' AND rule_id<>?) THEN 1 ELSE 0 END WHERE id=(SELECT task_id FROM runs WHERE id=?)`,
+				KindCoding, TaskReviewRequired, KindCoding, KindCoding, HeartbeatRule, runID); err != nil {
+				return err
+			}
+			return emitRunTask(tx, runID, "task.completed", now)
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET needs_you=? WHERE id=(SELECT task_id FROM runs WHERE id=?)`, boolInt(status == RunFailed), runID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE tasks SET needs_you=? WHERE id=(SELECT task_id FROM runs WHERE id=?)`, boolInt(status == RunFailed), runID)
-		return err
+		if status == RunFailed {
+			return emitRunTask(tx, runID, "task.failed", now)
+		}
+		return nil
 	})
 }
 
@@ -452,6 +464,9 @@ func (s *Store) Recover() (int, error) {
 			if _, err := tx.Exec(`UPDATE tasks SET state=?, needs_you=1, revision=revision+1, updated_at=? WHERE id=?`, TaskUncertain, now, p.task); err != nil {
 				return 0, err
 			}
+			if err := emitTask(tx, p.task, "task.uncertain", now); err != nil {
+				return 0, err
+			}
 		}
 		return len(found), nil
 	})
@@ -461,12 +476,14 @@ func (s *Store) Recover() (int, error) {
 // parkUncertain moves a starting run whose outcome cannot be established to
 // `uncertain` and asks a person (needs_you) — it is never retried by itself.
 func (s *Store) parkUncertain(runID, reason string) (struct{}, error) {
-	return struct{}{}, s.setRun(runID, []string{RunClaimed, RunStarting, RunRunning}, RunUncertain, TaskUncertain, func(tx *sql.Tx, _ int64) error {
+	return struct{}{}, s.setRun(runID, []string{RunClaimed, RunStarting, RunRunning}, RunUncertain, TaskUncertain, func(tx *sql.Tx, now int64) error {
 		if _, err := tx.Exec(`UPDATE tasks SET needs_you=1 WHERE id=(SELECT task_id FROM runs WHERE id=?)`, runID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID)
-		return err
+		if _, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID); err != nil {
+			return err
+		}
+		return emitRunTask(tx, runID, "task.uncertain", now)
 	})
 }
 

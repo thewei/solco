@@ -4,7 +4,7 @@ import "time"
 
 func (a *API) goal(args []string, body []byte) (any, error) {
 	if len(args) == 0 {
-		return nil, coded("invalid", "usage: assistant goal <create|list|show|approve|pause|resume|cancel|complete>")
+		return nil, coded("invalid", "usage: assistant goal <create|list|show|approve|pause|resume|cancel|complete|progress>")
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {
@@ -28,6 +28,19 @@ func (a *API) goal(args []string, body []byte) (any, error) {
 		}
 		g, err := a.Store.GetGoal(rest[0])
 		return ok("goal", g), err
+	case "progress":
+		var in struct {
+			common
+			Note string `json:"note"`
+		}
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant goal progress <id>")
+		}
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		e, replayed, err := a.Store.AddProgress(in.RequestID, rest[0], in.Note)
+		return ok("event", e, "replayed", replayed), err
 	case "approve", "pause", "resume", "cancel", "complete":
 		var in struct {
 			common
@@ -61,7 +74,7 @@ func (a *API) goal(args []string, body []byte) (any, error) {
 
 func (a *API) memory(args []string, body []byte) (any, error) {
 	if len(args) == 0 {
-		return nil, coded("invalid", "usage: assistant memory <propose|list|visible|approve|correct|forget|share|unshare>")
+		return nil, coded("invalid", "usage: assistant memory <propose|list|visible|context|search|approve|correct|forget|share|unshare>")
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {

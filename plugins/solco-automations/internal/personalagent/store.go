@@ -236,6 +236,26 @@ var migrations = []string{
 		seen_at INTEGER NOT NULL,
 		UNIQUE(source, resource, revision)
 	);`,
+	// v4: the event log grows kind/priority/detail (rowid is the watermark) and
+	// each Assistant may own one heartbeat.
+	`ALTER TABLE events ADD COLUMN kind TEXT NOT NULL DEFAULT 'pr.changed';
+	ALTER TABLE events ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE events ADD COLUMN detail TEXT NOT NULL DEFAULT '';
+	CREATE TABLE heartbeats (
+		assistant_id TEXT PRIMARY KEY REFERENCES assistants(id),
+		checklist TEXT NOT NULL DEFAULT '',
+		cron TEXT NOT NULL DEFAULT '',
+		event_rules TEXT NOT NULL DEFAULT '{}',
+		wake_budget INTEGER NOT NULL DEFAULT 0,
+		wake_approved INTEGER NOT NULL DEFAULT 0,
+		last_beat_at INTEGER NOT NULL DEFAULT 0,
+		event_mark INTEGER NOT NULL DEFAULT 0,
+		wakes_day TEXT NOT NULL DEFAULT '',
+		wakes_today INTEGER NOT NULL DEFAULT 0,
+		held TEXT NOT NULL DEFAULT '[]',
+		revision INTEGER NOT NULL DEFAULT 1,
+		updated_at INTEGER NOT NULL DEFAULT 0
+	);`,
 }
 
 func (s *Store) migrate() error {

@@ -72,6 +72,9 @@ func (s *Store) ProposeMemory(requestID string, in ProposeMemoryInput) (MemoryIt
 	if in.AssistantID == "" || in.Content == "" || strings.TrimSpace(in.SourceRef) == "" {
 		return MemoryItem{}, false, fmt.Errorf("%w: memory needs content and a sourceRef", ErrInvalid)
 	}
+	if looksLikeSecret(in.Content) {
+		return MemoryItem{}, false, fmt.Errorf("%w: that looks like a credential; memory never keeps credentials", ErrInvalid)
+	}
 	if in.Kind == "" {
 		in.Kind = "fact"
 	}
@@ -132,6 +135,9 @@ func (s *Store) CorrectMemory(requestID, id, content string, expectedRevision in
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return MemoryItem{}, false, ErrInvalid
+	}
+	if looksLikeSecret(content) {
+		return MemoryItem{}, false, fmt.Errorf("%w: that looks like a credential; memory never keeps credentials", ErrInvalid)
 	}
 	return s.editMemory(requestID, "memory.correct", id, expectedRevision, map[string]any{"id": id, "c": content, "rev": expectedRevision},
 		func(tx *sql.Tx, m MemoryItem, now int64) error { return bump(tx, now, id, `content=?`, content) })

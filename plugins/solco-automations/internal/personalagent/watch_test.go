@@ -289,3 +289,60 @@ func TestPRWatchIntervalSecondsBounds(t *testing.T) {
 		}
 	}
 }
+
+// SOLCO-W06: sleep, DST and a clock set back never make a flood of catch-up
+// checks. Time is absolute (epoch milliseconds), so a wall-clock jump is only
+// a jump in `now`: one due check per commitment, then one interval of quiet.
+func TestSleepAndClockChangesNeverFloodChecks(t *testing.T) {
+	s, _ := openTest(t)
+	a, _, c := activeWatch(t, s)
+	_ = a
+	now := time.Unix(1_800_000_000, 0)
+	f := &fakePR{state: PRState{State: "open", HeadSHA: "aaa111"}}
+	w := newWatcher(s, f, &now)
+	if _, err := w.Poll(t.Context()); err != nil || f.calls != 1 {
+		t.Fatalf("first: calls=%d %v", f.calls, err)
+	}
+
+	// The Mac sleeps for a night: 600 intervals are missed, one check happens.
+	now = now.Add(10 * time.Hour)
+	for i := 0; i < 3; i++ {
+		if _, err := w.Poll(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if f.calls != 2 {
+		t.Fatalf("after sleep the watcher checked %d times, want exactly one more", f.calls-1)
+	}
+	got, _ := s.GetGoal(c.GoalID)
+	if got.Commitments[0].NextCheckAt != now.Add(time.Minute).UnixMilli() {
+		t.Fatalf("next check = %d, want one interval after now", got.Commitments[0].NextCheckAt)
+	}
+
+	// The clock is set back three hours: the stored schedule is in the "future",
+	// yet the next tick still checks and re-anchors to the new clock.
+	now = now.Add(-3 * time.Hour)
+	if _, err := w.Poll(t.Context()); err != nil || f.calls != 3 {
+		t.Fatalf("after rollback calls=%d %v", f.calls, err)
+	}
+	got, _ = s.GetGoal(c.GoalID)
+	if got.Commitments[0].NextCheckAt != now.Add(time.Minute).UnixMilli() {
+		t.Fatalf("not re-anchored: %d", got.Commitments[0].NextCheckAt)
+	}
+
+	// DST: across the spring-forward gap (a wall clock that skips 02:00-03:00)
+	// the interval is still sixty absolute seconds.
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no tzdata")
+	}
+	before := time.Date(2027, 3, 14, 1, 59, 30, 0, ny)
+	now = before
+	if _, err := w.Poll(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetGoal(c.GoalID)
+	if d := time.UnixMilli(got.Commitments[0].NextCheckAt).Sub(before); d != time.Minute {
+		t.Fatalf("interval across DST = %v", d)
+	}
+}

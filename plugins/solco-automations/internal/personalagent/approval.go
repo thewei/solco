@@ -89,6 +89,17 @@ func subjectRevision(tx queryer, assistantID, kind, id string) (int, error) {
 			return 0, fmt.Errorf("%w: goal belongs to another assistant", ErrInvalid)
 		}
 		return g.Revision, nil
+	case "heartbeat":
+		// The subject is the Assistant's heartbeat; its id is the Assistant's.
+		if id != assistantID {
+			return 0, fmt.Errorf("%w: heartbeat belongs to another assistant", ErrInvalid)
+		}
+		var rev int
+		err := tx.QueryRow(`SELECT revision FROM heartbeats WHERE assistant_id=?`, id).Scan(&rev)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrNotFound
+		}
+		return rev, wrapBusy(err)
 	}
 	return 0, fmt.Errorf("%w: subject kind %q", ErrInvalid, kind)
 }
@@ -154,6 +165,12 @@ func (s *Store) DecideApproval(requestID, id, hash string, approve bool) (Approv
 		}
 		if _, err := tx.Exec(`UPDATE approvals SET state=?, decided_at=? WHERE id=?`, state, s.nowMS(), id); err != nil {
 			return a, err
+		}
+		if approve && a.SubjectKind == "heartbeat" {
+			// The approval is for these exact settings (the revision just matched).
+			if _, err := tx.Exec(`UPDATE heartbeats SET wake_approved=1 WHERE assistant_id=?`, a.SubjectID); err != nil {
+				return a, err
+			}
 		}
 		return s.getApprovalTx(tx, id)
 	})
