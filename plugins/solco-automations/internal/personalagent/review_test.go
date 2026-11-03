@@ -518,3 +518,77 @@ func TestOptionalAgentReviewIsAReadOnlyChildTask(t *testing.T) {
 		t.Fatalf("the brief must name the head: %q", child.Brief)
 	}
 }
+
+// A reviewer Agent that fails to start fails only its own child task: the
+// reviewed task, the review and its evidence stay exactly as they were.
+// (Shepherdr core-failed-starts: "a reviewer that fails to start … leaves the
+// task alone".)
+func TestAFailedReviewerLeavesTheReviewedTaskAlone(t *testing.T) {
+	f := newReview(t)
+	f.agentWork(map[string]string{"x.txt": "1\n"}, "work")
+	f.finish()
+	rev := f.start("s1")
+	rev, child, _, err := f.r.RequestAgentReview("ar", rev.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _ := f.s.GetTask(f.task.ID)
+	run, _, err := f.s.ClaimTask(child.ID, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.FinishRun(run.ID, RunFailed, "reviewer could not start"); err != nil {
+		t.Fatal(err)
+	}
+	gotChild, _ := f.s.GetTask(child.ID)
+	if gotChild.State != TaskFailed || !gotChild.NeedsYou {
+		t.Fatalf("the reviewer's own task = %+v", gotChild)
+	}
+	parent, _ := f.s.GetTask(f.task.ID)
+	if parent.State != before.State || parent.ReviewState != before.ReviewState || parent.NeedsYou != before.NeedsYou || parent.Revision != before.Revision {
+		t.Fatalf("the reviewed task moved: %+v", parent)
+	}
+	if again, err := f.r.Get(rev.ID); err != nil || again.State != ReviewReady || again.Head != rev.Head {
+		t.Fatalf("the review changed: %+v %v", again, err)
+	}
+}
+
+// The person's own files in the main checkout survive a merge that would add
+// the same path — whether the file is untracked or even ignored (git itself
+// overwrites an ignored file during a merge). The merge is refused and the
+// bytes are untouched. (Shepherdr core-tasks: stray / ignored file protection.)
+func TestAMergeNeverOverwritesTheMainCheckoutsUntrackedOrIgnoredFiles(t *testing.T) {
+	for _, ignored := range []bool{false, true} {
+		name := "untracked"
+		if ignored {
+			name = "ignored"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newReview(t)
+			f.agentWork(map[string]string{"notes.txt": "the agent's version\n"}, "adds notes")
+			f.finish()
+			rev := f.approveMerge(f.start("s1"))
+			if ignored {
+				ex := filepath.Join(f.repo, ".git", "info", "exclude")
+				if err := os.WriteFile(ex, []byte("notes.txt\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mine := filepath.Join(f.repo, "notes.txt")
+			if err := os.WriteFile(mine, []byte("MY OWN WORK\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			before := mainHead(t, f.repo)
+			got, err := f.r.Merge(rev.ID)
+			if err == nil || got.State == ReviewMerged {
+				t.Fatalf("a merge that would overwrite the person's file went through: %+v %v", got, err)
+			}
+			if raw, _ := os.ReadFile(mine); string(raw) != "MY OWN WORK\n" {
+				t.Fatalf("the person's file was overwritten: %q", raw)
+			}
+			if mainHead(t, f.repo) != before {
+				t.Fatal("main moved")
+			}
+		})
+	}
+}

@@ -31,9 +31,12 @@ func TestNoSandboxMeansNoSafetyPromise(t *testing.T) {
 
 	s, _ := openTest(t)
 	api := &API{Store: s}
-	// An Assistant's policy cannot be loosened through the API: the body field
-	// is ignored and review stays.
-	made, err := call(t, api, `{"requestId":"r1","name":"Ada","defaultPolicy":"auto","autoMerge":true}`, "assistant", "create")
+	// An Assistant's policy cannot be loosened through the API: a body that
+	// names one is refused outright (unknown field), and review stays.
+	if _, err := call(t, api, `{"requestId":"r0","name":"Eve","defaultPolicy":"auto","autoMerge":true}`, "assistant", "create"); codeOf(err) != "invalid" {
+		t.Fatalf("a policy field must be refused, got %q", codeOf(err))
+	}
+	made, err := call(t, api, `{"requestId":"r1","name":"Ada"}`, "assistant", "create")
 	if err != nil {
 		t.Fatal(err)
 	}

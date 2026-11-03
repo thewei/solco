@@ -316,3 +316,41 @@ func TestGoalProgressIsRecordedOnce(t *testing.T) {
 		t.Fatalf("progress events = %d", n)
 	}
 }
+
+// The heartbeat's own task finishing or failing is an event, but never news to
+// the heartbeat: otherwise each wake would cause the next (a wake loop).
+// (Shepherdr core-automations: "suppress automation-added recursion".)
+func TestAHeartbeatsOwnTaskNeverWakesItAgain(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a1", "Ada")
+	now := time.Unix(1_800_000_000, 0)
+	h := setBeat(t, s, a, HeartbeatInput{Cron: "0 9 * * *", WakeBudget: 5, Events: map[string]string{"task.failed": "wake", "task.completed": "wake"}})
+	approveWake(t, s, h)
+	b := beater(s, &now)
+	_, _ = b.Tick() // baseline
+	_, failing := runningTask(t, s, a, "t1", "Failing one")
+	_ = s.FinishRun(failing.ID, RunFailed, "boom")
+	if r, err := b.Tick(); err != nil || r.Woke != 1 {
+		t.Fatalf("first wake: %+v %v", r, err)
+	}
+	beat := taskTitles(t, s, a, "Heartbeat")
+	if len(beat) != 1 {
+		t.Fatalf("heartbeat tasks = %d", len(beat))
+	}
+	run, _, err := s.ClaimTask(beat[0].ID, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishRun(run.ID, RunFailed, "the wake itself failed"); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		now = now.Add(time.Minute)
+		if r, err := b.Tick(); err != nil || r.Woke != 0 {
+			t.Fatalf("the heartbeat's own failure woke it again: %+v %v", r, err)
+		}
+	}
+	if got := taskTitles(t, s, a, "Heartbeat"); len(got) != 1 {
+		t.Fatalf("heartbeat tasks = %d, want 1", len(got))
+	}
+}

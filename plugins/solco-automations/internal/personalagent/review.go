@@ -648,6 +648,23 @@ func (r *Reviewer) Merge(reviewID string) (Review, error) {
 		release(ReviewAwaiting, "")
 		return r.mustGet(rv.ID), fmt.Errorf("%w: a merge is already in progress in the main checkout", ErrBadState)
 	}
+	// The status check above leaves untracked and ignored files alone, and git
+	// itself overwrites an ignored file when a merge adds that path. Refuse by
+	// name before merging anything the person already has on disk.
+	if out, err := g.Run(info.Repo, "diff", "--name-only", "-z", "--diff-filter=A", "HEAD", rv.Head); err == nil {
+		for _, name := range strings.Split(out, "\x00") {
+			if name == "" {
+				continue
+			}
+			if _, serr := os.Lstat(filepath.Join(info.Repo, filepath.FromSlash(name))); serr == nil {
+				release(ReviewAwaiting, "")
+				return r.mustGet(rv.ID), fmt.Errorf("%w: %q already exists in the main checkout and the merge would replace it; move it away and retry", ErrBadState, name)
+			}
+		}
+	} else {
+		release(ReviewAwaiting, "")
+		return r.mustGet(rv.ID), fmt.Errorf("%w: could not compare the reviewed commit with the main checkout", ErrBadState)
+	}
 
 	msg := fmt.Sprintf("Merge task %s (%s)", cleanTitle(task.Title), task.ID)
 	if _, err := g.Run(info.Repo, "merge", "--no-ff", "--no-edit", "-m", msg, rv.Head); err != nil {

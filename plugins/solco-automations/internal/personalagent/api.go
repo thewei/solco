@@ -1,6 +1,7 @@
 package personalagent
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -107,7 +108,9 @@ func decode(body []byte, v any) error {
 	if len(strings.TrimSpace(string(body))) == 0 {
 		return coded("invalid", "a JSON body is required")
 	}
-	if err := json.Unmarshal(body, v); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields() // a typo'd field is refused, never silently dropped
+	if err := dec.Decode(v); err != nil {
 		return coded("invalid", "body is not valid JSON: %v", err)
 	}
 	return nil

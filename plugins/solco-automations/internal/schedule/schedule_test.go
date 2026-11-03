@@ -348,3 +348,27 @@ func TestPlanSkipsADraftUntilApproved(t *testing.T) {
 		t.Fatalf("decisions = %+v, want a fire after approval", approved.Decisions)
 	}
 }
+
+// A daily wall-clock time survives the spring-forward and fall-back days: the
+// next run is still 09:30 on the clock, not shifted by the changed offset.
+// (Shepherdr core-launch-matrix: "daily wall-clock time survives DST".)
+func TestDailyWallClockTimeSurvivesDST(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no tzdata")
+	}
+	a := config.Automation{Name: "daily", Cron: "30 9 * * *", CatchUpMinutes: 120}
+	for _, c := range []struct{ from, want string }{
+		{"2027-03-13 12:00", "2027-03-14 09:30"}, // spring forward (02:00 → 03:00)
+		{"2027-11-06 12:00", "2027-11-07 09:30"}, // fall back (02:00 → 01:00)
+	} {
+		from, _ := time.ParseInLocation("2006-01-02 15:04", c.from, ny)
+		got, ok := NextRun(a, from)
+		if !ok {
+			t.Fatalf("no next run from %s", c.from)
+		}
+		if g := got.In(ny).Format("2006-01-02 15:04"); g != c.want {
+			t.Fatalf("from %s next = %s, want %s", c.from, g, c.want)
+		}
+	}
+}

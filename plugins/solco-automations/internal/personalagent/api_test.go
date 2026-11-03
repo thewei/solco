@@ -125,3 +125,20 @@ func TestAPIUnknownCommand(t *testing.T) {
 }
 
 func asCodedErr(err error, out **CodedError) bool { return errors.As(err, out) }
+
+// A misspelled field must be refused, not dropped: an agent that writes
+// `depndsOn` would otherwise get a task with no dependencies and no word of it.
+// (Shepherdr core-task-options: "unknown flags refuse instead of silently disappearing".)
+func TestAnUnknownFieldIsRefusedNotDropped(t *testing.T) {
+	s, _ := openTest(t)
+	a := &API{Store: s}
+	created, _ := call(t, a, `{"requestId":"r1","name":"Ada"}`, "assistant", "create")
+	id := created["assistant"].(map[string]any)["id"].(string)
+	_, err := call(t, a, `{"requestId":"t1","assistantId":"`+id+`","kind":"research","title":"x","brief":"y","depndsOn":["t_1"]}`, "assistant", "task", "create")
+	if codeOf(err) != "invalid" {
+		t.Fatalf("a misspelled field code = %q, want invalid", codeOf(err))
+	}
+	if all, _ := s.ListTasks(id); len(all) != 0 {
+		t.Fatalf("the refused command still created %d task(s)", len(all))
+	}
+}

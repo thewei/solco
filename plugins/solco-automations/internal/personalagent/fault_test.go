@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 // C04 — fault injection. Every fault must end as a refusal or an explicit
@@ -174,5 +176,77 @@ func TestApprovalRetryAfterReconnectIsIdempotent(t *testing.T) {
 	again, replay, err := s.DecideApproval("retry-1", ap.ID, ap.ActionHash, true)
 	if err != nil || !replay || again.State != first.State || again.DecidedAt != first.DecidedAt {
 		t.Fatalf("replay: %+v %v %v", again, replay, err)
+	}
+}
+
+// A reader holding the database (an open read transaction in another
+// connection) never blocks a write: WAL lets the write commit through it.
+// (Shepherdr core-database-lock: "a write commits through a reader".)
+func TestAWriteCommitsThroughAReaderStillHoldingTheDatabase(t *testing.T) {
+	s, path := openTest(t, WithBusyTimeout(100*time.Millisecond))
+	mustAssistant(t, s, "a1", "Ada")
+	reader, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(50)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	reader.SetMaxOpenConns(1)
+	tx, err := reader.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var n int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM assistants`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("reader sees %d, %v", n, err)
+	}
+	if _, _, err := s.CreateAssistant("a2", CreateAssistantInput{Name: "Bob"}); err != nil {
+		t.Fatalf("a write must commit through a reader: %v", err)
+	}
+}
+
+// Rules due while the database is locked: the whole tick waits once (bounded,
+// not once per rule), fails with ErrBusy and writes nothing, so every rule is
+// still due, none is left half-claimed, and the next tick after the lock fires
+// each of them exactly once. (Shepherdr: "a due automation whose claim fails
+// stays due"; "due automations under a lasting reader share one wait".)
+func TestRulesDueUnderALockShareOneBoundedWaitAndStayDue(t *testing.T) {
+	s, path := openTest(t, WithBusyTimeout(150*time.Millisecond))
+	cfg := &config.Config{Automations: []config.Automation{
+		rule("a", "*/10 * * * *"), rule("b", "*/10 * * * *"), rule("c", "*/10 * * * *"),
+	}}
+	clock := &clockT{t: at(10, 0)}
+	for _, n := range []string{"a", "b", "c"} {
+		adopt(t, s, cfg, n, map[string]time.Time{n: at(9, 50)}, clock.t)
+	}
+	clock.t = at(10, 10)
+	sched := ruleSched(s, cfg, clock)
+	release := lockDB(t, path)
+	began := time.Now()
+	_, err := sched.Tick()
+	took := time.Since(began)
+	release()
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("tick under a lock = %v, want ErrBusy", err)
+	}
+	if took > 3*150*time.Millisecond {
+		t.Fatalf("three due rules waited %v: one wait per rule, not one in all", took)
+	}
+	for _, n := range []string{"a", "b", "c"} {
+		if got := ruleTasks(t, s, n); len(got) != 0 {
+			t.Fatalf("%s left %d task(s) from a refused tick", n, len(got))
+		}
+	}
+	rep, err := sched.Tick()
+	if err != nil || rep.Fired != 3 {
+		t.Fatalf("after the lock: fired=%d err=%v", rep.Fired, err)
+	}
+	if rep, err := sched.Tick(); err != nil || rep.Fired != 0 {
+		t.Fatalf("the same occurrence fired twice: %+v %v", rep, err)
+	}
+	for _, n := range []string{"a", "b", "c"} {
+		if got := ruleTasks(t, s, n); len(got) != 1 {
+			t.Fatalf("%s tasks = %d, want exactly 1", n, len(got))
+		}
 	}
 }

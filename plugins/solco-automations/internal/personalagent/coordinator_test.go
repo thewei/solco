@@ -332,3 +332,41 @@ func TestAPICoordinatorAndTaskGraphThroughTheCLI(t *testing.T) {
 		t.Fatalf("nodes = %d: %v", n, g)
 	}
 }
+
+// A long chain and a wide diamond lattice are walked iteratively with a seen
+// set: no stack depth, no exponential revisit. The closing edge of a long
+// chain is still refused as a cycle. (Shepherdr core-dependencies: bounded traversal.)
+func TestLongChainsAndDiamondLatticesAreWalkedWithinBounds(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a1", "Ada")
+	start := time.Now()
+	prev := mkTask(t, s, "c0", a.ID, "c0")
+	first := prev
+	for i := 1; i < 400; i++ {
+		prev = mkTask(t, s, "c"+time.Duration(i).String(), a.ID, "c"+time.Duration(i).String(), prev.ID)
+	}
+	first, _ = s.GetTask(first.ID)
+	if _, _, err := s.AddDependencies("close", first.ID, []string{prev.ID}, first.Revision); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("closing a 400-long chain must be a cycle: %v", err)
+	}
+	// 12 layers of 2 fully-connected nodes: 2^12 paths, 24 nodes.
+	layer := []Task{mkTask(t, s, "d-root", a.ID, "d-root")}
+	for l := 1; l <= 12; l++ {
+		var next []Task
+		for j := 0; j < 2; j++ {
+			ids := []string{}
+			for _, p := range layer {
+				ids = append(ids, p.ID)
+			}
+			next = append(next, mkTask(t, s, "d-"+time.Duration(l).String()+"-"+time.Duration(j).String(), a.ID, "d", ids...))
+		}
+		layer = next
+	}
+	root, _ := s.GetTask(layer[0].ID)
+	if root.State != TaskWaiting {
+		t.Fatalf("lattice leaf state = %s", root.State)
+	}
+	if d := time.Since(start); d > 20*time.Second {
+		t.Fatalf("traversal is not bounded: %v", d)
+	}
+}

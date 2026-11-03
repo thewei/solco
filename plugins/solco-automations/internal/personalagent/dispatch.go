@@ -316,6 +316,9 @@ func (d *Dispatcher) Reconcile(ctx context.Context, runID string) (Run, error) {
 // and runs each in its own goroutine. It returns how many it started.
 func (d *Dispatcher) Pump(ctx context.Context) int {
 	started := 0
+	if ctx.Err() != nil { // shutting down: nothing new may start
+		return 0
+	}
 	if _, err := d.Store.Promote(); err != nil {
 		log.Printf("personal agent: promoting waiting tasks: %v", err)
 	}
@@ -325,6 +328,9 @@ func (d *Dispatcher) Pump(ctx context.Context) int {
 		return 0
 	}
 	for _, t := range tasks {
+		if ctx.Err() != nil {
+			break
+		}
 		d.mu.Lock()
 		if d.running >= d.maxParallel() {
 			d.mu.Unlock()

@@ -38,7 +38,7 @@ func TestAPIStageCCommands(t *testing.T) {
 	if ap["subjectKind"] != "heartbeat" || !strings.Contains(ap["action"].(string), "at most 2") {
 		t.Fatalf("card = %v", ap)
 	}
-	dec, err := call(t, api, `{"requestId":"w2","id":"`+ap["id"].(string)+`","actionHash":"`+ap["actionHash"].(string)+`","approve":true}`, "assistant", "approval", "decide", ap["id"].(string))
+	dec, err := call(t, api, `{"requestId":"w2","actionHash":"`+ap["actionHash"].(string)+`","approve":true}`, "assistant", "approval", "decide", ap["id"].(string))
 	if err != nil || dec["approval"].(map[string]any)["state"] != "approved" {
 		t.Fatalf("decide: %v %v", dec, err)
 	}

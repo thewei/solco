@@ -456,3 +456,28 @@ func TestRuleTaskRunsTheRulesOwnDefinition(t *testing.T) {
 		t.Fatalf("observer saw %v", seen)
 	}
 }
+
+// A rule removed from automations.yaml stays dormant — its due occurrences fire
+// nothing and no phantom task appears — and comes back when it is re-added.
+// (Shepherdr core-automations: "removed spaces keep timed rules dormant until re-add".)
+func TestARemovedRuleStaysDormantUntilItIsAddedBack(t *testing.T) {
+	s, _ := openTest(t)
+	cfg := &config.Config{Automations: []config.Automation{rule("daily", "*/10 * * * *")}}
+	clock := &clockT{t: at(10, 0)}
+	adopt(t, s, cfg, "daily", map[string]time.Time{"daily": at(10, 0)}, clock.t)
+	gone := &config.Config{}
+	sched := &RuleScheduler{Store: s, Load: func() (*config.Config, error) { return gone, nil }, Now: clock.now}
+	clock.t = at(10, 30)
+	if rep, err := sched.Tick(); err != nil || rep.Fired != 0 {
+		t.Fatalf("a removed rule fired: %+v %v", rep, err)
+	}
+	if got := ruleTasks(t, s, "daily"); len(got) != 0 {
+		t.Fatalf("phantom tasks for a removed rule: %d", len(got))
+	}
+	back := ruleSched(s, cfg, clock)
+	clock.t = at(10, 40)
+	rep, err := back.Tick()
+	if err != nil || rep.Fired < 1 {
+		t.Fatalf("a re-added rule did not come back: %+v %v", rep, err)
+	}
+}

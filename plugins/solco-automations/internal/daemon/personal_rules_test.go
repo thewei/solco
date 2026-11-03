@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"sync"
@@ -138,5 +139,55 @@ func TestRuleRunsWriteTheOldHistory(t *testing.T) {
 	}
 	if recs[0].Status != history.StatusDone || recs[0].Worktree != "auto/owned-x" || recs[0].PaneID != "w1:p1" {
 		t.Fatalf("record = %+v", recs[0])
+	}
+}
+
+// A rule tick that hits a lasting database lock logs, returns and leaves the
+// daemon alive: the very next tick (lock gone) fires the due rule exactly once.
+// (Shepherdr core-database-lock: "a timer scan under a lock that outlasts the
+// wait fails, logs, and the app lives on to its next tick".)
+func TestARuleTickUnderALockFailsQuietlyAndTheNextTickFires(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", dir)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", dir)
+	yaml := "automations:\n  - name: owned\n    cron: \"* * * * *\"\n    repo: /repo\n    prompt: go\n"
+	if err := os.WriteFile(filepath.Join(dir, "automations.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := config.Load()
+	dbPath := filepath.Join(dir, "personal.db")
+	store, err := personalagent.Open(dbPath, personalagent.WithBusyTimeout(100*time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Now()
+	due := now.Add(-2 * time.Minute)
+	if _, _, err := store.AdoptLegacy("", "owned", cfg, map[string]time.Time{"owned": due}, now); err != nil {
+		t.Fatal(err)
+	}
+	p := &personal{store: store, seen: map[string]string{},
+		rules: &personalagent.RuleScheduler{Store: store, Load: config.Load}}
+
+	other, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=busy_timeout(50)&_txlock=immediate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.SetMaxOpenConns(1)
+	tx, err := other.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.tickRules() // must return, not panic or hang
+	_ = tx.Rollback()
+	_ = other.Close()
+
+	asst, _ := store.AutomationsAssistant()
+	if tasks, _ := store.ListTasks(asst.ID); len(tasks) != 0 {
+		t.Fatalf("a refused tick left %d task(s)", len(tasks))
+	}
+	p.tickRules()
+	if tasks, _ := store.ListTasks(asst.ID); len(tasks) != 1 {
+		t.Fatalf("the next tick fired %d task(s), want 1", len(tasks))
 	}
 }

@@ -397,3 +397,30 @@ func TestResumeWithNoAgentInALiveWorkspaceIsUncertain(t *testing.T) {
 		t.Fatalf("task = %+v", tk)
 	}
 }
+
+// Once the daemon is shutting down (context cancelled) a queued task is never
+// claimed or launched, even if its dependencies finish meanwhile.
+// (Shepherdr core-source: "shutdown prevents queued tasks from receiving go".)
+func TestShutdownClaimsAndLaunchesNothing(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a", "Ada")
+	task, _, err := s.CreateTask("t1", CreateTaskInput{AssistantID: a.ID, Title: "t", Brief: "b", Kind: KindResearch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := &fakeLauncher{}
+	d := &Dispatcher{Store: s, Launcher: l, Claimant: "daemon", MaxParallel: 2}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if n := d.Pump(ctx); n != 0 {
+		t.Fatalf("a cancelled daemon started %d task(s)", n)
+	}
+	d.Wait()
+	got, _ := s.GetTask(task.ID)
+	if got.State != TaskQueued {
+		t.Fatalf("task = %s, want it left queued", got.State)
+	}
+	if runs, _ := s.ListRuns(task.ID); len(runs) != 0 {
+		t.Fatalf("a run was claimed during shutdown: %+v", runs)
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -322,5 +324,36 @@ func TestAnInterruptedUpgradeRollsBackAndTheNextStartFinishesIt(t *testing.T) {
 	defer s3.Close()
 	if v, _ := s3.SchemaVersion(); v != before+1 {
 		t.Fatalf("version = %d, want %d", v, before+1)
+	}
+}
+
+// Identity is never reused: every Assistant/Task id is a fresh opaque value
+// (no per-prefix counters to rewind), a request replay returns the same id and
+// allocates nothing, and a renamed Assistant keeps its id.
+// (Shepherdr core-ids: "renamed/replaced machines and deleted tasks never reuse an ID".)
+func TestIdentityIsOpaqueAndNeverReused(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a", "Ada")
+	seen := map[string]bool{a.ID: true}
+	for i := range 150 {
+		task, replay, err := s.CreateTask("req-"+strconv.Itoa(i), CreateTaskInput{AssistantID: a.ID, Title: "t", Brief: "b", Kind: KindResearch})
+		if err != nil || replay {
+			t.Fatalf("task %d: replay=%v err=%v", i, replay, err)
+		}
+		if !strings.HasPrefix(task.ID, "t_") || seen[task.ID] {
+			t.Fatalf("task id %q reused or malformed", task.ID)
+		}
+		seen[task.ID] = true
+	}
+	again, replay, err := s.CreateTask("req-7", CreateTaskInput{AssistantID: a.ID, Title: "t", Brief: "b", Kind: KindResearch})
+	if err != nil || !replay || !seen[again.ID] {
+		t.Fatalf("a replayed request must return its original task: %+v replay=%v err=%v", again, replay, err)
+	}
+	if tasks, _ := s.ListTasks(a.ID); len(tasks) != 150 {
+		t.Fatalf("a replay allocated a new task: %d", len(tasks))
+	}
+	b := mustAssistant(t, s, "b", "Bob")
+	if seen[b.ID] {
+		t.Fatal("assistant id reused")
 	}
 }
