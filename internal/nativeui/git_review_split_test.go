@@ -34,6 +34,7 @@ func TestGitSidebarTreeAndCenterSplitGeometry(t *testing.T) {
 	s := gitSurfaceTestShell(t, root)
 	s.git.rootOf[root] = root
 	s.git.refreshing = true
+	openAllGitSections(s)
 	s.git.branches = []gitworkbench.Branch{
 		{Name: "main", Current: true}, {Name: "feat/editor/alpha"}, {Name: "feat/editor/beta"},
 	}

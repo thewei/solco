@@ -39,6 +39,7 @@ func treeTestShell(t *testing.T) (*Shell, *ui.Tester, string) {
 	shell.git.tags = []gitworkbench.Tag{{Name: "v1.0"}}
 	shell.git.stashes = []gitworkbench.Stash{{Ref: "stash@{0}", Subject: "WIP parser"}}
 	shell.git.worktrees = []gitworkbench.Worktree{{Path: root, Branch: "main"}}
+	openAllGitSections(shell)
 	if shell.router.Path() != routeWorkspace {
 		shell.router.Push(routeWorkspace)
 	}
@@ -180,7 +181,7 @@ func TestGitSectionPlusAppearsUnderThePointerAndOpensTheCreateDialog(t *testing.
 	if !shell.dialogOpen || shell.dialogKind != "git-create-branch" || shell.dialogTarget != root || shell.dialogAction != "Create" {
 		t.Fatalf("dialog = open %v kind %q target %q action %q", shell.dialogOpen, shell.dialogKind, shell.dialogTarget, shell.dialogAction)
 	}
-	if shell.gitTreeClosed[shell.gitFoldKey("section/Branches")] {
+	if shell.gitFolded(shell.gitFoldKey("section/Branches")) {
 		t.Fatal("pressing + must not fold the section")
 	}
 	if !tester.HasText("Create") || !tester.HasText("Branch name") {
@@ -328,7 +329,7 @@ func TestSidebarHeadProjectSearchFiltersAndEnterPicksTheFirstMatch(t *testing.T)
 func TestSidebarHeadBranchPulldownSearchesSwitchesAndCreates(t *testing.T) {
 	shell, tester, _ := treeTestShell(t)
 	// Fold the Branches section so only the pull-down lists branch names.
-	shell.gitTreeClosed[shell.gitFoldKey("section/Branches")] = true
+	shell.setGitFolded(shell.gitFoldKey("section/Branches"), true)
 	tester.Frame()
 	if err := tester.Click("Switch branch"); err != nil {
 		t.Fatalf("branch chip missing: %v; texts=%q", err, tester.Texts())
@@ -371,7 +372,7 @@ func TestSidebarHeadBranchPulldownSearchesSwitchesAndCreates(t *testing.T) {
 
 func TestSidebarHeadBranchRowsCarryMergeAndDeleteInTheirContextMenu(t *testing.T) {
 	shell, tester, _ := treeTestShell(t)
-	shell.gitTreeClosed[shell.gitFoldKey("section/Branches")] = true
+	shell.setGitFolded(shell.gitFoldKey("section/Branches"), true)
 	tester.Frame()
 	if err := tester.Click("Switch branch"); err != nil {
 		t.Fatal(err)

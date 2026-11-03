@@ -23,6 +23,7 @@ import (
 
 func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
 	s := gitSurfaceTestShell(t, t.TempDir())
+	s.git.stashes = []gitworkbench.Stash{{Ref: "stash@{0}", Hash: strings.Repeat("a", 40), Subject: "WIP"}}
 	s.showSurface(WorkspaceSurfaceDiff)
 	tt := ui.NewTester(s.View, 960, 640)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
@@ -51,7 +52,7 @@ func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
 	}
 	tt.Frame()
 	menu := strings.Join(tt.Menu(), " | ")
-	for _, want := range []string{"Stash All Changes", "Save Changes as Patch", "View Commits", "Git Settings"} {
+	for _, want := range []string{"Stash All Changes", "Save Stash…", "Recent Stashes", "Save Changes as Patch", "View Commits", "Hide Stashes in Commit List", "Git Settings"} {
 		if !strings.Contains(menu, want) {
 			t.Fatalf("Actions lost %s: %s", want, menu)
 		}

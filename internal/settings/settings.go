@@ -246,6 +246,13 @@ type WorkbenchSettings struct {
 	// GraphFolded maps a repository root to the merge commits (full hashes)
 	// whose merged-in branch the Commits graph folds away. Cosmetics only.
 	GraphFolded map[string][]string `json:"graph_folded,omitempty"`
+	// TreeFolds maps a repository root to the sidebar ref-tree rows and
+	// sections the user folded or opened away from the defaults (true =
+	// folded). Cosmetics only.
+	TreeFolds map[string]map[string]bool `json:"tree_folds,omitempty"`
+	// HideStashes drops the stash chips from the Commits list ("Hide Stashes
+	// in Commit List", Fork's menu toggle). Cosmetics only.
+	HideStashes bool `json:"hide_stashes,omitempty"`
 }
 
 type ShortcutSettings struct {

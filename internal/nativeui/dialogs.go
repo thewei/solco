@@ -51,7 +51,7 @@ func modalTitle(c *ui.Context, title string) ui.Element {
 // gitConfirmActions names what a Git confirm's button does, so it reads
 // "Remove" or "Discard" instead of a bare "Confirm".
 var gitConfirmActions = map[string]string{
-	"git-discard": "Discard", "git-delete-untracked": "Delete", "git-drop-stash": "Drop", "git-stash-clear": "Drop All",
+	"git-discard": "Discard", "git-delete-untracked": "Delete", "git-drop-stash": "Delete", "git-stash-clear": "Drop All",
 	"git-delete-branch": "Delete", "git-delete-remote-branch": "Delete", "git-delete-tag": "Delete", "git-delete-remote-tag": "Delete",
 	"git-merge-ff": "Merge", "git-merge-no-ff": "Merge", "git-merge-squash": "Squash", "git-rebase": "Rebase",
 	"git-cherry-pick": "Cherry-pick", "git-revert-commit": "Revert", "git-undo-commit": "Undo", "git-sequencer-abort": "Abort",
@@ -202,9 +202,7 @@ func (s *Shell) submitTextDialog(kind, target, value string) {
 			return
 		}
 		s.confirmCreateBranch(value)
-	case "git-stash-message":
-		s.submitStashMessage(target, value)
-	case "git-rename-branch", "git-create-branch-at":
+	case "git-rename-branch", "git-create-branch-at", "git-rename-stash":
 		s.submitRefDialog(kind, target, value)
 	case "files-new-file", "files-new-dir", "files-rename":
 		s.runFilesMutation(kind, target, value)

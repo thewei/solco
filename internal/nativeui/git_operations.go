@@ -51,6 +51,12 @@ func (s *Shell) runGitNetworkOp(name string, run func(ctx context.Context, root 
 }
 
 func (s *Shell) runGitOpBudget(name string, budget time.Duration, run func(ctx context.Context, root string) (string, error)) {
+	s.runGitOpFlow(name, budget, run, false)
+}
+
+// runGitOpFlow is the one runner. retried marks a run that already went
+// through "Stash and reapply", whose refusal is not offered that way again.
+func (s *Shell) runGitOpFlow(name string, budget time.Duration, run func(ctx context.Context, root string) (string, error), retried bool) {
 	if s.git == nil || s.git.root == "" {
 		return
 	}
@@ -79,15 +85,23 @@ func (s *Shell) runGitOpBudget(name string, budget time.Duration, run func(ctx c
 			}
 		}
 		slog.Info("git op done", "op", name, "duration_ms", time.Since(started).Milliseconds(), "ok", err == nil, "err_class", gitErrClass(err))
+		offerAutostash := !retried && autostashOps[name] && gitworkbench.LocalChangesBlocked(err)
 		s.applyOnUI(func() {
 			s.git.opBusy = false
 			if s.git == nil || s.git.root != root {
 				return
 			}
 			switch {
+			case err != nil && offerAutostash && len(conflictPaths) == 0 && !mergePaused:
+				// Local changes stand in the way: say so, and offer Fork's
+				// "Stash and reapply" as the way through.
+				s.openGitNotice(name, err, checkoutBlockedPaths(err), false)
+				s.offerAutostash(name, budget, run)
 			case err != nil && integrationOps[name]:
 				s.openGitNotice(name, err, conflictPaths, mergePaused)
 				s.git.staleBanner = true
+			case err != nil && checkoutOps[name] && len(checkoutBlockedPaths(err)) > 0:
+				s.openGitNotice(name, err, checkoutBlockedPaths(err), false)
 			case err != nil:
 				s.pendingToast = name + " failed: " + gitFailureText(err)
 				// A raw git exit line tells a user nothing here; the one
@@ -255,8 +269,14 @@ func (s *Shell) popStash(ref string) {
 }
 
 func (s *Shell) dropStash(ref string) {
-	s.openConfirm("git-drop-stash", ref, "Drop Stash “"+ref+"”?",
-		"The stashed changes are deleted permanently.")
+	name := ref
+	for _, st := range s.git.stashes {
+		if st.Ref == ref {
+			name = stashTitle(st.Subject)
+		}
+	}
+	s.openConfirm("git-drop-stash", ref, "Delete Stash “"+name+"”?",
+		"Delete stash from repository. The stashed changes are gone for good.")
 }
 
 func (s *Shell) deleteBranch(name string) {

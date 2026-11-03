@@ -100,7 +100,7 @@ func TestStashSectionMenuCarriesMessageAndDropAll(t *testing.T) {
 	}
 	tester.Frame()
 	menu := menuText(tester.Menu())
-	for _, want := range []string{"Stash All Changes", "Stash With Message…", "Drop All Stashes…"} {
+	for _, want := range []string{"Stash All Changes", "Save Stash…", "Drop All Stashes…"} {
 		if !strings.Contains(menu, want) {
 			t.Errorf("stash section menu = %q, missing %q", menu, want)
 		}
@@ -110,9 +110,9 @@ func TestStashSectionMenuCarriesMessageAndDropAll(t *testing.T) {
 	if !shell.confirmOpen || shell.confirmKind != "git-stash-clear" || !strings.Contains(shell.confirmTitle, "1 Stashes") {
 		t.Fatalf("confirm = %v %q %q", shell.confirmOpen, shell.confirmKind, shell.confirmTitle)
 	}
-	shell.openStashMessageDialog()
-	if !shell.dialogOpen || shell.dialogKind != "git-stash-message" || shell.dialogTarget != shell.git.root {
-		t.Fatalf("dialog = %v %q %q", shell.dialogOpen, shell.dialogKind, shell.dialogTarget)
+	shell.openSaveStashDialog()
+	if !shell.gitMore.stash.open || shell.gitMore.stash.kind != "save" || shell.gitMore.stash.root != shell.git.root {
+		t.Fatalf("dialog = %+v", shell.gitMore.stash)
 	}
 }
 

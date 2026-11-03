@@ -31,6 +31,8 @@ Git workbench 是 Solco 的本地 Git 域服务：Runner 负责仓库读取与�
 - `mutation_matrix_test.go`：Git 操作拒绝/保护矩阵测试。
 - `fork_more.go`：Fork 对齐的大件域能力（ResetTo、DeleteRemoteBranch、Set/UnsetUpstream、FormatPatch/StashPatch/WorkingPatch、CompareToWorktree、FileHistory、Blame、远程增改删、子模块列表/更新、RebasePlan/InteractiveRebase；冲突即 abort，Hard reset 仅干净树）。
 - `fork_more2.go`：Fork 第三批域能力（Pull ff/merge/rebase、FetchAll(+prune)、MergeSquash、CheckoutDetached、RestoreFile、ApplyPatch、CreateTagAnnotated、DeleteRemoteTag、RemoveWorktree、UnmergedPaths/ResolveConflict、Reflog、Add/RemoveSubmodule、StashPushPaths/StashClear、ParseWebRepo/CommitURL；冲突型集成动作失败即回滚并带冲突文件，Commit 增 NoVerify/SignOff）。
+- `autostash.go`：WithAutostash（Fork 的 Stash and reapply：stash -u → 动作 → pop；动作失败且不在半路则立即还原，半路/重放冲突则保留 stash）+ LocalChangesBlocked（识别"被本地改动挡住"的 Git 拒绝）
+- `stash_rename.go`：StashRename——同树同父重建带新留言的 stash 提交 → `stash store` → 丢旧条目（先存后丢）；StashList 现读 reflog 留言（`%gs`），改名可见
 - `operations.go`：同步、Stash（含其提交与 base 提交，`StashSnapshot` 把 tracked 变更与第三父的未跟踪文件合成一次审阅，供图谱把 stash 挂到所属提交）、Tag、Worktree、含完整父 SHA 的历史提交及 sequencer 操作，供原生历史图谱使用。
 - `operations_test.go`：真实 Git 操作和保护回归。
 - `line_patch.go`：按所选行构造单 hunk 补丁并经 `git apply --cached --recount [--reverse] -`（Runner.Stdin）暂存/取消暂存部分行；未选中的删除行回退为上下文、未选中的新增行丢弃。

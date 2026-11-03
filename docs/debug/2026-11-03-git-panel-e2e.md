@@ -200,3 +200,21 @@
 
 补充（用户反馈：Changed Files 选中行太亮）：MyGo 的 `ui.List` 会给“被选中”的行包装层刷 `Theme.Accent`（聚焦时是不透明蓝），盖在我们自己的 `SidebarSelect/Strong` 中性底之上，所以文件行比 Commits 列表亮很多。`gdChangedTreeList` 现在在清空 Accent 的主题下构建列表（`c.SetTheme` 仅包住 `ui.List` 调用，行内由 `renderChangesRow` 自画选中底），Changes / Staged / Unstaged / 提交文件列表一并生效；同时去掉“聚焦选中行状态字母变白”的分支（那是蓝底时代的补丁）。全 nativeui 排查：只有这三个设置了 `ListState.Selected` 的列表（都走 `gdChangedTreeList`）会触发该面；其余 `ui.List`（历史/Blame/Reflog/Rebase/Commits）不设 Selected，不受影响。守卫 `TestChosenFileRowIsNeutralNotAccent`：不做修复时像素为 `[10 135 250]`（蓝）而失败，修复后通过。
 
+## 第 10 轮：折叠持久化 / 双击提交检出 / Stash 对齐 Fork
+
+数据来源：Fork.app 的 nib/二进制字符串（Apply Stash 表单有 "Delete stash after applying"+"Stash will not be deleted if a conflict occurs"；Delete Stash "Delete stash from repository"；Rename Stash "Enter New Stash Message"；Save Stash "Stash message (optional)"；Partial Stash 勾选文件；主菜单 Quick Stash / Save Stash / Hide Stashes in Commit List；工具栏 Recent Stashes）。Fork 窗口在另一 Space/不在屏，双击检出未能实机对照，检出规则按 Fork 文档与既有 Solco 侧栏行为实现。
+
+| 项 | 改动 | 验证 |
+|---|---|---|
+| 折叠持久化 | `git_tree_folds.go`：区块/嵌套文件夹（含远程）折叠按仓库根存 `Workbench.TreeFolds`，只存偏离默认的项；默认只展开 Branches；搜索期折叠不落盘 | `TestGitFoldsDefaultToOnlyBranchesOpen`、`TestGitFoldsPersistPerRepository`、`TestGitSearchFoldsStayInTheSession`；原折叠/键盘/chip 定位测试迁到 `gitFolded` |
+| 双击提交检出 | `git_commit_checkout.go`：当前分支已在此→"Already on"；本地分支→切；仅远程分支→`CheckoutRemoteBranch`；无分支→游离；不弹确认（Git 自己拒绝覆盖）。被本地改动/未跟踪文件挡住时 `git_notice` 弹 "Can't Switch Yet"＋文件列表，分支不动；侧栏分支双击同样走该弹窗 | `TestPlanCommitCheckoutFollowsFork`、`TestDoubleClickingACommitSwitchesToItsBranch`、`…DetachesHead`、`…RefusedByLocalFilesExplainsWhich`（真实仓库） |
+| Stash 菜单 | 行菜单：Apply Stash…（表单+删除勾选，取代 Apply/Pop 两项）/ Rename Stash… / Delete Stash…，Save as Patch、Copy Ref 保留；区块 ⋯：Save Stash…、Drop All | `TestRefRowMenusCarryTheForkActions` |
+| Rename Stash | `StashRename`：Git 无改名，同树同父重建提交→`stash store`→丢旧；`StashList` 改读 `%gs`（reflog 留言）使改名可见；栈顶改名也可（原样重存是空操作，曾因此失败，测试覆盖） | `TestStashRenameKeepsTheContentAndReplacesTheMessage`、`TestRenameStashFromTheSidebarMenu` |
+| Save/Partial Stash | Changes ⋯ 与区块 ⋯ 的 Save Stash…：留言 + 文件勾选（默认全选=整体 stash，取消部分=只 stash 勾选的）；Changes ⋯ 增 Recent Stashes（最新 5 条→Apply 表单） | `TestSaveStashStashesOnlyTheTickedFiles`、`…WholeSet`、`TestApplyStashSheetKeepsOrDeletes`；`TestActionsMenu…` |
+
+| Hide Stashes in Commit List | Changes ⋯ 的勾选项，`Workbench.HideStashes` 全局；隐藏后提交列表不画 stash chip（Solco 的 stash 本就只以 chip 出现在其基底提交上） | `TestHideStashesDropsTheStashChips` |
+| Stash and reapply | `gitworkbench.WithAutostash`（stash -u → 动作 → pop；动作失败且不在半路则还原；重放冲突/半路则保留 stash，绝不往冲突树里 pop）。入口：检出/Pull/Merge/Rebase 被本地改动挡住时，原有说明弹窗多一个 **Stash and Reapply** 按钮，重跑同一动作（`autostashOps`；侧栏分支双击同） | gitworkbench `TestWithAutostash*`（4 例，真实仓库）、nativeui `TestStashAndReapplyGetsPastABlockedDoubleClick` |
+
+有意不同：Fork 的 stash 默认忽略新文件，Solco 的 Changes 列表把新文件当改动，故 stash 含新文件（对话框文案已写明）。未做：Fork 检出对话框的第三个选项 "Discard local changes (--force)"（破坏性，需单独确认设计）。
+
+**闪烁已定位并修复**（用户补充：点 Commit 后整块侧栏闪白再恢复，始于第 9 轮改下方布局之后）：根因是第 9 轮 `changes_panel.go` 为压掉选中蓝在列表外 `c.SetTheme(quiet)…SetTheme(real)`——MyGo 的 `SetTheme` 会把窗口根背景重置成主题底色，抹掉 `Shell.View` 为 vibrancy 设的透明根，评审区（文件列表）一出现侧栏就失去材质、变不透明。此前无头复现不了是因为 Tester 默认 vibrancy 关且只比 RGB。修复：还原后补 `Root().Background(Transparent)`（vibrancy 开时）；`TestReviewingACommitKeepsTheSidebarVibrancy`（vibrancy 开、比 alpha，已验证撤销修复即失败）+ `TestSetThemeIsOnlyCalledWhereTheRootIsRestored`（别处不许 SetTheme）。

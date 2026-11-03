@@ -75,6 +75,8 @@ func (s *Shell) submitRefDialog(kind, target, value string) {
 			}
 			return "Renamed " + subject + " to " + value, nil
 		})
+	case "git-rename-stash":
+		s.renameStash(subject, value)
 	case "git-create-branch-at":
 		s.runGitOp("New Branch", func(ctx context.Context, root string) (string, error) {
 			if _, err := s.git.runner.CreateBranchAt(ctx, root, value, subject); err != nil {

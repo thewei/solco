@@ -65,7 +65,7 @@ func TestClickingAStashLocatesTheCommitItWasMadeOn(t *testing.T) {
 // view, opening the section it was folded in.
 func TestClickingAChipRevealsItsSidebarRow(t *testing.T) {
 	f := newGraphFixture(t)
-	f.shell.gitTreeClosed[f.shell.gitFoldKey("section/Branches")] = true
+	f.shell.setGitFolded(f.shell.gitFoldKey("section/Branches"), true)
 	f.shell.commitsMode = true
 	f.tester.Frame()
 	f.tester.Frame()
@@ -77,7 +77,7 @@ func TestClickingAChipRevealsItsSidebarRow(t *testing.T) {
 	if f.shell.git.commitHash != want {
 		t.Fatalf("the chip should open its commit: %q want %q", f.shell.git.commitHash, want)
 	}
-	if f.shell.gitTreeClosed[f.shell.gitFoldKey("section/Branches")] || f.shell.gitTreeClosed[f.shell.gitFoldKey("local/feature")] {
+	if f.shell.gitFolded(f.shell.gitFoldKey("section/Branches")) || f.shell.gitFolded(f.shell.gitFoldKey("local/feature")) {
 		t.Fatal("the section and folder above the row must open")
 	}
 	f.tester.Frame()

@@ -56,9 +56,9 @@ func (s *Shell) revealInSidebar(t gitSidebarTarget) {
 		return
 	}
 	s.gitRefsFilter = ""
-	delete(s.gitTreeClosed, s.gitFoldKey("section/"+t.section))
+	s.setGitFolded(s.gitFoldKey("section/"+t.section), false)
 	for _, folder := range t.folders {
-		delete(s.gitTreeClosed, s.gitFoldKey(folder))
+		s.setGitFolded(s.gitFoldKey(folder), false)
 	}
 	s.gitRefsSelected, s.gitRefsReveal = t.key, t.key
 }
@@ -79,7 +79,7 @@ func (s *Shell) newGitChipIndex() gitChipIndex {
 		checkedOut: map[string]string{},
 	}
 	for _, st := range s.git.stashes {
-		if st.Base != "" {
+		if st.Base != "" && !s.settings.Workbench.HideStashes {
 			x.stashes[st.Base] = append(x.stashes[st.Base], st)
 		}
 	}

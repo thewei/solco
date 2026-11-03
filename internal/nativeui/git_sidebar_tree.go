@@ -266,8 +266,8 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 					label: "Stash changes", menuItem: "Stash All Changes", disabled: s.git.opBusy || !s.dirtyWorktree(),
 					run: s.stashChanges,
 					more: func(m *ui.Menu) {
-						if m.Item("Stash With Message…").Disabled(s.git.opBusy || !s.dirtyWorktree()).Chosen() {
-							s.openStashMessageDialog()
+						if m.Item("Save Stash…").Disabled(s.git.opBusy || !s.dirtyWorktree()).Chosen() {
+							s.openSaveStashDialog()
 						}
 						m.Separator()
 						if m.Item("Drop All Stashes…").Disabled(s.git.opBusy || len(s.git.stashes) == 0).Chosen() {
@@ -285,17 +285,18 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 						s.gitTreeRow(c, gitTreeItem{title: stashTitle(st.Subject), tooltip: st.Ref + "  " + st.Subject, kind: "Stash", glyph: iconStash, commit: st.Base, review: st.Hash}, func() {
 							s.copyToClipboard(st.Ref)
 						}, func(m *ui.Menu) {
-							if m.Item("Apply Stash").Disabled(s.git.opBusy).Chosen() {
-								s.applyStash(st.Ref)
+							if m.Item("Apply Stash…").Disabled(s.git.opBusy).Chosen() {
+								s.openApplyStashDialog(st)
 							}
-							if m.Item("Pop Stash").Chosen() {
-								s.popStash(st.Ref)
+							if m.Item("Rename Stash…").Disabled(s.git.opBusy).Chosen() {
+								s.openRenameStash(st)
 							}
+							if m.Item("Delete Stash…").Chosen() {
+								s.dropStash(st.Ref)
+							}
+							m.Separator()
 							if m.Item("Save as Patch…").Chosen() {
 								s.saveStashPatch(st.Ref, st.Subject)
-							}
-							if m.Item("Drop Stash…").Chosen() {
-								s.dropStash(st.Ref)
 							}
 							if m.Item("Copy Stash Ref").Chosen() {
 								s.copyToClipboard(st.Ref)
@@ -318,7 +319,7 @@ func (s *Shell) gitSidebarSection(c *ui.Context, name string, count int, action 
 	key := s.gitFoldKey("section/" + name)
 	// An empty section is its header and the 0: opening it only to read
 	// "None" cost a row per Remotes/Tags/Stashes.
-	closed := s.gitTreeClosed[key] || (count == 0 && strings.TrimSpace(s.gitRefsFilter) == "")
+	closed := s.gitFolded(key) || (count == 0 && strings.TrimSpace(s.gitRefsFilter) == "")
 	spec := sidebarSectionSpec{Key: "git-section:" + name, Title: name, Count: count, Closed: closed, Nav: &s.nav.gitRefs}
 	if action != nil {
 		if !action.disabled {
@@ -334,7 +335,7 @@ func (s *Shell) gitSidebarSection(c *ui.Context, name string, count int, action 
 		}
 	}
 	if _, clicked := s.sidebarSectionHeader(c, spec); clicked {
-		s.gitTreeClosed[key] = !s.gitTreeClosed[key]
+		s.setGitFolded(key, !s.gitFolded(key))
 	}
 	if !closed {
 		children()

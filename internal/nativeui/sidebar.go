@@ -437,6 +437,9 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 		if row.Clicked() {
 			s.reviewCommit(cm.Hash)
 		}
+		if row.DoubleClicked() {
+			s.checkoutCommitRow(cm)
+		}
 		// Long commit subjects preserve the full metadata in the tooltip.
 		tip := cm.Subject + "\n" + cm.Author + " · " + gdCommitTime(cm.Time) + "\n" + cm.Hash
 		if unmerged {

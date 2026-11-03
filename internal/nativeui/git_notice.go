@@ -8,9 +8,12 @@ package nativeui
  */
 
 import (
+	"context"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // integrationOps are the operations whose failure deserves a dialog.
@@ -24,12 +27,81 @@ var integrationOps = map[string]bool{
 	"Squash Merge":       true,
 }
 
+// checkoutOps are the checkouts whose refusal by local files deserves a dialog
+// naming those files (Fork's "can't switch" alert).
+var checkoutOps = map[string]bool{
+	"Check Out":        true,
+	"Check Out Branch": true,
+	"Check Out Commit": true,
+}
+
+// checkoutBlockedPaths lists the files Git names when it refuses a checkout
+// because local changes (or untracked files) would be overwritten.
+func checkoutBlockedPaths(err error) []string {
+	ge, ok := gitworkbench.GitError(err)
+	if !ok {
+		return nil
+	}
+	var paths []string
+	in := false
+	for _, line := range strings.Split(ge.Stderr, "\n") {
+		switch {
+		case strings.Contains(line, "would be overwritten by checkout") || strings.Contains(line, "would be overwritten by merge"):
+			in = true
+		case in && strings.HasPrefix(line, "\t"):
+			paths = append(paths, strings.TrimSpace(line))
+		case in:
+			in = false
+		}
+	}
+	return paths
+}
+
+// autostashOps are the operations that can be retried with "Stash and reapply"
+// when local changes block them: checkouts, pulls, merges and rebases.
+var autostashOps = map[string]bool{
+	"Check Out": true, "Check Out Branch": true, "Check Out Commit": true,
+	"Pull": true, "Pull and Merge": true, "Pull and Rebase": true,
+	"Fast-forward Merge": true, "Merge Commit": true,
+	"Rebase": true, "Interactive Rebase": true,
+}
+
+// offerAutostash gives the open notice a "Stash and Reapply" button that runs
+// the same operation again between a stash and its pop.
+func (s *Shell) offerAutostash(name string, budget time.Duration, run func(ctx context.Context, root string) (string, error)) {
+	n := &s.gitNotice
+	n.retryLabel = "Stash and Reapply"
+	n.retry = func() {
+		s.runGitOpFlow(name, budget, func(ctx context.Context, root string) (string, error) {
+			var notice string
+			res, err := s.git.runner.WithAutostash(ctx, root, func() error {
+				var e error
+				notice, e = run(ctx, root)
+				return e
+			})
+			if err != nil {
+				return "", err
+			}
+			switch {
+			case res.Kept:
+				notice += " — your changes conflict with the result and stay in the stash"
+			case res.Stashed:
+				notice += " — your changes were reapplied"
+			}
+			return notice, nil
+		}, true)
+	}
+}
+
 // gitNoticeState is one open explanation of why a merge/rebase did not land.
 type gitNoticeState struct {
 	open  bool
 	title string
 	body  string
 	paths []string
+	// retry, when set, is an alternative way through (Stash and Reapply).
+	retry      func()
+	retryLabel string
 }
 
 // openGitNotice words the failure of an integration op. paused means a merge
@@ -38,6 +110,7 @@ type gitNoticeState struct {
 func (s *Shell) openGitNotice(op string, err error, paths []string, paused bool) {
 	n := &s.gitNotice
 	n.paths = paths
+	n.retry, n.retryLabel = nil, ""
 	reason := gitFailureText(err)
 	switch {
 	case op == "Squash Merge" && len(paths) > 0:
@@ -46,6 +119,9 @@ func (s *Shell) openGitNotice(op string, err error, paths []string, paused bool)
 	case (op == "Rebase" || op == "Interactive Rebase" || op == "Pull and Rebase") && len(paths) > 0:
 		n.title = "Rebase Stopped on Conflicts"
 		n.body = "The rebase was cancelled and nothing changed. Merge instead, or rebase in the Terminal and resolve the conflicts there."
+	case checkoutOps[op] && len(paths) > 0:
+		n.title = "Can't Switch Yet"
+		n.body = "These files have local changes that the checkout would overwrite. Commit, stash or discard them first, or let Solco stash them, switch and reapply them. Nothing was changed."
 	case paused:
 		n.title = "Merge Needs Your Help"
 		n.body = "These files conflict. The merge is paused in your working tree: resolve them in Local Changes, then continue — or abort to go back."
@@ -88,7 +164,12 @@ func (s *Shell) gitNoticeDialog(c *ui.Context) {
 					}
 				})
 			}
-			ui.Row(c).FillWidth().Justify(ui.End).Children(func() {
+			ui.Row(c).FillWidth().Justify(ui.End).Gap(Spacing().M).Children(func() {
+				if n.retry != nil && regularButton(c, n.retryLabel).Clicked() {
+					retry := n.retry
+					n.open = false
+					retry()
+				}
 				if regularPrimaryButton(c, "OK").AutoFocus().Clicked() {
 					n.open = false
 				}

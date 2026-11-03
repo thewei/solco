@@ -352,12 +352,12 @@ func TestGitRefsTreeKeysFoldSectionsAndWalkRefs(t *testing.T) {
 	tester.Frame()
 	section := shell.gitFoldKey("section/Branches")
 	folder := shell.gitFoldKey("local/feature")
-	if !shell.gitTreeClosed[section] {
+	if !shell.gitFolded(section) {
 		t.Fatal("click must fold Branches")
 	}
 	wantCursor(t, tester, "Toggle Branches")
 	pressKey(tester, 0, ui.KeyRight)
-	if shell.gitTreeClosed[section] {
+	if shell.gitFolded(section) {
 		t.Fatal("→ on a closed section must open it")
 	}
 	pressKey(tester, 0, ui.KeyRight)
@@ -367,13 +367,13 @@ func TestGitRefsTreeKeysFoldSectionsAndWalkRefs(t *testing.T) {
 	pressKey(tester, 0, ui.KeyLeft)
 	wantCursor(t, tester, "Folder feature")
 	pressKey(tester, 0, ui.KeyLeft)
-	if !shell.gitTreeClosed[folder] || onScreen(tester, "Branch login") {
+	if !shell.gitFolded(folder) || onScreen(tester, "Branch login") {
 		t.Fatalf("← on an open folder must fold it; texts=%q", tester.Texts())
 	}
 	pressKey(tester, 0, ui.KeyLeft)
 	wantCursor(t, tester, "Toggle Branches") // folded folder: ← climbs to the section
 	pressKey(tester, 0, ui.KeyLeft)
-	if !shell.gitTreeClosed[section] {
+	if !shell.gitFolded(section) {
 		t.Fatal("← on an open section header must fold it")
 	}
 	pressKey(tester, 0, ui.KeyDown)

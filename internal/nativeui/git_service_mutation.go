@@ -172,6 +172,16 @@ func (s *Shell) switchBranch(name string) {
 
 		s.applyOnUI(func() {
 			s.git.branchBusy = false
+			if paths := checkoutBlockedPaths(err); err != nil && len(paths) > 0 {
+				s.openGitNotice("Check Out Branch", err, paths, false)
+				s.offerAutostash("Check Out Branch", gitOpTimeout, func(ctx context.Context, root string) (string, error) {
+					if _, err := s.git.runner.SwitchBranch(ctx, root, name); err != nil {
+						return "", err
+					}
+					return "Switched to " + name, nil
+				})
+				return
+			}
 			if err != nil {
 				s.status = "Branch switch refused"
 				s.errText = err.Error()

@@ -3,6 +3,7 @@ package nativeui
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/gitworkbench"
+	"github.com/thewei/solco/internal/settings"
 )
 
 /**
@@ -78,6 +79,14 @@ func (s *Shell) gitActionItems(m *ui.Menu) {
 	if m.Item("Stash All Changes").Disabled(s.git.opBusy || busySequencer || len(snap.Files) == 0).Chosen() {
 		s.stashChanges()
 	}
+	if m.Item("Save Stash…").Disabled(s.git.opBusy || busySequencer || len(snap.Files) == 0).Chosen() {
+		s.openSaveStashDialog()
+	}
+	if len(s.git.stashes) > 0 {
+		m.Submenu("Recent Stashes", func(sub *ui.Menu) {
+			s.recentStashItems(sub)
+		})
+	}
 	if m.Item("Save Changes as Patch…").Disabled(s.git.opBusy || len(snap.Files) == 0).Chosen() {
 		s.saveWorkingPatch()
 	}
@@ -90,6 +99,13 @@ func (s *Shell) gitActionItems(m *ui.Menu) {
 	m.Separator()
 	if m.Item("View Commits").Chosen() {
 		s.showGitCommits()
+	}
+	if m.Item("Hide Stashes in Commit List").Checked(s.settings.Workbench.HideStashes).Chosen() {
+		hide := !s.settings.Workbench.HideStashes
+		s.applySettings(func(st *settings.Settings) error {
+			st.Workbench.HideStashes = hide
+			return nil
+		})
 	}
 	if m.Item("Reflog…").Chosen() {
 		s.openReflogSheet()

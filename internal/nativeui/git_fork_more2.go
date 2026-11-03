@@ -262,27 +262,6 @@ func (s *Shell) stashFile(path string) {
 	})
 }
 
-func (s *Shell) openStashMessageDialog() {
-	if s.git == nil || s.git.root == "" || s.git.opBusy {
-		return
-	}
-	s.openTextDialog("git-stash-message", s.git.root, "Stash With Message", "Message", "")
-	s.dialogAction = "Stash"
-}
-
-func (s *Shell) submitStashMessage(target, message string) {
-	if s.git == nil || s.git.root == "" || s.git.root != target {
-		s.pendingToast = "Repository changed. Reopen the dialog to continue."
-		return
-	}
-	s.runGitOp("Stash", func(ctx context.Context, root string) (string, error) {
-		if err := s.git.runner.StashPush(ctx, root, message); err != nil {
-			return "", err
-		}
-		return "Changes stashed", nil
-	})
-}
-
 func (s *Shell) confirmDropAllStashes() {
 	if s.git == nil || s.git.root == "" || s.git.opBusy || len(s.git.stashes) == 0 {
 		return

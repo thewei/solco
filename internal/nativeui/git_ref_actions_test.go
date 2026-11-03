@@ -45,7 +45,7 @@ func TestRefRowMenusCarryTheForkActions(t *testing.T) {
 		{"login", []string{"Rebase Current Onto This…", "Rename Branch…"}},
 		{"develop (current)", []string{"Pull (Fast-Forward Only)", "Push", "Rename Branch…"}},
 		{"v1.0", []string{"Push Tag"}},
-		{"WIP parser", []string{"Apply Stash", "Pop Stash", "Save as Patch…"}},
+		{"WIP parser", []string{"Apply Stash…", "Rename Stash…", "Delete Stash…", "Save as Patch…"}},
 	} {
 		shell, tester, _ := treeTestShell(t)
 		shell.git.remoteBranches = []gitworkbench.RemoteBranch{{Remote: "origin", Name: "main"}}

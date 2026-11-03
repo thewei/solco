@@ -258,6 +258,9 @@ workspace_header.go: Commit Modal 打开/取消/草稿导航防护，仍使用�
 git_operations.go: 背景 mutation 编排，FF/no-FF Merge、Rebase、Revert/Cherry-pick/Undo、Git Continue/Abort，经确认并在失败后刷新；失败 toast 经 gitFailureText（gitworkbench.Explain 的人话）；Push/Pull 跟随 upstream
 git_notice.go: 合并/变基无法直接完成时的说明弹窗（FF 被拒/merge 冲突/rebase 冲突＋文件列表，只读）
 git_ref_actions.go: 对齐 Fork 的引用/提交右键动作编排（远程分支检出、分支改名、某提交处建分支/标签、推送标签、应用 stash、stash 行标题）
+git_tree_folds.go: 侧栏引用树折叠状态的唯一来源（gitFolded/setGitFolded）；按仓库根存 settings.Workbench.TreeFolds，只存与默认不同的项；默认仅 Branches 展开，搜索期折叠只在会话内
+git_commit_checkout.go: 双击提交即检出（Fork 同款）：当前分支已在此→提示；本地分支→切换；仅远程分支→本地同名/建 tracking；无分支→游离 HEAD；被本地文件拒绝时由 git_notice 弹窗列出文件
+git_stash_dialogs.go: 对齐 Fork 的 stash 面——Save Stash（留言+文件勾选=部分 stash）、Apply Stash（"Delete stash after applying"）、Rename Stash 入口、Changes ⋯ 的 Recent Stashes
 git_fork_more.go: Fork 大件编排（远程增改删、删除远程分支、Tracking、Reset to Here、Compare to Local Changes、Save as Patch（提交/Stash/工作区）、文件历史/Blame、交互式 rebase 面板、子模块区、Commit and Push、自动 fetch 定时器）
 git_fork_more2.go: Fork 第三批编排（Pull 合并/变基与 Fetch All、Squash Merge、分离 HEAD 检出、从提交还原文件、应用补丁、带说明 Tag 对话框与删除远端 Tag、Worktree 移除/作为 Workspace 打开、逐文件冲突解决、Reflog 面板、子模块新增/移除、带说明/按文件 Stash 与清空、提交的托管站点链接）
 git_sequencer_ui.go: Git Diff 顶栏冲突提示、操作准确的 Continue/Abort/Refresh；右侧 Inspector 共用状态和指引

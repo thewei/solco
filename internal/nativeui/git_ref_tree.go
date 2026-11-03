@@ -132,7 +132,7 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 	visit = func(n *gitRefNode, level int) {
 		folder := len(n.children) > 0
 		key := s.gitFoldKey(scope + "/" + n.full)
-		closed := s.gitTreeClosed[key]
+		closed := s.gitFolded(key)
 		value := n.full
 		// HEAD/current branch is identified by the snapshot, never inferred from name.
 		current := false
@@ -173,7 +173,7 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}
 		s.gitTreeRow(c, item, func() {
 			if folder {
-				s.gitTreeClosed[key] = !s.gitTreeClosed[key]
+				s.setGitFolded(key, !s.gitFolded(key))
 			} else {
 				click(value)
 			}
@@ -189,7 +189,7 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 				eye.toggle()
 			}
 			if folder && m.Item("Collapse Folder").Chosen() {
-				s.gitTreeClosed[key] = true
+				s.setGitFolded(key, true)
 			}
 		})
 		if folder && !closed {
