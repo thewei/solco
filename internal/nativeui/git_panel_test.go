@@ -118,9 +118,9 @@ func TestGitGraphWidthFollowsLanes(t *testing.T) {
 	}
 }
 
-// The commit under review shows its whole message (selectable, so it can be
-// copied by hand) and Copy Message copies subject and body together.
-func TestGitCommitCardCopiesTheFullMessage(t *testing.T) {
+// The commit under review is one strip (author, hash, date, subject, body) and
+// its menu's Copy Message copies subject and body together.
+func TestGitCommitStripCopiesTheFullMessage(t *testing.T) {
 	got := captureClipboard(t)
 	s := gitSurfaceTestShell(t, t.TempDir())
 	s.git.rootOf[s.git.root] = s.git.root
@@ -144,22 +144,31 @@ func TestGitCommitCardCopiesTheFullMessage(t *testing.T) {
 	tester := ui.NewTester(s.View, 1280, 800)
 	tester.Frame()
 	tester.Frame()
-	for _, want := range []string{"Fix the parser", "It dropped the last token.", "Copy Message", "Cherry-pick…", "Revert…"} {
+	for _, want := range []string{"Fix the parser", "It dropped the last token.", "Tester", "0123456", "Commit actions"} {
 		if !tester.HasText(want) {
-			t.Fatalf("the commit card lacks %q; texts=%q", want, tester.Texts())
+			t.Fatalf("the commit strip lacks %q; texts=%q", want, tester.Texts())
 		}
 	}
-	if err := tester.Click("Copy Message"); err != nil {
-		t.Fatal(err)
+	choose := func(item string) {
+		t.Helper()
+		if err := tester.Click("Commit actions"); err != nil {
+			t.Fatal(err)
+		}
+		tester.Frame()
+		if menu := menuText(tester.Menu()); !strings.Contains(menu, "Cherry-pick…") || !strings.Contains(menu, "Revert…") {
+			t.Fatalf("the commit menu lost its actions: %s", menu)
+		}
+		if err := tester.ChooseMenuItem(item); err != nil {
+			t.Fatal(err)
+		}
 	}
+	choose("Copy Message")
 	if len(*got) != 1 || (*got)[0] != "Fix the parser\n\nIt dropped the last token." {
 		t.Fatalf("Copy Message copied %q", *got)
 	}
-	if err := tester.Click("Copy hash"); err != nil {
-		t.Fatal(err)
-	}
+	choose("Copy Commit Hash")
 	if len(*got) != 2 || (*got)[1] != cm.Hash {
-		t.Fatalf("Copy hash copied %q", *got)
+		t.Fatalf("Copy Commit Hash copied %q", *got)
 	}
 }
 

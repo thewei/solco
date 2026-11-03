@@ -308,12 +308,10 @@ func (s *Shell) gitCommitReview(c *ui.Context) {
 			})
 			return
 		}
+		s.gitCommitStrip(c)
 		ui.Row(c).Grow(1).MinHeight(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 			s.gitFileNavigationColumn(c, func() {
-				ui.Column(c).Grow(1).MinHeight(0).MinWidth(0).Children(func() {
-					s.gitCommitCard(c)
-					s.gitCommitFiles(c)
-				})
+				s.gitCommitFiles(c)
 			})
 			ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Children(func() {
 				ui.Row(c).FillWidth().Padding(6, 12, 0).Gap(Spacing().S).AlignItems(ui.Center).Children(func() {
@@ -375,26 +373,30 @@ func splitCommitMessage(message, subject string) (string, string) {
 	return strings.TrimSpace(head), strings.TrimSpace(body)
 }
 
-// gitCommitCard is the commit under review: its message — selectable, the
-// body folded past three lines — who and when, the short hash, and the
-// commit's own actions.
-func (s *Shell) gitCommitCard(c *ui.Context) {
+// gitCommitStrip is the commit under review, one header across the whole
+// review (Fork's layout, 2026-11-03: it used to be a card squeezed into the
+// file column above the file list): the author's avatar and name, the short
+// hash, the date and the subject on one line, with the commit's actions
+// behind one menu. A message body sits on a line of its own beneath, folded
+// past three lines.
+func (s *Shell) gitCommitStrip(c *ui.Context) {
 	t := c.Theme()
 	cm := s.git.commitMeta
-	ui.Column(c).FillWidth().Shrink(0).Padding(8, 10, 10).Gap(6).
+	ui.Column(c).FillWidth().Shrink(0).Padding(8, 12).Gap(6).
 		BorderWidth(0, 0, 1, 0).BorderColor(s.tokens(t.Dark).BorderSubtle).Children(func() {
 		if cm == nil {
 			busyNote(c, "Reading commit…")
 			return
 		}
 		if s.git.compare {
-			ui.Text(c, "Working tree compared with "+cm.Short).FontSize(Typography().Body).FontWeight(WeightSemibold)
-			ui.Text(c, cm.Subject).FontSize(Typography().BodySmall).TextColor(t.TextMuted).MaxLines(2)
-			ui.Text(c, "Shows what changed between that commit and the files on disk now (staged and unstaged; untracked files are not included).").
-				FontSize(Typography().Caption).TextColor(t.TextMuted)
-			if compactButton(c, "Back to Commit").Clicked() {
-				s.reviewCommitAs(cm.Hash, false)
-			}
+			ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Working tree compared with "+cm.Short).FontSize(Typography().Body).FontWeight(WeightSemibold).Shrink(0).SingleLine()
+				tipped(c, ui.Text(c, "What changed between that commit and the files on disk now — staged and unstaged, untracked files not included.").
+					FontSize(Typography().BodySmall).TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine(), cm.Subject)
+				if compactButton(c, "Back to Commit").Clicked() {
+					s.reviewCommitAs(cm.Hash, false)
+				}
+			})
 			return
 		}
 		subject, body := splitCommitMessage(s.git.commitBody, cm.Subject)
@@ -402,44 +404,49 @@ func (s *Shell) gitCommitCard(c *ui.Context) {
 		if body != "" {
 			message += "\n\n" + body
 		}
-		ui.Column(c).FillWidth().Gap(4).Selectable().Children(func() {
-			ui.Text(c, subject).FontSize(Typography().Body).FontWeight(WeightSemibold)
-			if body != "" {
-				text := ui.Text(c, body).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
-				if !s.gitCommitBodyOpen {
-					text.MaxLines(gitCommitBodyFold)
-				}
-			}
-		})
-		if strings.Count(body, "\n") >= gitCommitBodyFold || len(body) > 180 {
-			label := "Show more"
-			if s.gitCommitBodyOpen {
-				label = "Show less"
-			}
-			fold := ui.ButtonBase(c).Padding(0).FocusRing(false).Label(label).Children(func() {
-				ui.Text(c, label).FontSize(Typography().Caption).TextColor(t.Accent)
-			})
-			if fold.Clicked() {
-				s.gitCommitBodyOpen = !s.gitCommitBodyOpen
-			}
-		}
-		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			tipped(c, ui.Text(c, cm.Author+" · "+gdRelativeTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0), gdCommitTime(cm.Time))
+		ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+			authorAvatar(c, cm.Author, 20)
+			ui.Text(c, cm.Author).FontSize(Typography().Body).FontWeight(WeightSemibold).Shrink(0).SingleLine()
 			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0).Selectable()
-			if gorexIconButton(c, gorexColorsOf(t.Dark), iconCopy, "Copy hash", "Copy Commit Hash", false, gorexRowBtn, gorexRowGlyph).Clicked() {
-				s.copyToClipboard(cm.Hash)
-			}
+			ui.Text(c, gdCommitTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0).SingleLine()
+			ui.Text(c, subject).FontSize(Typography().Body).FontWeight(WeightSemibold).Grow(1).MinWidth(0).SingleLine().Selectable()
+			menu := gorexIconButton(c, gorexColorsOf(t.Dark), iconActions, "Commit actions", "Commit actions", false, gorexRowBtn, gorexRowGlyph)
+			menu.Menu(func(m *ui.Menu) {
+				if m.Item("Copy Commit Hash").Chosen() {
+					s.copyToClipboard(cm.Hash)
+				}
+				if m.Item("Copy Message").Chosen() {
+					s.copyToClipboard(message)
+					s.pendingToast = "Copied commit message"
+				}
+				m.Separator()
+				if m.Item("Cherry-pick…").Chosen() {
+					s.confirmCherryPickCommit(cm.Hash, cm.Subject)
+				}
+				if m.Item("Revert…").Chosen() {
+					s.confirmRevertCommit(cm.Hash, cm.Subject)
+				}
+			})
 		})
-		ui.Row(c).FillWidth().Gap(6).Wrap().Children(func() {
-			if compactButton(c, "Copy Message").Clicked() {
-				s.copyToClipboard(message)
-				s.pendingToast = "Copied commit message"
+		if body == "" {
+			return
+		}
+		ui.Column(c).FillWidth().Gap(2).Children(func() {
+			text := ui.Text(c, body).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Selectable()
+			if !s.gitCommitBodyOpen {
+				text.MaxLines(gitCommitBodyFold)
 			}
-			if compactButton(c, "Cherry-pick…").Clicked() {
-				s.confirmCherryPickCommit(cm.Hash, cm.Subject)
-			}
-			if compactButton(c, "Revert…").Clicked() {
-				s.confirmRevertCommit(cm.Hash, cm.Subject)
+			if strings.Count(body, "\n") >= gitCommitBodyFold || len(body) > 180 {
+				label := "Show more"
+				if s.gitCommitBodyOpen {
+					label = "Show less"
+				}
+				fold := ui.ButtonBase(c).Padding(0).FocusRing(false).Label(label).Children(func() {
+					ui.Text(c, label).FontSize(Typography().Caption).TextColor(t.Accent)
+				})
+				if fold.Clicked() {
+					s.gitCommitBodyOpen = !s.gitCommitBodyOpen
+				}
 			}
 		})
 	})

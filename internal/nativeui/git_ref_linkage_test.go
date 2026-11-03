@@ -131,6 +131,9 @@ func TestCommitChipsCarryTheirKindsGlyph(t *testing.T) {
 	if byName["main"].glyph != iconBranch || !byName["main"].branch {
 		t.Fatalf("a branch wears the branch glyph: %+v", byName["main"])
 	}
+	if !byName["main"].current || byName["feature/login"].current {
+		t.Fatalf("only the checked-out branch's chip is current: %+v", byName)
+	}
 	if byName["feature/signup"].glyph != iconWorktree {
 		t.Fatalf("a branch checked out in another worktree wears the worktree glyph: %+v", byName["feature/signup"])
 	}

@@ -411,6 +411,13 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 		// wires to run unbroken (the compact All Commits list, 2026-10-14).
 		row := ui.Row(c).Gap(commitRowGap).Padding(0, 8).Radius(treeRowRadius).AlignItems(ui.Center).MinWidth(0)
 		muted, ref := t.TextMuted, pal.ref
+		// A commit the checked-out branch does not contain (another branch's
+		// work, not merged in) rests in the muted colour, Fork-style.
+		unmerged := view.merged != nil && !view.merged[cm.Hash]
+		subjectColor := t.Text
+		if unmerged {
+			subjectColor, ref = t.TextMuted, t.TextMuted
+		}
 		switch {
 		case s.git.flashHash == cm.Hash:
 			// The commit a sidebar click just located.
@@ -431,7 +438,11 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 			s.reviewCommit(cm.Hash)
 		}
 		// Long commit subjects preserve the full metadata in the tooltip.
-		tipped(c, row, cm.Subject+"\n"+cm.Author+" · "+gdCommitTime(cm.Time)+"\n"+cm.Hash)
+		tip := cm.Subject + "\n" + cm.Author + " · " + gdCommitTime(cm.Time) + "\n" + cm.Hash
+		if unmerged {
+			tip += "\nNot merged into the current branch"
+		}
+		tipped(c, row, tip)
 		row.ContextMenu(func(m *ui.Menu) {
 			if m.Item("Cherry-pick Commit…").Chosen() {
 				s.confirmCherryPickCommit(cm.Hash, cm.Subject)
@@ -489,7 +500,7 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 				s.reviewCommit(cmp.Or(chip.review, cm.Hash))
 				s.revealInSidebar(chip.target)
 			})
-			ui.Text(c, cm.Subject).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine()
+			gitCommitSubject(c, cm.Subject, subjectColor)
 			if !filtering && fold.foldable(cm.Hash) {
 				s.foldToggle(c, cm.Hash, foldedCounts[cm.Hash])
 			}

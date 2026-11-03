@@ -8,6 +8,7 @@ package nativeui
  */
 
 import (
+	"math"
 	"slices"
 
 	"github.com/egoist/mygo/ui"
@@ -147,7 +148,7 @@ const (
 	gitGraphInset    float32 = 8 // lane 0's x, and the room after the last lane
 	gitGraphMaxLanes         = 12
 	// gitGraphWire is the wire's thickness; the dot is a little over twice it.
-	gitGraphWireW float32 = 1.25
+	gitGraphWireW float32 = 1.5
 	gitGraphDotR  float32 = 3
 	// gitGraphCorner is the radius of an elbow's rounded corner.
 	gitGraphCorner float32 = 6
@@ -179,35 +180,53 @@ func gitGraphRowWidth(r gitGraphRow) float32 {
 func gitGraphGlyph(c *ui.Context, graph gitGraphRow, width float32, dotOnly bool) {
 	ui.Box(c).Width(width).Height(gitGraphRowH).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
 		color := func(idx int) ui.Color { return gitLaneColors[idx%len(gitLaneColors)] }
-		cy := r.Y + r.H/2
-		laneX := func(l int) float32 { return r.X + gitGraphInset + float32(min(l, gitGraphMaxLanes-1))*gitGraphStep }
+		// Every wire is a whole, odd number of device pixels wide and centred
+		// on a device pixel, so a lane is the same weight wherever it sits;
+		// at a fractional x or width the antialiasing drew some lanes thick
+		// and others thin (user report 2026-11-03).
+		sc := p.Scale()
+		if sc <= 0 {
+			sc = 1
+		}
+		wirePx := float32(math.Round(float64(gitGraphWireW * sc)))
+		if int(wirePx)%2 == 0 {
+			wirePx = max(wirePx-1, 1)
+		}
+		wireW := wirePx / sc
+		snap := func(v float32) float32 { return (float32(math.Floor(float64(v*sc))) + 0.5) / sc }
+		top := float32(math.Floor(float64(r.Y*sc))) / sc
+		bottom := float32(math.Ceil(float64((r.Y+r.H)*sc))) / sc
+		cy := snap(r.Y + r.H/2)
+		laneX := func(l int) float32 {
+			return snap(r.X + gitGraphInset + float32(min(l, gitGraphMaxLanes-1))*gitGraphStep)
+		}
 		dotX := laneX(graph.Lane)
 		if dotOnly {
-			dotX = r.X + gitGraphInset
+			dotX = snap(r.X + gitGraphInset)
 		} else {
 			for _, w := range graph.Through {
-				p.Line(laneX(w.Lane), r.Y, laneX(w.Lane), r.Y+r.H, gitGraphWireW, color(w.Color))
+				p.Line(laneX(w.Lane), top, laneX(w.Lane), bottom, wireW, color(w.Color))
 			}
 			if graph.Top {
-				p.Line(dotX, r.Y, dotX, cy, gitGraphWireW, color(graph.Color))
+				p.Line(dotX, top, dotX, cy, wireW, color(graph.Color))
 			}
 			if graph.Bottom {
-				p.Line(dotX, cy, dotX, r.Y+r.H, gitGraphWireW, color(graph.Color))
+				p.Line(dotX, cy, dotX, bottom, wireW, color(graph.Color))
 			}
 			var elbow ui.Path
 			for _, w := range graph.Converge {
 				// Down its own lane, round the corner, then in to the dot.
 				x := laneX(w.Lane)
 				s, rad := gitGraphSign(dotX-x), min(gitGraphCorner, abs32(dotX-x)-gitGraphDotR)
-				elbow.Reset().MoveTo(x, r.Y).LineTo(x, cy-rad).QuadTo(x, cy, x+s*rad, cy).LineTo(dotX-s*gitGraphDotR, cy)
-				p.StrokePath(&elbow, gitGraphWireW, color(w.Color))
+				elbow.Reset().MoveTo(x, top).LineTo(x, cy-rad).QuadTo(x, cy, x+s*rad, cy).LineTo(dotX-s*gitGraphDotR, cy)
+				p.StrokePath(&elbow, wireW, color(w.Color))
 			}
 			for _, w := range graph.Diverge {
 				// Out of the dot, round the corner, then down the lane.
 				x := laneX(w.Lane)
 				s, rad := gitGraphSign(x-dotX), min(gitGraphCorner, abs32(x-dotX)-gitGraphDotR)
-				elbow.Reset().MoveTo(dotX+s*gitGraphDotR, cy).LineTo(x-s*rad, cy).QuadTo(x, cy, x, cy+rad).LineTo(x, r.Y+r.H)
-				p.StrokePath(&elbow, gitGraphWireW, color(w.Color))
+				elbow.Reset().MoveTo(dotX+s*gitGraphDotR, cy).LineTo(x-s*rad, cy).QuadTo(x, cy, x, cy+rad).LineTo(x, bottom)
+				p.StrokePath(&elbow, wireW, color(w.Color))
 			}
 		}
 		p.Fill(ui.Rect{X: dotX - gitGraphDotR, Y: cy - gitGraphDotR, W: gitGraphDotR * 2, H: gitGraphDotR * 2},

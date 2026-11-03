@@ -186,3 +186,15 @@
 验证: `go test -short ./internal/nativeui ./internal/gitworkbench` 绿（含 `git_avatar_test.go`；`TestSidebarCountsShareTheRowsRightEdge` 改为量药丸右缘）；`go vet`；真机截图如上。
 
 补充（用户反馈）：当前分支行右端的 ✓ 去掉——选中底色已表明状态；右端只剩 ahead/behind 药丸（`gitTreeRow` 仅在有徽标时画 trailing）。
+
+## 第 9 轮：用户参照 Fork 截图的第二批反馈
+
+| 项 | 改动 | 复验 |
+|---|---|---|
+| 图谱线粗细不一 | 线宽 1.25pt 落在小数像素上，抗锯齿让有的车道粗有的细；改为按 `Painter.Scale()` 取整的奇数设备像素宽（2x 下 1.5pt）、x/y 居中于像素中心、行上下端向外取整（行间无缝） | 放大截图：各车道粗细一致，肘线圆角完好 |
+| 侧栏 Agents 计数不在最右 | 带菜单动作的区块头把计数放进 `Center()` 的 30pt 槽，计数停在槽中间；改为槽内右对齐（悬停仍显图标） | Agents/Services/Workspace 计数同一右缘 |
+| 提交行配色 | chip 按种类着色（分支琥珀、远程玫红、Tag 蓝、worktree 绿、stash 紫，浅底细边），当前分支为实心底 + ✓；未并入当前分支的提交（`gitHeadAncestors` 之外）subject/哈希用弱色 + tooltip 注明；约定式前缀（feat:/fix(ui):）加粗 | 截图：sq-topic/origin-main 等他线提交变灰，main 为实心琥珀 chip |
+| 提交下方布局 | 仿 Fork：通栏 `gitCommitStrip`（头像·作者·短哈希·日期·subject 一行，⋯ 菜单收 Copy Commit Hash/Copy Message/Cherry-pick/Revert，body 另起一行折叠），其下 文件树 | Diff；不再把消息卡 + 4 个按钮挤进文件列；左列只剩 Changed Files |
+
+验证: `go test -short ./internal/nativeui` 绿（新增 `TestSplitConventionalSubject`、`TestHeadAncestorsMarkTheMergedLine`、chip current 断言，提交卡测试改走 ⋯ 菜单）；`go vet`；真机截图。
+

@@ -312,7 +312,9 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 				}
 				slot.Children(func() {
 					if !row.Hovered() {
-						count()
+						// Right-aligned like the plain headers' count: the slot
+						// itself centres, which parked this count mid-slot.
+						ui.Row(c).FillWidth().Justify(ui.End).AlignItems(ui.Center).Children(count)
 						return
 					}
 					ui.Icon(c, spec.Action.Glyph).FontSize(gorexRowGlyph).TextColor(t.TextMuted)

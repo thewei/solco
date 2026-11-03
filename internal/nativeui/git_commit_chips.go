@@ -20,6 +20,11 @@ type gitChip struct {
 	text, tip string
 	glyph     *ui.SVG
 	branch    bool
+	// tone indexes gitLaneColors: the colour of the chip's kind (branch amber,
+	// remote rose, tag blue, worktree green, stash violet); current is the
+	// checked-out branch, drawn solid with a check.
+	tone    int
+	current bool
 	// target is the sidebar row the chip stands for; review is the commit a
 	// click on it opens when that is not the row's own (a stash).
 	target gitSidebarTarget
@@ -101,30 +106,39 @@ func (x gitChipIndex) chips(cm gitworkbench.CommitInfo, hidden map[string]bool) 
 		chip := gitChip{text: r.Name, tip: r.Name}
 		switch r.Kind {
 		case gitworkbench.RefBranch:
-			chip.branch, chip.glyph = true, iconBranch
+			chip.branch, chip.glyph, chip.tone, chip.current = true, iconBranch, chipToneBranch, r.Head
 			chip.target = gitRefTarget("Branches", "local", r.Name)
 			if path, ok := x.checkedOut[r.Name]; ok {
 				chip.glyph, chip.tip = iconWorktree, r.Name+"\nChecked out in "+tildePath(path)
 			}
 		case gitworkbench.RefRemote:
-			chip.glyph = iconCloud
+			chip.glyph, chip.tone = iconCloud, chipToneRemote
 			chip.target = gitRefTarget("Remotes", "remote", r.Name)
 		default:
-			chip.glyph = iconTag
+			chip.glyph, chip.tone = iconTag, chipToneTag
 			chip.target = gitRefTarget("Tags", "tag", r.Name)
 		}
 		out = append(out, chip)
 	}
 	for _, wt := range x.detached[cm.Hash] {
-		out = append(out, gitChip{text: filepath.Base(wt.Path), tip: tildePath(wt.Path) + "\nDetached worktree", glyph: iconWorktree,
+		out = append(out, gitChip{text: filepath.Base(wt.Path), tip: tildePath(wt.Path) + "\nDetached worktree", glyph: iconWorktree, tone: chipToneWorktree,
 			target: gitSidebarTarget{section: "Worktrees", key: gitRefRowKey(gitWorktreeLabel(wt), wt.Path)}})
 	}
 	for _, st := range x.stashes[cm.Hash] {
-		out = append(out, gitChip{text: st.Ref, tip: st.Ref + "\n" + strings.TrimSpace(st.Subject), glyph: iconStash,
+		out = append(out, gitChip{text: st.Ref, tip: st.Ref + "\n" + strings.TrimSpace(st.Subject), glyph: iconStash, tone: chipToneStash,
 			target: gitSidebarTarget{section: "Stashes", key: gitRefRowKey(st.Ref+"  "+st.Subject, st.Subject)}, review: st.Hash})
 	}
 	return out
 }
+
+// Chip tones: indexes into gitLaneColors (amber, blue, green, violet, rose).
+const (
+	chipToneBranch   = 0
+	chipToneTag      = 1
+	chipToneWorktree = 2
+	chipToneStash    = 3
+	chipToneRemote   = 4
+)
 
 // gitCommitChipsShown is how many chips a row spells out; the rest fold into
 // one "+N" chip whose tooltip lists them.
@@ -143,17 +157,54 @@ func gitCommitChips(c *ui.Context, chips []gitChip, accent ui.Color, click func(
 				Padding(2, 5).Radius(3).Background(t.SurfaceHover).TextColor(accent).SingleLine(), strings.Join(rest, "\n"))
 			return
 		}
-		bg, fg := t.SurfaceHover, accent
-		if chip.branch {
-			bg, fg = t.SurfacePressed, t.Text
+		tone := gitLaneColors[chip.tone%len(gitLaneColors)]
+		bg, border, fg := tone.Alpha(0.16), tone.Alpha(0.5), tone.Mix(t.Text, 0.45)
+		glyph := chip.glyph
+		if chip.current {
+			// The checked-out branch is the solid one, with a check.
+			bg, border, fg, glyph = tone.Alpha(0.34), tone, t.Text, iconCheck
 		}
-		el := ui.Row(c).Gap(3).AlignItems(ui.Center).Padding(2, 5).Radius(3).Background(bg).Shrink(0).MaxWidth(150).Children(func() {
-			ui.Icon(c, chip.glyph).FontSize(10).TextColor(fg).Shrink(0)
-			ui.Text(c, chip.text).FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(fg).SingleLine().MinWidth(0)
+		el := ui.Row(c).Height(18).Gap(4).AlignItems(ui.Center).Padding(0, 6).Radius(4).Background(bg).
+			Border(1, border).Shrink(0).MaxWidth(160).Children(func() {
+			ui.Icon(c, glyph).FontSize(10).TextColor(fg).Shrink(0)
+			ui.Text(c, chip.text).FontSize(Typography().Caption).FontWeight(WeightSemibold).TextColor(fg).SingleLine().MinWidth(0)
 		})
 		tipped(c, el, chip.tip)
 		if el.Clicked() {
 			click(chip)
 		}
 	}
+}
+
+// gitCommitSubject draws a commit subject on one line. A conventional-commit
+// type ("feat:", "fix(ui):") is set in bold, as Fork does, so the kind of a
+// change reads before its words.
+func gitCommitSubject(c *ui.Context, subject string, color ui.Color) {
+	kind, rest, ok := splitConventionalSubject(subject)
+	if !ok {
+		ui.Text(c, subject).FontSize(Typography().Body).TextColor(color).Grow(1).MinWidth(0).SingleLine()
+		return
+	}
+	ui.Row(c).Grow(1).MinWidth(0).Gap(4).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, kind).FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(color).Shrink(0).SingleLine()
+		ui.Text(c, rest).FontSize(Typography().Body).TextColor(color).Grow(1).MinWidth(0).SingleLine()
+	})
+}
+
+// splitConventionalSubject cuts "type(scope)!: text" into "type(scope)!:" and
+// "text"; ok is false for any other subject (including an empty text).
+func splitConventionalSubject(subject string) (kind, rest string, ok bool) {
+	head, tail, found := strings.Cut(subject, ": ")
+	if !found || strings.TrimSpace(tail) == "" || head == "" || len(head) > 24 {
+		return "", "", false
+	}
+	for i, r := range head {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+		case i > 0 && (r >= '0' && r <= '9' || r == '(' || r == ')' || r == '!' || r == '-' || r == '/' || r == ',' || r == '_' || r == '.'):
+		default:
+			return "", "", false
+		}
+	}
+	return head + ":", tail, true
 }
