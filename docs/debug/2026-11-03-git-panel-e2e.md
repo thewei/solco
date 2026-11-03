@@ -184,3 +184,5 @@
 | 字号阶梯 | `Caption 10→11`、`Micro 10→10.5`（App 内最小 10.5pt）；`compactButton` 固定 `CompactHeight`，避免字号上调撑高 | 终端侧栏、Changes、Commits、Sessions 无裁切；`TestControlVariantsShareOneHeight` 绿 |
 
 验证: `go test -short ./internal/nativeui ./internal/gitworkbench` 绿（含 `git_avatar_test.go`；`TestSidebarCountsShareTheRowsRightEdge` 改为量药丸右缘）；`go vet`；真机截图如上。
+
+补充（用户反馈）：当前分支行右端的 ✓ 去掉——选中底色已表明状态；右端只剩 ahead/behind 药丸（`gitTreeRow` 仅在有徽标时画 trailing）。

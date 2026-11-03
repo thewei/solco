@@ -210,9 +210,9 @@ func TestSidebarHeaderCollapsesProjectNameWhenNarrow(t *testing.T) {
 	}
 }
 
-// A section's count ends where a row's trailing mark (the current branch's
-// check) ends — one right column — and the current branch wears the
-// selection face instead of resting on the check alone.
+// A section's count ends where a row's trailing badge (ahead/behind) ends —
+// one right column — and the current branch is told apart by the selection
+// face alone (no check mark, 2026-11-03 user request).
 func TestSidebarCountsShareTheRowsRightEdge(t *testing.T) {
 	_, tester, _ := treeTestShell(t)
 	header, ok := tester.Find("Toggle Branches")

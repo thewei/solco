@@ -245,9 +245,9 @@ func (e *gitEye) label() string {
 // (folders keep folding on one click, which changes nothing in the repo).
 func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu func(*ui.Menu)) {
 	var trailing func()
-	if it.current || it.badge != "" {
+	if it.badge != "" {
 		trailing = func() {
-			// "↑6 ↓1" then the check: each half is its own text so the gaps
+			// "↑6 ↓1": each half is its own text so the gaps
 			// are real, one step above the muted caption it used to be.
 			ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(0).Children(func() {
 				th := c.Theme()
@@ -278,9 +278,6 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 						Background(tone.Alpha(0.16)).Children(func() {
 						ui.Text(c, part).FontSize(Typography().BodySmall).FontWeight(WeightMedium).TextColor(tone).SingleLine()
 					})
-				}
-				if it.current {
-					ui.Icon(c, iconCheck).FontSize(11).TextColor(th.Text).Shrink(0)
 				}
 			})
 		}
