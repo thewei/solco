@@ -293,6 +293,38 @@ func TestEndToEndSessionViewOnlyDowngradeBusyAndDisconnect(t *testing.T) {
 	}
 }
 
+// A phone whose link died on a network change asks again before the Mac noticed: it replaces its own session
+// instead of being told "busy"; another phone is still refused.
+func TestSameDeviceReplacesItsStaleSession(t *testing.T) {
+	b := &fakeBackend{avail: true, perms: protocol.PermissionStatus{ScreenRecording: true, Accessibility: true}}
+	s := readyService(b, authFn(func(context.Context, AuthRequest) (Decision, error) {
+		return Decision{Allow: true, Mode: protocol.ModeFullControl}, nil
+	}))
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	_, _, _, _, sdp1 := newOffer(t)
+	if _, err := s.Open(ctx, protocol.DeviceInfo{ID: "d1"}, protocol.Offer{Protocol: protocol.Version, SDP: sdp1}); err != nil {
+		t.Fatal(err)
+	}
+	first := b.cap()
+	_, _, _, _, sdp2 := newOffer(t)
+	if _, err := s.Open(ctx, protocol.DeviceInfo{ID: "d2"}, protocol.Offer{Protocol: protocol.Version, SDP: sdp2}); codeOf(err) != protocol.CodeBusy {
+		t.Fatalf("other phone: %v", err)
+	}
+	if _, err := s.Open(ctx, protocol.DeviceInfo{ID: "d1"}, protocol.Offer{Protocol: protocol.Version, SDP: sdp2}); err != nil {
+		t.Fatalf("same phone: %v", err)
+	}
+	select {
+	case <-first.done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stale session not released")
+	}
+	if got := len(s.Sessions()); got != 1 {
+		t.Fatalf("sessions = %d", got)
+	}
+	s.DisconnectDevice("d1")
+}
+
 func TestDisableAndRevokeEndTheSession(t *testing.T) {
 	b := &fakeBackend{avail: true, perms: protocol.PermissionStatus{ScreenRecording: true, Accessibility: true}}
 	for name, end := range map[string]func(*Service){

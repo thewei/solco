@@ -205,6 +205,15 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 		return protocol.Answer{}, protocol.Errf(protocol.CodeBadRequest, "tier")
 	}
 
+	// The phone that already holds the session asks again (its link died on a network change before the
+	// Mac noticed): the old session is released so the new one starts at once instead of answering busy.
+	s.mu.Lock()
+	stale := s.active
+	s.mu.Unlock()
+	if stale != nil && device.ID != "" && stale.DeviceID() == device.ID {
+		stale.Close(protocol.CodeSessionEnded)
+	}
+
 	s.mu.Lock()
 	set := s.settings
 	switch {
