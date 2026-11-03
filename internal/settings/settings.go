@@ -229,6 +229,10 @@ type WorkbenchSettings struct {
 	// CommitPrompt overrides the default commit convention, never sent
 	// automatically. Per-app preferences are separate from Git operations.
 	CommitPrompt string `json:"commit_prompt,omitempty"`
+	// AutoFetchMinutes, when 5/15/30/60, fetches the open repository's
+	// remote that often in the background (Fork's auto-fetch, user-approved
+	// 2026-11-03). 0 = off (default). Fetch only: never merges or pushes.
+	AutoFetchMinutes int `json:"auto_fetch_minutes,omitempty"`
 	// SplitDiff persists the unified/split diff layout choice (GWB-174).
 	SplitDiff bool `json:"split_diff,omitempty"`
 	// PinnedPanes maps a Herdr instance name to its pinned Pane ids
