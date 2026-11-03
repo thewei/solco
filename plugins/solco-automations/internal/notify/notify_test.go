@@ -223,3 +223,19 @@ func TestAToastStillGoesSomewhereWhenSessionsCannotBeListed(t *testing.T) {
 		t.Fatalf("toasted in %q, want one toast wherever the environment points", shownIn)
 	}
 }
+
+func TestAttentionToastsEachItemButCollapsesAStorm(t *testing.T) {
+	sink := &fakeSink{}
+	n := With(sink)
+	n.Attention([]AttentionItem{{Title: "Stalled · build", Body: "Has not started", Urgent: true}, {Title: "Ready for review · feature"}})
+	if len(sink.toasts) != 2 || sink.toasts[0].sound != herdr.SoundRequest || sink.toasts[1].sound != herdr.SoundNone {
+		t.Fatalf("toasts = %+v", sink.toasts)
+	}
+	sink.toasts = nil
+	n.Attention([]AttentionItem{{Title: "a"}, {Title: "b"}, {Title: "c"}, {Title: "d"}})
+	if len(sink.toasts) != 1 || sink.toasts[0].title != "4 things need you" {
+		t.Fatalf("a storm must be one toast: %+v", sink.toasts)
+	}
+	With(sink).Attention(nil)
+	(*Notifier)(nil).Attention([]AttentionItem{{Title: "x"}})
+}

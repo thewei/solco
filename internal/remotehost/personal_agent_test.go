@@ -44,6 +44,8 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 	}
 	key := strings.Join(args[1:], " ")
 	switch {
+	case strings.HasPrefix(key, "inbox"):
+		return []byte(`{"schema":1,"inbox":{"items":[{"id":"task:` + paTaskT + `","kind":"stalled","assistantId":"` + paAssistantA + `","taskId":"` + paTaskT + `","title":"Check it","detail":"Has not started","priority":3,"at":1800000000000}],"needsYou":1,"seq":4}}`), nil
 	case key == "overview":
 		return []byte(`{"schema":1,"needsYou":1,"assistants":[{"id":"` + paAssistantA + `","name":"Ada","status":"active","revision":1,"goals":1,"tasks":1,"running":0,"queued":0,"done":1,"needsYou":0,"approvals":1}]}`), nil
 	case key == "list":
@@ -203,6 +205,12 @@ func TestPersonalAgentWritesForwardIdsAndRevisions(t *testing.T) {
 	if call := core.lastCall(); !strings.Contains(call, `"requestId":"req-1"`) || !strings.Contains(call, `"expectedRevision":1`) || !strings.Contains(call, "Grace") {
 		t.Fatalf("rename call %q", call)
 	}
+	if got := post("/tasks/"+paTaskT+"/publish", `{"requestId":"req-p","expectedRevision":3}`); got != 200 {
+		t.Fatalf("publish: %d", got)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant task publish "+paTaskT) || !strings.Contains(call, `"expectedRevision":3`) {
+		t.Fatalf("publish call %q", call)
+	}
 	if got := post("/goals/"+paGoalG+"/approve", `{"requestId":"req-2","expectedRevision":2}`); got != 200 {
 		t.Fatalf("approve: %d", got)
 	}
@@ -306,6 +314,13 @@ func TestPersonalAgentGolden(t *testing.T) {
 	golden(t, "personal-agent-goals.json", bodyOf(t, h.get("/api/v3/personal-agent/goals?assistant="+paAssistantA, h.token, nil)))
 	golden(t, "personal-agent-task.json", bodyOf(t, h.get("/api/v3/personal-agent/tasks/"+paTaskT, h.token, nil)))
 	golden(t, "personal-agent-approvals.json", bodyOf(t, h.get("/api/v3/personal-agent/approvals", h.token, nil)))
+	golden(t, "personal-agent-inbox.json", bodyOf(t, h.get("/api/v3/personal-agent/inbox", h.token, nil)))
+	if resp := h.get("/api/v3/personal-agent/inbox?assistant=not%20an%20id", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a malformed assistant filter = %d", resp.StatusCode)
+	}
+	if resp := h.get("/api/v3/personal-agent/inbox", "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("inbox without a token = %d", resp.StatusCode)
+	}
 	golden(t, "personal-agent-decision-request.json", []byte(`{"requestId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","actionHash":"`+paHash+`","approve":true}`))
 	_, decided := h.send("POST", "/api/v3/personal-agent/approvals/"+paApprovalP+"/decision", h.token, `{"requestId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","actionHash":"`+paHash+`","approve":true}`)
 	golden(t, "personal-agent-decision.json", decided)

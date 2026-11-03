@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,10 +124,22 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|overview>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
+	case "inbox":
+		who, rest := flagValue(rest, "--assistant")
+		opt := InboxOptions{}
+		if v, _ := flagValue(rest, "--since"); v != "" {
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || n < 0 {
+				return nil, coded("invalid", "--since must be an event watermark")
+			}
+			opt.Since, opt.News = n, true
+		}
+		in, err := a.Store.Inbox(who, opt)
+		return ok("inbox", in), err
 	case "overview":
 		return a.overview()
 	case "list":

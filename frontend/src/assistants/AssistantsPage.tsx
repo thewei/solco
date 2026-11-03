@@ -3,6 +3,7 @@ import { App } from "../App";
 import {
   assistants,
   type CoordinatorChat,
+  type InboxItem,
   type AssistantsDetail,
   type AssistantsRun,
   type AssistantsTask,
@@ -93,8 +94,11 @@ export function AssistantsPage() {
   }
   const a = detail.assistant;
   const pending = detail.approvals.filter((p) => p.state === "pending");
-  const needTasks = detail.tasks.filter((t) => t.needsYou);
-  const needsCount = pending.length + needTasks.length;
+  // The inbox is the plugin's own list of what needs a person; the page only
+  // lays its tasks out next to the cards that act on them.
+  const reasons = new Map(detail.inbox.items.filter((i) => i.kind !== "approval" && i.kind !== "news" && i.taskId).map((i) => [i.taskId as string, i]));
+  const needTasks = detail.tasks.filter((t) => reasons.has(t.id) || t.needsYou);
+  const needsCount = detail.inbox.needsYou;
   const live = detail.goals.filter((g) => g.state === "draft" || g.state === "active" || g.state === "paused");
   const open = detail.tasks.filter((t) => OPEN_TASK.has(t.state));
   const done = detail.tasks.filter((t) => !OPEN_TASK.has(t.state) && !t.needsYou);
@@ -149,7 +153,7 @@ export function AssistantsPage() {
       </nav>
       <main className={tab === "coordinator" ? "as-body chat" : "as-body"}>
         {tab === "coordinator" ? <Coordinator detail={detail} act={act} /> : null}
-        {tab === "needs" ? <NeedsYou approvals={pending} tasks={needTasks} act={act} pull={pull} /> : null}
+        {tab === "needs" ? <NeedsYou approvals={pending} tasks={needTasks} reasons={reasons} act={act} pull={pull} /> : null}
         {tab === "watching" ? <Watching goals={live} act={act} /> : null}
         {tab === "tasks" ? <Tasks tasks={open} act={act} /> : null}
         {tab === "done" ? <Done tasks={done} goals={closedGoals} act={act} /> : null}
@@ -168,7 +172,7 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="as-none">{children}</p>;
 }
 
-function NeedsYou({ approvals, tasks, act }: { approvals: Approval[]; tasks: AssistantsTask[]; act: Act; pull: () => void }) {
+function NeedsYou({ approvals, tasks, reasons, act }: { approvals: Approval[]; tasks: AssistantsTask[]; reasons: Map<string, InboxItem>; act: Act; pull: () => void }) {
   if (approvals.length === 0 && tasks.length === 0) return <Empty>Nothing is waiting for you.</Empty>;
   return (
     <>
@@ -190,7 +194,7 @@ function NeedsYou({ approvals, tasks, act }: { approvals: Approval[]; tasks: Ass
         </section>
       ))}
       {tasks.map((t) => (
-        <TaskCard key={t.id} task={t} act={act} />
+        <TaskCard key={t.id} task={t} act={act} reason={reasons.get(t.id)} />
       ))}
     </>
   );
@@ -351,7 +355,7 @@ function Done({ tasks, goals, act }: { tasks: AssistantsTask[]; goals: Goal[]; a
   );
 }
 
-function TaskCard({ task: t, act }: { task: AssistantsTask; act: Act }) {
+function TaskCard({ task: t, act, reason }: { task: AssistantsTask; act: Act; reason?: InboxItem }) {
   return (
     <section className="as-card">
       <div className="as-row">
@@ -363,6 +367,7 @@ function TaskCard({ task: t, act }: { task: AssistantsTask; act: Act }) {
         {t.agent ? ` · ${t.agent}` : ""}
         {t.attempt > 1 ? ` · attempt ${t.attempt}` : ""}
       </p>
+      {reason ? <p className={`as-reason ${reason.kind}`}>{reason.detail}</p> : null}
       {t.runs.map((r) => (
         <RunLine key={r.id} run={r} />
       ))}

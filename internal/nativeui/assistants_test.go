@@ -34,6 +34,8 @@ const (
 	assistantsMemoryJSON    = `{"schema":1,"memory":[{"id":"m_1","assistantId":"a_1","content":"short reports","state":"approved"}]}`
 )
 
+const assistantsInboxJSON = `{"schema":1,"inbox":{"items":[{"id":"task:t_1","kind":"stalled","assistantId":"a_1","taskId":"t_1","title":"Check it","detail":"Has not started","priority":3,"at":1}],"needsYou":1,"seq":4}}`
+
 // assistantsCoordinators scripts `coordinator show <id>` for a test.
 var assistantsCoordinators = map[string]string{}
 
@@ -48,6 +50,9 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 			calls = append(calls, [2]string{strings.Join(args, " "), stdin})
 			if fail {
 				return []byte(`{"schema":1,"error":{"code":"internal","message":"no"}}`), context.Canceled
+			}
+			if strings.HasPrefix(strings.Join(args, " "), "inbox") {
+				return []byte(assistantsInboxJSON), nil
 			}
 			if id, ok := strings.CutPrefix(strings.Join(args, " "), "coordinator show "); ok {
 				if raw, found := assistantsCoordinators[id]; found {
@@ -306,6 +311,9 @@ func TestAssistantsBridgeSnapshotCarriesTheCoordinator(t *testing.T) {
 	view, err := NewAssistantsBridge(s).Snapshot(context.Background())
 	if err != nil || view.Detail == nil || view.Detail.Coordinator.State != "ready" || !view.Detail.CoordinatorOpen {
 		t.Fatalf("view = %+v err=%v", view.Detail, err)
+	}
+	if in := view.Detail.Inbox; in.NeedsYou != 1 || len(in.Items) != 1 || in.Items[0].Kind != "stalled" {
+		t.Fatalf("the page carries the plugin's own inbox: %+v", in)
 	}
 	s.projection = herdr.Projection{}
 	view, _ = NewAssistantsBridge(s).Snapshot(context.Background())

@@ -87,6 +87,32 @@ func (n *Notifier) Outcome(name string, st history.Status, detail string, took t
 	}
 }
 
+// Attention toasts what a person is wanted for (an approval, a failed start, a
+// stall, a review). Titles carry the item's own title only — never a prompt or
+// an error text. More than three at once collapse into one line.
+func (n *Notifier) Attention(items []AttentionItem) {
+	if n == nil || len(items) == 0 {
+		return
+	}
+	if len(items) > 3 {
+		n.show(fmt.Sprintf("%d things need you", len(items)), "", herdr.SoundRequest)
+		return
+	}
+	for _, it := range items {
+		sound := herdr.SoundNone
+		if it.Urgent {
+			sound = herdr.SoundRequest
+		}
+		n.show(it.Title, oneLine(it.Body), sound)
+	}
+}
+
+// AttentionItem is one line of Attention.
+type AttentionItem struct {
+	Title, Body string
+	Urgent      bool
+}
+
 // shortDuration renders a run's wall time the way a toast wants it:
 // 42s, 38m, 1h23m.
 func shortDuration(d time.Duration) string {

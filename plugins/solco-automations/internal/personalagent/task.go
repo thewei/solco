@@ -415,7 +415,7 @@ func (s *Store) BlockRun(runID, reason string) error {
 		if _, err := tx.Exec(`UPDATE tasks SET needs_you=1 WHERE id=(SELECT task_id FROM runs WHERE id=?)`, runID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID); err != nil {
+		if _, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, redactForRun(tx, runID, reason), runID); err != nil {
 			return err
 		}
 		return emitRunTask(tx, runID, "task.blocked", now)
@@ -441,7 +441,7 @@ func (s *Store) FinishRun(runID, status, note string) error {
 		if status != RunDone {
 			col = "error"
 		}
-		if _, err := tx.Exec(`UPDATE runs SET `+col+`=? WHERE id=?`, note, runID); err != nil {
+		if _, err := tx.Exec(`UPDATE runs SET `+col+`=? WHERE id=?`, redactForRun(tx, runID, note), runID); err != nil {
 			return err
 		}
 		if status == RunDone {
@@ -514,7 +514,7 @@ func (s *Store) parkUncertain(runID, reason string) (struct{}, error) {
 		if _, err := tx.Exec(`UPDATE tasks SET needs_you=1 WHERE id=(SELECT task_id FROM runs WHERE id=?)`, runID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, reason, runID); err != nil {
+		if _, err := tx.Exec(`UPDATE runs SET error=? WHERE id=?`, redactForRun(tx, runID, reason), runID); err != nil {
 			return err
 		}
 		return emitRunTask(tx, runID, "task.uncertain", now)
@@ -615,4 +615,13 @@ func (s *Store) AckTask(requestID, taskID string, expectedRevision int) (Task, b
 		}
 		return getTaskTx(tx, taskID)
 	})
+}
+
+// redactForRun strips the run's own brief and credential-shaped text from a
+// note before it is stored: an error an Agent or Herdr hands back may echo the
+// prompt it was given.
+func redactForRun(tx queryer, runID, text string) string {
+	var brief string
+	_ = tx.QueryRow(`SELECT t.brief FROM tasks t JOIN runs r ON r.task_id=t.id WHERE r.id=?`, runID).Scan(&brief)
+	return Redact(text, brief)
 }

@@ -66,14 +66,14 @@ func runCtx(ctx context.Context, out any, args ...string) error {
 		Result json.RawMessage `json:"result"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
-		return fmt.Errorf("herdr %v: unexpected output %q: %w", args, stdout.String(), err)
+		return fmt.Errorf("herdr %s: unexpected output %q: %w", commandName(args), stdout.String(), err)
 	}
 	raw := envelope.Result
 	if raw == nil {
 		raw = stdout.Bytes() // some commands print the result object bare
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
-		return fmt.Errorf("herdr %v: decode result: %w", args, err)
+		return fmt.Errorf("herdr %s: decode result: %w", commandName(args), err)
 	}
 	return nil
 }
@@ -103,6 +103,15 @@ func HasCode(err error, code string) bool {
 	return errors.As(err, &apiErr) && apiErr.Code == code
 }
 
+// commandName is the command an error may name: its first two words (`agent
+// prompt`), never the arguments — those carry prompts and paths.
+func commandName(args []string) string {
+	if len(args) >= 2 && args[0] == "--session" {
+		args = args[2:]
+	}
+	return strings.Join(args[:min(2, len(args))], " ")
+}
+
 // newAPIError turns a failed herdr invocation into one readable line. runErr
 // is the error from cmd.Run and is the last resort: a herdr that exits non-zero
 // while printing nothing at all used to produce a bare "worktree create: ",
@@ -112,7 +121,7 @@ func newAPIError(args []string, stdout []byte, stderr string, runErr error) erro
 	if len(args) >= 2 && args[0] == "--session" {
 		args = args[2:] // name the command, not where it was sent
 	}
-	cmd := strings.Join(args[:min(2, len(args))], " ")
+	cmd := commandName(args)
 	// herdr ≥ 0.8.0 prints the error envelope on stderr; older builds used stdout.
 	for _, out := range [][]byte{stdout, []byte(stderr)} {
 		var envelope struct {

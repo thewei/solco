@@ -353,7 +353,7 @@ func (d *Dispatcher) Pump(ctx context.Context) int {
 				d.mu.Unlock()
 			}()
 			if _, err := d.launch(ctx, run); err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("personal agent: run %s: %v", run.ID, err)
+				log.Printf("personal agent: run %s: %s", run.ID, Redact(err.Error(), t.Brief))
 			}
 		}()
 	}

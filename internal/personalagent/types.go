@@ -214,3 +214,25 @@ const (
 	CoordinatorStopped  = "stopped"
 	CoordinatorFailed   = "failed"
 )
+
+// InboxItem is one thing that needs a person (or, for news, is worth a glance),
+// from the plugin's single Inbox snapshot.
+type InboxItem struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	AssistantID string `json:"assistantId"`
+	TaskID      string `json:"taskId,omitempty"`
+	ApprovalID  string `json:"approvalId,omitempty"`
+	Title       string `json:"title"`
+	Detail      string `json:"detail"`
+	Priority    int    `json:"priority"`
+	At          int64  `json:"at"`
+}
+
+// Inbox is the snapshot: items by priority, the count that needs a person and
+// the event watermark it was read at.
+type Inbox struct {
+	Items    []InboxItem `json:"items"`
+	NeedsYou int         `json:"needsYou"`
+	Seq      int64       `json:"seq"`
+}

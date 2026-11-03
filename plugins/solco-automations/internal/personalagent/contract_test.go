@@ -84,6 +84,8 @@ func TestGoldenFixtures(t *testing.T) {
 	_ = ap
 	run("overview", ``, "assistant", "overview")
 
+	run("inbox", ``, "assistant", "inbox", "--assistant", aid)
+
 	started := run("coordinator-starting", `{"requestId":"g-cs"}`, "assistant", "coordinator", "start", aid)
 	ctask, _ := s.GetTask(field(started, "coordinator", "taskId").(string))
 	cr, _, _ := s.ClaimTask(ctask.ID, "daemon")

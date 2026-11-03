@@ -25,6 +25,9 @@ const (
 	ruleHistoryMax  = 5000
 )
 
+// inboxEvery is how often the inbox is read for something new to say.
+const inboxEvery = 15 * time.Second
+
 // pumpInterval is how often queued Assistant tasks are looked for. Much
 // shorter than the cron tick: a task a person just delegated should start now.
 const pumpInterval = 3 * time.Second
@@ -41,6 +44,8 @@ type personal struct {
 	beat     *personalagent.Beater
 	rules    *personalagent.RuleScheduler
 	reviewer *personalagent.Reviewer
+	inbox    *personalagent.InboxWatcher
+	lastLook time.Time
 	polling  atomic.Bool
 
 	notifier *notify.Notifier
@@ -79,6 +84,7 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.rules = &personalagent.RuleScheduler{Store: store, Load: config.Load}
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
+	p.inbox = &personalagent.InboxWatcher{Store: store}
 	p.reviewer = &personalagent.Reviewer{Store: store, Worktrees: p.disp.Worktrees}
 	if n, err := p.reviewer.Recover(); err != nil {
 		log.Printf("assistants: merge recovery failed: %v", err)
@@ -118,6 +124,10 @@ func (p *personal) tick() {
 	} else if r.Woke > 0 {
 		log.Printf("assistants: %d heartbeat wake(s) queued", r.Woke)
 	}
+	if time.Since(p.lastLook) >= inboxEvery {
+		p.lastLook = time.Now()
+		p.lookAtInbox()
+	}
 	if time.Since(p.lastRule) >= ruleEvery {
 		p.lastRule = time.Now()
 		p.tickRules()
@@ -125,6 +135,39 @@ func (p *personal) tick() {
 	if n := p.disp.Pump(p.ctx); n > 0 {
 		log.Printf("assistants: started %d task(s)", n)
 	}
+}
+
+// lookAtInbox toasts what newly needs a person. The words are fixed phrases and
+// the item's own title: no prompt, brief or error text ever reaches a toast.
+func (p *personal) lookAtInbox() {
+	fresh, err := p.inbox.Tick()
+	if err != nil {
+		log.Printf("assistants: inbox: %v", err)
+		return
+	}
+	items := make([]notify.AttentionItem, 0, len(fresh))
+	for _, it := range fresh {
+		items = append(items, notify.AttentionItem{
+			Title:  attentionTitle(it.Kind) + " · " + it.Title,
+			Body:   it.Detail,
+			Urgent: it.Priority >= 3,
+		})
+	}
+	p.notifier.Attention(items)
+}
+
+func attentionTitle(kind string) string {
+	switch kind {
+	case personalagent.InboxApproval:
+		return "Approval needed"
+	case personalagent.InboxFailedStart:
+		return "Could not start"
+	case personalagent.InboxStalled:
+		return "Stalled"
+	case personalagent.InboxReview:
+		return "Ready for review"
+	}
+	return "Needs you"
 }
 
 // close stops launching; agents that are working keep working in Herdr and are

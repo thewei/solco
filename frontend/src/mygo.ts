@@ -59,6 +59,11 @@ export interface AssistantsDetail {
    */
   coordinator: Coordinator;
   coordinatorOpen: boolean;
+  /**
+   * Inbox is the plugin's one snapshot of what needs a person (approvals,
+   * reviews, failed starts, stalls); the page draws it, never recomputes it.
+   */
+  inbox: Inbox;
 }
 
 /** AssistantsGoalInput creates a Goal; Watch makes it a PR Watch. */
@@ -738,6 +743,32 @@ export interface Goal {
   revision: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * Inbox is the snapshot: items by priority, the count that needs a person and
+ * the event watermark it was read at.
+ */
+export interface Inbox {
+  items: InboxItem[];
+  needsYou: number;
+  seq: number;
+}
+
+/**
+ * InboxItem is one thing that needs a person (or, for news, is worth a glance),
+ * from the plugin's single Inbox snapshot.
+ */
+export interface InboxItem {
+  id: string;
+  kind: string;
+  assistantId: string;
+  taskId?: string;
+  approvalId?: string;
+  title: string;
+  detail: string;
+  priority: number;
+  at: number;
 }
 
 /** LibraryItemPane is one library file. */

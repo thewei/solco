@@ -98,6 +98,15 @@ func TestGoldenFixturesDecodeStrictly(t *testing.T) {
 		t.Fatalf("overview = %+v", ov)
 	}
 
+	var ib struct {
+		Schema int   `json:"schema"`
+		Inbox  Inbox `json:"inbox"`
+	}
+	load(t, "inbox", &ib)
+	if ib.Inbox.NeedsYou != 1 || len(ib.Inbox.Items) != 1 || ib.Inbox.Items[0].Kind != "approval" {
+		t.Fatalf("inbox = %+v", ib.Inbox)
+	}
+
 	var co struct {
 		Schema      int         `json:"schema"`
 		Coordinator Coordinator `json:"coordinator"`

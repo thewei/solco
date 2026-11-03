@@ -242,6 +242,18 @@ func (c *Client) RetryTask(ctx context.Context, requestID, id string, rev int) (
 	return out.Task, c.do(ctx, req{requestID, rev}, &out, "task", "retry", id)
 }
 
+// Inbox reads one Assistant's inbox snapshot ("" = every Assistant's).
+func (c *Client) Inbox(ctx context.Context, assistantID string) (Inbox, error) {
+	var out struct {
+		Inbox Inbox `json:"inbox"`
+	}
+	args := []string{"inbox"}
+	if assistantID != "" {
+		args = append(args, "--assistant", assistantID)
+	}
+	return out.Inbox, c.do(ctx, nil, &out, args...)
+}
+
 // PublishTask moves a draft into the queue (or into waiting behind its dependencies).
 func (c *Client) PublishTask(ctx context.Context, requestID, id string, rev int) (Task, error) {
 	var out struct {

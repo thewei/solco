@@ -1,0 +1,20 @@
+{
+  "inbox": {
+    "items": [
+      {
+        "approvalId": "p_0000000000000007",
+        "assistantId": "a_0000000000000001",
+        "at": 1800000000000,
+        "detail": "Waiting for your decision",
+        "id": "approval:p_0000000000000007",
+        "kind": "approval",
+        "priority": 4,
+        "taskId": "t_0000000000000004",
+        "title": "merge work/x"
+      }
+    ],
+    "needsYou": 1,
+    "seq": 2
+  },
+  "schema": 1
+}

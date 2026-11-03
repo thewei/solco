@@ -1,0 +1,15 @@
+{
+  "coordinator": {
+    "agentSessionId": "sess-1",
+    "assistantId": "a_0000000000000001",
+    "createdAt": 1800000000000,
+    "herdrSession": "default",
+    "paneId": "w2:p1",
+    "revision": 2,
+    "state": "ready",
+    "taskId": "t_0000000000000008",
+    "updatedAt": 1800000000000,
+    "workspaceId": "w2"
+  },
+  "schema": 1
+}

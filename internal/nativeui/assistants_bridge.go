@@ -54,6 +54,9 @@ type AssistantsDetail struct {
 	// says its pane is in this window's Herdr tree (so its Chat can bind).
 	Coordinator     personalagent.Coordinator `json:"coordinator"`
 	CoordinatorOpen bool                      `json:"coordinatorOpen"`
+	// Inbox is the plugin's one snapshot of what needs a person (approvals,
+	// reviews, failed starts, stalls); the page draws it, never recomputes it.
+	Inbox personalagent.Inbox `json:"inbox"`
 }
 
 // CoordinatorChat is the answer to "bind the embedded Chat to this Assistant's
@@ -208,6 +211,10 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 	tasks, err := client.Tasks(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	d.Inbox = personalagent.Inbox{Items: []personalagent.InboxItem{}}
+	if in, err := client.Inbox(ctx, id); err == nil && in.Items != nil {
+		d.Inbox = in
 	}
 	if co, err := client.Coordinator(ctx, id); err == nil {
 		d.Coordinator = co

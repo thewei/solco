@@ -16,9 +16,9 @@ import (
 /**
  * [INPUT]: 依赖 Options.PersonalAgent（桌面 Assistants 核心的 CLI 客户端缝，nativeui 提供；门关返回 ok=false）、internal/personalagent 的类型与稳定错误码、server.go 的 guard/writeJSON/writeError
  * [OUTPUT]: 对外提供 PersonalAgentFunc、PersonalAssistantDetail/PersonalTask，
- *           GET /api/v3/personal-agent/overview|assistants|assistants/{id}|goals|tasks/{id}|approvals，
+ *           GET /api/v3/personal-agent/overview|assistants|assistants/{id}|goals|tasks/{id}|approvals|inbox，
  *           POST …/assistants（建）、…/assistants/{id}/rename|pause|resume、…/goals/draft、…/goals/{id}/approve|pause|resume|cancel、
- *           …/approvals/{id}/decision、…/tasks/{id}/ack|retry，bootstrap 的 capabilities.personalAgent/personalAgentManage/personalAgentApprove，
+ *           …/approvals/{id}/decision、…/tasks/{id}/ack|retry|publish，bootstrap 的 capabilities.personalAgent/personalAgentManage/personalAgentApprove，
  *           Server.NotifyPersonalAgent（events 帧 `personal-agent.changed`，只带修订号与计数）
  * [POS]: 手机 Assistants 的 Host 面（2026-11-03 决策，B4）：权威是插件 daemon 的 SQLite 核心，Host 只校验请求形状并经桌面同一个 CLI 客户端转发，不缓存、不重算状态；
  *        每个写请求必带 requestId（重放得原收据），带 expectedRevision（过期 409 stale_revision），审批必带 actionHash；
@@ -304,6 +304,32 @@ func (s *Server) handlePAApprovals(w http.ResponseWriter, r *http.Request, dev D
 	writeJSON(w, http.StatusOK, map[string]any{"schema": 1, "approvals": out})
 }
 
+// handlePAInbox serves the plugin's one inbox snapshot (approvals, reviews,
+// failed starts, stalls); the phone draws it and decides nothing from it.
+func (s *Server) handlePAInbox(w http.ResponseWriter, r *http.Request, dev Device) {
+	c := s.paSeam(w, r)
+	if c == nil {
+		return
+	}
+	who := ""
+	if q := r.URL.Query().Get("assistant"); q != "" {
+		id, ok := paID(w, q)
+		if !ok {
+			return
+		}
+		who = id
+	}
+	in, err := c.Inbox(r.Context(), who)
+	if err != nil {
+		s.paRefuse(w, dev, "inbox", err)
+		return
+	}
+	if in.Items == nil {
+		in.Items = []personalagent.InboxItem{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"schema": 1, "items": in.Items, "needsYou": in.NeedsYou, "seq": in.Seq})
+}
+
 // --- writes ---------------------------------------------------------------
 
 // paWrite runs one command under a context that outlives the request (a phone
@@ -479,7 +505,7 @@ func (s *Server) handlePADecideApproval(w http.ResponseWriter, r *http.Request, 
 	})
 }
 
-// handlePATaskAction serves ack|retry on one Task.
+// handlePATaskAction serves ack|retry|publish on one Task (publish releases a draft the Coordinator filed).
 func (s *Server) handlePATaskAction(action string) deviceHandler {
 	return func(w http.ResponseWriter, r *http.Request, dev Device) {
 		id, ok := paID(w, r.PathValue("id"))
@@ -500,9 +526,12 @@ func (s *Server) handlePATaskAction(action string) deviceHandler {
 		s.paWrite(w, r, dev, "task."+action, func(ctx context.Context, c *personalagent.Client) (any, error) {
 			var t personalagent.Task
 			var err error
-			if action == "ack" {
+			switch action {
+			case "ack":
 				t, err = c.AckTask(ctx, req.RequestID, id, req.ExpectedRevision)
-			} else {
+			case "publish":
+				t, err = c.PublishTask(ctx, req.RequestID, id, req.ExpectedRevision)
+			default:
 				t, err = c.RetryTask(ctx, req.RequestID, id, req.ExpectedRevision)
 			}
 			return map[string]any{"schema": 1, "task": t}, err
