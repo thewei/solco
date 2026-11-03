@@ -31,6 +31,7 @@ type gitService struct {
 	preflightGen atomic.Uint64
 	gdLoadGen    atomic.Uint64
 	graphGen     atomic.Uint64
+	sequencerGen atomic.Uint64
 
 	// root binding: resolved repo root of the selected Tab ("", not a repo).
 	root             string
@@ -96,6 +97,10 @@ type gitService struct {
 	// tags/worktrees are read once for the sidebar tree and its action popovers.
 	tags      []gitworkbench.Tag
 	worktrees []gitworkbench.Worktree
+	// remotes (configured, even without fetched branches) and submodules feed
+	// the Remotes dialog and the Submodules section.
+	remotes    []gitworkbench.Remote
+	submodules []gitworkbench.Submodule
 	// commit history for the All Commits pane.
 	commits        []gitworkbench.CommitInfo
 	commitsLoading bool
@@ -115,6 +120,8 @@ type gitService struct {
 	source     gdSourceKind
 	commitHash string
 	commitSnap *gitworkbench.ChangesSnapshot
+	// compare marks the commit review as "this commit against the working tree".
+	compare    bool
 	commitMeta *gitworkbench.CommitInfo
 	// commitBody is the full message of the commit under review (subject,
 	// blank line, body); read apart from the list, which keeps only subjects.
@@ -335,6 +342,7 @@ func (s *Shell) resetGitContextState() {
 	s.git.remoteBranches = nil
 	s.git.tags = nil
 	s.git.worktrees = nil
+	s.git.remotes, s.git.submodules = nil, nil
 	s.git.stashes = nil
 	s.git.commits = nil
 	s.git.graphLimit, s.git.locateHash, s.git.flashHash = 0, "", ""

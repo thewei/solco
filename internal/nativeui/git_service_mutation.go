@@ -55,6 +55,7 @@ func (s *Shell) submitCommit(subject, body string, selected []string) {
 			s.git.expectDrift = true
 			s.ensureGitSnapshot(true)
 			s.loadBranches()
+			s.afterCommitPush()
 		})
 	}()
 }
@@ -108,6 +109,7 @@ func (s *Shell) submitCommitAmend(subject, body string, selected []string, amend
 			s.resetCommitAIFlow()
 			s.ensureGitSnapshot(true)
 			s.loadBranches()
+			s.afterCommitPush()
 		})
 	}()
 }

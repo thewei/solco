@@ -210,9 +210,9 @@ func (s *Shell) gdSyncButtons(c *ui.Context, pal *gdPalette) {
 		tipped(c, ui.Spinner(c).Size(14, 14).Label("Git operation in progress…"), "Git operation in progress…")
 		return
 	}
-	button := func(svg *ui.SVG, tip string, action func()) {
+	button := func(svg *ui.SVG, tip string, action func(), off ...bool) {
 		b := gdIconButton(c, svg, tip)
-		if s.git.sequencerChecked && s.git.sequencer.Active() {
+		if s.git.sequencerChecked && s.git.sequencer.Active() || len(off) > 0 && off[0] {
 			b.Disabled(true)
 		}
 		if b.Clicked() {
@@ -221,6 +221,12 @@ func (s *Shell) gdSyncButtons(c *ui.Context, pal *gdPalette) {
 	}
 	button(iconFetch, "Fetch", s.fetchRepo)
 	button(iconPull, "Pull (fast-forward only)", s.pullRepo)
+	// A diverged branch cannot be pushed: Git refuses it for sure, so the
+	// button says why instead of inviting a guaranteed failure.
+	if s.git.upstream.Diverged() {
+		button(iconPush, "Can't push: "+s.git.upstream.Remote+"/"+s.git.upstream.Branch+" has commits you don't — merge or rebase first", s.pushRepo, true)
+		return
+	}
 	button(iconPush, "Push", s.pushRepo)
 }
 
@@ -397,6 +403,7 @@ func (s *Shell) gdFileHeader(c *ui.Context, pal *gdPalette, idx int, f *gdFile) 
 		if m.Item("Open in Editor").Disabled(cf.Status == gitworkbench.StatusDeleted).Chosen() {
 			s.openFileInEditor(cf.Path)
 		}
+		s.gdFileLogItems(m, cf)
 		if m.Item("Copy Path").Chosen() {
 			s.copyToClipboard(cf.Path)
 		}
@@ -758,6 +765,7 @@ func (s *Shell) gdLineCell(c *ui.Context, pal *gdPalette, f *gdFile, r *gdRow, l
 		if m.Item("Open in Editor").Disabled(f.cf.Status == gitworkbench.StatusDeleted).Chosen() {
 			s.openFileInEditor(f.cf.Path)
 		}
+		s.gdFileLogItems(m, f.cf)
 		if m.Item("Copy Path").Chosen() {
 			s.copyToClipboard(f.cf.Path)
 		}

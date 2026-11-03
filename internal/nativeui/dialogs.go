@@ -124,6 +124,8 @@ func (s *Shell) dialogs(c *ui.Context) {
 			}
 		})
 	}
+	s.gitNoticeDialog(c)
+	s.gitMoreDialogs(c)
 	s.newTaskDialog(c)
 	s.newProjectDialog(c)
 	s.newAutomationDialog(c)
@@ -174,6 +176,8 @@ func (s *Shell) submitTextDialog(kind, target, value string) {
 		} else {
 			s.createTag(value)
 		}
+	case "git-rename-branch", "git-create-branch-at", "git-create-tag-at":
+		s.submitRefDialog(kind, target, value)
 	case "files-new-file", "files-new-dir", "files-rename":
 		s.runFilesMutation(kind, target, value)
 	case workboardPlanBackDialog:

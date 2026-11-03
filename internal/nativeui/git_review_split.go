@@ -165,6 +165,12 @@ func (s *Shell) gitQuickCommitComposer(c *ui.Context) {
 	if len(snap.Files) == 0 && s.gitQuickSubject == "" && s.gitQuickBody == "" && !s.gitQuickAmend {
 		return
 	}
+	// A merge/rebase/cherry-pick in progress owns the next step (the banner's
+	// Continue/Abort): a disabled Commit bar beneath it only invites a typed
+	// message that nothing can send (device E2E 2026-11-03).
+	if s.git.sequencerChecked && s.git.sequencer.Active() {
+		return
+	}
 	ui.Column(c).FillWidth().Shrink(0).Padding(8, 12).
 		BorderWidth(1, 0, 0, 0).BorderColor(s.tokens(t.Dark).BorderSubtle).Children(func() {
 		contentColumn(c, formColumnWidth, func() {
@@ -222,23 +228,34 @@ func (s *Shell) gitQuickCommitActions(c *ui.Context, blocked bool) {
 	button := compactPrimaryButton(c, "Commit")
 	button.Disabled(blocked || s.commitQuickRunning)
 	if button.Clicked() {
-		s.openCommitSurface()
-		s.surface.commit.Subject = s.gitQuickSubject
-		s.surface.commit.Body = s.gitQuickBody
-		s.surface.commit.Amend = s.gitQuickAmend
-		// Do not overwrite a user-written amend message with HEAD.
-		s.surface.commit.AmendPrefilled = s.gitQuickAmend &&
-			(s.gitQuickSubject != "" || s.gitQuickBody != "")
+		s.openQuickCommit(false)
 	}
 	// The dropdown is independent of Commit: it only requests an AI
 	// candidate and fills Subject after root/snapshot/draft checks.
 	dropdown := gorexIconButton(c, gorexColorsOf(t.Dark), iconChevronDown, "Commit options", "Commit options",
 		false, gorexPaneBtn, gorexPaneGlyph)
 	dropdown.Menu(func(m *ui.Menu) {
+		if m.Item("Commit and Push…").Disabled(blocked || s.commitQuickRunning).Chosen() {
+			s.openQuickCommit(true)
+		}
+		m.Separator()
 		if m.Item("Draft Subject with AI").Disabled(blocked || s.commitQuickRunning || !s.commitGeneratorUsable()).Chosen() {
 			s.startQuickAICommit()
 		}
 	})
+}
+
+// openQuickCommit opens the Commit dialog with the composer's draft; push
+// makes its success continue with a Push (Commit and Push…).
+func (s *Shell) openQuickCommit(push bool) {
+	s.openCommitSurface()
+	s.surface.commit.Subject = s.gitQuickSubject
+	s.surface.commit.Body = s.gitQuickBody
+	s.surface.commit.Amend = s.gitQuickAmend
+	// Do not overwrite a user-written amend message with HEAD.
+	s.surface.commit.AmendPrefilled = s.gitQuickAmend &&
+		(s.gitQuickSubject != "" || s.gitQuickBody != "")
+	s.gitMore.pushAfterCommit = push
 }
 
 // showGitCommits switches both the upper navigator and lower reviewer.
@@ -367,6 +384,16 @@ func (s *Shell) gitCommitCard(c *ui.Context) {
 		BorderWidth(0, 0, 1, 0).BorderColor(s.tokens(t.Dark).BorderSubtle).Children(func() {
 		if cm == nil {
 			ui.Text(c, "Reading commit…").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+			return
+		}
+		if s.git.compare {
+			ui.Text(c, "Working tree compared with "+cm.Short).FontSize(Typography().Body).FontWeight(WeightSemibold)
+			ui.Text(c, cm.Subject).FontSize(Typography().BodySmall).TextColor(t.TextMuted).MaxLines(2)
+			ui.Text(c, "Shows what changed between that commit and the files on disk now (staged and unstaged; untracked files are not included).").
+				FontSize(Typography().Caption).TextColor(t.TextMuted)
+			if compactButton(c, "Back to Commit").Clicked() {
+				s.reviewCommitAs(cm.Hash, false)
+			}
 			return
 		}
 		subject, body := splitCommitMessage(s.git.commitBody, cm.Subject)

@@ -59,6 +59,9 @@ func (s *Shell) gitActionItems(m *ui.Menu) {
 	if m.Item("Stash All Changes").Disabled(s.git.opBusy || busySequencer || len(snap.Files) == 0).Chosen() {
 		s.stashChanges()
 	}
+	if m.Item("Save Changes as Patch…").Disabled(s.git.opBusy || len(snap.Files) == 0).Chosen() {
+		s.saveWorkingPatch()
+	}
 	if m.Item("Undo Last Commit…").Disabled(s.git.opBusy || busySequencer || snap.NoHead || snap.Branch == "").Chosen() {
 		s.undoLastCommit()
 	}

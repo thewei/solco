@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/gitworkbench"
 )
 
 // gitRefNode is a disposable slash-delimited tree. The only persistent state
@@ -145,11 +146,21 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}
 		item := gitTreeItem{title: n.name, tooltip: value, kind: gitRefKinds[scope], glyph: leafGlyph,
 			level: level, folder: folder, closed: closed, current: current}
+		if current && !folder {
+			item.badge = upstreamBadge(s.git.upstream)
+		}
 		if scope == "local" && !current && !folder {
 			item.hint = "Double-click to check out " + value
 		}
+		remoteRoot := scope == "remote" && folder && level == 0
 		if folder {
 			item.kind, item.glyph = "Folder", iconFolder
+			if remoteRoot {
+				item.kind, item.glyph = "Remote", iconCloud
+				if url := s.remoteURL(n.full); url != "" {
+					item.tooltip = url
+				}
+			}
 		} else {
 			item.ref = gitRefNamespace[scope] + value
 		}
@@ -169,6 +180,10 @@ func (s *Shell) gitRenderRefTree(c *ui.Context, scope string, roots []*gitRefNod
 		}, func(m *ui.Menu) {
 			if n.leaf {
 				menu(value, m)
+			}
+			if remoteRoot {
+				s.remoteMenu(m, n.full)
+				m.Separator()
 			}
 			if eye != nil && m.Item(eye.label()).Chosen() {
 				eye.toggle()
@@ -194,6 +209,9 @@ type gitTreeItem struct {
 	glyph                   *ui.SVG
 	level                   int
 	folder, closed, current bool
+	// badge is a short muted fact at the row's right end (the current
+	// branch's ahead/behind against its upstream, as Fork's "1↓1↑").
+	badge string
 	// hint is said once, on the first click that only selects the row, to
 	// tell what a double click will do (check out a branch).
 	hint string
@@ -227,9 +245,14 @@ func (e *gitEye) label() string {
 // (folders keep folding on one click, which changes nothing in the repo).
 func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu func(*ui.Menu)) {
 	var trailing func()
-	if it.current {
+	if it.current || it.badge != "" {
 		trailing = func() {
-			ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Text).Shrink(0)
+			if it.badge != "" {
+				ui.Text(c, it.badge).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).Shrink(0)
+			}
+			if it.current {
+				ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Text).Shrink(0)
+			}
 		}
 	}
 	key := gitRefRowKey(it.title, it.tooltip)
@@ -277,3 +300,19 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 // gitRefRowKey is a ref row's identity: its title and tooltip, which no two
 // rows of one tree share.
 func gitRefRowKey(title, tooltip string) string { return "git-ref:" + title + "@" + tooltip }
+
+// upstreamBadge is "↑1 ↓2" for a branch ahead/behind its upstream, "" when
+// level or untracked.
+func upstreamBadge(st gitworkbench.UpstreamStatus) string {
+	if !st.OK {
+		return ""
+	}
+	var parts []string
+	if st.Ahead > 0 {
+		parts = append(parts, "↑"+itoa(st.Ahead))
+	}
+	if st.Behind > 0 {
+		parts = append(parts, "↓"+itoa(st.Behind))
+	}
+	return strings.Join(parts, " ")
+}

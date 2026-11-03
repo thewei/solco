@@ -440,6 +440,31 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 				s.confirmRevertCommit(cm.Hash, cm.Subject)
 			}
 			m.Separator()
+			if m.Item("Interactive Rebase Onto Here…").Disabled(s.git.opBusy).Chosen() {
+				s.openRebaseSheet(cm.Hash, cm.Short)
+			}
+			m.Submenu("Reset Current Branch to Here", func(sub *ui.Menu) {
+				for _, mode := range []gitworkbench.ResetMode{gitworkbench.ResetSoft, gitworkbench.ResetMixed, gitworkbench.ResetHard} {
+					if sub.Item(resetModeText[mode][0] + "…").Disabled(s.git.opBusy).Chosen() {
+						s.confirmResetTo(cm.Hash, cm.Subject, mode)
+					}
+				}
+			})
+			m.Separator()
+			if m.Item("Compare to Local Changes").Chosen() {
+				s.compareToWorktree(cm.Hash)
+			}
+			if m.Item("Save as Patch…").Chosen() {
+				s.savePatch(cm.Hash, cm.Subject)
+			}
+			m.Separator()
+			if m.Item("New Branch Here…").Disabled(s.git.opBusy).Chosen() {
+				s.openCreateAt("git-create-branch-at", cm.Hash)
+			}
+			if m.Item("New Tag Here…").Disabled(s.git.opBusy).Chosen() {
+				s.openCreateAt("git-create-tag-at", cm.Hash)
+			}
+			m.Separator()
 			if m.Item("Copy Commit Hash").Chosen() {
 				s.copyToClipboard(cm.Hash)
 			}

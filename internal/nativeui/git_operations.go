@@ -12,6 +12,7 @@ package nativeui
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"slices"
 	"strings"
@@ -67,6 +68,15 @@ func (s *Shell) runGitOpBudget(name string, budget time.Duration, run func(ctx c
 		defer cancel()
 		started := time.Now()
 		notice, err := run(ctx, root)
+		var conflictPaths []string
+		var mergePaused bool
+		if err != nil && integrationOps[name] {
+			if ge, ok := gitworkbench.GitError(err); ok && len(ge.Paths) > 0 {
+				conflictPaths = ge.Paths
+			} else if st, serr := s.git.runner.SequencerState(ctx, root); serr == nil {
+				conflictPaths, mergePaused = st.UnmergedPaths, st.Kind == gitworkbench.SequencerMerge && st.Unmerged > 0
+			}
+		}
 		slog.Info("git op done", "op", name, "duration_ms", time.Since(started).Milliseconds(), "ok", err == nil, "err_class", gitErrClass(err))
 		s.applyOnUI(func() {
 			s.git.opBusy = false
@@ -74,8 +84,17 @@ func (s *Shell) runGitOpBudget(name string, budget time.Duration, run func(ctx c
 				return
 			}
 			switch {
+			case err != nil && integrationOps[name]:
+				s.openGitNotice(name, err, conflictPaths, mergePaused)
+				s.git.staleBanner = true
 			case err != nil:
-				s.pendingToast = name + " failed: " + firstErrLine(err)
+				s.pendingToast = name + " failed: " + gitFailureText(err)
+				// A raw git exit line tells a user nothing here; the one
+				// refusal a sync button can produce on purpose deserves its
+				// own sentence (device E2E 2026-11-03).
+				if name == "Pull" && s.git.upstream.OK && s.git.upstream.Ahead > 0 && s.git.upstream.Behind > 0 {
+					s.pendingToast = "Pull failed: local and " + s.git.upstream.Branch + " have diverged — merge or rebase first"
+				}
 				if name == "Revert Commit" || name == "Merge Commit" || name == "Cherry-pick Commit" {
 					s.pendingToast += " If conflicts occurred, open Local Changes to resolve or abort the operation."
 				}
@@ -105,6 +124,22 @@ func gitErrClass(err error) string {
 		return string(ge.Class)
 	}
 	return "error"
+}
+
+// gitFailureText is the one sentence a failed Git operation shows: Git's own
+// reason read from its output (rejected, sign-in, network, remote hook …),
+// else the domain's refusal text, else the first error line. "exit status 1"
+// alone told a user nothing (device E2E 2026-11-03: Push "did not pass").
+func gitFailureText(err error) string {
+	if reason := gitworkbench.Explain(err); reason != "" {
+		return reason
+	}
+	if ge, ok := gitworkbench.GitError(err); ok && ge.Stderr == "" {
+		if inner := errors.Unwrap(ge); inner != nil {
+			return strings.TrimSpace(inner.Error())
+		}
+	}
+	return firstErrLine(err)
 }
 
 func firstErrLine(err error) string {
@@ -179,10 +214,17 @@ func (s *Shell) pullRepo() {
 		if branch == "" {
 			return "", errGitOp("detached HEAD: check out a branch first")
 		}
-		if err := s.git.runner.PullFFOnly(ctx, root, remote, branch); err != nil {
+		// The branch's own upstream decides where it pulls from — the first
+		// remote and the same-named branch are only the guess for a branch
+		// that has none.
+		theirs := branch
+		if up := s.git.upstream; up.OK && up.Remote != "" {
+			remote, theirs = up.Remote, up.Branch
+		}
+		if err := s.git.runner.PullFFOnly(ctx, root, remote, theirs); err != nil {
 			return "", err
 		}
-		return "Pulled " + remote + "/" + branch, nil
+		return "Pulled " + remote + "/" + theirs, nil
 	})
 }
 
@@ -194,10 +236,14 @@ func (s *Shell) pushRepo() {
 			return "", errGitOp("detached HEAD: check out a branch first")
 		}
 		setUpstream := !s.git.upstream.OK
-		if err := s.git.runner.Push(ctx, root, remote, branch, setUpstream); err != nil {
+		theirs := branch
+		if up := s.git.upstream; up.OK && up.Remote != "" {
+			remote, theirs = up.Remote, up.Branch
+		}
+		if err := s.git.runner.PushTo(ctx, root, remote, branch, theirs, setUpstream); err != nil {
 			return "", err
 		}
-		notice := "Pushed " + remote + "/" + branch
+		notice := "Pushed " + remote + "/" + theirs
 		if setUpstream {
 			notice += " (tracking set)"
 		}
@@ -263,6 +309,17 @@ func (s *Shell) confirmMergeNoFFBranch(target string) {
 	}
 	s.openConfirm("git-merge-no-ff", target, "Create Merge Commit With “"+target+"”?",
 		"Merges "+target+" into the current branch. If files conflict, resolve them in Local Changes, then continue or abort.")
+}
+
+// confirmRebaseOnto replays the current branch on top of target. A rebase that
+// stops on conflicts is cancelled by the Runner, so this confirm may promise
+// that nothing is left half-done.
+func (s *Shell) confirmRebaseOnto(target string) {
+	if s.git == nil || s.git.root == "" || target == "" || target == s.currentBranchName() || s.git.opBusy {
+		return
+	}
+	s.openConfirm("git-rebase", target, "Rebase Current Branch Onto “"+target+"”?",
+		"Replays the current branch's commits on top of "+target+" and rewrites them. If anything conflicts, the rebase is cancelled and nothing changes. Requires a clean working tree.")
 }
 
 func (s *Shell) confirmCherryPickCommit(hash, subject string) {
@@ -372,13 +429,18 @@ func (s *Shell) addWorktree(path string) {
 }
 
 // reviewCommit switches the review to one commit's diff (All Commits).
-func (s *Shell) reviewCommit(hash string) {
+func (s *Shell) reviewCommit(hash string) { s.reviewCommitAs(hash, false) }
+
+// reviewCommitAs reads one commit's diff; compare reads it against the working
+// tree instead (the commit's right-click "Compare to Local Changes").
+func (s *Shell) reviewCommitAs(hash string, compare bool) {
 	if s.git == nil || s.git.root == "" || hash == "" {
 		return
 	}
-	if s.git.source == gdSourceCommit && s.git.commitHash == hash {
+	if s.git.source == gdSourceCommit && s.git.commitHash == hash && s.git.compare == compare {
 		return
 	}
+	s.git.compare = compare
 	root := s.git.root
 	isStash := slices.ContainsFunc(s.git.stashes, func(st gitworkbench.Stash) bool { return st.Hash == hash })
 	s.git.source = gdSourceCommit
@@ -402,7 +464,10 @@ func (s *Shell) reviewCommit(hash string) {
 		ctx, cancel := context.WithTimeout(context.Background(), gitworkbench.ReadTimeout*2)
 		defer cancel()
 		snapshot := s.git.runner.CommitSnapshot
-		if isStash {
+		if compare {
+			snapshot = s.git.runner.CompareToWorktree
+		}
+		if isStash && !compare {
 			// A stash reads as a whole: tracked changes plus untracked files.
 			snapshot = s.git.runner.StashSnapshot
 		}
@@ -443,6 +508,7 @@ func (s *Shell) reviewLocalChanges() {
 		return
 	}
 	s.git.source = gdSourceWorktree
+	s.git.compare = false
 	s.git.commitSnap = nil
 	s.git.commitMeta, s.git.commitBody = nil, ""
 	s.git.gdFiles = nil
@@ -509,6 +575,30 @@ func (s *Shell) runGitConfirm(kind, target string) {
 				return "", err
 			}
 			return "Merged branch " + target, nil
+		})
+	case "git-checkout-remote":
+		s.runCheckoutRemote(target)
+	case "git-delete-remote-branch":
+		s.runDeleteRemoteBranch(target)
+	case "git-reset-soft":
+		s.runReset(target, gitworkbench.ResetSoft)
+	case "git-reset-mixed":
+		s.runReset(target, gitworkbench.ResetMixed)
+	case "git-reset-hard":
+		s.runReset(target, gitworkbench.ResetHard)
+	case "git-remove-remote":
+		s.runGitOp("Remove Remote", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.RemoveRemote(ctx, root, target); err != nil {
+				return "", err
+			}
+			return "Removed remote " + target, nil
+		})
+	case "git-rebase":
+		s.runGitOp("Rebase", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.RebaseOnto(ctx, root, target); err != nil {
+				return "", err
+			}
+			return "Rebased current branch onto " + target, nil
 		})
 	case "git-cherry-pick":
 		s.runGitOp("Cherry-pick Commit", func(ctx context.Context, root string) (string, error) {

@@ -97,6 +97,9 @@ func (s *Shell) workspaceHomeCenter(c *ui.Context) {
 			})
 		}
 		ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+			// The sidebar header's hover "+" was the only way to a Workspace
+			// (device E2E 2026-11-03): the empty center names it too.
+			ghostPill(c, "home-new-workspace", "New Workspace from Folder…", s.createWorkspaceFromFolder)
 			if s.workboardAvailable() {
 				ghostPill(c, "home-new-task", "New Task", func() { s.openWorkboardAdd(false) })
 			}

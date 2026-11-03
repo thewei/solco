@@ -255,6 +255,7 @@ func (s *Shell) gdRowContextMenu(m *ui.Menu, cf *gitworkbench.ChangeFile) {
 			s.openFileInEditor(cf.Path)
 		}
 	}
+	s.gdFileLogItems(m, cf)
 	if m.Item("Copy Path").Chosen() {
 		s.copyToClipboard(cf.Path)
 	}

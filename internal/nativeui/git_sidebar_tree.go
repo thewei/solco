@@ -166,24 +166,75 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 							if m.Item("Merge into Current…").Chosen() {
 								s.openMergeDialog(full)
 							}
-							if m.Item("Delete Branch…").Chosen() {
-								s.deleteBranch(full)
+							if m.Item("Rebase Current Onto This…").Disabled(s.git.opBusy).Chosen() {
+								s.confirmRebaseOnto(full)
 							}
+							m.Separator()
+						} else if s.git.upstream.OK {
+							// What Fork's current-branch menu offers beside the toolbar.
+							if m.Item("Pull (Fast-Forward Only)").Disabled(s.git.opBusy).Chosen() {
+								s.pullRepo()
+							}
+							if m.Item("Push").Disabled(s.git.opBusy || s.git.upstream.Diverged()).Chosen() {
+								s.pushRepo()
+							}
+							m.Separator()
 						}
+						if m.Item("Rename Branch…").Disabled(s.git.opBusy).Chosen() {
+							s.openRenameBranch(full)
+						}
+						s.trackingMenu(m, full)
+						if !current && m.Item("Delete Branch…").Chosen() {
+							s.deleteBranch(full)
+						}
+						m.Separator()
 						if m.Item("Copy Branch Name").Chosen() {
 							s.copyToClipboard(full)
 						}
 					})
 				})
-				s.gitSidebarSection(c, "Remotes", len(s.git.remoteBranches), nil, func() {
+				s.gitSidebarSection(c, "Remotes", len(s.git.remoteBranches)+len(s.remotesWithoutBranches()), &gitSectionAction{
+					label: "Add remote", menuItem: "Add Remote…", disabled: s.git.opBusy,
+					run: func() { s.openRemoteDialog("add", "") },
+				}, func() {
 					refs := make([]string, 0, len(s.git.remoteBranches))
 					for _, b := range s.git.remoteBranches {
 						refs = append(refs, b.Remote+"/"+b.Name)
+					}
+					empties := s.remotesWithoutBranches()
+					for _, rm := range empties {
+						if !gitRefMatches(s.gitRefsFilter, rm.Name, rm.FetchURL) {
+							continue
+						}
+						remote := rm
+						s.gitTreeRow(c, gitTreeItem{title: remote.Name, tooltip: remote.FetchURL, kind: "Remote", glyph: iconCloud, badge: "not fetched"},
+							func() {}, func(m *ui.Menu) { s.remoteMenu(m, remote.Name) })
+					}
+					if len(refs) == 0 {
+						if len(empties) == 0 {
+							s.gitEmptySection(c, 0)
+						}
+						return
 					}
 					s.gitRenderRefTree(c, "remote", gitRefTree(refs, s.gitRefsFilter), 0, func(full string) {
 						s.copyToClipboard(full)
 						s.pendingToast = "Copied remote-tracking ref"
 					}, func(full string, m *ui.Menu) {
+						if m.Item("Check Out…").Disabled(s.git.opBusy).Chosen() {
+							s.checkoutRemoteBranch(full)
+						}
+						if s.currentBranchName() != "" {
+							if m.Item("Merge into Current…").Disabled(s.git.opBusy).Chosen() {
+								s.openMergeDialog(full)
+							}
+							if m.Item("Rebase Current Onto This…").Disabled(s.git.opBusy).Chosen() {
+								s.confirmRebaseOnto(full)
+							}
+						}
+						m.Separator()
+						if m.Item("Delete Remote Branch…").Disabled(s.git.opBusy).Chosen() {
+							s.confirmDeleteRemoteBranch(full)
+						}
 						if m.Item("Copy Remote-Tracking Ref").Chosen() {
 							s.copyToClipboard(full)
 						}
@@ -200,6 +251,10 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 					s.gitRenderRefTree(c, "tag", gitRefTree(refs, s.gitRefsFilter), 0, func(full string) {
 						s.copyToClipboard(full)
 					}, func(full string, m *ui.Menu) {
+						if m.Item("Push Tag").Disabled(s.git.opBusy).Chosen() {
+							s.pushTag(full)
+						}
+						m.Separator()
 						if m.Item("Copy Tag Name").Chosen() {
 							s.copyToClipboard(full)
 						}
@@ -219,11 +274,17 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 						}
 						shown++
 						st := stash
-						s.gitTreeRow(c, gitTreeItem{title: st.Ref + "  " + st.Subject, tooltip: st.Subject, kind: "Stash", glyph: iconStash, commit: st.Base, review: st.Hash}, func() {
+						s.gitTreeRow(c, gitTreeItem{title: stashTitle(st.Subject), tooltip: st.Ref + "  " + st.Subject, kind: "Stash", glyph: iconStash, commit: st.Base, review: st.Hash}, func() {
 							s.copyToClipboard(st.Ref)
 						}, func(m *ui.Menu) {
+							if m.Item("Apply Stash").Disabled(s.git.opBusy).Chosen() {
+								s.applyStash(st.Ref)
+							}
 							if m.Item("Pop Stash").Chosen() {
 								s.popStash(st.Ref)
+							}
+							if m.Item("Save as Patch…").Chosen() {
+								s.saveStashPatch(st.Ref, st.Subject)
 							}
 							if m.Item("Drop Stash…").Chosen() {
 								s.dropStash(st.Ref)
@@ -235,6 +296,7 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 					}
 					s.gitEmptySection(c, shown)
 				})
+				s.submodulesSection(c)
 			})
 		})
 	})

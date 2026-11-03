@@ -40,7 +40,7 @@ func TestClickingAStashLocatesTheCommitItWasMadeOn(t *testing.T) {
 	if len(f.shell.git.stashes) != 1 || f.shell.git.stashes[0].Base != f.tip(t, "main") {
 		t.Fatalf("a stash is attached to the commit it was made on: %+v", f.shell.git.stashes)
 	}
-	if err := f.tester.Click(f.shell.git.stashes[0].Ref + "  " + f.shell.git.stashes[0].Subject); err != nil {
+	if err := f.tester.Click(stashTitle(f.shell.git.stashes[0].Subject)); err != nil {
 		t.Fatal(err)
 	}
 	want := f.tip(t, "main")

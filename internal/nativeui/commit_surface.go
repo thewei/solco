@@ -158,6 +158,9 @@ func (s *Shell) commitActionFooter(c *ui.Context) {
 			if s.surface.commit.Amend {
 				label = "Amend " + label
 			}
+			if s.gitMore.pushAfterCommit {
+				label += " and Push"
+			}
 			ready := len(selected) > 0 && strings.TrimSpace(s.surface.commit.Subject) != "" &&
 				!s.surface.commit.InFlight && s.surface.commit.Captured && !s.commitGenRunning
 			ui.Textf(c, "%d selected", len(selected)).FontSize(Typography().Caption).TextColor(t.TextMuted)
