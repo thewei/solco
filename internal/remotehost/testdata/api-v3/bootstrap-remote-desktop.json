@@ -1,0 +1,15 @@
+{
+  "capabilities": {
+    "chat": true,
+    "remoteDesktop": true,
+    "terminal": true
+  },
+  "hostId": "",
+  "hostName": "Test Mac",
+  "instances": [
+    {
+      "id": "default"
+    }
+  ],
+  "version": "test"
+}

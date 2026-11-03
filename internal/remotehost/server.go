@@ -36,7 +36,9 @@ const (
 	ScopeView Scope = 1 << iota
 	ScopeTerminalInput
 	ScopeManage
-	scopeOwner = ScopeView | ScopeTerminalInput | ScopeManage
+	// ScopeRemoteDesktop sees and drives the whole Mac desktop — the most powerful bit, asked for by nothing else.
+	ScopeRemoteDesktop
+	scopeOwner = ScopeView | ScopeTerminalInput | ScopeManage | ScopeRemoteDesktop
 )
 
 // subprotocolBearer is the WebSocket subprotocol that carries the token
@@ -98,10 +100,13 @@ type Options struct {
 	// Machines lists and connects the desktop's saved Herdr machines as phone "devices" (POST /devices/{id}/connect,
 	// scope manage); nil = the phone sees no devices.
 	Machines Machines
-	Home     string // user home for provider transcript roots ("" = os.UserHomeDir)
-	HostName string
-	Version  string
-	Now      func() time.Time
+	// RemoteDesktop lets the phone watch and control the Mac's whole desktop (GET /remote-desktop, POST /remote-desktop/session,
+	// scope remote-desktop); nil or switched off in Settings = no entry on the phone and bootstrap says so.
+	RemoteDesktop RemoteDesktop
+	Home          string // user home for provider transcript roots ("" = os.UserHomeDir)
+	HostName      string
+	Version       string
+	Now           func() time.Time
 }
 
 // PairingOffer is what Settings shows as a QR code.
@@ -455,6 +460,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
 	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
 	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
+	mux.Handle("GET "+apiPrefix+"/remote-desktop", s.guard(ScopeRemoteDesktop, s.handleRemoteDesktopInfo))
+	mux.Handle("POST "+apiPrefix+"/remote-desktop/session", s.guard(ScopeRemoteDesktop, s.handleRemoteDesktopSession))
 	mux.Handle("POST "+apiPrefix+"/sessions/{id}/continue", s.guard(ScopeManage, s.handleSessionContinue))
 	mux.Handle("POST "+apiPrefix+"/sessions/{id}/trash", s.guard(ScopeManage, s.handleSessionTrash))
 	mux.Handle("GET "+apiPrefix+"/sessions/trash", s.guard(ScopeView, s.handleTrashList))
@@ -562,6 +569,9 @@ func (s *Server) closeDevice(deviceID string) {
 	for _, h := range handles {
 		go h.close()
 	}
+	if s.opts.RemoteDesktop != nil {
+		s.opts.RemoteDesktop.DisconnectDevice(deviceID) // a revoked phone loses its desktop session too
+	}
 }
 
 // --- handlers -------------------------------------------------------------
@@ -661,6 +671,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	}
 	if s.voiceReady() {
 		capabilities["voice"] = true
+	}
+	if s.remoteDesktopOn() {
+		capabilities["remoteDesktop"] = true
 	}
 	if s.opts.Queue != nil {
 		capabilities["queue"] = true

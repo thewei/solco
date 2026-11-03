@@ -1,0 +1,17 @@
+package macos
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func mustWrite(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}

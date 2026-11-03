@@ -1,0 +1,27 @@
+{
+  "sessionId": "rd_0123456789ab",
+  "sdp": "v=0 answer",
+  "state": {
+    "mode": "full",
+    "displayId": "1",
+    "displays": [
+      {
+        "id": "1",
+        "name": "Built-in Retina Display",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900,
+        "pixelWidth": 2880,
+        "pixelHeight": 1800,
+        "scale": 2,
+        "isMain": true
+      }
+    ],
+    "tier": "standard",
+    "width": 1728,
+    "height": 1080,
+    "fps": 30,
+    "hardware": true
+  }
+}
