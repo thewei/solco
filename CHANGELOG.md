@@ -13,7 +13,8 @@ at release time and shown in Settings → About.
 - Automations: run headless so no trust dialog can stop an unattended run
 - Automations: unread failed/finished runs count in the Header and show in a new Automations tab of its popover
 - Automations: a Mac notification and a phone notification for each step — a draft waiting for approval, a run starting, finishing or failing
-- Phone: a read-only Automations screen (what runs when, last result, drafts waiting), opened from Home or by tapping an automation notification
+- Phone: an Automations screen (what runs when, last result, drafts waiting), opened from Home or by tapping an automation notification
+- Phone: manage automations like on the Mac — approve drafts, run now, pause/resume, edit, delete, start the scheduler, see a run's history and jump to its pane, create one, or ask an Agent to draft it
 
 ### Fixed
 

@@ -115,21 +115,22 @@ func (s *Shell) remoteServer() *remotehost.Server {
 	userDataDir := s.userDataDir // fixed at startup; the Host's goroutines must not touch the Shell
 	git := app.NewRemoteGit()
 	opts := remotehost.Options{
-		Config:        remoteConfigFrom(s.settings.Remote),
-		Dir:           filepath.Join(s.userDataDir, "RemoteHost"),
-		Backend:       remotehost.NewManagerBackend(s.runtime),
-		Identity:      s.hostHookIdentity,
-		AgentFacts:    s.hostAgentFacts,
-		Usage:         s.hostUsage,
-		Automations:   s.hostAutomations,
-		Sessions:      s.hostSessions(s.hist.service),
-		HostName:      host,
-		Version:       mygo.App.Version(),
-		Git:           git,
-		GitWrite:      git,
-		Files:         true,
-		Machines:      app.NewRemoteMachines(s.runtime),
-		OnAddressLost: s.remoteAddressLost,
+		Config:           remoteConfigFrom(s.settings.Remote),
+		Dir:              filepath.Join(s.userDataDir, "RemoteHost"),
+		Backend:          remotehost.NewManagerBackend(s.runtime),
+		Identity:         s.hostHookIdentity,
+		AgentFacts:       s.hostAgentFacts,
+		Usage:            s.hostUsage,
+		Automations:      s.hostAutomations,
+		AutomationsAdmin: s.hostAutomationsAdmin(),
+		Sessions:         s.hostSessions(s.hist.service),
+		HostName:         host,
+		Version:          mygo.App.Version(),
+		Git:              git,
+		GitWrite:         git,
+		Files:            true,
+		Machines:         app.NewRemoteMachines(s.runtime),
+		OnAddressLost:    s.remoteAddressLost,
 		Attach: func(data []byte, mime, name string) (string, error) {
 			dir, err := chatattach.Dir(userDataDir)
 			if err != nil {

@@ -1,5 +1,16 @@
 {
   "scheduler": true,
+  "draftPrompt": "Draft an automation: state its goal, trigger, guardrails and cost in the rationale, and always create it as a draft.",
+  "agents": [
+    {
+      "id": "claude",
+      "label": "Claude Code"
+    },
+    {
+      "id": "codex",
+      "label": "Codex"
+    }
+  ],
   "automations": [
     {
       "name": "nightly-ci-triage",

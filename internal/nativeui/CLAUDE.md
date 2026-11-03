@@ -44,7 +44,9 @@ page_automations.go: /automations 页（Phase 4 Option A 管理列表 + 详情�
 automations_inbox.go: Automations 收件箱（插件的 `seen` 为唯一权威）——automationRunUnread（非草稿、有 last_run、未读、failed|done）、automationsUnread/automationsHeaderCounts（失败→attention、完成→review，并入 Header waiting/total；门关返回 0）、refreshAutomationsBackground（后台节流 1 分钟）、markAutomationSeen/markAllAutomationsSeen（乐观置位后写 `seen`）、Header 浮层第五页签 Automations（Failed/Finished 分组，Mark All Seen / Open Automations，点行开抽屉）
 automations_inbox_test.go: 失败/完成拆分、已读/草稿/运行中不计数、门关零痕迹、浮层页签列出并开抽屉、开抽屉标已读一次、seen --all、headerTally 算术
 remote_automations.go: 手机 Automations 只读页的数据缝（Options.Automations）——窗口线程在每次 list 变化/已读/门关闭后刷新一个原子快照，Host goroutine 只读快照（门关或首读未落地 = ok=false）；线格式不含提示词/理由/错误
-remote_automations_test.go: 快照随门与列表、已读即时翻转 unread、状态与时间映射
+remote_automations_test.go: 快照随门与列表、已读即时翻转 unread、状态与时间映射、手机的 agent 选项用插件认的 kind id（claude 而非 claude-code）
+remote_automations_admin.go: 手机 Automations 管理的实时缝（Options.AutomationsAdmin）——Host goroutine 经原子 target（root+session+agents）直接调 `automations.Client`（Create/Update/Do/StartScheduler/MarkSeen/Detail），写完 `applyOnWindow` 刷新桌面并答复新鲜列表；详情运行取自 History（不含错误文本）；日志不含名字/提示词/理由
+remote_automations_admin_test.go: 经 stub 客户端验证各动词、详情不泄露 History 的敏感文本、门关即不可用
 automations_notify.go: 自动化步骤通知（2026-11-03）——list 每次读回交给 `automations.Watcher`（相邻两次的差：Agent 起草的新草稿 / run 开始 / 完成 / 失败；首读只记录），逐条发 macOS 系统通知（ID `solco-automation/<name>`，同一自动化的后一步替换前一步，点击回到该自动化的抽屉）并经 `remotehost.Server.NotifyAutomation` 推给手机；文案只含名称与步骤；步骤变化靠 `automationsList.busy`（有 run 在跑或 90 s 内有定时 run）时 8 s 短轮询在任意页面发现
 automations_notify_test.go: 通知文案、ID 往返与失败即关、点击落到抽屉、list 变化走 Watcher 且无窗口时不阻塞
 page_automations_flow_test.go: /automations 页端到端流程（New/Approve/Run/Edit、Agent 选择以 Herdr kind 落盘、Run as Headless 经 Edit 与抽屉往返）

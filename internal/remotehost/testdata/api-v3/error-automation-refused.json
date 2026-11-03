@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "automation_refused",
+    "message": "cron: expected 5 fields"
+  }
+}

@@ -38,11 +38,25 @@ type AutomationItem struct {
 	Unread    bool           `json:"unread,omitempty"` // the newest run finished and nobody opened it
 }
 
+// AutomationAgent is one agent an automation can run: ID is the kind the
+// plugin takes (not always Solco's own agent id), Label the name to show.
+type AutomationAgent struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
 // Automations is the page as the phone draws it. Scheduler is whether the
 // plugin's daemon is running (nothing fires on schedule without it).
 type Automations struct {
-	Scheduler   bool             `json:"scheduler"`
-	Automations []AutomationItem `json:"automations"`
+	Scheduler bool `json:"scheduler"`
+	// DraftPrompt is the Mac's own brief for an Agent asked to draft an
+	// automation (the desktop's "Let an Agent Draft" text), so the phone sends
+	// the same words; absent from the list when the Host has none.
+	DraftPrompt string `json:"draftPrompt,omitempty"`
+	// Agents are the kinds the Mac can launch, in the plugin's own ids — the
+	// New/Edit form's agent choices.
+	Agents      []AutomationAgent `json:"agents,omitempty"`
+	Automations []AutomationItem  `json:"automations"`
 }
 
 // AutomationsFunc serves the list; ok=false means the plugin gate is closed

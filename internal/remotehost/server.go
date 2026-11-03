@@ -90,6 +90,10 @@ type Options struct {
 	// is closed), means no such view and bootstrap does not advertise it. It
 	// runs on the Host's goroutines.
 	Automations AutomationsFunc
+	// AutomationsAdmin lets the phone manage the Mac's automations (detail,
+	// draft/edit, approve, run now, pause/resume, delete, scheduler, seen):
+	// nil = read-only list, and bootstrap does not advertise automationsManage.
+	AutomationsAdmin AutomationsAdmin
 	// Sessions serves the desktop's session catalog for the phone (GET /sessions):
 	// metadata, search and the running-pane link; nil = no such view and bootstrap
 	// says so. It runs on the Host's goroutines.
@@ -487,6 +491,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+apiPrefix+"/devices/{id}/connect", s.guard(ScopeManage, s.handleDeviceConnect))
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
 	mux.Handle("GET "+apiPrefix+"/automations", s.guard(ScopeView, s.handleAutomations))
+	mux.Handle("GET "+apiPrefix+"/automations/{name}", s.guard(ScopeView, s.handleAutomationDetail))
+	mux.Handle("POST "+apiPrefix+"/automations", s.guard(ScopeManage, s.handleAutomationCreate))
+	mux.Handle("POST "+apiPrefix+"/automations/{name}/save", s.guard(ScopeManage, s.handleAutomationUpdate))
+	for _, op := range []AutomationOp{OpApproveAutomation, OpRunAutomation, OpPauseAutomation, OpResumeAutomation, OpDeleteAutomation} {
+		mux.Handle("POST "+apiPrefix+"/automations/{name}/"+string(op), s.guard(ScopeManage, s.handleAutomationOp(op)))
+	}
+	mux.Handle("POST "+apiPrefix+"/automations/scheduler/start", s.guard(ScopeManage, s.handleAutomationScheduler))
+	mux.Handle("POST "+apiPrefix+"/automations/seen", s.guard(ScopeManage, s.handleAutomationSeen))
 	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
 	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
 	mux.Handle("GET "+apiPrefix+"/remote-desktop", s.guard(ScopeRemoteDesktop, s.handleRemoteDesktopInfo))
@@ -686,6 +698,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	if s.opts.Automations != nil {
 		if _, ok := s.opts.Automations(r.Context()); ok {
 			capabilities["automations"] = true
+			if s.opts.AutomationsAdmin != nil && s.opts.AutomationsAdmin.Open() {
+				capabilities["automationsManage"] = true
+			}
 		}
 	}
 	if s.opts.Sessions != nil {

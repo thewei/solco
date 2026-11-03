@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/automations"
 )
 
@@ -50,7 +51,7 @@ func TestPhoneSnapshotFollowsTheGateAndTheList(t *testing.T) {
 
 func TestPhoneWireMapsStatesTimesAndCarriesNoPrompt(t *testing.T) {
 	list := mustParseList(t, inboxFixture(false))
-	out := remoteAutomationsOf(list)
+	out := remoteAutomationsOf(list, nil)
 	states := map[string]string{}
 	for _, a := range out.Automations {
 		states[a.Name] = a.State
@@ -60,5 +61,20 @@ func TestPhoneWireMapsStatesTimesAndCarriesNoPrompt(t *testing.T) {
 	}
 	if states["draft-sweep"] != "draft" || states["nightly-ci-triage"] != "active" {
 		t.Errorf("states = %v", states)
+	}
+}
+
+// The form's agent choices carry the id the plugin takes, not Solco's own: a
+// phone that saved "claude-code" would be refused by Herdr.
+func TestPhoneAgentChoicesUseThePluginsKindIds(t *testing.T) {
+	_, s := stubInbox(t)
+	s.launchKinds = []app.SessionKind{{ID: app.TerminalKind, Label: "Terminal"}, {ID: "claude-code", Label: "Claude Code"}}
+	got := s.remoteAutomationAgents()
+	if len(got) != 1 || got[0].ID != "claude" || got[0].Label != "Claude Code" {
+		t.Fatalf("agents %+v", got)
+	}
+	s.syncRemoteAutomations()
+	if list, _ := s.hostAutomations(context.Background()); len(list.Agents) != 1 {
+		t.Fatalf("the list carries %+v", list.Agents)
 	}
 }

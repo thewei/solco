@@ -324,6 +324,18 @@ func TestGoldenAPIv3(t *testing.T) {
 	h.srv.opts.Automations = func(context.Context) (Automations, bool) { return sampleAutomations(), true }
 	golden(t, "bootstrap-automations.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
 	golden(t, "automations.json", bodyOf(t, h.get("/api/v3/automations", h.token, nil)))
+	// management: detail (prompt, rationale, runs without error text), the write request the
+	// phone sends, and a refusal that carries the plugin's own words
+	fa := &fakeAdmin{open: true}
+	h.srv.opts.AutomationsAdmin = fa
+	golden(t, "bootstrap-automations-manage.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "automation-detail.json", bodyOf(t, h.get("/api/v3/automations/nightly-ci-triage", h.token, nil)))
+	writeReq, _ := json.Marshal(automationWrite{Name: "weekly-recap", AutomationFields: sampleAutomationDetail().AutomationFields})
+	golden(t, "automation-write-request.json", writeReq)
+	fa.fail = &AutomationError{Code: "automation_refused", Status: http.StatusConflict, Detail: "cron: expected 5 fields"}
+	_, refusal := h.send("POST", "/api/v3/automations/dependency-sweep/approve", h.token, "")
+	golden(t, "error-automation-refused.json", refusal)
+	h.srv.opts.AutomationsAdmin = nil
 	h.srv.opts.Automations = nil
 	golden(t, "error-automations-unavailable.json", bodyOf(t, h.get("/api/v3/automations", h.token, nil)))
 	// sessions (read-only): the desktop's catalog metadata with the running-pane

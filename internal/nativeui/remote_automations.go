@@ -4,7 +4,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/automations"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/remotehost"
 )
 
@@ -19,13 +22,20 @@ import (
 // syncRemoteAutomations refreshes what the phone can read: the desktop's
 // current list when the gate is open, nothing when it is closed.
 func (s *Shell) syncRemoteAutomations() {
+	if s.automationsAvailable() {
+		s.automations.target.Store(&automationsTarget{root: s.automations.avail.Root, session: herdr.ParseRef(s.activeInstance).Session, agents: s.remoteAutomationAgents()})
+	} else {
+		s.automations.target.Store(nil)
+	}
 	if !s.automationsAvailable() || s.automations.list.loadedAt.IsZero() || s.automations.list.failed {
 		if !s.automationsAvailable() {
 			s.automations.remote.Store(nil)
 		}
 		return
 	}
-	out := remoteAutomationsOf(s.automations.list.result)
+	state := s.automations.list.result.State
+	s.automations.remoteState.Store(&state)
+	out := remoteAutomationsOf(s.automations.list.result, s.remoteAutomationAgents())
 	s.automations.remote.Store(&out)
 }
 
@@ -40,8 +50,8 @@ func (s *Shell) hostAutomations(context.Context) (remotehost.Automations, bool) 
 }
 
 // remoteAutomationsOf maps the plugin's list to the wire.
-func remoteAutomationsOf(result automations.ListResult) remotehost.Automations {
-	out := remotehost.Automations{Scheduler: result.Scheduler != 0, Automations: make([]remotehost.AutomationItem, 0, len(result.Automations))}
+func remoteAutomationsOf(result automations.ListResult, agents []remotehost.AutomationAgent) remotehost.Automations {
+	out := remotehost.Automations{Scheduler: result.Scheduler != 0, DraftPrompt: automationsAskText, Agents: agents, Automations: make([]remotehost.AutomationItem, 0, len(result.Automations))}
 	for _, a := range result.Automations {
 		item := remotehost.AutomationItem{
 			Name: a.Name, State: "active", Schedule: a.ScheduleText, Agent: a.Agent,
@@ -67,6 +77,17 @@ func remoteAutomationsOf(result automations.ListResult) remotehost.Automations {
 			item.LastRun = run
 		}
 		out.Automations = append(out.Automations, item)
+	}
+	return out
+}
+
+// remoteAutomationAgents is the form's agent choices: every launchable agent
+// of this Mac, under the id the plugin takes (claude, not claude-code). Window
+// thread only — it reads the launch kinds.
+func (s *Shell) remoteAutomationAgents() []remotehost.AutomationAgent {
+	var out []remotehost.AutomationAgent
+	for _, kind := range s.automationAgentKinds() {
+		out = append(out, remotehost.AutomationAgent{ID: agent.HerdrAgentKind(history.AgentID(kind.ID)), Label: kind.Label})
 	}
 	return out
 }

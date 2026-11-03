@@ -44,6 +44,13 @@ type automationsState struct {
 	// remote is the read-only snapshot the Host's goroutines serve the phone
 	// from (remote_automations.go); the window thread is its only writer.
 	remote atomic.Pointer[remotehost.Automations]
+	// target is where the phone's management calls reach the plugin: the folder
+	// and Herdr session the window last used. Written by the window thread,
+	// nil while the gate is closed (remote_automations_admin.go).
+	target atomic.Pointer[automationsTarget]
+	// remoteState is the plugin's state folder (the daemon log's home), kept
+	// beside target for the phone's Start Scheduler.
+	remoteState atomic.Pointer[string]
 }
 
 // automationsAvailable is the one gate every automations surface and command

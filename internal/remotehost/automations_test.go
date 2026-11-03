@@ -66,7 +66,7 @@ func TestAutomationsNeverNullAndCapabilityFollowsTheGate(t *testing.T) {
 // sampleAutomations is the golden file's desktop: an unread failure, a running
 // automation, a draft awaiting approval and a paused one.
 func sampleAutomations() Automations {
-	return Automations{Scheduler: true, Automations: []AutomationItem{
+	return Automations{Scheduler: true, DraftPrompt: "Draft an automation: state its goal, trigger, guardrails and cost in the rationale, and always create it as a draft.", Agents: []AutomationAgent{{ID: "claude", Label: "Claude Code"}, {ID: "codex", Label: "Codex"}}, Automations: []AutomationItem{
 		{
 			Name: "nightly-ci-triage", State: "active", Schedule: "Daily 03:00", Agent: "claude", Headless: true,
 			NextRunMs: 1786129200000, Unread: true,
