@@ -83,6 +83,7 @@ func (s *Shell) markAutomationSeen(name string) {
 	}
 	runID := a.LastRun.RunID
 	a.LastRun.Seen = true
+	s.syncRemoteAutomations()
 	s.invalidateQuickPanel()
 	s.automationsWrite("seen", name, func(ctx context.Context, client *automations.Client) error {
 		return client.MarkSeen(ctx, runID)
@@ -96,6 +97,7 @@ func (s *Shell) markAllAutomationsSeen() {
 			a.LastRun.Seen = true
 		}
 	}
+	s.syncRemoteAutomations()
 	s.automationsWrite("seen-all", "", func(ctx context.Context, client *automations.Client) error {
 		return client.MarkAllSeen(ctx)
 	}, nil)

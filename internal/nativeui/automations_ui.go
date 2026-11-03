@@ -11,10 +11,12 @@ import (
 	"context"
 	"log/slog"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/thewei/solco/internal/automations"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/remotehost"
 )
 
 const (
@@ -39,6 +41,9 @@ type automationsState struct {
 	detecting  bool
 	list       automationsList
 	watcher    automations.Watcher // list → notifiable steps (automations_notify.go)
+	// remote is the read-only snapshot the Host's goroutines serve the phone
+	// from (remote_automations.go); the window thread is its only writer.
+	remote atomic.Pointer[remotehost.Automations]
 }
 
 // automationsAvailable is the one gate every automations surface and command
@@ -80,6 +85,7 @@ func (s *Shell) applyAutomationsAvailability(avail automations.Availability) {
 	if !avail.Supported {
 		// Zero trace: a plugin that went away takes its page state with it.
 		s.automations.list = automationsList{}
+		s.syncRemoteAutomations()
 	}
 	if avail.Supported && !prev.Supported {
 		s.refreshAutomations(true) // first read as the gate opens
@@ -121,6 +127,7 @@ func (s *Shell) applyAutomationsList(result automations.ListResult, err error) {
 	if !s.automationsAvailable() {
 		s.automations.list = automationsList{}
 		s.automations.watcher.Reset()
+		s.syncRemoteAutomations()
 		return
 	}
 	list.loadedAt = timeNow()
@@ -137,6 +144,7 @@ func (s *Shell) applyAutomationsList(result automations.ListResult, err error) {
 	}
 	list.result = result
 	s.notifyAutomationSteps(result.Automations)
+	s.syncRemoteAutomations()
 	if sel := list.selected; sel != "" {
 		switch {
 		case list.automation(sel) == nil:

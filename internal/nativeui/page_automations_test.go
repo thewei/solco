@@ -136,7 +136,7 @@ func TestApplyAutomationsAvailabilityClearsTheInFlightFlag(t *testing.T) {
 	s.automations.detecting = true
 	s.applyAutomationsAvailability(automations.Availability{Installed: true, Enabled: true, Version: "0.12.0", Supported: true})
 	if s.automations.detecting || !s.automationsAvailable() {
-		t.Fatalf("state after apply = %+v", s.automations)
+		t.Fatalf("after apply: detecting=%v available=%v", s.automations.detecting, s.automationsAvailable())
 	}
 	s.applyAutomationsAvailability(automations.Unreadable())
 	if s.automationsAvailable() {

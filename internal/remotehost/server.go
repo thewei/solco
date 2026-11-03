@@ -85,6 +85,11 @@ type Options struct {
 	// Host offers no quota view and bootstrap says so. It runs on the Host's
 	// goroutines and answers every provider's standing in the page's order.
 	Usage func(ctx context.Context, force bool) Quota
+	// Automations serves the desktop's Automations page for the phone (GET
+	// /automations, read-only): nil, or an answer with ok=false (the plugin gate
+	// is closed), means no such view and bootstrap does not advertise it. It
+	// runs on the Host's goroutines.
+	Automations AutomationsFunc
 	// Sessions serves the desktop's session catalog for the phone (GET /sessions):
 	// metadata, search and the running-pane link; nil = no such view and bootstrap
 	// says so. It runs on the Host's goroutines.
@@ -481,6 +486,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/workspaces/{id}/files/content", s.guard(ScopeView, s.handleFileContent))
 	mux.Handle("POST "+apiPrefix+"/devices/{id}/connect", s.guard(ScopeManage, s.handleDeviceConnect))
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
+	mux.Handle("GET "+apiPrefix+"/automations", s.guard(ScopeView, s.handleAutomations))
 	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
 	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
 	mux.Handle("GET "+apiPrefix+"/remote-desktop", s.guard(ScopeRemoteDesktop, s.handleRemoteDesktopInfo))
@@ -676,6 +682,11 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	}
 	if s.opts.Usage != nil {
 		capabilities["quota"] = true
+	}
+	if s.opts.Automations != nil {
+		if _, ok := s.opts.Automations(r.Context()); ok {
+			capabilities["automations"] = true
+		}
 	}
 	if s.opts.Sessions != nil {
 		capabilities["sessions"] = true

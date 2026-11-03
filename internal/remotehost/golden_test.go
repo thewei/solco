@@ -319,6 +319,13 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "quota.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
 	h.srv.opts.Usage = nil
 	golden(t, "error-quota-unavailable.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
+	// automations (read-only): the desktop's Automations page behind a capability that
+	// follows the plugin gate; the seam answers the whole list, the handler only forwards
+	h.srv.opts.Automations = func(context.Context) (Automations, bool) { return sampleAutomations(), true }
+	golden(t, "bootstrap-automations.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "automations.json", bodyOf(t, h.get("/api/v3/automations", h.token, nil)))
+	h.srv.opts.Automations = nil
+	golden(t, "error-automations-unavailable.json", bodyOf(t, h.get("/api/v3/automations", h.token, nil)))
 	// sessions (read-only): the desktop's catalog metadata with the running-pane
 	// link; the seam answers search and running, the handler only forwards
 	h.srv.opts.Sessions = func(_ context.Context, q SessionsQuery) (Sessions, error) { return sampleSessions(q), nil }
