@@ -7,8 +7,7 @@ Before engineering Solco, read:
 1. `docs/client-product-architecture.md` — canonical architecture source of truth.
 2. `docs/mygo-native-execution-rules.md` — active migration execution contract.
 3. `docs/mygo-native-migration-roadmap.md` — active task roadmap and milestone order.
-4. `.agents/skills/solco-development/SKILL.md` — Solco engineering workflow.
-5. `.agents/skills/solco-evidence-loop/SKILL.md` — bug/行为异常的取证修复循环（环境先行→实机取证→根因→修复→同环境复验），进度文件在 `docs/debug/`，教训自更新于该 skill 的 `LESSONS.md`；需要实机 computer-use 验证时必读。
+4. `.agents/skills/solco-development/SKILL.md` — Solco engineering workflow，含 bug/行为异常的取证修复循环（环境先行→实机取证→根因→修复→同环境复验，进度文件在 `docs/debug/`，教训自更新于该 skill 的 `LESSONS.md`；需要实机 computer-use 验证时必读其 Evidence loop 一节）。
 
 Architecture ownership lives only in `docs/client-product-architecture.md`; ad-hoc audits/progress evidence that are not part of the active migration contract may remain outside the repository.
 
