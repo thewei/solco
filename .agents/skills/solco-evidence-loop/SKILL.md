@@ -51,10 +51,12 @@ GOTOOLCHAIN=auto go tool mygo build                  # 仓库根；产物 build/
 启动 env（全部必带）：
 
 ```
-HOME=$SB/home  HERDR_SOCKET_PATH=$SB/herdr.sock  HERDR_CONFIG_PATH=$SB/herdr-config.toml
-HERDR_BIN_PATH=$(command -v herdr)   # 本机 herdr（0.9.5 @ ~/.local/bin/herdr 已验证）
+HOME=$SB/home  HERDR_BIN_PATH=$(command -v herdr)   # 本机 herdr；daemon 由 Solco EnsureRunning 拉起
 日志: $SB/home/Library/Logs/Solco/solco.log（沙箱内的 PathLogs，不要去翻用户活实例的）
 ```
+
+herdr 的 socket/config 都从 HOME 派生：`$SB/home/.config/herdr/herdr.sock`、`…/config.toml`。`HERDR_SOCKET_PATH` 只传给 Solco spawn 的子进程（terminal attach 等），对本机 CLI 不生效——CLI 驱动沙箱 daemon 一律用上面的 socket 路径（落点 internal/herdr/herdr.go `SocketPath`）。
+并行会话可能在跑**同名沙箱**（同 bundle id `com.whstudio.solco.sandbox`）：`pgrep -f SolcoSandbox` 会拿到别人的 pid。按启动路径甄别自己的实例（`ps` 看二进制路径），`list_windows` 后先截图核对内容（workspace 名/cwd）再点击——2026-11-03 曾把点击打进并行会话的窗口。
 
 Solco 自己会 EnsureRunning 拉起 `herdr server`（internal/herdr/herdr.go），不需要手工起 daemon。
 UI 里用侧栏 Workspace 区「New Workspace from Folder…」把 scratch 目录开成 workspace。
@@ -66,8 +68,8 @@ UI 里用侧栏 Workspace 区「New Workspace from Folder…」把 scratch 目�
 
 - surface / pane / chat 归属类问题：`internal/nativeui/workspace.go` + `new_tab_agent.go` 的 `slog.Info("surface trace", …)` 探针点（showSurface / syncWorkspaceForSelection / reconcilePaneSurface / openWorkspaceChat / completeAgentOpen / startNewTab / agentSessionStarted），`grep "surface trace" $SB/home/Library/Logs/Solco/solco.log`。
 - 终端 attach 抖动：log 的 `attach native terminal` + `native terminals synced`（`spawned/closed` 计数能读出 surface 离开/回到 Terminal 的次数）。
-- 协议/运行时真值：`herdr --help`、`herdr session list --json`、`HERDR_SOCKET_PATH=$SB/herdr.sock herdr …`——以 CLI/schema 为准，截图永不作为唯一证据。
-- UI 证据：`cua-driver get_window_state`（截图+AX 树）；弹层菜单是独立 NSWindow，窗口截图看不见，走 `invoke_menu` 或 AX。
+- 协议/运行时真值：`herdr --help`、`herdr session list --json`、`HERDR_SOCKET_PATH=$SB/home/.config/herdr/herdr.sock herdr …`——以 CLI/schema 为准，截图永不作为唯一证据。
+- UI 证据：`cua-driver get_window_state`（截图+AX 树）；弹层菜单是独立 NSWindow，窗口截图看不见，走 `invoke_menu` 或 AX。快照/截图缓存不跨 CLI 调用（一次性 CLI 报 `screenshot_context_missing`/`stale_element_token`）——snapshot→click→verify 全序列放进一个持久 `cua-driver mcp` stdio 会话（python 子进程讲 JSON-RPC），AX 不可达元素用 `screenshot_frame` 像素坐标兜底。
 
 取证完成的判据：能写出「在沙箱里执行 X，观察 Y，与预期 Z 相符/不符」。Y 必须是日志行、截图或 CLI 输出，写进进度文件。**问题复现不了就停下报告，不进入修复。**
 

@@ -82,6 +82,8 @@ Chat UI is the official MyGo `ui.WebView` page over the single bound-service bri
 
 Use MyGo native widgets before custom drawing; reuse `theme.go`, `icons.go`, and `components.go` before one-off page styling. One canonical shell: do not add alternate Sidebar implementations or duplicate row/navigation builders for the same shell state; improve the canonical path in place. Keep framework/platform code out of `internal/herdr` and ordinary domain packages.
 
+Workspace primary-surface navigation has one owner pair in `internal/nativeui` (2026-11-03): `showPaneSurface(paneID)` for "go to this pane" and `landSelectedPane()` for "back to the workspace home" (header home tab, ⌘1 / Go-menu Workspace, palette Workspace, view-tab exits). They land the pane's remembered surface (`paneSurfaceMemo` via `panePrefersChat`) and NEVER rewrite it — `paneSurfaceMemo` is written only by explicit choices (card-header toggle, Open Terminal actions, `openChat` success/invitation). New navigation entry points must ride these owners; never hand-write a `panePrefersChat ? Chat : showViewTerminal` ternary and never call `showViewTerminal` right after `selectPane` (both shapes persisted a Chat-pinned pane on Terminal — 2026-11-02 flash and 2026-11-03 revert loops, `docs/debug/`).
+
 ## Logging and privacy
 
 Application logs are structured and size-bounded (`internal/applog`, MyGo `PathLogs`). Never log terminal output, prompt/conversation bodies, credentials, environment dumps, or provider secrets. Log operation names, stable runtime IDs, errors, state counts, and timing needed for diagnosis.
