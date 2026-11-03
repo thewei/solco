@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -448,5 +449,113 @@ func TestAwaitReportsWhatHerdrLastSaid(t *testing.T) {
 	err := w.await(Session{PaneID: "p"}, 2*time.Millisecond)
 	if !herdr.HasCode(err, "timeout") {
 		t.Fatalf("got %v, want herdr's last error kept", err)
+	}
+}
+
+// ── Claude's folder-trust dialog, answered only for the run's own folder ──
+
+const claudeTrustScreen = " Accessing workspace:\n\n %s\n\n Quick safety check: Is this a project you created or one you trust?\n\n %s No, exit\n %s Yes, I trust this folder\n\n Enter to confirm · Esc to cancel\n"
+
+// trustPane scripts the dialog the way Claude draws it: the menu opens on
+// "No, exit", Down moves the cursor, Enter on "Yes" removes the dialog.
+func trustPane(path string, onYes *bool) *fakeOps {
+	cursorOnYes := false
+	gone := false
+	ops := &fakeOps{}
+	ops.paneRead = func(string, int) (string, error) {
+		if gone {
+			return " ❯ \n", nil
+		}
+		if cursorOnYes {
+			return fmt.Sprintf(claudeTrustScreen, path, " ", "❯"), nil
+		}
+		return fmt.Sprintf(claudeTrustScreen, path, "❯", " "), nil
+	}
+	ops.sendKeys = func(_ string, keys ...string) error {
+		for _, k := range keys {
+			switch {
+			case k == "down":
+				cursorOnYes = true
+			case k == "enter" && cursorOnYes:
+				gone = true
+				*onYes = true
+			}
+		}
+		return nil
+	}
+	return ops
+}
+
+func TestClaudeTrustForTheRunsOwnWorktreeIsAnswered(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/.herdr/worktrees/solco/auto-nightly-20261103-2136", &answeredYes)
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco"})
+
+	if err := w.blockedBy(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"}); err != nil {
+		t.Fatalf("an own-worktree trust dialog should be answered, got %v", err)
+	}
+	if !answeredYes || strings.Join(ops.keys, ",") != "down,enter" {
+		t.Errorf("want Down then Enter on 'Yes, I trust this folder', got keys %v (yes=%v)", ops.keys, answeredYes)
+	}
+}
+
+func TestClaudeTrustForTheAutomationsRepositoryIsAnswered(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/work/solco", &answeredYes)
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco", Workspace: "root"})
+
+	if err := w.blockedBy(Session{PaneID: "w1:p1"}); err != nil || !answeredYes {
+		t.Fatalf("root-mode trust dialog: err=%v yes=%v keys=%v", err, answeredYes, ops.keys)
+	}
+}
+
+// Trust is a decision about one folder: a dialog about any other stops the run
+// and nothing is pressed.
+func TestClaudeTrustForAnyOtherFolderStillStopsTheRun(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/somewhere/else", &answeredYes)
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco"})
+
+	err := w.blockedBy(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError, got %v", err)
+	}
+	if len(ops.keys) != 0 || answeredYes {
+		t.Errorf("pressed keys %v on a foreign folder's trust dialog", ops.keys)
+	}
+}
+
+// A dialog that never goes away (the keys had no effect) ends in the refusal,
+// after a bounded number of keys.
+func TestClaudeTrustThatDoesNotCloseGivesUp(t *testing.T) {
+	path := "/Users/me/work/solco"
+	ops := &fakeOps{paneRead: func(string, int) (string, error) {
+		return fmt.Sprintf(claudeTrustScreen, path, "❯", " "), nil
+	}}
+	err := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: path}).blockedBy(Session{PaneID: "w1:p1"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want the refusal, got %v", err)
+	}
+	if len(ops.keys) == 0 || len(ops.keys) > 5 {
+		t.Errorf("the attempt should be bounded, pressed %v", ops.keys)
+	}
+}
+
+// herdr answers a start that meets the trust dialog with agent_kind_mismatch
+// on one run and agent_not_ready on the next; both must reach the dialog check.
+func TestStartAnswersTheTrustDialogWhenHerdrSaysNotReady(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/.herdr/worktrees/solco/auto-nightly-20261103-2136", &answeredYes)
+	ops.agentStart = func(string, string, string, []string) error { return apiErr("agent start", herdr.CodeNotReady) }
+	ops.agentIdentity = func(string) (string, string, error) { return "claude", "idle", nil }
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco"})
+
+	if err := w.start(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"}); err != nil {
+		t.Fatalf("start should go through once the dialog is answered, got %v", err)
+	}
+	if !answeredYes {
+		t.Errorf("the dialog was never answered; keys %v", ops.keys)
 	}
 }

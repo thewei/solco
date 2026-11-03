@@ -56,7 +56,7 @@ func (w agentWork) start(s Session) error {
 	deadline := time.Now().Add(w.knobs.paneReady)
 	for {
 		err := w.ops.AgentStart(name, w.a.Agent, s.PaneID, w.args())
-		if err != nil && w.ops.HasCode(err, herdr.CodeKindMismatch) {
+		if err != nil && (w.ops.HasCode(err, herdr.CodeKindMismatch) || w.ops.HasCode(err, herdr.CodeNotReady)) {
 			return w.settle(s, err)
 		}
 		if err == nil || !w.ops.HasCode(err, herdr.CodePaneBusy) {
@@ -70,7 +70,7 @@ func (w agentWork) start(s Session) error {
 	}
 }
 
-// settle is what a kind mismatch at start is given instead of being a verdict:
+// settle is what a kind mismatch (or a not-ready answer) at start is given instead of being a verdict:
 // time for the pane to show which agent it really is. It ends one of three
 // ways — the expected agent registers and the run goes on; a startup dialog is
 // found, which no amount of waiting answers, so the run stops there with the

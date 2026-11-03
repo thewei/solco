@@ -18,6 +18,15 @@ What changed for someone using the plugin. Dates are release dates.
   first-run trust dialog can stop an unattended run. The prompt travels in a
   0600 file, not typed into the pane; a non-zero exit fails the run and names
   the pane holding the output. Not for workflows, templates or the hc backend.
+- **Claude's folder-trust question is answered for the run's own folder**: an
+  interactive run that meets "Is this a project you created or one you trust?"
+  presses Down/Enter on "Yes, I trust this folder" — but only when the path on
+  screen is the run's worktree or the automation's repository, reading the
+  highlight before Enter and the screen after every key, at most five presses.
+  Any other folder, any other dialog (project MCP approval is code execution)
+  and Codex/Cursor/Antigravity trust questions (unmeasured) still stop the run
+  untouched. herdr's `agent_not_ready` at start is now treated like
+  `agent_kind_mismatch`: the screen is read before the run is called failed.
 - `history --json` runs carry `seen`; `seen <run-id|--all>` marks them read.
 - The plugin's own words are English throughout: `schedule_text` renders as
   English ("Daily 09:00", "Weekdays 09:00", "Every 6 hours", …) and a done

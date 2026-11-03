@@ -19,6 +19,8 @@ type ops interface {
 	AgentStart(name, kind, paneID string, extraArgs []string) error
 	AgentSubmit(target, text string) error
 	AgentSubmitPending(paneID string) error
+	// PaneSendKeys presses named keys (down, enter …) on the pane.
+	PaneSendKeys(paneID string, keys ...string) error
 	AgentStatus(target string) (string, error)
 	// AgentIdentity is AgentStatus plus which agent herdr registered there.
 	AgentIdentity(target string) (kind, status string, err error)

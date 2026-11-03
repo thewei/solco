@@ -259,6 +259,13 @@ func (c Client) AgentSubmit(target, text string) error {
 // seconds, then registered as claude). The pane gets the chance to settle.
 const CodeKindMismatch = "agent_kind_mismatch"
 
+// CodeNotReady is herdr's answer when `agent start` finds the agent already
+// "blocked during startup" — the other face of a first-run dialog (measured
+// 2026-11-03: the same Claude trust question, answered agent_kind_mismatch on
+// one run and agent_not_ready on the next). Like a mismatch it is not a verdict
+// until the screen has been read.
+const CodeNotReady = "agent_not_ready"
+
 // AgentStatus reports the agent's current state: idle, working, blocked…
 func (c Client) AgentStatus(target string) (string, error) {
 	_, status, err := c.AgentIdentity(target)
@@ -284,6 +291,12 @@ func (c Client) AgentIdentity(target string) (kind, status string, err error) {
 // sitting in the composer. Harmless when the composer is empty.
 func (c Client) AgentSubmitPending(paneID string) error {
 	return c.run(nil, "pane", "send-keys", paneID, "enter")
+}
+
+// PaneSendKeys presses named keys on the pane (herdr's own key names: enter,
+// down …). Unlike AgentSubmit it does not care which agent is in the pane.
+func (c Client) PaneSendKeys(paneID string, keys ...string) error {
+	return c.run(nil, append([]string{"pane", "send-keys", paneID}, keys...)...)
 }
 
 // AgentWait blocks until the agent settles (idle, done or blocked).

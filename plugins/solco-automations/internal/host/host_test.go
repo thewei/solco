@@ -20,6 +20,7 @@ type fakeOps struct {
 	agentStart      func(name, kind, paneID string, args []string) error
 	agentSubmit     func(target, text string) error
 	submitPending   func(paneID string) error
+	sendKeys        func(paneID string, keys ...string) error
 	agentStatus     func(target string) (string, error)
 	agentIdentity   func(target string) (string, string, error)
 	agentWait       func(target string, d time.Duration) error
@@ -32,6 +33,7 @@ type fakeOps struct {
 	session string
 	current string
 
+	keys    []string
 	starts  int
 	submits int
 	pending int
@@ -119,6 +121,14 @@ func (f *fakeOps) PaneRead(paneID string, lines int) (string, error) {
 		return "", nil
 	}
 	return f.paneRead(paneID, lines)
+}
+
+func (f *fakeOps) PaneSendKeys(paneID string, keys ...string) error {
+	f.keys = append(f.keys, keys...)
+	if f.sendKeys == nil {
+		return nil
+	}
+	return f.sendKeys(paneID, keys...)
 }
 
 func (f *fakeOps) LookPath(file string) error {
