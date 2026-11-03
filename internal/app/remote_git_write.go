@@ -13,7 +13,7 @@ import (
 /**
  * [INPUT]: 依赖 gitworkbench.Runner（Snapshot/Stage/Unstage/CapturePreflight/Commit/Fetch/PullFFOnly/Push/DefaultRemote/CurrentBranch/Upstream）、remotehost.GitWriter 契约
  * [OUTPUT]: 对外提供 RemoteGit 的写面（实现 remotehost.GitWriter：手机 Changes 的暂存/取消暂存/提交/Fetch/Pull/Push）
- * [POS]: 手机 Host 与桌面同一个本地 Git 域的写适配——与桌面 git_operations.go 同一套参数（DefaultRemote + CurrentBranch，Pull 仅 --ff-only，首次 Push 设上游）；路径必须是当前快照列出的文件，提交先抓预检再走 Runner 的原子事务；HEAD 栅栏（手机审阅时的短哈希）移动即 git_stale；Git 的 stderr 只用于分类，永不出本包；丢弃/重置/分支管理不在此面
+ * [POS]: 手机 Host 与桌面同一个本地 Git 域的写适配——与桌面 git_operations.go 同一套参数（有 upstream 跟 upstream，否则 DefaultRemote + CurrentBranch，Pull 仅 --ff-only，首次 Push 设上游）；路径必须是当前快照列出的文件，提交先抓预检再走 Runner 的原子事务；HEAD 栅栏（手机审阅时的短哈希）移动即 git_stale；Git 的 stderr 只用于分类，永不出本包；丢弃/重置/分支管理不在此面
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -122,9 +122,19 @@ func (g *RemoteGit) Sync(ctx context.Context, dir string, op remotehost.GitSyncO
 			if !up.OK {
 				return gitRefusal("git_no_upstream", http.StatusConflict)
 			}
-			return mapGitError(g.runner.PullFFOnly(ctx, root, remote, branch))
+			// The branch's own upstream decides where it pulls from and pushes
+			// to, as on the desktop: the first remote is only the guess for a
+			// branch that has none.
+			if up.Remote != "" {
+				remote = up.Remote
+			}
+			return mapGitError(g.runner.PullFFOnly(ctx, root, remote, up.Branch))
 		}
-		return mapGitError(g.runner.Push(ctx, root, remote, branch, !up.OK))
+		theirs := branch
+		if up.OK && up.Remote != "" {
+			remote, theirs = up.Remote, up.Branch
+		}
+		return mapGitError(g.runner.PushTo(ctx, root, remote, branch, theirs, !up.OK))
 	}
 	return errors.New("unknown git sync op")
 }

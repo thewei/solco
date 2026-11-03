@@ -147,3 +147,34 @@ func TestRemoteGitSyncAgainstARealRemote(t *testing.T) {
 		t.Fatalf("non-fast-forward push: %v", err)
 	}
 }
+
+// The phone's Push/Pull follow the branch's own upstream: one on the second
+// remote under another name must not be pushed to the first remote's branch.
+func TestRemoteGitSyncFollowsTheUpstream(t *testing.T) {
+	dir := identified(t)
+	first, fork := t.TempDir(), t.TempDir()
+	gitIn(t, first, "init", "-q", "--bare", "-b", "main")
+	gitIn(t, fork, "init", "-q", "--bare", "-b", "main")
+	gitIn(t, dir, "remote", "add", "a-first", first)
+	gitIn(t, dir, "remote", "add", "fork", fork)
+	gitIn(t, dir, "push", "-q", "-u", "fork", "main:topic")
+	g := NewRemoteGit()
+	ctx := context.Background()
+
+	writeFile(t, dir, "b.txt", "keep\nnext\n")
+	if _, err := g.Commit(ctx, dir, remotehost.GitCommit{Subject: "next", Paths: []string{"b.txt"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Sync(ctx, dir, remotehost.GitPush, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, fork, "log", "-1", "--format=%s", "topic"); got != "next" {
+		t.Fatalf("fork/topic head %q", got)
+	}
+	if out, err := exec.Command("git", "-C", first, "branch").CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("the first remote must stay untouched, got %q (%v)", out, err)
+	}
+	if err := g.Sync(ctx, dir, remotehost.GitPull, ""); err != nil {
+		t.Fatalf("pull from fork/topic: %v", err)
+	}
+}
