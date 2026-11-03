@@ -161,6 +161,12 @@ fi
 GOTOOLCHAIN=auto go tool mygo build
 [ -x "$SRC/Contents/MacOS/Solco" ] || die "build produced no executable at $SRC"
 
+# The Automations/Assistants plugin binary is built from this checkout (Herdr links it, it is not in the bundle).
+# A stale one answers no `assistant …` command, so the installed app would hide the Assistants section (found on a real device 2026-11-04).
+if [ -f "$REPO/plugins/solco-automations/scripts/install.sh" ]; then
+  (cd "$REPO/plugins/solco-automations" && sh scripts/install.sh) || echo "warning: could not rebuild the Automations plugin binary (Assistants stay hidden until it is rebuilt)"
+fi
+
 # Remote Desktop's native helper rides inside the bundle (Contents/Helpers). It is built from its own
 # repository; without it the app builds fine and Remote Desktop reports "unavailable". The final
 # identity signature below re-seals everything, so the helper is first signed ad hoc here.

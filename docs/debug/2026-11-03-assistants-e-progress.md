@@ -62,3 +62,18 @@
 最终树上全部 gate 重跑：根 `go test ./...`（nativeui 因并行争用有一次超时，单跑 1073 passed）、`mygo vet`、`mygo build`、插件 `-race` 全绿、frontend 三项、mobile 六项、`git diff --check`；两个真 Herdr e2e 脚本 exit 0/PASS。
 
 未做：没有可用的 adb 真机（`adb devices` 空、手机 ping 不通、无 AVD），真手机点按仍未做；手机侧以 Host v3 golden + 真核心 Host e2e + mobile 测试覆盖。
+
+## 真机联调（2026-11-04，vivo V2309A + 本机 Solco 0.12.2，USB adb）
+安装：桌面 `solco-install` 覆盖安装；手机 `android-release.sh` release 包（vivo「安全守护」勾选框 630,2449 → 继续安装 630,2621），数据与配对保留。路径：手机经 Relay / P2P（192.168.5.68）连 Mac。
+
+已在真机上跑通（Mac 侧用 `solco-automations assistant … list/show` 与桌面 UI 交叉核对）：
+- Assistants：手机新建 `phone-e2e` → 桌面侧栏 Assistants 立即出现；手机 Pause/Resume → 核心 `status` 变 disabled/active，桌面显示 Paused/Active；桌面 New Task（research，pi + glm-flash）→ 真 Herdr 开 `auto:` worktree 工作区，20 s 内 done，窗格里实际答出 PONG（$0.004）；手机显示 Done · 1。
+- 审批：Mac 侧请求一条 approval → 手机 Needs You · 1 → 手机 Deny → 核心 `state: denied`。
+- PR Watch：手机 Watch a PR（`thewei/solco#1`）→ draft goal → 手机 Start → 守护进程真连 GitHub 取到 `closed|merged=true` 游标。
+- Automations：手机新建（校验「Pick a schedule」）→ draft → Approve → Pause → Delete（确认框）→ Mac 列表为空。
+- Agents / Chat / Terminal：phone 看到真 pi 运行的 Chat，发 `PONG2` 到 pane 答出；Terminal observe 渲染真屏，行输入送达 pane。Changes（真 diff）、Files、Sessions、Quota 数据均与 Mac 一致。
+- 未测：Remote Desktop（手机 lobby 报「Needs a permission: Screen Recording」——需要人在 macOS 隐私设置里给 Solco 授权，我没有擅自授权）、语音听写（需真人说话）、Git 写操作（stage/commit/push 会改用户真仓库）。
+
+真机上发现并修复的缺陷：
+1. 手机把「暂停」当 `status === 'paused'`，核心实际是 `disabled`：Pause 后按钮仍显示 Pause、无 Paused 提示（`[id].tsx`/`index.tsx`/`personal-agent-model.ts` 改为 `status !== 'active'`，测试改用真实的 `disabled`）。fixtures 里只有 `active`，所以契约测试一直没发现。
+2. 安装脚本不重建插件二进制：已安装 App 里 Assistants 区块不显示（`assistant overview` 打到旧二进制，打印 usage）、守护进程没在跑。`install.sh` 现在在 mygo build 之后重建 `plugins/solco-automations/bin/solco-automations`。
