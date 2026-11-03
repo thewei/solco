@@ -17,7 +17,7 @@
 | A2 | Herdr 执行适配（claim→launch→reconcile，uncertain，Resume，Busy） | 完成 | 同上 |
 | A3 | CLI `assistant …` + JSON + daemon pump | 完成 | 同上 |
 | A4 | 根仓 `internal/personalagent` Client + capability gate | 待办 | - |
-| B1 | Assistant/Goal/Commitment/Memory/Approval | 待办 | - |
+| B1 | Goal/Commitment/Memory/Approval + CLI（coding task 必须 repoPath、goal 暂停挡 claim）| 完成（store+CLI；Chat 隔离在 B3） | 见 git log |
 | B2 | PR Watch（确定性） | 待办 | - |
 | B3 | 侧栏 Assistants + /assistants WebView + AssistantsBridge | 待办 | - |
 | B4 | Host v3 路由 + golden | 待办 | - |
@@ -34,3 +34,4 @@
 
 ## 教训 / 坑
 （见 `.agents/skills/solco-evidence-loop/LESSONS.md`，此处只记本任务特有）
+- 2026-11-03 B1：migration v2（goals/commitments/memory_items/approvals），goal.go/memory.go/approval.go + CLI `assistant goal|memory|approval …`；SOLCO-A01/A02/A04/A05/A06/M01/M02/M04 在 `docs/solco-assistants-required-cases.jsonl` 标 verified（A03 等 B3 的 Chat 隔离，M03 等 C2 ContextBuilder）。

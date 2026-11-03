@@ -165,6 +165,62 @@ var migrations = []string{
 		result TEXT NOT NULL,
 		created_at INTEGER NOT NULL
 	);`,
+	// v2: goals, commitments, memory, approvals.
+	`CREATE TABLE goals (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		title TEXT NOT NULL,
+		objective TEXT NOT NULL DEFAULT '',
+		state TEXT NOT NULL,
+		evidence TEXT NOT NULL DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX goals_by_assistant ON goals(assistant_id, state);
+	CREATE TABLE commitments (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		goal_id TEXT NOT NULL REFERENCES goals(id),
+		kind TEXT NOT NULL,
+		success_criteria TEXT NOT NULL DEFAULT '',
+		exit_condition TEXT NOT NULL DEFAULT '',
+		spec TEXT NOT NULL DEFAULT '{}',
+		state TEXT NOT NULL,
+		next_check_at INTEGER NOT NULL DEFAULT 0,
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX commitments_by_goal ON commitments(goal_id);
+	CREATE TABLE memory_items (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		scope TEXT NOT NULL DEFAULT 'assistant',
+		kind TEXT NOT NULL DEFAULT 'fact',
+		content TEXT NOT NULL,
+		source_ref TEXT NOT NULL,
+		state TEXT NOT NULL,
+		shared_with TEXT NOT NULL DEFAULT '[]',
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX memory_by_assistant ON memory_items(assistant_id, state);
+	CREATE TABLE approvals (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		subject_kind TEXT NOT NULL,
+		subject_id TEXT NOT NULL,
+		action TEXT NOT NULL,
+		action_hash TEXT NOT NULL,
+		expected_revision INTEGER NOT NULL,
+		expires_at INTEGER NOT NULL,
+		state TEXT NOT NULL,
+		decided_at INTEGER NOT NULL DEFAULT 0,
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX approvals_by_assistant ON approvals(assistant_id, state);`,
 }
 
 func (s *Store) migrate() error {

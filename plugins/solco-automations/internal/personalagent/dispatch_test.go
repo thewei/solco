@@ -71,7 +71,7 @@ func (f *fakeLauncher) Find(marker string) (Session, bool, error) {
 func newQueuedTask(t *testing.T, s *Store, kind string) (Assistant, Task) {
 	t.Helper()
 	a := mustAssistant(t, s, "a-"+kind, "Ada "+kind)
-	task, _, err := s.CreateTask("t-"+kind, CreateTaskInput{AssistantID: a.ID, Title: "Check PR", Brief: "Read the PR and report.", Kind: kind})
+	task, _, err := s.CreateTask("t-"+kind, CreateTaskInput{AssistantID: a.ID, Title: "Check PR", Brief: "Read the PR and report.", Kind: kind, RepoPath: "/tmp/repo"})
 	if err != nil {
 		t.Fatal(err)
 	}

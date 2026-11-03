@@ -112,7 +112,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|task|run|overview>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|overview>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
@@ -164,6 +164,12 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		}
 		x, replayed, err := a.Store.SetAssistantStatus(in.RequestID, rest[0], status, in.ExpectedRevision)
 		return ok("assistant", x, "replayed", replayed), err
+	case "goal":
+		return a.goal(rest, body)
+	case "memory":
+		return a.memory(rest, body)
+	case "approval":
+		return a.approval(rest, body)
 	case "task":
 		return a.task(rest, body)
 	case "run":
@@ -238,15 +244,17 @@ func (a *API) run(args []string, _ []byte) (any, error) {
 
 // OverviewRow is one Assistant's counters for the sidebar and the phone.
 type OverviewRow struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Status   string `json:"status"`
-	Revision int    `json:"revision"`
-	Tasks    int    `json:"tasks"`
-	Queued   int    `json:"queued"`
-	Running  int    `json:"running"`
-	NeedsYou int    `json:"needsYou"`
-	Done     int    `json:"done"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Revision  int    `json:"revision"`
+	Tasks     int    `json:"tasks"`
+	Queued    int    `json:"queued"`
+	Running   int    `json:"running"`
+	NeedsYou  int    `json:"needsYou"`
+	Done      int    `json:"done"`
+	Goals     int    `json:"goals"`
+	Approvals int    `json:"approvals"`
 }
 
 func (a *API) overview() (any, error) {
@@ -275,7 +283,25 @@ func (a *API) overview() (any, error) {
 				row.NeedsYou++
 			}
 		}
-		needs += row.NeedsYou
+		goals, err := a.Store.ListGoals(x.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, g := range goals {
+			if g.State == GoalActive || g.State == GoalPaused || g.State == GoalDraft {
+				row.Goals++
+			}
+		}
+		aps, err := a.Store.ListApprovals(x.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, ap := range aps {
+			if ap.State == ApprovalPending {
+				row.Approvals++
+			}
+		}
+		needs += row.NeedsYou + row.Approvals
 		rows = append(rows, row)
 	}
 	return ok("assistants", rows, "needsYou", needs), nil

@@ -161,6 +161,9 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 	default:
 		return Task{}, false, fmt.Errorf("%w: kind %q", ErrInvalid, in.Kind)
 	}
+	if in.Kind == KindCoding && strings.TrimSpace(in.RepoPath) == "" {
+		return Task{}, false, fmt.Errorf("%w: a coding task needs a repoPath", ErrInvalid)
+	}
 	if in.Agent == "" {
 		in.Agent = "claude"
 	}
@@ -171,6 +174,12 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 		}
 		if a.Status != StatusActive {
 			return Task{}, ErrAssistantDisabled
+		}
+		if in.GoalID != "" {
+			g, err := getGoalTx(tx, in.GoalID)
+			if err != nil || g.AssistantID != in.AssistantID {
+				return Task{}, fmt.Errorf("%w: goal %q is not this assistant's", ErrInvalid, in.GoalID)
+			}
 		}
 		state := TaskQueued
 		if in.Draft {
@@ -275,6 +284,11 @@ func (s *Store) ClaimTask(taskID, claimant string) (Run, bool, error) {
 		}
 		if a.Status != StatusActive {
 			return claim{}, ErrAssistantDisabled
+		}
+		if t.GoalID != "" {
+			if g, err := getGoalTx(tx, t.GoalID); err == nil && g.State != GoalActive {
+				return claim{}, fmt.Errorf("%w: its goal is %s", ErrNotClaimable, g.State)
+			}
 		}
 		now := s.nowMS()
 		id := newID("r")
@@ -460,7 +474,9 @@ func (s *Store) parkUncertain(runID, reason string) (struct{}, error) {
 // that are active.
 func (s *Store) QueuedTasks() ([]Task, error) {
 	rows, err := s.db.Query(`SELECT `+prefixed("t", taskCols)+` FROM tasks t JOIN assistants a ON a.id=t.assistant_id
-		WHERE t.state=? AND a.status=? ORDER BY t.created_at, t.id`, TaskQueued, StatusActive)
+		WHERE t.state=? AND a.status=?
+		AND (t.goal_id='' OR EXISTS(SELECT 1 FROM goals g WHERE g.id=t.goal_id AND g.state='active'))
+		ORDER BY t.created_at, t.id`, TaskQueued, StatusActive)
 	if err != nil {
 		return nil, wrapBusy(err)
 	}

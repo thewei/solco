@@ -1,0 +1,31 @@
+{"id": "SOLCO-A01", "batch": "B1", "scenario": "创建/重命名 Assistant 后 ID、已有 Task/Goal/会话关联不变", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/store_test.go#TestRenameKeepsIdentityAndEnforcesRevision", "evidence": "go test ./internal/personalagent passes; rename keeps ID and hanging tasks (2026-11-03)"}
+{"id": "SOLCO-A02", "batch": "B1", "scenario": "没有 Repo/Workspace 也能拥有个人长期目标", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/goal_test.go#TestGoalNeedsNoRepoOrWorkspace", "evidence": "go test passes; goal drafted with no repo/workspace (2026-11-03)"}
+{"id": "SOLCO-A03", "batch": "B1", "scenario": "两个 Assistant 同一 Workspace 下，Memory/Approval/Task/Chat 不能串线", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-A04", "batch": "B1", "scenario": "停用 Assistant 后不再新发任务；原 Herdr Pane/人工更改不被清理", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/dispatch_test.go#TestDisabledBeforeClaimLaunchesNothing", "evidence": "go test passes; disabled Assistant provisions 0 times, store_test TestDisabledAssistantTakesNoNewTasks (2026-11-03)"}
+{"id": "SOLCO-A05", "batch": "A1", "scenario": "同 requestId 重复创建只产生一个 Assistant；不同 body 报冲突", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/store_test.go#TestReceiptReplayAndConflict", "evidence": "go test passes; same requestId replays, other body request_conflict (2026-11-03)"}
+{"id": "SOLCO-A06", "batch": "B3", "scenario": "两手机并发更新 Assistant，旧 expectedRevision 409", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/goal_test.go#TestGoalStaleRevisionIs409", "evidence": "go test passes; stale expectedRevision -> stale_revision for assistants (store_test) and goals (2026-11-03)"}
+{"id": "SOLCO-M01", "batch": "C2", "scenario": "Agent 总结只产生 Memory 候选，明确批准后才进入长期记忆", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/memory_test.go#TestMemoryCandidateNeedsApproval", "evidence": "go test passes; candidate invisible until approved (2026-11-03)"}
+{"id": "SOLCO-M02", "batch": "C2", "scenario": "每条 Memory 有 sourceRef、版本、作用域、撤销授权、产生时间", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/memory_test.go#TestMemoryNeedsASourceRef", "evidence": "go test passes; sourceRef/revision/scope/timestamps required and stored (2026-11-03)"}
+{"id": "SOLCO-M03", "batch": "C2", "scenario": "改正/删除后 ContextBuilder 立即不再使用旧记忆", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-M04", "batch": "B1", "scenario": "跨 Assistant 共享 Memory 必须明确授予并支持撤销", "status": "verified", "target_test": "plugins/solco-automations/internal/personalagent/memory_test.go#TestMemoryIsolationShareAndRevoke", "evidence": "go test passes; cross-assistant read only via explicit grant, revoke immediate (2026-11-03)"}
+{"id": "SOLCO-M05", "batch": "B2", "scenario": "PR/网页中的提示词注入不能提升工具权限或修改批准规则", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-M06", "batch": "C2", "scenario": "Context/token 预算有界，不因摘要把密钥/全量历史写日志", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-W01", "batch": "B2", "scenario": "PR 没变化时 0 Agent/LLM、lastChecked 正常记录", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-W02", "batch": "B2", "scenario": "PR revision、事件重复、重启和网络中断下只建一个 Run", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-W03", "batch": "B2", "scenario": "GitHub 401/403/404/429/5xx/离线都不同于“没有变化”", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-W04", "batch": "B2", "scenario": "Goal 暂停恰逢触发，提交前重验权限禁止新 Agent", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-W05", "batch": "B2", "scenario": "Agent 结束 turn 不能自动将 Goal 判完成，必须满足退出条件", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-W06", "batch": "C1", "scenario": "DST/时钟回拨/睡眠恢复不会补跑洪水", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-W07", "batch": "B2", "scenario": "缺硬沙盒时不得承诺无授权的写、删除、合并的安全保证", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-R01", "batch": "B3", "scenario": "关闭窗口/完全退出 GUI/daemon 继续/Host 离线的不同状态准确", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-R02", "batch": "E4", "scenario": "常驻 Host 保持同一个配对身份/证书指纹/设备撤销权限", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-R03", "batch": "B3", "scenario": "手机离线重连不重发审批/Run，撤销手机后 HTTP/WS 拒绝", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-R04", "batch": "A2", "scenario": "无真实 SessionRef 时不可由 Pane 标题或路径猜 Agent", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-R05", "batch": "D2", "scenario": "D 迁移期间现有旧手机 `/automations` 不退化/不双派", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-D01", "batch": "D1", "scenario": "旧自动化 Cron/queue/catchup/draft/TTL/30 天历史有同等测试", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-D02", "batch": "D1", "scenario": "逐条规则迁移水位线准确，旧/新不会执行同一个 occurrence", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-D03", "batch": "E4", "scenario": "旧 `~/.herdr-projects` 仅显式备份/导出，绝不卸载即清空", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-E01", "batch": "E2", "scenario": "Git head 变化后旧 Merge 批准失效，脏文件/符号链接受保护", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-E02", "batch": "E1", "scenario": "多 Assistant Coordinator 并发时不共享其他助手权限/会话", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-E03", "batch": "E4", "scenario": "数据库升级崩溃/launchd 双启动时只一个 dispatcher", "status": "planned", "target_test": null, "evidence": null}
+{"id": "SOLCO-E04", "batch": "A1", "scenario": "Run/Approval/Agent 通知和日志不泄漏 prompt、密钥、私有 PR 正文", "status": "planned", "target_test": null, "evidence": null}
