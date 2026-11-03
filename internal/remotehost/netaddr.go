@@ -77,6 +77,10 @@ func isVirtualInterface(name string) bool {
 	return false
 }
 
+// IsVirtualInterface reports an interface a phone can never reach (VM bridges, tunnels, system links).
+// Remote Desktop media keeps tunnels out of this list itself, because a Tailscale phone arrives on one.
+func IsVirtualInterface(name string) bool { return isVirtualInterface(name) }
+
 func isTailscale(a netip.Addr) bool { return tailscaleV4.Contains(a) || tailscaleV6.Contains(a) }
 
 func filterCandidates(mode Mode, all []ifaceAddr) []Candidate {

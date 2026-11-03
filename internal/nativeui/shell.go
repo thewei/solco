@@ -218,6 +218,8 @@ type Shell struct {
 	// remote backs Settings → Remote Access: the optional phone-client Host,
 	// its listener choice feedback and the pairing sheet.
 	remote remoteState
+	// rdesk is the Remote Desktop page and approval state (remote_desktop.go).
+	rdesk remoteDesktopState
 	// remoteFacts is the desktop's resolved agent titles/last-worked times, published for the Host's goroutines.
 	remoteFacts remoteAgentFacts
 	// remoteLive is the running-session identity snapshot behind the phone's Sessions list.
@@ -1007,6 +1009,7 @@ func (s *Shell) Close() {
 	s.stopLiveTail()
 	s.stopHistory()
 	s.stopRemoteHost()
+	s.stopRemoteDesktop()
 	s.closeAllTerminals()
 	// Kill the SSH socket bridges of saved-machine instances: they are
 	// process-global children that would otherwise outlive the app.

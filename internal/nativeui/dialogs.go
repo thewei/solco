@@ -133,6 +133,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 	s.usageConsentDialog(c)
 	s.voiceConsentDialog(c)
 	s.remotePairDialog(c)
+	s.remoteDesktopDialog(c)
 	s.automationsDialogs(c)
 	s.shortcutsSheet(c)
 	if s.confirmOpen {

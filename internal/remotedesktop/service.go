@@ -58,9 +58,10 @@ type Authorizer interface {
 
 // Config wires a Service.
 type Config struct {
-	Backend         platform.Backend
-	Authorizer      Authorizer
-	ICEServers      []rtc.ICEServer
+	Backend    platform.Backend
+	Authorizer Authorizer
+	// ICEServers supplies STUN/TURN entries per session (nil = host candidates only: LAN and Tailscale).
+	ICEServers      func(ctx context.Context) []rtc.ICEServer
 	InterfaceFilter func(name string) bool
 	// OnChange fires after the session set, settings or readiness changed (Settings page refresh,
 	// status-bar item). It must not block.
@@ -251,7 +252,7 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 		return protocol.Answer{}, err
 	}
 	peer, sdp, err := rtc.Answer(ctx, offer.SDP, rtc.Options{
-		ICEServers: s.cfg.ICEServers, InterfaceFilter: s.cfg.InterfaceFilter,
+		ICEServers: s.iceServers(ctx), InterfaceFilter: s.cfg.InterfaceFilter,
 		Handlers: rtc.Handlers{
 			OnControl:         sess.OnControl,
 			OnPointer:         sess.OnPointer,
@@ -360,4 +361,11 @@ func newID() string {
 	var b [12]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
+}
+
+func (s *Service) iceServers(ctx context.Context) []rtc.ICEServer {
+	if s.cfg.ICEServers == nil {
+		return nil
+	}
+	return s.cfg.ICEServers(ctx)
 }

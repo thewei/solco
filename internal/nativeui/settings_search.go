@@ -44,6 +44,11 @@ var settingsLabels = map[string][][2]string{
 		{"Advanced", "Relay"}, {"Advanced", "Relay Address"}, {"Advanced", "Registration Key"},
 		{"Advanced", "P2P"}, {"Advanced", "ICE Servers"}, {"Advanced", "TURN Username"}, {"Advanced", "TURN Credential"},
 	},
+	"/settings/remote-desktop": {
+		{"Phone control", "Allow remote desktop"},
+		{"Permissions", "Screen Recording"}, {"Permissions", "Accessibility"},
+		{"Connection", "Ask before each connection"}, {"Connection", "Quality"},
+	},
 	"/settings/providers": {
 		{"", "Integration"}, {"", "Status hook"},
 	},

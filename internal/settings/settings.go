@@ -27,6 +27,10 @@ type Settings struct {
 	// 2026-10-31). The zero value is off: nothing listens until the user
 	// picks a mode in Settings → Remote Access.
 	Remote RemoteAccessSettings `json:"remote_access,omitempty"`
+	// RemoteDesktop is the phone's view-and-control of this Mac's whole desktop (Settings → Remote
+	// Desktop). Off by default; it also needs Remote Access to be on, because the phone reaches the
+	// signalling endpoint through the Host.
+	RemoteDesktop RemoteDesktopSettings `json:"remote_desktop,omitempty"`
 
 	// Agents is the per-agent launch toggle (Settings → Agents). Absent
 	// keys mean enabled; see AgentsSettings.
@@ -49,6 +53,16 @@ func (a AgentsSettings) IsEnabled(id string) bool {
 		return value
 	}
 	return true
+}
+
+// RemoteDesktopSettings is the Remote Desktop page's choice. The zero value is off with approval
+// required: a phone connects only after the person at the Mac says yes.
+type RemoteDesktopSettings struct {
+	Enabled bool `json:"enabled,omitempty"`
+	// SkipApproval connects an already-paired phone without asking each time (never the default).
+	SkipApproval bool `json:"skip_approval,omitempty"`
+	// Tier is the default quality: "smooth" | "standard" | "high" ("" = standard).
+	Tier string `json:"tier,omitempty"`
 }
 
 // RemoteAccessSettings is the Remote Access page's choice. Mode is "" / "off",

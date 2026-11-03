@@ -142,6 +142,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		opts.Continuer = s.hostContinuer(s.hist.service)
 	}
 	opts.Trasher = s.hostTrasher(s.hist.service)
+	opts.RemoteDesktop = s.remoteDesktopSeam()
 	if voiceSeam := s.hostVoice(); voiceSeam != nil {
 		opts.Voice = voiceSeam
 	}
