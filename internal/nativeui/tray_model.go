@@ -1,5 +1,5 @@
 // [INPUT]: 依赖 StatusCenterSnapshot（status_center_model.go）的 NeedsAttention/ReviewPending/Working/Entries、agent.OperationalLabel
-// [OUTPUT]: 导出 TrayCounts、TrayCountsFromSnapshot、TrayTitle、TrayToolTip、TrayFingerprint
+// [OUTPUT]: 导出 TrayCounts、TrayCountsFromSnapshot、TrayTitle、TrayToolTip、TrayRemoteDesktop、TrayFingerprint
 // [POS]: nativeui 托盘的纯投影层。tray.go 持有它；quick_panel.go 的 attentionSegments 共享同一份 counts 语义。无 IO。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -62,6 +62,16 @@ func TrayToolTip(counts TrayCounts, connected bool) string {
 		return "Solco — Ready"
 	}
 	return "Solco — " + strings.Join(segments, ", ")
+}
+
+// TrayRemoteDesktop marks the menu bar while a phone is on this Mac's screen: a screen glyph before the
+// status title and the viewer's name in the tooltip, so a session can never run unnoticed. `remote` is
+// "" when no session is live (title and tooltip pass through unchanged).
+func TrayRemoteDesktop(title, tip, remote string) (string, string) {
+	if remote == "" {
+		return title, tip
+	}
+	return strings.TrimSpace("🖥 " + title), tip + " · Remote Desktop: " + remote
 }
 
 // TrayFingerprint captures exactly the snapshot state the tray may react to

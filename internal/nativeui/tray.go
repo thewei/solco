@@ -34,6 +34,8 @@ type statusTray struct {
 	// first apply always writes.
 	applied     bool
 	fingerprint string
+	// remote names the phone on this Mac's screen ("" = none); a change re-projects like any other.
+	remote string
 }
 
 func newStatusTray(platform trayPlatform) *statusTray {
@@ -43,15 +45,16 @@ func newStatusTray(platform trayPlatform) *statusTray {
 // apply projects one snapshot onto the platform (0.7 §18): writes happen
 // only when the tray fingerprint changed since the last apply.
 func (t *statusTray) apply(snapshot StatusCenterSnapshot, connected bool) {
-	fingerprint := TrayFingerprint(snapshot, connected)
+	fingerprint := TrayFingerprint(snapshot, connected) + "|rd=" + t.remote
 	if t.applied && fingerprint == t.fingerprint {
 		return
 	}
 	t.fingerprint = fingerprint
 	t.applied = true
 	counts := TrayCountsFromSnapshot(snapshot)
-	t.platform.SetTitle(TrayTitle(counts))
-	t.platform.SetToolTip(TrayToolTip(counts, connected))
+	title, tip := TrayRemoteDesktop(TrayTitle(counts), TrayToolTip(counts, connected), t.remote)
+	t.platform.SetTitle(title)
+	t.platform.SetToolTip(tip)
 }
 
 // AttachTray binds the macOS menu-bar tray (0.7 §17): the normal click
@@ -85,6 +88,7 @@ func (s *Shell) updateTray() {
 	if s.tray == nil {
 		return
 	}
+	s.tray.remote = s.remoteDesktopTrayLabel()
 	s.tray.apply(s.BuildStatusCenterSnapshot(), !s.offline)
 }
 

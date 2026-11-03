@@ -229,3 +229,34 @@ func TestTrayIconPNGIsTemplateGlyph(t *testing.T) {
 		t.Fatalf("icon bounds = %v, want 128x128", bounds)
 	}
 }
+
+// TestTrayShowsAPhoneOnTheScreen: a live Remote Desktop session marks the title and tooltip and re-projects
+// once when it starts and once when it ends; with none the projection is exactly the status-first one.
+func TestTrayShowsAPhoneOnTheScreen(t *testing.T) {
+	if title, tip := TrayRemoteDesktop("1/2", "Solco — Ready", ""); title != "1/2" || tip != "Solco — Ready" {
+		t.Fatalf("no session must pass through, got %q / %q", title, tip)
+	}
+	if title, tip := TrayRemoteDesktop("", "Solco — Ready", "Pixel (viewing)"); title != "🖥" || tip != "Solco — Ready · Remote Desktop: Pixel (viewing)" {
+		t.Fatalf("quiet title still carries the glyph, got %q / %q", title, tip)
+	}
+
+	platform := &fakeTrayPlatform{}
+	tray := newStatusTray(platform)
+	snap := StatusCenterSnapshot{}
+	tray.apply(snap, true)
+	n := platform.calls()
+	tray.apply(snap, true)
+	if platform.calls() != n {
+		t.Fatal("an unchanged tray was rebuilt")
+	}
+	tray.remote = "Pixel (controlling)"
+	tray.apply(snap, true)
+	if platform.calls() == n || platform.titles[len(platform.titles)-1] != "🖥" {
+		t.Fatalf("a session start did not reach the menu bar: %q", platform.titles)
+	}
+	tray.remote = ""
+	tray.apply(snap, true)
+	if platform.titles[len(platform.titles)-1] != "" {
+		t.Fatalf("the glyph stayed after the session ended: %q", platform.titles)
+	}
+}

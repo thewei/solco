@@ -123,6 +123,49 @@ func (s *Shell) rdRefreshSessions() {
 	if s.rdesk.svc != nil {
 		s.rdesk.sessions = s.rdesk.svc.Sessions()
 	}
+	s.updateTray()
+	if s.quickPanel != nil {
+		s.fitQuickPanel()
+		s.invalidateQuickPanel()
+	}
+}
+
+// remoteDesktopTrayLabel names the phone on this Mac's screen for the menu bar ("" = no session): the
+// device's name and whether it only watches. Never anything about what is on the screen.
+func (s *Shell) remoteDesktopTrayLabel() string {
+	if len(s.rdesk.sessions) == 0 {
+		return ""
+	}
+	info := s.rdesk.sessions[0]
+	name := strings.TrimSpace(info.Device.Name)
+	if name == "" {
+		name = "a phone"
+	}
+	if !info.Controlling {
+		return name + " (viewing)"
+	}
+	return name + " (controlling)"
+}
+
+// quickPanelRemoteHeight is the banner's height in the quick panel (one row, plus its rule).
+const quickPanelRemoteHeight = 44
+
+// quickPanelRemoteDesktop is the quick panel's banner while a phone is on the screen: who, and a Disconnect
+// that ends the session on the spot (the Mac user's own switch, the same call as Settings).
+func (s *Shell) quickPanelRemoteDesktop(c *ui.Context) {
+	label := s.remoteDesktopTrayLabel()
+	if label == "" || s.rdesk.svc == nil {
+		return
+	}
+	sp := Spacing()
+	t := c.Theme()
+	id := s.rdesk.sessions[0].ID
+	ui.Row(c.Key("qp-rd")).FillWidth().Padding(sp.XS, sp.M, sp.XS).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "Remote Desktop · "+label).FontSize(Typography().Caption).Grow(1).SingleLine().TextColor(t.TextMuted)
+		if compactButton(c, "Disconnect").Clicked() {
+			s.rdesk.svc.Disconnect(id)
+		}
+	})
 }
 
 // --- approval ---------------------------------------------------------------
