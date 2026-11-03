@@ -44,12 +44,15 @@ func (l *HostLauncher) automation(spec LaunchSpec) config.Automation {
 		return a
 	}
 	repo := spec.RepoPath
+	if spec.WorkDir != "" {
+		repo = spec.WorkDir
+	}
 	if repo == "" {
 		repo = filepath.Join(l.WorkDirRoot, "personal")
 		_ = os.MkdirAll(repo, 0o700)
 	}
 	mode := config.WorkspaceRoot
-	if spec.Kind == KindCoding {
+	if spec.Kind == KindCoding && spec.WorkDir == "" {
 		mode = config.WorkspaceWorktree
 	}
 	minutes := int(spec.Timeout / time.Minute)

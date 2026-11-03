@@ -271,6 +271,18 @@ var migrations = []string{
 	// v6: the worktree branch a run provisioned (history and the folder-trust
 	// check both name it); never on the wire.
 	`ALTER TABLE runs ADD COLUMN branch TEXT NOT NULL DEFAULT '';`,
+	// v7: each coding task's isolated checkout (E02).
+	`CREATE TABLE worktrees (
+		task_id TEXT PRIMARY KEY,
+		repo TEXT NOT NULL,
+		path TEXT NOT NULL,
+		branch TEXT NOT NULL,
+		target_branch TEXT NOT NULL,
+		base_head TEXT NOT NULL,
+		state TEXT NOT NULL DEFAULT 'active',
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);`,
 }
 
 func (s *Store) migrate() error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,6 +74,7 @@ func startPersonal(n *notify.Notifier) *personal {
 			return *a, true
 		},
 		OnSettled: p.settled,
+		Worktrees: &personalagent.Worktrees{Store: store, Root: worktreeRoot()},
 	}
 	p.rules = &personalagent.RuleScheduler{Store: store, Load: config.Load}
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
@@ -266,4 +268,16 @@ func (p *personal) prune() {
 	} else if n > 0 {
 		log.Printf("assistants: pruned %d rule task(s) past retention", n)
 	}
+}
+
+// worktreeRoot is the controlled folder of coding-task worktrees, with every
+// symlink along its path already resolved (Worktrees refuses a root that
+// still has one).
+func worktreeRoot() string {
+	root := filepath.Join(personalagent.WorkDirRoot(), "worktrees")
+	_ = os.MkdirAll(root, 0o700)
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		return real
+	}
+	return root
 }
