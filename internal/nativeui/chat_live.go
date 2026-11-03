@@ -47,7 +47,8 @@ func (s *Shell) agentSessionIdentity(key agent.AgentKey) (history.AgentID, *herd
 // bind path: live agents stream their provider transcript tail; history
 // conversations read through HistoryService. It activates WorkspaceSurfaceChat
 // inside the workspace for a seamless in-situ experience and records the
-// pane-surface memory (Chat on success, Terminal on the fallback).
+// pane-surface memory (Chat on success; the no-source fallback lands through
+// showPaneSurface and never rewrites the memory — 2026-11-03 unification).
 func (s *Shell) openChat(card agent.AgentCardModel) {
 	if s.holdCommitNavigation() {
 		return
@@ -55,8 +56,11 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 	s.markAgentReviewedIfPending(card.Key)
 	s.chatPaneID = card.PaneID
 	if card.PaneID != "" {
+		// The selection sync may land the remembered surface; Chat itself is
+		// recorded only where it really opens below — an unconditional stamp
+		// here wrote a Chat pin for panes that ended on the Terminal
+		// fallback (2026-11-03 unification).
 		s.selectPane(card.PaneID)
-		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceChat)
 	}
 	s.checkTerminalDialog()
 	if s.bindLiveAgent(card.Key) {
@@ -64,6 +68,7 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 			s.router.Push(routeWorkspace)
 		}
 		s.surface.openChat(s.workspaceContext())
+		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceChat)
 		return
 	}
 	if card.ConversationID != "" {
@@ -72,29 +77,34 @@ func (s *Shell) openChat(card agent.AgentCardModel) {
 			s.router.Push(routeWorkspace)
 		}
 		s.surface.openChat(s.workspaceContext())
+		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceChat)
 		return
 	}
 	// A fresh agent whose session file is not written yet opens Chat on its
-	// own invitation: the first prompt is what creates the session.
-	if s.liveSourcePending(card.Key) {
+	// own invitation: the first prompt is what creates the session — for a
+	// launch still pending and for any pane that prefers Chat (2026-10-31
+	// invitation state; the same pane answered Terminal or invitation by
+	// entry path before the 2026-11-03 unification).
+	if s.liveSourcePending(card.Key) || s.panePrefersChat(card.PaneID) {
 		if s.router.Path() != routeWorkspace {
 			s.router.Push(routeWorkspace)
 		}
 		s.surface.openChat(s.workspaceContext())
+		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceChat)
 		s.rebindWorkspaceChat()
 		return
 	}
-	// No live session identity and no history conversation: navigating to
-	// /chat would render its empty state behind the user's back (2026-10-06
-	// F58). Land on the agent's Terminal with a hint instead.
+	// Nothing to read and no Chat preference: land the Terminal with a hint
+	// instead of an empty page behind the user's back (2026-10-06 F58).
+	// showPaneSurface is the shared landing — it writes no memory, so an
+	// incidental fallback can never corrupt a pin (the old stamp recorded
+	// Terminal without even showing one).
 	s.status = "No chat source for this agent yet — opened its Terminal."
 	s.pendingToast = s.status // the status strip only renders on the empty-terminal branch
-	if card.PaneID != "" {
-		s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceTerminal)
-	}
 	if s.router.Path() != routeWorkspace {
 		s.router.Push(routeWorkspace)
 	}
+	s.showPaneSurface(card.PaneID)
 }
 
 // bindLiveAgent streams one live Agent's provider-owned transcript into the

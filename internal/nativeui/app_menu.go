@@ -14,9 +14,10 @@ import "github.com/egoist/mygo"
 // The application menu is Check for Updates…, Settings… (⌘,), Hide/Hide
 // Others/Show All, Quit, About Solco; Go carries the app's own destinations
 // in the order of the sidebar's view tabs, and accelerators only on
-// idempotent destinations (Router.Push dedupes; the Terminal view keeps the
-// Terminal), never on a toggle, so a menu accelerator and an in-app
-// shortcut that fire together stay harmless.
+// idempotent destinations (Router.Push dedupes; Workspace lands the
+// selected pane's remembered surface via landSelectedPane), never on a
+// toggle, so a menu accelerator and an in-app shortcut that fire together
+// stay harmless.
 func (s *Shell) MenuBar(checkForUpdates *mygo.MenuItem) *mygo.Menu {
 	nav := func(label, accelerator, path string) *mygo.MenuItem {
 		return &mygo.MenuItem{Label: label, Accelerator: accelerator, Click: func(*mygo.MenuItem, *mygo.Window) {

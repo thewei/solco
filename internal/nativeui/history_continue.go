@@ -294,9 +294,3 @@ func continueFailureText(target history.AgentID, err error) string {
 		return "Couldn't continue in " + name + "."
 	}
 }
-
-// showPane brings one pane into view: select it, and show the Terminal.
-func (s *Shell) showPane(paneID string) {
-	s.selectPane(paneID)
-	s.showViewTerminal()
-}

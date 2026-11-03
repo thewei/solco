@@ -925,11 +925,12 @@ func (s *Shell) Navigate(path string) {
 	})
 }
 
-// ShowWorkspaceFromMenu is the Go menu's Workspace: the Terminal view from
-// anywhere. Like Back it lands the Terminal — also from the Workspace's own
-// Changes/Chat surface, where a bare route push is a no-op — and choosing it
-// while the Terminal is up keeps it.
-func (s *Shell) ShowWorkspaceFromMenu() { s.applyOnWindow(s.showViewTerminal) }
+// ShowWorkspaceFromMenu is the Go menu's Workspace: back to the workspace
+// from anywhere, on the selected pane's remembered surface (landSelectedPane)
+// — never a hardwired Terminal that would rewrite a Chat-pinned pane's
+// memory (2026-11-03 surface-owner unification). Choosing it while the
+// remembered surface is already up keeps it.
+func (s *Shell) ShowWorkspaceFromMenu() { s.applyOnWindow(s.landSelectedPane) }
 
 // ShowChangesFromMenu and ShowFilesFromMenu are the Go menu's seams for the
 // two views that are not routes of their own (Changes is a Workspace

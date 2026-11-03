@@ -44,3 +44,11 @@
 - 2026-11-02 红绿流程不要动共享工作树：未修版验证用「复制改动文件 → python 还原 hunk → 跑红 → 恢复」的文件快照法（git stash 在有并行批次的树上是禁区）。
 - 2026-11-02 沙箱实例的恢复路由会改变侧栏渲染 → 影响 ensureLaunchKinds 的触发链（agentGroupItems 只在 Workspace 页渲染）：Settings 路由启动的实例 catalog 永远不加载，⌘T 恒 Terminal。复现「启动种类」类问题前先把沙箱 route 设为 /workspace。
 - 2026-11-02（架构记忆）sibling sweep 命中：`landLaunchedPane` 同型位除了 startNewTab 还有 history_continue.go 的 Continue 完成路径——凡是「launch 事务完成后落 surface」的代码都必须走按意图落地的 helper，不许 showPane。
+
+## 第 1 轮循环（2026-11-03 chat-view-revert-on-return：home 家族改写 surface 记忆）
+
+- 2026-11-03 沙箱 CLI 对不上 Solco 的 socket：Solco 自己的 Herdr socket 从 HOME 派生（`herdr.SocketPath` = `$HOME/.config/herdr/herdr.sock`），`HERDR_SOCKET_PATH` 只传给 spawn 的子进程（terminal attach 等）→ 沙箱内用 CLI 驱动 daemon 要用 `$SB/home/.config/herdr/herdr.sock`（落点 internal/herdr/herdr.go SocketPath）。
+- 2026-11-03 cua-driver 一次性 CLI 每次调用独立 transport 会话，快照/截图缓存不跨调用（`screenshot_context_missing`、`stale_element_token`）→ snapshot+click 全序列放进一个 `cua-driver mcp` 持久 stdio 会话（python 起子进程讲 JSON-RPC），AX 不可达的元素用 `screenshot_frame` 像素兜底。
+- 2026-11-03 并行会话可能跑着**同名沙箱**（同样改了 com.whstudio.solco.sandbox）：`pgrep -f SolcoSandbox | head -1` 会拿到别人的 pid，点击打进别人的窗口（本轮只造成导航级噪音）→ 先 `ps` 按启动路径甄别 pid，list_windows 后再截图核对内容（workspace 名/cwd）。
+- 2026-11-03（架构记忆）`showSurface` 曾经「落 surface + 写 paneSurfaceMemo」耦合在一个函数里：任何经 showSurface(Terminal) 的落地都会改写记忆——home 家族（首页签/⌘1/⌘P Workspace/页签 toggle 退出）就是这样把 Chat 记忆持久打回 Terminal 的（沙箱 trace + fb-3/fb-4 截图实锤）。2026-11-03 起落地面与记忆分离：导航走 `showPaneSurface`/`landSelectedPane`（永不写记忆），只有显式选择（卡头切换钮、Open Terminal 动作、openChat 成功/邀请）写记忆；**新增「去某 pane / 回 workspace」的代码一律走这两个 owner**，不许再手写 `panePrefersChat ? Chat : showViewTerminal` 三元式（goToPane/external_reveal 已收编）。
+- 2026-11-03（架构记忆）记忆回写必须与真实落地同分支：openChat 曾在入口无条件先盖 chat、无会话回落再盖 terminal 且**连 Terminal surface 都不落**（只改记忆 + toast）——surface 没变记忆先变是同型污染；修复后 Chat 记账在三个真正落 Chat 的分支里，回落经 showPaneSurface 不写记忆（单测 TestOpenChatKeepsAPinnedSessionlessPaneOnItsInvitation / TestOpenChatLandsASessionlessPlainPreferenceOnTerminal 钉）。

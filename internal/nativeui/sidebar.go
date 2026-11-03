@@ -190,8 +190,12 @@ func (s *Shell) sidebarViewTabs(c *ui.Context) {
 	}
 	sp := Spacing()
 	ui.Row(c).FillWidth().Padding(0, sidebarGutter, sp.S).Gap(sp.XS).Children(func() {
-		if gorexIconTab(c, k, iconTerminal, "Terminal view", "Terminal", onTerminal || onChat).Clicked() {
-			s.showViewTerminal()
+		homeTip := "Terminal"
+		if s.panePrefersChat(s.selectedPaneID) && s.workspaceChatAvailable() {
+			homeTip = "Chat"
+		}
+		if gorexIconTab(c, k, iconTerminal, "Terminal view", homeTip, onTerminal || onChat).Clicked() {
+			s.landSelectedPane()
 		}
 		if gorexIconTab(c, k, iconGit, "Changes view", "Changes", onChanges).Clicked() {
 			s.showViewChanges()

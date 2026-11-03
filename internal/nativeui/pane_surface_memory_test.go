@@ -3,6 +3,7 @@ package nativeui
 import (
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
@@ -153,5 +154,146 @@ func TestDefaultAgentViewTUIKeepsTheTerminal(t *testing.T) {
 	shell.selectPane("p2")
 	if shell.surface.current() != WorkspaceSurfaceTerminal || shell.panePrefersChat("p2") {
 		t.Fatalf("default setting must stay Terminal, got %v", shell.surface.current())
+	}
+}
+
+// 2026-11-03 surface-owner unification: the header home tab (and every
+// other "return to the workspace" launcher) is navigation — it must land
+// the selected pane's remembered surface and never rewrite the pane-surface
+// memory. A Chat-pinned pane stays Chat when the user pages away and comes
+// back through it.
+func TestHomeTabKeepsAPinnedChatPaneOnChat(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.showSurface(WorkspaceSurfaceChat) // the user pinned p1 on Chat
+	tester := ui.NewTester(shell.View, 1200, 800)
+	tester.Frame()
+
+	if err := tester.Click("Terminal view"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if shell.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("home tab landed a Chat-pinned pane on %v", shell.surface.current())
+	}
+	if got := shell.captureSession().PaneSurfaces["p1"]; got != string(WorkspaceSurfaceChat) {
+		t.Fatalf("home tab rewrote p1's memory to %q", got)
+	}
+}
+
+func TestFilesTabExitKeepsAPinnedChatPaneOnChat(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.showSurface(WorkspaceSurfaceChat)
+	shell.showViewFiles()
+	if shell.router.Path() != routeFiles {
+		t.Fatalf("setup route = %q, want Files", shell.router.Path())
+	}
+
+	shell.showViewFiles() // the second click is the way back
+	if shell.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("leaving Files landed a Chat-pinned pane on %v", shell.surface.current())
+	}
+	if got := shell.captureSession().PaneSurfaces["p1"]; got != string(WorkspaceSurfaceChat) {
+		t.Fatalf("the Files exit rewrote p1's memory to %q", got)
+	}
+}
+
+// landSelectedPane — the shared owner behind the home tab, ⌘1 / Go-menu
+// Workspace, the palette Workspace action and the view-tab exits — lands the
+// remembered surface directly.
+func TestLandSelectedPaneRestoresTheRememberedSurface(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.showSurface(WorkspaceSurfaceChat)
+	shell.showViewFiles()
+
+	shell.landSelectedPane()
+	if shell.router.Path() != routeWorkspace || shell.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("home landing = %s/%v, want the workspace on Chat", shell.router.Path(), shell.surface.current())
+	}
+}
+
+// The landing is navigation: when Chat cannot open (the Agent card is
+// pruned) the pane falls to Terminal without erasing the Chat memory, so a
+// later reconciliation can restore it.
+func TestLandSelectedPaneKeepsChatMemoryWhenChatUnavailable(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.showSurface(WorkspaceSurfaceChat) // p1 pinned on Chat
+	shell.workbench.directory.Replace(nil)  // the Agent is gone
+	shell.surface.resetToTerminal(shell.workspaceContext())
+
+	shell.landSelectedPane()
+	if shell.surface.current() != WorkspaceSurfaceTerminal {
+		t.Fatalf("surface without an Agent = %v, want Terminal", shell.surface.current())
+	}
+	if !shell.panePrefersChat("p1") {
+		t.Fatal("landing Terminal must not erase p1's Chat memory")
+	}
+}
+
+// A plain shell has no Chat preference: home lands Terminal and records
+// nothing — incidental navigation never writes the memory.
+func TestLandSelectedPaneRecordsNothingForAPlainPane(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.selectPane("p3")
+
+	shell.landSelectedPane()
+	if shell.surface.current() != WorkspaceSurfaceTerminal {
+		t.Fatalf("plain pane surface = %v, want Terminal", shell.surface.current())
+	}
+	if got := shell.captureSession().PaneSurfaces["p3"]; got != "" {
+		t.Fatalf("plain pane memory written as %q, want none", got)
+	}
+}
+
+// goToPane — the Sessions page's "Go to Pane" — rides the same owner: a
+// Chat-pinned pane is never flipped to its terminal.
+func TestGoToPaneKeepsAPinnedChatPaneOnChat(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.showSurface(WorkspaceSurfaceChat)
+	shell.selectPane("p2") // p2 is on Terminal
+	shell.rememberPaneSurface("p1", WorkspaceSurfaceChat)
+
+	shell.goToPane("p1")
+	if shell.router.Path() != routeWorkspace || shell.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("go to pane = %s/%v, want the workspace on Chat", shell.router.Path(), shell.surface.current())
+	}
+	if got := shell.captureSession().PaneSurfaces["p1"]; got != string(WorkspaceSurfaceChat) {
+		t.Fatalf("go to pane rewrote p1's memory to %q", got)
+	}
+}
+
+// openChat's no-source fallback rides the same ownership: a pane pinned on
+// Chat opens the invitation (the page's own empty state) and keeps its
+// memory — the old fallback stamped Terminal without even showing one.
+func TestOpenChatKeepsAPinnedSessionlessPaneOnItsInvitation(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.showSurface(WorkspaceSurfaceTerminal)
+	shell.rememberPaneSurface("p1", WorkspaceSurfaceChat) // pinned, no session yet
+	card, _ := shell.agentCardForPane("p1")
+
+	shell.openChat(card)
+	if shell.surface.current() != WorkspaceSurfaceChat {
+		t.Fatalf("sessionless pinned pane = %v, want the Chat invitation", shell.surface.current())
+	}
+	if !shell.panePrefersChat("p1") {
+		t.Fatal("the sessionless fallback must not rewrite the Chat memory")
+	}
+}
+
+// Without a Chat preference the announced Terminal landing stands — through
+// the shared owner, so incidental navigation writes no memory.
+func TestOpenChatLandsASessionlessPlainPreferenceOnTerminal(t *testing.T) {
+	shell := surfaceMemoryShell(t)
+	shell.showSurface(WorkspaceSurfaceDiff)
+	card, _ := shell.agentCardForPane("p1") // no memory: settings default is Terminal
+
+	shell.openChat(card)
+	if shell.surface.current() != WorkspaceSurfaceTerminal {
+		t.Fatalf("sessionless unpinned pane = %v, want Terminal", shell.surface.current())
+	}
+	if shell.pendingToast == "" {
+		t.Fatal("the Terminal fallback must keep its hint")
+	}
+	if got := shell.captureSession().PaneSurfaces["p1"]; got != "" {
+		t.Fatalf("the Terminal fallback wrote p1's memory as %q, want none", got)
 	}
 }

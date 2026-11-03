@@ -311,8 +311,9 @@ func (s *Shell) showViewChat() {
 	s.showSurface(WorkspaceSurfaceChat)
 }
 
-// showViewChanges toggles the Changes view: repeating the click exits to
-// Terminal.
+// showViewChanges toggles the Changes view: repeating the click leaves for
+// the selected pane's remembered surface (landSelectedPane), like every
+// other workspace return.
 func (s *Shell) showViewChanges() {
 	fromCommit := s.surface.current() == WorkspaceSurfaceCommit
 	if s.holdCommitNavigation() {
@@ -325,7 +326,7 @@ func (s *Shell) showViewChanges() {
 		return
 	}
 	if _, _, changes, _ := s.viewSwitchActive(); changes {
-		s.showViewTerminal()
+		s.landSelectedPane()
 		return
 	}
 	if s.router.Path() != routeWorkspace {

@@ -192,6 +192,40 @@ func (s *Shell) enterTerminalSurface() {
 	s.syncGitContext()
 }
 
+// showPaneSurface lands paneID on the surface its memory names — Chat when
+// it prefers Chat and Chat is bindable, Terminal otherwise — and never
+// rewrites the pane-surface memory: arriving at a pane is navigation, and
+// only an explicit surface choice (the card-header switch, an Open
+// Terminal action, openChat) records memory. The one answer every "go to
+// this pane" path shares (2026-11-03 surface-owner unification).
+func (s *Shell) showPaneSurface(paneID string) {
+	if s.panePrefersChat(paneID) && s.workspaceChatAvailable() {
+		s.showSurface(WorkspaceSurfaceChat)
+		return
+	}
+	if s.surface.current() == WorkspaceSurfaceTerminal {
+		return
+	}
+	s.enterTerminalSurface()
+}
+
+// landSelectedPane is the one owner of "return to the workspace home": the
+// header home tab, ⌘1 / Go-menu Workspace, the palette Workspace action and
+// the view-tab exits all land here. It routes to the workspace and shows the
+// selected pane's remembered surface (showPaneSurface) — a Chat-pinned pane
+// stays Chat — instead of hardwiring Terminal and rewriting the memory the
+// way the old showViewTerminal landing did (2026-11-03 unification; sandbox
+// repro in docs/debug/2026-11-03-chat-view-revert-on-return.md).
+func (s *Shell) landSelectedPane() {
+	if s.holdCommitNavigation() {
+		return
+	}
+	if s.router.Path() != routeWorkspace {
+		s.router.Push(routeWorkspace)
+	}
+	s.showPaneSurface(s.selectedPaneID)
+}
+
 // workspaceChatAvailable fences user-triggered Chat navigation to an
 // actual Agent pane. A previously bound conversation for another pane does
 // not qualify the currently selected plain shell as a Chat destination.

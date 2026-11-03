@@ -486,7 +486,7 @@ func (s *Shell) executeCommandCenterResult(result commandcenter.Result) {
 		case "action:add-device":
 			s.openDeviceAdd("")
 		case "action:open-workspace":
-			s.showViewTerminal()
+			s.landSelectedPane()
 		case "action:open-changes":
 			s.goChanges()
 		case "action:open-files":

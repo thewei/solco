@@ -83,16 +83,12 @@ func liveSessionTone(state operationalState) StatusTone {
 
 // goToPane brings a running session's Pane into view on the surface it was
 // last used on (Chat when remembered and bindable, Terminal otherwise): the
-// per-pane memory decides, so "Go to pane" never flips a Chat pane back to
-// its terminal.
+// per-pane memory decides through the shared showPaneSurface owner, so "Go
+// to pane" never flips a Chat pane back to its terminal (2026-11-03).
 func (s *Shell) goToPane(paneID string) {
 	s.selectPane(paneID)
 	if s.router.Path() != routeWorkspace {
 		s.router.Push(routeWorkspace)
 	}
-	surface := WorkspaceSurfaceTerminal
-	if s.panePrefersChat(paneID) && s.workspaceChatAvailable() {
-		surface = WorkspaceSurfaceChat
-	}
-	s.showSurface(surface)
+	s.showPaneSurface(paneID)
 }

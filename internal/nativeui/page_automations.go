@@ -124,7 +124,7 @@ func (s *Shell) showViewAutomations() {
 		return
 	}
 	if s.router.Path() == routeAutomations {
-		s.showViewTerminal()
+		s.landSelectedPane()
 		return
 	}
 	s.router.Push(routeAutomations)

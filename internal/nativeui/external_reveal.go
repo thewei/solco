@@ -107,11 +107,7 @@ func (s *Shell) tryPendingReveal() bool {
 		s.hideQuickPanel()
 		s.router.Push(routeWorkspace)
 		s.selectTab(req.target.TabID)
-		if s.panePrefersChat(s.selectedPaneID) && s.workspaceChatAvailable() {
-			s.showSurface(WorkspaceSurfaceChat)
-		} else {
-			s.showViewTerminal()
-		}
+		s.showPaneSurface(s.selectedPaneID)
 		s.activateWindow()
 		return true
 	case req.target.TabID == "" && projectExists(s.projection, req.target.ProjectID):
@@ -119,11 +115,7 @@ func (s *Shell) tryPendingReveal() bool {
 		s.hideQuickPanel()
 		s.router.Push(routeWorkspace)
 		s.selectProject(req.target.ProjectID)
-		if s.panePrefersChat(s.selectedPaneID) && s.workspaceChatAvailable() {
-			s.showSurface(WorkspaceSurfaceChat)
-		} else {
-			s.showViewTerminal()
-		}
+		s.showPaneSurface(s.selectedPaneID)
 		s.activateWindow()
 		return true
 	}

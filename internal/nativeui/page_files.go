@@ -18,7 +18,7 @@ func (s *Shell) showViewFiles() {
 		return
 	}
 	if s.router.Path() == routeFiles {
-		s.showViewTerminal()
+		s.landSelectedPane()
 		return
 	}
 	s.syncRightPanelRoot()

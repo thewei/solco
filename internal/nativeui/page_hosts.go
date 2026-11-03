@@ -73,7 +73,7 @@ func (s *Shell) showViewHosts() {
 		return
 	}
 	if s.router.Path() == routeHosts {
-		s.showViewTerminal()
+		s.landSelectedPane()
 		return
 	}
 	s.router.Push(routeHosts)
