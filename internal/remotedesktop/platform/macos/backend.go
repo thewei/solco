@@ -172,7 +172,7 @@ func (b *Backend) Open(ctx context.Context) (platform.Capturer, error) {
 	}
 	cmd := exec.Command(path, "serve", "--socket", srv.Path())
 	cmd.Env = append(helperEnv(), "SOLCO_RD_TOKEN="+srv.Token())
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	ownProcessGroup(cmd)
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
 		_ = srv.Close()
@@ -453,7 +453,7 @@ func (c *capturer) waitExit(d time.Duration) bool {
 
 func (c *capturer) kill() {
 	if c.cmd.Process != nil {
-		_ = syscall.Kill(-c.cmd.Process.Pid, syscall.SIGKILL) // the helper's own process group
+		killProcessGroup(c.cmd.Process.Pid) // the helper's own process group
 		_ = c.cmd.Process.Kill()
 	}
 }
