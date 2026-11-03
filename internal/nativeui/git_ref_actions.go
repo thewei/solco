@@ -49,16 +49,12 @@ func (s *Shell) openRenameBranch(name string) {
 	s.dialogAction = "Rename"
 }
 
-// openCreateAt asks for a branch or tag name to create at one exact commit.
+// openCreateAt asks for a branch name to create at one exact commit.
 func (s *Shell) openCreateAt(kind, hash string) {
 	if s.git == nil || s.git.root == "" || s.git.opBusy || !gitworkbenchFullHash(hash) {
 		return
 	}
-	title, label := "New Branch Here", "Branch name"
-	if kind == "git-create-tag-at" {
-		title, label = "New Tag Here", "Tag name"
-	}
-	s.openTextDialog(kind, s.git.root+"\x00"+hash, title+" ("+hash[:8]+")", label, "")
+	s.openTextDialog(kind, s.git.root+"\x00"+hash, "New Branch Here ("+hash[:8]+")", "Branch name", "")
 	s.dialogAction = "Create"
 }
 
@@ -85,13 +81,6 @@ func (s *Shell) submitRefDialog(kind, target, value string) {
 				return "", err
 			}
 			return "Created and switched to " + value, nil
-		})
-	case "git-create-tag-at":
-		s.runGitOp("Create Tag", func(ctx context.Context, root string) (string, error) {
-			if err := s.git.runner.CreateTagAt(ctx, root, value, subject); err != nil {
-				return "", err
-			}
-			return "Created tag " + value, nil
 		})
 	}
 }

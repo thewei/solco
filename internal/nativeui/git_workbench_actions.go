@@ -56,17 +56,41 @@ func (s *Shell) gitActionItems(m *ui.Menu) {
 		s.unstageFiles(unstage)
 	}
 	m.Separator()
+	canSync := !s.git.opBusy && !busySequencer && snap.Branch != ""
+	if m.Item("Fetch All Remotes").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
+		s.fetchAll(false)
+	}
+	if m.Item("Fetch All and Prune").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
+		s.fetchAll(true)
+	}
+	if m.Item("Pull and Merge").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
+		s.pullWith(gitworkbench.PullMerge, "Pull and Merge")
+	}
+	if m.Item("Pull and Rebase").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
+		s.pullWith(gitworkbench.PullRebase, "Pull and Rebase")
+	}
+	m.Separator()
 	if m.Item("Stash All Changes").Disabled(s.git.opBusy || busySequencer || len(snap.Files) == 0).Chosen() {
 		s.stashChanges()
 	}
 	if m.Item("Save Changes as Patch…").Disabled(s.git.opBusy || len(snap.Files) == 0).Chosen() {
 		s.saveWorkingPatch()
 	}
+	if m.Item("Apply Patch…").Disabled(s.git.opBusy || busySequencer).Chosen() {
+		s.applyPatchFile()
+	}
 	if m.Item("Undo Last Commit…").Disabled(s.git.opBusy || busySequencer || snap.NoHead || snap.Branch == "").Chosen() {
 		s.undoLastCommit()
 	}
+	m.Separator()
 	if m.Item("View Commits").Chosen() {
 		s.showGitCommits()
+	}
+	if m.Item("Reflog…").Chosen() {
+		s.openReflogSheet()
+	}
+	if m.Item("Add Submodule…").Disabled(s.git.opBusy || busySequencer).Chosen() {
+		s.openAddSubmoduleDialog()
 	}
 	m.Separator()
 	if m.Item("Git Settings…").Chosen() {

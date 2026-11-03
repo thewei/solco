@@ -176,7 +176,7 @@ type Shell struct {
 	mergeDialogOpen      bool
 	mergeTarget          string
 	mergeRepoRoot        string
-	mergeStrategy        int // 0: FF-only, 1: create merge commit
+	mergeStrategy        int // 0: FF-only, 1: create merge commit, 2: squash
 	gitMore              gitMoreState
 	gitNotice            gitNoticeState
 

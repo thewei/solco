@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -207,26 +208,10 @@ func (s *Shell) fetchRepo() {
 	})
 }
 
-func (s *Shell) pullRepo() {
-	s.runGitNetworkOp("Pull", func(ctx context.Context, root string) (string, error) {
-		remote := s.git.runner.DefaultRemote(ctx, root)
-		branch := s.git.runner.CurrentBranch(ctx, root)
-		if branch == "" {
-			return "", errGitOp("detached HEAD: check out a branch first")
-		}
-		// The branch's own upstream decides where it pulls from — the first
-		// remote and the same-named branch are only the guess for a branch
-		// that has none.
-		theirs := branch
-		if up := s.git.upstream; up.OK && up.Remote != "" {
-			remote, theirs = up.Remote, up.Branch
-		}
-		if err := s.git.runner.PullFFOnly(ctx, root, remote, theirs); err != nil {
-			return "", err
-		}
-		return "Pulled " + remote + "/" + theirs, nil
-	})
-}
+// pullRepo is the header Pull: fast-forward only. The branch's own upstream
+// decides where it pulls from — the first remote and the same-named branch
+// are only the guess for a branch that has none (pullWith).
+func (s *Shell) pullRepo() { s.pullWith(gitworkbench.PullFastForward, "Pull") }
 
 func (s *Shell) pushRepo() {
 	s.runGitNetworkOp("Push", func(ctx context.Context, root string) (string, error) {
@@ -394,19 +379,6 @@ func gitworkbenchFullHash(hash string) bool {
 func (s *Shell) undoLastCommit() {
 	s.openConfirm("git-undo-commit", "", "Undo Last Commit?",
 		"Its changes stay staged. Nothing is discarded.")
-}
-
-// createTag creates a lightweight tag at HEAD.
-func (s *Shell) createTag(name string) {
-	if strings.TrimSpace(name) == "" {
-		return
-	}
-	s.runGitOp("Create Tag", func(ctx context.Context, root string) (string, error) {
-		if err := s.git.runner.CreateTag(ctx, root, name); err != nil {
-			return "", err
-		}
-		return "Created tag " + name, nil
-	})
 }
 
 // deleteTagConfirm removes a tag after confirmation.
@@ -627,6 +599,57 @@ func (s *Shell) runGitConfirm(kind, target string) {
 				return "", err
 			}
 			return "Last commit undone (changes kept staged)", nil
+		})
+	case "git-merge-squash":
+		s.runGitOp("Squash Merge", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.MergeSquash(ctx, root, target); err != nil {
+				return "", err
+			}
+			return "Squashed " + target + " into the working tree — review and Commit", nil
+		})
+	case "git-checkout-detached":
+		s.runGitOp("Check Out Commit", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.CheckoutDetached(ctx, root, target); err != nil {
+				return "", err
+			}
+			return "HEAD is detached at " + target[:8], nil
+		})
+	case "git-restore-file":
+		hash, path, _ := strings.Cut(target, "\x00")
+		s.runGitOp("Restore File", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.RestoreFile(ctx, root, hash, path); err != nil {
+				return "", err
+			}
+			return "Restored " + path + " from " + hash[:8], nil
+		})
+	case "git-delete-remote-tag":
+		remote, name, _ := strings.Cut(target, "\x00")
+		s.runGitNetworkOp("Delete Remote Tag", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.DeleteRemoteTag(ctx, root, remote, name); err != nil {
+				return "", err
+			}
+			return "Deleted " + name + " on " + remote, nil
+		})
+	case "git-remove-worktree":
+		s.runGitOp("Remove Worktree", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.RemoveWorktree(ctx, root, target); err != nil {
+				return "", err
+			}
+			return "Removed worktree " + filepath.Base(target), nil
+		})
+	case "git-stash-clear":
+		s.runGitOp("Drop All Stashes", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.StashClear(ctx, root); err != nil {
+				return "", err
+			}
+			return "Dropped all stashes", nil
+		})
+	case "git-remove-submodule":
+		s.runGitOp("Remove Submodule", func(ctx context.Context, root string) (string, error) {
+			if err := s.git.runner.RemoveSubmodule(ctx, root, target); err != nil {
+				return "", err
+			}
+			return "Removed submodule " + target + " — Commit to record it", nil
 		})
 	case "git-delete-tag":
 		s.runGitOp("Delete Tag", func(ctx context.Context, root string) (string, error) {

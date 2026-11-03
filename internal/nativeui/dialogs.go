@@ -58,12 +58,15 @@ func (s *Shell) dialogs(c *ui.Context) {
 			ui.Column(c).Width(430).MaxWidth(480).Gap(Spacing().L).Children(func() {
 				modalTitle(c, "Merge Branch")
 				tipped(c, ui.Text(c, s.mergeTarget).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine(), s.mergeTarget)
-				segmentedControl(c, &s.mergeStrategy, "Fast-forward only", "Create merge commit").FillWidth()
-				if s.mergeStrategy == 0 {
-					ui.Text(c, "Moves the branch forward if it has not diverged. No merge commit.").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
-				} else {
-					ui.Text(c, "Creates a merge commit. You may need to resolve conflicts.").FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
+				segmentedControl(c, &s.mergeStrategy, "Fast-forward only", "Create merge commit", "Squash").FillWidth()
+				hint := "Moves the branch forward if it has not diverged. No merge commit."
+				switch s.mergeStrategy {
+				case 1:
+					hint = "Creates a merge commit. You may need to resolve conflicts."
+				case 2:
+					hint = "Brings every change in as staged changes without a merge commit; you commit them yourself."
 				}
+				ui.Text(c, hint).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
 				ui.Row(c).FillWidth().Gap(Spacing().M).Justify(ui.End).Children(func() {
 					if regularButton(c, "Cancel Merge").Clicked() {
 						s.mergeDialogOpen = false
@@ -71,9 +74,12 @@ func (s *Shell) dialogs(c *ui.Context) {
 					if regularPrimaryButton(c, "Review Merge").Clicked() {
 						target, strategy := s.mergeTarget, s.mergeStrategy
 						s.mergeDialogOpen = false
-						if strategy == 1 {
+						switch strategy {
+						case 1:
 							s.confirmMergeNoFFBranch(target)
-						} else {
+						case 2:
+							s.confirmMergeSquash(target)
+						default:
 							s.confirmMergeBranch(target)
 						}
 					}
@@ -166,17 +172,15 @@ func (s *Shell) submitTextDialog(kind, target, value string) {
 		s.mutate(func() (herdr.Projection, error) { return s.runtime.RenamePane(s.activeInstance, target, value) })
 	case "git-add-worktree":
 		s.addWorktree(value)
-	case "git-create-branch", "git-create-tag":
+	case "git-create-branch":
 		if s.git == nil || s.git.root == "" || s.git.root != target {
 			s.pendingToast = "Repository changed. Reopen the dialog to continue."
 			return
 		}
-		if kind == "git-create-branch" {
-			s.confirmCreateBranch(value)
-		} else {
-			s.createTag(value)
-		}
-	case "git-rename-branch", "git-create-branch-at", "git-create-tag-at":
+		s.confirmCreateBranch(value)
+	case "git-stash-message":
+		s.submitStashMessage(target, value)
+	case "git-rename-branch", "git-create-branch-at":
 		s.submitRefDialog(kind, target, value)
 	case "files-new-file", "files-new-dir", "files-rename":
 		s.runFilesMutation(kind, target, value)

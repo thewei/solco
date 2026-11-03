@@ -61,21 +61,25 @@ func (s *Shell) createWorkspaceFromFolder() {
 			if err != nil || len(paths) == 0 || paths[0] == "" {
 				return
 			}
-			cwd := paths[0]
-			label := filepath.Base(cwd)
-			if s.activeInstance == "" {
-				s.status = "Choose a Session first"
-				return
-			}
-			if s.activeIsRemote() {
-				// The folder picker can only see this machine's disk; a
-				// remote workspace needs a path that exists on the remote.
-				s.status = "Switch to a local Session to add a Workspace from a local folder"
-				return
-			}
-			s.mutateSelecting(func() (herdr.Projection, error) {
-				return s.runtime.CreateProject(s.activeInstance, cwd, label)
-			})
+			s.createWorkspaceAt(paths[0])
 		})
 	}()
+}
+
+// createWorkspaceAt creates a Herdr Workspace rooted at a folder of this Mac.
+func (s *Shell) createWorkspaceAt(cwd string) {
+	label := filepath.Base(cwd)
+	if s.activeInstance == "" {
+		s.status = "Choose a Session first"
+		return
+	}
+	if s.activeIsRemote() {
+		// The folder picker can only see this machine's disk; a
+		// remote workspace needs a path that exists on the remote.
+		s.status = "Switch to a local Session to add a Workspace from a local folder"
+		return
+	}
+	s.mutateSelecting(func() (herdr.Projection, error) {
+		return s.runtime.CreateProject(s.activeInstance, cwd, label)
+	})
 }

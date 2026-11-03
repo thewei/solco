@@ -257,6 +257,7 @@ git_operations.go: 背景 mutation 编排，FF/no-FF Merge、Rebase、Revert/Che
 git_notice.go: 合并/变基无法直接完成时的说明弹窗（FF 被拒/merge 冲突/rebase 冲突＋文件列表，只读）
 git_ref_actions.go: 对齐 Fork 的引用/提交右键动作编排（远程分支检出、分支改名、某提交处建分支/标签、推送标签、应用 stash、stash 行标题）
 git_fork_more.go: Fork 大件编排（远程增改删、删除远程分支、Tracking、Reset to Here、Compare to Local Changes、Save as Patch（提交/Stash/工作区）、文件历史/Blame、交互式 rebase 面板、子模块区、Commit and Push、自动 fetch 定时器）
+git_fork_more2.go: Fork 第三批编排（Pull 合并/变基与 Fetch All、Squash Merge、分离 HEAD 检出、从提交还原文件、应用补丁、带说明 Tag 对话框与删除远端 Tag、Worktree 移除/作为 Workspace 打开、逐文件冲突解决、Reflog 面板、子模块新增/移除、带说明/按文件 Stash 与清空、提交的托管站点链接）
 git_sequencer_ui.go: Git Diff 顶栏冲突提示、操作准确的 Continue/Abort/Refresh；右侧 Inspector 共用状态和指引
 git_sequencer_ui_test.go: Merge/Revert/Cherry-pick 的 headless 冲突状态、按钮安全门禁和仓库切换隔离
 dialogs.go: deviceAddDialog（Add Device 面板，device_add.go）在此挂载；Git 危险动作确认绑定打开时 repository root；Merge 策略 Modal 失效时关闭；Sessions 的 Delete Forever / Empty Trash 确认；Confirm/Cancel 保持安全默认；modalTitle 是自建对话框（Merge/Commit/文本输入）唯一的标题（Heading 16 semibold），内层间距 L=12 与 Modal 面板一致、页脚按钮间距 M=8 与官方 AlertDialog 一致

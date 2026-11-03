@@ -25,9 +25,12 @@ type gitMoreState struct {
 	// ("Commit and Push…"); cleared whenever the dialog opens or is cancelled.
 	pushAfterCommit bool
 
-	remote remoteDialogState
-	rebase rebaseSheetState
-	file   fileSheetState
+	remote    remoteDialogState
+	rebase    rebaseSheetState
+	file      fileSheetState
+	tag       tagDialogState
+	reflog    reflogSheetState
+	submodule submoduleDialogState
 
 	autoFetchTimer *time.Timer
 }
@@ -418,6 +421,9 @@ func (s *Shell) submodulesSection(c *ui.Context) {
 					if m.Item("Copy Path").Chosen() {
 						s.copyToClipboard(sub.Path)
 					}
+					if m.Item("Remove Submodule…").Disabled(s.git.opBusy).Chosen() {
+						s.confirmRemoveSubmodule(sub.Path)
+					}
 				})
 		}
 		s.gitEmptySection(c, shown)
@@ -753,6 +759,9 @@ func (s *Shell) gitMoreDialogs(c *ui.Context) {
 	s.remoteDialog(c)
 	s.rebaseSheet(c)
 	s.fileSheet(c)
+	s.tagDialog(c)
+	s.reflogSheet(c)
+	s.submoduleDialog(c)
 }
 
 // gdFileLogItems is the file menus' shared Finder / History / Blame group (one
@@ -764,6 +773,9 @@ func (s *Shell) gdFileLogItems(m *ui.Menu, cf *gitworkbench.ChangeFile) {
 	commit := s.gdReviewingCommit()
 	deleted := cf.Status == gitworkbench.StatusDeleted
 	tracked := !cf.Untracked && (commit || cf.Status != gitworkbench.StatusAdded)
+	if !commit && cf.Status == gitworkbench.StatusConflicted {
+		s.gdConflictItems(m, cf)
+	}
 	if !commit && m.Item("Show in Finder").Disabled(deleted).Chosen() {
 		s.openExternalPathParent(filepath.Join(s.git.root, cf.Path))
 	}
@@ -776,6 +788,13 @@ func (s *Shell) gdFileLogItems(m *ui.Menu, cf *gitworkbench.ChangeFile) {
 			rev = s.git.commitHash
 		}
 		s.openFileSheet("blame", cf.Path, rev)
+	}
+	if commit {
+		if m.Item("Restore File from This Commit…").Disabled(s.git.opBusy || (deleted && !s.git.compare)).Chosen() {
+			s.confirmRestoreFile(s.git.commitHash, cf.Path)
+		}
+	} else if cf.Status != gitworkbench.StatusConflicted && m.Item("Stash File").Disabled(s.git.opBusy).Chosen() {
+		s.stashFile(cf.Path)
 	}
 }
 

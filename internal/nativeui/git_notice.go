@@ -19,6 +19,9 @@ var integrationOps = map[string]bool{
 	"Merge Commit":       true,
 	"Rebase":             true,
 	"Interactive Rebase": true,
+	"Pull and Merge":     true,
+	"Pull and Rebase":    true,
+	"Squash Merge":       true,
 }
 
 // gitNoticeState is one open explanation of why a merge/rebase did not land.
@@ -37,7 +40,10 @@ func (s *Shell) openGitNotice(op string, err error, paths []string, paused bool)
 	n.paths = paths
 	reason := gitFailureText(err)
 	switch {
-	case (op == "Rebase" || op == "Interactive Rebase") && len(paths) > 0:
+	case op == "Squash Merge" && len(paths) > 0:
+		n.title = "Squash Merge Cancelled"
+		n.body = "These files conflict, so the squash was cancelled and nothing changed. Merge with a merge commit instead to resolve them in Local Changes."
+	case (op == "Rebase" || op == "Interactive Rebase" || op == "Pull and Rebase") && len(paths) > 0:
 		n.title = "Rebase Stopped on Conflicts"
 		n.body = "The rebase was cancelled and nothing changed. Merge instead, or rebase in the Terminal and resolve the conflicts there."
 	case paused:

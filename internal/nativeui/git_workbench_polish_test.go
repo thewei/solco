@@ -57,10 +57,12 @@ func TestGitLayoutButtonsActuallySwitchAndStayVisible(t *testing.T) {
 		}
 	}
 	// Fetch / Pull / Push are toolbar icons now; Refresh lives in the
-	// sidebar header. Neither repeats in the pull-down.
-	for _, dup := range []string{"Fetch", "Pull", "Push", "Refresh"} {
-		if strings.Contains(menu, dup) {
-			t.Fatalf("duplicate %s in Actions: %s", dup, menu)
+	// sidebar header. Neither repeats in the pull-down; only their different
+	// variants (Fetch All Remotes, Pull and Rebase …) do.
+	for _, item := range tt.Menu() {
+		switch item {
+		case "Fetch", "Pull", "Push", "Refresh":
+			t.Fatalf("duplicate %s in Actions: %s", item, menu)
 		}
 	}
 	tt.CloseMenu()

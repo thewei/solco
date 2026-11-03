@@ -77,6 +77,16 @@ func (s *Shell) commitSurface(c *ui.Context) {
 					textArea(c, &s.surface.commit.Body).Grow(0).Height(72).Placeholder("Extra detail").Label("Commit description")
 				})
 
+				// Per-commit options.
+				ui.Row(c).FillWidth().Gap(sp.L).AlignItems(ui.Center).Children(func() {
+					signOff, noVerify := s.surface.commit.SignOff, s.surface.commit.NoVerify
+					ui.Checkbox(c.Key("commit-signoff"), &signOff, "")
+					ui.Text(c, "Sign off").FontSize(Typography().Caption).TextColor(t.TextMuted)
+					ui.Checkbox(c.Key("commit-noverify"), &noVerify, "")
+					ui.Text(c, "Skip hooks").FontSize(Typography().Caption).TextColor(t.TextMuted)
+					s.surface.commit.SignOff, s.surface.commit.NoVerify = signOff, noVerify
+				})
+
 				// Selected-file checklist (GWB-223 selection checklist).
 				ui.Column(c).FillWidth().Gap(sp.XXS).Children(func() {
 					ui.Row(c).FillWidth().Gap(sp.S).AlignItems(ui.Center).Children(func() {

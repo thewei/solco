@@ -21,6 +21,8 @@ type gitSectionAction struct {
 	menuItem string // context-menu title
 	disabled bool
 	run      func()
+	// more adds items to the section's context menu below the creation item.
+	more func(m *ui.Menu)
 }
 
 // segmentTab is one segment of segmentTabs: a glyph and a label.
@@ -126,12 +128,7 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 								s.openExternalPath(worktree.Path)
 							}
 						}, func(m *ui.Menu) {
-							if m.Item("Copy Path").Chosen() {
-								s.copyToClipboard(worktree.Path)
-							}
-							if !worktree.Bare && m.Item("Reveal in Finder").Chosen() {
-								s.openExternalPath(worktree.Path)
-							}
+							s.worktreeMenu(m, worktree, worktree.Path == s.git.worktrees[0].Path)
 						})
 					}
 					s.gitEmptySection(c, shown)
@@ -242,7 +239,7 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 				})
 				s.gitSidebarSection(c, "Tags", len(s.git.tags), &gitSectionAction{
 					label: "New tag", menuItem: "New Tag…", disabled: s.git.opBusy,
-					run: func() { s.openCreateDialog("git-create-tag", "New Tag", "Tag name") },
+					run: func() { s.openTagDialog("") },
 				}, func() {
 					refs := make([]string, 0, len(s.git.tags))
 					for _, tag := range s.git.tags {
@@ -261,11 +258,23 @@ func (s *Shell) gitRepositorySidebar(c *ui.Context) {
 						if m.Item("Delete Tag…").Chosen() {
 							s.deleteTagConfirm(full)
 						}
+						if m.Item("Delete Tag from Remote…").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
+							s.confirmDeleteRemoteTag(full)
+						}
 					})
 				})
 				s.gitSidebarSection(c, "Stashes", len(s.git.stashes), &gitSectionAction{
 					label: "Stash changes", menuItem: "Stash All Changes", disabled: s.git.opBusy || !s.dirtyWorktree(),
 					run: s.stashChanges,
+					more: func(m *ui.Menu) {
+						if m.Item("Stash With Message…").Disabled(s.git.opBusy || !s.dirtyWorktree()).Chosen() {
+							s.openStashMessageDialog()
+						}
+						m.Separator()
+						if m.Item("Drop All Stashes…").Disabled(s.git.opBusy || len(s.git.stashes) == 0).Chosen() {
+							s.confirmDropAllStashes()
+						}
+					},
 				}, func() {
 					shown := 0
 					for _, stash := range s.git.stashes {
@@ -319,6 +328,9 @@ func (s *Shell) gitSidebarSection(c *ui.Context, name string, count int, action 
 		spec.Menu = func(m *ui.Menu) {
 			if m.Item(action.menuItem).Disabled(action.disabled).Chosen() {
 				action.run()
+			}
+			if action.more != nil {
+				action.more(m)
 			}
 		}
 	}

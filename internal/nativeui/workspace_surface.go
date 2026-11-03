@@ -46,6 +46,10 @@ type CommitSurfaceState struct {
 	// message into the fields once per toggle.
 	Amend          bool
 	AmendPrefilled bool
+	// NoVerify skips the repository's commit hooks; SignOff adds a
+	// Signed-off-by trailer. Both apply to this one commit only.
+	NoVerify bool
+	SignOff  bool
 }
 
 // workspaceSurfaceState is the UI-independent primary-surface state machine

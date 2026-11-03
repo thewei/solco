@@ -132,3 +132,25 @@
 踩坑记录: headless Tester 里**刚新增的行**要 `Frame → Advance(1s) → Frame` 才能命中（进入动效期间 hit-test 为空），此前 “trunk/当前分支右键无菜单” 同因，真机无此现象。
 
 验证: `go test -short ./...` 绿、`mygo vet .`、`git diff --check`；上表“设备复验”全部在沙箱 Solco（pid 6724）对 demo 实操通过。
+
+## 第 6 轮：Fork 第三批（用户选定 11 项，同日）
+
+域层 `internal/gitworkbench/fork_more2.go`（真实仓库测试 `fork_more2_test.go`），编排 `internal/nativeui/git_fork_more2.go`（测试 `git_fork_more2_test.go`）。
+
+| 项 | 实现 | 设备复验（沙箱 demo） |
+|---|---|---|
+| A1 Pull 选项 + Fetch All | 页面 Actions 菜单 `Fetch All Remotes` / `Fetch All and Prune` / `Pull and Merge` / `Pull and Rebase`（头部 Pull 仍是 FF-only）；rebase 需干净树，冲突立即 abort 并列文件（弹窗 “Rebase Stopped on Conflicts”）；merge 冲突停在半路，沿用顶部条幅 + 弹窗 “Merge Needs Your Help” | 分叉 3↑2↓ → Pull and Merge 生成合并提交；add/add 冲突时 Rebase 弹窗列出 `clash.txt`、HEAD 不变；Merge 停在冲突态 |
+| A2 Squash merge | 合并对话框第三段 `Squash`；干净树才可，冲突 `reset --merge` 回滚；成功只留暂存，不提交 | `sq.txt` 暂存、HEAD 不动、无 MERGE_HEAD |
+| A3 Checkout Commit / Restore File / Apply Patch | 提交与 Reflog 行 `Check Out This Commit…`（确认后 detached）；提交审阅里文件右键 `Restore File from This Commit…`（确认，只进工作区不暂存）；Actions `Apply Patch…`（`apply --check` 通过才应用，只改工作区，8 MiB 上限） | 检出后 `HEAD detached at e87e18b`；菜单项可见；Apply Patch 由域测覆盖（需系统文件对话框） |
+| A4 Annotated tag + Delete Remote Tag | `New Tag…`/`New Tag Here…` 改为对话框（名称 + 可选说明，有说明即 annotated，经 stdin 传）；Tag 行 `Delete Tag from Remote…`（确认；远端=upstream 的远端，否则 origin） | `git cat-file -t v0.3-rc` = `tag`，说明在列表里；删远端后 `ls-remote` 无该 tag、本地仍在 |
+| A5 Worktree | 行菜单 `Open as Workspace`（复用 `createWorkspaceAt`）/ `Remove Worktree…`（主工作树不出现；Git 拒绝脏树，不 force） | 加 `wt-side` 后菜单四项齐全，确认后目录与登记都消失 |
+| B6 冲突逐文件解决 | 冲突文件右键 `Keep Current Branch's Version` / `Take Incoming Version` / `Mark as Resolved`（仍含冲突标记则拒绝）；一侧删除文件时取该侧 = `git rm` | 带标记 Mark as Resolved → toast “still contains conflict markers”；Take Incoming 后文件内容为 remote side 且已暂存 |
+| B8 Reflog | Actions `Reflog…` 面板（300 条）；行右键 Check Out / New Branch Here / Reset ▸ / Copy Hash；点击跳到提交审阅 | 面板列出 20+ 条含 checkout/rebase/pull；行菜单齐全 |
+| B9 子模块 | Actions `Add Submodule…`（地址 + 可选目录，目录默认取仓库名；联网）；行菜单 `Remove Submodule…`（`deinit -f` + `rm -f`，确认） | 对话框与目录推断正确；本机 file:// 被 Git 的 protocol.file 策略拒绝，toast 带原因（域测用 `GIT_CONFIG_*` 放行并验证增/删成功） |
+| B10 Stash | Stashes 区头右键 `Stash With Message…` / `Drop All Stashes…`（确认）；文件右键 `Stash File`（`stash push -u -- path`） | 只暂存点选文件、另一未跟踪文件留在工作区；Drop All 后 `stash list` 为空 |
+| B11 托管站点链接 | 提交右键 `Copy Commit Link` / `Open on GitHub|GitLab|Bitbucket|Codeberg|<host>`（仅 web 远端，本地路径远端不出现；GitLab 系 `/-/commit/`、Bitbucket `/commits/`） | 本机 demo 远端为本地路径 → 两项不出现（符合设计）；URL 解析由表驱动单测覆盖 |
+| B12 Skip hooks / Sign-off | 提交面板两个复选框（逐次，不持久）→ `--no-verify` / `--signoff` | 预置失败 pre-commit 钩子，勾选后提交成功且信息带 `Signed-off-by` |
+
+约束沿用: 不做 force push、不做 `git clean`、不做 Ignore；`internal/gitworkbench` 仍是唯一 Git 执行者，无新 Herdr 方法，日志不含路径/Git 文本。
+
+验证: `go test -short ./...` 绿、`mygo vet .`、`git diff --check`；上表“设备复验”在沙箱 Solco 对 demo 实操通过（Apply Patch / 托管链接 / 子模块成功路径由单测覆盖）。

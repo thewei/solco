@@ -462,9 +462,13 @@ func (s *Shell) commitsPane(c *ui.Context, pal *gdPalette) {
 				s.openCreateAt("git-create-branch-at", cm.Hash)
 			}
 			if m.Item("New Tag Here…").Disabled(s.git.opBusy).Chosen() {
-				s.openCreateAt("git-create-tag-at", cm.Hash)
+				s.openTagDialog(cm.Hash)
+			}
+			if m.Item("Check Out This Commit…").Disabled(s.git.opBusy).Chosen() {
+				s.confirmCheckoutCommit(cm.Hash, cm.Subject)
 			}
 			m.Separator()
+			s.commitLinkItems(m, cm.Hash)
 			if m.Item("Copy Commit Hash").Chosen() {
 				s.copyToClipboard(cm.Hash)
 			}

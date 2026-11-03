@@ -80,12 +80,13 @@ func (s *Shell) submitCommitAmend(subject, body string, selected []string, amend
 	s.git.committing = true
 	s.surface.commit.InFlight = true
 	s.surface.commit.ErrText = ""
+	noVerify, signOff := s.surface.commit.NoVerify, s.surface.commit.SignOff
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), gitworkbench.MutateTimeout)
 		defer cancel()
 		result, err := s.git.runner.Commit(ctx, root,
-			gitworkbench.CommitDraft{Subject: subject, Body: body, Paths: selected, Amend: amend}, *pre, snap)
+			gitworkbench.CommitDraft{Subject: subject, Body: body, Paths: selected, Amend: amend, NoVerify: noVerify, SignOff: signOff}, *pre, snap)
 		slog.Info("git commit finished", "op_class", "mutate", "op", "commit", "amend", amend, "ok", err == nil)
 
 		s.applyOnUI(func() {
