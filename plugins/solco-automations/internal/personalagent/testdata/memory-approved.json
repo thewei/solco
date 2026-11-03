@@ -1,0 +1,17 @@
+{
+  "memory": {
+    "assistantId": "a_0000000000000001",
+    "content": "Prefers short reports",
+    "createdAt": 1800000000000,
+    "id": "m_0000000000000006",
+    "kind": "fact",
+    "revision": 2,
+    "scope": "assistant",
+    "sharedWith": [],
+    "sourceRef": "run:r_1",
+    "state": "approved",
+    "updatedAt": 1800000000000
+  },
+  "replayed": false,
+  "schema": 1
+}

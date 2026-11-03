@@ -1,0 +1,19 @@
+{
+  "assistants": [
+    {
+      "approvals": 1,
+      "done": 1,
+      "goals": 1,
+      "id": "a_0000000000000001",
+      "name": "Ada",
+      "needsYou": 0,
+      "queued": 0,
+      "revision": 1,
+      "running": 0,
+      "status": "active",
+      "tasks": 1
+    }
+  ],
+  "needsYou": 1,
+  "schema": 1
+}

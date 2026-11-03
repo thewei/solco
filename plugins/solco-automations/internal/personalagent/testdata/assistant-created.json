@@ -1,0 +1,18 @@
+{
+  "assistant": {
+    "coordinatorSession": "",
+    "createdAt": 1800000000000,
+    "defaultPolicy": "review",
+    "description": "Follows my pull requests",
+    "id": "a_0000000000000001",
+    "name": "Ada",
+    "revision": 1,
+    "rolePrompt": "",
+    "scope": "personal",
+    "status": "active",
+    "updatedAt": 1800000000000,
+    "workspaceRefs": []
+  },
+  "replayed": false,
+  "schema": 1
+}

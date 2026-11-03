@@ -123,3 +123,5 @@ func TestAPIUnknownCommand(t *testing.T) {
 		t.Fatalf("code = %q", codeOf(err))
 	}
 }
+
+func asCodedErr(err error, out **CodedError) bool { return errors.As(err, out) }

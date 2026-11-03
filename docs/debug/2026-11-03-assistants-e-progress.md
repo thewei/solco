@@ -16,7 +16,7 @@
 | A1 | personalagent Store（SQLite）+ receipt/claim | 完成 | 见 git log |
 | A2 | Herdr 执行适配（claim→launch→reconcile，uncertain，Resume，Busy） | 完成 | 同上 |
 | A3 | CLI `assistant …` + JSON + daemon pump | 完成 | 同上 |
-| A4 | 根仓 `internal/personalagent` Client + capability gate | 待办 | - |
+| A4 | 根仓 `internal/personalagent` Client + capability gate + 金文件契约 | 完成 | 见 git log |
 | B1 | Goal/Commitment/Memory/Approval + CLI（coding task 必须 repoPath、goal 暂停挡 claim）| 完成（store+CLI；Chat 隔离在 B3） | 见 git log |
 | B2 | PR Watch（确定性，github.go + watch.go + daemon 接线） | 完成（store+真机 e2e） | 见 git log |
 | B3 | 侧栏 Assistants + /assistants WebView + AssistantsBridge | 待办 | - |
@@ -37,3 +37,4 @@
 - 2026-11-03 B1：migration v2（goals/commitments/memory_items/approvals），goal.go/memory.go/approval.go + CLI `assistant goal|memory|approval …`；SOLCO-A01/A02/A04/A05/A06/M01/M02/M04 在 `docs/solco-assistants-required-cases.jsonl` 标 verified（A03 等 B3 的 Chat 隔离，M03 等 C2 ContextBuilder）。
 - 2026-11-03 B2：migration v3（events UNIQUE(source,resource,revision)、commitment cursor/last_error）；`Watcher.Poll`（bounded 后台 goroutine，不入 tick）；GitHubFetcher（401/403/404/429/5xx/离线→各自 code，永不当“无变化”）；e2e `plugins/solco-automations/scripts/e2e-pr-watch.sh`（本机假 GitHub + 真 Herdr + pi/glm-5.3-flash）PASS：未变化 0 task，改 head 后恰 1 task→done→needsYou=true。SOLCO-W01–W05/M05 verified。
 - 2026-11-03 坑：e2e 里 daemon 用 `--standby` 会在 ~30s 因“二进制≠已安装”自退（shouldRelaunch）；e2e 脚本改成非 standby。macOS bash 3.2 下失败的 `[[ ]]` 不触发 `set -e` → 用 `assert`。
+- 2026-11-03 A4：插件侧 TestGoldenFixtures 写 `testdata/*.json`（稳定 id/hash），根仓 `internal/personalagent` 严格解码（DisallowUnknownFields）+ 真实二进制往返测试；gate = `assistant overview` 能答。

@@ -1,0 +1,44 @@
+{
+  "runs": [
+    {
+      "agentSessionId": "",
+      "claimant": "daemon",
+      "createdAt": 1800000000000,
+      "error": "",
+      "eventId": "",
+      "finishedAt": 1800000000000,
+      "herdrSession": "default",
+      "id": "r_0000000000000005",
+      "idempotencyKey": "task:t_0000000000000004:1",
+      "label": "",
+      "paneId": "w1:p1",
+      "result": "",
+      "ruleId": "",
+      "startedAt": 1800000000000,
+      "status": "done",
+      "taskId": "t_0000000000000004",
+      "workspaceId": "w1"
+    }
+  ],
+  "schema": 1,
+  "task": {
+    "agent": "claude",
+    "assistantId": "a_0000000000000001",
+    "attempt": 1,
+    "brief": "Read it.",
+    "createdAt": 1800000000000,
+    "goalId": "g_0000000000000002",
+    "id": "t_0000000000000004",
+    "kind": "research",
+    "model": "",
+    "needsYou": false,
+    "parentTaskId": "",
+    "repoPath": "",
+    "reviewState": "",
+    "revision": 5,
+    "ruleId": "",
+    "state": "done",
+    "title": "Check the PR",
+    "updatedAt": 1800000000000
+  }
+}
