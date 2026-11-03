@@ -80,6 +80,18 @@ func firstLine(s string) string {
 	return s
 }
 
+// DefaultWorktreeRoot is the controlled folder of coding-task worktrees, with
+// every symlink along its path already resolved (Worktrees refuses a root that
+// still has one). The daemon and the CLI must agree on it.
+func DefaultWorktreeRoot() string {
+	root := filepath.Join(WorkDirRoot(), "worktrees")
+	_ = os.MkdirAll(root, 0o700)
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		return real
+	}
+	return root
+}
+
 // WorktreeInfo is one task's isolated checkout.
 type WorktreeInfo struct {
 	TaskID       string `json:"taskId"`

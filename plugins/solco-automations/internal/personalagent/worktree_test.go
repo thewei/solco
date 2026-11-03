@@ -38,6 +38,8 @@ func newRepo(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	gitT(t, repo, "config", "user.name", "Fixture")
+	gitT(t, repo, "config", "user.email", "fixture@example.invalid")
 	gitT(t, repo, "add", ".")
 	gitT(t, repo, "commit", "-m", "baseline")
 	return repo

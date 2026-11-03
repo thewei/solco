@@ -69,6 +69,8 @@ type API struct {
 	LegacyLast func() map[string]time.Time
 	// Now is a test seam.
 	Now func() time.Time
+	// Reviewer serves `assistant review|checks`; nil answers `unavailable`.
+	Reviewer *Reviewer
 }
 
 type envelope map[string]any
@@ -121,7 +123,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|overview>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|overview>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
@@ -186,6 +188,10 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.events(rest, body)
 	case "rule":
 		return a.rule(rest, body)
+	case "review":
+		return a.review(rest, body)
+	case "checks":
+		return a.checks(rest, body)
 	case "approval":
 		return a.approval(rest, body)
 	case "task":

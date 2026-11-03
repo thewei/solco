@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,14 +33,15 @@ const pumpInterval = 3 * time.Second
 // lock, the one scheduler. It opens the store, settles what a crash left
 // behind and then pumps queued tasks into real Herdr Agents.
 type personal struct {
-	store   *personalagent.Store
-	disp    *personalagent.Dispatcher
-	cancel  context.CancelFunc
-	ctx     context.Context
-	watch   *personalagent.Watcher
-	beat    *personalagent.Beater
-	rules   *personalagent.RuleScheduler
-	polling atomic.Bool
+	store    *personalagent.Store
+	disp     *personalagent.Dispatcher
+	cancel   context.CancelFunc
+	ctx      context.Context
+	watch    *personalagent.Watcher
+	beat     *personalagent.Beater
+	rules    *personalagent.RuleScheduler
+	reviewer *personalagent.Reviewer
+	polling  atomic.Bool
 
 	notifier *notify.Notifier
 	lastRule time.Time
@@ -74,11 +74,17 @@ func startPersonal(n *notify.Notifier) *personal {
 			return *a, true
 		},
 		OnSettled: p.settled,
-		Worktrees: &personalagent.Worktrees{Store: store, Root: worktreeRoot()},
+		Worktrees: &personalagent.Worktrees{Store: store, Root: personalagent.DefaultWorktreeRoot()},
 	}
 	p.rules = &personalagent.RuleScheduler{Store: store, Load: config.Load}
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
+	p.reviewer = &personalagent.Reviewer{Store: store, Worktrees: p.disp.Worktrees}
+	if n, err := p.reviewer.Recover(); err != nil {
+		log.Printf("assistants: merge recovery failed: %v", err)
+	} else if n > 0 {
+		log.Printf("assistants: %d interrupted merge(s) settled from git's own state", n)
+	}
 	if n, err := store.Recover(); err != nil {
 		log.Printf("assistants: recovery failed: %v", err)
 	} else if n > 0 {
@@ -268,16 +274,4 @@ func (p *personal) prune() {
 	} else if n > 0 {
 		log.Printf("assistants: pruned %d rule task(s) past retention", n)
 	}
-}
-
-// worktreeRoot is the controlled folder of coding-task worktrees, with every
-// symlink along its path already resolved (Worktrees refuses a root that
-// still has one).
-func worktreeRoot() string {
-	root := filepath.Join(personalagent.WorkDirRoot(), "worktrees")
-	_ = os.MkdirAll(root, 0o700)
-	if real, err := filepath.EvalSymlinks(root); err == nil {
-		return real
-	}
-	return root
 }

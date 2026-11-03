@@ -283,6 +283,37 @@ var migrations = []string{
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
 	);`,
+	// v8: review evidence and the approved check list (E03).
+	`CREATE TABLE reviews (
+		id TEXT PRIMARY KEY,
+		task_id TEXT NOT NULL,
+		assistant_id TEXT NOT NULL,
+		state TEXT NOT NULL,
+		branch TEXT NOT NULL,
+		head TEXT NOT NULL,
+		base_head TEXT NOT NULL,
+		target_branch TEXT NOT NULL,
+		target_head TEXT NOT NULL,
+		files INTEGER NOT NULL DEFAULT 0,
+		insertions INTEGER NOT NULL DEFAULT 0,
+		deletions INTEGER NOT NULL DEFAULT 0,
+		paths TEXT NOT NULL DEFAULT '[]',
+		diff_hash TEXT NOT NULL DEFAULT '',
+		checks TEXT NOT NULL DEFAULT '[]',
+		agent_review_task_id TEXT NOT NULL DEFAULT '',
+		approval_id TEXT NOT NULL DEFAULT '',
+		error TEXT NOT NULL DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX reviews_by_task ON reviews(task_id, created_at);
+	CREATE TABLE review_checks (
+		assistant_id TEXT PRIMARY KEY,
+		active TEXT NOT NULL DEFAULT '[]',
+		pending TEXT NOT NULL DEFAULT '[]',
+		revision INTEGER NOT NULL DEFAULT 0
+	);`,
 }
 
 func (s *Store) migrate() error {
@@ -350,6 +381,31 @@ func hashPayload(kind string, payload any) string {
 	raw, _ := json.Marshal(payload)
 	sum := sha256.Sum256(append([]byte(kind+"\x00"), raw...))
 	return hex.EncodeToString(sum[:])
+}
+
+// peekReceipt returns the stored result of an earlier request without running
+// anything, for commands whose work happens outside the transaction.
+func peekReceipt[T any](s *Store, requestID, kind string, payload any) (T, bool, error) {
+	var zero T
+	if requestID == "" {
+		return zero, false, nil
+	}
+	var storedKind, storedHash, stored string
+	err := s.db.QueryRow(`SELECT kind, payload_hash, result FROM receipts WHERE request_id=?`, requestID).Scan(&storedKind, &storedHash, &stored)
+	if errors.Is(err, sql.ErrNoRows) {
+		return zero, false, nil
+	}
+	if err != nil {
+		return zero, false, wrapBusy(err)
+	}
+	if storedKind != kind || storedHash != hashPayload(kind, payload) {
+		return zero, false, ErrRequestConflict
+	}
+	var out T
+	if err := json.Unmarshal([]byte(stored), &out); err != nil {
+		return zero, false, fmt.Errorf("stored receipt unreadable: %w", err)
+	}
+	return out, true, nil
 }
 
 // execute runs fn and, when requestID is set, its receipt in one transaction.

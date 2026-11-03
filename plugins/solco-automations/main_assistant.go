@@ -23,7 +23,8 @@ func assistantCmd(args []string) error {
 	if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice == 0 {
 		body, _ = io.ReadAll(io.LimitReader(os.Stdin, 4<<20))
 	}
-	api := &personalagent.API{Store: store}
+	wt := &personalagent.Worktrees{Store: store, Root: personalagent.DefaultWorktreeRoot()}
+	api := &personalagent.API{Store: store, Reviewer: &personalagent.Reviewer{Store: store, Worktrees: wt}}
 	out, err := api.Handle(append([]string{"assistant"}, args...), body)
 	if err != nil {
 		return printAssistantError(err)
