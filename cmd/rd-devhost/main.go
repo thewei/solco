@@ -80,6 +80,13 @@ func (a authorizer) Authorize(ctx context.Context, req remotedesktop.AuthRequest
 	return remotedesktop.Decision{Allow: false}, nil
 }
 
+// relayFromEnv turns on the relay path for off-LAN tests: RD_RELAY_URL and RD_RELAY_KEY (the relay's shared
+// registration key — an env var so it never shows in argv).
+func relayFromEnv() remotehost.RelayConfig {
+	u, k := strings.TrimSpace(os.Getenv("RD_RELAY_URL")), os.Getenv("RD_RELAY_KEY")
+	return remotehost.RelayConfig{Enabled: u != "", URL: u, RegistrationKey: k}
+}
+
 func lanAddr() string {
 	ifs, _ := net.Interfaces()
 	for _, in := range ifs {
@@ -123,6 +130,7 @@ func main() {
 
 	srv, err := remotehost.New(remotehost.Options{
 		Config:        remotehost.Config{Mode: remotehost.ModeLAN, Port: *port, Address: *addr},
+		Relay:         relayFromEnv(),
 		Dir:           *dir,
 		Backend:       stubBackend{},
 		RemoteDesktop: svc,
@@ -132,6 +140,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	srv.SetP2P(remotehost.P2PConfig{Enabled: true})
 	if err := srv.Start(); err != nil {
 		panic(err)
 	}
