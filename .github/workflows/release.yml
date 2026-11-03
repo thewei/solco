@@ -74,6 +74,9 @@ jobs:
           gh release download "$(cat scripts/remote-helper.pin)" --repo "$GITHUB_REPOSITORY" \
             --pattern solco-remote-helper --dir resources/darwin
           chmod +x resources/darwin/solco-remote-helper
+      - name: Build the resident Remote Host
+        if: matrix.name == 'macOS'
+        run: scripts/build-hostd.sh resources/darwin/solco-hostd "${GITHUB_REF_NAME#v}"
       - name: Build and upload release updates
         env:
           GH_TOKEN: ${{ github.token }}

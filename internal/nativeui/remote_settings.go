@@ -17,6 +17,7 @@ import (
 	"github.com/thewei/solco/internal/chatattach"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/hostd"
 	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/settings"
 )
@@ -44,6 +45,8 @@ var (
 // created on first need and lives until the shell closes.
 type remoteState struct {
 	srv       *remotehost.Server
+	lease     *hostd.Lease // the right to listen on the Host port (the resident service may hold it while we are away)
+	claiming  bool
 	err       string
 	portDraft string
 
@@ -65,33 +68,13 @@ type remoteState struct {
 	qr       [][]bool
 }
 
-// remoteRelayFrom maps the saved choice to the Host's relay config.
+// remoteRelayFrom, remoteP2PFrom and remoteConfigFrom map the saved choice to the Host's configs; the mapping is
+// shared with the resident service (internal/hostd) so both owners read the settings the same way.
 func remoteRelayFrom(r settings.RemoteAccessSettings) remotehost.RelayConfig {
-	return remotehost.RelayConfig{Enabled: r.RelayEnabled, URL: strings.TrimSpace(r.RelayURL), RegistrationKey: r.RelayKey}
+	return hostd.RelayFrom(r)
 }
-
-// remoteP2PFrom maps the saved choice to the Host's P2P config (on unless the
-// user switched it off; empty ICE text = the built-in STUN list).
-func remoteP2PFrom(r settings.RemoteAccessSettings) remotehost.P2PConfig {
-	return remotehost.P2PConfig{
-		Enabled:    !r.P2PDisabled,
-		ICEServers: remotehost.ParseICEServers(r.P2PICE, r.P2PTurnUser, r.P2PTurnPass),
-	}
-}
-
-// remoteConfigFrom maps the saved choice to the Host's listener config; an
-// unreadable mode is off, never wider.
-func remoteConfigFrom(r settings.RemoteAccessSettings) remotehost.Config {
-	mode, err := remotehost.ParseMode(r.Mode)
-	if err != nil {
-		mode = remotehost.ModeOff
-	}
-	port := r.Port
-	if port == 0 {
-		port = remotehost.DefaultPort
-	}
-	return remotehost.Config{Mode: mode, Port: port, Address: r.Address}
-}
+func remoteP2PFrom(r settings.RemoteAccessSettings) remotehost.P2PConfig { return hostd.P2PFrom(r) }
+func remoteConfigFrom(r settings.RemoteAccessSettings) remotehost.Config { return hostd.ConfigFrom(r) }
 
 func remoteModeIndex(m remotehost.Mode) int {
 	for i, mm := range remoteModes {
@@ -169,6 +152,16 @@ func (s *Shell) syncRemoteHost() {
 	if srv == nil {
 		return
 	}
+	if remoteConfigFrom(s.settings.Remote).Mode == remotehost.ModeOff {
+		s.remote.err = ""
+		_ = srv.Reconfigure(remoteConfigFrom(s.settings.Remote), remoteRelayFrom(s.settings.Remote))
+		s.releaseHostLease()
+		return
+	}
+	if s.remote.lease == nil {
+		s.claimHostLease() // the resident service may own the port; ask it to step aside, then come back here
+		return
+	}
 	s.remote.err = ""
 	srv.SetP2P(remoteP2PFrom(s.settings.Remote))
 	if err := srv.Reconfigure(remoteConfigFrom(s.settings.Remote), remoteRelayFrom(s.settings.Remote)); err != nil {
@@ -208,6 +201,42 @@ func (s *Shell) stopRemoteHost() {
 	if s.remote.srv != nil {
 		s.remote.srv.Close()
 	}
+	s.releaseHostLease()
+}
+
+// remoteClaimGo runs the (possibly slow) lease claim off the window thread; tests make it synchronous.
+var remoteClaimGo = func(f func()) { go f() }
+
+// remoteClaimWait is how long the desktop waits for a resident service to hand the port over.
+const remoteClaimWait = 6 * time.Second
+
+// claimHostLease takes the Host port from the resident service (or finds it free) and then re-runs the sync. Two
+// owners never listen at once: without the lease the desktop reports it instead of binding.
+func (s *Shell) claimHostLease() {
+	if s.remote.claiming || s.userDataDir == "" {
+		return
+	}
+	s.remote.claiming = true
+	dir := hostd.RemoteDir(s.userDataDir)
+	remoteClaimGo(func() {
+		lease, err := hostd.Claim(dir, remoteClaimWait)
+		s.applyOnWindow(func() {
+			s.remote.claiming = false
+			if err != nil {
+				slog.Warn("remote host port is owned elsewhere", "error", err)
+				s.remote.err = "Remote access is unavailable: another Solco Host owns the port."
+				return
+			}
+			s.remote.lease = lease
+			s.syncRemoteHost()
+		})
+	})
+}
+
+// releaseHostLease hands the port back so the resident service can serve while Solco is off or closed.
+func (s *Shell) releaseHostLease() {
+	s.remote.lease.Release()
+	s.remote.lease = nil
 }
 
 // setRemote saves a change to the page's choice and rebinds the listener.
@@ -267,9 +296,40 @@ func (s *Shell) settingsRemote(c *ui.Context) {
 	}))
 	if cfg.Mode != remotehost.ModeOff {
 		s.remoteStatusCard(c, srv, cfg)
+		s.remoteResidentRow(c)
 	}
 	s.remotePairedPhones(c, srv)
 	s.remoteAdvanced(c, srv, cfg)
+}
+
+// remoteResidentRow offers the resident service (internal/hostd): while it is installed, phones keep reaching the
+// Assistants and the Herdr tree after Solco quits. Shown only where the bundle ships the binary.
+func (s *Shell) remoteResidentRow(c *ui.Context) {
+	exe, _ := os.Executable()
+	bin, ok := hostd.Locate(exe)
+	if !ok {
+		return
+	}
+	installed := hostd.Installed()
+	settingsGroup(c, "", row("Keep Running When Solco Quits", "Phones can still manage Assistants and watch Agents while this app is closed. Chat, files and Git need Solco open.", func() {
+		if on, changed := settingSwitch(c, "Keep Running When Solco Quits", installed); changed {
+			dir := s.userDataDir
+			remoteClaimGo(func() {
+				var err error
+				if on {
+					err = hostd.Install(bin, dir)
+				} else {
+					err = hostd.Uninstall()
+				}
+				s.applyOnWindow(func() {
+					if err != nil {
+						slog.Warn("resident service change failed", "error", err)
+						s.remote.err = "The resident service could not be changed."
+					}
+				})
+			})
+		}
+	}))
 }
 
 // remoteSummary is the status card's reading of the Host: a headline, the

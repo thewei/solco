@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/thewei/solco/internal/personalagent"
 )
@@ -330,4 +331,50 @@ func TestPersonalAgentGolden(t *testing.T) {
 	golden(t, "error-personal-agent-stale.json", stale)
 	h3 := newHarness(t)
 	golden(t, "error-personal-agent-unavailable.json", bodyOf(t, h3.get("/api/v3/personal-agent/overview", h3.token, nil)))
+}
+
+// SOLCO-R03: a phone that lost its connection and sends the same decision again forwards the same requestId (the
+// core answers from its receipt, never deciding twice); a revoked phone is refused over HTTP and its socket is
+// closed, and nothing reaches the core afterwards.
+func TestReconnectReplaysTheRequestIdAndARevokedPhoneIsRefused(t *testing.T) {
+	h, core := paHarness(t, true)
+	decide := `{"requestId":"retry-9","actionHash":"` + paHash + `","approve":true}`
+	path := "/api/v3/personal-agent/approvals/" + paApprovalP + "/decision"
+	for i := 0; i < 2; i++ { // the second send is the retry after a dropped connection
+		if status, _ := h.send("POST", path, h.token, decide); status != 200 {
+			t.Fatalf("decision #%d: %d", i, status)
+		}
+		if call := core.lastCall(); !strings.Contains(call, `"requestId":"retry-9"`) || !strings.Contains(call, "approval decide "+paApprovalP) {
+			t.Fatalf("decision #%d call %q", i, call)
+		}
+	}
+	conn, _, err := h.dial("/api/v3/events", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readJSON(t, conn) // hello
+
+	if err := h.srv.Devices().Revoke(h.devID); err != nil {
+		t.Fatal(err)
+	}
+	before := core.callCount()
+	if status, _ := h.send("POST", path, h.token, decide); status != http.StatusUnauthorized {
+		t.Fatalf("revoked phone decision: %d", status)
+	}
+	if resp := h.get("/api/v3/personal-agent/overview", h.token, nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked phone read: %d", resp.StatusCode)
+	}
+	if core.callCount() != before {
+		t.Fatal("a revoked phone reached the Assistants core")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for {
+		if _, _, err := conn.Read(ctx); err != nil {
+			break // closed by the revoke
+		}
+	}
+	if ctx.Err() != nil {
+		t.Fatal("the revoked phone's events socket stayed open")
+	}
 }

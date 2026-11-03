@@ -165,6 +165,8 @@ GOTOOLCHAIN=auto go tool mygo build
 # repository; without it the app builds fine and Remote Desktop reports "unavailable". The final
 # identity signature below re-seals everything, so the helper is first signed ad hoc here.
 bash "$REPO/scripts/embed-remote-helper.sh" "$SRC" || echo "warning: could not embed the Remote Desktop helper (the app builds without it)"
+# The resident Remote Host (phones keep reaching Assistants after Solco quits); optional, offered in Settings → Remote Access.
+bash "$REPO/scripts/embed-hostd.sh" "$SRC" || echo "warning: could not embed the resident Remote Host (the app builds without it)"
 
 step "3/7 verify the built bundle"
 plutil -lint "$SRC/Contents/Info.plist" >/dev/null || die "built Info.plist is invalid"

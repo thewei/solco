@@ -39,7 +39,7 @@ var settingsLabels = map[string][][2]string{
 		{"Transcription", "Source"}, {"Transcription", "Account"}, {"Transcription", "What is sent"}, {"Transcription", "Endpoint"}, {"Transcription", "API key"}, {"Transcription", "Model"},
 	},
 	"/settings/remote": {
-		{"Access", "Access"}, {"Access", "Pair a phone"},
+		{"Access", "Access"}, {"Access", "Pair a phone"}, {"Access", "Keep Running When Solco Quits"},
 		{"Advanced", "Address"}, {"Advanced", "Port"},
 		{"Advanced", "Relay"}, {"Advanced", "Relay Address"}, {"Advanced", "Registration Key"},
 		{"Advanced", "P2P"}, {"Advanced", "ICE Servers"}, {"Advanced", "TURN Username"}, {"Advanced", "TURN Credential"},
