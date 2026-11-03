@@ -161,6 +161,11 @@ fi
 GOTOOLCHAIN=auto go tool mygo build
 [ -x "$SRC/Contents/MacOS/Solco" ] || die "build produced no executable at $SRC"
 
+# Remote Desktop's native helper rides inside the bundle (Contents/Helpers). It is built from its own
+# repository; without it the app builds fine and Remote Desktop reports "unavailable". The final
+# identity signature below re-seals everything, so the helper is first signed ad hoc here.
+bash "$REPO/scripts/embed-remote-helper.sh" "$SRC" || echo "warning: could not embed the Remote Desktop helper (the app builds without it)"
+
 step "3/7 verify the built bundle"
 plutil -lint "$SRC/Contents/Info.plist" >/dev/null || die "built Info.plist is invalid"
 BUILD_ID="$(bundle_id "$SRC")" || die "cannot read the built bundle identifier"
