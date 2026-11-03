@@ -449,12 +449,11 @@ func TestReflog(t *testing.T) {
 }
 
 func TestSubmoduleAddRemove(t *testing.T) {
-	t.Setenv("GIT_CONFIG_COUNT", "1")
-	t.Setenv("GIT_CONFIG_KEY_0", "protocol.file.allow")
-	t.Setenv("GIT_CONFIG_VALUE_0", "always")
 	ctx, cancel := opCtx(t)
 	defer cancel()
 
+	// No protocol.file.allow in the environment: a typed local path must
+	// still work, which is the point of addLocalSubmodule.
 	sub, _ := tempRepo(t)
 	root, r := tempRepo(t)
 
@@ -473,6 +472,12 @@ func TestSubmoduleAddRemove(t *testing.T) {
 	}
 	if err := r.AddSubmodule(ctx, root, "file://"+sub, "lib"); err == nil {
 		t.Fatal("adding the same path twice must be refused")
+	}
+	if err := r.AddSubmodule(ctx, root, sub, "lib2"); err != nil {
+		t.Fatalf("an absolute path is a local address too: %v", err)
+	}
+	if err := r.RemoveSubmodule(ctx, root, "lib2"); err != nil {
+		t.Fatalf("remove lib2: %v", err)
 	}
 	if err := r.RemoveSubmodule(ctx, root, "nothing"); err == nil {
 		t.Fatal("non-submodule must be refused")

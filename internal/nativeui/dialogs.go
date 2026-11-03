@@ -48,6 +48,28 @@ func modalTitle(c *ui.Context, title string) ui.Element {
 	return ui.Text(c, title).FontSize(Typography().Heading).FontWeight(WeightSemibold)
 }
 
+// gitConfirmActions names what a Git confirm's button does, so it reads
+// "Remove" or "Discard" instead of a bare "Confirm".
+var gitConfirmActions = map[string]string{
+	"git-discard": "Discard", "git-delete-untracked": "Delete", "git-drop-stash": "Drop", "git-stash-clear": "Drop All",
+	"git-delete-branch": "Delete", "git-delete-remote-branch": "Delete", "git-delete-tag": "Delete", "git-delete-remote-tag": "Delete",
+	"git-merge-ff": "Merge", "git-merge-no-ff": "Merge", "git-merge-squash": "Squash", "git-rebase": "Rebase",
+	"git-cherry-pick": "Cherry-pick", "git-revert-commit": "Revert", "git-undo-commit": "Undo", "git-sequencer-abort": "Abort",
+	"git-checkout-detached": "Check Out", "git-checkout-remote": "Check Out", "git-restore-file": "Restore",
+	"git-remove-worktree": "Remove", "git-remove-submodule": "Remove", "git-remove-remote": "Remove",
+}
+
+// confirmActionText is the confirm button's label for a confirm kind.
+func confirmActionText(kind string) string {
+	if text, ok := gitConfirmActions[kind]; ok {
+		return text
+	}
+	if strings.HasPrefix(kind, "git-reset-") {
+		return "Reset"
+	}
+	return "Confirm"
+}
+
 func (s *Shell) dialogs(c *ui.Context) {
 	if s.mergeDialogOpen && (s.git == nil || s.mergeRepoRoot == "" || s.mergeRepoRoot != s.git.root) {
 		s.mergeDialogOpen = false
@@ -109,8 +131,10 @@ func (s *Shell) dialogs(c *ui.Context) {
 	if s.dialogOpen {
 		ui.Modal(c, &s.dialogOpen, func() {
 			modalTitle(c, s.dialogTitle)
-			field := textField(c, &s.dialogValue).Label(s.dialogLabel).AutoFocus().Width(360)
-			submit := field.Submitted()
+			submit := false
+			captionedField(c, s.dialogLabel, "", func() {
+				submit = textField(c, &s.dialogValue).Label(s.dialogLabel).AutoFocus().Width(360).Submitted()
+			})
 			ui.Row(c).Gap(Spacing().M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {
 					s.dialogOpen = false
@@ -148,7 +172,7 @@ func (s *Shell) dialogs(c *ui.Context) {
 		// button: AlertDialog focuses and Enter-clicks its LAST button, so
 		// Cancel goes last (Enter dismisses safely; Escape still cancels by
 		// label) and Confirm is index 0 (2026-10-06 F69).
-		if ui.AlertDialog(c, &s.confirmOpen, s.confirmTitle, s.confirmMessage, "Confirm", "Cancel") == 0 {
+		if ui.AlertDialog(c, &s.confirmOpen, s.confirmTitle, s.confirmMessage, confirmActionText(s.confirmKind), "Cancel") == 0 {
 			kind, target := s.confirmKind, s.confirmTarget
 			s.confirmOpen = false
 			s.submitConfirm(kind, target)

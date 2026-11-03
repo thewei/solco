@@ -268,7 +268,7 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 		ui.Box(c).Width(treeGlyphGap).Shrink(0).PassThrough()
 		ui.Text(c, spec.Title).FontSize(Typography().Body).FontWeight(WeightSemibold).Grow(1).MinWidth(0).SingleLine()
 		count := func() {
-			ui.Textf(c, "%d", spec.Count).FontSize(Typography().Micro).TextColor(t.TextMuted).Shrink(0)
+			ui.Textf(c, "%d", spec.Count).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0)
 		}
 		if spec.Trailing != nil {
 			count()

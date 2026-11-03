@@ -367,7 +367,31 @@ func (r *Runner) AddSubmodule(ctx context.Context, root, address, rel string) er
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
 		return refusal("submodule", "%s already exists", rel)
 	}
+	if isLocalAddress(address) {
+		return r.addLocalSubmodule(ctx, root, address, rel)
+	}
 	_, err = r.network(ctx, root, "submodule", "add", "--", address, rel)
+	return err
+}
+
+// isLocalAddress reports an absolute path or file:// address.
+func isLocalAddress(address string) bool {
+	return filepath.IsAbs(address) || strings.HasPrefix(strings.ToLower(address), "file://")
+}
+
+// addLocalSubmodule adds a submodule cloned from a local repository. Git
+// refuses the file transport for submodules by default (it guards against a
+// hostile .gitmodules), but here the user typed the path themselves and
+// nothing is cloned recursively, so the transport is allowed for this one
+// command only.
+func (r *Runner) addLocalSubmodule(ctx context.Context, root, address, rel string) error {
+	unlock, err := r.LockRepo(root, "submodule")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	env := append(mutateEnv(), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=protocol.file.allow", "GIT_CONFIG_VALUE_0=always")
+	_, err = r.run(ctx, OpMutate, NetworkTimeout, MaxReadOutput, env, root, []string{"submodule", "add", "--", address, rel})
 	return err
 }
 

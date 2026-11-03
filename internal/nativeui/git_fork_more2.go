@@ -135,9 +135,12 @@ func (s *Shell) tagDialog(c *ui.Context) {
 		modalTitle(c, title)
 		submit := false
 		ui.Column(c).Gap(Spacing().M).Children(func() {
-			f := textField(c.Key("tag-name"), &d.name).Label("Tag name").AutoFocus().Width(380)
-			submit = f.Submitted()
-			textArea(c.Key("tag-message"), &d.message).Label("Message (optional — makes it an annotated tag)").Width(380).Height(76)
+			captionedField(c, "Tag name", "", func() {
+				submit = textField(c.Key("tag-name"), &d.name).Label("Tag name").AutoFocus().Width(380).Submitted()
+			})
+			captionedField(c, "Message", "Optional. A message makes it an annotated tag.", func() {
+				textArea(c.Key("tag-message"), &d.message).Label("Tag message").Width(380).Height(76)
+			})
 			ui.Row(c).Gap(Spacing().M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {
 					d.open = false
@@ -337,7 +340,7 @@ func (s *Shell) reflogSheet(c *ui.Context) {
 		ui.Column(c).Width(760).MaxWidth(900).Height(520).MinHeight(240).MinWidth(0).Gap(Spacing().M).Children(func() {
 			modalTitle(c, "Reflog")
 			ui.Text(c, "Where HEAD has been, newest first. Right-click an entry to go back to it.").
-				FontSize(Typography().Caption).TextColor(t.TextMuted)
+				FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			switch {
 			case r.loading:
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -376,7 +379,7 @@ func (s *Shell) reflogRow(c *ui.Context, e gitworkbench.ReflogEntry) {
 		s.showGitCommits()
 		s.reviewCommit(e.Hash)
 	}
-	tipped(c, row, e.Action+"\n"+e.Subject+" · "+gdCommitTime(e.Time)+"\n"+e.Hash)
+	tipped(c, row, e.Action+"\n"+e.Subject+" · "+gdCommitTime(e.Time)+"\n"+e.Selector+" · "+e.Hash)
 	row.ContextMenu(func(m *ui.Menu) {
 		if m.Item("Check Out This Commit…").Disabled(s.git.opBusy).Chosen() {
 			s.gitMore.reflog.open = false
@@ -399,12 +402,36 @@ func (s *Shell) reflogRow(c *ui.Context, e gitworkbench.ReflogEntry) {
 			s.copyToClipboard(e.Hash)
 		}
 	})
+	kind, detail := reflogParts(e.Action)
 	row.Children(func() {
-		ui.Text(c, e.Selector).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Width(78).SingleLine()
-		ui.Text(c, e.Hash[:8]).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.Accent).Width(64).SingleLine()
-		ui.Text(c, e.Action).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine()
-		ui.Text(c, gdCommitTime(e.Time)).FontSize(Typography().BodySmall).TextColor(t.TextMuted).SingleLine()
+		// kind chip · what happened · commit · how long ago: the selector
+		// (HEAD@{n}) is in the tooltip, where nobody reads it by eye.
+		ui.Row(c).Size(70, 18).Shrink(0).Center().Radius(treeRowRadius).
+			Background(t.TextMuted.Alpha(0.14)).Children(func() {
+			ui.Text(c, kind).FontSize(Typography().Caption).FontWeight(WeightMedium).TextColor(t.TextMuted).SingleLine()
+		})
+		ui.Text(c, detail).FontSize(Typography().Body).Grow(1).MinWidth(0).SingleLine()
+		ui.Text(c, e.Hash[:8]).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.Accent).Shrink(0).SingleLine()
+		ui.Text(c, gdRelativeTime(e.Time)).FontSize(Typography().BodySmall).TextColor(t.TextMuted).
+			Width(72).TextAlign(ui.End).Shrink(0).SingleLine()
 	})
+}
+
+// reflogParts splits a reflog message into the kind of move (its first word)
+// and the rest: "rebase (finish): returning to x" → "rebase", "(finish) ·
+// returning to x".
+func reflogParts(action string) (kind, detail string) {
+	head, msg, _ := strings.Cut(strings.TrimSpace(action), ": ")
+	kind, mod, _ := strings.Cut(head, " ")
+	switch {
+	case kind == "":
+		return "head", action
+	case mod == "":
+		return kind, msg
+	case msg == "":
+		return kind, mod
+	}
+	return kind, mod + " · " + msg
 }
 
 // ---- submodules ------------------------------------------------------------
@@ -442,9 +469,12 @@ func (s *Shell) submoduleDialog(c *ui.Context) {
 		modalTitle(c, "Add Submodule")
 		submit := false
 		ui.Column(c).Gap(Spacing().M).Children(func() {
-			u := textField(c.Key("sub-url"), &d.url).Label("Repository address").Placeholder("https://github.com/you/lib.git").AutoFocus().Width(380)
-			p := textField(c.Key("sub-path"), &d.path).Label("Folder (optional)").Placeholder(fallbackText(submoduleFolder(d.url), "lib")).Width(380)
-			submit = u.Submitted() || p.Submitted()
+			captionedField(c, "Repository address", "", func() {
+				submit = textField(c.Key("sub-url"), &d.url).Label("Repository address").Placeholder("https://github.com/you/lib.git").AutoFocus().Width(380).Submitted()
+			})
+			captionedField(c, "Folder", "Optional. Defaults to the repository name.", func() {
+				submit = textField(c.Key("sub-path"), &d.path).Label("Submodule folder").Placeholder(fallbackText(submoduleFolder(d.url), "lib")).Width(380).Submitted() || submit
+			})
 			ui.Row(c).Gap(Spacing().M).Justify(ui.End).Children(func() {
 				if regularButton(c, "Cancel").Clicked() {
 					d.open = false

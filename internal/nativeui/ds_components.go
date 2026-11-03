@@ -135,6 +135,19 @@ func settingsGroup(c *ui.Context, title string, rows ...settingsRow) ui.Element 
 	})
 }
 
+// captionedField puts a visible caption above a dialog's input and, when
+// given, a muted hint under it. A placeholder vanishes the moment the user
+// types, so it cannot be the only thing that says what a field is for.
+func captionedField(c *ui.Context, caption, hint string, field func()) {
+	ui.Column(c).Gap(Spacing().XS).Children(func() {
+		ui.Text(c, caption).FontSize(Typography().BodySmall).FontWeight(WeightMedium)
+		field()
+		if hint != "" {
+			ui.Text(c, hint).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
+		}
+	})
+}
+
 // rowInset is the horizontal padding of a grouped row; dividers start at it.
 const rowInset float32 = 14
 

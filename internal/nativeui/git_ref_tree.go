@@ -247,12 +247,27 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 	var trailing func()
 	if it.current || it.badge != "" {
 		trailing = func() {
-			if it.badge != "" {
-				ui.Text(c, it.badge).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).Shrink(0)
-			}
-			if it.current {
-				ui.Icon(c, iconCheck).FontSize(11).TextColor(c.Theme().Text).Shrink(0)
-			}
+			// "↑6 ↓1" then the check: each half is its own text so the gaps
+			// are real, one step above the muted caption it used to be.
+			ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(0).Children(func() {
+				th := c.Theme()
+				// Only the ↑/↓ counts split; a word badge ("not set up") stays whole.
+				var parts []string
+				switch {
+				case it.badge == "":
+				case strings.HasPrefix(it.badge, "↑") || strings.HasPrefix(it.badge, "↓"):
+					parts = strings.Fields(it.badge)
+				default:
+					parts = []string{it.badge}
+				}
+				for _, part := range parts {
+					ui.Text(c, part).FontSize(Typography().BodySmall).FontWeight(WeightMedium).
+						TextColor(th.TextMuted.Mix(th.Text, 0.55)).SingleLine()
+				}
+				if it.current {
+					ui.Icon(c, iconCheck).FontSize(11).TextColor(th.Text).Shrink(0)
+				}
+			})
 		}
 	}
 	key := gitRefRowKey(it.title, it.tooltip)

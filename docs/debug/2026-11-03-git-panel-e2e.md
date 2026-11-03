@@ -146,7 +146,7 @@
 | A5 Worktree | 行菜单 `Open as Workspace`（复用 `createWorkspaceAt`）/ `Remove Worktree…`（主工作树不出现；Git 拒绝脏树，不 force） | 加 `wt-side` 后菜单四项齐全，确认后目录与登记都消失 |
 | B6 冲突逐文件解决 | 冲突文件右键 `Keep Current Branch's Version` / `Take Incoming Version` / `Mark as Resolved`（仍含冲突标记则拒绝）；一侧删除文件时取该侧 = `git rm` | 带标记 Mark as Resolved → toast “still contains conflict markers”；Take Incoming 后文件内容为 remote side 且已暂存 |
 | B8 Reflog | Actions `Reflog…` 面板（300 条）；行右键 Check Out / New Branch Here / Reset ▸ / Copy Hash；点击跳到提交审阅 | 面板列出 20+ 条含 checkout/rebase/pull；行菜单齐全 |
-| B9 子模块 | Actions `Add Submodule…`（地址 + 可选目录，目录默认取仓库名；联网）；行菜单 `Remove Submodule…`（`deinit -f` + `rm -f`，确认） | 对话框与目录推断正确；本机 file:// 被 Git 的 protocol.file 策略拒绝，toast 带原因（域测用 `GIT_CONFIG_*` 放行并验证增/删成功） |
+| B9 子模块 | Actions `Add Submodule…`（地址 + 可选目录，目录默认取仓库名；联网）；行菜单 `Remove Submodule…`（`deinit -f` + `rm -f`，确认） | 对话框与目录推断正确；本机路径起初被 Git 的 protocol.file 策略拒绝（第 7 轮修复，见下） |
 | B10 Stash | Stashes 区头右键 `Stash With Message…` / `Drop All Stashes…`（确认）；文件右键 `Stash File`（`stash push -u -- path`） | 只暂存点选文件、另一未跟踪文件留在工作区；Drop All 后 `stash list` 为空 |
 | B11 托管站点链接 | 提交右键 `Copy Commit Link` / `Open on GitHub|GitLab|Bitbucket|Codeberg|<host>`（仅 web 远端，本地路径远端不出现；GitLab 系 `/-/commit/`、Bitbucket `/commits/`） | 本机 demo 远端为本地路径 → 两项不出现（符合设计）；URL 解析由表驱动单测覆盖 |
 | B12 Skip hooks / Sign-off | 提交面板两个复选框（逐次，不持久）→ `--no-verify` / `--signoff` | 预置失败 pre-commit 钩子，勾选后提交成功且信息带 `Signed-off-by` |
@@ -154,3 +154,21 @@
 约束沿用: 不做 force push、不做 `git clean`、不做 Ignore；`internal/gitworkbench` 仍是唯一 Git 执行者，无新 Herdr 方法，日志不含路径/Git 文本。
 
 验证: `go test -short ./...` 绿、`mygo vet .`、`git diff --check`；上表“设备复验”在沙箱 Solco 对 demo 实操通过（Apply Patch / 托管链接 / 子模块成功路径由单测覆盖）。
+
+## 第 7 轮：真机补验 + 可读性与条理（用户反馈：继续跑完真机、数字可以大一点、更原生/清晰/有条理）
+
+| 项 | 改动 | 设备复验 |
+|---|---|---|
+| 分支行 `↑6 ↓1 ✓` | 原为 10.5pt 暗灰、两数字挤在一起；改为 11pt Medium、亮一档（`TextMuted` 向 `Text` 混 55%），`↑`/`↓` 各自成字、间距 5，✓ 同组（文字徽标如 “not set up” 保持整块） | 放大截图：两数字清晰分开，✓ 不再贴着 ↓1 |
+| 其余小数字 | 区块计数（Branches 4 / Tags 3 …）、Changes 文件行 `+1 −0`、文件数、提交详情的作者·时间/短哈希、分段标签计数：Micro/Caption(10–10.5) → BodySmall(11) | 侧栏与文件列表数字一档提升，行高/列宽不变 |
+| Reflog 面板 | 原为 `HEAD@{n}` + 哈希 + 原文 + 绝对时间的四列“原始输出”；改为 动作类型徽标（commit/checkout/reset/rebase/pull）· 说明 · 短哈希 · 相对时间；`HEAD@{n}` 与绝对时间进 tooltip；说明行文字提到 11pt | 面板一眼能扫到“做过什么”；右键菜单不变 |
+| 对话框字段 | 新增 `captionedField`（字段上方可见标题 + 可选提示）；Tag（Tag name / Message 并说明“带说明即 annotated”）、Add Submodule（Repository address / Folder，提示默认取仓库名）、通用文本对话框（分支名/Stash 说明等）都有常驻标题——占位符一输入就消失，不能是字段唯一的说明 | 三个对话框截图均有标题 |
+| 确认按钮 | Git 的确认弹窗按钮由泛泛的 “Confirm” 改为动作名（Remove / Discard / Delete / Drop All / Squash / Check Out / Restore / Reset / Revert …），`confirmActionText` 一处映射，非 Git 确认保持 Confirm；Cancel 仍是默认键 | Remove Submodule、Delete Tag from Remote 弹窗按钮分别为 Remove、Delete |
+| Actions 菜单 | 4 个低频同步变体收进 `Fetch & Pull Options` 子菜单（顶层少 3 项），其余分组不变 | 菜单顶层 15 项，子菜单四项齐全 |
+| Add Submodule 本机路径 | **真机发现**：给本机绝对路径/`file://` 被 Git 默认的 `protocol.file.allow=user` 拒绝（“transport 'file' not allowed”），用户无法添加本地子模块。改为仅对**用户键入的本机路径**在该条命令上放行 file 传输（环境变量 `GIT_CONFIG_*`，不改任何配置文件；不递归，https/ssh 地址走原路径）；域测去掉原先全局放行，覆盖 `file://` 与绝对路径 + 删除 | 沙箱 demo：添加 → `.gitmodules` + gitlink 暂存、侧栏出现 Submodules 区；`Remove Submodule…` → Remove 后目录与登记消失 |
+| 复制/打开提交链接 | 把 origin 临时指向 `https://github.com/acme/demo.git`、点 Refresh 后提交菜单出现 `Copy Commit Link` / `Open on GitHub`；Copy 后剪贴板为 `https://github.com/acme/demo/commit/<完整哈希>` | 已验证复制；“Open on GitHub” 只调 `OpenExternal`，不在沙箱开浏览器 |
+| Apply Patch | 菜单项 → 系统文件对话框（含 “The patch is applied to the working tree only — nothing is staged or committed.” 说明）真机已出现；对话框是远程视图服务，无障碍树不可达，后台无法替它选文件，故“选中补丁后应用”仍由域测覆盖（`apply --check` + 应用 + 越界/超限拒绝） | 对话框出现并可取消 |
+
+踩坑: 远端 URL 在 App 外被改（`git remote set-url`）后，侧栏要点一次 Refresh 才会重读 remotes（既有行为，非本轮引入）。
+
+验证: `go test -short ./internal/gitworkbench ./internal/nativeui` 绿；`go vet`；真机截图对比如上。

@@ -213,7 +213,7 @@ func (s *Shell) gitQuickCommitForm(c *ui.Context, snap *gitworkbench.ChangesSnap
 				}
 			}
 			ui.Spacer(c)
-			ui.Text(c, pluralFiles(len(snap.Files))).FontSize(Typography().Micro).TextColor(t.TextMuted)
+			ui.Text(c, pluralFiles(len(snap.Files))).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			s.gitQuickCommitActions(c, blocked)
 		})
 		if s.commitQuickError != "" {
@@ -335,7 +335,7 @@ func (s *Shell) gitCommitFiles(c *ui.Context) {
 		}, 10, func() {
 			ui.Text(c, "Changed Files").FontSize(Typography().BodySmall).FontWeight(WeightSemibold).SingleLine()
 			if snap != nil {
-				ui.Textf(c, "%d", len(snap.Files)).FontSize(Typography().Micro).TextColor(t.TextMuted)
+				ui.Textf(c, "%d", len(snap.Files)).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			}
 		})
 		if snap == nil {
@@ -423,8 +423,8 @@ func (s *Shell) gitCommitCard(c *ui.Context) {
 			}
 		}
 		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			tipped(c, ui.Text(c, cm.Author+" · "+gdRelativeTime(cm.Time)).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0), gdCommitTime(cm.Time))
-			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().Caption).TextColor(t.TextMuted).Shrink(0).Selectable()
+			tipped(c, ui.Text(c, cm.Author+" · "+gdRelativeTime(cm.Time)).FontSize(Typography().BodySmall).TextColor(t.TextMuted).SingleLine().Grow(1).MinWidth(0), gdCommitTime(cm.Time))
+			ui.Text(c, cm.Short).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0).Selectable()
 			if gorexIconButton(c, gorexColorsOf(t.Dark), iconCopy, "Copy hash", "Copy Commit Hash", false, gorexRowBtn, gorexRowGlyph).Clicked() {
 				s.copyToClipboard(cm.Hash)
 			}

@@ -57,18 +57,23 @@ func (s *Shell) gitActionItems(m *ui.Menu) {
 	}
 	m.Separator()
 	canSync := !s.git.opBusy && !busySequencer && snap.Branch != ""
-	if m.Item("Fetch All Remotes").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
-		s.fetchAll(false)
-	}
-	if m.Item("Fetch All and Prune").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
-		s.fetchAll(true)
-	}
-	if m.Item("Pull and Merge").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
-		s.pullWith(gitworkbench.PullMerge, "Pull and Merge")
-	}
-	if m.Item("Pull and Rebase").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
-		s.pullWith(gitworkbench.PullRebase, "Pull and Rebase")
-	}
+	// The four rarer remote variants share one submenu; plain Fetch / Pull /
+	// Push are the toolbar icons.
+	m.Submenu("Fetch & Pull Options", func(sub *ui.Menu) {
+		if sub.Item("Fetch All Remotes").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
+			s.fetchAll(false)
+		}
+		if sub.Item("Fetch All and Prune").Disabled(s.git.opBusy || len(s.git.remotes) == 0).Chosen() {
+			s.fetchAll(true)
+		}
+		sub.Separator()
+		if sub.Item("Pull and Merge").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
+			s.pullWith(gitworkbench.PullMerge, "Pull and Merge")
+		}
+		if sub.Item("Pull and Rebase").Disabled(!canSync || len(s.git.remotes) == 0).Chosen() {
+			s.pullWith(gitworkbench.PullRebase, "Pull and Rebase")
+		}
+	})
 	m.Separator()
 	if m.Item("Stash All Changes").Disabled(s.git.opBusy || busySequencer || len(snap.Files) == 0).Chosen() {
 		s.stashChanges()

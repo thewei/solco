@@ -28,7 +28,7 @@ func TestActionsMenuCarriesTheThirdBatch(t *testing.T) {
 	}
 	tester.Frame()
 	menu := menuText(tester.Menu())
-	for _, want := range []string{"Fetch All Remotes", "Fetch All and Prune", "Pull and Merge", "Pull and Rebase", "Apply Patch…", "Reflog…", "Add Submodule…"} {
+	for _, want := range []string{"Fetch & Pull Options", "Apply Patch…", "Reflog…", "Add Submodule…"} {
 		if !strings.Contains(menu, want) {
 			t.Errorf("Actions lost %s: %s", want, menu)
 		}
@@ -229,5 +229,37 @@ func TestReflogSheetOpensLoading(t *testing.T) {
 	shell.openReflogSheet()
 	if r := shell.gitMore.reflog; !r.open || !r.loading {
 		t.Fatalf("reflog = %+v", r)
+	}
+}
+
+func TestReflogPartsSplitsKindFromDetail(t *testing.T) {
+	for _, c := range []struct{ in, kind, detail string }{
+		{"commit: fix typo", "commit", "fix typo"},
+		{"checkout: moving from a to b", "checkout", "moving from a to b"},
+		{"rebase (finish): returning to refs/heads/main", "rebase", "(finish) · returning to refs/heads/main"},
+		{"pull --rebase origin main (pick): feat: x", "pull", "--rebase origin main (pick) · feat: x"},
+		{"reset: moving to HEAD", "reset", "moving to HEAD"},
+		{"", "head", ""},
+	} {
+		if k, d := reflogParts(c.in); k != c.kind || d != c.detail {
+			t.Errorf("reflogParts(%q) = %q, %q; want %q, %q", c.in, k, d, c.kind, c.detail)
+		}
+	}
+}
+
+func TestGitConfirmButtonsNameTheirAction(t *testing.T) {
+	for kind, want := range map[string]string{
+		"git-remove-submodule": "Remove", "git-discard": "Discard", "git-reset-hard": "Reset",
+		"git-stash-clear": "Drop All", "history-trash-forever": "Confirm", "": "Confirm",
+	} {
+		if got := confirmActionText(kind); got != want {
+			t.Errorf("confirmActionText(%q) = %q, want %q", kind, got, want)
+		}
+	}
+	// Every git confirm opened in this package has its own verb.
+	for _, kind := range []string{"git-merge-squash", "git-checkout-detached", "git-restore-file", "git-delete-remote-tag", "git-remove-worktree"} {
+		if confirmActionText(kind) == "Confirm" {
+			t.Errorf("%s has no action label", kind)
+		}
 	}
 }

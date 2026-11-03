@@ -51,7 +51,7 @@ func segmentTabs(c *ui.Context, name string, chosen *int, items []segmentTab, ba
 				ui.Text(c, tab.label).SingleLine().TextColor(col)
 				if badge != nil {
 					if n := badge(i); n > 0 {
-						ui.Text(c, itoa(n)).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine()
+						ui.Text(c, itoa(n)).FontSize(Typography().BodySmall).TextColor(t.TextMuted).SingleLine()
 					}
 				}
 			})
