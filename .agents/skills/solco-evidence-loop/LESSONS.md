@@ -22,3 +22,9 @@
 - 台账门禁（`check-shepherdr-2.1-parity.mjs`）需要真实的上游审读才能关；SHA 8df9402… 可 `git fetch --depth 1 origin <sha>` 后 checkout（tag `v2.1.0` 解析出的 HEAD 与它不同）。不审读就不要标 verified/not_applicable。
 - 给“迁移被打断”写测试：`migrations` 是包级切片，测试里追加一条必失败的 SQL（先建表再写不存在的表），断言版本号不变、半成品表不在、旧数据在，再换回可用迁移确认补完。
 - 沙箱直接 `exec` 启动二进制时要用 `block_until_ms:0` 后台；`nohup … &` 在调用结束就被回收。用 `computer_resolve_app {pid}` 取 target_id（`computer_apps` 列不出沙箱）。
+
+## 2026-11-04 对标台账关账的教训
+- 逐条审读上游测试不是走过场：1,193 条里至少挖出 3 个真缺陷（取消后仍认领、合并覆盖 ignored 文件、拼错字段被静默丢弃）。每个“看起来对不上”的上游断言先写一个红测试再决定修或 n/a。
+- 台账脚本要核对 `target_test` 的函数名真实存在，别只看文件存在；再用 `go test -v -run '^(A|B)$'` 数 `--- PASS`，`ok` 不代表命中（没匹配也 ok；opt-in 测试会 SKIP，要带环境变量跑）。
+- 全量并行跑 4 套 gate 时 `TestRevealGrowsTheWindowToTheCommit` 会因机器争用超时（单跑 11s 全过）：门禁结果以单独重跑为准，别在并行下判红绿。
+- 严格解码（`DisallowUnknownFields`）会让原来“带多余字段”的测试变红——这正是它的价值；测试里的多余字段要删，而不是放宽解码。

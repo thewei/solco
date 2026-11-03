@@ -49,5 +49,16 @@
 - SOLCO-E03 新测 `TestAnInterruptedUpgradeRollsBackAndTheNextStartFinishesIt`（迁移事务回滚 + 下次启动补完）；SOLCO-D03 `legacy-export` + 源码扫描测试禁止其它文件提及 `.herdr-projects`。
 - 没有可用的 adb 真机连接（`adb devices` 空）：手机侧以 Host v3 golden + 真进程 Host e2e + 549 个 mobile 测试验证，未做真手机点按。
 
-## 台账现状（诚实记录）
-`node scripts/check-shepherdr-2.1-parity.mjs --gate=all`：31/31 SOLCO 自有场景 verified；上游 1,193 条静态源用例里只有 46 条有人工裁决行且全是 `planned`，其余 1,147 条未逐条审读断言。此门禁**未**通过，不能声称“上游全量用例已逐条等价”。计划文档自己写明 MVP/E 的功能验收不依赖全量签收；后续若要关账，按 `docs/shepherdr-2.1-test-parity.md` §2 的流程逐文件审读（核心 go-parity ≈10.5k 行、UI/client ≈14k 行）。
+## 台账现状（2026-11-04 关账）
+`node scripts/check-shepherdr-2.1-parity.mjs --gate=all` 通过：上游 1,193 条静态源用例逐条审读（168 个文件），167 条 `verified`（117 个不同的目标测试，已逐个 `go test -v` 确认 PASS；`TestRealHerdrObserveContract` 需 `SOLCO_REMOTEHOST_CONTRACT=1` 对真 Herdr 跑过），1,026 条 `not_applicable`（每条带该文件的具体理由：Shepherdr 独有的 Autopilot/沙箱、浏览器面板、web-push/Service Worker、多机 spaces、网页布局等）；31/31 SOLCO 自有场景 verified。检查脚本现在会核对 `target_test` 里的测试名确实存在于文件中。
+
+对标审读过程中发现并修复的真实缺陷（都先红后绿）：
+1. `Pump` 在 ctx 取消后仍会认领任务（`TestShutdownClaimsAndLaunchesNothing`）；
+2. 合并会静默覆盖主检出里被 ignore 的同名文件（git 对 ignored 文件直接覆盖）——现在合并前按名字拒绝（`TestAMergeNeverOverwritesTheMainCheckoutsUntrackedOrIgnoredFiles`）；
+3. 插件 CLI 的 JSON 请求体拼错字段会被静默丢弃（agent 写 `depndsOn` 得到无依赖任务）——现在 `DisallowUnknownFields` 拒绝（`TestAnUnknownFieldIsRefusedNotDropped`）。
+
+另补：心跳自身任务不会再唤醒心跳、被移除的规则休眠且可复活、长依赖链/菱形格有界遍历、锁竞争下写入与规则 tick 有界。
+
+最终树上全部 gate 重跑：根 `go test ./...`（nativeui 因并行争用有一次超时，单跑 1073 passed）、`mygo vet`、`mygo build`、插件 `-race` 全绿、frontend 三项、mobile 六项、`git diff --check`；两个真 Herdr e2e 脚本 exit 0/PASS。
+
+未做：没有可用的 adb 真机（`adb devices` 空、手机 ping 不通、无 AVD），真手机点按仍未做；手机侧以 Host v3 golden + 真核心 Host e2e + mobile 测试覆盖。
