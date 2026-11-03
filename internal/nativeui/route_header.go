@@ -57,6 +57,8 @@ func (s *Shell) routeHeader() (routeHeaderSpec, bool) {
 		return s.projectRouteHeader(), true
 	case path == routeAutomations:
 		return routeHeaderSpec{title: "Automations"}, true
+	case path == routeAssistants:
+		return routeHeaderSpec{title: "Assistants"}, true
 	case path == routeTask:
 		return s.taskRouteHeader(), true
 	case path == routeArchived:

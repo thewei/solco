@@ -127,6 +127,10 @@ func main() {
 	// Shell functions. Binding before App.Run keeps `mygo generate` complete.
 	mygo.BindAs("projects", nativeui.NewProjectsBridge(shell))
 
+	// The WebView Assistants page (product decision 2026-11-03) reads and
+	// writes only through the plugin's `assistant …` CLI behind this bridge.
+	mygo.BindAs("assistants", nativeui.NewAssistantsBridge(shell))
+
 	var raiseMain func()
 
 	// Notification clicks route back to the Agent's owning pane, including

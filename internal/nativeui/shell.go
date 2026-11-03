@@ -305,6 +305,9 @@ type Shell struct {
 	// (automations_ui.go): the page, its sidebar tab and every command hide
 	// unless detection reports it Supported.
 	automations automationsState
+	// assistants is the Assistants gate and sidebar overview (assistants_state.go),
+	// opened by the automations plugin gate plus its own capability probe.
+	assistants assistantsState
 	// rightPanel owns the Native Right Panel (Changes/Files/Services).
 	rightPanel rightPanelState
 	// filesSearch is the Files sidebar's one search (names | content).

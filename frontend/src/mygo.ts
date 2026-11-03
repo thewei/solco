@@ -15,6 +15,127 @@ export interface ActionPane {
   dock: boolean;
 }
 
+/** Approval is a question to a person about one exact action. */
+export interface Approval {
+  id: string;
+  assistantId: string;
+  subjectKind: string;
+  subjectId: string;
+  action: string;
+  actionHash: string;
+  expectedRevision: number;
+  expiresAt: number;
+  state: string;
+  decidedAt: number;
+  createdAt: number;
+}
+
+/** Assistant is one persistent identity. */
+export interface Assistant {
+  id: string;
+  name: string;
+  description: string;
+  rolePrompt: string;
+  scope: string;
+  workspaceRefs: string[];
+  coordinatorSession: string;
+  defaultPolicy: string;
+  status: string;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** AssistantsDetail is the selected Assistant's page. */
+export interface AssistantsDetail {
+  assistant: Assistant;
+  goals: Goal[];
+  tasks: AssistantsTask[];
+  approvals: Approval[];
+  memory: MemoryItem[];
+}
+
+/** AssistantsGoalInput creates a Goal; Watch makes it a PR Watch. */
+export interface AssistantsGoalInput {
+  assistantId: string;
+  title: string;
+  objective: string;
+  /** Watch, when set, adds one pr_watch commitment. */
+  watch?: AssistantsWatch;
+}
+
+/** AssistantsRun is one Run plus whether its pane can be opened from here. */
+export interface AssistantsRun {
+  id: string;
+  taskId: string;
+  ruleId: string;
+  eventId: string;
+  idempotencyKey: string;
+  status: string;
+  claimant: string;
+  herdrSession: string;
+  workspaceId: string;
+  paneId: string;
+  agentSessionId: string;
+  label: string;
+  result: string;
+  error: string;
+  createdAt: number;
+  startedAt: number;
+  finishedAt: number;
+  canOpen: boolean;
+}
+
+/** AssistantsTask is a Task with the Runs the page lists under it. */
+export interface AssistantsTask {
+  id: string;
+  assistantId: string;
+  goalId: string;
+  ruleId: string;
+  parentTaskId: string;
+  kind: string;
+  title: string;
+  brief: string;
+  repoPath: string;
+  agent: string;
+  model: string;
+  state: string;
+  needsYou: boolean;
+  reviewState: string;
+  attempt: number;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+  runs: AssistantsRun[];
+}
+
+/** AssistantsView is everything the page draws, one value per read. */
+export interface AssistantsView {
+  theme: string;
+  available: boolean;
+  /** Assistants are the overview rows (counters per Assistant). */
+  assistants: OverviewRow[];
+  needsYou: number;
+  /** Selected is the Assistant the page is on ("" = none yet). */
+  selected: string;
+  detail?: AssistantsDetail;
+  /**
+   * NewForm asks the page to open its New Assistant form (the sidebar's "+");
+   * reading it clears it.
+   */
+  newForm: boolean;
+}
+
+/** AssistantsWatch is the PR Watch spec the page collects. */
+export interface AssistantsWatch {
+  repo: string;
+  number: number;
+  intervalSeconds: number;
+  agent: string;
+  model: string;
+  repoPath: string;
+}
+
 /** AttemptPane is one parallel attempt. */
 export interface AttemptPane {
   letter: string;
@@ -430,6 +551,25 @@ export interface ChatTurn {
   changes?: ChatChange[];
 }
 
+/** Commitment is one thing a Goal keeps doing. */
+export interface Commitment {
+  id: string;
+  assistantId: string;
+  goalId: string;
+  kind: string;
+  successCriteria: string;
+  exitCondition: string;
+  spec: string;
+  state: string;
+  nextCheckAt: number;
+  lastCheckedAt: number;
+  lastError: string;
+  cursor: string;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** ComposeInput is the New Task sheet as the page filled it in. */
 export interface ComposeInput {
   title: string;
@@ -483,6 +623,19 @@ export interface CoordinatorPane {
   error: string;
 }
 
+/** CreateTaskInput is the body of a task creation. */
+export interface CreateTaskInput {
+  assistantId: string;
+  goalId?: string;
+  kind: string;
+  title: string;
+  brief: string;
+  repoPath?: string;
+  agent?: string;
+  model?: string;
+  draft?: boolean;
+}
+
 /** FactPane is a label/value row of the Run tab. */
 export interface FactPane {
   label: string;
@@ -534,6 +687,20 @@ export interface FindingPane {
   proof: string;
 }
 
+/** Goal is a long-lived objective. */
+export interface Goal {
+  id: string;
+  assistantId: string;
+  title: string;
+  objective: string;
+  state: string;
+  evidence: string;
+  commitments: Commitment[];
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** LibraryItemPane is one library file. */
 export interface LibraryItemPane {
   id: string;
@@ -558,6 +725,21 @@ export interface LibraryPane {
   totalText: string;
 }
 
+/** MemoryItem is one remembered thing. */
+export interface MemoryItem {
+  id: string;
+  assistantId: string;
+  scope: string;
+  kind: string;
+  content: string;
+  sourceRef: string;
+  state: string;
+  sharedWith: string[];
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** NarrativePane is the plugin's free text on the task. */
 export interface NarrativePane {
   description: string;
@@ -568,6 +750,21 @@ export interface NarrativePane {
   limitStopped: string;
   handovers: string[];
   attempts: AttemptPane[];
+}
+
+/** OverviewRow is one Assistant's counters. */
+export interface OverviewRow {
+  id: string;
+  name: string;
+  status: string;
+  revision: number;
+  tasks: number;
+  queued: number;
+  running: number;
+  needsYou: number;
+  done: number;
+  goals: number;
+  approvals: number;
 }
 
 /** ProjectCounts feed the header chips. */
@@ -1116,6 +1313,67 @@ export const projects = {
   /** Snapshot is the page's first read (later changes arrive as events). */
   snapshot(): Promise<ProjectsView> {
     return call("projects.Snapshot");
+  },
+} as const;
+
+/** AssistantsBridge is the page's bound service. */
+export const assistants = {
+  /** AckTask clears a finished task's needs-you. */
+  ackTask(requestID: string, id: string, revision: number): Promise<void> {
+    return call("assistants.AckTask", requestID, id, revision);
+  },
+  /** CreateAssistant adds an Assistant and selects it. */
+  createAssistant(requestID: string, name: string, description: string): Promise<string> {
+    return call("assistants.CreateAssistant", requestID, name, description);
+  },
+  /** CreateGoal drafts a Goal (a PR Watch when Watch is set). */
+  createGoal(requestID: string, in_: AssistantsGoalInput): Promise<void> {
+    return call("assistants.CreateGoal", requestID, in_);
+  },
+  /** CreateTask queues a task for an Assistant. */
+  createTask(requestID: string, in_: CreateTaskInput): Promise<void> {
+    return call("assistants.CreateTask", requestID, in_);
+  },
+  /**
+   * DecideApproval answers one Approval; the hash binds the decision to the
+   * exact action the person saw.
+   */
+  decideApproval(requestID: string, id: string, actionHash: string, approve: boolean): Promise<void> {
+    return call("assistants.DecideApproval", requestID, id, actionHash, approve);
+  },
+  /** GoalAction runs approve | pause | resume | cancel | complete on a Goal. */
+  goalAction(requestID: string, action: string, id: string, revision: number, evidence: string): Promise<void> {
+    return call("assistants.GoalAction", requestID, action, id, revision, evidence);
+  },
+  /**
+   * OpenPane selects a Run's pane in the Workspace (only a pane the tree still
+   * lists; no new Herdr method, no --takeover).
+   */
+  openPane(paneID: string): Promise<boolean> {
+    return call("assistants.OpenPane", paneID);
+  },
+  /** RenameAssistant renames one Assistant. */
+  renameAssistant(requestID: string, id: string, name: string, revision: number): Promise<void> {
+    return call("assistants.RenameAssistant", requestID, id, name, revision);
+  },
+  /** RetryTask re-queues a failed or cancelled task. */
+  retryTask(requestID: string, id: string, revision: number): Promise<void> {
+    return call("assistants.RetryTask", requestID, id, revision);
+  },
+  /** Select records the Assistant the page is on (the sidebar row follows). */
+  select(id: string): Promise<void> {
+    return call("assistants.Select", id);
+  },
+  /** SetAssistantEnabled pauses or resumes one Assistant. */
+  setAssistantEnabled(requestID: string, id: string, enabled: boolean, revision: number): Promise<void> {
+    return call("assistants.SetAssistantEnabled", requestID, id, enabled, revision);
+  },
+  /**
+   * Snapshot reads the overview and, for the Assistant the shell has selected
+   * (else the first), its page.
+   */
+  snapshot(): Promise<AssistantsView> {
+    return call("assistants.Snapshot");
   },
 } as const;
 

@@ -92,10 +92,12 @@ func (s *Shell) applyAutomationsAvailability(avail automations.Availability) {
 	if !avail.Supported {
 		// Zero trace: a plugin that went away takes its page state with it.
 		s.automations.list = automationsList{}
+		s.resetAssistants()
 		s.syncRemoteAutomations()
 	}
 	if avail.Supported && !prev.Supported {
 		s.refreshAutomations(true) // first read as the gate opens
+		s.refreshAssistants(true)  // the Assistants probe rides the same gate
 	}
 	if prev == avail {
 		return

@@ -1,0 +1,326 @@
+/* Assistants page (product decision 2026-11-03). Same surface tokens as the
+   Chat (theme.css); only the state hues are local. Presentation only. */
+
+.as,
+.as-boot,
+.as-empty {
+  height: 100%;
+}
+
+.as-boot {
+  background: var(--content);
+}
+
+.as {
+  display: flex;
+  flex-direction: column;
+  background: var(--content);
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.as-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--content);
+  color: var(--text);
+}
+
+.as-empty h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.as-empty p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.as-head {
+  padding: 16px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.as-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.as-title h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.as-desc {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.as-actions,
+.as-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.as-row.end {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.as-row > strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.as-actions {
+  margin-top: 4px;
+}
+
+.as-btn {
+  font: inherit;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.as-btn:hover {
+  background: var(--code-bg);
+}
+
+.as-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.as-btn.danger {
+  color: var(--danger);
+}
+
+.as-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.as-link {
+  font: inherit;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.as-error {
+  margin: 4px 24px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.as-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 24px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.as-tabs button {
+  font: inherit;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.as-tabs button.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.as-count {
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--code-bg);
+}
+
+.as-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.as-card {
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.as-card.quiet {
+  opacity: 0.85;
+}
+
+.as-text {
+  margin: 0;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.as-meta,
+.as-none {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.as-chip {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text-muted);
+}
+
+.as-chip.active,
+.as-chip.done,
+.as-chip.completed {
+  color: var(--ok);
+}
+
+.as-chip.running,
+.as-chip.starting,
+.as-chip.claimed {
+  color: var(--working);
+}
+
+.as-chip.blocked,
+.as-chip.review_required,
+.as-chip.uncertain,
+.as-chip.paused,
+.as-chip.draft {
+  color: var(--warning);
+}
+
+.as-chip.failed,
+.as-chip.cancelled {
+  color: var(--danger);
+}
+
+.as-run {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.as-err {
+  color: var(--danger);
+}
+
+.as-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.as-dot.done {
+  background: var(--ok);
+}
+
+.as-dot.running,
+.as-dot.starting {
+  background: var(--working);
+}
+
+.as-dot.failed,
+.as-dot.cancelled {
+  background: var(--danger);
+}
+
+.as-dot.uncertain,
+.as-dot.blocked {
+  background: var(--warning);
+}
+
+.as-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.as-sheet {
+  width: min(440px, calc(100vw - 48px));
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.as-sheet h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.as-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.as-field input,
+.as-field textarea,
+.as-field select {
+  font: inherit;
+  color: var(--text);
+  background: var(--content);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 8px;
+  -webkit-user-select: text;
+  user-select: text;
+}

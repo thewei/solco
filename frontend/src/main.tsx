@@ -18,6 +18,11 @@ const ProjectsPage = React.lazy(() =>
   import("./projects/ProjectsPage").then((m) => ({ default: m.ProjectsPage })),
 );
 
+const AssistantsPage = React.lazy(() =>
+  import("./assistants/AssistantsPage").then((m) => ({ default: m.AssistantsPage })),
+);
+
+const isAssistants = /\/assistants\/?$/.test(window.location.pathname);
 const isProjects = /\/projects\/?$/.test(window.location.pathname);
 const isFilesViewer = /\/files-viewer\/?$/.test(window.location.pathname);
 
@@ -45,7 +50,11 @@ if (import.meta.env.DEV) {
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <React.StrictMode>
-    {isProjects ? (
+    {isAssistants ? (
+      <React.Suspense fallback={<div className="as-boot" />}>
+        <AssistantsPage />
+      </React.Suspense>
+    ) : isProjects ? (
       <React.Suspense fallback={<div className="pj-boot" />}>
         <ProjectsPage />
       </React.Suspense>

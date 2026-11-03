@@ -14,6 +14,8 @@ func TestMain(m *testing.M) {
 	revealInFinder = func(string) {}
 	openInBrowser = func(string) error { return nil }
 	showStaticPreview = func(*Shell, string) error { return nil }
+	// The Assistants overview read runs only where a test arms it.
+	assistantsGo = func(func()) {}
 	os.Exit(m.Run())
 }
 
