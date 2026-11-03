@@ -453,6 +453,25 @@ func TestHelperDeathAndCaptureStopEndTheSession(t *testing.T) {
 	}
 }
 
+func TestUnplannedCaptureStopRestartsThenGivesUp(t *testing.T) {
+	r := newRig(t, protocol.ModeFullControl)
+	r.connect()
+	for i := 0; i < maxCaptureRestarts; i++ {
+		id := r.cap.lastStart().CaptureID
+		r.cap.events <- platform.Event{Kind: platform.EventCaptureStopped, CaptureID: id}
+		waitFor(t, "restart", func() bool { return r.cap.lastStart().CaptureID != id })
+	}
+	r.cap.events <- platform.Event{Kind: platform.EventCaptureStopped, CaptureID: r.cap.lastStart().CaptureID}
+	select {
+	case c := <-r.end:
+		if c != protocol.CodeCaptureFailed {
+			t.Fatalf("reason = %s", c)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("session did not end after repeated stops")
+	}
+}
+
 func TestPermissionLossDowngradesToViewOnly(t *testing.T) {
 	r := newRig(t, protocol.ModeFullControl)
 	r.connect()

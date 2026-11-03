@@ -122,7 +122,8 @@ type Session struct {
 
 	captureSeq atomic.Uint32
 	activeCap  atomic.Uint32
-	capMu      sync.Mutex // serialises capture (re)starts
+	capMu      sync.Mutex  // serialises capture (re)starts
+	restarts   []time.Time // recent unplanned capture restarts (guarded by mu)
 
 	framesSent, framesDropped, keyframesSent, keyRequests atomic.Uint64
 	lastPTS                                               time.Duration
@@ -266,6 +267,49 @@ func (s *Session) startCapture(ctx context.Context) error {
 	s.activeCap.Store(cfg.CaptureID)
 	s.log.Info("remote desktop capture started", "display", cfg.DisplayID, "w", started.Width, "h", started.Height, "fps", cfg.FPS, "kbps", cfg.BitrateKbps, "hw", started.HardwareEncoder)
 	return nil
+}
+
+const (
+	maxCaptureRestarts = 3
+	captureRestartSpan = time.Minute
+)
+
+// recoverCapture restarts a stream that stopped on its own (display reconfiguration, a screen-saver
+// or lock transition, another capture client). A stream that keeps dying ends the session.
+func (s *Session) recoverCapture(cause *protocol.Error) {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	now := s.cfg.Now()
+	recent := s.restarts[:0]
+	for _, t := range s.restarts {
+		if now.Sub(t) < captureRestartSpan {
+			recent = append(recent, t)
+		}
+	}
+	s.restarts = recent
+	if len(s.restarts) >= maxCaptureRestarts {
+		s.mu.Unlock()
+		if cause == nil {
+			cause = protocol.Errf(protocol.CodeCaptureFailed, "capture stopped")
+		}
+		s.fail(cause)
+		return
+	}
+	s.restarts = append(s.restarts, now)
+	attempt := len(s.restarts)
+	s.mu.Unlock()
+
+	s.log.Warn("remote desktop capture stopped; restarting", "attempt", attempt)
+	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
+	defer cancel()
+	if err := s.startCapture(ctx); err != nil {
+		s.fail(err)
+		return
+	}
+	s.sendState()
 }
 
 // OnLinkState is fed by the transport.
@@ -462,11 +506,11 @@ func (s *Session) handleEvent(ev platform.Event) {
 		if ev.CaptureID != s.activeCap.Load() {
 			return // the generation we replaced ourselves
 		}
-		if ev.Err != nil {
+		if ev.Err != nil && ev.Err.Code == protocol.CodePermissionRequired {
 			s.fail(ev.Err)
-		} else {
-			s.fail(protocol.Errf(protocol.CodeCaptureFailed, "capture stopped"))
+			return
 		}
+		go s.recoverCapture(ev.Err)
 	case platform.EventError:
 		if ev.Err != nil && ev.Err.Code == protocol.CodePermissionRequired {
 			// Accessibility was taken away mid-session: stop honouring input and say so.
