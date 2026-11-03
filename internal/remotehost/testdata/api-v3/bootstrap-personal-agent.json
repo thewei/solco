@@ -1,0 +1,17 @@
+{
+  "capabilities": {
+    "chat": true,
+    "personalAgent": true,
+    "personalAgentApprove": true,
+    "personalAgentManage": true,
+    "terminal": true
+  },
+  "hostId": "",
+  "hostName": "Test Mac",
+  "instances": [
+    {
+      "id": "default"
+    }
+  ],
+  "version": "test"
+}

@@ -202,3 +202,23 @@ func TestAssistantsBridgeRefusesWhileTheGateIsClosed(t *testing.T) {
 		t.Fatalf("closed gate snapshot = %+v, %v", view, err)
 	}
 }
+
+func TestHostPersonalAgentFollowsTheGate(t *testing.T) {
+	stubAssistants(t, false)
+	s := NewShell()
+	if _, ok := s.hostPersonalAgent(context.Background()); ok {
+		t.Fatal("closed gate must give the phones no client")
+	}
+	s = openAssistantsShell(t)
+	c, ok := s.hostPersonalAgent(context.Background())
+	if !ok || c == nil {
+		t.Fatal("open gate must give the phones the desktop's client")
+	}
+	if ov, err := c.Overview(context.Background()); err != nil || len(ov.Assistants) != 1 {
+		t.Fatalf("phone client overview: %v %+v", err, ov)
+	}
+	s.applyAutomationsAvailability(automations.Availability{})
+	if _, ok := s.hostPersonalAgent(context.Background()); ok {
+		t.Fatal("a plugin that went away must withdraw the phones' client")
+	}
+}

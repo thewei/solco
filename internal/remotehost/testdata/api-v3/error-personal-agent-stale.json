@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "stale_revision",
+    "message": "revision is stale"
+  }
+}

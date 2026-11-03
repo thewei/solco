@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 automations_ui 的插件能力门（Availability.Root）、internal/personalagent 的 CLI 客户端、herdr.ParseRef/SocketPath
- * [OUTPUT]: assistantsState（门、概览缓存、当前选中 Assistant、页面 WebView 句柄）、assistantsAvailable（唯一显示门）、refreshAssistants（后台重读概览）、assistantsClientFor（桥与刷新共用的客户端）、newAssistantsClient/assistantsGo 测试缝
+ * [OUTPUT]: （手机缝与变更帧见 remote_personal_agent.go）assistantsState（门、概览缓存、当前选中 Assistant、页面 WebView 句柄）、assistantsAvailable（唯一显示门）、refreshAssistants（后台重读概览）、assistantsClientFor（桥与刷新共用的客户端）、newAssistantsClient/assistantsGo 测试缝
  * [POS]: 产品决策 2026-11-03（Assistants）：Assistants 的权威是 com.whstudio.solco.automations 插件 daemon 里的 SQLite 核心，Solco 只经它的 `assistant …` CLI 取数与下命令；本文件只缓存侧栏要画的概览，渲染路径零 IO，插件缺失/版本不符/远程实例时一切出口关闭、界面零痕迹
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,6 +45,8 @@ type assistantsState struct {
 	// webview is the page's embedded WebView; broken latches a failed creation.
 	webview *mygo.WebView
 	broken  bool
+	// fingerprint is the counters' digest at the last read the phones were told about.
+	fingerprint string
 }
 
 var (
@@ -117,6 +119,8 @@ func (s *Shell) applyAssistantsOverview(overview personalagent.Overview, err err
 	}
 	st.ready = true
 	st.overview = overview
+	s.syncRemoteAssistants()
+	s.notifyAssistantsChanged()
 	if st.selected != "" && st.overviewRow(st.selected) == nil {
 		st.selected = ""
 	}
@@ -134,6 +138,7 @@ func (s *Shell) applyAssistantsOverviewFromBridge(overview personalagent.Overvie
 // owns it).
 func (s *Shell) resetAssistants() {
 	s.assistants = assistantsState{webview: s.assistants.webview, broken: s.assistants.broken}
+	s.syncRemoteAssistants()
 }
 
 // overviewRow finds one Assistant's counters.

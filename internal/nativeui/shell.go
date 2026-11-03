@@ -27,6 +27,7 @@ import (
 	"github.com/thewei/solco/internal/gitworkbench"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/personalagent"
 	"github.com/thewei/solco/internal/preview"
 	"github.com/thewei/solco/internal/scripts"
 	"github.com/thewei/solco/internal/services"
@@ -308,6 +309,8 @@ type Shell struct {
 	// assistants is the Assistants gate and sidebar overview (assistants_state.go),
 	// opened by the automations plugin gate plus its own capability probe.
 	assistants assistantsState
+	// assistantsRemote is the client the paired phones' Assistants routes use (nil while the gate is closed); written on the window lane, read by Host goroutines.
+	assistantsRemote atomic.Pointer[personalagent.Client]
 	// rightPanel owns the Native Right Panel (Changes/Files/Services).
 	rightPanel rightPanelState
 	// filesSearch is the Files sidebar's one search (names | content).

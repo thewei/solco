@@ -94,6 +94,10 @@ type Options struct {
 	// draft/edit, approve, run now, pause/resume, delete, scheduler, seen):
 	// nil = read-only list, and bootstrap does not advertise automationsManage.
 	AutomationsAdmin AutomationsAdmin
+	// PersonalAgent hands the Assistants routes (/personal-agent/…) the desktop's
+	// CLI client to the Go core: nil, or ok=false (gate closed), means no such
+	// surface and bootstrap does not advertise personalAgent. Runs on the Host's goroutines.
+	PersonalAgent PersonalAgentFunc
 	// Sessions serves the desktop's session catalog for the phone (GET /sessions):
 	// metadata, search and the running-pane link; nil = no such view and bootstrap
 	// says so. It runs on the Host's goroutines.
@@ -153,6 +157,7 @@ type Server struct {
 	trees       map[string]*treeState
 	peeks       peekCache
 	poke        chan struct{}                    // closed and replaced by Poke; every events pump waits on the current one
+	paRevision  uint64                           // Assistants change counter (NotifyPersonalAgent)
 	notices     map[chan map[string]any]struct{} // open events sockets' queues for one-off frames (NotifyAutomation)
 	netStop     chan struct{}                    // closed by Close; stops the address watcher (watch.go)
 	netDone     chan struct{}                    // closed by the watcher goroutine on exit; Close joins it
@@ -499,6 +504,24 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("POST "+apiPrefix+"/automations/scheduler/start", s.guard(ScopeManage, s.handleAutomationScheduler))
 	mux.Handle("POST "+apiPrefix+"/automations/seen", s.guard(ScopeManage, s.handleAutomationSeen))
+	pa := apiPrefix + "/personal-agent"
+	mux.Handle("GET "+pa+"/overview", s.guard(ScopeView, s.handlePAOverview))
+	mux.Handle("GET "+pa+"/assistants", s.guard(ScopeView, s.handlePAAssistants))
+	mux.Handle("GET "+pa+"/assistants/{id}", s.guard(ScopeView, s.handlePAAssistant))
+	mux.Handle("GET "+pa+"/goals", s.guard(ScopeView, s.handlePAGoals))
+	mux.Handle("GET "+pa+"/tasks/{id}", s.guard(ScopeView, s.handlePATask))
+	mux.Handle("GET "+pa+"/approvals", s.guard(ScopeView, s.handlePAApprovals))
+	mux.Handle("POST "+pa+"/assistants", s.guard(ScopeManage, s.handlePACreateAssistant))
+	mux.Handle("POST "+pa+"/assistants/{id}/rename", s.guard(ScopeManage, s.handlePARenameAssistant))
+	mux.Handle("POST "+pa+"/assistants/{id}/pause", s.guard(ScopeManage, s.handlePAAssistantEnabled(false)))
+	mux.Handle("POST "+pa+"/assistants/{id}/resume", s.guard(ScopeManage, s.handlePAAssistantEnabled(true)))
+	mux.Handle("POST "+pa+"/goals/draft", s.guard(ScopeManage, s.handlePADraftGoal))
+	for _, action := range []string{"approve", "pause", "resume", "cancel"} {
+		mux.Handle("POST "+pa+"/goals/{id}/"+action, s.guard(ScopeManage, s.handlePAGoalAction(action)))
+	}
+	mux.Handle("POST "+pa+"/approvals/{id}/decision", s.guard(ScopeManage, s.handlePADecideApproval))
+	mux.Handle("POST "+pa+"/tasks/{id}/ack", s.guard(ScopeManage, s.handlePATaskAction("ack")))
+	mux.Handle("POST "+pa+"/tasks/{id}/retry", s.guard(ScopeManage, s.handlePATaskAction("retry")))
 	mux.Handle("GET "+apiPrefix+"/sessions", s.guard(ScopeView, s.handleSessions))
 	mux.Handle("POST "+apiPrefix+"/voice/transcribe", s.guard(ScopeTerminalInput, s.handleVoiceTranscribe))
 	mux.Handle("GET "+apiPrefix+"/remote-desktop", s.guard(ScopeRemoteDesktop, s.handleRemoteDesktopInfo))
@@ -701,6 +724,13 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			if s.opts.AutomationsAdmin != nil && s.opts.AutomationsAdmin.Open() {
 				capabilities["automationsManage"] = true
 			}
+		}
+	}
+	if s.opts.PersonalAgent != nil {
+		if c, ok := s.opts.PersonalAgent(r.Context()); ok && c != nil {
+			capabilities["personalAgent"] = true
+			capabilities["personalAgentManage"] = true
+			capabilities["personalAgentApprove"] = true
 		}
 	}
 	if s.opts.Sessions != nil {
