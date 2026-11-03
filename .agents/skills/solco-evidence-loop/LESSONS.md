@@ -16,3 +16,9 @@
 - 要让沙箱看到本地插件：`HOME=$SB/home herdr plugin link <插件副本>`（副本里自己 `go build -o bin/solco-automations`，别覆盖活实例用的 bin）。
 - Computer Use：所有调用的 `target` 必须是对象 `{scope,pid,target_id}`，点击要带最近一次截图的 `coordinate_token`；悬停才出现的 “+” 要点两次（第一次只是悬停/折叠了区头）；后台 app 用 `computer_type` 走 AX 值写入即可。
 - 后台任务用 Shell `block_until_ms:0` 起（`&`+nohup 会随调用结束被回收）。
+
+## 2026-11-04 Assistants E06/E07 收尾
+- 删大批文件后提交：`git commit -- <paths>` 需要把已 `git rm` 的路径也列进去；路径多时用 `--pathspec-from-file=<file>`（zsh 下 `$(…)` 换行不会拆词，直接传会报 pathspec 错）。
+- 台账门禁（`check-shepherdr-2.1-parity.mjs`）需要真实的上游审读才能关；SHA 8df9402… 可 `git fetch --depth 1 origin <sha>` 后 checkout（tag `v2.1.0` 解析出的 HEAD 与它不同）。不审读就不要标 verified/not_applicable。
+- 给“迁移被打断”写测试：`migrations` 是包级切片，测试里追加一条必失败的 SQL（先建表再写不存在的表），断言版本号不变、半成品表不在、旧数据在，再换回可用迁移确认补完。
+- 沙箱直接 `exec` 启动二进制时要用 `block_until_ms:0` 后台；`nohup … &` 在调用结束就被回收。用 `computer_resolve_app {pid}` 取 target_id（`computer_apps` 列不出沙箱）。

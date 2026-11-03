@@ -280,3 +280,47 @@ func TestRecordLaunchStoresRealIdentity(t *testing.T) {
 		t.Fatalf("after finish: task=%s run=%+v", gt.State, got)
 	}
 }
+
+// SOLCO-E03: an upgrade that dies half-way leaves the database at the version it
+// had (each migration is one transaction) with every row intact, and the next
+// start, with a working migration, finishes the job.
+func TestAnInterruptedUpgradeRollsBackAndTheNextStartFinishesIt(t *testing.T) {
+	s, path := openTest(t)
+	a := mustAssistant(t, s, "r-up", "Ada")
+	before, _ := s.SchemaVersion()
+	_ = s.Close()
+
+	good := migrations
+	t.Cleanup(func() { migrations = good })
+	migrations = append(append([]string{}, good...),
+		`CREATE TABLE half_done (id TEXT); INSERT INTO nope_missing VALUES (1);`)
+	if _, err := Open(path); err == nil {
+		t.Fatal("a failing migration must fail Open")
+	}
+
+	migrations = good
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen after the failed upgrade: %v", err)
+	}
+	defer s2.Close()
+	if v, _ := s2.SchemaVersion(); v != before {
+		t.Fatalf("version moved to %d after a rolled-back upgrade (was %d)", v, before)
+	}
+	if _, err := s2.db.Exec(`SELECT 1 FROM half_done`); err == nil {
+		t.Fatal("the failed migration left a table behind")
+	}
+	if got, err := s2.GetAssistant(a.ID); err != nil || got.Name != "Ada" {
+		t.Fatalf("rows lost across the failed upgrade: %+v %v", got, err)
+	}
+
+	migrations = append(append([]string{}, good...), `CREATE TABLE later_ok (id TEXT)`)
+	s3, err := Open(path)
+	if err != nil {
+		t.Fatalf("finishing the upgrade: %v", err)
+	}
+	defer s3.Close()
+	if v, _ := s3.SchemaVersion(); v != before+1 {
+		t.Fatalf("version = %d, want %d", v, before+1)
+	}
+}

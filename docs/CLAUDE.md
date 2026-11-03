@@ -4,6 +4,11 @@
 Members:
 - `README.md` — documentation entry point.
 - `client-product-architecture.md` — unique architecture source of truth; defines Solco product ownership and Herdr runtime ownership.
+- `personal-agent-plan.md` — historical Rust-first source audit (v1.2.27 / Shepherdr 2.1 / hc); architecture implementation superseded; cite as historical evidence only.
+- `personal-agent-go-mvp-plan.md` — **current proposed A–E Go-native Assistants implementation**: Shepherdr 2.1.0 as main behavior/test source; persistent per-Assistant memory/coordination, workboard `Projects` → `Assistants`, one Go daemon, shared Chat WebView, mandatory E resident Host. Test inventory A0 complete; Go features not implemented.
+- `shepherdr-2.1-test-parity.md` — **authoritative staged TDD handoff A0–E4**: every upstream 2.1 test accounted for (168 files, 1193 static declarations), port/adapt/reuse/platform triage, Solco-only Memory/safety gaps, red→green and final closure gates.
+- `shepherdr-2.1-test-cases.jsonl` — immutable generated source-located index of all 1193 Shepherdr 2.1 test declarations; generator: `scripts/generate-shepherdr-2.1-test-index.mjs`.
+- `shepherdr-2.1-parity-decisions.jsonl` — manual source-case ledger (46 priority cases planned, none verified) and `solco-assistants-required-cases.jsonl` — 31 **mandatory Solco-only** Assistant/Memory/Watch/mobile/migration cases (all planned). Checker: `scripts/check-shepherdr-2.1-parity.mjs`, final gate checks both.
 - `github-release-updates.md` — signed GitHub Releases updater publishing runbook and first-install migration limit.
 - `terminal-interaction-spec.md` — terminal interaction-quality contract and manual acceptance for the hosted Herdr TUI surface.
 - `performance-engineering.md` — measured performance contract, budgets, methodology, and known lessons.
