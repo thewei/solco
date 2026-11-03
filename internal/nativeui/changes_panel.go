@@ -47,6 +47,13 @@ func (s *Shell) gdChangedTreeList(c *ui.Context, pal *gdPalette, rows []gitworkb
 		s.renderChangesRow(c, pal, rows[i], state, pane, choice, onClick)
 	}).Grow(1).MinHeight(0).Padding(3, sidebarGutter)
 	c.SetTheme(real)
+	// SetTheme also resets the window root's background to the theme canvas,
+	// which silently switched the sidebar's vibrancy off whenever a changes
+	// list was on screen (the sidebar flashed opaque on every commit click,
+	// user report 2026-11-03). Put back what Shell.View sets.
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	}
 	// A plain click opens the file: the list replaced the choice with that
 	// one row. Choice-growing clicks (Cmd, Shift) stay preview-free.
 	if changed := list.Changed(); changed && *selected >= 0 && *selected < len(rows) {
