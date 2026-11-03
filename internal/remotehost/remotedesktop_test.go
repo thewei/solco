@@ -35,7 +35,7 @@ func (f *fakeRemoteDesktop) Open(_ context.Context, d protocol.DeviceInfo, o pro
 		return protocol.Answer{}, f.err
 	}
 	return protocol.Answer{SessionID: "rd_0123456789ab", SDP: "v=0 answer", State: protocol.SessionState{
-		Mode: protocol.ModeFullControl, DisplayID: "1", Tier: protocol.TierStandard, Width: 1728, Height: 1080, FPS: 30, Hardware: true,
+		Mode: protocol.ModeFullControl, DisplayID: "1", Tier: protocol.TierStandard, Width: 1728, Height: 1080, FPS: 30, Hardware: true, Cursor: true,
 		Displays: []protocol.DisplayInfo{{ID: "1", Name: "Built-in Retina Display", Width: 1440, Height: 900, PixelWidth: 2880, PixelHeight: 1800, Scale: 2, IsMain: true}},
 	}}, nil
 }
@@ -132,6 +132,7 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 		"clipboard-get":  `{"type":"clipboard.get"}`,
 		"display-select": `{"type":"display.select","displayId":"2"}`,
 		"quality-set":    `{"type":"quality.set","tier":"high"}`,
+		"cursor-set":     `{"type":"cursor.set","visible":false}`,
 		"keyframe":       `{"type":"keyframe.request"}`,
 		"ping":           `{"type":"ping","t":1700000000000}`,
 		"session-end":    `{"type":"session.end"}`,
@@ -146,7 +147,7 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 	}
 
 	st := protocol.SessionState{
-		Mode: protocol.ModeFullControl, DisplayID: "1", Tier: protocol.TierStandard, Width: 1728, Height: 1080, FPS: 30, Hardware: true,
+		Mode: protocol.ModeFullControl, DisplayID: "1", Tier: protocol.TierStandard, Width: 1728, Height: 1080, FPS: 30, Hardware: true, Cursor: true,
 		Displays: []protocol.DisplayInfo{
 			{ID: "1", Name: "Built-in Retina Display", X: 0, Y: 0, Width: 1440, Height: 900, PixelWidth: 2880, PixelHeight: 1800, Scale: 2, IsMain: true},
 			{ID: "2", Name: "DELL U2723QE", X: 1440, Y: -200, Width: 1920, Height: 1080, PixelWidth: 3840, PixelHeight: 2160, Scale: 2},

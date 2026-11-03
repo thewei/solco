@@ -25,6 +25,7 @@ const (
 	TypeClipboardGet  = "clipboard.get"
 	TypeDisplaySelect = "display.select"
 	TypeQualitySet    = "quality.set"
+	TypeCursorSet     = "cursor.set"
 	TypeKeyframe      = "keyframe.request"
 	TypePing          = "ping"
 	TypeSessionEnd    = "session.end"
@@ -118,6 +119,12 @@ type QualitySet struct {
 	Tier Tier   `json:"tier"`
 }
 
+// CursorSet shows or hides the Mac's pointer in the video (the phone draws its own in trackpad mode).
+type CursorSet struct {
+	Type    string `json:"type"`
+	Visible bool   `json:"visible"`
+}
+
 type Ping struct {
 	Type string `json:"type"`
 	T    int64  `json:"t"`
@@ -201,6 +208,8 @@ func Decode(data []byte) (any, error) {
 		target = &DisplaySelect{}
 	case TypeQualitySet:
 		target = &QualitySet{}
+	case TypeCursorSet:
+		target = &CursorSet{}
 	case TypePing:
 		target = &Ping{}
 	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest:

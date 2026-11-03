@@ -53,6 +53,7 @@ type SessionState struct {
 	Height    int           `json:"height"`
 	FPS       int           `json:"fps"`
 	Hardware  bool          `json:"hardware"`
+	Cursor    bool          `json:"cursor"` // the Mac's pointer is drawn in the video
 }
 
 // DeviceInfo identifies the phone to the authorizer and the session list. ID is the paired device id.

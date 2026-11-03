@@ -91,6 +91,7 @@ type CaptureConfig struct {
 	FPS                 int    `json:"fps"`
 	BitrateKbps         int    `json:"bitrateKbps"`
 	KeyframeIntervalSec int    `json:"keyframeIntervalSec"`
+	HideCursor          bool   `json:"hideCursor,omitempty"` // absent = the Mac's pointer is drawn
 }
 
 // CaptureStarted is the helper's answer to a successful start.

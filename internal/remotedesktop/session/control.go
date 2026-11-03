@@ -34,6 +34,8 @@ func (s *Session) handle(data []byte) {
 		go s.selectDisplay(m.DisplayID)
 	case *protocol.QualitySet:
 		go s.setTier(m.Tier)
+	case *protocol.CursorSet:
+		go s.setCursor(m.Visible)
 	default:
 		s.handleInput(msg)
 	}
@@ -271,6 +273,18 @@ func (s *Session) setTier(t protocol.Tier) {
 	}
 	s.cfg.Tier = t
 	s.setDisplayLocked(s.display, s.state.Displays)
+	s.mu.Unlock()
+	s.restartAndAnnounce()
+}
+
+func (s *Session) setCursor(visible bool) {
+	s.mu.Lock()
+	if s.hideCursor == !visible {
+		s.mu.Unlock()
+		return
+	}
+	s.hideCursor = !visible
+	s.state.Cursor = visible
 	s.mu.Unlock()
 	s.restartAndAnnounce()
 }

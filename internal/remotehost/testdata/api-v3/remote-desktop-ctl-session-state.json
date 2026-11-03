@@ -32,5 +32,6 @@
   "width": 1728,
   "height": 1080,
   "fps": 30,
-  "hardware": true
+  "hardware": true,
+  "cursor": true
 }

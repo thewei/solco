@@ -124,6 +124,7 @@ type Session struct {
 	activeCap  atomic.Uint32
 	capMu      sync.Mutex  // serialises capture (re)starts
 	restarts   []time.Time // recent unplanned capture restarts (guarded by mu)
+	hideCursor bool        // the phone asked for the Mac's pointer to stay out of the video
 
 	framesSent, framesDropped, keyframesSent, keyRequests atomic.Uint64
 	lastPTS                                               time.Duration
@@ -229,7 +230,7 @@ func (s *Session) setDisplayLocked(d protocol.DisplayInfo, all []protocol.Displa
 	s.display = d
 	s.state = protocol.SessionState{
 		Mode: s.cfg.Mode, DisplayID: d.ID, Displays: all, Tier: s.cfg.Tier,
-		Width: w, Height: h, FPS: spec.FPS, Hardware: s.state.Hardware,
+		Width: w, Height: h, FPS: spec.FPS, Hardware: s.state.Hardware, Cursor: !s.hideCursor,
 	}
 }
 
@@ -238,7 +239,7 @@ func (s *Session) captureConfigLocked() protocol.CaptureConfig {
 	return protocol.CaptureConfig{
 		CaptureID: s.captureSeq.Add(1), DisplayID: s.display.ID,
 		Width: s.state.Width, Height: s.state.Height, FPS: spec.FPS, BitrateKbps: spec.BitrateKbps,
-		KeyframeIntervalSec: protocol.KeyframeIntervalSec,
+		KeyframeIntervalSec: protocol.KeyframeIntervalSec, HideCursor: s.hideCursor,
 	}
 }
 
