@@ -208,6 +208,16 @@ func (a *API) task(args []string, body []byte) (any, error) {
 		}
 		runs, err := a.Store.ListRuns(t.ID)
 		return ok("task", t, "runs", runs), err
+	case "ack":
+		var in common
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant task ack <id>")
+		}
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		x, replayed, err := a.Store.AckTask(in.RequestID, rest[0], in.ExpectedRevision)
+		return ok("task", x, "replayed", replayed), err
 	case "retry":
 		var in common
 		if len(rest) != 1 {

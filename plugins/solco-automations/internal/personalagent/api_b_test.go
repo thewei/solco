@@ -20,7 +20,7 @@ func TestAPIGoalMemoryApprovalFlow(t *testing.T) {
 	asst, _ := call(t, a, `{"requestId":"a1","name":"Ada"}`, "assistant", "create")
 	aid := field(asst, "assistant", "id").(string)
 
-	g, err := call(t, a, fmt.Sprintf(`{"requestId":"g1","assistantId":%q,"title":"Watch PR","commitments":[{"kind":"pr_watch","spec":"{}"}]}`, aid), "assistant", "goal", "create")
+	g, err := call(t, a, fmt.Sprintf(`{"requestId":"g1","assistantId":%q,"title":"Watch PR","commitments":[{"kind":"pr_watch","spec":"{\"repo\":\"o/r\",\"number\":12}"}]}`, aid), "assistant", "goal", "create")
 	if err != nil {
 		t.Fatal(err)
 	}

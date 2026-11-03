@@ -29,6 +29,9 @@ type Commitment struct {
 	Spec            string `json:"spec"`
 	State           string `json:"state"`
 	NextCheckAt     int64  `json:"nextCheckAt"`
+	LastCheckedAt   int64  `json:"lastCheckedAt"`
+	LastError       string `json:"lastError"`
+	Cursor          string `json:"cursor"`
 	Revision        int    `json:"revision"`
 	CreatedAt       int64  `json:"createdAt"`
 	UpdatedAt       int64  `json:"updatedAt"`
@@ -65,7 +68,7 @@ type CreateGoalInput struct {
 }
 
 const goalCols = `id,assistant_id,title,objective,state,evidence,revision,created_at,updated_at`
-const commitmentCols = `id,assistant_id,goal_id,kind,success_criteria,exit_condition,spec,state,next_check_at,revision,created_at,updated_at`
+const commitmentCols = `id,assistant_id,goal_id,kind,success_criteria,exit_condition,spec,state,next_check_at,last_checked_at,last_error,cursor,revision,created_at,updated_at`
 
 type queryer interface {
 	QueryRow(string, ...any) *sql.Row
@@ -96,7 +99,7 @@ func commitmentsOf(q queryer, goalID string) ([]Commitment, error) {
 	for rows.Next() {
 		var c Commitment
 		if err := rows.Scan(&c.ID, &c.AssistantID, &c.GoalID, &c.Kind, &c.SuccessCriteria, &c.ExitCondition, &c.Spec,
-			&c.State, &c.NextCheckAt, &c.Revision, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			&c.State, &c.NextCheckAt, &c.LastCheckedAt, &c.LastError, &c.Cursor, &c.Revision, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -114,6 +117,11 @@ func (s *Store) CreateGoal(requestID string, in CreateGoalInput) (Goal, bool, er
 	for _, c := range in.Commitments {
 		if strings.TrimSpace(c.Kind) == "" {
 			return Goal{}, false, fmt.Errorf("%w: a commitment needs a kind", ErrInvalid)
+		}
+		if c.Kind == CommitmentPRWatch {
+			if _, err := ParsePRWatchSpec(c.Spec); err != nil {
+				return Goal{}, false, err
+			}
 		}
 	}
 	return execute(s, requestID, "goal.create", in, func(tx *sql.Tx) (Goal, error) {
@@ -135,8 +143,8 @@ func (s *Store) CreateGoal(requestID string, in CreateGoalInput) (Goal, bool, er
 			if spec == "" {
 				spec = "{}"
 			}
-			if _, err := tx.Exec(`INSERT INTO commitments(`+commitmentCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-				newID("c"), in.AssistantID, id, c.Kind, c.SuccessCriteria, c.ExitCondition, spec, GoalDraft, 0, 1, now, now); err != nil {
+			if _, err := tx.Exec(`INSERT INTO commitments(`+commitmentCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+				newID("c"), in.AssistantID, id, c.Kind, c.SuccessCriteria, c.ExitCondition, spec, GoalDraft, 0, 0, "", "", 1, now, now); err != nil {
 				return Goal{}, err
 			}
 		}

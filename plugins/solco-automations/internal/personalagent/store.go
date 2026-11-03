@@ -221,6 +221,21 @@ var migrations = []string{
 		created_at INTEGER NOT NULL
 	);
 	CREATE INDEX approvals_by_assistant ON approvals(assistant_id, state);`,
+	// v3: deterministic watching — a cursor per commitment, a deduped event log.
+	`ALTER TABLE commitments ADD COLUMN last_checked_at INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE commitments ADD COLUMN last_error TEXT NOT NULL DEFAULT '';
+	ALTER TABLE commitments ADD COLUMN cursor TEXT NOT NULL DEFAULT '';
+	CREATE TABLE events (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		commitment_id TEXT NOT NULL DEFAULT '',
+		source TEXT NOT NULL,
+		resource TEXT NOT NULL,
+		revision TEXT NOT NULL,
+		task_id TEXT NOT NULL DEFAULT '',
+		seen_at INTEGER NOT NULL,
+		UNIQUE(source, resource, revision)
+	);`,
 }
 
 func (s *Store) migrate() error {

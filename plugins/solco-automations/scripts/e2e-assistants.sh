@@ -5,6 +5,8 @@
 #
 #   scripts/e2e-assistants.sh [agent] [model]       default: pi magpie/zhipu/glm-5.3-flash
 set -euo pipefail
+# bash 3.2 (macOS) does not abort on a failing [[ ]]; assert says it out loud.
+assert() { if ! eval "$1"; then echo "ASSERT FAILED: $1"; exit 1; fi; }
 AGENT="${1:-pi}"
 MODEL="${2:-magpie/zhipu/glm-5.3-flash}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,7 +30,7 @@ if ! herdr --session "$SESSION" workspace list >/dev/null 2>&1; then
   for _ in $(seq 1 20); do herdr --session "$SESSION" workspace list >/dev/null 2>&1 && break; sleep 0.5; done
 fi
 
-nohup "$BIN" daemon --standby >"$SB/daemon.log" 2>&1 &
+nohup "$BIN" daemon >"$SB/daemon.log" 2>&1 &
 DAEMON=$!
 cleanup() { kill "$DAEMON" 2>/dev/null || true; herdr session stop "$SESSION" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
@@ -51,7 +53,7 @@ for i in $(seq 1 120); do
     echo "--- killing the daemon mid-run and starting a new one"
     sleep "${E2E_RESTART_DELAY:-0}"
     kill -9 "$DAEMON"; wait "$DAEMON" 2>/dev/null || true
-    nohup "$BIN" daemon --standby >>"$SB/daemon.log" 2>&1 &
+    nohup "$BIN" daemon >>"$SB/daemon.log" 2>&1 &
     DAEMON=$!; RESTARTED=1
     sleep 4
     echo "state after restart: $("$BIN" assistant task show "$T" | python3 -c 'import json,sys;print(json.load(sys.stdin)["task"]["state"])')"
@@ -65,4 +67,4 @@ echo "--- daemon log"; cat "$SB/daemon.log"
 TASKS=$("$BIN" assistant task list | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["tasks"]))')
 RUNS=$("$BIN" assistant run list | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["runs"]))')
 echo "tasks=$TASKS runs=$RUNS"
-[[ "$STATE" == "done" && "$TASKS" == 1 && "$RUNS" == 1 ]]
+assert '[[ "$STATE" == "done" && "$TASKS" == 1 && "$RUNS" == 1 ]]'

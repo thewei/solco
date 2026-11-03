@@ -408,7 +408,7 @@ func (s *Store) FinishRun(runID, status, note string) error {
 		if status == RunDone {
 			_, err := tx.Exec(`UPDATE tasks SET state=CASE WHEN kind=? THEN ? ELSE state END,
 				review_state=CASE WHEN kind=? THEN 'pending' ELSE review_state END,
-				needs_you=CASE WHEN kind=? THEN 1 ELSE 0 END WHERE id=(SELECT task_id FROM runs WHERE id=?)`,
+				needs_you=CASE WHEN kind=? OR rule_id<>'' THEN 1 ELSE 0 END WHERE id=(SELECT task_id FROM runs WHERE id=?)`,
 				KindCoding, TaskReviewRequired, KindCoding, KindCoding, runID)
 			return err
 		}
@@ -543,6 +543,24 @@ func (s *Store) RetryTask(requestID, taskID string, expectedRevision int) (Task,
 		if _, err := tx.Exec(`UPDATE tasks SET state=?, attempt=attempt+1, needs_you=0, revision=revision+1, updated_at=? WHERE id=?`,
 			TaskQueued, s.nowMS(), taskID); err != nil {
 			return Task{}, err
+		}
+		return getTaskTx(tx, taskID)
+	})
+}
+
+// AckTask clears Needs You after a person has looked at a finished task.
+func (s *Store) AckTask(requestID, taskID string, expectedRevision int) (Task, bool, error) {
+	payload := map[string]any{"id": taskID, "rev": expectedRevision}
+	return execute(s, requestID, "task.ack", payload, func(tx *sql.Tx) (Task, error) {
+		t, err := getTaskTx(tx, taskID)
+		if err != nil {
+			return t, err
+		}
+		if t.Revision != expectedRevision {
+			return t, ErrStaleRevision
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET needs_you=0, revision=revision+1, updated_at=? WHERE id=?`, s.nowMS(), taskID); err != nil {
+			return t, err
 		}
 		return getTaskTx(tx, taskID)
 	})

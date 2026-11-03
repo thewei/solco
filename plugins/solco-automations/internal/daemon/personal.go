@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/thewei/solco/plugins/solco-automations/internal/personalagent"
@@ -17,10 +18,12 @@ const pumpInterval = 3 * time.Second
 // lock, the one scheduler. It opens the store, settles what a crash left
 // behind and then pumps queued tasks into real Herdr Agents.
 type personal struct {
-	store  *personalagent.Store
-	disp   *personalagent.Dispatcher
-	cancel context.CancelFunc
-	ctx    context.Context
+	store   *personalagent.Store
+	disp    *personalagent.Dispatcher
+	cancel  context.CancelFunc
+	ctx     context.Context
+	watch   *personalagent.Watcher
+	polling atomic.Bool
 }
 
 func startPersonal() *personal {
@@ -37,6 +40,7 @@ func startPersonal() *personal {
 		Claimant:    "daemon",
 		MaxParallel: 2,
 	}
+	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	if n, err := store.Recover(); err != nil {
 		log.Printf("assistants: recovery failed: %v", err)
 	} else if n > 0 {
@@ -52,6 +56,17 @@ func startPersonal() *personal {
 func (p *personal) tick() {
 	if p == nil {
 		return
+	}
+	if p.polling.CompareAndSwap(false, true) {
+		// Watching reads the network: never inside the tick, never twice at once.
+		go func() {
+			defer p.polling.Store(false)
+			if n, err := p.watch.Poll(p.ctx); err != nil && p.ctx.Err() == nil {
+				log.Printf("assistants: watch: %v", err)
+			} else if n > 0 {
+				log.Printf("assistants: %d watched change(s) queued", n)
+			}
+		}()
 	}
 	if n := p.disp.Pump(p.ctx); n > 0 {
 		log.Printf("assistants: started %d task(s)", n)

@@ -68,3 +68,4 @@
 - 2026-11-03 独立命名 Herdr 会话做 e2e：`nohup herdr --session <name> server &`，CLI 用 `herdr --session <name> …`，收尾 `herdr session stop <name>`；plugin daemon 用 `HERDR_PLUGIN_STATE_DIR/CONFIG_DIR` + `SOLCO_ASSISTANTS_*` env 隔离（plugins/solco-automations/scripts/e2e-assistants.sh）。
 - 2026-11-03 daemon 在 `--standby` 且二进制路径≠已安装路径时会自我 relaunch 退出（daemon.go shouldRelaunch）→ 判忙必须包含所有在途 run（含 Assistants dispatcher），否则会把还在等 Agent 的 run 丢在 `running`；沙箱里的二进制天然≠已安装，会放大该问题。
 - 2026-11-03 herdr 的 `agent_not_running` 一码两义（工作区已关 / 窗格里没 Agent）→ 区分要再查 workspace list；活工作区无 Agent = `uncertain` 交给人，不当取消。
+- 2026-11-03 macOS bash 3.2 下裸 `[[ … ]]` 失败不触发 `set -e`（脚本会假 PASS）→ e2e 脚本一律用 `assert '[[ … ]]'` 辅助；daemon e2e 不要 `--standby`（沙箱二进制≠已安装路径会 ~30s 自退）。
