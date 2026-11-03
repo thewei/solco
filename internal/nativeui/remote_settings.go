@@ -115,19 +115,20 @@ func (s *Shell) remoteServer() *remotehost.Server {
 	userDataDir := s.userDataDir // fixed at startup; the Host's goroutines must not touch the Shell
 	git := app.NewRemoteGit()
 	opts := remotehost.Options{
-		Config:     remoteConfigFrom(s.settings.Remote),
-		Dir:        filepath.Join(s.userDataDir, "RemoteHost"),
-		Backend:    remotehost.NewManagerBackend(s.runtime),
-		Identity:   s.hostHookIdentity,
-		AgentFacts: s.hostAgentFacts,
-		Usage:      s.hostUsage,
-		Sessions:   s.hostSessions(s.hist.service),
-		HostName:   host,
-		Version:    mygo.App.Version(),
-		Git:        git,
-		GitWrite:   git,
-		Files:      true,
-		Machines:   app.NewRemoteMachines(s.runtime),
+		Config:        remoteConfigFrom(s.settings.Remote),
+		Dir:           filepath.Join(s.userDataDir, "RemoteHost"),
+		Backend:       remotehost.NewManagerBackend(s.runtime),
+		Identity:      s.hostHookIdentity,
+		AgentFacts:    s.hostAgentFacts,
+		Usage:         s.hostUsage,
+		Sessions:      s.hostSessions(s.hist.service),
+		HostName:      host,
+		Version:       mygo.App.Version(),
+		Git:           git,
+		GitWrite:      git,
+		Files:         true,
+		Machines:      app.NewRemoteMachines(s.runtime),
+		OnAddressLost: s.remoteAddressLost,
 		Attach: func(data []byte, mime, name string) (string, error) {
 			dir, err := chatattach.Dir(userDataDir)
 			if err != nil {
@@ -177,6 +178,26 @@ func (s *Shell) startRemoteHostAtLaunch() {
 	if remoteConfigFrom(s.settings.Remote).Mode != remotehost.ModeOff {
 		s.syncRemoteHost()
 	}
+}
+
+// remoteAddressLost follows the Mac to its new LAN/Tailscale address after a
+// DHCP or network change: the Host's watcher only reports, the fix rides the
+// same user path (persist + Reconfigure), so the page, the QR and the next
+// launch all agree. The watcher repeats until the saved address is healthy;
+// once it is, later reports are no-ops here.
+func (s *Shell) remoteAddressLost() {
+	s.callOnWindow(func() {
+		cfg := remoteConfigFrom(s.settings.Remote)
+		if cfg.Mode != remotehost.ModeLAN && cfg.Mode != remotehost.ModeTailscale {
+			return
+		}
+		recommended := s.pickRemoteAddress(cfg.Mode, cfg.Address)
+		if recommended == "" || recommended == cfg.Address {
+			return
+		}
+		slog.Info("remote host address lost; following the network", "mode", string(cfg.Mode))
+		s.setRemote(func(r *settings.RemoteAccessSettings) { r.Address = recommended })
+	})
 }
 
 func (s *Shell) stopRemoteHost() {

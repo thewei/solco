@@ -22,8 +22,8 @@ import (
 
 /**
  * [INPUT]: 依赖 Config/RelayConfig/DeviceStore/Pairing/LoadOrCreateCert、Backend（Herdr 缝）、net/http
- * [OUTPUT]: 对外提供 Server（New/Start/Reconfigure/Close/Handler/StartPairing/Devices/RelayStatus）、PairingOffer、Scope 与统一 authorize 入口
- * [POS]: Remote Host 的监听器生命周期与 HTTP 面：/api/v3 的 pair（免鉴权）、bootstrap、tree；其余端点（events/terminals/peek）在 events.go/terminal.go/peek.go；所有受保护端点都过 guard → authorize（Bearer 头、['solco.bearer', token] 子协议、或 wopen 无子协议场景的 ?token= query），撤销即关闭该设备的所有 WS；relay 隧道（relayclient.go）由 Start/Reconfigure/Close 管理生命周期，仅当 Relay.Enabled 且监听器已启动时运行，StartPairing 在 relay 开启时给 QR 追加 &r=&rt=
+ * [OUTPUT]: 对外提供 Server（New/Start/Reconfigure/Close/Handler/StartPairing/Devices/RelayStatus）、Options.OnAddressLost、PairingOffer、Scope 与统一 authorize 入口
+ * [POS]: Remote Host 的监听器生命周期与 HTTP 面：/api/v3 的 pair（免鉴权）、bootstrap（lan/tailscale 监听中时带 net.addresses＝当前正在服务的那个地址；loopback/绑定失败不带——不真实 serving 的地址绝不下发）、tree；其余端点（events/terminals/peek）在 events.go/terminal.go/peek.go；所有受保护端点都过 guard → authorize（Bearer 头、['solco.bearer', token] 子协议、或 wopen 无子协议场景的 ?token= query），撤销即关闭该设备的所有 WS；relay 隧道（relayclient.go）由 Start/Reconfigure/Close 管理生命周期，仅当 Relay.Enabled 且监听器已启动时运行，StartPairing 在 relay 开启时给 QR 追加 &r=&rt=；绑定失败仍拉 relay 与地址看门狗（watch.go：只报告，换址/重绑归回调方）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -54,6 +54,13 @@ type Options struct {
 	// direct network path exists; it dials out, so it needs no extra port and
 	// its loopback bridge is an implementation detail (relayclient.go).
 	Relay RelayConfig
+	// OnAddressLost is called on its own goroutine (one per report, watch.go) when
+	// the configured lan/tailscale address is no longer on the machine's
+	// interfaces (DHCP, a changed network) while a usable one exists. The
+	// callback owns the fix — it re-picks and rebinds through the settings path
+	// (Reconfigure); the server never switches an address on its own.
+	// Nil = the address is never re-checked.
+	OnAddressLost func()
 	// Identity supplies a session identity Herdr's agent list lacks (Claude
 	// Code and Codex report none; the desktop learns it from its own hooks).
 	// It must match provider and terminal itself; nil disables the fallback.
@@ -132,6 +139,8 @@ type Server struct {
 	trees       map[string]*treeState
 	peeks       peekCache
 	poke        chan struct{} // closed and replaced by Poke; every events pump waits on the current one
+	netStop     chan struct{} // closed by Close; stops the address watcher (watch.go)
+	netDone     chan struct{} // closed by the watcher goroutine on exit; Close joins it
 
 	relay       *relayClient // non-nil while the relay tunnel is running
 	relayStatus RelayStatus  // what Settings shows; written by startRelay and the client
@@ -170,7 +179,9 @@ func (s *Server) Devices() *DeviceStore { return s.devices }
 
 // Start binds the configured address with TLS. Off is a no-op. It never binds
 // a wildcard address (Config.ListenAddr guarantees that). A bind that fails still
-// brings the relay tunnel up when it is enabled (see below) and returns the error.
+// brings the relay tunnel up when it is enabled (see below) and starts the
+// address watcher (watch.go), which reports the vanished address so Settings can
+// follow the Mac to its new one.
 func (s *Server) Start() error {
 	cfg := s.config()
 	addr, err := cfg.ListenAddr()
@@ -185,14 +196,16 @@ func (s *Server) Start() error {
 		// The address can vanish under a running Mac (DHCP, a changed network, Wi-Fi off). The relay does not
 		// need it: it dials out and bridges into Handler() through its own 127.0.0.1 loopback, so a phone that
 		// was paired through it keeps reaching the Mac. The error still goes up — Settings flags the stale
-		// address — and pairing stays refused (no listener, no QR) until it is fixed.
+		// address — and pairing stays refused (no listener, no QR) until the watcher has found the new one.
 		s.startRelay()
+		s.watchAddresses()
 		return fmt.Errorf("remote host listen on %s: %w", addr, err)
 	}
 	if err := s.serve(ln, cfg); err != nil {
 		_ = ln.Close()
 		return err
 	}
+	s.watchAddresses()
 	return nil
 }
 
@@ -359,6 +372,12 @@ func (s *Server) Close() {
 	s.stopRelay()
 	s.closeP2P()
 	s.mu.Lock()
+	if s.netStop != nil {
+		close(s.netStop)
+		s.netStop = nil
+	}
+	done := s.netDone
+	s.netDone = nil
 	srv := s.httpServer
 	s.httpServer = nil
 	s.listenHost, s.listenPort, s.fingerprint = "", "", "" // nothing to pair against once stopped
@@ -369,6 +388,9 @@ func (s *Server) Close() {
 		}
 	}
 	s.mu.Unlock()
+	if done != nil {
+		<-done // the watcher stops touching the interfaces before Close returns
+	}
 	for _, h := range handles {
 		go h.close()
 	}
@@ -627,6 +649,12 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 		"version":      s.opts.Version,
 		"capabilities": capabilities,
 		"instances":    instances,
+	}
+	// Where this Mac serves right now (loopback and a failed bind offer nothing a
+	// phone could reach): the phone's book follows a changed LAN/Tailscale address
+	// from the answer of every successful connect, however it reached the Host.
+	if advertised := s.advertised(); len(advertised) > 0 {
+		body["net"] = map[string]any{"addresses": advertised}
 	}
 	if s.opts.Launcher != nil {
 		capabilities["launch"] = true

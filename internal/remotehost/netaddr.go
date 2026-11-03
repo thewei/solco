@@ -36,7 +36,9 @@ func Candidates(mode Mode) ([]Candidate, error) {
 	return filterCandidates(mode, all), nil
 }
 
-func interfaceAddrs() ([]ifaceAddr, error) {
+// interfaceAddrs enumerates the machine's up, non-loopback interface addresses.
+// A variable so the address watcher's tests can fake the machine's networks.
+var interfaceAddrs = func() ([]ifaceAddr, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
