@@ -198,3 +198,5 @@
 
 验证: `go test -short ./internal/nativeui` 绿（新增 `TestSplitConventionalSubject`、`TestHeadAncestorsMarkTheMergedLine`、chip current 断言，提交卡测试改走 ⋯ 菜单）；`go vet`；真机截图。
 
+补充（用户反馈：Changed Files 选中行太亮）：MyGo 的 `ui.List` 会给“被选中”的行包装层刷 `Theme.Accent`（聚焦时是不透明蓝），盖在我们自己的 `SidebarSelect/Strong` 中性底之上，所以文件行比 Commits 列表亮很多。`gdChangedTreeList` 现在在清空 Accent 的主题下构建列表（`c.SetTheme` 仅包住 `ui.List` 调用，行内由 `renderChangesRow` 自画选中底），Changes / Staged / Unstaged / 提交文件列表一并生效；同时去掉“聚焦选中行状态字母变白”的分支（那是蓝底时代的补丁）。全 nativeui 排查：只有这三个设置了 `ListState.Selected` 的列表（都走 `gdChangedTreeList`）会触发该面；其余 `ui.List`（历史/Blame/Reflog/Rebase/Commits）不设 Selected，不受影响。守卫 `TestChosenFileRowIsNeutralNotAccent`：不做修复时像素为 `[10 135 250]`（蓝）而失败，修复后通过。
+

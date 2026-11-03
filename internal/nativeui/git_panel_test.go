@@ -172,6 +172,42 @@ func TestGitCommitStripCopiesTheFullMessage(t *testing.T) {
 	}
 }
 
+// A chosen file row wears the neutral selection tint, focused or not — never
+// the theme's blue accent MyGo paints on a chosen list row (user report
+// 2026-11-03: it read far brighter than the Commits list's own selection).
+func TestChosenFileRowIsNeutralNotAccent(t *testing.T) {
+	s := gitSurfaceTestShell(t, t.TempDir())
+	s.git.rootOf[s.git.root] = s.git.root
+	s.git.refreshing = true
+	s.showSurface(WorkspaceSurfaceDiff)
+	cm := gitworkbench.CommitInfo{Hash: "0123456789abcdef0123456789abcdef01234567", Short: "0123456", Subject: "Fix", Author: "T", Time: time.Now()}
+	s.git.commits = []gitworkbench.CommitInfo{cm}
+	s.commitsMode = true
+	s.git.source = gdSourceCommit
+	s.git.commitHash = cm.Hash
+	s.git.commitMeta = &cm
+	snap := *s.git.snapshot
+	s.git.commitSnap = &snap
+	s.git.gdFilesFor = nil
+	s.rebuildDiffRows()
+	tester := ui.NewTester(s.View, 1280, 800)
+	tester.Frame()
+	tester.Frame()
+	name, ok := tester.Find("README")
+	if !ok {
+		t.Fatalf("no file row; texts=%q", tester.Texts())
+	}
+	if err := tester.Click("README"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	tester.Frame()
+	px := pixelAt(tester, int(name.X+name.W+60), int(name.Y+name.H/2))
+	if int(px[2])-int(px[0]) > 40 {
+		t.Fatalf("a chosen file row is blue (%v): the accent leaked through the list's own selection face", px)
+	}
+}
+
 // Idle, the composer is a single line (subject + Commit); focusing the subject
 // or holding a draft opens the description and options.
 func TestGitComposerIsOneLineUntilUsed(t *testing.T) {

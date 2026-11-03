@@ -30,12 +30,23 @@ func (s *Shell) gdChangedTreeList(c *ui.Context, pal *gdPalette, rows []gitworkb
 		}
 		state.Selection = choice
 	}
+	// MyGo paints a chosen row in the theme's accent (opaque blue while the
+	// list has focus), which sat far brighter than the neutral selection the
+	// Commits list wears (user report 2026-11-03). The list is built under a
+	// theme whose accent is clear, so the row's own SidebarSelect/Strong tint
+	// (renderChangesRow) is the only face; every other control is built
+	// outside this block and keeps the real accent.
+	real := c.Theme()
+	quiet := *real
+	quiet.Accent, quiet.AccentText = ui.RGBA(0, 0, 0, 0), real.Text
+	c.SetTheme(&quiet)
 	list := ui.List(c, state, len(rows), func(i int) {
 		if i < 0 || i >= len(rows) {
 			return
 		}
 		s.renderChangesRow(c, pal, rows[i], state, pane, choice, onClick)
 	}).Grow(1).MinHeight(0).Padding(3, sidebarGutter)
+	c.SetTheme(real)
 	// A plain click opens the file: the list replaced the choice with that
 	// one row. Choice-growing clicks (Cmd, Shift) stay preview-free.
 	if changed := list.Changed(); changed && *selected >= 0 && *selected < len(rows) {
@@ -159,10 +170,7 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 					Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(muted).Shrink(0), gdLines(cf.Additions, "added")+", "+gdLines(cf.Deletions, "removed"))
 			}
 			letter := gdStatusLetterColor(cf.Status, pal, t)
-			switch {
-			case selected && focused:
-				letter = t.AccentText
-			case viewed:
+			if viewed {
 				letter = t.TextMuted
 			}
 			// A small tinted tile instead of a bare letter: the status reads as
