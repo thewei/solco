@@ -48,6 +48,11 @@ func (c *remoteContinuer) Continue(ctx context.Context, instance, sessionID stri
 	if !ok {
 		return remotehost.ContinueResult{}, &remotehost.LaunchError{Code: "unknown_session", Status: http.StatusNotFound}
 	}
+	// The Settings → Agents toggle gates starting new Agent work on the
+	// phone too; an already-running pane (AlreadyLive below) still passes.
+	if !c.launch.AgentEnabled(meta.Agent) {
+		return remotehost.ContinueResult{}, &remotehost.LaunchError{Code: "agent_disabled", Status: http.StatusConflict, Detail: meta.Agent.DisplayName() + " is turned off on the Mac (Settings → Agents)."}
+	}
 	source := agent.ContinuationSource{
 		Agent:           meta.Agent,
 		ID:              meta.ID,

@@ -64,7 +64,10 @@ const (
 	// SessionUncertain: the session may exist (the Agent was created but could not be verified or
 	// prompted). Look at the tree before retrying.
 	SessionUncertain SessionErrorCode = "launch_uncertain"
-	SessionFailed    SessionErrorCode = "launch_failed"
+	// SessionAgentDisabled: the agent is turned off in Settings → Agents;
+	// nothing was started.
+	SessionAgentDisabled SessionErrorCode = "agent_disabled"
+	SessionFailed        SessionErrorCode = "launch_failed"
 )
 
 // SessionError is a typed refusal; Detail never carries the prompt.
@@ -140,7 +143,16 @@ func (l *SessionStarter) Kinds() []SessionKind {
 		}
 	}
 	l.kinds, l.kindsAt = kinds, l.now()
-	return kinds
+	// The exit applies the Settings → Agents toggles so every enumeration
+	// site (Tab menus, the sidebar, the phone) sees one gate; the cache
+	// keeps the full list and Terminal always passes.
+	enabled := make([]SessionKind, 0, len(kinds))
+	for _, kind := range kinds {
+		if kind.ID == TerminalKind || l.service.agentEnabled(history.AgentID(kind.ID)) {
+			enabled = append(enabled, kind)
+		}
+	}
+	return enabled
 }
 
 // StartSession runs one launch and returns the new pane. The same RequestID
@@ -158,6 +170,11 @@ func (l *SessionStarter) StartSession(ctx context.Context, instance string, spec
 	}
 	if remote && spec.Agent != "" {
 		return SessionResult{}, &SessionError{Code: SessionPathUnavailable, Detail: "agents cannot be started on a remote machine from here"}
+	}
+	// The toggle is a fence as well as a filter: a kind that slipped past an
+	// enumeration site (a stale menu, a queued phone draft) is refused here.
+	if spec.Agent != "" && !l.service.agentEnabled(spec.Agent) {
+		return SessionResult{}, &SessionError{Code: SessionAgentDisabled, Detail: string(spec.Agent) + " is turned off in Settings → Agents"}
 	}
 
 	if spec.Agent == "" {

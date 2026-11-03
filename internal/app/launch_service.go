@@ -13,6 +13,7 @@ import (
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/settings"
 )
 
 // LaunchService binds the Agent-runtime transactions to the verified Herdr
@@ -37,6 +38,10 @@ type LaunchService struct {
 	ledgerMu   sync.Mutex
 	ledgerPath string
 
+	// agentGate is the Settings → Agents toggle source; the launch gate
+	// reads it per call so a toggle flip lands without a restart.
+	agentGate func() settings.AgentsSettings
+
 	// sessions is the shared new-session starter (session_launch.go).
 	sessionsOnce sync.Once
 	sessions     *SessionStarter
@@ -54,6 +59,26 @@ func NewLaunchService(manager *herdr.Manager) *LaunchService {
 
 // Registry is the idempotency seam every launch goes through.
 func (s *LaunchService) Registry() *agent.LaunchRegistry { return s.registry }
+
+// AttachAgentGate wires the Settings → Agents toggle source; production
+// binds SettingsService.Current. A nil gate (tests) leaves every
+// launchable agent enabled.
+func (s *LaunchService) AttachAgentGate(fn func() settings.AgentsSettings) {
+	s.agentGate = fn
+}
+
+// AgentEnabled reports the launch toggle for one agent: the toggle only
+// records opt-outs, so an unset gate (and an absent key) is enabled.
+func (s *LaunchService) AgentEnabled(id history.AgentID) bool {
+	return s.agentEnabled(id)
+}
+
+func (s *LaunchService) agentEnabled(id history.AgentID) bool {
+	if s.agentGate == nil {
+		return true
+	}
+	return s.agentGate().IsEnabled(string(id))
+}
 
 // Queue exposes the follow-up queue for projection/cancel surfaces.
 func (s *LaunchService) Queue() *conversation.FollowUpQueue { return s.queue }
@@ -401,6 +426,13 @@ type HistoryContinuationDeps struct {
 // transaction with exactly one initial prompt.
 func (s *LaunchService) ExecuteHistoryContinuation(ctx context.Context, session string, plan agent.ContinuationPlan, instruction string, deps HistoryContinuationDeps) (agent.ContinuationOutcome, error) {
 	instructionField := agent.ContinuationInstruction{Instruction: instruction}
+	// The toggle gates starting new Agent work; an already-live pane is
+	// only located, never started, so it passes.
+	if plan.Strategy == agent.StrategyNativeResume || plan.Strategy == agent.StrategyContextTransfer {
+		if !s.agentEnabled(plan.Target) {
+			return agent.ContinuationOutcome{}, fmt.Errorf("%s is turned off in Settings → Agents", plan.Target.DisplayName())
+		}
+	}
 	if plan.Strategy == agent.StrategyContextTransfer {
 		if deps.OpenWindow == nil {
 			return agent.ContinuationOutcome{}, errors.New("context transfer requires a history window source")

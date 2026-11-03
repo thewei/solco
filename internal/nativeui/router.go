@@ -104,6 +104,8 @@ func (s *Shell) currentRouteTitle() string {
 		return "Sessions"
 	case path == routeQuota:
 		return "Quota"
+	case path == routeOnboarding:
+		return "Welcome"
 	case path == routeAutomations:
 		return "Automations"
 	case path == routeFiles:

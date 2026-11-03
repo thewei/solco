@@ -27,6 +27,28 @@ type Settings struct {
 	// 2026-10-31). The zero value is off: nothing listens until the user
 	// picks a mode in Settings → Remote Access.
 	Remote RemoteAccessSettings `json:"remote_access,omitempty"`
+
+	// Agents is the per-agent launch toggle (Settings → Agents). Absent
+	// keys mean enabled; see AgentsSettings.
+	Agents AgentsSettings `json:"agents,omitempty"`
+}
+
+// AgentsSettings is the per-agent launch toggle (Settings → Agents). Enabled
+// maps an agent id (history.AgentID) to off; an absent key means enabled, so
+// an upgrade keeps the pre-toggle behavior — every launchable agent was
+// offered — until the user turns one off. Only explicit false hides an
+// agent; true is never stored.
+type AgentsSettings struct {
+	Enabled map[string]bool `json:"enabled,omitempty"`
+}
+
+// IsEnabled reports the toggle for one agent id: an absent key (or a nil
+// map) is enabled — the toggle only ever records opt-outs.
+func (a AgentsSettings) IsEnabled(id string) bool {
+	if value, ok := a.Enabled[id]; ok {
+		return value
+	}
+	return true
 }
 
 // RemoteAccessSettings is the Remote Access page's choice. Mode is "" / "off",
@@ -131,6 +153,10 @@ type GeneralSettings struct {
 	// one of its own: "" or "tui" (the terminal, the default) or "chat" (the
 	// Chat page). A pane the user has switched keeps its own choice.
 	AgentView string `json:"agent_view,omitempty"`
+	// Onboarded records that the first-run guide was completed or skipped.
+	// It only ever gates the guide on a fresh install (SettingsService
+	// FreshInstall); an upgraded settings file never sees it.
+	Onboarded bool `json:"onboarded,omitempty"`
 	// Opacity controls the transparency of the application window shell
 	// (0.50 to 1.00). An unset (0) or out-of-range value defaults to 1.00 (opaque).
 	Opacity float64 `json:"opacity,omitempty"`

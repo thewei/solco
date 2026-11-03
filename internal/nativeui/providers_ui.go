@@ -47,6 +47,25 @@ func statusHookFor(id agenthooks.ProviderID) (history.AgentID, bool) {
 	}
 }
 
+// hookProviderOf maps a launchable agent onto its Solco status hook
+// provider — statusHookFor's inverse. ok is false for agents without one:
+// enabling them installs nothing (the Herdr integration keeps its manual
+// repair lane).
+func hookProviderOf(id history.AgentID) (agenthooks.ProviderID, bool) {
+	switch id {
+	case history.AgentClaudeCode:
+		return agenthooks.ProviderClaude, true
+	case history.AgentAntigravity:
+		return agenthooks.ProviderAntigravity, true
+	case history.AgentCursor:
+		return agenthooks.ProviderCursor, true
+	case history.AgentCodex:
+		return agenthooks.ProviderCodex, true
+	default:
+		return "", false
+	}
+}
+
 // providerRow is one provider's merged presentation card: the Herdr
 // integration facet and, where one exists, the direct status hook facet.
 // Facet pointers stay nil until the matching audit data arrives.

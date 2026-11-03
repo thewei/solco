@@ -76,7 +76,7 @@ func (s *Shell) continueTargets(meta history.SessionMeta) []history.AgentID {
 			continue
 		}
 		capabilities := agent.ProjectCapabilities(provider, agent.Environment{Enabled: true, Installed: true})
-		if capabilities.UnavailableReason == "" {
+		if capabilities.UnavailableReason == "" && s.agentEnabled(provider) {
 			targets = append(targets, provider)
 		}
 	}
@@ -125,6 +125,12 @@ func (s *Shell) requestContinue(meta history.SessionMeta, target *history.AgentI
 	case agent.StrategyAlreadyLive:
 		s.goToPane(plan.PaneID)
 	case agent.StrategyNativeResume, agent.StrategyContextTransfer:
+		// The toggle gates starting new Agent work; a pane that is already
+		// running (AlreadyLive, above) is only located, never started.
+		if !s.agentEnabled(plan.Target) {
+			s.pendingToast = plan.Target.DisplayName() + " is turned off in Settings → Agents."
+			return
+		}
 		s.hist.pendingContinue = &continueRequest{meta: meta, plan: plan}
 		title, message := continueConfirmText(meta, plan)
 		s.openConfirm("history-continue", meta.Key, title, message)

@@ -12,16 +12,37 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/agenthooks"
+	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 )
 
-// TestProvidersPageHookLeadsIntegrationFallsBack pins the single-mechanism
-// surface: the direct status hook is the lead facet for hook-covered
-// providers, the Herdr integration is demoted to a fallback lane whose
-// repair action only stays available while the hook cannot do the job, and
-// each facet action still reconciles from a fresh audit.
-func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
+// toggleKindsStarter serves a fixed launch list so the pages' kinds reads
+// never touch the real herdr CLI.
+type toggleKindsStarter struct{ kinds []app.SessionKind }
+
+func (f toggleKindsStarter) Kinds() []app.SessionKind { return f.kinds }
+func (f toggleKindsStarter) StartSession(context.Context, string, app.SessionSpec) (app.SessionResult, error) {
+	return app.SessionResult{}, nil
+}
+
+// providersTestKinds is the launch list the toggle-page tests use: two
+// hook-covered agents, one integration-only agent, Terminal last.
+var providersTestKinds = []app.SessionKind{
+	{ID: app.TerminalKind, Label: "Terminal"},
+	{ID: "claude-code", Label: "Claude Code"},
+	{ID: "antigravity", Label: "Antigravity CLI"},
+	{ID: "pi", Label: "Pi"},
+}
+
+// TestProvidersPageTogglesLead pins the toggle-first Agents page: every
+// launchable agent renders as a toggle row whose leading mechanism (the
+// Solco status hook) carries the status and the repair, while agents Herdr
+// cannot start here keep their diagnosis cards (hook lead, integration
+// fallback) without a toggle.
+func TestProvidersPageTogglesLead(t *testing.T) {
 	shell := NewShell()
+	shell.newTabStarter = toggleKindsStarter{providersTestKinds}
 	installed := map[string]bool{}
 	var commands []string
 	shell.providers.integrations = agent.NewIntegrationHealthServiceWithRunner(func(ctx context.Context, args []string) (string, error) {
@@ -37,7 +58,7 @@ func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
 			return "not installed"
 		}
 		return "claude: " + state("claude") + " (/Users/demo/.claude/hooks/herdr-agent-state.sh)\n" +
-			"codex: current (v8) (/Users/demo/.codex/herdr-agent-state.sh)\n" +
+			"codex: " + state("codex") + " (/Users/demo/.codex/herdr-agent-state.sh)\n" +
 			"antigravity-cli: " + state("antigravity-cli") + " (/Users/demo/.gemini/config/hooks/herdr-agent-state.sh)\n", nil
 	})
 	home := t.TempDir()
@@ -57,44 +78,47 @@ func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
 		t.Fatalf("route-entry integration audits = %d, want 1", audits)
 	}
 
-	// Claude Code renders as ONE hook-led card, not as two parallel rows
-	// from two systems. The fallback lane is visible beside it.
-	if got := countTextExact(tester.Texts(), "Claude Code"); got != 1 {
-		t.Fatalf("Claude Code shown %d times, want one merged card; texts=%q", got, tester.Texts())
-	}
-	if !tester.HasText("Herdr integration") {
-		t.Fatalf("fallback lane missing; texts=%q", tester.Texts())
+	// Every launchable agent is a toggle row (the switch repeats its label
+	// as its accessible text, so the name may count twice).
+	for _, label := range []string{"Claude Code", "Antigravity CLI", "Pi"} {
+		if got := countTextExact(tester.Texts(), label); got < 1 {
+			t.Fatalf("%s toggle row missing; texts=%q", label, tester.Texts())
+		}
 	}
 
-	// Both hook-covered providers start with an unhealthy hook, so each
-	// fallback lane is still load-bearing and offers its repair action.
-	if got := countTextExact(tester.Texts(), "Install integration"); got != 2 {
-		t.Fatalf("fallback repair actions = %d, want 2; texts=%q", got, tester.Texts())
-	}
+	// Hook repairs: Claude Code and Antigravity CLI on their toggle rows,
+	// Codex and Cursor on their diagnosis cards (kinds absent from the
+	// launch list).
 	if got := countTextExact(tester.Texts(), "Install status hook"); got != 4 {
-		t.Fatalf("hook actions = %d, want 4 (Claude Code, Cursor, Codex, Antigravity); texts=%q", got, tester.Texts())
+		t.Fatalf("hook actions = %d, want 4; texts=%q", got, tester.Texts())
+	}
+	// The Herdr integration fallback lane survives only on diagnosis cards
+	// of agents that are not launchable here: Codex and Cursor (the audit
+	// reports an unsupported integration for every provider missing from
+	// its output). The toggle rows carry the hook as their single leading
+	// mechanism.
+	if got := countTextExact(tester.Texts(), "Herdr integration"); got != 2 {
+		t.Fatalf("integration fallback rows = %d, want 2 (Codex, Cursor); texts=%q", got, tester.Texts())
+	}
+	if got := countTextExact(tester.Texts(), "Install integration"); got != 1 {
+		t.Fatalf("integration repair actions = %d, want 1 (Codex); texts=%q", got, tester.Texts())
 	}
 
-	// The remaining fallback repair (claude's hook is still not installed)
-	// works end to end: herdr integration install runs off render and the
-	// facet reconciles from a fresh audit.
+	// The Codex diagnosis card still repairs end to end: herdr integration
+	// install runs off render and the facet reconciles from a fresh audit.
 	if err := tester.Click("Install integration"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	if !installed["claude"] {
+	if !installed["codex"] {
 		t.Fatalf("herdr integration install did not run; installed=%v", installed)
 	}
-	if !tester.HasText("Claude Code integration is current") {
+	if !tester.HasText("Codex integration is current") {
 		t.Fatalf("integration toast missing; texts=%q", tester.Texts())
 	}
-	if got := countTextExact(tester.Texts(), "Install integration"); got != 1 {
-		t.Fatalf("fallback repair actions after repair = %d, want 1 (antigravity); texts=%q", got, tester.Texts())
-	}
 
-	// Installing Claude Code's hook flips its lead facet to Current and
-	// demotes its fallback lane: the repair action disappears, leaving only
-	// Antigravity's load-bearing fallback action.
+	// Installing Claude Code's status hook flips its toggle row to Current:
+	// the repair disappears and the reconciled detail shows.
 	if err := tester.Click("Install status hook"); err != nil {
 		t.Fatal(err)
 	}
@@ -116,11 +140,75 @@ func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
 	if !tester.HasText("Live status is on") {
 		t.Fatalf("reconciled hook detail missing; texts=%q", tester.Texts())
 	}
-	if got := countTextExact(tester.Texts(), "Install integration"); got != 1 {
-		t.Fatalf("fallback repair actions after hook install = %d, want 1; texts=%q", got, tester.Texts())
-	}
 	if got := countTextExact(tester.Texts(), "Install status hook"); got != 3 {
-		t.Fatalf("hook actions after install = %d, want 3 (Cursor, Codex, Antigravity); texts=%q", got, tester.Texts())
+		t.Fatalf("hook actions after install = %d, want 3; texts=%q", got, tester.Texts())
+	}
+}
+
+// TestAgentsTogglePersistsAndInstalls pins the toggle-on promise: turning
+// an agent off only persists the opt-out; turning it back on installs
+// Solco's own status hook at once, and agents without a Solco hook install
+// nothing.
+func TestAgentsTogglePersistsAndInstalls(t *testing.T) {
+	shell := NewShell()
+	shell.newTabStarter = toggleKindsStarter{providersTestKinds}
+	shell.providers.integrations = agent.NewIntegrationHealthServiceWithRunner(func(ctx context.Context, args []string) (string, error) {
+		return "claude: current (v10) (/Users/demo/.claude/hooks/herdr-agent-state.sh)\n" +
+			"antigravity-cli: current (v4) (/Users/demo/.gemini/config/hooks/herdr-agent-state.sh)\n", nil
+	})
+	home := t.TempDir()
+	shell.providers.hooks = agenthooks.NewManagerWithHome(home)
+
+	shell.router.Replace("/settings/providers")
+	tester := ui.NewTester(shell.View, 1200, 800)
+
+	// Absent key = enabled: Claude Code starts on, turns off on one click.
+	if !shell.agentEnabled(history.AgentClaudeCode) {
+		t.Fatal("an agent without an opt-out must start enabled")
+	}
+	if err := tester.Click("Claude Code"); err != nil {
+		t.Fatal(err)
+	}
+	if shell.agentEnabled(history.AgentClaudeCode) {
+		t.Fatal("the off click must persist the opt-out")
+	}
+	persisted := shell.settingsService.Current().Agents
+	if persisted.IsEnabled("claude-code") {
+		t.Fatalf("persisted agents map = %+v, want claude-code off", persisted.Enabled)
+	}
+
+	// Turning it back on installs the Solco status hook immediately: only
+	// our own wiring, never the Herdr integration.
+	if err := tester.Click("Claude Code"); err != nil {
+		t.Fatal(err)
+	}
+	if !shell.agentEnabled(history.AgentClaudeCode) {
+		t.Fatal("the on click must clear the opt-out")
+	}
+	script := filepath.Join(home, ".solco", "hooks", "solco-claude-hook.sh")
+	if _, err := os.Stat(script); err != nil {
+		t.Fatalf("status hook not installed on enable: %v", err)
+	}
+	wiring, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil || !strings.Contains(string(wiring), "solco-claude-hook.sh") {
+		t.Fatalf("claude settings not wired on enable (err=%v)", err)
+	}
+	if value := shell.settingsService.Current().Agents; len(value.Enabled) != 0 {
+		t.Fatalf("enabling stores nothing; enabled map = %+v", value.Enabled)
+	}
+
+	// Pi has no Solco hook: toggling it installs nothing and never fails.
+	if err := tester.Click("Pi"); err != nil {
+		t.Fatal(err)
+	}
+	if shell.agentEnabled(history.AgentPi) {
+		t.Fatal("the off click for Pi must persist")
+	}
+	if err := tester.Click("Pi"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".pi")); err == nil {
+		t.Fatal("Pi must have no Solco wiring to install")
 	}
 }
 
@@ -129,6 +217,10 @@ func TestProvidersPageHookLeadsIntegrationFallsBack(t *testing.T) {
 // action, and deferred providers never expose one.
 func TestProvidersPageHookOnlyAndDeferred(t *testing.T) {
 	shell := NewShell()
+	shell.newTabStarter = toggleKindsStarter{[]app.SessionKind{
+		{ID: app.TerminalKind, Label: "Terminal"},
+		{ID: "claude-code", Label: "Claude Code"},
+	}}
 	shell.providers.integrations = agent.NewIntegrationHealthServiceWithRunner(func(ctx context.Context, args []string) (string, error) {
 		return "", nil
 	})
@@ -162,6 +254,10 @@ func TestProvidersPageHookOnlyAndDeferred(t *testing.T) {
 // and agents without a reading show no column of Unknown pills.
 func TestProvidersAuditFailureStaysPlain(t *testing.T) {
 	shell := NewShell()
+	shell.newTabStarter = toggleKindsStarter{[]app.SessionKind{
+		{ID: app.TerminalKind, Label: "Terminal"},
+		{ID: "codex", Label: "Codex"},
+	}}
 	shell.providers.integrations = agent.NewIntegrationHealthServiceWithRunner(func(ctx context.Context, args []string) (string, error) {
 		return "", fmt.Errorf("herdr integration status: %w", herdr.ErrCLINotFound)
 	})
@@ -188,6 +284,22 @@ func TestProvidersAuditFailureStaysPlain(t *testing.T) {
 	}
 	if !tester.HasText("Codex") {
 		t.Fatalf("agent rows must stay listed; texts=%q", tester.Texts())
+	}
+}
+
+// TestContinueTargetsRespectsToggle pins the Continue gate: the "Continue
+// in" candidates drop agents the user turned off.
+func TestContinueTargetsRespectsToggle(t *testing.T) {
+	shell := NewShell()
+	shell.hist.providers = []history.AgentID{history.AgentClaudeCode, history.AgentCodex, history.AgentPi}
+	shell.settings.Agents.Enabled = map[string]bool{"codex": false}
+	meta := history.SessionMeta{Agent: history.AgentClaudeCode}
+	var got []string
+	for _, target := range shell.continueTargets(meta) {
+		got = append(got, string(target))
+	}
+	if want := "pi"; len(got) != 1 || got[0] != want {
+		t.Fatalf("continue targets = %v, want [%s]", got, want)
 	}
 }
 

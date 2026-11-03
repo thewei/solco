@@ -7,9 +7,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 
+	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/settings"
 )
 
@@ -18,10 +20,11 @@ import (
 // never prevents startup: the service keeps defaults and records the load
 // error for diagnostics.
 type SettingsService struct {
-	mu      sync.Mutex
-	store   settings.Store
-	value   settings.Settings
-	loadErr error
+	mu           sync.Mutex
+	store        settings.Store
+	value        settings.Settings
+	loadErr      error
+	freshInstall bool
 }
 
 func NewSettingsService(store settings.Store) *SettingsService {
@@ -32,13 +35,34 @@ func NewSettingsService(store settings.Store) *SettingsService {
 			value = settings.Default()
 		}
 	}
-	return &SettingsService{store: store, value: value, loadErr: err}
+	svc := &SettingsService{store: store, value: value, loadErr: err}
+	// The first-run guide runs only on a machine that never had settings:
+	// a file-backed store whose file is absent at construction.
+	if p, ok := store.(freshStorePath); ok {
+		if _, statErr := os.Stat(p.Path()); os.IsNotExist(statErr) {
+			svc.freshInstall = true
+		}
+	}
+	return svc
 }
 
 // LoadError reports the startup load failure, if any. It is diagnostic only:
 // defaults are already active.
 func (s *SettingsService) LoadError() error {
 	return s.loadErr
+}
+
+// freshStorePath is the optional capability of file-backed stores: the path
+// whose absence marks a fresh install.
+type freshStorePath interface {
+	Path() string
+}
+
+// FreshInstall reports that the settings store had no file at construction:
+// this machine never ran Solco before. It is the first-run guide's only
+// trigger; an upgraded settings file is never "fresh".
+func (s *SettingsService) FreshInstall() bool {
+	return s.freshInstall
 }
 
 func (s *SettingsService) Current() settings.Settings {
@@ -107,6 +131,11 @@ func ValidateSettings(value *settings.Settings) error {
 	}
 	if strings.TrimSpace(value.Terminal.FontFamily) == "" {
 		return fmt.Errorf("terminal font family is empty")
+	}
+	for id := range value.Agents.Enabled {
+		if _, ok := history.ParseAgentID(id); !ok {
+			return fmt.Errorf("unknown agent id %q in agents.enabled", id)
+		}
 	}
 	return nil
 }

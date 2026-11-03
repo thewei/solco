@@ -207,6 +207,7 @@ type Shell struct {
 	settingsVoiceEndpointDraft string
 	settingsVoiceKeyDraft      string
 	settingsVoiceModelDraft    string
+	onboardStep                int // the first-run guide's current step (page_onboarding.go)
 
 	// voice* back Settings → Voice: the cached Codex sign-in status and the
 	// open "use my ChatGPT sign-in?" consent dialog.
@@ -779,6 +780,17 @@ func NewShell(opts ...ShellOption) *Shell {
 	for _, opt := range opts {
 		opt(s)
 	}
+	// The Settings → Agents toggle gate reads the live settings service, so
+	// every launch surface (Tab menus, sidebar, phone, Continue) filters and
+	// refuses without a restart.
+	s.launch.AttachAgentGate(func() settings.AgentsSettings {
+		return s.settingsService.Current().Agents
+	})
+	// The first-run guide opens only on a machine that never had settings
+	// and has not completed it once; a skipped guide never returns.
+	if s.settingsService.FreshInstall() && !s.settings.General.Onboarded {
+		s.router.Replace(routeOnboarding)
+	}
 	s.restoreSession()
 	s.startRemoteHostAtLaunch()
 	return s
@@ -812,6 +824,12 @@ func (s *Shell) applySettings(mutate func(*settings.Settings) error) {
 	s.settings = updated
 	s.settingsFontDraft = updated.Terminal.FontFamily
 	s.settingsThemeDraft = terminalThemeDisplay(updated.Terminal.ThemeName)
+	// A toggle flip changes the launch list: drop the cached kinds so the
+	// next "+" menu, sidebar row or page re-reads them through the gate.
+	if agentEnabledChanged(s.settings.Agents.Enabled, updated.Agents.Enabled) {
+		s.launchKinds = nil
+		s.launchKindsLoading = false
+	}
 	if s.win != nil {
 		// SetSource marshals to the main thread and waits; headless tests
 		// have no main loop, so only apply with a window attached.
@@ -820,6 +838,20 @@ func (s *Shell) applySettings(mutate func(*settings.Settings) error) {
 		// Chat appearance flags (contrast, serif) ride the projection.
 		s.publishChatBridge()
 	}
+}
+
+// agentEnabledChanged reports whether the stored opt-outs differ. nil and
+// empty mean the same thing (nothing is turned off).
+func agentEnabledChanged(before, after map[string]bool) bool {
+	if len(before) != len(after) {
+		return true
+	}
+	for id, off := range before {
+		if other, ok := after[id]; !ok || other != off {
+			return true
+		}
+	}
+	return false
 }
 
 // syncThemeSource applies Settings -> General -> Appearance to the
@@ -1042,6 +1074,11 @@ func (s *Shell) View(c *ui.Context) {
 		if s.bootstrapPending || s.bootstrapFailed {
 			_ = content.Animate("workspace-enter", 0, 260*time.Millisecond)
 			content.Children(func() { s.bootstrapPage(c) })
+		} else if s.router.Path() == routeOnboarding {
+			// The first-run guide owns the whole canvas: no sidebar, no
+			// title bar, no overlays. Its choices persist through
+			// applySettings; finishing replaces the route with Workspace.
+			content.Children(func() { s.onboardingPage(c) })
 		} else {
 			content.Opacity(content.Animate("workspace-enter", 1, 260*time.Millisecond))
 			content.Children(func() {
