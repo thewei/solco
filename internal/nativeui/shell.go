@@ -357,6 +357,14 @@ type Shell struct {
 	// only — render never touches either.
 	originMu    sync.Mutex
 	originCache map[string]originRootEntries
+	// serviceHealth carries each pane service's derived health between
+	// scans (service_health.go, 2026-11-03): tones for the square, red
+	// facts for the retained rows. probeKinds remembers which ports are
+	// bare TCP (connect-only probes); probeMu keeps overlapping scan
+	// lanes off each other. Scan lane writes, UI lane reads.
+	serviceHealth map[string]serviceHealthFact
+	probeKinds    map[uint16]probeKindEntry
+	probeMu       sync.Mutex
 	// lastUsedStore persists each root's last-run command name for the pane
 	// header's run control (last-commands.json in production).
 	lastUsedStore *scripts.LastUsedStore
@@ -761,6 +769,8 @@ func NewShell(opts ...ShellOption) *Shell {
 	s.scriptPanes = make(map[string]string)
 	s.serviceOrigins = make(map[string]string)
 	s.originCache = make(map[string]originRootEntries)
+	s.serviceHealth = make(map[string]serviceHealthFact)
+	s.probeKinds = make(map[uint16]probeKindEntry)
 	s.runBusy = make(map[string]bool)
 	s.paneBusyIndex = make(map[string]paneBusyInfo)
 	s.paneShellIdle = make(map[string]bool)

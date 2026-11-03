@@ -127,7 +127,7 @@ func (s *Shell) quickPanelServiceRow(c *ui.Context, row serviceRowModel) {
 				serviceOriginView(c, row)
 			})
 		})
-		statusIndicatorService(c, ToneSuccess, detail)
+		statusIndicatorService(c, healthToneOf(row.Act), detail)
 		if len(row.Act.Ports) > 0 {
 			if compactButton(c, "Preview").Clicked() {
 				s.openLocalPreviewURL(services.LocalPreviewURL(row.Act.Ports[0]))

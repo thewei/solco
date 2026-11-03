@@ -478,7 +478,7 @@ func (s *Shell) serviceRow(c *ui.Context, parent agent.AgentCardModel, act paneS
 			ui.Text(c, name).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).SingleLine().Shrink(0).PassThrough()
 			ui.Text(c, ports).FontSize(Typography().Micro).TextColor(t.TextMuted).
 				SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Grow(1).PassThrough()
-			statusIndicatorService(c, ToneSuccess, serviceActivityDetail(act))
+			statusIndicatorService(c, healthToneOf(act), serviceActivityDetail(act))
 		})
 	})
 	return row
