@@ -35,6 +35,9 @@ const (
 	// pane tally, in fixed-width boxes so rows line up.
 	treeBranchColW float32 = 72
 	treeCountColW  float32 = 16
+	// treeCountSlotW is a section header's right-hand slot: the count pill at
+	// rest, the hover action under the pointer.
+	treeCountSlotW float32 = 30
 	treeMetaGap    float32 = 4
 
 	// treeRowRadius is the corner of every selectable sidebar row: tree rows,
@@ -192,6 +195,9 @@ func (s *Shell) sidebarTreeRow(c *ui.Context, spec sidebarTreeSpec) (ui.Element,
 		ui.Icon(c, spec.Glyph).FontSize(treeGlyphW).TextColor(glyph).Shrink(0)
 		ui.Box(c).Width(treeTitleGap).Shrink(0).PassThrough()
 		title := ui.Text(c, spec.Title).FontSize(Typography().Body).SingleLine().Grow(1).MinWidth(0)
+		if spec.Current {
+			title.FontWeight(WeightSemibold)
+		}
 		if spec.Dim && !spec.Current {
 			title.TextColor(t.TextMuted)
 		}
@@ -267,8 +273,18 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 		treeChevron(c, true, !spec.Closed, t.TextMuted)
 		ui.Box(c).Width(treeGlyphGap).Shrink(0).PassThrough()
 		ui.Text(c, spec.Title).FontSize(Typography().Body).FontWeight(WeightSemibold).Grow(1).MinWidth(0).SingleLine()
+		// A non-zero count is a small pill so the header reads as the level
+		// above its rows; a zero stays plain text and recedes.
 		count := func() {
-			ui.Textf(c, "%d", spec.Count).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0)
+			if spec.Count == 0 {
+				ui.Textf(c, "%d", spec.Count).FontSize(Typography().BodySmall).TextColor(t.TextMuted).Shrink(0)
+				return
+			}
+			ui.Row(c).Height(16).Padding(0, 6).Shrink(0).Center().Radius(Radius().Pill).
+				Background(t.TextMuted.Alpha(0.16)).Children(func() {
+				ui.Textf(c, "%d", spec.Count).FontSize(Typography().BodySmall).FontWeight(WeightMedium).
+					TextColor(t.TextMuted.Mix(t.Text, 0.35)).SingleLine()
+			})
 		}
 		if spec.Trailing != nil {
 			count()
@@ -277,7 +293,7 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 		}
 		// The count ends at the row's right edge — where a row's check mark and
 		// size end — and gives way to the hover action in the same slot.
-		ui.Row(c).Size(gorexRowBtn+2, gorexRowBtn).Shrink(0).Justify(ui.End).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Size(treeCountSlotW, gorexRowBtn).Shrink(0).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 			switch {
 			case spec.Action == nil:
 				count()
@@ -288,7 +304,7 @@ func (s *Shell) sidebarSectionHeader(c *ui.Context, spec sidebarSectionSpec) (ui
 				// its popup always delivers — a hover-conditional menu's
 				// element would be gone by the frame after the choice and
 				// the choice would be dropped (probed 2026-11-02).
-				slot := ui.ButtonBase(c.Key(spec.Key+":action")).Size(gorexRowBtn+2, gorexRowBtn).
+				slot := ui.ButtonBase(c.Key(spec.Key+":action")).Size(treeCountSlotW, gorexRowBtn).
 					Radius(treeRowRadius).Center().FocusRing(false).Label(spec.Action.Label)
 				slot.Menu(spec.Action.Menu)
 				if slot.Hovered() {

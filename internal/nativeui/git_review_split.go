@@ -285,6 +285,7 @@ func (s *Shell) gitCommitHistoryPane(c *ui.Context) {
 				}
 			}
 		})
+		s.gitCommitColumnHead(c)
 		s.commitsPane(c, gdPaletteFor(t))
 	})
 }
@@ -354,7 +355,7 @@ func (s *Shell) gitCommitFiles(c *ui.Context) {
 			})
 		list.Children(func() {
 			if len(rows) == 0 {
-				ui.Text(c, "No matching files").Padding(12).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+				quietNote(c, "No matching files")
 			}
 		})
 	})
@@ -383,7 +384,7 @@ func (s *Shell) gitCommitCard(c *ui.Context) {
 	ui.Column(c).FillWidth().Shrink(0).Padding(8, 10, 10).Gap(6).
 		BorderWidth(0, 0, 1, 0).BorderColor(s.tokens(t.Dark).BorderSubtle).Children(func() {
 		if cm == nil {
-			ui.Text(c, "Reading commit…").FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+			busyNote(c, "Reading commit…")
 			return
 		}
 		if s.git.compare {

@@ -343,10 +343,7 @@ func (s *Shell) reflogSheet(c *ui.Context) {
 				FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			switch {
 			case r.loading:
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, "Reading…").FontSize(Typography().Body).TextColor(t.TextMuted)
-				})
+				busyNote(c, "Reading…")
 			case r.err != "":
 				ui.Text(c, r.err).FontSize(Typography().Body).TextColor(t.Warning)
 			case len(r.entries) == 0:

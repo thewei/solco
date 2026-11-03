@@ -230,8 +230,10 @@ func TestSidebarCountsShareTheRowsRightEdge(t *testing.T) {
 	if !near(header.X+header.W, row.X+row.W) {
 		t.Fatalf("header and row end at %v and %v", header.X+header.W, row.X+row.W)
 	}
-	if got, want := count.X+count.W, header.X+header.W-treeRowPad; !near(got, want) {
-		t.Fatalf("the count ends at %v, want the row's content edge %v", got, want)
+	// A non-zero count sits in a pill with 6pt side padding; the pill, not the
+	// digit, ends at the content edge.
+	if got, want := count.X+count.W+6, header.X+header.W-treeRowPad; !near(got, want) {
+		t.Fatalf("the count pill ends at %v, want the row's content edge %v", got, want)
 	}
 	// The checked-out row is filled; an ordinary branch is not.
 	face := func(r ui.Rect) [4]uint8 { return pixelAt(tester, int(r.X+r.W-2), int(r.Y+1)) }

@@ -172,3 +172,15 @@
 踩坑: 远端 URL 在 App 外被改（`git remote set-url`）后，侧栏要点一次 Refresh 才会重读 remotes（既有行为，非本轮引入）。
 
 验证: `go test -short ./internal/gitworkbench ./internal/nativeui` 绿；`go vet`；真机截图对比如上。
+
+## 第 8 轮：五项 UI 方向（用户全选）
+
+| 项 | 改动 | 设备复验 |
+|---|---|---|
+| 提交图列表 | 新增列头 `Subject / Author / Commit / Date`（`gitCommitColumnHead`，与行共用 `commitAuthorColW/HashColW/DateColW/RowGap` 常量，窄于阈值时与行一起隐藏作者/时间列）；作者列为 16pt 圆形字母头像（`authorAvatar`，颜色只由名字散列决定，不联网取 Gravatar）+ 名字 | 列头与各列值对齐，头像同名同色 |
+| 侧栏引用树 | 区块头计数改为药丸（0 为纯数字）、右槽固定 `treeCountSlotW`；当前分支名 Semibold；`↑N` 绿 / `↓N` 红药丸，文字徽标仍纯文字，✓ 同行 | 截图：`↑6 ↓1` 彩色药丸 + ✓ |
+| Changes 文件列表 | 状态字母（U/A/M/D…）放进 16×16 着色小块；目录名 Medium | 截图：文件行末为绿色 U 块 |
+| 提示统一 | 新增 `quietNote`（"No …" 空态）/`busyNote`（"Reading…" 加载）：同字号 Body、同色、同 12pt 内边距；替换 Git 列表/对话框里 6 种各异的写法；确认弹窗文案既有统一（动作名按钮 + 后果句以句号结尾） | 文件历史/Blame/Rebase/Reflog/Commits 过滤空态一致 |
+| 字号阶梯 | `Caption 10→11`、`Micro 10→10.5`（App 内最小 10.5pt）；`compactButton` 固定 `CompactHeight`，避免字号上调撑高 | 终端侧栏、Changes、Commits、Sessions 无裁切；`TestControlVariantsShareOneHeight` 绿 |
+
+验证: `go test -short ./internal/nativeui ./internal/gitworkbench` 绿（含 `git_avatar_test.go`；`TestSidebarCountsShareTheRowsRightEdge` 改为量药丸右缘）；`go vet`；真机截图如上。

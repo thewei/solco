@@ -148,6 +148,20 @@ func captionedField(c *ui.Context, caption, hint string, field func()) {
 	})
 }
 
+// quietNote is a list's "nothing here" line and busyNote its "still reading"
+// line: one size, one colour and one inset for every Git list and dialog, so
+// an empty or loading state reads the same wherever it appears.
+func quietNote(c *ui.Context, text string) {
+	ui.Text(c, text).FontSize(Typography().Body).TextColor(c.Theme().TextMuted).Padding(12)
+}
+
+func busyNote(c *ui.Context, text string) {
+	ui.Row(c).Gap(8).Padding(12).AlignItems(ui.Center).Children(func() {
+		ui.Spinner(c).Size(14, 14)
+		ui.Text(c, text).FontSize(Typography().Body).TextColor(c.Theme().TextMuted)
+	})
+}
+
 // rowInset is the horizontal padding of a grouped row; dividers start at it.
 const rowInset float32 = 14
 
@@ -229,12 +243,12 @@ func tileToneFor(name string) TileTone {
 // list rows, popover menus: a regular Button at the footnote size. Surfaces
 // never restate that size on a Button; the dense tier changes here, once.
 func compactButton(c *ui.Context, label string) ui.Element {
-	return regularButton(c, label).FontSize(Typography().Micro)
+	return regularButton(c, label).FontSize(Typography().Micro).Height(Controls().CompactHeight)
 }
 
 // compactPrimaryButton is compactButton's accent-filled form.
 func compactPrimaryButton(c *ui.Context, label string) ui.Element {
-	return regularPrimaryButton(c, label).FontSize(Typography().Micro)
+	return regularPrimaryButton(c, label).FontSize(Typography().Micro).Height(Controls().CompactHeight)
 }
 
 // emptyState is the shared nothing-here state. An action, when given, is the

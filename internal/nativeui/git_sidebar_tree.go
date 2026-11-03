@@ -91,11 +91,10 @@ func (s *Shell) gitRefsFilterChanged() {
 }
 
 func (s *Shell) gitRepositorySidebar(c *ui.Context) {
-	t := c.Theme()
 	ui.Column(c).Grow(1).MinHeight(0).Padding(7, sidebarGutter, 0).Gap(6).Children(func() {
 		s.gitViewTabs(c)
 		if s.git.root == "" {
-			ui.Text(c, "No Git repository").Padding(10).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+			quietNote(c, "No Git repository")
 			return
 		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {

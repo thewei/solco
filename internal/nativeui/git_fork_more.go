@@ -497,10 +497,7 @@ func (s *Shell) fileSheet(c *ui.Context) {
 			ui.Text(c, f.path).FontSize(Typography().Caption).TextColor(t.TextMuted).SingleLine()
 			switch {
 			case f.loading:
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, "Reading…").FontSize(Typography().Body).TextColor(t.TextMuted)
-				})
+				busyNote(c, "Reading…")
 			case f.err != "":
 				ui.Text(c, f.err).FontSize(Typography().Body).TextColor(t.Warning)
 			case f.mode == "history":
@@ -526,7 +523,7 @@ func (s *Shell) fileHistoryList(c *ui.Context) {
 	t := c.Theme()
 	f := &s.gitMore.file
 	if len(f.commits) == 0 {
-		ui.Text(c, "No commits touch this file yet.").FontSize(Typography().Body).TextColor(t.TextMuted)
+		quietNote(c, "No commits touch this file yet.")
 		return
 	}
 	ui.List(c, &f.list, len(f.commits), func(i int) {
@@ -554,7 +551,7 @@ func (s *Shell) blameList(c *ui.Context) {
 	t := c.Theme()
 	f := &s.gitMore.file
 	if len(f.blame) == 0 {
-		ui.Text(c, "Nothing to annotate.").FontSize(Typography().Body).TextColor(t.TextMuted)
+		quietNote(c, "Nothing to annotate.")
 		return
 	}
 	ui.List(c, &f.list, len(f.blame), func(i int) {
@@ -657,10 +654,7 @@ func (s *Shell) rebaseSheet(c *ui.Context) {
 		ui.Column(c).Width(720).MaxWidth(820).Height(560).MinHeight(260).MinWidth(0).Gap(Spacing().M).Children(func() {
 			modalTitle(c, "Interactive Rebase")
 			if r.loading {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, "Reading commits…").FontSize(Typography().Body).TextColor(t.TextMuted)
-				})
+				busyNote(c, "Reading commits…")
 				return
 			}
 			ui.Text(c, itoa(len(r.rows))+" commits after "+r.baseShort+", oldest first. Pick an action for each; ↑ ↓ reorder. If anything conflicts, the rebase is cancelled and nothing changes.").

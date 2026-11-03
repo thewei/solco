@@ -111,7 +111,7 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 		if node.Dir {
 			ui.Icon(c, iconFolder).FontSize(treeGlyphW).TextColor(muted).Shrink(0)
 			ui.Box(c).Width(treeTitleGap).Shrink(0).PassThrough()
-			tipped(c, ui.Text(c, node.Name).FontSize(Typography().Body).SingleLine().Grow(1).Shrink(1).MinWidth(0), node.Path)
+			tipped(c, ui.Text(c, node.Name).FontSize(Typography().Body).FontWeight(WeightMedium).SingleLine().Grow(1).Shrink(1).MinWidth(0), node.Path)
 			if !s.gdReviewingCommit() && (pane == gdViewUnstaged || pane == gdViewStaged) {
 				paths := gitDirectoryPaths(s.gitSnapshot(), node.Path, pane)
 				if len(paths) > 0 {
@@ -165,8 +165,13 @@ func (s *Shell) renderChangesRow(c *ui.Context, pal *gdPalette, row gitworkbench
 			case viewed:
 				letter = t.TextMuted
 			}
-			ui.Text(c, gdStatusLetter(&cf)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(letter).
-				Width(12).TextAlign(ui.End).Shrink(0) // flush right: the letter ends where the pane header's Stage/Unstage ends
+			// A small tinted tile instead of a bare letter: the status reads as
+			// a mark at a glance, the letter is the accessible detail. It sits
+			// flush right, where the pane header's Stage/Unstage ends.
+			ui.Box(c).Size(16, 16).Shrink(0).Radius(treeRowRadius).Background(letter.Alpha(0.16)).Center().Children(func() {
+				ui.Text(c, gdStatusLetter(&cf)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).
+					TextColor(letter).PassThrough()
+			})
 		})
 	})
 	// Directory disclosure is independent of List.Changed: selecting the

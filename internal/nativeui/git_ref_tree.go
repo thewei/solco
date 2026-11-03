@@ -260,9 +260,24 @@ func (s *Shell) gitTreeRow(c *ui.Context, it gitTreeItem, action func(), menu fu
 				default:
 					parts = []string{it.badge}
 				}
+				pal := gdPaletteFor(th)
 				for _, part := range parts {
-					ui.Text(c, part).FontSize(Typography().BodySmall).FontWeight(WeightMedium).
-						TextColor(th.TextMuted.Mix(th.Text, 0.55)).SingleLine()
+					// ↑ ahead wears the add colour, ↓ behind the delete one, each
+					// in a tinted pill; a word badge stays plain text.
+					tone := th.TextMuted.Mix(th.Text, 0.55)
+					switch {
+					case strings.HasPrefix(part, "↑"):
+						tone = pal.addText
+					case strings.HasPrefix(part, "↓"):
+						tone = pal.delText
+					default:
+						ui.Text(c, part).FontSize(Typography().BodySmall).FontWeight(WeightMedium).TextColor(tone).SingleLine()
+						continue
+					}
+					ui.Row(c).Height(16).Padding(0, 6).Shrink(0).Center().Radius(Radius().Pill).
+						Background(tone.Alpha(0.16)).Children(func() {
+						ui.Text(c, part).FontSize(Typography().BodySmall).FontWeight(WeightMedium).TextColor(tone).SingleLine()
+					})
 				}
 				if it.current {
 					ui.Icon(c, iconCheck).FontSize(11).TextColor(th.Text).Shrink(0)
