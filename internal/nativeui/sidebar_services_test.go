@@ -26,20 +26,45 @@ func TestClassifyServiceOrigin(t *testing.T) {
 	cards := []agent.AgentCardModel{svcTestCard("p1", "w1")}
 	scriptPanes := map[string]string{"p3": "dev.up"}
 
-	origin, provider, label := classifyServiceOrigin(cards, scriptPanes, "p1")
+	origin, provider, label := classifyServiceOrigin(cards, scriptPanes, nil, "p1")
 	if origin != serviceOriginAgent || provider != history.AgentClaudeCode || label != "Claude Code" {
 		t.Fatalf("agent pane origin = %v %v %q", origin, provider, label)
 	}
-	origin, provider, label = classifyServiceOrigin(cards, scriptPanes, "p3")
+	origin, provider, label = classifyServiceOrigin(cards, scriptPanes, nil, "p3")
 	if origin != serviceOriginScript || provider != "" || label != "dev.up" {
 		t.Fatalf("script pane origin = %v %v %q", origin, provider, label)
 	}
-	if origin, _, _ = classifyServiceOrigin(cards, scriptPanes, "p4"); origin != serviceOriginManual {
+	if origin, _, _ = classifyServiceOrigin(cards, scriptPanes, nil, "p4"); origin != serviceOriginManual {
 		t.Fatalf("manual pane origin = %v", origin)
 	}
 	// The agent card outranks a script record on the same pane.
-	if origin, _, _ = classifyServiceOrigin(cards, map[string]string{"p1": "dev.up"}, "p1"); origin != serviceOriginAgent {
+	if origin, _, _ = classifyServiceOrigin(cards, map[string]string{"p1": "dev.up"}, nil, "p1"); origin != serviceOriginAgent {
 		t.Fatalf("card must outrank a script record, got %v", origin)
+	}
+}
+
+// The 2026-11-03 inferred tier: a pane Solco never launched anything into
+// still names its project's script when the foreground argv explains it.
+func TestClassifyServiceOriginInferred(t *testing.T) {
+	cards := []agent.AgentCardModel{svcTestCard("p1", "w1")}
+	records := map[string]string{"p2": "dev.up"}
+	origins := map[string]string{"p3": "start", "p1": "daemon", "p2": "other"}
+
+	origin, _, label := classifyServiceOrigin(cards, records, origins, "p3")
+	if origin != serviceOriginScript || label != "start" {
+		t.Fatalf("inferred origin = %v %q, want script start", origin, label)
+	}
+	// The Run-button record outranks an inference on the same pane.
+	if _, _, label = classifyServiceOrigin(nil, records, origins, "p2"); label != "dev.up" {
+		t.Fatalf("record label = %q, want the clicked script", label)
+	}
+	// The agent card outranks an inference (an omp pane holding a port).
+	if origin, _, _ = classifyServiceOrigin(cards, records, origins, "p1"); origin != serviceOriginAgent {
+		t.Fatalf("card must outrank an inference, got %v", origin)
+	}
+	// No inference → the manual fallback.
+	if origin, _, _ = classifyServiceOrigin(nil, records, origins, "p9"); origin != serviceOriginManual {
+		t.Fatalf("unexplained pane = %v, want manual", origin)
 	}
 }
 
@@ -116,7 +141,7 @@ func TestSidebarServicesSection(t *testing.T) {
 	}
 
 	tester := ui.NewTester(s.View, 1200, 800)
-	for _, want := range []string{"Services", ":3000", ":8080", "Manual"} {
+	for _, want := range []string{"Services", ":3000", ":8080", "Manual", "· repo-a", "· repo-b"} {
 		if !tester.HasText(want) {
 			t.Fatalf("sidebar services section missing %q; texts=%q", want, tester.Texts())
 		}
@@ -144,6 +169,36 @@ func TestSidebarServicesSection(t *testing.T) {
 	tester.Frame()
 	if !tester.HasText(":3000") || !tester.HasText(":8080") {
 		t.Fatalf("services rows did not render again; texts=%q", tester.Texts())
+	}
+
+	// Workspace groups fold like the Agents list's (2026-11-03): the
+	// header toggle hides only that project's rows, the folded group
+	// shows its count, and the fold rides the Agents folds' persistence.
+	if err := tester.Click("Toggle Project A services"); err != nil {
+		t.Fatalf("workspace group click: %v", err)
+	}
+	if !s.foldedAgents["svc-group:w1"] {
+		t.Fatalf("group click did not fold Project A: %v", s.foldedAgents)
+	}
+	tester.Frame()
+	if tester.HasText(":3000") {
+		t.Fatalf("folded Project A rows still render; texts=%q", tester.Texts())
+	}
+	if !tester.HasText(":8080") {
+		t.Fatalf("Project B rows must survive the Project A fold; texts=%q", tester.Texts())
+	}
+	if !tester.HasText("1") {
+		t.Fatalf("folded group lacks its service count; texts=%q", tester.Texts())
+	}
+	if err := tester.Click("Toggle Project A services"); err != nil {
+		t.Fatal(err)
+	}
+	if s.foldedAgents["svc-group:w1"] {
+		t.Fatalf("second click did not unfold Project A")
+	}
+	tester.Frame()
+	if !tester.HasText(":3000") {
+		t.Fatalf("unfolded Project A rows did not render; texts=%q", tester.Texts())
 	}
 }
 
@@ -193,11 +248,16 @@ func TestServiceRowModelsAttribution(t *testing.T) {
 	if p1.Title == "" {
 		t.Fatalf("process row title must fall back to the friendly name")
 	}
+	// The 2026-11-03 directory disambiguator: the pane cwd's leaf rides
+	// the row, the full path its tooltip.
+	if p1.DirName != "repo-a" || p1.DirPath != "/repo-a" || p2.DirName != "repo-b" || p2.DirPath != "/repo-b" {
+		t.Fatalf("dir facts = %+v / %+v", p1, p2)
+	}
 
 	// With an agent card bound to p1 the origin names the agent and the
 	// row keeps the card for the panePrefersChat jump.
 	cards := []agent.AgentCardModel{svcTestCard("p1", "w1")}
-	p1Origin, provider, label := classifyServiceOrigin(cards, s.scriptPanes, "p1")
+	p1Origin, provider, label := classifyServiceOrigin(cards, s.scriptPanes, s.serviceOrigins, "p1")
 	if p1Origin != serviceOriginAgent || provider != history.AgentClaudeCode || label != "Claude Code" {
 		t.Fatalf("p1 with card = %v %v %q", p1Origin, provider, label)
 	}

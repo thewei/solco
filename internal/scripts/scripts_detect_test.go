@@ -46,6 +46,28 @@ func TestDetectPackageJSONScripts(t *testing.T) {
 	}
 }
 
+// The body is the alignment anchor (2026-11-03): a package.json script
+// carries its own body for process matching; runner-indirection targets
+// (make/just) carry none — nothing about their recipe is matchable.
+func TestDetectBody(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"package.json":   `{"scripts":{"dev":"vite --port 3000"}}`,
+		"pnpm-lock.yaml": "# lock",
+	})
+	dev, ok := findCommand(Detect(root), "dev")
+	if !ok || dev.Body != "vite --port 3000" {
+		t.Fatalf("dev body = %+v (ok=%v), want the script body", dev, ok)
+	}
+
+	root = writeTree(t, map[string]string{
+		"justfile": "serve:\n    caddy run\n",
+	})
+	serve, ok := findCommand(Detect(root), "serve")
+	if !ok || serve.Body != "" {
+		t.Fatalf("just recipe body = %+v (ok=%v), want empty", serve, ok)
+	}
+}
+
 func TestDetectPackageJSONRunnerByLockfile(t *testing.T) {
 	cases := map[string]string{
 		"pnpm-lock.yaml":    "pnpm run",

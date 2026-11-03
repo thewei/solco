@@ -9,6 +9,7 @@ package nativeui
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -44,6 +45,13 @@ type serviceRowModel struct {
 	Card        *agent.AgentCardModel // the pane's agent card, nil when none
 	ProjectID   string
 	ProjectName string
+	// DirName is the pane working directory's leaf (2026-11-03 user
+	// request): the second line's small directory fact, so same-named
+	// titles in two projects stay apart (`start · devspace` vs `start ·
+	// api`). DirPath is the tooltip's full path; both empty when the pane
+	// has no directory.
+	DirName string
+	DirPath string
 	// Title is the row's first line: a script-launched service carries the
 	// script definition's own name (2026-11-02 user request), everything
 	// else the process's friendly name.
@@ -60,13 +68,18 @@ type serviceGroupModel struct {
 
 // classifyServiceOrigin resolves who started the service in a pane: an
 // agent card bound to the pane wins (the pane is the agent's), then a
-// script this shell launched into the pane (in-memory, like the index),
-// else a manual run.
-func classifyServiceOrigin(cards []agent.AgentCardModel, scriptPanes map[string]string, paneID string) (serviceOrigin, history.AgentID, string) {
+// script this shell launched into the pane (the Run button's persisted
+// record), then the argv inference — a manually typed `pnpm run start`
+// lands on its project's script name (2026-11-03 title alignment) — and
+// only then a manual run with the process name as its title.
+func classifyServiceOrigin(cards []agent.AgentCardModel, scriptPanes map[string]string, origins map[string]string, paneID string) (serviceOrigin, history.AgentID, string) {
 	if card := cardForPane(cards, paneID); card != nil {
 		return serviceOriginAgent, card.Provider, card.ProviderLabel
 	}
 	if name := scriptPanes[paneID]; name != "" {
+		return serviceOriginScript, "", name
+	}
+	if name := origins[paneID]; name != "" {
 		return serviceOriginScript, "", name
 	}
 	return serviceOriginManual, "", ""
@@ -160,12 +173,12 @@ func (s *Shell) serviceRowModels() []serviceRowModel {
 				break
 			}
 		}
-		origin, provider, label := classifyServiceOrigin(cards, scriptPanes, paneID)
+		origin, provider, label := classifyServiceOrigin(cards, scriptPanes, s.serviceOrigins, paneID)
 		title := serviceTitle(act)
 		if origin == serviceOriginScript {
 			title = s.scriptTitleFor(label, pane.CWD)
 		}
-		rows = append(rows, serviceRowModel{
+		row := serviceRowModel{
 			PaneID:      paneID,
 			Act:         act,
 			Origin:      origin,
@@ -175,7 +188,15 @@ func (s *Shell) serviceRowModels() []serviceRowModel {
 			ProjectID:   pane.ProjectID,
 			ProjectName: projectName,
 			Title:       title,
-		})
+		}
+		// The pane's own directory is the disambiguator (2026-11-03): the
+		// leaf joins the second line in small text, the full path rides
+		// the tooltip. Degenerate roots render nothing.
+		if pane.CWD != "" && pane.CWD != "/" {
+			row.DirPath = pane.CWD
+			row.DirName = filepath.Base(pane.CWD)
+		}
+		rows = append(rows, row)
 	}
 	slices.SortStableFunc(rows, func(a, b serviceRowModel) int {
 		return paneOrder[a.PaneID] - paneOrder[b.PaneID]
@@ -219,26 +240,71 @@ func (s *Shell) servicesSection(c *ui.Context) {
 	})
 }
 
-// serviceItems draws the section body: one group renders bare, several
-// wear their workspace label; no rows keeps the honest empty line.
+// serviceItems draws the section body: one foldable workspace group per
+// project, mirroring the Agents list's group headers (2026-11-03 user
+// request) — chevron + workspace label + service count, click toggles,
+// context menu folds/unfolds all. The fold reuses the Agents folds'
+// persistence (foldedAgents → Session.FoldedAgents) under "svc-group:"
+// keys; open is the default. No rows keeps the honest empty line.
 func (s *Shell) serviceItems(c *ui.Context, rows []serviceRowModel) {
 	if len(rows) == 0 {
 		ui.Text(c, "No services running").Padding(Spacing().M, Spacing().L).TextColor(c.Theme().TextMuted)
 		return
 	}
 	groups := groupServiceRows(rows)
-	if len(groups) == 1 {
-		for _, row := range groups[0].Rows {
-			s.serviceCardItem(c, row, false)
+	for _, group := range groups {
+		foldKey := agentFoldKey("svc-group", group.Key)
+		folded := s.foldedAgents[foldKey]
+		t := c.Theme()
+		ui.Box(c.Key("svc-group-gap:" + group.Key)).Height(5).Shrink(0)
+		head := ui.ButtonBase(c.Key("svc-group:"+group.Key)).FillWidth().Height(24).Radius(treeRowRadius).
+			Padding(0, agentCardPadX, 0, 2).Gap(4).AlignItems(ui.Center).FocusRing(false).
+			Label("Toggle " + group.Name + " services")
+		if head.Hovered() {
+			head.Background(t.SurfaceHover)
 		}
-		return
+		head.Transition(rowFade)
+		head.Children(func() {
+			treeChevron(c, true, !folded, t.TextMuted)
+			ui.Text(c, group.Name).FontSize(Typography().Micro).
+				TextColor(t.TextMuted.Alpha(0.75)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).PassThrough()
+			if folded {
+				ui.Text(c, itoa(len(group.Rows))).FontSize(Typography().Micro).
+					TextColor(t.TextMuted).SingleLine().Shrink(0).PassThrough()
+			}
+		})
+		if head.Clicked() {
+			s.toggleAgentFold(foldKey)
+		}
+		head.ContextMenu(func(m *ui.Menu) {
+			if m.Item("Fold All Groups").Chosen() {
+				s.setServiceGroupFolds(groups, true)
+			}
+			if m.Item("Unfold All Groups").Chosen() {
+				s.setServiceGroupFolds(groups, false)
+			}
+		})
+		if folded {
+			continue
+		}
+		for _, row := range group.Rows {
+			s.serviceCardItem(c, row)
+		}
+	}
+}
+
+// setServiceGroupFolds folds or unfolds every workspace group of the
+// Services list at once (a group header's context menu).
+func (s *Shell) setServiceGroupFolds(groups []serviceGroupModel, fold bool) {
+	if s.foldedAgents == nil {
+		s.foldedAgents = map[string]bool{}
 	}
 	for _, group := range groups {
-		ui.Text(c, group.Name).Padding(Spacing().S, agentCardTextInset, Spacing().XXS).
-			FontSize(Typography().Micro).TextColor(c.Theme().TextMuted.Alpha(0.75)).
-			SingleLine().Ellipsis("…")
-		for _, row := range group.Rows {
-			s.serviceCardItem(c, row, true)
+		key := agentFoldKey("svc-group", group.Key)
+		if fold {
+			s.foldedAgents[key] = true
+		} else {
+			delete(s.foldedAgents, key)
 		}
 	}
 }
@@ -247,7 +313,7 @@ func (s *Shell) serviceItems(c *ui.Context, rows []serviceRowModel) {
 // card's anatomy. Click jumps to the pane's remembered surface (the
 // agent's Chat when the pane carries an agent card, else the terminal);
 // the context menu offers the pane actions and per-port previews.
-func (s *Shell) serviceCardItem(c *ui.Context, row serviceRowModel, grouped bool) {
+func (s *Shell) serviceCardItem(c *ui.Context, row serviceRowModel) {
 	t := c.Theme()
 	tokens := designTokens(t.Dark)
 	name := row.Title
@@ -272,10 +338,6 @@ func (s *Shell) serviceCardItem(c *ui.Context, row serviceRowModel, grouped bool
 				})
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					serviceOriginView(c, row)
-					if !grouped && row.ProjectName != "" {
-						tipped(c, ui.Text(c, row.ProjectName).FontSize(Typography().Micro).
-							TextColor(t.TextMuted).SingleLine(), row.ProjectName)
-					}
 				})
 			})
 			statusIndicatorService(c, ToneSuccess, detail)
@@ -324,7 +386,10 @@ func serviceMarkView(c *ui.Context, act paneServiceActivity) {
 
 // serviceOriginView draws the second line's attribution: a mini agent mark
 // plus its label, the process a script launch runs, or the plain "Manual" —
-// the answer to "who started this".
+// the answer to "who started this". The pane directory's leaf follows in
+// the same small text (2026-11-03 user request): `start · devspace` keeps
+// same-named titles apart across projects, and the full path rides the
+// tooltip. Both the sidebar card and the popover row share this view.
 func serviceOriginView(c *ui.Context, row serviceRowModel) {
 	t := c.Theme()
 	switch row.Origin {
@@ -343,6 +408,10 @@ func serviceOriginView(c *ui.Context, row serviceRowModel) {
 	default:
 		ui.Text(c, "Manual").FontSize(Typography().Micro).
 			TextColor(t.TextMuted).SingleLine().Shrink(0)
+	}
+	if row.DirName != "" {
+		tipped(c, ui.Text(c, "· "+row.DirName).FontSize(Typography().Micro).
+			TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0).Ellipsis("…"), row.DirPath)
 	}
 }
 

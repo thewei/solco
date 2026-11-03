@@ -85,6 +85,9 @@ func (s *Shell) persistableAgentFolds() []string {
 	live := make(map[string]bool, len(s.projection.Projects)+10)
 	for _, project := range s.projection.Projects {
 		live[agentFoldKey("group", project.ID)] = true
+		// The Services section's workspace groups fold under the same
+		// persistence (2026-11-03); they live as long as the Workspace.
+		live[agentFoldKey("svc-group", project.ID)] = true
 	}
 	for _, card := range s.workbenchCards() {
 		live[subagentFoldKey(card)] = true

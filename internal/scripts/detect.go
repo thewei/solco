@@ -27,8 +27,13 @@ const (
 // identity within the root (menu label, last-used key); Command is the full
 // line typed into the pane's shell.
 type DetectedCommand struct {
-	Name    string
+	Name string
+	// Command is the exact line Solco types for this entry (`bun run dev`);
+	// Body is what that line actually runs (`bun run src/dev.ts`), used to
+	// match a live process back to the entry that produced it. Empty for
+	// runner indirections (make/just targets) with no single body.
 	Command string
+	Body    string
 	Source  string
 }
 
@@ -36,8 +41,15 @@ type DetectedCommand struct {
 // user-authored Script definition or a detected project command. User
 // definitions win name conflicts, so the menu stays one merged list.
 type CommandEntry struct {
-	Name    string
+	Name string
+	// Command is the menu's typed line; Body is what it runs — a user
+	// definition's typed line itself, or a package.json script's own body.
+	// A live process is matched back to the entry through Command (the
+	// runner wrapper that stays in the foreground group) and then Body
+	// (the actual child process), so the title lands on the script name
+	// regardless of how the process was launched.
 	Command string
+	Body    string
 	Source  string
 	User    bool
 }
@@ -85,14 +97,14 @@ func MergeCommands(defs []ScriptDefinition, detected []DetectedCommand) []Comman
 			continue
 		}
 		seen[def.Name] = true
-		out = append(out, CommandEntry{Name: def.Name, Command: def.Command, Source: "script", User: true})
+		out = append(out, CommandEntry{Name: def.Name, Command: def.Command, Body: def.Command, Source: "script", User: true})
 	}
 	for _, cmd := range detected {
 		if seen[cmd.Name] {
 			continue
 		}
 		seen[cmd.Name] = true
-		out = append(out, CommandEntry{Name: cmd.Name, Command: cmd.Command, Source: cmd.Source})
+		out = append(out, CommandEntry{Name: cmd.Name, Command: cmd.Command, Body: cmd.Body, Source: cmd.Source})
 	}
 	return out
 }
@@ -134,7 +146,7 @@ func detectPackageJSON(root string) []DetectedCommand {
 		if !validCommandName(name) {
 			continue
 		}
-		out = append(out, DetectedCommand{Name: name, Command: runner + " " + name, Source: "package.json"})
+		out = append(out, DetectedCommand{Name: name, Command: runner + " " + name, Body: strings.TrimSpace(doc.Scripts[name]), Source: "package.json"})
 	}
 	return out
 }

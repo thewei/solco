@@ -36,10 +36,14 @@ const (
 )
 
 // paneServiceActivity is one observed service: the first listening
-// foreground process name and its deduplicated, sorted ports.
+// foreground process name, its deduplicated sorted ports, and the bounded
+// argv lines of the pane's whole foreground group — wrapper and children
+// alike — for origin inference (service_origin.go). Argvs stay scan-lane
+// facts: render reads the inferred name, never these.
 type paneServiceActivity struct {
 	Proc  string
 	Ports []uint16
+	Argvs [][]string
 }
 
 // foregroundPaneService matches one Pane's foreground processes against the
@@ -52,6 +56,12 @@ func foregroundPaneService(info *herdr.PaneProcessInfo, listeners map[int]servic
 	var act paneServiceActivity
 	var attributed []int
 	for _, fg := range info.ForegroundProcesses {
+		// The wrapper often holds no port itself (`pnpm run start` →
+		// `node dist/cli.js serve` owns :7676): every foreground argv
+		// feeds origin inference, not just the listening process's.
+		if argv := boundedArgv(fg.Argv); len(argv) > 0 {
+			act.Argvs = append(act.Argvs, argv)
+		}
 		snap, ok := listeners[fg.PID]
 		if !ok {
 			continue
@@ -483,6 +493,7 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 	next := computeSidebarServices(herdr.Projection{Panes: panes}, listeners, infos)
 	busy := computePaneBusy(panes, infos)
 	shellIdle := computeShellIdlePanes(panes, infos)
+	origins := s.resolveServiceOrigins(panes, next.Panes)
 	if s.win == nil {
 		return
 	}
@@ -492,6 +503,7 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 		}
 		livenessChanged := !maps.Equal(s.paneShellIdle, shellIdle)
 		s.serviceIndex = next
+		s.serviceOrigins = origins
 		s.paneBusyIndex = busy
 		s.publishRemoteAgentFacts() // phones list the services beside each agent
 		s.paneShellIdle = shellIdle
