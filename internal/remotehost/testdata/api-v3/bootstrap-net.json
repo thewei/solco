@@ -1,0 +1,22 @@
+{
+  "capabilities": {
+    "chat": true,
+    "terminal": true
+  },
+  "hostId": "a1cc1d2af9c5a03e",
+  "hostName": "Test Mac",
+  "instances": [
+    {
+      "id": "default"
+    }
+  ],
+  "net": {
+    "addresses": [
+      {
+        "host": "192.168.1.10",
+        "port": 7788
+      }
+    ]
+  },
+  "version": "test"
+}

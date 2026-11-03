@@ -52,3 +52,14 @@
 - 2026-11-03 并行会话可能跑着**同名沙箱**（同样改了 com.whstudio.solco.sandbox）：`pgrep -f SolcoSandbox | head -1` 会拿到别人的 pid，点击打进别人的窗口（本轮只造成导航级噪音）→ 先 `ps` 按启动路径甄别 pid，list_windows 后再截图核对内容（workspace 名/cwd）。
 - 2026-11-03（架构记忆）`showSurface` 曾经「落 surface + 写 paneSurfaceMemo」耦合在一个函数里：任何经 showSurface(Terminal) 的落地都会改写记忆——home 家族（首页签/⌘1/⌘P Workspace/页签 toggle 退出）就是这样把 Chat 记忆持久打回 Terminal 的（沙箱 trace + fb-3/fb-4 截图实锤）。2026-11-03 起落地面与记忆分离：导航走 `showPaneSurface`/`landSelectedPane`（永不写记忆），只有显式选择（卡头切换钮、Open Terminal 动作、openChat 成功/邀请）写记忆；**新增「去某 pane / 回 workspace」的代码一律走这两个 owner**，不许再手写 `panePrefersChat ? Chat : showViewTerminal` 三元式（goToPane/external_reveal 已收编）。
 - 2026-11-03（架构记忆）记忆回写必须与真实落地同分支：openChat 曾在入口无条件先盖 chat、无会话回落再盖 terminal 且**连 Terminal surface 都不落**（只改记忆 + toast）——surface 没变记忆先变是同型污染；修复后 Chat 记账在三个真正落 Chat 的分支里，回落经 showPaneSurface 不写记忆（单测 TestOpenChatKeepsAPinnedSessionlessPaneOnItsInvitation / TestOpenChatLandsASessionlessPlainPreferenceOnTerminal 钉）。
+
+## 第 1 轮循环（2026-11-03 agent-launch-chat-loading：启动期表面无持有）
+
+- 2026-11-03 沙箱应用的**退出保存会用内存态覆盖手改的 settings.json**（kill 触发 SaveSession 回写）→ 改沙箱设置必须 kill → 改文件 → 再启动，绝不在活实例存在时手改（落点 internal/nativeui/session.go SaveSession）。
+- 2026-11-03 两个并行沙箱同屏时，对方 cua-driver 的像素点击会落进我的窗口（本轮 09:57:43/09:58:12/09:58:25 的 Chat↔Terminal 三连翻转，caller 全是 surfaceToggle 按钮路径 = 污染不是代码；对方安静后同环境零翻转）→ 判「翻转是否代码行为」：看 showSurface/memo 探针 caller 是选择/切换 owner 还是按钮 handler，并对照对方会话活跃时段。
+- 2026-11-03（架构记忆）启动流不参与表面决策的正确形状是「意图持有」：pendingLaunch 从点击起持有 Chat（rendering launching 卡、无 composer 即禁止输入），syncWorkspaceForSelection/reconcilePaneSurface 在 hold 期间让位、watcher 投影先选新 Tab——不要在每条中间投影路径上猜 prefers/avail（落点 internal/nativeui/chat_launch.go）。
+- 2026-11-03 沙箱启动用 `open --env` 不会传 HOME，应用会连到用户真实 Herdr 会话（立即退出、未操作；幸好只是看了一眼）→ 一律 python `subprocess.Popen(env=…, start_new_session=True)` 直接起可执行文件，起后先 `ps eww -p <pid>` 核对 HOME 再动手（落点 solco-development SKILL 沙箱配方）。
+- 2026-11-03 窗口在副屏/后台时 `cua-driver get_window_state` 的截图可滞后数分钟（把旧会话的 toast 当成现状）→ 状态判断以 AX 树 + solco.log + 仓库状态为准，截图只做布局观察；toast 类断言用单测钉。
+- 2026-11-03 `NewShell` 里任何读 `s.settings` 的初始化必须放在 `for _, opt := range opts` 之后（WithSettings 才换入已存设置）：Split/Unified 偏好曾因此每次重启回 Unified（TestSavedDiffLayoutSurvivesRestart）。
+- 2026-11-03 为跑单测临时 `git stash -- <file>` 会把并行会话在同一文件里的未提交改动一并收走（已原样 pop 回来）→ 变异验证用复制备份文件再还原，不要 stash。
+- 2026-11-03 `ui.Context.SetTheme` **会重置窗口根背景为主题底色**（`c.root.bg = t.Background`），抹掉 `Shell.View` 为 vibrancy 设的 `Root().Background(Transparent)`：changes_panel 为压掉选中蓝在列表外 `SetTheme(quiet)…SetTheme(real)`，结果每次评审区出现（点提交）整块侧栏失去材质闪白。无头 Tester 默认 vibrancy 关 + 只比 RGB 看不出 → 复现需 `tester.SetVibrancy(true)` 并比 **alpha**（侧栏透明像素数）；落点 internal/nativeui/changes_panel.go，守卫 `TestReviewingACommitKeepsTheSidebarVibrancy` / `TestSetThemeIsOnlyCalledWhereTheRootIsRestored`。教训：闪/白屏类 bug 先问"无头环境和真机在哪个开关上不同"（vibrancy、ReduceMotion、前后台），再下"无法复现"的结论。

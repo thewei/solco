@@ -36,14 +36,20 @@ const (
 )
 
 // paneServiceActivity is one observed service: the first listening
-// foreground process name, its deduplicated sorted ports, and the bounded
+// foreground process name, its deduplicated sorted ports, the bounded
 // argv lines of the pane's whole foreground group — wrapper and children
-// alike — for origin inference (service_origin.go). Argvs stay scan-lane
-// facts: render reads the inferred name, never these.
+// alike — for origin inference (service_origin.go), and the scan's derived
+// health annotation (service_health.go). Argvs stay scan-lane facts:
+// render reads the inferred name and the health tone, never these.
 type paneServiceActivity struct {
 	Proc  string
 	Ports []uint16
 	Argvs [][]string
+	// HealthTone/HealthReason (2026-11-03): the square's color and the
+	// tooltip's reason suffix. Zero tone means the plain green of a
+	// serving listener.
+	HealthTone   StatusTone
+	HealthReason string
 }
 
 // foregroundPaneService matches one Pane's foreground processes against the
@@ -300,7 +306,7 @@ func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIn
 
 	for _, pane := range projection.Panes {
 		if svc := services.Panes[pane.ID]; len(svc.Ports) > 0 {
-			index[pane.ID] = sidebarActivity{On: true, Tone: ToneSuccess, Detail: serviceActivityDetail(svc), Service: true}
+			index[pane.ID] = sidebarActivity{On: true, Tone: healthToneOf(svc), Detail: serviceActivityDetail(svc), Service: true}
 		}
 	}
 	for _, tab := range projection.Tabs {
@@ -376,13 +382,24 @@ func rollupActivity(index map[string]sidebarActivity, agentStateByPane map[strin
 	return act, true
 }
 
-// servicePortsText is the ports alone: ":3000, :5173".
+// servicePortsText is the ports alone: ":3000, :5173" (built directly —
+// the detail string now carries the health reason suffix).
 func servicePortsText(act paneServiceActivity) string {
-	return strings.TrimPrefix(serviceActivityDetail(act), firstText(act.Proc, "service")+" on ")
+	parts := make([]string, 0, len(act.Ports))
+	for i, port := range act.Ports {
+		if i == 4 {
+			parts = append(parts, "…")
+			break
+		}
+		parts = append(parts, ":"+strconv.Itoa(int(port)))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // serviceActivityDetail is the tooltip fact for one service:
-// "node on :3000, :8080" (ports capped to keep the tooltip readable).
+// "node on :3000, :8080 · exited" — the health reason rides the same
+// string when the scan derived one (2026-11-03; ports capped to keep the
+// tooltip readable).
 func serviceActivityDetail(act paneServiceActivity) string {
 	label := firstText(act.Proc, "service")
 	parts := make([]string, 0, len(act.Ports))
@@ -393,7 +410,11 @@ func serviceActivityDetail(act paneServiceActivity) string {
 		}
 		parts = append(parts, ":"+strconv.Itoa(int(port)))
 	}
-	return label + " on " + strings.Join(parts, ", ")
+	detail := label + " on " + strings.Join(parts, ", ")
+	if act.HealthReason != "" {
+		detail += " · " + act.HealthReason
+	}
+	return detail
 }
 
 func joinDetails(parts ...string) string {
@@ -494,6 +515,14 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 	busy := computePaneBusy(panes, infos)
 	shellIdle := computeShellIdlePanes(panes, infos)
 	origins := s.resolveServiceOrigins(panes, next.Panes)
+	// Health probes ride the same scan: one short batch over the pane
+	// services' ports, then the tone derivation inside the UI apply (it
+	// needs the previous index and shell facts, both UI-lane state).
+	ports := make([]uint16, 0, len(next.Panes))
+	for _, act := range next.Panes {
+		ports = append(ports, act.Ports...)
+	}
+	probes := s.serviceProbePorts(ports)
 	if s.win == nil {
 		return
 	}
@@ -502,6 +531,7 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 			return
 		}
 		livenessChanged := !maps.Equal(s.paneShellIdle, shellIdle)
+		s.applyServiceHealth(panes, next.Panes, probes, shellIdle, s.clock())
 		s.serviceIndex = next
 		s.serviceOrigins = origins
 		s.paneBusyIndex = busy

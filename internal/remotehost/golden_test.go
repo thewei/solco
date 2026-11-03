@@ -134,6 +134,17 @@ func TestGoldenAPIv3(t *testing.T) {
 		golden(t, name, bodyOf(t, h.get(path, h.token, nil)))
 	}
 	golden(t, "error-unauthorized.json", bodyOf(t, h.get("/api/v3/tree", "", nil)))
+	// net: the address the Mac serves right now, so a phone's book follows a changed
+	// LAN/Tailscale address (bootstrap.json above is loopback — it carries none)
+	h.srv.opts.Config = Config{Mode: ModeLAN, Port: 7788, Address: "192.168.1.10"}
+	h.srv.mu.Lock()
+	h.srv.listenHost, h.srv.listenPort = "192.168.1.10", "7788"
+	h.srv.mu.Unlock()
+	golden(t, "bootstrap-net.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	h.srv.opts.Config = Config{Mode: ModeLoopback, Port: 7788}
+	h.srv.mu.Lock()
+	h.srv.listenHost, h.srv.listenPort = "", ""
+	h.srv.mu.Unlock()
 	golden(t, "error-unknown-instance.json", bodyOf(t, h.get("/api/v3/tree?instance=ghost", h.token, nil)))
 
 	// events: hello, then tree.changed after a visible change

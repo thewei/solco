@@ -15,6 +15,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/services"
 )
@@ -155,7 +156,7 @@ func procServiceMark(act paneServiceActivity) (visualMark, bool) {
 // is skipped.
 func (s *Shell) serviceRowModels() []serviceRowModel {
 	var rows []serviceRowModel
-	if len(s.serviceIndex.Panes) == 0 {
+	if len(s.serviceIndex.Panes) == 0 && len(s.serviceHealth) == 0 {
 		return rows
 	}
 	cards := s.workbenchCards()
@@ -166,42 +167,72 @@ func (s *Shell) serviceRowModels() []serviceRowModel {
 		if pane == nil {
 			continue
 		}
-		projectName := ""
-		for _, project := range s.projection.Projects {
-			if project.ID == pane.ProjectID {
-				projectName = project.Label
-				break
-			}
+		rows = append(rows, s.serviceRowFor(*pane, act, cards, scriptPanes))
+	}
+	// Retained unhealthy services (2026-11-03): a red fact keeps its row
+	// while the pane lives, so a crashed dev server is seen — the index
+	// dropped it the moment its ports closed.
+	for paneID, fact := range s.serviceHealth {
+		if fact.Tone != ToneError {
+			continue
 		}
-		origin, provider, label := classifyServiceOrigin(cards, scriptPanes, s.serviceOrigins, paneID)
-		title := serviceTitle(act)
-		if origin == serviceOriginScript {
-			title = s.scriptTitleFor(label, pane.CWD)
+		if _, live := s.serviceIndex.Panes[paneID]; live {
+			continue
 		}
-		row := serviceRowModel{
-			PaneID:      paneID,
-			Act:         act,
-			Origin:      origin,
-			Provider:    provider,
-			OriginLabel: label,
-			Card:        cardForPane(cards, paneID),
-			ProjectID:   pane.ProjectID,
-			ProjectName: projectName,
-			Title:       title,
+		pane := paneByID(s.projection, paneID)
+		if pane == nil {
+			continue
 		}
-		// The pane's own directory is the disambiguator (2026-11-03): the
-		// leaf joins the second line in small text, the full path rides
-		// the tooltip. Degenerate roots render nothing.
-		if pane.CWD != "" && pane.CWD != "/" {
-			row.DirPath = pane.CWD
-			row.DirName = filepath.Base(pane.CWD)
+		act := paneServiceActivity{
+			Proc:         fact.Proc,
+			Ports:        fact.Ports,
+			HealthTone:   fact.Tone,
+			HealthReason: fact.Reason,
 		}
-		rows = append(rows, row)
+		rows = append(rows, s.serviceRowFor(*pane, act, cards, scriptPanes))
 	}
 	slices.SortStableFunc(rows, func(a, b serviceRowModel) int {
 		return paneOrder[a.PaneID] - paneOrder[b.PaneID]
 	})
 	return rows
+}
+
+// serviceRowFor builds one Services row for a pane's activity — the one
+// anatomy for live rows (from the index) and retained red rows (from the
+// health facts).
+func (s *Shell) serviceRowFor(pane herdr.Pane, act paneServiceActivity, cards []agent.AgentCardModel, scriptPanes map[string]string) serviceRowModel {
+	paneID := pane.ID
+	projectName := ""
+	for _, project := range s.projection.Projects {
+		if project.ID == pane.ProjectID {
+			projectName = project.Label
+			break
+		}
+	}
+	origin, provider, label := classifyServiceOrigin(cards, scriptPanes, s.serviceOrigins, paneID)
+	title := serviceTitle(act)
+	if origin == serviceOriginScript {
+		title = s.scriptTitleFor(label, pane.CWD)
+	}
+	row := serviceRowModel{
+		PaneID:      paneID,
+		Act:         act,
+		Origin:      origin,
+		Provider:    provider,
+		OriginLabel: label,
+		Card:        cardForPane(cards, paneID),
+		ProjectID:   pane.ProjectID,
+		ProjectName: projectName,
+		Title:       title,
+	}
+	// The pane's own directory is the disambiguator (2026-11-03): the
+	// leaf joins the second line in small text, the full path rides
+	// the tooltip. Degenerate roots render nothing.
+	if pane.CWD != "" && pane.CWD != "/" {
+		row.DirPath = pane.CWD
+		row.DirName = filepath.Base(pane.CWD)
+	}
+	return row
 }
 
 // serviceTitle is the process's friendly name — the default row title.
@@ -340,7 +371,7 @@ func (s *Shell) serviceCardItem(c *ui.Context, row serviceRowModel) {
 					serviceOriginView(c, row)
 				})
 			})
-			statusIndicatorService(c, ToneSuccess, detail)
+			statusIndicatorService(c, healthToneOf(row.Act), detail)
 		})
 	})
 	if rowEl.Clicked() {

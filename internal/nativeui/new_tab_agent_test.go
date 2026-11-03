@@ -22,12 +22,13 @@ type fakeStarter struct {
 	kinds []app.SessionKind
 	specs []app.SessionSpec
 	pane  string
+	err   error
 }
 
 func (f *fakeStarter) Kinds() []app.SessionKind { return f.kinds }
 func (f *fakeStarter) StartSession(_ context.Context, _ string, spec app.SessionSpec) (app.SessionResult, error) {
 	f.specs = append(f.specs, spec)
-	return app.SessionResult{PaneID: f.pane}, nil
+	return app.SessionResult{PaneID: f.pane}, f.err
 }
 
 var testKinds = []app.SessionKind{
