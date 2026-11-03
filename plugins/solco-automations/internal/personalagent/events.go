@@ -95,10 +95,14 @@ func emitTx(tx *sql.Tx, e Event, now int64) (bool, error) {
 // emitTask records a task's transition. Heartbeat tasks are the heartbeat's
 // own; their events exist but the heartbeat ignores them (no wake loops).
 func emitTask(tx *sql.Tx, taskID, kind string, now int64) error {
-	var assistant, title, state string
+	var assistant, title, state, taskKind string
 	var attempt int
-	if err := tx.QueryRow(`SELECT assistant_id,title,state,attempt FROM tasks WHERE id=?`, taskID).Scan(&assistant, &title, &state, &attempt); err != nil {
+	if err := tx.QueryRow(`SELECT assistant_id,title,state,attempt,kind FROM tasks WHERE id=?`, taskID).Scan(&assistant, &title, &state, &attempt, &taskKind); err != nil {
 		return err
+	}
+	// A Coordinator coming up or settling is not news; only its failure is.
+	if taskKind == KindCoordinator && (kind == "task.added" || kind == "task.completed") {
+		return nil
 	}
 	verb := strings.TrimPrefix(kind, "task.")
 	_, err := emitTx(tx, Event{

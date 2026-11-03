@@ -98,6 +98,20 @@ func TestGoldenFixturesDecodeStrictly(t *testing.T) {
 		t.Fatalf("overview = %+v", ov)
 	}
 
+	var co struct {
+		Schema      int         `json:"schema"`
+		Coordinator Coordinator `json:"coordinator"`
+		Replayed    bool        `json:"replayed"`
+	}
+	load(t, "coordinator-starting", &co)
+	if co.Coordinator.State != CoordinatorStarting || co.Coordinator.TaskID == "" {
+		t.Fatalf("coordinator = %+v", co.Coordinator)
+	}
+	load(t, "coordinator-ready", &co)
+	if co.Coordinator.State != CoordinatorReady || co.Coordinator.PaneID != "w2:p1" || co.Coordinator.AgentSessionID == "" {
+		t.Fatalf("coordinator = %+v", co.Coordinator)
+	}
+
 	var e struct {
 		Schema int    `json:"schema"`
 		Error  *Error `json:"error"`

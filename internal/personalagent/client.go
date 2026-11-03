@@ -242,6 +242,38 @@ func (c *Client) RetryTask(ctx context.Context, requestID, id string, rev int) (
 	return out.Task, c.do(ctx, req{requestID, rev}, &out, "task", "retry", id)
 }
 
+// PublishTask moves a draft into the queue (or into waiting behind its dependencies).
+func (c *Client) PublishTask(ctx context.Context, requestID, id string, rev int) (Task, error) {
+	var out struct {
+		Task Task `json:"task"`
+	}
+	return out.Task, c.do(ctx, req{requestID, rev}, &out, "task", "publish", id)
+}
+
+// Coordinator reads an Assistant's Coordinator (state "none" before its first start).
+func (c *Client) Coordinator(ctx context.Context, assistantID string) (Coordinator, error) {
+	var out struct {
+		Coordinator Coordinator `json:"coordinator"`
+	}
+	return out.Coordinator, c.do(ctx, nil, &out, "coordinator", "show", assistantID)
+}
+
+// StartCoordinator queues the Coordinator; the daemon launches it as a real Herdr Agent.
+func (c *Client) StartCoordinator(ctx context.Context, requestID, assistantID string) (Coordinator, error) {
+	var out struct {
+		Coordinator Coordinator `json:"coordinator"`
+	}
+	return out.Coordinator, c.do(ctx, req{RequestID: requestID}, &out, "coordinator", "start", assistantID)
+}
+
+// StopCoordinator marks the Coordinator stopped.
+func (c *Client) StopCoordinator(ctx context.Context, requestID, assistantID string) (Coordinator, error) {
+	var out struct {
+		Coordinator Coordinator `json:"coordinator"`
+	}
+	return out.Coordinator, c.do(ctx, req{RequestID: requestID}, &out, "coordinator", "stop", assistantID)
+}
+
 // Approvals lists an Assistant's approvals.
 func (c *Client) Approvals(ctx context.Context, assistantID string) ([]Approval, error) {
 	var out struct {

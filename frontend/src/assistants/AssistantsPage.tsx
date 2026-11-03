@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { App } from "../App";
 import {
   assistants,
+  type CoordinatorChat,
   type AssistantsDetail,
   type AssistantsRun,
   type AssistantsTask,
@@ -18,11 +20,11 @@ import "./assistants.css";
  * own sentence. The page polls; the sidebar's counters follow each read.
  */
 
-type Tab = "needs" | "watching" | "tasks" | "done" | "memory";
+type Tab = "coordinator" | "needs" | "watching" | "tasks" | "done" | "memory";
 type Form = "assistant" | "watch" | "task" | null;
 
 const rid = () => crypto.randomUUID();
-const OPEN_TASK = new Set(["draft", "queued", "claimed", "starting", "running", "blocked", "review_required", "uncertain"]);
+const OPEN_TASK = new Set(["draft", "waiting", "queued", "claimed", "starting", "running", "blocked", "review_required", "uncertain"]);
 
 function useAssistants() {
   const [view, setView] = useState<AssistantsView | null>(null);
@@ -98,6 +100,7 @@ export function AssistantsPage() {
   const done = detail.tasks.filter((t) => !OPEN_TASK.has(t.state) && !t.needsYou);
   const closedGoals = detail.goals.filter((g) => g.state === "completed" || g.state === "cancelled");
   const tabs: [Tab, string, number][] = [
+    ["coordinator", "Coordinator", 0],
     ["needs", "Needs You", needsCount],
     ["watching", "Watching", live.length],
     ["tasks", "Tasks", open.length],
@@ -144,7 +147,8 @@ export function AssistantsPage() {
           </button>
         ))}
       </nav>
-      <main className="as-body">
+      <main className={tab === "coordinator" ? "as-body chat" : "as-body"}>
+        {tab === "coordinator" ? <Coordinator detail={detail} act={act} /> : null}
         {tab === "needs" ? <NeedsYou approvals={pending} tasks={needTasks} act={act} pull={pull} /> : null}
         {tab === "watching" ? <Watching goals={live} act={act} /> : null}
         {tab === "tasks" ? <Tasks tasks={open} act={act} /> : null}
@@ -190,6 +194,75 @@ function NeedsYou({ approvals, tasks, act }: { approvals: Approval[]; tasks: Ass
       ))}
     </>
   );
+}
+
+/**
+ * The Assistant's own Coordinator: the ordinary Chat page bound to its real
+ * Herdr Agent. The page asks the bridge to bind first (the pane comes from the
+ * plugin's record of the Coordinator's run, never a guess), then mounts the one
+ * Chat; a Coordinator that is not up yet shows why, with Start.
+ */
+function Coordinator({ detail, act }: { detail: AssistantsDetail; act: Act }) {
+  const a = detail.assistant;
+  const co = detail.coordinator;
+  const [bind, setBind] = useState<CoordinatorChat | null>(null);
+  const live = co.state === "ready" && detail.coordinatorOpen;
+  useEffect(() => {
+    if (!live) {
+      setBind(null);
+      return;
+    }
+    let cancelled = false;
+    const attempt = () =>
+      assistants
+        .bindCoordinator(a.id)
+        .then((r) => !cancelled && setBind(r))
+        .catch(() => !cancelled && setBind(null));
+    void attempt();
+    // Until the Agent has reported its session, look again.
+    const timer = window.setInterval(() => void attempt(), 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [a.id, co.paneId, live]);
+  if (live && bind?.bound && bind.paneId === co.paneId) return <App key={`${a.id}|${co.paneId}`} />;
+  const busy = co.state === "starting" || (live && !bind?.bound);
+  const canStart = co.state === "none" || co.state === "stopped" || co.state === "failed";
+  const why = live ? (bind?.reason ?? "Connecting to the Coordinator…") : co.state === "ready" ? "The Coordinator is not open in this window." : stateLine(co.state);
+  return (
+    <div className="as-nochat">
+      <div className="as-nochat-card">
+        <h2>{a.name}'s Coordinator</h2>
+        <p>{why}</p>
+        <div className="as-row">
+          {canStart ? (
+            <button type="button" className="as-btn primary" disabled={a.status !== "active"} onClick={() => act(() => assistants.startCoordinator(rid(), a.id))}>
+              {co.state === "none" ? "Start Coordinator" : "Start again"}
+            </button>
+          ) : null}
+          {co.state === "starting" || co.state === "ready" ? (
+            <button type="button" className="as-btn" onClick={() => act(() => assistants.stopCoordinator(rid(), a.id))}>
+              Stop
+            </button>
+          ) : null}
+        </div>
+        {busy ? <p className="as-meta">This can take a few seconds.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function stateLine(state: string): string {
+  switch (state) {
+    case "starting":
+      return "The Coordinator is starting.";
+    case "failed":
+      return "The Coordinator could not start.";
+    case "stopped":
+      return "The Coordinator is stopped.";
+  }
+  return "The Coordinator turns your goals into tasks and keeps them moving. Start it to talk to it.";
 }
 
 function Watching({ goals, act }: { goals: Goal[]; act: Act }) {
@@ -297,6 +370,11 @@ function TaskCard({ task: t, act }: { task: AssistantsTask; act: Act }) {
         {t.needsYou ? (
           <button type="button" className="as-btn primary" onClick={() => act(() => assistants.ackTask(rid(), t.id, t.revision))}>
             Got it
+          </button>
+        ) : null}
+        {t.state === "draft" ? (
+          <button type="button" className="as-btn primary" onClick={() => act(() => assistants.publishTask(rid(), t.id, t.revision))}>
+            Publish
           </button>
         ) : null}
         {t.state === "failed" || t.state === "cancelled" ? (

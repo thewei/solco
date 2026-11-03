@@ -53,6 +53,12 @@ export interface AssistantsDetail {
   tasks: AssistantsTask[];
   approvals: Approval[];
   memory: MemoryItem[];
+  /**
+   * Coordinator is the Assistant's own Coordinator Agent; CoordinatorOpen
+   * says its pane is in this window's Herdr tree (so its Chat can bind).
+   */
+  coordinator: Coordinator;
+  coordinatorOpen: boolean;
 }
 
 /** AssistantsGoalInput creates a Goal; Watch makes it a PR Watch. */
@@ -613,6 +619,36 @@ export interface ContextPane {
   items: ContextItemPane[];
 }
 
+/**
+ * Coordinator is an Assistant's Coordinator Agent as the plugin reports it:
+ * the session fields are exactly what Herdr reported for its run.
+ */
+export interface Coordinator {
+  assistantId: string;
+  state: string;
+  taskId?: string;
+  herdrSession?: string;
+  workspaceId?: string;
+  paneId?: string;
+  agentSessionId?: string;
+  revision: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * CoordinatorChat is the answer to "bind the embedded Chat to this Assistant's
+ * Coordinator": Bound says the Chat is on it now; otherwise State/Reason say
+ * why not (starting, waiting for its session, not in this window, …).
+ */
+export interface CoordinatorChat {
+  assistantId: string;
+  state: string;
+  paneId: string;
+  bound: boolean;
+  reason: string;
+}
+
 /** CoordinatorPane is the Project's coordinator as the plugin last reported. */
 export interface CoordinatorPane {
   state: string;
@@ -634,6 +670,9 @@ export interface CreateTaskInput {
   agent?: string;
   model?: string;
   draft?: boolean;
+  /** DependsOn lists tasks of the same Assistant that must be done first. */
+  dependsOn?: string[];
+  parentTaskId?: string;
 }
 
 /** FactPane is a label/value row of the Run tab. */
@@ -1322,6 +1361,16 @@ export const assistants = {
   ackTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.AckTask", requestID, id, revision);
   },
+  /**
+   * BindCoordinator points the embedded Chat at this Assistant's Coordinator.
+   * The pane comes only from the plugin's own record of the Coordinator's run —
+   * never from a pane title, a folder or a name — and the Chat binds only when
+   * Herdr (or a hook) has reported the Agent's session, so two Assistants'
+   * Chats can never read each other's conversation.
+   */
+  bindCoordinator(assistantID: string): Promise<CoordinatorChat> {
+    return call("assistants.BindCoordinator", assistantID);
+  },
   /** CreateAssistant adds an Assistant and selects it. */
   createAssistant(requestID: string, name: string, description: string): Promise<string> {
     return call("assistants.CreateAssistant", requestID, name, description);
@@ -1352,6 +1401,10 @@ export const assistants = {
   openPane(paneID: string): Promise<boolean> {
     return call("assistants.OpenPane", paneID);
   },
+  /** PublishTask releases a draft the Coordinator (or the person) filed. */
+  publishTask(requestID: string, id: string, revision: number): Promise<void> {
+    return call("assistants.PublishTask", requestID, id, revision);
+  },
   /** RenameAssistant renames one Assistant. */
   renameAssistant(requestID: string, id: string, name: string, revision: number): Promise<void> {
     return call("assistants.RenameAssistant", requestID, id, name, revision);
@@ -1374,6 +1427,17 @@ export const assistants = {
    */
   snapshot(): Promise<AssistantsView> {
     return call("assistants.Snapshot");
+  },
+  /**
+   * StartCoordinator asks the daemon to bring the Assistant's Coordinator up as
+   * a real Herdr Agent (the plugin owns the lifecycle).
+   */
+  startCoordinator(requestID: string, id: string): Promise<void> {
+    return call("assistants.StartCoordinator", requestID, id);
+  },
+  /** StopCoordinator marks the Coordinator stopped. */
+  stopCoordinator(requestID: string, id: string): Promise<void> {
+    return call("assistants.StopCoordinator", requestID, id);
   },
 } as const;
 

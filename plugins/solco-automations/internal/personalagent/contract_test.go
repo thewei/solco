@@ -84,6 +84,15 @@ func TestGoldenFixtures(t *testing.T) {
 	_ = ap
 	run("overview", ``, "assistant", "overview")
 
+	started := run("coordinator-starting", `{"requestId":"g-cs"}`, "assistant", "coordinator", "start", aid)
+	ctask, _ := s.GetTask(field(started, "coordinator", "taskId").(string))
+	cr, _, _ := s.ClaimTask(ctask.ID, "daemon")
+	_ = s.MarkStarting(cr.ID)
+	_ = s.RecordLaunch(cr.ID, Session{HerdrSession: "default", WorkspaceID: "w2", PaneID: "w2:p1", AgentSessionID: "sess-1"})
+	cr, _ = s.GetRun(cr.ID)
+	s.syncCoordinator(ctask, cr)
+	run("coordinator-ready", ``, "assistant", "coordinator", "show", aid)
+
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError
 	if !asCodedErr(err, &ce) {

@@ -170,6 +170,9 @@ type CreateTaskInput struct {
 	Agent       string `json:"agent,omitempty"`
 	Model       string `json:"model,omitempty"`
 	Draft       bool   `json:"draft,omitempty"`
+	// DependsOn lists tasks of the same Assistant that must be done first.
+	DependsOn    []string `json:"dependsOn,omitempty"`
+	ParentTaskID string   `json:"parentTaskId,omitempty"`
 }
 
 // CommitmentInput drafts a commitment together with its Goal.
@@ -187,3 +190,27 @@ type CreateGoalInput struct {
 	Objective   string            `json:"objective,omitempty"`
 	Commitments []CommitmentInput `json:"commitments,omitempty"`
 }
+
+// Coordinator is an Assistant's Coordinator Agent as the plugin reports it:
+// the session fields are exactly what Herdr reported for its run.
+type Coordinator struct {
+	AssistantID    string `json:"assistantId"`
+	State          string `json:"state"`
+	TaskID         string `json:"taskId,omitempty"`
+	HerdrSession   string `json:"herdrSession,omitempty"`
+	WorkspaceID    string `json:"workspaceId,omitempty"`
+	PaneID         string `json:"paneId,omitempty"`
+	AgentSessionID string `json:"agentSessionId,omitempty"`
+	Revision       int    `json:"revision"`
+	CreatedAt      int64  `json:"createdAt,omitempty"`
+	UpdatedAt      int64  `json:"updatedAt,omitempty"`
+}
+
+// Coordinator states.
+const (
+	CoordinatorNone     = "none"
+	CoordinatorStarting = "starting"
+	CoordinatorReady    = "ready"
+	CoordinatorStopped  = "stopped"
+	CoordinatorFailed   = "failed"
+)

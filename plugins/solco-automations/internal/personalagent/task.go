@@ -237,13 +237,16 @@ func (s *Store) GetTask(id string) (Task, error) { return getTaskTx(s.db, id) }
 // GetRun reads one run.
 func (s *Store) GetRun(id string) (Run, error) { return getRunTx(s.db, id) }
 
-// ListTasks returns an Assistant's tasks (every Assistant's when id is empty),
+// ListTasks returns an Assistant's tasks (every Assistant's when id is empty;
+// never its Coordinator's own),
 // newest first.
 func (s *Store) ListTasks(assistantID string) ([]Task, error) {
-	q := `SELECT ` + taskCols + ` FROM tasks`
-	args := []any{}
+	// An Assistant's Coordinator task is plumbing, not work the person queued:
+	// it never shows in lists, counters or the task graph.
+	q := `SELECT ` + taskCols + ` FROM tasks WHERE kind<>?`
+	args := []any{KindCoordinator}
 	if assistantID != "" {
-		q += ` WHERE assistant_id=?`
+		q += ` AND assistant_id=?`
 		args = append(args, assistantID)
 	}
 	rows, err := s.db.Query(q+` ORDER BY created_at DESC, id`, args...)

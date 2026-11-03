@@ -50,6 +50,21 @@ type AssistantsDetail struct {
 	Tasks     []AssistantsTask           `json:"tasks"`
 	Approvals []personalagent.Approval   `json:"approvals"`
 	Memory    []personalagent.MemoryItem `json:"memory"`
+	// Coordinator is the Assistant's own Coordinator Agent; CoordinatorOpen
+	// says its pane is in this window's Herdr tree (so its Chat can bind).
+	Coordinator     personalagent.Coordinator `json:"coordinator"`
+	CoordinatorOpen bool                      `json:"coordinatorOpen"`
+}
+
+// CoordinatorChat is the answer to "bind the embedded Chat to this Assistant's
+// Coordinator": Bound says the Chat is on it now; otherwise State/Reason say
+// why not (starting, waiting for its session, not in this window, …).
+type CoordinatorChat struct {
+	AssistantID string `json:"assistantId"`
+	State       string `json:"state"`
+	PaneID      string `json:"paneId"`
+	Bound       bool   `json:"bound"`
+	Reason      string `json:"reason"`
 }
 
 // AssistantsTask is a Task with the Runs the page lists under it.
@@ -194,6 +209,10 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 	if err != nil {
 		return nil, err
 	}
+	if co, err := client.Coordinator(ctx, id); err == nil {
+		d.Coordinator = co
+		d.CoordinatorOpen = co.PaneID != "" && coordinatorInSession(co, session) && panes[co.PaneID]
+	}
 	for _, t := range tasks {
 		item := AssistantsTask{Task: t, Runs: []AssistantsRun{}}
 		if _, runs, err := client.TaskDetail(ctx, t.ID); err == nil {
@@ -205,6 +224,95 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 		d.Tasks = append(d.Tasks, item)
 	}
 	return d, nil
+}
+
+// coordinatorInSession says the Coordinator ran in the window's Herdr session
+// (a Coordinator that ran elsewhere is never opened or bound here).
+func coordinatorInSession(co personalagent.Coordinator, session string) bool {
+	return co.HerdrSession == "" || herdr.ParseRef(co.HerdrSession).Session == session || co.HerdrSession == session
+}
+
+// StartCoordinator asks the daemon to bring the Assistant's Coordinator up as
+// a real Herdr Agent (the plugin owns the lifecycle).
+func (b *AssistantsBridge) StartCoordinator(ctx context.Context, requestID, id string) error {
+	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
+		_, err := c.StartCoordinator(ctx, requestID, id)
+		return err
+	})
+}
+
+// StopCoordinator marks the Coordinator stopped.
+func (b *AssistantsBridge) StopCoordinator(ctx context.Context, requestID, id string) error {
+	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
+		_, err := c.StopCoordinator(ctx, requestID, id)
+		return err
+	})
+}
+
+// PublishTask releases a draft the Coordinator (or the person) filed.
+func (b *AssistantsBridge) PublishTask(ctx context.Context, requestID, id string, revision int) error {
+	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
+		_, err := c.PublishTask(ctx, requestID, id, revision)
+		return err
+	})
+}
+
+// BindCoordinator points the embedded Chat at this Assistant's Coordinator.
+// The pane comes only from the plugin's own record of the Coordinator's run —
+// never from a pane title, a folder or a name — and the Chat binds only when
+// Herdr (or a hook) has reported the Agent's session, so two Assistants'
+// Chats can never read each other's conversation.
+func (b *AssistantsBridge) BindCoordinator(ctx context.Context, assistantID string) (CoordinatorChat, error) {
+	out := CoordinatorChat{AssistantID: assistantID, State: personalagent.CoordinatorNone}
+	c, err := b.client()
+	if err != nil {
+		return out, err
+	}
+	rctx, cancel := context.WithTimeout(ctx, assistantsCallTimeout)
+	defer cancel()
+	co, err := c.Coordinator(rctx, assistantID)
+	if err != nil {
+		return out, err
+	}
+	out.State, out.PaneID = co.State, co.PaneID
+	if co.State != personalagent.CoordinatorReady {
+		out.Reason = coordinatorReason(co.State)
+		return out, nil
+	}
+	b.shell.callOnWindow(func() { out = b.shell.bindAssistantCoordinator(out, co) })
+	return out, nil
+}
+
+func coordinatorReason(state string) string {
+	switch state {
+	case personalagent.CoordinatorStarting:
+		return "The Coordinator is starting."
+	case personalagent.CoordinatorFailed:
+		return "The Coordinator could not start."
+	case personalagent.CoordinatorStopped:
+		return "The Coordinator is stopped."
+	}
+	return "This Assistant has no Coordinator yet."
+}
+
+// bindAssistantCoordinator binds the Chat to a ready Coordinator's pane. Call
+// on the window lane.
+func (s *Shell) bindAssistantCoordinator(out CoordinatorChat, co personalagent.Coordinator) CoordinatorChat {
+	if co.PaneID == "" || !coordinatorInSession(co, herdr.ParseRef(s.activeInstance).Session) {
+		out.Reason = "The Coordinator is not open in this window."
+		return out
+	}
+	card, ok := s.agentCardForPane(co.PaneID)
+	if !ok {
+		out.Reason = "The Coordinator's pane is not in this window."
+		return out
+	}
+	if !s.bindChatToCard(card) {
+		out.Reason = "The Coordinator has not reported its session yet."
+		return out
+	}
+	out.Bound = true
+	return out
 }
 
 // Select records the Assistant the page is on (the sidebar row follows).

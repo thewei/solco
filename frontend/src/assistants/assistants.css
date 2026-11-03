@@ -324,3 +324,38 @@
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* The Coordinator tab: the Chat page fills the body edge to edge. */
+.as-body.chat {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.as-nochat {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.as-nochat-card {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  text-align: center;
+}
+
+.as-nochat-card h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.as-nochat-card p {
+  margin: 0;
+  color: var(--i3, var(--text));
+}

@@ -328,7 +328,7 @@ func TestAPICoordinatorAndTaskGraphThroughTheCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := len(g["nodes"].([]any)); n != 3 { // the coordinator's own task is a node too
+	if n := len(g["nodes"].([]any)); n != 2 { // the coordinator's own task is plumbing, not a node
 		t.Fatalf("nodes = %d: %v", n, g)
 	}
 }

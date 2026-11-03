@@ -3,6 +3,9 @@ package nativeui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,6 +34,9 @@ const (
 	assistantsMemoryJSON    = `{"schema":1,"memory":[{"id":"m_1","assistantId":"a_1","content":"short reports","state":"approved"}]}`
 )
 
+// assistantsCoordinators scripts `coordinator show <id>` for a test.
+var assistantsCoordinators = map[string]string{}
+
 // stubAssistants routes every CLI call through one fake, recording stdin and
 // argv, and runs the background lane inline.
 func stubAssistants(t *testing.T, fail bool) *[][2]string {
@@ -42,6 +48,12 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 			calls = append(calls, [2]string{strings.Join(args, " "), stdin})
 			if fail {
 				return []byte(`{"schema":1,"error":{"code":"internal","message":"no"}}`), context.Canceled
+			}
+			if id, ok := strings.CutPrefix(strings.Join(args, " "), "coordinator show "); ok {
+				if raw, found := assistantsCoordinators[id]; found {
+					return []byte(raw), nil
+				}
+				return []byte(`{"schema":1,"coordinator":{"assistantId":"` + id + `","state":"none","revision":0}}`), nil
 			}
 			switch strings.Join(args, " ") {
 			case "overview":
@@ -66,6 +78,7 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 	}
 	assistantsGo = func(f func()) { f() }
 	t.Cleanup(func() {
+		assistantsCoordinators = map[string]string{}
 		newAssistantsClient = func(root, session string) *personalagent.Client {
 			return personalagent.NewClient(root, []string{"HERDR_SOCKET_PATH=" + herdr.SocketPath(session)})
 		}
@@ -220,5 +233,83 @@ func TestHostPersonalAgentFollowsTheGate(t *testing.T) {
 	s.applyAutomationsAvailability(automations.Availability{})
 	if _, ok := s.hostPersonalAgent(context.Background()); ok {
 		t.Fatal("a plugin that went away must withdraw the phones' client")
+	}
+}
+
+func coordinatorJSON(id, state, pane string) string {
+	return fmt.Sprintf(`{"schema":1,"coordinator":{"assistantId":%q,"state":%q,"taskId":"t_c","herdrSession":"default","paneId":%q,"revision":2}}`, id, state, pane)
+}
+
+// SOLCO-A03 / SOLCO-R04: with two Assistants in one Workspace, each Chat binds
+// only to its own Coordinator's pane, and a pane without a reported session is
+// never guessed at.
+func TestAssistantsChatBindsOnlyToItsOwnCoordinator(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, secret string) string {
+		path := filepath.Join(dir, name+".jsonl")
+		line := `{"type":"user","cwd":"/work","message":{"content":"` + secret + `"}}` + "\n"
+		if err := os.WriteFile(path, []byte(line), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	alpha, beta := write("alpha", "alpha-private-plan"), write("beta", "beta-private-plan")
+	stubAssistants(t, false)
+	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "ready", "p1")
+	assistantsCoordinators["a_2"] = coordinatorJSON("a_2", "ready", "p2")
+	assistantsCoordinators["a_3"] = coordinatorJSON("a_3", "ready", "p3")
+	assistantsCoordinators["a_4"] = coordinatorJSON("a_4", "starting", "")
+	s := openAssistantsShell(t)
+	identity := func(path string) *herdr.AgentSessionIdentity {
+		return &herdr.AgentSessionIdentity{Agent: "claude-code", Kind: "path", Source: "transcript", Value: path}
+	}
+	s.projection = herdr.Projection{Agents: []herdr.Agent{
+		{TerminalID: "t1", PaneID: "p1", Status: "idle", AgentSession: identity(alpha)},
+		{TerminalID: "t2", PaneID: "p2", Status: "idle", AgentSession: identity(beta)},
+		// A Claude pane whose title and folder look like Assistant three's, but
+		// that never reported a session: nothing may be guessed from them.
+		{TerminalID: "t3", PaneID: "p3", Status: "idle", Name: "a_3 coordinator"},
+	}}
+	b := NewAssistantsBridge(s)
+
+	got, err := b.BindCoordinator(context.Background(), "a_1")
+	if err != nil || !got.Bound || s.chatPaneID != "p1" {
+		t.Fatalf("a_1 = %+v pane=%q err=%v", got, s.chatPaneID, err)
+	}
+	if turns := fmt.Sprintf("%+v", s.chatTurns); !strings.Contains(turns, "alpha-private-plan") || strings.Contains(turns, "beta-private-plan") {
+		t.Fatalf("a_1's Chat shows the wrong conversation: %s", turns)
+	}
+	got, err = b.BindCoordinator(context.Background(), "a_2")
+	if err != nil || !got.Bound || s.chatPaneID != "p2" {
+		t.Fatalf("a_2 = %+v pane=%q err=%v", got, s.chatPaneID, err)
+	}
+	if turns := fmt.Sprintf("%+v", s.chatTurns); !strings.Contains(turns, "beta-private-plan") || strings.Contains(turns, "alpha-private-plan") {
+		t.Fatalf("a_2's Chat leaks a_1's conversation: %s", turns)
+	}
+
+	if got, err = b.BindCoordinator(context.Background(), "a_3"); err != nil || got.Bound || got.Reason == "" {
+		t.Fatalf("a pane with no reported session must not bind: %+v %v", got, err)
+	}
+	if got, err = b.BindCoordinator(context.Background(), "a_4"); err != nil || got.Bound || got.State != "starting" {
+		t.Fatalf("a starting coordinator has no Chat yet: %+v %v", got, err)
+	}
+	if got, err = b.BindCoordinator(context.Background(), "a_9"); err != nil || got.Bound || got.State != "none" {
+		t.Fatalf("an Assistant with no Coordinator: %+v %v", got, err)
+	}
+}
+
+func TestAssistantsBridgeSnapshotCarriesTheCoordinator(t *testing.T) {
+	stubAssistants(t, false)
+	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "ready", "w1:p1")
+	s := openAssistantsShell(t)
+	s.projection = herdr.Projection{Panes: []herdr.Pane{{ID: "w1:p1"}}}
+	view, err := NewAssistantsBridge(s).Snapshot(context.Background())
+	if err != nil || view.Detail == nil || view.Detail.Coordinator.State != "ready" || !view.Detail.CoordinatorOpen {
+		t.Fatalf("view = %+v err=%v", view.Detail, err)
+	}
+	s.projection = herdr.Projection{}
+	view, _ = NewAssistantsBridge(s).Snapshot(context.Background())
+	if view.Detail.CoordinatorOpen {
+		t.Fatal("a Coordinator whose pane left the tree must not be openable")
 	}
 }
