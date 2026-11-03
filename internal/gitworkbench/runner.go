@@ -89,7 +89,8 @@ type Error struct {
 	OpClass  OpClass
 	Op       string // git subcommand, e.g. "diff", "commit"
 	ExitCode int
-	Stderr   string // truncated; UI display only, never logged by this package
+	Stderr   string   // truncated; UI display only, never logged by this package
+	Paths    []string // conflicting files of a stopped merge/rebase; UI display only
 	err      error
 }
 

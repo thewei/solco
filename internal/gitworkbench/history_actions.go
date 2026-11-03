@@ -43,7 +43,8 @@ func (r *Runner) RequireCleanWorktree(ctx context.Context, root string) error {
 // Users can decide separately whether they want a no-ff merge in a later
 // explicitly designed conflict-resolution workflow.
 func (r *Runner) MergeFastForward(ctx context.Context, root, target string) error {
-	if err := r.validateLocalBranch(ctx, root, target); err != nil {
+	ref, err := r.resolveBranchRef(ctx, root, target)
+	if err != nil {
 		return err
 	}
 	current := r.CurrentBranch(ctx, root)
@@ -54,9 +55,9 @@ func (r *Runner) MergeFastForward(ctx context.Context, root, target string) erro
 	if err := r.RequireCleanWorktree(ctx, root); err != nil {
 		return err
 	}
-	// Full refs, after local-branch enumeration, cannot be interpreted as
-	// Git command-line options, even for unusual user-defined ref names.
-	_, err := r.Mutate(ctx, root, "merge", "--ff-only", "refs/heads/"+target)
+	// Full refs, after branch enumeration, cannot be interpreted as Git
+	// command-line options, even for unusual user-defined ref names.
+	_, err = r.Mutate(ctx, root, "merge", "--ff-only", ref)
 	return err
 }
 

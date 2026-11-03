@@ -162,8 +162,17 @@ func (r *Runner) Commit(ctx context.Context, root string, draft CommitDraft, pre
 	}
 
 	paths := append([]string(nil), draft.Paths...)
+	// A staged rename travels as two index sides. The pathspec must carry
+	// the old path too, or its deletion stays staged for the next commit
+	// and the rename lands split across two commits (device E2E 2026-11-03).
+	if snap != nil {
+		for _, p := range draft.Paths {
+			if cf, ok := snap.ByPath(p); ok && cf.OldPath != "" && cf.OldPath != cf.Path {
+				paths = append(paths, cf.OldPath)
+			}
+		}
+	}
 	sort.Strings(paths)
-
 	// 1. Stage selected untracked paths only (never `git add -A`).
 	var untracked []string
 	for _, p := range paths {

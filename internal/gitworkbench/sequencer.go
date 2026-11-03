@@ -147,18 +147,49 @@ func (r *Runner) FinishSequencer(ctx context.Context, root string, expected Sequ
 // silently merge a dirty tree; conflicts may leave MERGE_HEAD for the user to
 // resolve in the inspector or Terminal.
 func (r *Runner) MergeNoFastForward(ctx context.Context, root, target string) error {
-	if err := r.validateLocalBranch(ctx, root, target); err != nil {
+	ref, err := r.resolveBranchRef(ctx, root, target)
+	if err != nil {
 		return err
 	}
 	current := r.CurrentBranch(ctx, root)
 	if current == "" || current == target {
 		return &Error{Class: ErrRefusal, OpClass: OpMutate, Op: "merge",
-			err: errors.New("select a different local branch while on a checked-out branch")}
+			err: errors.New("select a different branch while on a checked-out branch")}
 	}
 	if err := r.RequireCleanWorktree(ctx, root); err != nil {
 		return err
 	}
-	_, err := r.Mutate(ctx, root, "merge", "--no-ff", "--no-edit", "refs/heads/"+target)
+	_, err = r.Mutate(ctx, root, "merge", "--no-ff", "--no-edit", ref)
+	return err
+}
+
+// RebaseOnto replays the current branch on top of a local or remote-tracking
+// branch. A rebase that stops on conflicts is aborted at once and reported with
+// the conflicting paths: Solco has no rebase continue/skip workflow, so it never
+// leaves one half-done (the user resolves it in the Terminal or merges instead).
+func (r *Runner) RebaseOnto(ctx context.Context, root, target string) error {
+	ref, err := r.resolveBranchRef(ctx, root, target)
+	if err != nil {
+		return err
+	}
+	current := r.CurrentBranch(ctx, root)
+	if current == "" || current == target {
+		return &Error{Class: ErrRefusal, OpClass: OpMutate, Op: "rebase",
+			err: errors.New("select a different branch while on a checked-out branch")}
+	}
+	if err := r.RequireCleanWorktree(ctx, root); err != nil {
+		return err
+	}
+	_, err = r.Mutate(ctx, root, "rebase", ref)
+	if err == nil {
+		return nil
+	}
+	state, _ := r.SequencerState(ctx, root)
+	_, _ = r.Mutate(ctx, root, "rebase", "--abort") // no-op error when none started
+	if state.Unmerged > 0 {
+		return &Error{Class: ErrConflict, OpClass: OpMutate, Op: "rebase", Paths: state.UnmergedPaths,
+			err: fmt.Errorf("rebase stopped on conflicts in %d files and was aborted; nothing changed", state.Unmerged)}
+	}
 	return err
 }
 
