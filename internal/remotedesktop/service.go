@@ -277,7 +277,9 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 	}
 	peer, sdp, err := rtc.Answer(ctx, offer.SDP, rtc.Options{
 		ICEServers: s.iceServersFor(ctx, offer.SDP), InterfaceFilter: s.cfg.InterfaceFilter,
+		StartKbps: protocol.Specs[tier].BitrateKbps,
 		Handlers: rtc.Handlers{
+			OnBandwidth:       sess.OnBandwidth,
 			OnControl:         sess.OnControl,
 			OnPointer:         sess.OnPointer,
 			OnKeyframeRequest: sess.OnKeyframeRequest,

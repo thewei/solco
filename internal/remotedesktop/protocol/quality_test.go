@@ -55,3 +55,27 @@ func TestDecode(t *testing.T) {
 		t.Error("oversized message must fail")
 	}
 }
+
+func TestAdaptBitrate(t *testing.T) {
+	if got := AdaptBitrate(TierStandard, 100000); got != 5000 {
+		t.Fatalf("a roomy link keeps the tier target, got %d", got)
+	}
+	if got := AdaptBitrate(TierStandard, 2000); got != 1700 {
+		t.Fatalf("a tight link gets 85%%, got %d", got)
+	}
+	if got := AdaptBitrate(TierStandard, 100); got != 1000 {
+		t.Fatalf("the floor is a fifth of the tier, got %d", got)
+	}
+	if got := AdaptBitrate(TierSmooth, 100); got != 500 {
+		t.Fatalf("smooth floor, got %d", got)
+	}
+}
+
+func TestWorthRetuning(t *testing.T) {
+	if !WorthRetuning(0, 100) || !WorthRetuning(1000, 1100) || !WorthRetuning(1000, 880) {
+		t.Fatal("10% moves are real")
+	}
+	if WorthRetuning(1000, 1050) || WorthRetuning(1000, 950) {
+		t.Fatal("small moves are noise")
+	}
+}

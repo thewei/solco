@@ -80,6 +80,7 @@ type fakeCap struct {
 	starts   []protocol.CaptureConfig
 	stops    int
 	keyReqs  int
+	tunes    []int
 	closed   bool
 	startErr error
 }
@@ -113,8 +114,13 @@ func (c *fakeCap) StopCapture(context.Context) error {
 	c.mu.Unlock()
 	return nil
 }
-func (c *fakeCap) RequestKeyframe()              { c.mu.Lock(); c.keyReqs++; c.mu.Unlock() }
-func (c *fakeCap) TuneBitrate(int)               {}
+func (c *fakeCap) RequestKeyframe()  { c.mu.Lock(); c.keyReqs++; c.mu.Unlock() }
+func (c *fakeCap) TuneBitrate(k int) { c.mu.Lock(); c.tunes = append(c.tunes, k); c.mu.Unlock() }
+func (c *fakeCap) tuned() []int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]int(nil), c.tunes...)
+}
 func (c *fakeCap) Frames() <-chan platform.Frame { return c.frames }
 func (c *fakeCap) Events() <-chan platform.Event { return c.events }
 func (c *fakeCap) Input() platform.Input         { return c.in }
@@ -506,5 +512,22 @@ func TestKeyframeRequestAndStartFailure(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("session did not end on start failure")
+	}
+}
+
+func TestBandwidthEstimateRetargetsTheEncoderWithinTheTier(t *testing.T) {
+	r := newRig(t, protocol.ModeFullControl)
+	r.connect()
+	r.s.OnBandwidth(100000) // roomy: the tier's own target is already set, nothing to do
+	if got := r.cap.tuned(); len(got) != 0 {
+		t.Fatalf("no retarget expected, got %v", got)
+	}
+	r.s.OnBandwidth(2000)
+	if got := r.cap.tuned(); len(got) != 1 || got[0] != 1700 {
+		t.Fatalf("weak link should drop to 85%%, got %v", got)
+	}
+	r.s.OnBandwidth(1000) // inside the one-second hold-off
+	if got := r.cap.tuned(); len(got) != 1 {
+		t.Fatalf("retargets must be rate limited, got %v", got)
 	}
 }

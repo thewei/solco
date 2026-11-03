@@ -90,6 +90,7 @@ func TestAnswerConnectsAndCarriesVideoAndData(t *testing.T) {
 		OnKeyframeRequest: func() { keyReq.Add(1) },
 		OnState:           func(s State) { states <- s },
 		OnControlOpen:     func() { controlOpen <- struct{}{} },
+		OnBandwidth:       func(int) {}, // the congestion-control interceptors must not break negotiation
 	}})
 	if err != nil {
 		t.Fatal(err)

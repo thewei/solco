@@ -125,6 +125,8 @@ type Session struct {
 	capMu      sync.Mutex  // serialises capture (re)starts
 	restarts   []time.Time // recent unplanned capture restarts (guarded by mu)
 	hideCursor bool        // the phone asked for the Mac's pointer to stay out of the video
+	tunedKbps  int         // the encoder's current target, as last set (guarded by mu)
+	lastTune   time.Time   // when the link estimate last retargeted the encoder (guarded by mu)
 
 	framesSent, framesDropped, keyframesSent, keyRequests atomic.Uint64
 	lastPTS                                               time.Duration
@@ -262,6 +264,7 @@ func (s *Session) startCapture(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.state.Width, s.state.Height, s.state.Hardware = started.Width, started.Height, started.HardwareEncoder
+	s.tunedKbps = cfg.BitrateKbps
 	s.sharing = true
 	s.havePTS = false
 	s.mu.Unlock()
@@ -347,6 +350,27 @@ func (s *Session) OnControlOpen() { s.sendState() }
 func (s *Session) OnKeyframeRequest() {
 	s.keyRequests.Add(1)
 	s.cap.RequestKeyframe()
+}
+
+// OnBandwidth is the link's congestion estimate (kbps). The encoder follows it down so a weak link keeps
+// moving instead of stalling, and back up to the tier's target when the link recovers; moves under 10% and
+// retargets closer than a second apart are skipped.
+func (s *Session) OnBandwidth(estimateKbps int) {
+	s.mu.Lock()
+	if s.closed || !s.sharing {
+		s.mu.Unlock()
+		return
+	}
+	now := s.cfg.Now()
+	target := protocol.AdaptBitrate(s.cfg.Tier, estimateKbps)
+	if !protocol.WorthRetuning(s.tunedKbps, target) || now.Sub(s.lastTune) < time.Second {
+		s.mu.Unlock()
+		return
+	}
+	s.tunedKbps, s.lastTune = target, now
+	s.mu.Unlock()
+	s.log.Info("remote desktop bitrate retargeted", "session", s.cfg.ID, "kbps", target, "estimateKbps", estimateKbps)
+	s.cap.TuneBitrate(target)
 }
 
 // fail tells the phone and ends the session. It never blocks the caller: Close waits for the loops,

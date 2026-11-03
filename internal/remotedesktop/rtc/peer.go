@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/pkg/cc"
+	"github.com/pion/interceptor/pkg/gcc"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
@@ -76,6 +78,9 @@ type Handlers struct {
 	OnState func(State)
 	// OnControlOpen fires when the control channel becomes writable.
 	OnControlOpen func()
+	// OnBandwidth reports the link's congestion-controlled send estimate in kbps (Google congestion
+	// control over the phone's transport-wide feedback); the session retargets the encoder from it.
+	OnBandwidth func(kbps int)
 }
 
 // Options configures one peer.
@@ -85,7 +90,9 @@ type Options struct {
 	InterfaceFilter func(name string) bool
 	// IncludeLoopback adds loopback candidates (tests only).
 	IncludeLoopback bool
-	Handlers        Handlers
+	// StartKbps seeds the bandwidth estimator (the tier's own target), so a good link is not ramped up from scratch.
+	StartKbps int
+	Handlers  Handlers
 }
 
 // Peer is one answered WebRTC connection.
@@ -126,6 +133,31 @@ func newAPI(opts Options) (*webrtc.API, error) {
 		}
 	}
 	ir := &interceptor.Registry{}
+	if opts.Handlers.OnBandwidth != nil {
+		start := opts.StartKbps
+		if start <= 0 {
+			start = 2500
+		}
+		controller, err := cc.NewInterceptor(func() (cc.BandwidthEstimator, error) {
+			return gcc.NewSendSideBWE(
+				gcc.SendSideBWEInitialBitrate(start*1000),
+				gcc.SendSideBWEMinBitrate(150_000),
+				gcc.SendSideBWEMaxBitrate(25_000_000),
+				gcc.SendSideBWEPacer(gcc.NewNoOpPacer()),
+			)
+		})
+		if err != nil {
+			return nil, err
+		}
+		onBW := opts.Handlers.OnBandwidth
+		controller.OnNewPeerConnection(func(_ string, est cc.BandwidthEstimator) {
+			est.OnTargetBitrateChange(func(bps int) { onBW(bps / 1000) })
+		})
+		ir.Add(controller)
+		if err := webrtc.ConfigureTWCCHeaderExtensionSender(m, ir); err != nil {
+			return nil, err
+		}
+	}
 	if err := webrtc.RegisterDefaultInterceptors(m, ir); err != nil {
 		return nil, err
 	}

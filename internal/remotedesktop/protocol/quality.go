@@ -60,3 +60,40 @@ func (s TierSpec) Size(d DisplayInfo) (w, h int) {
 	}
 	return w &^ 1, h &^ 1
 }
+
+// AdaptBitrate turns the link's bandwidth estimate (kbps) into the encoder target for tier t: 85% of what
+// the link can carry, never above the tier's own target and never below a floor that keeps text legible.
+func AdaptBitrate(t Tier, estimateKbps int) int {
+	spec, ok := Specs[t]
+	if !ok {
+		return estimateKbps
+	}
+	floor := spec.BitrateKbps / 5
+	if floor < 400 {
+		floor = 400
+	}
+	if floor > spec.BitrateKbps {
+		floor = spec.BitrateKbps
+	}
+	target := estimateKbps * 85 / 100
+	if target > spec.BitrateKbps {
+		return spec.BitrateKbps
+	}
+	if target < floor {
+		return floor
+	}
+	return target
+}
+
+// WorthRetuning reports whether moving the encoder from last to target kbps is a real change (≥10%);
+// smaller moves would only churn the rate controller.
+func WorthRetuning(last, target int) bool {
+	if last <= 0 {
+		return true
+	}
+	d := target - last
+	if d < 0 {
+		d = -d
+	}
+	return d*10 >= last
+}
