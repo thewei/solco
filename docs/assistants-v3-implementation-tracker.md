@@ -146,6 +146,7 @@
 - 过程：手机 Assistant 页 Start conversation → 页面停在 “Starting the Coordinator on your Mac…” 超过 2 分钟，Mac 日志只有 `coordinator.start` 操作、无后续。
 - 根因 1（真实缺陷）：插件守护进程根本没在运行（`ps` 无 `solco-automations daemon`，`herdr plugin log` 无该插件日志）——Herdr 只在 server 启动时跑插件的 startup hook，Solco 之后才 link/更新的插件没有 daemon，排队的 Coordinator 永远停在 `starting`；Assistants 路径此前不会自启它（只有 Automations 页的 Start Scheduler 按钮会）。修复：`plugins/solco-automations/main_assistant.go` 的 `ensureDaemon`——`assistant coordinator start` 成功后若 `daemon.Running()` 为假，就 `Setsid` 拉起 `daemon`（日志进插件 state 目录 `daemon.log`，flock 保证第二份自行退出，幂等，不让命令失败）。实机：重建插件二进制后再次 start，3 s 内 daemon 在跑，30 s 内出现真实 Herdr 工作区与 Claude 窗格（状态 done）。`go test ./...`（插件）484 PASS。
 - 根因 2：Coordinator ready 的瞬间 Herdr 树里该窗格还没有 `agent`，手机 `paneRoute` 因此选了 Terminal 而不是 Chat，手机落在终端画面。修复：`assistants/[id].tsx` 在窗格带 `agent`（或 Host 不提供 chat）之前不自动跳转；重新进入后落在共享 Chat 页。
-- 问题 3：Chat 页标题被窗格自己的标题（首条用户消息，即 Coordinator 启动 prompt）占用，显示 “You are the Coordinator of t…”。修复：从 Assistant 页进入时把 Assistant 名带成 `title`，聊天页在带 `assistant` 参数时以它为标题；“Open conversation” 按钮也补上 `assistant` 参数（此前缺，导致聊天页里“回到 Assistant”入口丢失）。`pnpm typecheck`/`lint`/`test`（583 PASS）通过；新 apk 尚未安装复验——NOT VERIFIED。
+- 问题 3：Chat 页标题被窗格自己的标题（首条用户消息，即 Coordinator 启动 prompt）占用，显示 “You are the Coordinator of t…”。修复：从 Assistant 页进入时把 Assistant 名带成 `title`，聊天页在带 `assistant` 参数时以它为标题；“Open conversation” 按钮也补上 `assistant` 参数（此前缺，导致聊天页里“回到 Assistant”入口丢失）。`pnpm typecheck`/`lint`/`test`（583 PASS）通过；新 apk 已装机复验，见下一条。
 - 已知限制（未改）：Coordinator 的 152 行启动 prompt 作为首条“用户消息”出现在 Chat 里（折叠为 “Show all 152 lines”），因为它确是该会话的真实首条输入；模型名徽标显示 `glm-flash`（该 Claude 的本机配置）。
-- 收尾：测试用的 Ada Coordinator 仍在运行，需停止（见本节之后）。
+- 复验（新 release apk 装机后）：停 Coordinator、杀掉 daemon（`ps` 0 个）→ 手机点 Start conversation → 45 s 后 daemon 已被自动拉起（1 个）、手机直接落在共享 Chat 页、标题为 “Ada”（副标题 `claude · auto: … Ada · Coordinator`），不再经过 Terminal。PASS。
+- 收尾：Ada 的 Coordinator 已 stop，两个测试用 Herdr 工作区已关闭；daemon 留在运行。
