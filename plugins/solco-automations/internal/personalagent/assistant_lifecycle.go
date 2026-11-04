@@ -282,6 +282,7 @@ func (s *Store) DeleteArchivedAssistant(id string, rev int, paneGone ...func(str
 		"DELETE FROM memory_items WHERE assistant_id=?",
 		"DELETE FROM review_checks WHERE assistant_id=?",
 		"DELETE FROM reviews WHERE assistant_id=?",
+		"DELETE FROM activity_cursors WHERE assistant_id=?",
 		"DELETE FROM goal_facts WHERE assistant_id=?",
 		"DELETE FROM goal_plan_revisions WHERE goal_id IN (SELECT id FROM goals WHERE assistant_id=?)",
 		"DELETE FROM goal_plans WHERE assistant_id=?",

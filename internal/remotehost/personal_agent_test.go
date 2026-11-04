@@ -62,6 +62,10 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 			return nil, err
 		}
 		return raw, nil
+	case strings.HasPrefix(key, "activity list "):
+		return []byte(`{"schema":1,"activity":{"facts":[{"seq":4,"id":"f_0000000000000017","assistantId":"` + paAssistantA + `","goalId":"` + paGoalG + `","taskId":"` + paTaskT + `","kind":"delegated","text":"Delegated: Collect numbers","createdAt":1800000000000}],"nextSeq":4,"ackSeq":0,"hasMore":false}}`), nil
+	case strings.HasPrefix(key, "activity ack "):
+		return []byte(`{"schema":1,"ackSeq":4,"replayed":false}`), nil
 	case key == "group list":
 		return []byte(`{"schema":1,"groups":[` + paGroup + `]}`), nil
 	case strings.HasPrefix(key, "group show"):
@@ -620,6 +624,9 @@ func TestPersonalAgentPlanRoutes(t *testing.T) {
 	if call := core.lastCall(); !strings.HasPrefix(call, "assistant facts "+paAssistantA+" --limit 20") {
 		t.Fatalf("facts call %q", call)
 	}
+	golden(t, "personal-agent-activity.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/activity?after=0&limit=20", h.token, nil)))
+	_, receipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/activity/ack", h.token, `{"requestId":"activity-ack-1","seq":4}`)
+	golden(t, "personal-agent-activity-ack.json", receipt)
 	for _, bad := range []string{pbase + "/assistants/" + paAssistantA + "/facts?limit=0", pbase + "/assistants/" + paAssistantA + "/facts?limit=101", pbase + "/assistants/" + paAssistantA + "/facts?limit=x", pbase + "/goals/not%20an%20id/plan"} {
 		if r := h.get(bad, h.token, nil); r.StatusCode != http.StatusBadRequest {
 			t.Errorf("%s = %d", bad, r.StatusCode)
@@ -807,5 +814,58 @@ func TestPersonalAgentMemoryAndProactivityRoutes(t *testing.T) {
 	_ = json.Unmarshal(bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)), &boot)
 	if !boot.Capabilities["personalAgentMemory"] || !boot.Capabilities["personalAgentProactivity"] {
 		t.Fatalf("capabilities = %v", boot.Capabilities)
+	}
+}
+
+// Cursor pages are a per-device, ScopeView read. A read never ACKs. Only the
+// explicit ScopeManage write can advance the device's durable cursor.
+func TestPersonalAgentActivityReplayAndDeviceBoundACK(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA + "/activity"
+	resp := h.get(base+"?after=0&limit=2", h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("activity GET status = %d", resp.StatusCode)
+	}
+	var page struct {
+		Facts   []personalagent.Fact `json:"facts"`
+		NextSeq int64                `json:"nextSeq"`
+		AckSeq  int64                `json:"ackSeq"`
+		HasMore bool                 `json:"hasMore"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil || len(page.Facts) != 1 || page.NextSeq != 4 || page.AckSeq != 0 || page.HasMore {
+		t.Fatalf("activity read: %+v %v", page, err)
+	}
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant activity list "+paAssistantA+" --consumer device:dev_") || !strings.Contains(last, "--after 0 --limit 2") {
+		t.Fatalf("activity must use the authenticated device's consumer, got %q", last)
+	}
+	if status, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"a-1","seq":4}`); status != http.StatusOK {
+		t.Fatalf("ACK status %d", status)
+	}
+	if last := core.lastCall(); !strings.Contains(last, "assistant activity ack "+paAssistantA+"|") || !strings.Contains(last, `"consumer":"device:dev_`) || !strings.Contains(last, `"seq":4`) {
+		t.Fatalf("ACK must use device ID, got %q", last)
+	}
+	if status, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"a-2","seq":-1}`); status != http.StatusBadRequest {
+		t.Fatalf("negative ACK status %d", status)
+	}
+	if status, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"a-3","seq":4,"consumer":"device:forged"}`); status != http.StatusBadRequest {
+		t.Fatalf("forged consumer status %d", status)
+	}
+	for _, path := range []string{base + "?after=-1", base + "?after=nan", base + "?limit=0", base + "?limit=101", base + "?limit=nan"} {
+		if resp := h.get(path, h.token, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s = %d", path, resp.StatusCode)
+		}
+	}
+	if resp := h.get(base, "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthorized Activity = %d", resp.StatusCode)
+	}
+	if status, _ := h.send("POST", base+"/ack", "", `{"requestId":"a-1","seq":4}`); status != http.StatusUnauthorized {
+		t.Fatalf("unauthorized ACK = %d", status)
+	}
+	h2, core2 := paHarness(t, false)
+	if resp := h2.get(base, h2.token, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("closed seam = %d", resp.StatusCode)
+	}
+	if core2.callCount() != 0 {
+		t.Fatal("closed seam reached the core")
 	}
 }

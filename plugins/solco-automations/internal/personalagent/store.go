@@ -541,6 +541,37 @@ var migrations = []string{
 		payload TEXT NOT NULL,
 		created_at INTEGER NOT NULL
 	);`,
+	// 20: the existing Fact ledger becomes a stable, non-reusable sequence
+	// for cursor-based Activity replay. An ordinary SQLite rowid can be reused
+	// after the newest row is purged; AUTOINCREMENT cannot. Keep all old seq
+	// values so existing desktop/mobile receipts and cursors stay valid.
+	// The same SQLite remains the only owner of the messages.
+	`CREATE TABLE goal_facts_next (
+		seq INTEGER PRIMARY KEY AUTOINCREMENT,
+		id TEXT NOT NULL UNIQUE,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		goal_id TEXT NOT NULL DEFAULT '',
+		task_id TEXT NOT NULL DEFAULT '',
+		kind TEXT NOT NULL,
+		text TEXT NOT NULL,
+		evidence TEXT NOT NULL DEFAULT '',
+		dedupe_key TEXT NOT NULL UNIQUE,
+		created_at INTEGER NOT NULL
+	);
+	INSERT INTO goal_facts_next(seq,id,assistant_id,goal_id,task_id,kind,text,evidence,dedupe_key,created_at)
+	SELECT rowid,id,assistant_id,goal_id,task_id,kind,text,evidence,dedupe_key,created_at FROM goal_facts ORDER BY rowid;
+	DROP TABLE goal_facts;
+	ALTER TABLE goal_facts_next RENAME TO goal_facts;
+	CREATE INDEX goal_facts_by_assistant ON goal_facts(assistant_id);
+	CREATE INDEX goal_facts_by_goal ON goal_facts(goal_id);
+	CREATE INDEX goal_facts_activity ON goal_facts(assistant_id,seq);
+	CREATE TABLE activity_cursors (
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		consumer TEXT NOT NULL,
+		ack_seq INTEGER NOT NULL DEFAULT 0 CHECK(ack_seq>=0),
+		updated_at INTEGER NOT NULL,
+		PRIMARY KEY (assistant_id,consumer)
+	);`,
 }
 
 func (s *Store) migrate() error {

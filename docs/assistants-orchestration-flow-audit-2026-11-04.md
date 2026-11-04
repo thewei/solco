@@ -69,3 +69,12 @@
 - 在确认外部 Pane 状态之后，写事务里再次对比所有 Run 的 Pane 身份，防止归档验证期间新增/切换 Pane；后续永久删除也采用同样的事务内核对。
 - 对已安全结束的 Coordinator，Archive 将旧协调者状态重置为 `stopped`；恢复 Assistant 后可重新启动，但再次启动仍要重新验证原 Pane 关闭，不能凭历史成功证明盲目创建。
 - 自动测试覆盖归档幂等、仍有 Pane 的拒绝、检查期间 Pane 变化的拒绝、归档-恢复-重启；`go test ./...`（plugin）PASS。没有实际 Herdr/OMP 进程级测试时，**不能宣称进程停止功能已实现**。
+
+## 继续优化：可靠活动流与手机 ACK（2026-11-04）
+
+- **唯一事实源**：不创建第二套 Assistant 对话运行时或模型。沿用 `goal_facts` 的 Solco-authored sentences；数据库升级版本 20 将原来可能被 SQLite 复用的 `rowid` 迁移为 `seq INTEGER PRIMARY KEY AUTOINCREMENT`（原序号保留），保证永久删除旧行后，新消息不会复用序号。
+- **Activity 分页**：插件 `assistant activity list <assistantId> --consumer <key> [--after N] [--limit N]` 按 `seq ASC` 提供 `facts/nextSeq/hasMore/ackSeq`，单页最多 200。读取不修改状态，断线重连从最近一次 ACK 序号继续；条目 ID 去重；多 Assistant 的数据隔离。
+- **显式确认**：插件 `assistant activity ack <assistantId>` 按 `requestId/consumer/seq` 更新 `activity_cursors`，只允许确认该 Assistant 真实存在的 seq，单向推进，事务化写入+请求收据回放。归档保留 ACK 游标，永久删除清除它。ACK 表示此消费端处理/看过，不保证手机 OS 的通知或协调者语言生成成功。
+- **Host / 手机**：Host `GET /api/v3/personal-agent/assistants/{id}/activity?after=&limit=`（ScopeView）和 `POST .../activity/ack`（ScopeManage）共用原插件 CLI 缝；消费者 ID **完全由已配对的 Device ID 派生**，手机无法伪造；ACK JSON 拒绝未知字段。手机独立 Activity History 页面：显示新到旧逐页传递的消息（画面按旧到新排序）、支持主动标记已读、定期拉取、重连去重、跨 Mac 隔离；最新事实条保留。
+- **自动测试**：迁移后序号无复用、分页跨多个消费端、幂等/拒绝非法 ACK、断线重开重放、删除游标、Host 鉴权/门关闭/设备绑定、手机 Zod Goldens/行为单测。
+- **仍未实现**：不会自动把 Fact 插入 OMP 的聊天记录；没有可靠 OS Push/后台通知投递、自然语言总结生成与推送 ACK；启用 reportEveryMin 只产生可读的事实，不等于 Coordinator 主动发话。后续将复用 `personal-agent.changed` 事件提示客户端主动补读，而不是把事件帧当内容本体。

@@ -81,3 +81,4 @@ remotedesktop.go: Remote Desktop 接缝与端点——`RemoteDesktop` 接口（E
 
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+personal_agent_activity.go: Assistant Activity（2026-11-04）——有界 cursor GET 与显式 per-device ACK POST，消费端身份由已配对 Device ID 派生、ScopeView/ScopeManage 分开、严格拒绝伪造 consumer；权威是插件 `goal_facts` AUTOINCREMENT seq 与 `activity_cursors`，没有第二套消息库，读取不 ACK。

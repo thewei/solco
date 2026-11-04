@@ -542,6 +542,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+pa+"/assistants/{id}/mcp/verify", s.guard(ScopeManage, s.handlePAMCPVerify))
 	mux.Handle("GET "+pa+"/goals/{id}/plan", s.guard(ScopeView, s.handlePAGoalPlan))
 	mux.Handle("GET "+pa+"/assistants/{id}/facts", s.guard(ScopeView, s.handlePAFacts))
+	mux.Handle("GET "+pa+"/assistants/{id}/activity", s.guard(ScopeView, s.handlePAActivity))
+	mux.Handle("POST "+pa+"/assistants/{id}/activity/ack", s.guard(ScopeManage, s.handlePAActivityAck))
 	mux.Handle("GET "+pa+"/assistants/{id}/routines", s.guard(ScopeView, s.handlePARoutines))
 	mux.Handle("GET "+pa+"/assistants/{id}/memory", s.guard(ScopeView, s.handlePAMemory))
 	mux.Handle("GET "+pa+"/memory/{id}/history", s.guard(ScopeView, s.handlePAMemoryHistory))

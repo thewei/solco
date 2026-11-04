@@ -561,6 +561,32 @@ func (c *Client) Facts(ctx context.Context, assistantID string, limit int) ([]Fa
 	return out.Facts, c.do(ctx, nil, &out, args...)
 }
 
+// Activity returns a bounded, oldest-first page of Solco progress facts.
+func (c *Client) Activity(ctx context.Context, assistantID, consumer string, after int64, limit int) (ActivityPage, error) {
+	var out struct {
+		Activity ActivityPage `json:"activity"`
+	}
+	args := []string{"activity", "list", assistantID, "--consumer", consumer, "--after", strconv.FormatInt(after, 10)}
+	if limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+	return out.Activity, c.do(ctx, nil, &out, args...)
+}
+
+// AckActivity stores one consumer's processed progress watermark. A caller
+// must ACK only after it has handled the returned Activity facts.
+func (c *Client) AckActivity(ctx context.Context, requestID, assistantID, consumer string, seq int64) (int64, error) {
+	var out struct {
+		AckSeq int64 `json:"ackSeq"`
+	}
+	in := struct {
+		RequestID string `json:"requestId"`
+		Consumer  string `json:"consumer"`
+		Seq       int64  `json:"seq"`
+	}{requestID, consumer, seq}
+	return out.AckSeq, c.do(ctx, in, &out, "activity", "ack", assistantID)
+}
+
 // Routines lists an Assistant's routines (everyone's when empty), newest first.
 func (c *Client) Routines(ctx context.Context, assistantID string) ([]Routine, error) {
 	var out struct {

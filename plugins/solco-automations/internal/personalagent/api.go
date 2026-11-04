@@ -156,6 +156,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return ok("inbox", in), err
 	case "overview":
 		return a.overview()
+	case "activity":
+		return a.activity(rest, body)
 	case "legacy-export":
 		// Explicit, read-only: copies the retired herdr-projects data aside; nothing is ever removed from it.
 		dst, rest := flagValue(rest, "--to")

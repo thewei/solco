@@ -515,6 +515,16 @@ type Fact struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
+// ActivityPage is a stable cursor-based progression of Solco-authored
+// facts, oldest first. Its AckSeq is the explicitly acknowledged watermark
+// of this consumer, not an assertion that the UI delivered a notification.
+type ActivityPage struct {
+	Facts   []Fact `json:"facts"`
+	NextSeq int64  `json:"nextSeq"`
+	AckSeq  int64  `json:"ackSeq"`
+	HasMore bool   `json:"hasMore"`
+}
+
 // Routine is a scheduled automation that belongs to an Assistant, with the
 // definition it points at and how it is doing. The definition itself lives in
 // the Automations plugin's own file; prompt and rationale are clipped.
