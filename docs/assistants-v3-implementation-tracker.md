@@ -133,9 +133,11 @@
 - 仍 NOT VERIFIED：桌面 UI 里的写入（Computer Use 往 WebView 文本框输入未生效，读回为空，未强行）；写路径由 `TestAssistantsMemoryAndBehaviorBridge`、Host 路由测试与隔离 daemon 实机覆盖。
 - 手机顶栏 Assistants 入口消失一事：Host 的 `personalAgent` 能力由 `syncRemoteAssistants` 在首次 overview 到达（日志 14:25:55）后才置位，手机若在此前取了 bootstrap 且之后没刷新就会缺该入口；也可能是 adb 截图停在旧帧（状态栏时钟从未走动）。未在手机上复核（用户正在用手机）。
 
-### 手机 Assistants 入口缺失——未结问题（2026-11-04 14:4x，只读排查）
-- 现象：Mac 端重装重启（14:25）后，手机首页顶栏有 Automations、Remote Desktop 图标但没有 Assistants 机器人图标；同一 apk 在重启前的 Host 上有该图标。说明 bootstrap 能解析，只是 `capabilities.personalAgent` 为假。
-- 已排除：手机端只在 `capabilities.personalAgent` 为真时画图标（`(home)/(tabs)/index.tsx:115`）；Host 每次请求现算该能力（`handleBootstrap` → `Options.PersonalAgent`），无缓存；`hostPersonalAgent` 只看 `assistantsRemote`，由 `applyAssistantsOverview` 在首次 overview 到达后设置（桌面日志 14:25:55 `assistants available`，侧栏也列出 5 个 Assistant）；Mac 上唯一的 7788 监听者是新 `Solco.app`（pid 1740）。
-- 未排除：Host 请求时刻的 `assistantsRemote` 实际值（无日志可看）；手机该次 bootstrap 的时机。adb 截图在该手机上滞后一帧（按返回已回到桌面，截图仍是应用帧），因此不能靠截图判断瞬时状态。
-- 下一步（需要用户在场或授权）：在桌面临时加一行不含内容的日志（能力结果），或让手机重新配对后抓一次 bootstrap；不在本轮改动。
+### 手机 Assistants 入口（2026-11-04 15:xx，更正上一条“入口缺失”）
+- 结论：入口没有消失。临时诊断日志 `remote host bootstrap personal agent served=true`（临时、已移除；只记布尔能力）确认 Host 已发 `personalAgent:true`；`uiautomator dump` 在手机首页看到 “Assistants” 按钮。此前判断依据的 adb 截图在该手机上滞后，不可作为瞬时状态证据（本机用 `uiautomator dump` 取实时 UI）。上一条“未结问题”作废。
 
+### U5 手机真机验证（2026-11-04 15:xx，vivo，release apk，经 `uiautomator dump` 取 UI、`adb input` 操作；对象为测试 Assistant “Ada”，无 Agent 启动）
+- Assistants → Open Ada：详情页含 Work style / Memory / Behavior 按钮（来自 Host 能力 `personalAgentMemory`/`personalAgentProactivity`）。
+- Memory 屏：`Ada · Memory`、`REMEMBERED · 0/500`、空态；添加 “U5 phone check note” → `1/500`，`you · rev 1`；Edit → Save → `rev 2`；History 展开出 `rev 2 · You · approved` 与 `rev 1`；Forget → Forget for good → `0/500`（已清理，无遗留）。
+- Behavior 屏：三档等级（当前 Follow up）、Quiet hours Off、间隔 0、日预算 20；选 Suggest → Save → 退出重进仍为 Suggest（落盘）；恢复 Follow up → Save → 重进确认已还原。
+- 仍 NOT VERIFIED：手机上 Quiet Hours 开启与时区选择、预算为 0 的行为；MU-08/09/23 的手机聊天路径尚未逐项驱动。
