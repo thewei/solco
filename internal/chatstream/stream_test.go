@@ -7,6 +7,7 @@
 package chatstream
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -83,11 +84,11 @@ func TestBufferIdentityAndBounds(t *testing.T) {
 		}
 		seq++
 	}
-	if b.Apply(frame(seq, "text_delta", "m", "one extra")) {
-		t.Fatal("unbounded content")
+	if !b.Apply(frame(seq, "text_delta", "m", "one extra")) {
+		t.Fatal("oversized delta must invalidate the rendered turn")
 	}
-	if len(b.Text) > MaxTextBytes {
-		t.Fatalf("buffer over bound: %d", len(b.Text))
+	if !b.Desynced || len(b.Text) != 0 {
+		t.Fatalf("unbounded text escaped into UI: %+v", b)
 	}
 	restart := frame(1, "message_start", "new", "")
 	restart.Epoch = "epoch-B"
@@ -95,6 +96,54 @@ func TestBufferIdentityAndBounds(t *testing.T) {
 		t.Fatalf("restart state: %+v", b)
 	}
 }
+func TestBufferOverflowDropsProvisionalTextUntilNextMessage(t *testing.T) {
+	for _, kind := range []string{"text_delta", "thinking_delta"} {
+		t.Run(kind, func(t *testing.T) {
+			var b Buffer
+			if !b.Apply(frame(1, "message_start", "m1", "")) {
+				t.Fatal("start")
+			}
+			seq := uint64(2)
+			for i := 0; i < MaxTextBytes/MaxDeltaBytes; i++ {
+				if !b.Apply(frame(seq, kind, "m1", strings.Repeat("A", MaxDeltaBytes))) {
+					t.Fatal("in-bound content")
+				}
+				seq++
+			}
+			if !b.Apply(frame(seq, kind, "m1", "overflow")) {
+				t.Fatal("overflow must invalidate UI overlay")
+			}
+			if !b.Desynced || b.MessageID != "" || b.Text != "" || b.Thinking != "" {
+				t.Fatalf("overflow exposed stale content: %+v", b)
+			}
+			if b.Apply(frame(seq+1, "message_end", "m1", "")) {
+				t.Fatal("oversized turn resumed")
+			}
+			if !b.Apply(frame(seq+5, "message_start", "m2", "")) || b.Desynced {
+				t.Fatal("new turn did not recover")
+			}
+		})
+	}
+}
+
+func TestBufferToolLimitDropsProvisionalActivity(t *testing.T) {
+	var b Buffer
+	if !b.Apply(frame(1, "message_start", "m1", "")) {
+		t.Fatal("start")
+	}
+	for i := 0; i < MaxTools+1; i++ {
+		e := frame(uint64(i+2), "tool_start", "m1", "")
+		e.ToolCallID = fmt.Sprintf("tool-%d", i)
+		e.ToolName = "read"
+		if !b.Apply(e) {
+			t.Fatalf("tool event %d refused", i)
+		}
+	}
+	if !b.Desynced || len(b.Tools) != 0 || b.MessageID != "" {
+		t.Fatalf("tool limit leaked activity: %+v", b)
+	}
+}
+
 func TestStreamAddsRunningToolToCommittedNarrationWithoutDuplicatingTurn(t *testing.T) {
 	var b Buffer
 	_ = b.Apply(frame(1, "message_start", "m", ""))

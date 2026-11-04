@@ -87,6 +87,14 @@ type Buffer struct {
 
 func (b *Buffer) Reset() { *b = Buffer{} }
 
+// invalidate retires an untrustworthy provisional turn, without pretending
+// it completed. The provider transcript is always the recovery authority.
+func (b *Buffer) invalidate(seq uint64) {
+	b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended = "", "", "", nil, false
+	b.Desynced = true
+	b.Seq = seq
+}
+
 // Apply returns false for invalid, stale or unrelated events. The caller
 // independently validates pane/session identity before reaching this method.
 func (b *Buffer) Apply(e Event) bool {
@@ -109,9 +117,7 @@ func (b *Buffer) Apply(e Event) bool {
 	// inevitable under backpressure; until the next message_start we show
 	// only the provider-owned JSONL transcript rather than corrupted text.
 	if b.Epoch == e.Epoch && b.Seq != 0 && e.Seq != b.Seq+1 && e.Kind != "message_start" {
-		b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended = "", "", "", nil, false
-		b.Desynced = true
-		b.Seq = e.Seq
+		b.invalidate(e.Seq)
 		return true
 	}
 	if b.Desynced && e.Kind != "message_start" {
@@ -137,12 +143,16 @@ func (b *Buffer) Apply(e Event) bool {
 		b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended, b.Desynced = e.MessageID, "", "", nil, false, false
 	case "text_delta":
 		if len(b.Text)+len(e.Delta) > MaxTextBytes {
-			return false
+			b.invalidate(e.Seq)
+			b.Epoch = e.Epoch
+			return true
 		}
 		b.Text += e.Delta
 	case "thinking_delta":
 		if len(b.Thinking)+len(e.Delta) > MaxTextBytes {
-			return false
+			b.invalidate(e.Seq)
+			b.Epoch = e.Epoch
+			return true
 		}
 		b.Thinking += e.Delta
 	case "tool_start":
@@ -155,7 +165,9 @@ func (b *Buffer) Apply(e Event) bool {
 			}
 		}
 		if len(b.Tools) >= MaxTools {
-			return false
+			b.invalidate(e.Seq)
+			b.Epoch = e.Epoch
+			return true
 		}
 		b.Tools = append(b.Tools, tool{id: e.ToolCallID, name: e.ToolName})
 	case "tool_end":

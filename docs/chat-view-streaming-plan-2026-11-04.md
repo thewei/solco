@@ -55,14 +55,14 @@ Provider native JSONL → LiveDecoder/LivePump → canonical reconciliation
 | SC-02 | `scripts/omp-chat-stream.ts`：独立、可按需安装的 OMP 扩展 | `bun test scripts/omp-chat-stream.test.ts` 模拟真实 Unix Socket / OMP 事件通过；未安装到用户扩展目录 | 代码完成 / 实机待验收 |
 | SC-03 | `internal/chatstream` + `internal/nativeui`：有界 overlay；严格 session 身份；优先给现有 ChatBridge 提供文本/思考增量与工具状态 | Go 单测验证跨 Pane/Session 过滤、序号/epoch 去重、工具阶段、转录回补；WebView 仍走现有 120ms 全量投影 | 代码完成 / 实机待验收 |
 | SC-04 | WebView 优化：独立 `chat:delta`、有序尾回合 suffix patch / 50ms 合并 | Go 端只传尾部至多 3 回合，且从最后实际交付的 Snapshot/事件核对历史前缀与非回合元数据；窗口滑动/状态改变自动退回完整快照。页面按 `baseSeq + conversationId` 严格验序；手机暂未发 delta | 代码完成 / 性能实测待补 |
-| SC-05 | 扩展安装/Doctor、CLI 兼容窗口、真实隔离 Herdr+OMP 演练 | 独立 `--check/--install/--uninstall` 通过临时 HOME 测试；`scripts/check-omp-chat-stream-load.py` 在 OMP 18.16.0 上通过隔离 HOME 的 `-e` RPC ready 加载验证，无模型请求。尚无真实 Herdr/TUI 文本输出与 UI 现场验收 | 部分完成 |
+| SC-05 | 扩展安装/Doctor、CLI 兼容窗口、真实隔离 Herdr+OMP 演练 | 独立 `--check/--install/--uninstall` 通过临时 HOME 测试；隔离 `-e` ready 加载通过；新增 `scripts/check-omp-chat-stream-live.py`，真实 OMP 18.16.0 + loopback SSE 模型实测 9 帧（含工具和逐段文本），重复执行均通过；仍待独立 Herdr TUI / Solco WebView 实机验收 | 部分完成 |
 | SC-06 | Pi 扩展复用 / mobile Host delta 事件 | 桌面移动端共用事件模型且身份与回放一致 | 待后续 |
 
 ## 4. 风险与护栏
 
 1. **转录与原生事件竞态**：永远以会话文件为提交真值；增量只是 overlay。消息完成后等真值包含对应内容再清除，不能闪白，也不能重复追加历史行。
 2. **同一 Agent 双视图**：只 attach 到当前 Herdr identity 对应的 pane/session；切换清空状态，禁止同名 Agent 或同 cwd 推测身份。
-3. **事件风暴/丢帧**：IPC 帧、delta 和 overlay 均设硬限制，独立 coalescing。任何源序号空洞都立即让临时文本失同步并回退 Provider JSONL，绝不跨丢失 Token 继续拼接。下一条 `message_start` 可从新回合恢复；不得通过每个 Token 触发网络/RPC 全量读取。
+3. **事件风暴/丢帧/容量**：IPC 帧、delta 和 overlay 均设硬限制，独立 coalescing。任何序号空洞、单消息文本/思考超 32KiB、工具记录超过 64 个都立即撤销临时投影、标记失同步并回退 Provider JSONL；绝不截断后继续展示或跨缺失 Token 拼接。下一条 `message_start` 从新回合恢复；不得通过每个 Token 触发网络/RPC 全量读取。
 4. **隐私**：文本只在用户级 Unix socket 内短暂传输；日志只写事件类型/统计，永不写内容。
 5. **兼容**：Extension 可缺失、socket 不可用时，回退现有 JSONL；安装不篡改 Herdr 提供的 extension。
 6. **移动端**：`frontend/src` 是桌面手机唯一 Chat 页面；后续 frontend 变更必须走同步与检查，不允许移动端自行维护另一版 UI。
@@ -88,4 +88,6 @@ Provider native JSONL → LiveDecoder/LivePump → canonical reconciliation
 - 2026-11-04（SC-04/05 加固）：发现两类真实危险路径：`chatstream.Buffer` 在 Extension 队列溢出导致 seq 缺口后会继续拼接错误的 Token；长对话转录窗口向前滑动时，`chatDeltaPatch` 只替换末尾三回合，会把旧前缀残留在 UI。本次修复：缺口立即标记 `Desynced`/丢弃临时文本、唤醒 JSONL 真值尾读，下一消息重建；只有已交付完整状态的不可变前缀与元数据未变时才允许 suffix Patch，否则发 `chat:updated`。工具结束也要等原生转录实际出现完成结果才能退卡。Go 定向回归新增掉帧、工具真值、滚动窗口、元数据及独立 Socket→ChatBridge 投影测试。
 - 2026-11-04（SC-05 独立实测）：本机 OMP 18.16.0 用临时 HOME / 虚拟 Pane / 不可达的临时 Socket / 伪 API Key，在无模型请求下通过 `--mode=rpc --no-ui --no-extensions -e scripts/omp-chat-stream.ts` 的官方加载器，返回 `ready`、退出 0；命令已固化于 `scripts/check-omp-chat-stream-load.py`。**只证明真实 CLI 能加载 Extension，不是 Herdr TUI 单进程 Token 输出验收；未安装到用户 HOME。**
 - 2026-11-04（加固验收）：`go test ./...` 全量退出 0；新增 Go 定向回归通过，`go tool mygo vet .` 通过，`go tool mygo build` 编译并签名 `build/darwin-arm64/Solco.app`；官方 OMP Extension 加载 Smoke、Bun Socket、隔离 HOME 安装脚本测试均通过。**未运行真实 Herdr TUI 的逐 Token 现场验收，故 SC-05 仍为部分完成。**
+- 2026-11-04（SC-05 真进程闭环）：新增纯 Python 标准库脚本 `scripts/check-omp-chat-stream-live.py`。临时 HOME 下由本机真实 OMP 18.16.0 进程显式 `-e` 加载 Solco Extension，模型接口仅连 127.0.0.1 的 SSE fixture；模拟模型先要求读取临时文件，OMP 真正执行 read 工具，再以 3 段文字返回。Socket 实收严格序列 `message_start, message_end, tool_start, tool_end, message_start, text_delta×3, message_end`（9 帧），每条序号连续、会话文件真实存在且全部位于隔离 HOME、Pane 和 Agent ID 精确一致，连续两轮通过。**RPC 模式真实 OMP 插件/工具链已验，不等同 Herdr TUI/GUI 现场验收**。无需访问付费 API，不变更用户 HOME/运行中进程。
+- 2026-11-04（容量边界加固）：真实 OMP smoke 落地后补测 "一条回复刚好超过 32KiB"，发现旧 Buffer 会拒绝追加但残留截断文本。已用红/绿测试修为 `invalidate(seq)`：立即清空临时文/思考/工具并标记 `Desynced`，同时扩展到 64 工具上限；`nativeui` 复用既有失同步唤醒 JSONL 真值恢复逻辑。文本、思考、工具容量回归通过。最新版 `go test ./...` 退出 0，MyGo Vet / Build 退出 0；初次全量测试短暂因并行 Assistant 的 `TestPersonalAgentGolden` fixture drift 失败，该测试在并行开发调整后单测和第二轮全量复跑均通过。
 - 下一批：SC-05 隔离 Herdr/OMP 真正 TUI 同进程验证（逐字延时、遗漏帧、会话/Pane 切换、工具状态与中断）、Doctor UI/自动安装的产品决策；SC-06 手机 Host 对等流事件和 Pi 复用；性能基准与可视化稳定性测试。
