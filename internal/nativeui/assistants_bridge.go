@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 assistants_state 的门/客户端（assistantsClientFor）、internal/personalagent 的 CLI 客户端与类型、Shell.openPane、herdr.ParseRef
- * [OUTPUT]: AssistantsBridge（`mygo.BindAs("assistants", …)`）——Snapshot 读视图（概览 + 选中 Assistant 的 Goal/Task/Approval/Memory/Run），命令（建/改名/启停 Assistant、建 Goal 与 PR Watch、Goal 动作、建/确认/重试 Task、批准/拒绝 Approval、打开 Run 的窗格）与 Select（页面导航）
+ * [OUTPUT]: AssistantsBridge（`mygo.BindAs("assistants", …)`）——Snapshot 轻读视图（概览 + 选中 Assistant 的 Approval/Inbox/Coordinator + 可选 agent 列表）、Drawer（Goal/Task/Run/Memory，抽屉开着才读）、EnsureChat（首条消息拉起 Coordinator，requestId 幂等）、BindCoordinator（不移动 Mac 选中项的静默绑定，无转录时落邀请态），命令（建/改名/启停 Assistant、建 Goal 与 PR Watch、Goal 动作、建/确认/重试 Task、批准/拒绝 Approval、打开 Run 的窗格）与 Select（页面导航）
  * [POS]: Assistants WebView 页（2026-11-03 决策）的唯一数据与命令口：全部读写走插件的 `assistant …` CLI（SQLite 单写者仍归插件），Solco 不缓存业务数据、不重算状态；IO 在桥 goroutine 上，窗口线程只被借来读 Herdr 投影与写选中项；错误原样带插件稳定码；日志与快照都不记提示词/简报/记忆正文
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/personalagent"
 )
 
@@ -39,18 +41,30 @@ type AssistantsView struct {
 	// Selected is the Assistant the page is on ("" = none yet).
 	Selected string            `json:"selected"`
 	Detail   *AssistantsDetail `json:"detail,omitempty"`
+	// Agents are the Herdr agents a Coordinator may run on (Chat-capable and
+	// switched on in Settings → Agents, last used first); DefaultAgent is the
+	// first of them.
+	Agents       []AssistantsAgent `json:"agents"`
+	DefaultAgent string            `json:"defaultAgent"`
 	// NewForm asks the page to open its New Assistant form (the sidebar's "+");
 	// reading it clears it.
 	NewForm bool `json:"newForm"`
 }
 
-// AssistantsDetail is the selected Assistant's page.
+// AssistantsAgent is one choice of the Coordinator's agent chip: ID is the
+// Herdr agent kind the plugin passes to `herdr agent start --kind`.
+type AssistantsAgent struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// AssistantsDetail is the selected Assistant's light page: what the
+// conversation header, the Needs-You strip and the Chat need. The long lists
+// (Goals, Tasks and their Runs, Memory) are the More drawer's, read by Drawer
+// only while it is open.
 type AssistantsDetail struct {
-	Assistant personalagent.Assistant    `json:"assistant"`
-	Goals     []personalagent.Goal       `json:"goals"`
-	Tasks     []AssistantsTask           `json:"tasks"`
-	Approvals []personalagent.Approval   `json:"approvals"`
-	Memory    []personalagent.MemoryItem `json:"memory"`
+	Assistant personalagent.Assistant  `json:"assistant"`
+	Approvals []personalagent.Approval `json:"approvals"`
 	// Coordinator is the Assistant's own Coordinator Agent; CoordinatorOpen
 	// says its pane is in this window's Herdr tree (so its Chat can bind).
 	Coordinator     personalagent.Coordinator `json:"coordinator"`
@@ -58,6 +72,13 @@ type AssistantsDetail struct {
 	// Inbox is the plugin's one snapshot of what needs a person (approvals,
 	// reviews, failed starts, stalls); the page draws it, never recomputes it.
 	Inbox personalagent.Inbox `json:"inbox"`
+}
+
+// AssistantsDrawer is the More drawer's content for one Assistant.
+type AssistantsDrawer struct {
+	Goals  []personalagent.Goal       `json:"goals"`
+	Tasks  []AssistantsTask           `json:"tasks"`
+	Memory []personalagent.MemoryItem `json:"memory"`
 }
 
 // CoordinatorChat is the answer to "bind the embedded Chat to this Assistant's
@@ -68,7 +89,12 @@ type CoordinatorChat struct {
 	State       string `json:"state"`
 	PaneID      string `json:"paneId"`
 	Bound       bool   `json:"bound"`
-	Reason      string `json:"reason"`
+	// Invitation says the Chat is on the Coordinator's pane but the agent has
+	// no transcript yet (a fresh Coordinator writes none until its first
+	// prompt): the page shows the new-session Chat and keeps asking until the
+	// conversation binds.
+	Invitation bool   `json:"invitation"`
+	Reason     string `json:"reason"`
 }
 
 // AssistantsTask is a Task with the Runs the page lists under it.
@@ -128,7 +154,10 @@ func (b *AssistantsBridge) Snapshot(ctx context.Context) (AssistantsView, error)
 	var panes map[string]bool
 	var client *personalagent.Client
 	var session, selected string
+	view.Agents = []AssistantsAgent{}
 	s.callOnWindow(func() {
+		s.ensureLaunchKinds()
+		view.Agents, view.DefaultAgent = s.assistantAgents()
 		view.Theme = s.chatBridgeTheme()
 		view.NewForm, s.assistants.newForm = s.assistants.newForm, false
 		if s.assistantsAvailable() {
@@ -177,14 +206,13 @@ func (b *AssistantsBridge) Snapshot(ctx context.Context) (AssistantsView, error)
 	return view, nil
 }
 
-// assistantsDetail reads one Assistant's page. A Run can be opened only while
-// it ran in the window's Herdr session and its pane is still in the tree.
+// assistantsDetail reads one Assistant's light page.
 func assistantsDetail(ctx context.Context, client *personalagent.Client, id, session string, panes map[string]bool) (*AssistantsDetail, error) {
 	list, err := client.Assistants(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d := &AssistantsDetail{Goals: []personalagent.Goal{}, Tasks: []AssistantsTask{}, Approvals: []personalagent.Approval{}, Memory: []personalagent.MemoryItem{}}
+	d := &AssistantsDetail{Approvals: []personalagent.Approval{}}
 	found := false
 	for _, a := range list {
 		if a.ID == id {
@@ -194,24 +222,10 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 	if !found {
 		return nil, nil
 	}
-	if goals, err := client.Goals(ctx, id); err != nil {
-		return nil, err
-	} else if goals != nil {
-		d.Goals = goals
-	}
 	if approvals, err := client.Approvals(ctx, id); err != nil {
 		return nil, err
 	} else if approvals != nil {
 		d.Approvals = approvals
-	}
-	if memory, err := client.VisibleMemory(ctx, id); err != nil {
-		return nil, err
-	} else if memory != nil {
-		d.Memory = memory
-	}
-	tasks, err := client.Tasks(ctx, id)
-	if err != nil {
-		return nil, err
 	}
 	d.Inbox = personalagent.Inbox{Items: []personalagent.InboxItem{}}
 	if in, err := client.Inbox(ctx, id); err == nil && in.Items != nil {
@@ -221,17 +235,92 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 		d.Coordinator = co
 		d.CoordinatorOpen = co.PaneID != "" && coordinatorInSession(co, session) && panes[co.PaneID]
 	}
+	return d, nil
+}
+
+// Drawer reads the More drawer's lists for one Assistant: its Goals, Tasks
+// with their Runs (a Run can be opened only while it ran in the window's Herdr
+// session and its pane is still in the tree) and approved Memory. The page
+// asks only while the drawer is open, so the chat's own polling stays light.
+func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDrawer, error) {
+	out := AssistantsDrawer{Goals: []personalagent.Goal{}, Tasks: []AssistantsTask{}, Memory: []personalagent.MemoryItem{}}
+	c, err := b.client()
+	if err != nil {
+		return out, err
+	}
+	var panes map[string]bool
+	var session string
+	b.shell.callOnWindow(func() {
+		session = herdr.ParseRef(b.shell.activeInstance).Session
+		panes = map[string]bool{}
+		for _, p := range b.shell.projection.Panes {
+			panes[p.ID] = true
+		}
+	})
+	ctx, cancel := context.WithTimeout(ctx, assistantsCallTimeout)
+	defer cancel()
+	if goals, err := c.Goals(ctx, id); err != nil {
+		return out, err
+	} else if goals != nil {
+		out.Goals = goals
+	}
+	if memory, err := c.VisibleMemory(ctx, id); err != nil {
+		return out, err
+	} else if memory != nil {
+		out.Memory = memory
+	}
+	tasks, err := c.Tasks(ctx, id)
+	if err != nil {
+		return out, err
+	}
 	for _, t := range tasks {
 		item := AssistantsTask{Task: t, Runs: []AssistantsRun{}}
-		if _, runs, err := client.TaskDetail(ctx, t.ID); err == nil {
+		if _, runs, err := c.TaskDetail(ctx, t.ID); err == nil {
 			for _, r := range runs {
 				same := r.HerdrSession == "" || herdr.ParseRef(r.HerdrSession).Session == session || r.HerdrSession == session
 				item.Runs = append(item.Runs, AssistantsRun{Run: r, CanOpen: r.PaneID != "" && same && panes[r.PaneID]})
 			}
 		}
-		d.Tasks = append(d.Tasks, item)
+		out.Tasks = append(out.Tasks, item)
 	}
-	return d, nil
+	return out, nil
+}
+
+// chatCapableAgents are the Solco agent ids whose conversation the Chat page
+// can read (the Chat composer decision's provider set).
+var chatCapableAgents = map[history.AgentID]bool{
+	history.AgentClaudeCode: true, history.AgentCodex: true, history.AgentPi: true,
+	history.AgentOMP: true, history.AgentCursor: true, history.AgentAntigravity: true,
+}
+
+// assistantAgents lists the Herdr agents a Coordinator may run on: the
+// launchable kinds that are Chat-capable (so the conversation can be shown),
+// the last-used one first. The Settings → Agents toggles already filter
+// launchKinds. Window lane.
+func (s *Shell) assistantAgents() ([]AssistantsAgent, string) {
+	out := []AssistantsAgent{}
+	seen := map[string]bool{}
+	add := func(kind app.SessionKind) {
+		if kind.ID == app.TerminalKind || seen[kind.ID] || !chatCapableAgents[history.AgentID(kind.ID)] {
+			return
+		}
+		seen[kind.ID] = true
+		out = append(out, AssistantsAgent{ID: agent.HerdrAgentKind(history.AgentID(kind.ID)), Label: kind.Label})
+	}
+	for _, id := range s.recentLaunchKinds {
+		for _, kind := range s.launchKinds {
+			if kind.ID == id {
+				add(kind)
+			}
+		}
+	}
+	for _, kind := range s.launchKinds {
+		add(kind)
+	}
+	if len(out) == 0 {
+		return out, ""
+	}
+	return out, out[0].ID
 }
 
 // coordinatorInSession says the Coordinator ran in the window's Herdr session
@@ -241,12 +330,62 @@ func coordinatorInSession(co personalagent.Coordinator, session string) bool {
 }
 
 // StartCoordinator asks the daemon to bring the Assistant's Coordinator up as
-// a real Herdr Agent (the plugin owns the lifecycle).
-func (b *AssistantsBridge) StartCoordinator(ctx context.Context, requestID, id string) error {
+// a real Herdr Agent on the chosen agent kind (the plugin owns the lifecycle).
+func (b *AssistantsBridge) StartCoordinator(ctx context.Context, requestID, id, agentKind string) error {
+	if err := b.agentAllowed(agentKind); err != nil {
+		return err
+	}
 	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
-		_, err := c.StartCoordinator(ctx, requestID, id)
+		_, err := c.StartCoordinator(ctx, requestID, id, agentKind, "")
 		return err
 	})
+}
+
+// agentAllowed fences the chip's choice: "" is the plugin default, anything
+// else must be one of the agents Settings offers (a switched-off agent never
+// starts a Coordinator).
+func (b *AssistantsBridge) agentAllowed(agentKind string) error {
+	if agentKind == "" {
+		return nil
+	}
+	var list []AssistantsAgent
+	b.shell.callOnWindow(func() { list, _ = b.shell.assistantAgents() })
+	for _, a := range list {
+		if a.ID == agentKind {
+			return nil
+		}
+	}
+	return errors.New("invalid: that agent is not available for a Coordinator")
+}
+
+// EnsureChat is the conversation's first-Send entry (2026-11-04): it starts the
+// Assistant's Coordinator when there is none (never started, stopped or
+// failed; starting/ready is left alone) and answers like BindCoordinator, so
+// the page can hold the person's text until Bound. The requestId makes a
+// double Send one start; a paused Assistant is refused by the plugin.
+func (b *AssistantsBridge) EnsureChat(ctx context.Context, requestID, id, agentKind string) (CoordinatorChat, error) {
+	out := CoordinatorChat{AssistantID: id, State: personalagent.CoordinatorNone}
+	if err := b.agentAllowed(agentKind); err != nil {
+		return out, err
+	}
+	c, err := b.client()
+	if err != nil {
+		return out, err
+	}
+	rctx, cancel := context.WithTimeout(ctx, assistantsCallTimeout)
+	defer cancel()
+	co, err := c.Coordinator(rctx, id)
+	if err != nil {
+		return out, err
+	}
+	switch co.State {
+	case personalagent.CoordinatorNone, personalagent.CoordinatorStopped, personalagent.CoordinatorFailed:
+		if co, err = c.StartCoordinator(rctx, requestID, id, agentKind, ""); err != nil {
+			return out, err
+		}
+		b.shell.applyOnWindow(func() { b.shell.refreshAssistants(true) })
+	}
+	return b.bindState(id, co), nil
 }
 
 // StopCoordinator marks the Coordinator stopped.
@@ -282,13 +421,19 @@ func (b *AssistantsBridge) BindCoordinator(ctx context.Context, assistantID stri
 	if err != nil {
 		return out, err
 	}
-	out.State, out.PaneID = co.State, co.PaneID
+	return b.bindState(assistantID, co), nil
+}
+
+// bindState binds the Chat when the Coordinator is ready and says why not
+// otherwise.
+func (b *AssistantsBridge) bindState(assistantID string, co personalagent.Coordinator) CoordinatorChat {
+	out := CoordinatorChat{AssistantID: assistantID, State: co.State, PaneID: co.PaneID}
 	if co.State != personalagent.CoordinatorReady {
 		out.Reason = coordinatorReason(co.State)
-		return out, nil
+		return out
 	}
 	b.shell.callOnWindow(func() { out = b.shell.bindAssistantCoordinator(out, co) })
-	return out, nil
+	return out
 }
 
 func coordinatorReason(state string) string {
@@ -320,6 +465,7 @@ func (s *Shell) bindAssistantCoordinator(out CoordinatorChat, co personalagent.C
 		return out
 	}
 	out.Bound = true
+	out.Invitation = s.chatConversationID == ""
 	return out
 }
 
@@ -456,26 +602,22 @@ func (b *AssistantsBridge) write(ctx context.Context, run func(context.Context, 
 	return nil
 }
 
-// bindChatToCard is openChat's binding without its navigation: a page that embeds the Chat (the Assistants
-// Coordinator tab) keeps the route where it is. False says the agent has no chat source yet.
+// bindChatToCard is openChat's binding without its navigation: a page that
+// embeds the Chat (the Assistants conversation) keeps the route and the Mac
+// user's Workspace selection where they are (2026-11-04). It reports whether
+// the Chat is on the card now — bound to its transcript, or latched on the
+// new-session invitation when the agent has no transcript yet (a fresh
+// Coordinator writes none until its first prompt).
 func (s *Shell) bindChatToCard(card agent.AgentCardModel) bool {
-	s.chatPaneID = card.PaneID
-	if card.PaneID != "" {
-		s.selectPane(card.PaneID)
-	}
-	if s.bindLiveAgent(card.Key) {
-		return true
-	}
-	if card.ConversationID != "" {
-		s.bindChatConversation(card.ConversationID)
-		return true
-	}
-	if s.liveSourcePending(card.Key) {
-		s.rebindWorkspaceChat()
-		return true
-	}
-	return false
+	s.chatBriefPane = card.PaneID
+	s.rebindChatForCard(card)
+	return s.chatPaneID == card.PaneID && (s.chatConversationID != "" || s.chatSourcelessPaneID == card.PaneID)
 }
+
+// assistantBriefPrefix opens the plugin's standing Coordinator brief
+// (personalagent.CoordinatorPrompt); the Chat of an Assistants-bound pane
+// leaves that first row out.
+const assistantBriefPrefix = "You are the Coordinator of the Solco Assistant"
 
 // openPane shows one pane of this session.
 func (s *Shell) openPane(id string) {

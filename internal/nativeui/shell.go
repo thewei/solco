@@ -584,6 +584,10 @@ type Shell struct {
 	// chatSourcelessPaneID latches the pane whose "no chat source" cleanup
 	// already ran, so the render-path rebind is a cheap early return.
 	chatSourcelessPaneID string
+	// chatBriefPane is a Coordinator pane the Assistants page bound: its first
+	// user row is the standing brief Solco launched it with, not something the
+	// person said, so the Chat page does not show it.
+	chatBriefPane string
 	// paneSurfaceMemo remembers the surface each pane was last used on, so
 	// a sidebar Agent click lands where the user left it (N19 #4).
 	paneSurfaceMemo   map[string]WorkspaceSurfaceKind

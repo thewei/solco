@@ -1,31 +1,40 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { App } from "../App";
 import {
   assistants,
-  type CoordinatorChat,
-  type InboxItem,
+  chat,
+  type AssistantsAgent,
   type AssistantsDetail,
+  type AssistantsDrawer,
   type AssistantsRun,
   type AssistantsTask,
   type AssistantsView,
   type Approval,
+  type CoordinatorChat,
   type Goal,
+  type InboxItem,
+  type MemoryItem,
 } from "../mygo";
 import "./assistants.css";
 
 /**
- * The Assistants page (product decision 2026-11-03). It reads one bridge
- * snapshot (the plugin's Assistants core answers; nothing is cached here) and
- * every action goes back through the bridge with a fresh requestId, so a
- * double click replays instead of duplicating. A refusal shows the plugin's
- * own sentence. The page polls; the sidebar's counters follow each read.
+ * The Assistants page, chat-first (design: designs/assistants-chat-first/). An
+ * Assistant is its conversation: the shared Chat fills the page, what needs the
+ * person rises above it as one strip, and everything the old tabs held lives
+ * behind the ⋯ menu and the More drawer. The page reads one light bridge
+ * snapshot (the plugin's core answers; nothing is cached here); the long
+ * lists are read only while the drawer is open. Every action goes back through
+ * the bridge with a fresh requestId, so a double click replays instead of
+ * duplicating, and a refusal shows the plugin's own sentence.
  */
 
-type Tab = "coordinator" | "needs" | "watching" | "tasks" | "done" | "memory";
-type Form = "assistant" | "watch" | "task" | null;
+type Tab = "needs" | "watching" | "tasks" | "done" | "memory" | "about";
+type Form = "assistant" | "watch" | "task" | "rename" | null;
 
 const rid = () => crypto.randomUUID();
 const OPEN_TASK = new Set(["draft", "waiting", "queued", "claimed", "starting", "running", "blocked", "review_required", "uncertain"]);
+/** A first message that has not found its Coordinator in this long is given back. */
+const HOLD_LIMIT_MS = 90_000;
 
 function useAssistants() {
   const [view, setView] = useState<AssistantsView | null>(null);
@@ -35,26 +44,35 @@ function useAssistants() {
   }, []);
   useEffect(() => {
     pull();
-    const timer = window.setInterval(pull, 3000);
-    return () => window.clearInterval(timer);
+    // The page polls only while it is visible: a hidden window costs no CLI calls.
+    const timer = window.setInterval(() => !document.hidden && pull(), 4000);
+    const show = () => !document.hidden && pull();
+    document.addEventListener("visibilitychange", show);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", show);
+    };
   }, [pull]);
   useEffect(() => {
     if (view?.theme) document.documentElement.dataset.theme = view.theme;
   }, [view?.theme]);
-  /** Run one command; show the refusal, then re-read. */
-  const act = useCallback(
-    async (call: () => Promise<unknown>) => {
-      setError("");
-      try {
-        await call();
-      } catch (e) {
-        setError(msg(e));
-      }
-      pull();
-    },
-    [pull],
-  );
-  return { view, error, setError, pull, act };
+  return { view, error, setError, pull };
+}
+
+/** The More drawer's lists: read on open and while open, never otherwise. */
+function useDrawer(id: string, open: boolean) {
+  const [drawer, setDrawer] = useState<AssistantsDrawer | null>(null);
+  const pull = useCallback(() => {
+    if (open) assistants.drawer(id).then(setDrawer).catch(() => undefined);
+  }, [id, open]);
+  useEffect(() => {
+    if (!open) return;
+    pull();
+    const timer = window.setInterval(() => !document.hidden && pull(), 4000);
+    return () => window.clearInterval(timer);
+  }, [open, pull]);
+  useEffect(() => setDrawer(null), [id]);
+  return { drawer, pull };
 }
 
 function msg(e: unknown): string {
@@ -63,12 +81,39 @@ function msg(e: unknown): string {
 }
 
 export function AssistantsPage() {
-  const { view, error, setError, pull, act } = useAssistants();
-  const [tab, setTab] = useState<Tab>("needs");
+  const { view, error, setError, pull } = useAssistants();
+  const [tab, setTab] = useState<Tab | null>(null);
+  const [menu, setMenu] = useState(false);
   const [form, setForm] = useState<Form>(null);
+  const [stripOpen, setStripOpen] = useState(false);
+  const selected = view?.selected ?? "";
+  const { drawer, pull: pullDrawer } = useDrawer(selected, tab !== null);
   useEffect(() => {
     if (view?.newForm) setForm("assistant");
   }, [view?.newForm]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || form) return;
+      if (menu) setMenu(false);
+      else if (tab) setTab(null);
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [menu, tab, form]);
+  /** Run one command; show the refusal, then re-read. */
+  const act: Act = useCallback(
+    async (call) => {
+      setError("");
+      try {
+        await call();
+      } catch (e) {
+        setError(msg(e));
+      }
+      pull();
+      pullDrawer();
+    },
+    [pull, pullDrawer, setError],
+  );
 
   if (!view) return <div className="as-boot" />;
   if (!view.available) {
@@ -84,7 +129,7 @@ export function AssistantsPage() {
     return (
       <div className="as-empty">
         <h2>No Assistants yet</h2>
-        <p>An Assistant is a named helper with its own goals, tasks, memory and approvals.</p>
+        <p>An Assistant is a named helper you talk to. It keeps goals, tasks, memory and approvals.</p>
         <button type="button" className="as-btn primary" onClick={() => setForm("assistant")}>
           New Assistant
         </button>
@@ -94,74 +139,426 @@ export function AssistantsPage() {
   }
   const a = detail.assistant;
   const pending = detail.approvals.filter((p) => p.state === "pending");
-  // The inbox is the plugin's own list of what needs a person; the page only
-  // lays its tasks out next to the cards that act on them.
-  const reasons = new Map(detail.inbox.items.filter((i) => i.kind !== "approval" && i.kind !== "news" && i.taskId).map((i) => [i.taskId as string, i]));
-  const needTasks = detail.tasks.filter((t) => reasons.has(t.id) || t.needsYou);
-  const needsCount = detail.inbox.needsYou;
-  const live = detail.goals.filter((g) => g.state === "draft" || g.state === "active" || g.state === "paused");
-  const open = detail.tasks.filter((t) => OPEN_TASK.has(t.state));
-  const done = detail.tasks.filter((t) => !OPEN_TASK.has(t.state) && !t.needsYou);
-  const closedGoals = detail.goals.filter((g) => g.state === "completed" || g.state === "cancelled");
+  const others = detail.inbox.items.filter((i) => i.kind !== "approval" && i.kind !== "news");
+  const needsCount = pending.length + others.length;
+  const co = detail.coordinator;
+  const status = coordinatorStatus(a.status, co.state, detail.coordinatorOpen);
+  const canStop = co.state === "starting" || co.state === "ready";
   const tabs: [Tab, string, number][] = [
-    ["coordinator", "Coordinator", 0],
-    ["needs", "Needs You", needsCount],
-    ["watching", "Watching", live.length],
-    ["tasks", "Tasks", open.length],
-    ["done", "Done", done.length + closedGoals.length],
-    ["memory", "Memory", detail.memory.length],
+    ["needs", "Needs you", needsCount],
+    ["watching", "Watching", drawer ? drawer.goals.filter((g) => g.state === "draft" || g.state === "active" || g.state === "paused").length : 0],
+    ["tasks", "Tasks", drawer ? drawer.tasks.filter((t) => OPEN_TASK.has(t.state)).length : 0],
+    ["done", "Done", 0],
+    ["memory", "Memory", 0],
+    ["about", "About", 0],
   ];
+  const choose = (fn: () => void) => () => {
+    setMenu(false);
+    fn();
+  };
   return (
     <div className="as">
       <header className="as-head">
-        <div className="as-title">
-          <h1>{a.name}</h1>
-          <span className={`as-chip ${a.status}`}>{a.status === "active" ? "Active" : "Paused"}</span>
-        </div>
-        {a.description ? <p className="as-desc">{a.description}</p> : null}
-        <div className="as-actions">
-          <button type="button" className="as-btn" onClick={() => setForm("watch")}>
-            Watch a PR
+        <h1>{a.name}</h1>
+        <span className={`as-state ${status.tone}`}>
+          <span className={`as-dot ${status.tone}`} />
+          {status.label}
+        </span>
+        {needsCount > 0 ? (
+          <button type="button" className="as-needs" onClick={() => setStripOpen((v) => !v)}>
+            {needsCount} {needsCount === 1 ? "needs" : "need"} you
           </button>
-          <button type="button" className="as-btn" onClick={() => setForm("task")}>
-            New Task
+        ) : null}
+        <span className="as-grow" />
+        <button type="button" className={`as-ib ${tab ? "on" : ""}`} onClick={() => setTab(tab ? null : needsCount > 0 ? "needs" : "watching")}>
+          More
+        </button>
+        <div className="as-menu-wrap">
+          <button type="button" className={`as-ib ${menu ? "on" : ""}`} aria-label="Actions" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
+            ⋯
           </button>
-          <button
-            type="button"
-            className="as-btn"
-            onClick={() => act(() => assistants.setAssistantEnabled(rid(), a.id, a.status !== "active", a.revision))}
-          >
-            {a.status === "active" ? "Pause" : "Resume"}
-          </button>
+          {menu ? (
+            <>
+              <div className="as-menu-scrim" onMouseDown={() => setMenu(false)} />
+              <div className="as-menu" role="menu">
+                <button type="button" role="menuitem" onClick={choose(() => setForm("watch"))}>
+                  Watch a pull request…
+                </button>
+                <button type="button" role="menuitem" onClick={choose(() => setForm("task"))}>
+                  New task…
+                </button>
+                <hr />
+                <button type="button" role="menuitem" onClick={choose(() => setForm("rename"))}>
+                  Rename…
+                </button>
+                <button type="button" role="menuitem" onClick={choose(() => void act(() => assistants.setAssistantEnabled(rid(), a.id, a.status !== "active", a.revision)))}>
+                  {a.status === "active" ? "Pause" : "Resume"} {a.name}
+                </button>
+                {a.status === "active" && co.state !== "none" ? (
+                  <button type="button" role="menuitem" onClick={choose(() => void act(() => assistants.startCoordinator(rid(), a.id, view.defaultAgent)))} disabled={canStop}>
+                    Restart Coordinator
+                  </button>
+                ) : null}
+                <hr />
+                <button type="button" role="menuitem" onClick={choose(() => setForm("assistant"))}>
+                  New Assistant…
+                </button>
+                {canStop ? (
+                  <button type="button" role="menuitem" className="danger" onClick={choose(() => void act(() => assistants.stopCoordinator(rid(), a.id)))}>
+                    Stop Coordinator
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
       </header>
       {error ? (
         <div className="as-error" role="alert">
-          {error}
+          <span>{error}</span>
           <button type="button" className="as-link" onClick={() => setError("")}>
             Dismiss
           </button>
         </div>
       ) : null}
-      <nav className="as-tabs" role="tablist">
-        {tabs.map(([id, label, n]) => (
-          <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
-            {label}
-            {n > 0 ? <span className="as-count">{n}</span> : null}
+      {needsCount > 0 ? <Strip pending={pending} others={others} open={stripOpen} setOpen={setStripOpen} act={act} more={() => setTab("needs")} /> : null}
+      {a.status !== "active" ? (
+        <div className="as-note warn">
+          Paused — new tasks and watches are not started. The conversation keeps working.
+          <button type="button" className="as-link" onClick={() => void act(() => assistants.setAssistantEnabled(rid(), a.id, true, a.revision))}>
+            Resume
           </button>
-        ))}
-      </nav>
-      <main className={tab === "coordinator" ? "as-body chat" : "as-body"}>
-        {tab === "coordinator" ? <Coordinator detail={detail} act={act} /> : null}
-        {tab === "needs" ? <NeedsYou approvals={pending} tasks={needTasks} reasons={reasons} act={act} pull={pull} /> : null}
-        {tab === "watching" ? <Watching goals={live} act={act} /> : null}
-        {tab === "tasks" ? <Tasks tasks={open} act={act} /> : null}
-        {tab === "done" ? <Done tasks={done} goals={closedGoals} act={act} /> : null}
-        {tab === "memory" ? <Memory detail={detail} /> : null}
+        </div>
+      ) : null}
+      <main className="as-body chat">
+        <Conversation key={a.id} view={view} detail={detail} setError={setError} refresh={pull} />
+        {tab ? (
+          <aside className="as-drawer" aria-label="More">
+            <nav className="as-tabs" role="tablist">
+              {tabs.map(([id, label, n]) => (
+                <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
+                  {label}
+                  {n > 0 ? <span className="as-count">{n}</span> : null}
+                </button>
+              ))}
+              <span className="as-grow" />
+              <button type="button" className="as-ib" aria-label="Close" onClick={() => setTab(null)}>
+                ✕
+              </button>
+            </nav>
+            <div className="as-dbody">
+              <DrawerBody tab={tab} detail={detail} drawer={drawer} view={view} pending={pending} act={act} pull={pull} />
+            </div>
+          </aside>
+        ) : null}
       </main>
       {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} act={act} /> : null}
-      {form === "watch" ? <NewWatch assistantId={a.id} onClose={() => setForm(null)} act={act} /> : null}
-      {form === "task" ? <NewTask assistantId={a.id} onClose={() => setForm(null)} act={act} /> : null}
+      {form === "rename" ? <Rename assistant={a} onClose={() => setForm(null)} act={act} /> : null}
+      {form === "watch" ? <NewWatch assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
+      {form === "task" ? <NewTask assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
+    </div>
+  );
+}
+
+/** The header's one-word truth about the conversation. */
+function coordinatorStatus(assistant: string, state: string, open: boolean): { label: string; tone: string } {
+  if (assistant !== "active") return { label: "Paused", tone: "warn" };
+  switch (state) {
+    case "starting":
+      return { label: "Starting…", tone: "work" };
+    case "ready":
+      return open ? { label: "Ready", tone: "ok" } : { label: "Not in this window", tone: "warn" };
+    case "failed":
+      return { label: "Could not start", tone: "bad" };
+    case "stopped":
+      return { label: "Stopped", tone: "" };
+  }
+  return { label: "Not started", tone: "" };
+}
+
+/** What needs the person, above the chat: approvals decide here, anything else points at the drawer. */
+function Strip({ pending, others, open, setOpen, act, more }: { pending: Approval[]; others: InboxItem[]; open: boolean; setOpen: (v: boolean) => void; act: Act; more: () => void }) {
+  const first = pending[0]?.action ?? others[0]?.title ?? "";
+  return (
+    <section className="as-strip" aria-label="Needs you">
+      <div className="as-strip-top">
+        <strong>{pending.length + others.length === 1 ? "1 needs you" : `${pending.length + others.length} need you`}</strong>
+        {!open ? <span className="as-meta as-ellipsis">{first}</span> : null}
+        <span className="as-grow" />
+        <button type="button" className="as-link" onClick={() => setOpen(!open)}>
+          {open ? "Hide" : "Review"}
+        </button>
+      </div>
+      {open ? (
+        <>
+          {pending.map((p) => (
+            <div key={p.id} className="as-strip-item">
+              <div className="as-strip-text">
+                <strong>Approve?</strong>
+                <p className="as-text">{p.action}</p>
+                <span className="as-meta">{p.subjectKind}</span>
+              </div>
+              <button type="button" className="as-btn primary" onClick={() => act(() => assistants.decideApproval(rid(), p.id, p.actionHash, true))}>
+                Approve
+              </button>
+              <button type="button" className="as-btn" onClick={() => act(() => assistants.decideApproval(rid(), p.id, p.actionHash, false))}>
+                Deny
+              </button>
+            </div>
+          ))}
+          {others.map((i) => (
+            <div key={i.id} className="as-strip-item">
+              <div className="as-strip-text">
+                <strong>{i.title}</strong>
+                <p className="as-meta">{i.detail}</p>
+              </div>
+              <button type="button" className="as-btn" onClick={more}>
+                Open
+              </button>
+            </div>
+          ))}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function DrawerBody({ tab, detail, drawer, view, pending, act, pull }: { tab: Tab; detail: AssistantsDetail; drawer: AssistantsDrawer | null; view: AssistantsView; pending: Approval[]; act: Act; pull: () => void }) {
+  const reasons = new Map(detail.inbox.items.filter((i) => i.kind !== "approval" && i.kind !== "news" && i.taskId).map((i) => [i.taskId as string, i]));
+  if (tab === "about") return <About detail={detail} view={view} act={act} />;
+  if (!drawer) return <Empty>Loading…</Empty>;
+  const needTasks = drawer.tasks.filter((t) => reasons.has(t.id) || t.needsYou);
+  const live = drawer.goals.filter((g) => g.state === "draft" || g.state === "active" || g.state === "paused");
+  const open = drawer.tasks.filter((t) => OPEN_TASK.has(t.state));
+  const done = drawer.tasks.filter((t) => !OPEN_TASK.has(t.state) && !t.needsYou);
+  const closedGoals = drawer.goals.filter((g) => g.state === "completed" || g.state === "cancelled");
+  switch (tab) {
+    case "needs":
+      return <NeedsYou approvals={pending} tasks={needTasks} reasons={reasons} act={act} pull={pull} />;
+    case "watching":
+      return <Watching goals={live} act={act} />;
+    case "tasks":
+      return <Tasks tasks={open} act={act} />;
+    case "done":
+      return <Done tasks={done} goals={closedGoals} act={act} />;
+    case "memory":
+      return <Memory memory={drawer.memory} />;
+  }
+}
+
+function About({ detail, view, act }: { detail: AssistantsDetail; view: AssistantsView; act: Act }) {
+  const a = detail.assistant;
+  const co = detail.coordinator;
+  const canStart = a.status === "active" && (co.state === "none" || co.state === "stopped" || co.state === "failed");
+  return (
+    <>
+      <section className="as-card">
+        <strong>{a.name}</strong>
+        <p className="as-text">{a.description || "No description."}</p>
+      </section>
+      <section className="as-card">
+        <div className="as-row">
+          <strong>Coordinator</strong>
+          <span className={`as-chip ${co.state}`}>{co.state === "none" ? "not started" : co.state}</span>
+        </div>
+        <p className="as-meta">The Agent you talk to. It runs as a real Herdr Agent and files tasks for you to publish.</p>
+        <div className="as-row">
+          {canStart ? (
+            <button type="button" className="as-btn" disabled={view.agents.length === 0} onClick={() => act(() => assistants.startCoordinator(rid(), a.id, view.defaultAgent))}>
+              {co.state === "none" ? "Start" : "Start again"}
+            </button>
+          ) : null}
+          {co.state === "starting" || co.state === "ready" ? (
+            <button type="button" className="as-btn danger" onClick={() => act(() => assistants.stopCoordinator(rid(), a.id))}>
+              Stop
+            </button>
+          ) : null}
+        </div>
+      </section>
+    </>
+  );
+}
+
+const DRAFT_KEY = (id: string) => `as-draft:${id}`;
+
+/**
+ * The conversation. The Coordinator's real Chat once it is up; before that the
+ * same shell with a composer of its own — the first Send starts the Coordinator
+ * (idempotent requestId) and the typed text is held until the Chat is bound to
+ * it, then sent exactly once. A start that fails gives the text back.
+ */
+function Conversation({ view, detail, setError, refresh }: { view: AssistantsView; detail: AssistantsDetail; setError: (e: string) => void; refresh: () => void }) {
+  const a = detail.assistant;
+  const co = detail.coordinator;
+  const [bind, setBind] = useState<CoordinatorChat | null>(null);
+  const [draft, setDraft] = useState(() => localStorage.getItem(DRAFT_KEY(a.id)) ?? "");
+  const [agent, setAgent] = useState(view.defaultAgent);
+  const [held, setHeld] = useState<{ id: string; text: string; at: number } | null>(null);
+  const sentFor = useRef("");
+  const live = co.state === "ready" && detail.coordinatorOpen;
+  useEffect(() => {
+    if (!agent || !view.agents.some((x) => x.id === agent)) setAgent(view.defaultAgent);
+  }, [agent, view.agents, view.defaultAgent]);
+  useEffect(() => {
+    if (!live) {
+      setBind(null);
+      return;
+    }
+    let cancelled = false;
+    const attempt = () =>
+      assistants
+        .bindCoordinator(a.id)
+        .then((r) => !cancelled && setBind(r))
+        .catch(() => !cancelled && setBind(null));
+    void attempt();
+    // Until the Agent has reported its session (an invitation Chat has none),
+    // look again.
+    const timer = window.setInterval(() => void attempt(), bind?.invitation || !bind?.bound ? 1500 : 6000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [a.id, co.paneId, live, bind?.invitation, bind?.bound]);
+  const bound = live && bind?.bound === true && bind.paneId === co.paneId;
+
+  // The held first message goes out once: when the Chat is on the Coordinator
+  // AND its composer takes a prompt (ready, or queued behind the Agent's own
+  // first turn). A fresh Agent reports no status for a moment, and Send into
+  // that would be refused without a word — so ask the Chat first, and look
+  // again until it says yes.
+  useEffect(() => {
+    if (!held || !bound || sentFor.current === held.id) return;
+    let cancelled = false;
+    let timer = 0;
+    const tryOnce = () => {
+      chat
+        .snapshot()
+        .then((s) => {
+          if (cancelled) return;
+          if (s.disposition !== "ready" && s.disposition !== "queue") {
+            timer = window.setTimeout(tryOnce, 700);
+            return;
+          }
+          sentFor.current = held.id;
+          return chat.send(held.text).then(() => {
+            if (cancelled) return;
+            setHeld(null);
+            localStorage.removeItem(DRAFT_KEY(a.id));
+          });
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          sentFor.current = held.id;
+          setHeld(null);
+          setError(`Not sent (${msg(e)}): ${held.text}`);
+        });
+    };
+    tryOnce();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [held, bound, a.id, setError]);
+  // A start that failed, or took too long, gives the text back.
+  useEffect(() => {
+    if (!held) return;
+    const giveBack = (why: string) => {
+      setDraft(held.text);
+      setHeld(null);
+      setError(why);
+    };
+    if (co.state === "failed" && !bound) return giveBack("The Coordinator could not start. Your message is back in the box.");
+    const timer = window.setTimeout(() => giveBack("The Coordinator is taking too long to start. Your message is back in the box."), Math.max(1000, HOLD_LIMIT_MS - (Date.now() - held.at)));
+    return () => window.clearTimeout(timer);
+  }, [held, bound, co.state, setError]);
+
+  const send = () => {
+    const text = draft.trim();
+    if (!text || held || !agent) return;
+    const item = { id: rid(), text, at: Date.now() };
+    setHeld(item);
+    setDraft("");
+    localStorage.setItem(DRAFT_KEY(a.id), text);
+    setError("");
+    assistants
+      .ensureChat(item.id, a.id, agent)
+      .catch((e) => {
+        setDraft(text);
+        setHeld(null);
+        setError(msg(e));
+      })
+      .finally(refresh);
+  };
+
+  if (bound) return <div className="as-chatwrap"><App key={`${a.id}|${co.paneId}`} /></div>;
+  const starting = held !== null || co.state === "starting" || (live && !bind?.bound);
+  const stranded = co.state === "ready" && !detail.coordinatorOpen;
+  const paused = a.status !== "active";
+  const noAgents = view.agents.length === 0;
+  return (
+    <div className="as-shell">
+      <div className="as-shell-body">
+        {held ? (
+          <div className="as-thread">
+            <div className="as-user">{held.text}</div>
+            <p className="as-meta">Starting {agentLabel(view.agents, agent)}…</p>
+          </div>
+        ) : (
+          <div className="as-hello">
+            <h2>{a.name}</h2>
+            <p>{stranded ? "This Assistant's Coordinator ran in another Herdr session, so it can't be opened here." : starting ? "Getting the Coordinator ready…" : co.state === "failed" ? "The Coordinator could not start. Send a message to try again." : "Talk to it like a colleague. It turns goals into tasks and keeps them moving; you approve anything risky."}</p>
+            {a.description ? <p className="as-meta">{a.description}</p> : null}
+          </div>
+        )}
+      </div>
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSend={send}
+        disabled={paused || noAgents || held !== null || starting || stranded}
+        placeholder={paused ? "Paused — resume to start a conversation" : noAgents ? "Turn on an agent in Settings → Agents" : starting ? "Starting the Coordinator…" : stranded ? "Restart the Coordinator from ⋯" : `Message ${a.name}…`}
+        agents={view.agents}
+        agent={agent}
+        onAgent={setAgent}
+      />
+    </div>
+  );
+}
+
+function agentLabel(agents: AssistantsAgent[], id: string): string {
+  return agents.find((x) => x.id === id)?.label ?? "the Coordinator";
+}
+
+function Composer({ value, onChange, onSend, disabled, placeholder, agents, agent, onAgent }: { value: string; onChange: (v: string) => void; onSend: () => void; disabled: boolean; placeholder: string; agents: AssistantsAgent[]; agent: string; onAgent: (v: string) => void; onStop?: undefined }) {
+  const key = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter sends; Shift+Enter breaks the line; an IME's own Enter never sends.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      if (!disabled) onSend();
+    }
+  };
+  return (
+    <div className="as-composer-row">
+      <div className={`as-composer ${disabled ? "off" : ""}`}>
+        <textarea value={value} rows={1} placeholder={placeholder} aria-label="Message" disabled={disabled} onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
+        <div className="as-composer-bar">
+          {agents.length > 1 ? (
+            <select className="as-agent" aria-label="Agent that runs the Coordinator" value={agent} onChange={(e) => onAgent(e.target.value)}>
+              {agents.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          ) : agents.length === 1 ? (
+            <span className="as-agent static">{agents[0].label}</span>
+          ) : null}
+          <span className="as-grow" />
+          <button type="button" className="as-send" aria-label="Send" disabled={disabled || value.trim() === ""} onClick={onSend}>
+            ↑
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -198,75 +595,6 @@ function NeedsYou({ approvals, tasks, reasons, act }: { approvals: Approval[]; t
       ))}
     </>
   );
-}
-
-/**
- * The Assistant's own Coordinator: the ordinary Chat page bound to its real
- * Herdr Agent. The page asks the bridge to bind first (the pane comes from the
- * plugin's record of the Coordinator's run, never a guess), then mounts the one
- * Chat; a Coordinator that is not up yet shows why, with Start.
- */
-function Coordinator({ detail, act }: { detail: AssistantsDetail; act: Act }) {
-  const a = detail.assistant;
-  const co = detail.coordinator;
-  const [bind, setBind] = useState<CoordinatorChat | null>(null);
-  const live = co.state === "ready" && detail.coordinatorOpen;
-  useEffect(() => {
-    if (!live) {
-      setBind(null);
-      return;
-    }
-    let cancelled = false;
-    const attempt = () =>
-      assistants
-        .bindCoordinator(a.id)
-        .then((r) => !cancelled && setBind(r))
-        .catch(() => !cancelled && setBind(null));
-    void attempt();
-    // Until the Agent has reported its session, look again.
-    const timer = window.setInterval(() => void attempt(), 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [a.id, co.paneId, live]);
-  if (live && bind?.bound && bind.paneId === co.paneId) return <App key={`${a.id}|${co.paneId}`} />;
-  const busy = co.state === "starting" || (live && !bind?.bound);
-  const canStart = co.state === "none" || co.state === "stopped" || co.state === "failed";
-  const why = live ? (bind?.reason ?? "Connecting to the Coordinator…") : co.state === "ready" ? "The Coordinator is not open in this window." : stateLine(co.state);
-  return (
-    <div className="as-nochat">
-      <div className="as-nochat-card">
-        <h2>{a.name}'s Coordinator</h2>
-        <p>{why}</p>
-        <div className="as-row">
-          {canStart ? (
-            <button type="button" className="as-btn primary" disabled={a.status !== "active"} onClick={() => act(() => assistants.startCoordinator(rid(), a.id))}>
-              {co.state === "none" ? "Start Coordinator" : "Start again"}
-            </button>
-          ) : null}
-          {co.state === "starting" || co.state === "ready" ? (
-            <button type="button" className="as-btn" onClick={() => act(() => assistants.stopCoordinator(rid(), a.id))}>
-              Stop
-            </button>
-          ) : null}
-        </div>
-        {busy ? <p className="as-meta">This can take a few seconds.</p> : null}
-      </div>
-    </div>
-  );
-}
-
-function stateLine(state: string): string {
-  switch (state) {
-    case "starting":
-      return "The Coordinator is starting.";
-    case "failed":
-      return "The Coordinator could not start.";
-    case "stopped":
-      return "The Coordinator is stopped.";
-  }
-  return "The Coordinator turns your goals into tasks and keeps them moving. Start it to talk to it.";
 }
 
 function Watching({ goals, act }: { goals: Goal[]; act: Act }) {
@@ -407,11 +735,11 @@ function RunLine({ run }: { run: AssistantsRun }) {
   );
 }
 
-function Memory({ detail }: { detail: AssistantsDetail }) {
-  if (detail.memory.length === 0) return <Empty>No memory yet. Memory is only kept after you approve it.</Empty>;
+function Memory({ memory }: { memory: MemoryItem[] }) {
+  if (memory.length === 0) return <Empty>No memory yet. Memory is only kept after you approve it.</Empty>;
   return (
     <>
-      {detail.memory.map((m) => (
+      {memory.map((m) => (
         <section key={m.id} className="as-card quiet">
           <p className="as-text">{m.content}</p>
           <p className="as-meta">
@@ -478,6 +806,40 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/** The agent choice of a form: the Herdr kinds Settings offers; free text only when none is listed. */
+function AgentPick({ agents, value, onChange }: { agents: AssistantsAgent[]; value: string; onChange: (v: string) => void }) {
+  if (agents.length === 0) return <input value={value} onChange={(e) => onChange(e.target.value)} />;
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {agents.map((x) => (
+        <option key={x.id} value={x.id}>
+          {x.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function Rename({ assistant, onClose, act }: { assistant: { id: string; name: string; revision: number }; onClose: () => void; act: Act }) {
+  const [name, setName] = useState(assistant.name);
+  return (
+    <Sheet
+      title="Rename Assistant"
+      submit="Rename"
+      busy={!name.trim() || name.trim() === assistant.name}
+      onClose={onClose}
+      onSubmit={() => {
+        void act(() => assistants.renameAssistant(rid(), assistant.id, name, assistant.revision));
+        onClose();
+      }}
+    >
+      <Field label="Name">
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+      </Field>
+    </Sheet>
+  );
+}
+
 function NewAssistant({ onClose, act }: { onClose: () => void; act: Act }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -502,11 +864,11 @@ function NewAssistant({ onClose, act }: { onClose: () => void; act: Act }) {
   );
 }
 
-function NewWatch({ assistantId, onClose, act }: { assistantId: string; onClose: () => void; act: Act }) {
+function NewWatch({ assistantId, agents, onClose, act }: { assistantId: string; agents: AssistantsAgent[]; onClose: () => void; act: Act }) {
   const [repo, setRepo] = useState("");
   const [number, setNumber] = useState("");
   const [minutes, setMinutes] = useState("5");
-  const [agent, setAgent] = useState("pi");
+  const [agent, setAgent] = useState(agents[0]?.id ?? "pi");
   const [repoPath, setRepoPath] = useState("");
   const valid = /^[\w.-]+\/[\w.-]+$/.test(repo.trim()) && Number(number) > 0;
   return (
@@ -539,7 +901,7 @@ function NewWatch({ assistantId, onClose, act }: { assistantId: string; onClose:
         <input value={minutes} onChange={(e) => setMinutes(e.target.value)} inputMode="numeric" />
       </Field>
       <Field label="Agent that reads a change">
-        <input value={agent} onChange={(e) => setAgent(e.target.value)} />
+        <AgentPick agents={agents} value={agent} onChange={setAgent} />
       </Field>
       <Field label="Local checkout (optional)">
         <input value={repoPath} onChange={(e) => setRepoPath(e.target.value)} placeholder="/path/to/repo" />
@@ -549,11 +911,11 @@ function NewWatch({ assistantId, onClose, act }: { assistantId: string; onClose:
   );
 }
 
-function NewTask({ assistantId, onClose, act }: { assistantId: string; onClose: () => void; act: Act }) {
+function NewTask({ assistantId, agents, onClose, act }: { assistantId: string; agents: AssistantsAgent[]; onClose: () => void; act: Act }) {
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState("");
   const [kind, setKind] = useState("research");
-  const [agent, setAgent] = useState("pi");
+  const [agent, setAgent] = useState(agents[0]?.id ?? "pi");
   const [repoPath, setRepoPath] = useState("");
   const valid = title.trim() !== "" && brief.trim() !== "" && (kind !== "coding" || repoPath.trim() !== "");
   return (
@@ -589,7 +951,7 @@ function NewTask({ assistantId, onClose, act }: { assistantId: string; onClose: 
         </select>
       </Field>
       <Field label="Agent">
-        <input value={agent} onChange={(e) => setAgent(e.target.value)} />
+        <AgentPick agents={agents} value={agent} onChange={setAgent} />
       </Field>
       {kind === "coding" ? (
         <Field label="Repository path">

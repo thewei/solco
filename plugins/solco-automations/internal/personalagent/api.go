@@ -321,7 +321,11 @@ func (a *API) coordinator(args []string, body []byte) (any, error) {
 		return nil, coded("invalid", "usage: assistant coordinator <show|start|stop> <assistantId>")
 	}
 	cmd, id := args[0], args[1]
-	var in common
+	var in struct {
+		common
+		Agent string `json:"agent"`
+		Model string `json:"model"`
+	}
 	switch cmd {
 	case "show":
 		c, err := a.Store.GetCoordinator(id)
@@ -334,7 +338,7 @@ func (a *API) coordinator(args []string, body []byte) (any, error) {
 		var replayed bool
 		var err error
 		if cmd == "start" {
-			c, replayed, err = a.Store.StartCoordinator(in.RequestID, id)
+			c, replayed, err = a.Store.StartCoordinatorAs(in.RequestID, id, in.Agent, in.Model)
 		} else {
 			c, replayed, err = a.Store.StopCoordinator(in.RequestID, id)
 		}

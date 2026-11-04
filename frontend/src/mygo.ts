@@ -35,13 +35,24 @@ export interface Assistant {
   updatedAt: number;
 }
 
-/** AssistantsDetail is the selected Assistant's page. */
+/**
+ * AssistantsAgent is one choice of the Coordinator's agent chip: ID is the
+ * Herdr agent kind the plugin passes to `herdr agent start --kind`.
+ */
+export interface AssistantsAgent {
+  id: string;
+  label: string;
+}
+
+/**
+ * AssistantsDetail is the selected Assistant's light page: what the
+ * conversation header, the Needs-You strip and the Chat need. The long lists
+ * (Goals, Tasks and their Runs, Memory) are the More drawer's, read by Drawer
+ * only while it is open.
+ */
 export interface AssistantsDetail {
   assistant: Assistant;
-  goals: Goal[];
-  tasks: AssistantsTask[];
   approvals: Approval[];
-  memory: MemoryItem[];
   /**
    * Coordinator is the Assistant's own Coordinator Agent; CoordinatorOpen
    * says its pane is in this window's Herdr tree (so its Chat can bind).
@@ -53,6 +64,13 @@ export interface AssistantsDetail {
    * reviews, failed starts, stalls); the page draws it, never recomputes it.
    */
   inbox: Inbox;
+}
+
+/** AssistantsDrawer is the More drawer's content for one Assistant. */
+export interface AssistantsDrawer {
+  goals: Goal[];
+  tasks: AssistantsTask[];
+  memory: MemoryItem[];
 }
 
 /** AssistantsGoalInput creates a Goal; Watch makes it a PR Watch. */
@@ -119,6 +137,13 @@ export interface AssistantsView {
   /** Selected is the Assistant the page is on ("" = none yet). */
   selected: string;
   detail?: AssistantsDetail;
+  /**
+   * Agents are the Herdr agents a Coordinator may run on (Chat-capable and
+   * switched on in Settings → Agents, last used first); DefaultAgent is the
+   * first of them.
+   */
+  agents: AssistantsAgent[];
+  defaultAgent: string;
   /**
    * NewForm asks the page to open its New Assistant form (the sidebar's "+");
    * reading it clears it.
@@ -564,6 +589,13 @@ export interface CoordinatorChat {
   state: string;
   paneId: string;
   bound: boolean;
+  /**
+   * Invitation says the Chat is on the Coordinator's pane but the agent has
+   * no transcript yet (a fresh Coordinator writes none until its first
+   * prompt): the page shows the new-session Chat and keeps asking until the
+   * conversation binds.
+   */
+  invitation: boolean;
   reason: string;
 }
 
@@ -1007,6 +1039,25 @@ export const assistants = {
   decideApproval(requestID: string, id: string, actionHash: string, approve: boolean): Promise<void> {
     return call("assistants.DecideApproval", requestID, id, actionHash, approve);
   },
+  /**
+   * Drawer reads the More drawer's lists for one Assistant: its Goals, Tasks
+   * with their Runs (a Run can be opened only while it ran in the window's Herdr
+   * session and its pane is still in the tree) and approved Memory. The page
+   * asks only while the drawer is open, so the chat's own polling stays light.
+   */
+  drawer(id: string): Promise<AssistantsDrawer> {
+    return call("assistants.Drawer", id);
+  },
+  /**
+   * EnsureChat is the conversation's first-Send entry (2026-11-04): it starts the
+   * Assistant's Coordinator when there is none (never started, stopped or
+   * failed; starting/ready is left alone) and answers like BindCoordinator, so
+   * the page can hold the person's text until Bound. The requestId makes a
+   * double Send one start; a paused Assistant is refused by the plugin.
+   */
+  ensureChat(requestID: string, id: string, agentKind: string): Promise<CoordinatorChat> {
+    return call("assistants.EnsureChat", requestID, id, agentKind);
+  },
   /** GoalAction runs approve | pause | resume | cancel | complete on a Goal. */
   goalAction(requestID: string, action: string, id: string, revision: number, evidence: string): Promise<void> {
     return call("assistants.GoalAction", requestID, action, id, revision, evidence);
@@ -1047,10 +1098,10 @@ export const assistants = {
   },
   /**
    * StartCoordinator asks the daemon to bring the Assistant's Coordinator up as
-   * a real Herdr Agent (the plugin owns the lifecycle).
+   * a real Herdr Agent on the chosen agent kind (the plugin owns the lifecycle).
    */
-  startCoordinator(requestID: string, id: string): Promise<void> {
-    return call("assistants.StartCoordinator", requestID, id);
+  startCoordinator(requestID: string, id: string, agentKind: string): Promise<void> {
+    return call("assistants.StartCoordinator", requestID, id, agentKind);
   },
   /** StopCoordinator marks the Coordinator stopped. */
   stopCoordinator(requestID: string, id: string): Promise<void> {

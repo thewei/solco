@@ -370,3 +370,59 @@ func TestLongChainsAndDiamondLatticesAreWalkedWithinBounds(t *testing.T) {
 		t.Fatalf("traversal is not bounded: %v", d)
 	}
 }
+
+// A Coordinator runs the Herdr agent the person chose; unnamed = the default,
+// and a kind that is not a plain Herdr agent id is refused before any task exists.
+func TestStartCoordinatorAsCarriesTheChosenAgent(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a1", "Ada")
+	if _, _, err := s.StartCoordinatorAs("bad", a.ID, "pi; rm -rf /", ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("an unsafe agent kind must be refused: %v", err)
+	}
+	c, _, err := s.StartCoordinatorAs("ok", a.ID, "pi", "magpie/zhipu/glm-5.3-flash")
+	if err != nil || c.State != CoordinatorStarting {
+		t.Fatalf("start = %+v %v", c, err)
+	}
+	task, err := s.GetTask(c.TaskID)
+	if err != nil || task.Agent != "pi" || task.Model != "magpie/zhipu/glm-5.3-flash" {
+		t.Fatalf("task = %+v %v", task, err)
+	}
+	b := mustAssistant(t, s, "a2", "Bob")
+	cb, _, _ := s.StartCoordinator("dflt", b.ID)
+	if tb, _ := s.GetTask(cb.TaskID); tb.Agent != DefaultCoordinatorAgent {
+		t.Fatalf("default agent = %q", tb.Agent)
+	}
+	if p := CoordinatorPrompt(a); !strings.Contains(p, "conversation partner") {
+		t.Fatalf("the Coordinator is told it may simply answer: %q", p)
+	}
+}
+
+// A launch whose outcome Herdr could not confirm (the run parks as uncertain)
+// leaves no Coordinator the person can talk to: it reads failed, so the next
+// Send starts a fresh attempt instead of waiting on "starting" forever.
+func TestCoordinatorWithAnUncertainLaunchReadsFailed(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a1", "Ada")
+	c, _, _ := s.StartCoordinator("s1", a.ID)
+	f := &fakeLauncher{provisionErr: errors.New("herdr down"), findErr: errors.New("herdr down")}
+	d := &Dispatcher{Store: s, Launcher: f, Claimant: "t"}
+	if _, err := d.RunTask(context.Background(), c.TaskID); !errors.Is(err, ErrUncertain) {
+		t.Fatalf("want an uncertain launch, got %v", err)
+	}
+	if got, _ := s.GetCoordinator(a.ID); got.State != CoordinatorFailed {
+		t.Fatalf("an uncertain launch must not leave the Coordinator starting: %+v", got)
+	}
+	if again, _, err := s.StartCoordinatorAs("s2", a.ID, "pi", ""); err != nil || again.State != CoordinatorStarting || again.TaskID == c.TaskID {
+		t.Fatalf("the next Send starts a new attempt: %+v %v", again, err)
+	}
+}
+
+func TestCoordinatorPromptNamesTheConfiguredCLI(t *testing.T) {
+	old := CLI
+	CLI = "/opt/solco/bin/solco-automations"
+	t.Cleanup(func() { CLI = old })
+	p := CoordinatorPrompt(Assistant{ID: "a_1", Name: "Ada"})
+	if !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task create") || !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task graph") {
+		t.Fatalf("prompt does not carry the absolute CLI path:\n%s", p)
+	}
+}

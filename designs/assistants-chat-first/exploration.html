@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Assistants · chat-first (single design)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+/* Tokens lifted from frontend/src/theme.css (dark + light pairs). Presentation only. */
+:root{--content:#f5f5f7;--panel:#fff;--hair:rgba(0,0,0,.09);--hair2:rgba(0,0,0,.17);--text:#18181b;--muted:#71717a;--accent:#0a84ff;--danger:#ff3b30;--ok:#2f7d5c;--work:#8a6d1f;--warn:#b45309;--tint:rgba(0,0,0,.04);--tint2:rgba(0,0,0,.07)}
+.dark{--content:#161618;--panel:#1f1f22;--hair:rgba(255,255,255,.08);--hair2:rgba(255,255,255,.16);--text:#f4f4f5;--muted:#98989f;--accent:#0a84ff;--danger:#ff453a;--ok:#6fc29b;--work:#d4b45e;--warn:#e0a94f;--tint:rgba(255,255,255,.05);--tint2:rgba(255,255,255,.08)}
+*{box-sizing:border-box}
+body{margin:0;font:13px -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;background:#0d0d0f;color:#ddd;height:100vh;display:flex}
+button{font:inherit;color:inherit;cursor:pointer}
+/* ---- storybook shell (right rail) ---- */
+.stage{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;min-width:0}
+.rail{width:260px;border-left:1px solid #2a2a2e;padding:14px;overflow:auto;background:#121214;font-size:12px}
+.rail.closed{display:none}
+.rail h3{margin:14px 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7c7c85}
+.rail button.s{display:block;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:7px;padding:6px 8px;color:#bbb}
+.rail button.s:hover{background:#1c1c20}.rail button.s.on{background:#1f2a3a;border-color:#27456f;color:#fff}
+.rail p{color:#8a8a93;line-height:1.5;margin:6px 0}
+.tag{position:fixed;left:14px;bottom:12px;font-size:11px;color:#8a8a93;background:#121214;border:1px solid #2a2a2e;border-radius:6px;padding:3px 8px}
+.toggle{position:fixed;right:10px;top:8px;background:#1c1c20;border:1px solid #2a2a2e;border-radius:6px;color:#aaa;padding:2px 8px}
+/* ---- the window: sidebar + page ---- */
+.win{width:min(1100px,100%);height:min(720px,calc(100vh - 48px));background:var(--content);color:var(--text);border-radius:12px;display:flex;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);border:1px solid var(--hair2)}
+.side{width:208px;background:var(--panel);border-right:1px solid var(--hair);padding:12px 8px;display:flex;flex-direction:column;gap:2px;flex:none}
+.side .lab{font-size:11px;color:var(--muted);padding:8px 8px 4px;letter-spacing:.04em}
+.row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:var(--muted)}
+.row.on{background:var(--tint2);color:var(--text)}
+.row .n{margin-left:auto;font-size:11px;background:var(--accent);color:#fff;border-radius:9px;padding:0 6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dot.ok{background:var(--ok)}.dot.work{background:var(--work)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--danger)}
+.page{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+/* header */
+.head{height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--hair);flex:none}
+.head h1{font-size:14px;margin:0;font-weight:600}
+.pill{font-size:11px;border-radius:999px;padding:2px 8px;background:var(--tint2);color:var(--muted);display:inline-flex;gap:5px;align-items:center}
+.pill.needs{background:rgba(224,169,79,.16);color:var(--warn);cursor:pointer}
+.sp{flex:1}
+.ib{border:1px solid transparent;background:none;border-radius:8px;height:28px;min-width:28px;padding:0 8px;color:var(--muted)}
+.ib:hover,.ib.on{background:var(--tint2);color:var(--text)}
+/* needs-you strip */
+.strip{margin:10px 16px 0;border:1px solid var(--hair2);border-radius:12px;background:var(--panel);overflow:hidden;flex:none}
+.strip .top{display:flex;gap:8px;align-items:center;padding:8px 12px}
+.strip .it{border-top:1px solid var(--hair);padding:10px 12px;display:flex;gap:10px;align-items:center}
+.strip .it p{margin:0;flex:1;line-height:1.45}.strip .it small{color:var(--muted)}
+.btn{border:1px solid var(--hair2);background:var(--panel);border-radius:8px;padding:4px 12px;height:28px}
+.btn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:hover{filter:brightness(1.05)}
+/* conversation */
+.conv{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;overflow:auto;padding:20px 16px}
+.col{width:min(680px,100%);display:flex;flex-direction:column;gap:14px}
+.u{align-self:flex-end;background:var(--tint2);border-radius:18px;padding:8px 14px;max-width:80%}
+.a{line-height:1.6}
+.a .led{color:var(--muted);font-size:12px;border-left:2px solid var(--hair2);padding-left:10px}
+.hello{margin:auto;text-align:center;max-width:420px}
+.hello h2{font-size:20px;margin:0 0 6px}.hello p{color:var(--muted);margin:0;line-height:1.5}
+.chips{display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+/* composer */
+.comp{padding:0 16px 16px;display:flex;justify-content:center;flex:none}
+.box{width:min(680px,100%);border:1px solid var(--hair2);background:var(--panel);border-radius:24px;padding:10px 12px 8px;display:flex;flex-direction:column;gap:6px}
+.box.off{opacity:.55}
+.box .in{min-height:22px;color:var(--text)}
+.box .in.ph{color:var(--muted)}
+.box .bar{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
+.send{margin-left:auto;width:28px;height:28px;border-radius:50%;border:0;background:var(--text);color:var(--content)}
+.send:disabled{opacity:.3}
+.note{text-align:center;font-size:12px;color:var(--muted);padding:0 16px 8px}
+.note.warn{color:var(--warn)}
+/* menus + drawer */
+.menu{position:absolute;right:12px;top:44px;width:230px;background:var(--panel);border:1px solid var(--hair2);border-radius:10px;padding:5px;box-shadow:0 12px 32px rgba(0,0,0,.35);z-index:5}
+.menu button{display:flex;width:100%;gap:8px;background:none;border:0;border-radius:6px;padding:6px 8px;text-align:left}
+.menu button:hover{background:var(--tint2)}.menu hr{border:0;border-top:1px solid var(--hair);margin:4px 0}
+.menu .d{color:var(--danger)}
+.drawer{position:absolute;right:0;top:48px;bottom:0;width:360px;background:var(--panel);border-left:1px solid var(--hair2);display:flex;flex-direction:column;z-index:4;box-shadow:-12px 0 32px rgba(0,0,0,.2)}
+.tabs{display:flex;gap:2px;padding:8px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.tabs button{border:0;background:none;border-radius:7px;padding:4px 8px;color:var(--muted)}
+.tabs button.on{background:var(--tint2);color:var(--text)}
+.dbody{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.card{border:1px solid var(--hair);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.card small{color:var(--muted)}
+.hide{display:none}
+.drawer-hint{position:absolute;left:12px;bottom:12px;font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="stage"><div id="win" class="win dark"></div></div>
+<button class="toggle" id="railToggle" title="Esc">›</button>
+<aside class="rail" id="rail">
+  <h3>State</h3>
+  <div id="states"></div>
+  <h3>Theme</h3>
+  <button class="s" id="theme">Dark / Light</button>
+  <h3>Story</h3>
+  <p><b>One design.</b> The Assistant <i>is</i> its conversation. The Coordinator Chat fills the page; everything the old tabs held lives behind <b>⋯</b> (actions) and <b>More</b> (a drawer). Anything that needs a person rises above the chat as one strip.</p>
+  <p>Real mechanism: the page embeds the shared Chat <code>&lt;App/&gt;</code>; before the Coordinator exists the page draws the same shell and the first Send starts it (idempotent <code>requestId</code>) — the typed text is kept until the Coordinator is bound, then sent once.</p>
+  <p>Opening a Coordinator never moves the Mac's Workspace selection.</p>
+</aside>
+<div class="tag" id="tag"></div>
+
+<script>
+const S = [
+  ['fresh',  'Not started · first message'],
+  ['starting','Starting (send held)'],
+  ['live',   'Live conversation'],
+  ['needs',  'Needs you strip (open)'],
+  ['menu',   '⋯ menu'],
+  ['drawer', 'More drawer · Watching'],
+  ['paused', 'Paused'],
+  ['failed', 'Start failed (text kept)'],
+];
+let state = 'fresh', dark = true;
+const $ = s => document.querySelector(s);
+
+const side = (needs) => `
+<div class="side">
+  <div class="row">Workspace</div><div class="row">Changes</div><div class="row">Sessions</div>
+  <div class="lab">ASSISTANTS</div>
+  <div class="row on"><span class="dot ${state==='live'||state==='needs'||state==='drawer'||state==='menu'?'ok':state==='starting'?'work':state==='failed'?'bad':''}"></span>Research desk${needs?'<span class="n">2</span>':''}</div>
+  <div class="row"><span class="dot"></span>PR sentinel</div>
+</div>`;
+
+function head(){
+  const st = {fresh:['Not started',''],starting:['Starting…','work'],live:['Ready','ok'],needs:['Ready','ok'],menu:['Ready','ok'],drawer:['Ready','ok'],paused:['Paused','warn'],failed:['Could not start','bad']}[state];
+  const needs = state==='needs' ? '<span class="pill needs" data-a="strip">● 2 need you</span>' : state==='live'?'':'';
+  return `<div class="head"><h1>Research desk</h1><span class="pill"><span class="dot ${st[1]}"></span>${st[0]}</span>${needs}<span class="sp"></span>
+  <button class="ib ${state==='drawer'?'on':''}" data-a="drawer">More</button>
+  <button class="ib ${state==='menu'?'on':''}" data-a="menu">⋯</button></div>`;
+}
+const strip = `<div class="strip"><div class="top"><b>2 need you</b><span class="sp"></span><button class="ib" data-a="live">Hide</button></div>
+ <div class="it"><p><b>Approve?</b> Push branch <code>auto/pr-142-fix</code> to origin<br><small>from task “Fix flaky test” · bound to this exact action</small></p><button class="btn p">Approve</button><button class="btn">Deny</button></div>
+ <div class="it"><p><b>Review required</b> — “Summarise Q3 notes” finished<br><small>1 run · 4 min</small></p><button class="btn p">Got it</button></div></div>`;
+const hello = `<div class="hello"><h2>Research desk</h2><p>Talk to it like a colleague. It turns goals into tasks and keeps them moving; you approve anything risky.</p>
+ <div class="chips"><button class="btn" data-a="fill">Watch PR #142</button><button class="btn" data-a="fill">Summarise my notes</button><button class="btn" data-a="fill">What are you working on?</button></div></div>`;
+const live = `<div class="col"><div class="u">Watch acme/api#142 and tell me when CI settles.</div>
+ <div class="a"><div class="led">Thought for 4s · Filed 1 task</div><p>I'll check it every 5 minutes. I filed a <b>draft</b> watch — press Start on it in <i>More → Watching</i>, or say “go”.</p></div>
+ <div class="u">go</div><div class="a"><p>Started. I'll message you here when it changes.</p></div></div>`;
+function comp(){
+  const off = state==='paused' || state==='starting';
+  const ph = state==='fresh'||state==='failed'?'Message Research desk…':state==='paused'?'Paused — resume to give it new work':state==='starting'?'Starting the Coordinator — your message is held…':'Message Research desk…';
+  const kept = state==='starting'?'Watch acme/api#142 and tell me when CI settles.':state==='failed'?'Watch acme/api#142 and tell me when CI settles.':'';
+  return `<div class="comp"><div class="box ${state==='paused'?'off':''}"><div class="in ${kept?'':'ph'}">${kept||ph}</div>
+  <div class="bar"><span>＋</span>${state==='fresh'||state==='failed'?'<span class="pill" title="Agent that runs the Coordinator">Agent · pi ▾</span>':''}<span class="sp"></span><button class="send" ${off||state==='fresh'?'disabled':''}>↑</button></div></div></div>
+  ${state==='failed'?'<div class="note warn">The Coordinator could not start (agent not found). Your message is still here. <a href="#" data-a="fresh" style="color:var(--accent)">Try again</a> · <a href="#" data-a="menu" style="color:var(--accent)">Pick another agent</a></div>':''}
+  ${state==='paused'?'<div class="note warn">Paused: new tasks and watches are not started. The conversation stays readable. <a href="#" data-a="live" style="color:var(--accent)">Resume</a></div>':''}`;
+}
+const menu = `<div class="menu"><button>Watch a pull request…</button><button>New task…</button><hr><button>Rename…</button><button>Pause Research desk</button><button>Restart Coordinator</button><hr><button>New Assistant…</button><button class="d">Stop Coordinator</button></div>`;
+const drawer = `<div class="drawer"><div class="tabs"><button>Needs you</button><button class="on">Watching 1</button><button>Tasks 2</button><button>Done 3</button><button>Memory 4</button><button>About</button></div>
+<div class="dbody"><div class="card"><div style="display:flex"><b>Watch acme/api#142</b><span class="sp"></span><span class="pill">active</span></div><small>acme/api#142 · looked 2 min ago</small><div style="display:flex;gap:6px"><button class="btn">Pause</button><button class="btn">Complete…</button><button class="btn">Cancel</button></div></div>
+<div class="card"><small>Esc or click the chat to close. Read-heavy lists load only while this is open — the chat page itself polls one light summary.</small></div></div></div>`;
+
+function render(){
+  const body = state==='fresh'||state==='failed'||state==='starting' ? `<div class="conv">${state==='starting'?'<div class="col"><div class="u">Watch acme/api#142 and tell me when CI settles.</div><div class="a"><div class="led">Starting pi…</div></div></div>':hello}</div>` : `<div class="conv">${live}</div>`;
+  $('#win').className = 'win ' + (dark?'dark':'');
+  $('#win').innerHTML = side(state==='needs') + `<div class="page">${head()}${state==='needs'?strip:''}${body}${comp()}${state==='menu'?menu:''}${state==='drawer'?drawer:''}</div>`;
+  $('#states').innerHTML = S.map(([k,l])=>`<button class="s ${k===state?'on':''}" data-s="${k}">${l}</button>`).join('');
+  $('#tag').textContent = 'State: ' + (S.find(x=>x[0]===state)||[])[1];
+}
+document.addEventListener('click', e=>{
+  const s = e.target.closest('[data-s]'); if(s){state=s.dataset.s;render();return}
+  const a = e.target.closest('[data-a]');
+  if(a){const v=a.dataset.a; if(v==='drawer') state = state==='drawer'?'live':'drawer'; else if(v==='menu') state = state==='menu'?'live':'menu'; else if(v==='strip') state='needs'; else if(v==='fill'){ } else state=v; render(); e.preventDefault(); return}
+  if(e.target.id==='theme'){dark=!dark;render()}
+  if(e.target.id==='railToggle'){ $('#rail').classList.toggle('closed') }
+  if(state==='menu' && !e.target.closest('.menu')){state='live';render()}
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ if(state==='drawer'||state==='menu'){state='live';render()} else $('#rail').classList.toggle('closed') }});
+render();
+</script>
+</body>
+</html>

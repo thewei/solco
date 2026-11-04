@@ -25,5 +25,7 @@ FilesViewer.tsx: `/files` 预览面的 Markdown/图片渲染（github-markdown-c
 theme.css: 设计令牌唯一源：ink ramp（--i1..i4）、hair/tint、`--warning` 等，浅深两套 + 高对比变体
 chat.css: Chat 本体样式（含 `.codeb` 代码块族、`.mmprev` mermaid 画布、`.mmerr` 解析错误行）
 files-viewer.css: Files 预览面样式
+assistants/AssistantsPage.tsx: `/assistants` 对话优先页（2026-11-04，designs/assistants-chat-first）：嵌入同一个 `App` 作 Coordinator 对话；未启动时同款壳 + 自带输入框与 agent 选择，首条消息经 `assistants.ensureChat` 拉起 Coordinator 并在 Chat 绑定后经 `chat.send` 恰好发送一次；Needs-You 条、⋯ 菜单、More 抽屉（列表经 `assistants.drawer` 仅开着时读取）
+assistants/assistants.css: 上述页面样式（沿用 theme.css 令牌）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

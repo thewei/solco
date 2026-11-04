@@ -60,6 +60,9 @@ func startPersonal(n *notify.Notifier) *personal {
 		log.Printf("assistants: store unavailable, Assistants are paused: %v", err)
 		return nil
 	}
+	if exe, err := os.Executable(); err == nil {
+		personalagent.CLI = exe
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &personal{store: store, ctx: ctx, cancel: cancel, notifier: n, seen: map[string]string{}}
 	p.disp = &personalagent.Dispatcher{

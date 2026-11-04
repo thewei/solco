@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/gitworkbench"
@@ -633,6 +634,18 @@ func (s *Shell) chatAwaitingBind() bool {
 	return known
 }
 
+// agentCardForChat is the card of the pane the Chat is bound to (an embedding
+// page such as Assistants binds a pane that is not the Workspace selection),
+// else the selected pane's.
+func (s *Shell) agentCardForChat() (agent.AgentCardModel, bool) {
+	if s.chatPaneID != "" {
+		if card, ok := s.agentCardForPane(s.chatPaneID); ok {
+			return card, true
+		}
+	}
+	return s.agentCardForSelectedPane()
+}
+
 // chatBridgeState projects the chat state (UI lane only).
 func (s *Shell) chatBridgeState() ChatBridgeState {
 	s.chatStateSeq++
@@ -679,12 +692,12 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 			state.Title = fallbackText(s.chatSession.Title, history.Untitled)
 			state.Provider = s.chatSession.Agent.DisplayName()
 		}
-	} else if card, ok := s.agentCardForSelectedPane(); ok {
+	} else if card, ok := s.agentCardForChat(); ok {
 		state.Title = card.Title
 		state.Provider = card.ProviderLabel
 	}
 	if !s.chatReadOnly && s.chatLiveProvider != "" {
-		if card, ok := s.agentCardForSelectedPane(); ok && card.Provider != "" && card.Provider != s.chatLiveProvider {
+		if card, ok := s.agentCardForChat(); ok && card.Provider != "" && card.Provider != s.chatLiveProvider {
 			state.Model = ""
 			state.ContextTokens = nil
 		} else {
@@ -720,6 +733,17 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		state.Root, state.CanReview = root, true
 	}
 	state.Turns = chatsession.Turns(s.chatTurns, root, snap)
+	if s.chatBriefPane != "" && s.chatBriefPane == s.chatPaneID {
+		// The brief is a user row, but not necessarily the first one: the
+		// person's own first message can be echoed ahead of it.
+		kept := state.Turns[:0:0]
+		for _, turn := range state.Turns {
+			if !(turn.User && strings.HasPrefix(turn.Text, assistantBriefPrefix)) {
+				kept = append(kept, turn)
+			}
+		}
+		state.Turns = kept
+	}
 	state.attachSubagents(s.chatSubagents, s.chatTurns, s.chatLiveProvider, time.Now())
 	state.Plan = chatsession.PlanOf(s.chatTurns)
 	return state

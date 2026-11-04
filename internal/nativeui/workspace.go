@@ -7,7 +7,6 @@
 package nativeui
 
 import (
-
 	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/agent"
 )
@@ -219,74 +218,82 @@ func (s *Shell) openWorkspaceChat() bool {
 	return true
 }
 
+// rebindChatForCard reconciles the active chat session with one Agent card
+// whatever the Workspace selection is: the Workspace Chat passes the selected
+// pane's card, an embedding page (Assistants) passes its own, so binding a
+// Chat never has to move the Mac user's navigation.
+func (s *Shell) rebindChatForCard(card agent.AgentCardModel) {
+	if s.chatPaneID == card.PaneID && s.chatConversationID != "" {
+		// The bound live transcript yields when the pane's occupant has
+		// moved on: another agent took the pane over (the provider
+		// changed) or the same agent restarted into a new session (the
+		// measured fingerprint changed). Without this, switching agents
+		// in place kept the previous agent's view on the Chat surface
+		// (2026-10-31). A pane whose occupant is gone or has not
+		// reported an identity yet keeps the binding; a history-bound
+		// view (no live fingerprint) only obeys the linked-yield rule.
+		current := s.liveFingerprintForPane(card.PaneID)
+		occupant := agentProvider(s.paneAgent(card.PaneID))
+		stale := s.chatLiveFingerprint != "" &&
+			((current != "" && current != s.chatLiveFingerprint) ||
+				(occupant != "" && occupant != s.chatLiveProvider))
+		if !stale {
+			// A hand-linked session (chat_link.go) yields once the
+			// agent's measured identity arrives; anything else stays
+			// bound.
+			if provider, _ := s.agentSessionIdentity(card.Key); !(s.chatSessionLinked() && provider != "") {
+				// A later direct live bind (sidebar path) supersedes
+				// the sourceless latch.
+				s.chatSourcelessPaneID = ""
+				return
+			}
+		}
+	}
+	if s.chatPaneID == card.PaneID && s.chatSourcelessPaneID == card.PaneID {
+		// The latch holds only while the pane still has no chat source:
+		// once the agent establishes a session (card carries the
+		// conversation identity), rebind for real.
+		// An identity whose transcript is not on disk yet (a fresh
+		// session) is no source either.
+		if provider, _ := s.agentSessionIdentity(card.Key); card.ConversationID == "" && (provider == "" || s.liveSourcePending(card.Key)) {
+			return
+		}
+		s.chatSourcelessPaneID = ""
+	}
+	s.chatPaneID = card.PaneID
+	s.chatSourcelessPaneID = ""
+	if card.Key.TerminalID != "" && s.bindLiveAgent(card.Key) {
+		return
+	}
+	if card.ConversationID != "" {
+		s.bindChatConversation(card.ConversationID)
+		return
+	}
+	// An Agent without any chat source must not inherit the previous
+	// pane's conversation: drop to the empty state. The render path
+	// re-enters while the pane stays sourceless, so the notice is
+	// latched per pane (the guard above exits early).
+	s.stopLiveTail()
+	s.chatConversationID = ""
+	s.chatTurns = nil
+	s.chatWindowMessages = nil
+	s.chatWindowStart = 0
+	s.chatHasOlder = false
+	s.chatContextTokens = nil
+	s.chatModel = ""
+	s.chatSourcelessPaneID = card.PaneID
+	// The page shows its own invitation (type the first prompt below),
+	// so no toast; a prompt already sent from here keeps its echo.
+	s.retainPendingEchoForPane(card.PaneID)
+	s.appendPendingEchoTurn()
+	s.publishChatBridge()
+	return
+}
+
 // rebindWorkspaceChat reconciles the active chat session with the selected pane.
 func (s *Shell) rebindWorkspaceChat() {
 	if card, ok := s.agentCardForSelectedPane(); ok {
-		if s.chatPaneID == card.PaneID && s.chatConversationID != "" {
-			// The bound live transcript yields when the pane's occupant has
-			// moved on: another agent took the pane over (the provider
-			// changed) or the same agent restarted into a new session (the
-			// measured fingerprint changed). Without this, switching agents
-			// in place kept the previous agent's view on the Chat surface
-			// (2026-10-31). A pane whose occupant is gone or has not
-			// reported an identity yet keeps the binding; a history-bound
-			// view (no live fingerprint) only obeys the linked-yield rule.
-			current := s.liveFingerprintForPane(card.PaneID)
-			occupant := agentProvider(s.paneAgent(card.PaneID))
-			stale := s.chatLiveFingerprint != "" &&
-				((current != "" && current != s.chatLiveFingerprint) ||
-					(occupant != "" && occupant != s.chatLiveProvider))
-			if !stale {
-				// A hand-linked session (chat_link.go) yields once the
-				// agent's measured identity arrives; anything else stays
-				// bound.
-				if provider, _ := s.agentSessionIdentity(card.Key); !(s.chatSessionLinked() && provider != "") {
-					// A later direct live bind (sidebar path) supersedes
-					// the sourceless latch.
-					s.chatSourcelessPaneID = ""
-					return
-				}
-			}
-		}
-		if s.chatPaneID == card.PaneID && s.chatSourcelessPaneID == card.PaneID {
-			// The latch holds only while the pane still has no chat source:
-			// once the agent establishes a session (card carries the
-			// conversation identity), rebind for real.
-			// An identity whose transcript is not on disk yet (a fresh
-			// session) is no source either.
-			if provider, _ := s.agentSessionIdentity(card.Key); card.ConversationID == "" && (provider == "" || s.liveSourcePending(card.Key)) {
-				return
-			}
-			s.chatSourcelessPaneID = ""
-		}
-		s.chatPaneID = card.PaneID
-		s.chatSourcelessPaneID = ""
-		if card.Key.TerminalID != "" && s.bindLiveAgent(card.Key) {
-			return
-		}
-		if card.ConversationID != "" {
-			s.bindChatConversation(card.ConversationID)
-			return
-		}
-		// An Agent without any chat source must not inherit the previous
-		// pane's conversation: drop to the empty state. The render path
-		// re-enters while the pane stays sourceless, so the notice is
-		// latched per pane (the guard above exits early).
-		s.stopLiveTail()
-		s.chatConversationID = ""
-		s.chatTurns = nil
-		s.chatWindowMessages = nil
-		s.chatWindowStart = 0
-		s.chatHasOlder = false
-		s.chatContextTokens = nil
-		s.chatModel = ""
-		s.chatSourcelessPaneID = card.PaneID
-		// The page shows its own invitation (type the first prompt below),
-		// so no toast; a prompt already sent from here keeps its echo.
-		s.retainPendingEchoForPane(card.PaneID)
-		s.appendPendingEchoTurn()
-		s.publishChatBridge()
-		return
+		s.rebindChatForCard(card)
 	} else if s.selectedPaneID != "" && s.selectedPaneID != s.chatPaneID {
 		s.chatPaneID = s.selectedPaneID
 		s.chatSourcelessPaneID = ""

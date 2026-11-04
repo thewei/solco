@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -61,7 +62,30 @@ func (s *Store) GetCoordinator(assistantID string) (Coordinator, error) {
 // finds the same coordinator; starting after a stop or a failure makes a new
 // task (and so a new, explicit attempt).
 func (s *Store) StartCoordinator(requestID, assistantID string) (Coordinator, bool, error) {
-	return execute(s, requestID, "coordinator.start", map[string]string{"assistant": assistantID}, func(tx *sql.Tx) (Coordinator, error) {
+	return s.StartCoordinatorAs(requestID, assistantID, "", "")
+}
+
+// DefaultCoordinatorAgent is the Herdr agent kind a Coordinator runs when the
+// caller names none.
+const DefaultCoordinatorAgent = "claude"
+
+var coordinatorAgentRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+
+// StartCoordinatorAs is StartCoordinator with the Herdr agent kind (and an
+// optional model) the person chose for this Coordinator; empty = the default.
+// A kind or model the plugin cannot pass to Herdr safely is refused.
+func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model string) (Coordinator, bool, error) {
+	agentKind, model = strings.TrimSpace(agentKind), strings.TrimSpace(model)
+	if agentKind == "" {
+		agentKind = DefaultCoordinatorAgent
+	}
+	if !coordinatorAgentRe.MatchString(agentKind) {
+		return Coordinator{}, false, fmt.Errorf("%w: agent %q is not a Herdr agent kind", ErrInvalid, agentKind)
+	}
+	if len(model) > 120 || strings.ContainsAny(model, "\n\r\x00") {
+		return Coordinator{}, false, fmt.Errorf("%w: invalid model", ErrInvalid)
+	}
+	return execute(s, requestID, "coordinator.start", map[string]string{"assistant": assistantID, "agent": agentKind, "model": model}, func(tx *sql.Tx) (Coordinator, error) {
 		a, err := getAssistantTx(tx, assistantID)
 		if err != nil {
 			return Coordinator{}, err
@@ -80,7 +104,7 @@ func (s *Store) StartCoordinator(requestID, assistantID string) (Coordinator, bo
 		taskID := newID("t")
 		brief := "Coordinate the work of the assistant " + a.Name + "."
 		if _, err := tx.Exec(`INSERT INTO tasks(`+taskCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			taskID, assistantID, "", "", "", KindCoordinator, a.Name+" · Coordinator", brief, "", "claude", "",
+			taskID, assistantID, "", "", "", KindCoordinator, a.Name+" · Coordinator", brief, "", agentKind, model,
 			TaskQueued, 0, "", 1, 1, now, now); err != nil {
 			return Coordinator{}, err
 		}
@@ -136,7 +160,10 @@ func (s *Store) syncCoordinator(t Task, r Run) {
 		state = CoordinatorStarting
 	case RunRunning, RunDone, RunBlocked:
 		state = CoordinatorReady
-	case RunFailed:
+	case RunFailed, RunUncertain:
+		// An unconfirmed launch is not a Coordinator the person can talk to;
+		// the next Send starts a fresh, explicit attempt. A run that is
+		// re-attached later (uncertain → running) flips this back to ready.
 		state = CoordinatorFailed
 	case RunCancelled:
 		state = CoordinatorStopped
@@ -156,18 +183,23 @@ func (s *Store) syncCoordinator(t Task, r Run) {
 		s.nowMS(), t.AssistantID, t.ID, CoordinatorStopped)
 }
 
+// CLI is how the Coordinator is told to call the plugin's own command. The
+// daemon sets it to its own executable's absolute path: an Agent launched in a
+// Herdr pane has no reason to find `solco-automations` on its PATH.
+var CLI = "solco-automations"
+
 // CoordinatorPrompt is the standing brief of an Assistant's Coordinator. It
 // names the CLI the Agent uses to file work, the limits it works under and
 // nothing from any other Assistant.
 func CoordinatorPrompt(a Assistant) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are the Coordinator of the Solco Assistant %q (id %s). You turn the person's goals into tasks and keep them moving; you do not do the tasks yourself.\n\n", a.Name, a.ID)
+	fmt.Fprintf(&b, "You are the Coordinator of the Solco Assistant %q (id %s). You are the person's conversation partner for this Assistant: answer questions, think things through and report plainly, in the language the person writes in. When real work is needed you turn the person's goals into tasks and keep them moving; you do not do the tasks yourself.\n\n", a.Name, a.ID)
 	if strings.TrimSpace(a.RolePrompt) != "" {
 		b.WriteString("Role: " + strings.TrimSpace(a.RolePrompt) + "\n\n")
 	}
 	b.WriteString("How you file work (run these in your shell; the JSON goes on stdin):\n")
-	fmt.Fprintf(&b, "  solco-automations assistant task create   {\"assistantId\":%q,\"kind\":\"research|coding|manual\",\"title\":\"…\",\"brief\":\"…\",\"repoPath\":\"…\",\"parentTaskId\":\"t_…\",\"dependsOn\":[\"t_…\"],\"draft\":true}\n", a.ID)
-	fmt.Fprintf(&b, "  solco-automations assistant task graph    %s\n\n", a.ID)
+	fmt.Fprintf(&b, "  %s assistant task create   {\"assistantId\":%q,\"kind\":\"research|coding|manual\",\"title\":\"…\",\"brief\":\"…\",\"repoPath\":\"…\",\"parentTaskId\":\"t_…\",\"dependsOn\":[\"t_…\"],\"draft\":true}\n", CLI, a.ID)
+	fmt.Fprintf(&b, "  %s assistant task graph    %s\n\n", CLI, a.ID)
 	b.WriteString("Rules:\n")
 	b.WriteString("- Create every coding task as a draft (\"draft\":true); a person publishes it. Research tasks may go straight to the queue.\n")
 	b.WriteString("- Split a big goal into small tasks with parentTaskId, and order them with dependsOn; a task waits until what it depends on is done.\n")

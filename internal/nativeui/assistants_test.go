@@ -11,7 +11,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/automations"
+	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/personalagent"
 )
@@ -52,6 +54,9 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 			}
 			if strings.HasPrefix(strings.Join(args, " "), "inbox") {
 				return []byte(assistantsInboxJSON), nil
+			}
+			if id, ok := strings.CutPrefix(strings.Join(args, " "), "coordinator start "); ok {
+				return []byte(coordinatorJSON(id, "starting", "")), nil
 			}
 			if id, ok := strings.CutPrefix(strings.Join(args, " "), "coordinator show "); ok {
 				if raw, found := assistantsCoordinators[id]; found {
@@ -146,7 +151,7 @@ func TestAssistantsSectionAppearsAndOpensThePage(t *testing.T) {
 }
 
 func TestAssistantsBridgeSnapshotReadsTheSelectedAssistant(t *testing.T) {
-	stubAssistants(t, false)
+	calls := stubAssistants(t, false)
 	s := openAssistantsShell(t)
 	s.projection = herdr.Projection{Panes: []herdr.Pane{{ID: "w1:p1"}}}
 	b := NewAssistantsBridge(s)
@@ -157,9 +162,18 @@ func TestAssistantsBridgeSnapshotReadsTheSelectedAssistant(t *testing.T) {
 	if !view.Available || view.Selected != "a_1" || view.Detail == nil {
 		t.Fatalf("view = %+v", view)
 	}
-	d := view.Detail
-	if len(d.Goals) != 1 || len(d.Memory) != 1 || len(d.Tasks) != 1 || len(d.Approvals) != 0 {
-		t.Fatalf("detail = %+v", d)
+	if view.Detail.Assistant.Name != "Ada" || len(view.Detail.Approvals) != 0 {
+		t.Fatalf("detail = %+v", view.Detail)
+	}
+	// The poll stays light: the long lists are the drawer's, read on demand.
+	for _, c := range *calls {
+		if strings.HasPrefix(c[0], "goal list") || strings.HasPrefix(c[0], "task") || strings.HasPrefix(c[0], "memory") {
+			t.Fatalf("the light snapshot ran %q", c[0])
+		}
+	}
+	d, err := b.Drawer(context.Background(), "a_1")
+	if err != nil || len(d.Goals) != 1 || len(d.Memory) != 1 || len(d.Tasks) != 1 {
+		t.Fatalf("drawer = %+v err=%v", d, err)
 	}
 	runs := d.Tasks[0].Runs
 	if len(runs) != 2 || !runs[0].CanOpen || runs[1].CanOpen {
@@ -287,8 +301,14 @@ func TestAssistantsChatBindsOnlyToItsOwnCoordinator(t *testing.T) {
 		t.Fatalf("a_2's Chat leaks a_1's conversation: %s", turns)
 	}
 
-	if got, err = b.BindCoordinator(context.Background(), "a_3"); err != nil || got.Bound || got.Reason == "" {
-		t.Fatalf("a pane with no reported session must not bind: %+v %v", got, err)
+	// A pane with no reported session is never guessed at (no title/folder
+	// match): the plugin's own record names p3, so the Chat lands on the
+	// new-session invitation for exactly that pane and shows no conversation.
+	if got, err = b.BindCoordinator(context.Background(), "a_3"); err != nil || !got.Bound || !got.Invitation || s.chatPaneID != "p3" {
+		t.Fatalf("a pane with no reported session lands on the invitation: %+v pane=%q %v", got, s.chatPaneID, err)
+	}
+	if turns := fmt.Sprintf("%+v", s.chatTurns); strings.Contains(turns, "alpha-private-plan") || strings.Contains(turns, "beta-private-plan") || s.chatConversationID != "" {
+		t.Fatalf("a_3's invitation inherits a conversation: %s %q", turns, s.chatConversationID)
 	}
 	if got, err = b.BindCoordinator(context.Background(), "a_4"); err != nil || got.Bound || got.State != "starting" {
 		t.Fatalf("a starting coordinator has no Chat yet: %+v %v", got, err)
@@ -314,5 +334,129 @@ func TestAssistantsBridgeSnapshotCarriesTheCoordinator(t *testing.T) {
 	view, _ = NewAssistantsBridge(s).Snapshot(context.Background())
 	if view.Detail.CoordinatorOpen {
 		t.Fatal("a Coordinator whose pane left the tree must not be openable")
+	}
+}
+
+// TestBindChatToCardKeepsWorkspaceSelection pins the Assistants chat's
+// no-navigation rule (2026-11-04): binding the embedded Chat to a Coordinator's
+// pane must not move the Mac user's Workspace selection, and a fresh agent with
+// no transcript lands on the new-session invitation (bound, sourceless).
+func TestBindChatToCardKeepsWorkspaceSelection(t *testing.T) {
+	shell := NewShell()
+	shell.loading = false
+	shell.selectedPaneID = "p-work"
+	shell.selectedTabID = "tab-work"
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{
+			{TerminalID: "term-work", PaneID: "p-work", Status: "idle"},
+			{TerminalID: "term-co", PaneID: "p-co", Status: "idle"},
+		},
+	}
+	card, ok := shell.agentCardForPane("p-co")
+	if !ok {
+		t.Fatal("coordinator card missing from the projection")
+	}
+	if !shell.bindChatToCard(card) {
+		t.Fatal("a card with no transcript yet must land on the invitation (bound)")
+	}
+	if shell.selectedPaneID != "p-work" || shell.selectedTabID != "tab-work" {
+		t.Fatalf("selection moved to pane=%q tab=%q", shell.selectedPaneID, shell.selectedTabID)
+	}
+	if shell.chatPaneID != "p-co" || shell.chatSourcelessPaneID != "p-co" {
+		t.Fatalf("chat pane=%q latch=%q, want the coordinator", shell.chatPaneID, shell.chatSourcelessPaneID)
+	}
+	if got := shell.chatBridgeState(); !got.Waiting {
+		t.Fatalf("state = %+v, want the invitation (Waiting)", got)
+	}
+}
+
+func coordinatorStartCalls(calls *[][2]string) (n int, stdin string) {
+	for _, c := range *calls {
+		if c[0] == "coordinator start a_1" {
+			n++
+			stdin = c[1]
+		}
+	}
+	return
+}
+
+// The first Send starts a Coordinator that is not there, carrying the chosen
+// agent and the caller's requestId; a Coordinator that is already starting or
+// ready is left alone (2026-11-04 ensure).
+func TestAssistantsEnsureChatStartsOnlyWhatIsMissing(t *testing.T) {
+	calls := stubAssistants(t, false)
+	s := openAssistantsShell(t)
+	s.launchKinds = []app.SessionKind{{ID: app.TerminalKind, Label: "Terminal"}, {ID: "pi", Label: "pi"}, {ID: "claude-code", Label: "Claude Code"}, {ID: "droid", Label: "Droid"}}
+	b := NewAssistantsBridge(s)
+
+	got, err := b.EnsureChat(context.Background(), "req-start", "a_1", "pi")
+	if err != nil || got.State != "starting" {
+		t.Fatalf("ensure = %+v err=%v", got, err)
+	}
+	n, stdin := coordinatorStartCalls(calls)
+	if n != 1 || !strings.Contains(stdin, `"requestId":"req-start"`) || !strings.Contains(stdin, `"agent":"pi"`) {
+		t.Fatalf("start calls = %d stdin=%q", n, stdin)
+	}
+
+	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "starting", "")
+	if _, err := b.EnsureChat(context.Background(), "req-2", "a_1", "pi"); err != nil {
+		t.Fatal(err)
+	}
+	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "ready", "p9")
+	if _, err := b.EnsureChat(context.Background(), "req-3", "a_1", "pi"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := coordinatorStartCalls(calls); n != 1 {
+		t.Fatalf("a starting or ready Coordinator must not be started again (%d starts)", n)
+	}
+
+	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "failed", "")
+	if _, err := b.EnsureChat(context.Background(), "req-4", "a_1", "pi"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := coordinatorStartCalls(calls); n != 2 {
+		t.Fatalf("a failed Coordinator is started again by the next Send (%d starts)", n)
+	}
+}
+
+// The chip's choice is fenced to the agents Settings offers and the Chat can
+// read; nothing reaches the plugin for any other kind.
+func TestAssistantsEnsureChatRefusesAnAgentTheChatCannotRead(t *testing.T) {
+	calls := stubAssistants(t, false)
+	s := openAssistantsShell(t)
+	s.launchKinds = []app.SessionKind{{ID: "pi", Label: "pi"}, {ID: "droid", Label: "Droid"}}
+	b := NewAssistantsBridge(s)
+	for _, kind := range []string{"droid", "claude", "pi; rm -rf /"} {
+		if _, err := b.EnsureChat(context.Background(), "r", "a_1", kind); err == nil {
+			t.Fatalf("agent %q must be refused", kind)
+		}
+	}
+	if n, _ := coordinatorStartCalls(calls); n != 0 {
+		t.Fatalf("a refused agent started %d Coordinators", n)
+	}
+	view, _ := b.Snapshot(context.Background())
+	if len(view.Agents) != 1 || view.Agents[0].ID != "pi" || view.DefaultAgent != "pi" {
+		t.Fatalf("agents = %+v default=%q, want pi only (droid has no Chat)", view.Agents, view.DefaultAgent)
+	}
+}
+
+// The Coordinator's standing brief is the first user row of its transcript;
+// the Assistants page's Chat does not show it as something the person said.
+func TestAssistantsChatHidesTheCoordinatorBrief(t *testing.T) {
+	shell := NewShell()
+	shell.chatPaneID = "p9"
+	shell.chatBriefPane = "p9"
+	shell.chatTurns = []conversation.TimelineTurn{
+		{UserRow: true, Text: "hi"},
+		{UserRow: true, Text: assistantBriefPrefix + ` "Ada" (id a_1). …`},
+		{UserRow: false, Narration: "Ready."},
+	}
+	turns := shell.chatBridgeState().Turns
+	if len(turns) != 2 || !turns[0].User || turns[0].Text != "hi" || turns[1].User {
+		t.Fatalf("turns = %+v", turns)
+	}
+	shell.chatBriefPane = "other"
+	if got := shell.chatBridgeState().Turns; len(got) != 3 {
+		t.Fatalf("a pane the page did not bind keeps its first row: %+v", got)
 	}
 }

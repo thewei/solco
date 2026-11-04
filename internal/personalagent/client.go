@@ -270,12 +270,18 @@ func (c *Client) Coordinator(ctx context.Context, assistantID string) (Coordinat
 	return out.Coordinator, c.do(ctx, nil, &out, "coordinator", "show", assistantID)
 }
 
-// StartCoordinator queues the Coordinator; the daemon launches it as a real Herdr Agent.
-func (c *Client) StartCoordinator(ctx context.Context, requestID, assistantID string) (Coordinator, error) {
+// StartCoordinator queues the Coordinator; the daemon launches it as a real
+// Herdr Agent of the given kind (empty = the plugin's default) and optional model.
+func (c *Client) StartCoordinator(ctx context.Context, requestID, assistantID, agentKind, model string) (Coordinator, error) {
 	var out struct {
 		Coordinator Coordinator `json:"coordinator"`
 	}
-	return out.Coordinator, c.do(ctx, req{RequestID: requestID}, &out, "coordinator", "start", assistantID)
+	body := struct {
+		req
+		Agent string `json:"agent,omitempty"`
+		Model string `json:"model,omitempty"`
+	}{req{RequestID: requestID}, agentKind, model}
+	return out.Coordinator, c.do(ctx, body, &out, "coordinator", "start", assistantID)
 }
 
 // StopCoordinator marks the Coordinator stopped.
