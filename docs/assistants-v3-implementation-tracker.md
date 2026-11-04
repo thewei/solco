@@ -267,4 +267,20 @@
 
 **发布阻断仍存在**：AUD-01/15 Owner 与 Agent 权限身份隔离；AUD-10 Routine 首次 YAML → SQLite 中断时的 durable intent/reconciliation。其它 staged 文档和 UI 更改保持原样。
 
-**全仓库额外验证（独立于插件门禁）**：`733520a` 仅修 Git Push 测试桩，使 31 秒延迟只用于真正的 `push`，独立 `TestPushOutlivesTheWorkingTreeBudget` **PASS（31.51s）**。但 Root `go test ./... -timeout=120s` 在 `internal/nativeui` 整包超时（截至超时时正在执行 `TestEveryInnerPageLeavesByTheTerminalTab`；此事实不代表单独证实它死锁），因此 **Root 全量仍 NOT PASS**；根模块 PersonalAgent/RemoteHost/Hostd/Automations 子集 PASS。详情见审计报告 `11.1。对其他开发者正在修改的 Onboarding/文档未作任何混入或重置。
+**全仓库额外验证（独立于插件门禁）**：`733520a` 仅修 Git Push 测试桩，使 31 秒延迟只用于真正的 `push`，独立 `TestPushOutlivesTheWorkingTreeBudget` **PASS（31.51s）**。但 Root `go test ./... -timeout=120s` 在 `internal/nativeui` 整包超时（截至超时时正在执行 `TestEveryInnerPageLeavesByTheTerminalTab`；此事实不代表单独证实它死锁），因此 **Root 全量仍 NOT PASS**；根模块 PersonalAgent/RemoteHost/Hostd/Automations 子集 PASS。详情见审计报告第 11.1 节。对其他开发者正在修改的 Onboarding/文档未作任何混入或重置。
+
+## 10. 第六轮修复与状态更新（2026-11-04）
+
+> 当前状态以本节为准；前文 AUD-10/18 “无 durable intent” 是旧审计证据。完整设计与 RED→GREEN 细节见 `docs/assistants-v3-audit-2026-11-04.md` 第 12 节。
+
+| 问题 | 当前状态 | 本次提交和可复验依据 | 剩余限制 |
+| --- | --- | --- | --- |
+| AUD-10 / 首次 YAML 写完后进程强杀 | **PASS（进程级 crash-recovery）** | `c04a7fd`：SQLite v19 持久 `routine_intents` 在 YAML 写前提交；重启补完 Routine/Legacy ownership/唯一审批卡；实际子进程 `SIGKILL` + 新进程恢复测试 GREEN；不同中断点、跨天幂等和未批准不得执行 GREEN | 无 v19 之前历史 orphan 识别依据；未做电源故障和生产库迁移实测 |
+| AUD-18 / 跨库审批完整性 | **PASS（执行阻断 + 安全恢复）** | `c04a7fd` 加上之前 `a425db0` Dispatch Gate：没有 `Active+Approved+匹配哈希` 的定义不能派发；恢复不自动作 Owner 决策；定义被他人修改会保留隔离，不覆盖 | AUD-01 可信身份隔离仍 OPEN；外部写文件不会遵守应用级锁 |
+| AUD-11 / 后台守护 | **PASS（CLI 唤醒分支） / NOT VERIFIED（开机恢复）** | `d25b7d8`：不依赖 Coordinator，成功写入 Task/Goal/Routine/Approval/Group 等均补启动；只读轮询不启动。跨进程启动锁+就绪检查；23 个分支测试 GREEN | 没有 Host/CLI 请求且 launchd 未安装时，崩溃后不会自启；真实多进程/重启 E2E 尚缺 |
+| AUD-09 / 原子 YAML 写盘 | **PASS（文件/目录 fsync 调用与单测）** | `e6be6b4`：临时 YAML `Sync`、`Rename`、目录 `Sync`；本机目录 fsync 可用；生成文件 0600 且无临时残留 | 需要电源故障实验，不对硬件持久性作绝对保证 |
+| AUD-01/15 / Agent、Owner 同 UID | **P0 OPEN** | 没有用 ACL 字符串、提示词等假装完成 OS 主体隔离 | 可信 Broker + macOS 沙箱/受限身份仍须另行开发 |
+
+**本批已实测**：Plugin `go test ./...`、`go test -race ./internal/config ./internal/personalagent ./internal/daemon ./ -count=1` PASS，Desktop Root `go test ./internal/automations ./internal/personalagent ./internal/remotehost ./internal/hostd` PASS。**本批未重测**：Desktop GUI 全量、Android E2E、Mac 开机/多日恢复、真实用户库迁移；没有安装/重启现用 Solco.app。
+
+**本批提交**：`c04a7fd`（Routine 跨库日志/恢复）、`d25b7d8`（Assistant 命令唤醒与 bootstrap 防重）、`e6be6b4`（配置 fsync）。其它开发者未提交的 Hook/MyGo/设计文档不混入此批。

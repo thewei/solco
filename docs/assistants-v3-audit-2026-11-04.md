@@ -340,3 +340,18 @@
 - 同期其他开发者的 `internal/nativeui/page_onboarding.go` / `page_onboarding_test.go` WIP 未修改或提交；三个 Onboarding 专项测试独立运行均 PASS。
 
 **结论**：新增四个插件安全/可靠性 commit 具备完整插件全量与 Race 证据；额外 Git 测试修补 commit 具备独立 GREEN 证据；全量 GUI 测试超时需下一批做可重复基准、测试运行时间预算/隔离，不应将其归因于本批插件行为。
+
+## 12. 第六轮修复：Routine crash journal / daemon wake / fsync（2026-11-04）
+
+本节是第 10、11 节之后的**最新状态**。此前“缺 SQLite/YAML durable intent”“AUD-10 orphan Draft 无恢复”的描述属于修复前状态，不再代表本批代码。所有强杀与配置测试均使用临时 SQLite/YAML，无生产文件迁移或服务重启。
+
+| Commit / 原问题 | 已完成并验收的具体不变量 | 仍需单独验收 |
+| --- | --- | --- |
+| `c04a7fd` — AUD-10、AUD-18 跨库中断恢复 | SQLite migration v19 增 `routine_intents`；`routineDraft` 在任何 YAML 写入前持久记录原 requestId、归属、定义 hash、冻结的 Owner 审批问题和预测时间。写 YAML → `UpsertRoutine` → `AdoptLegacy` → `RequestApproval` 三步都以原 requestId 幂等补完，成功后清除意图。CLI 和 Daemon 在服务前调用 `RecoverRoutineIntents`；`LegacyReservations` 将尚未落入 `legacy_rules` 的意图也留在旧调度器排除清单。`TestRoutineSIGKILLAfterYAMLRecoversOnNewProcess` **实际子进程 SIGKILL**（YAML 已提交、SQLite Routine 尚未写）→ 新进程重开库 → **Draft + 唯一 Owner 待审批卡**。此外 YAML 之前、Routine 之后、审批收据之后、跨天重放、Draft 误清除、外部改写等回归 GREEN | `SIGKILL` 注入不等于 Mac 意外断电/存储硬件故障；v19 上线前已经存在、没有 journal 的历史残缺记录无法无歧义恢复；无生产库迁移验证 |
+| `c04a7fd` — 恢复编辑竞态/可用性 | `config.RestoreDraftIf` 在同一个 config `flock` 内读取、核验调用方传入的定义、再将 `draft` 置回 true；当用户改动 Prompt 时拒绝覆盖并保留 `routine_intents` 的 Legacy 派发保留项。单个冲突意图不阻止其他独立 Routine 恢复或 Assistant 服务；不会替用户批准 | 被编辑的冲突意图需要人工处理；没有提供可信 Owner-only 清理入口（关联 AUD-01） |
+| `d25b7d8` — AUD-11 CLI 补启动 | 对成功的 Task / Goal / Routine / Approval / Group / Heartbeat / Rule 等可产生工作或解除阻塞的 CLI 命令补启动 Scheduler；列表/overview/群聊查询不启动。跨进程 `.assistant-daemon-bootstrap.lock` 护住检查→启动，最多 2s 检查真正 Daemon lock 是否已取得，避免多个 CLI 同时产生多余 standby 子进程。命令分流 23 个子场景通过 | 进程异常退出后**无任何 CLI 请求**时，仍依赖已安装的 launchd/systemd；仅测试了分流逻辑，未进行手机离线/重启后独立 daemon 的 E2E |
+| `e6be6b4` — AUD-09 YAML 落盘 | 所有 `config.write` 修改先 `tmp.Sync`，再关闭/`Rename`，然后 `dir.Sync`；macOS 本机目录 fsync 能力已验证，落盘后文件权限 `0600`，无残留 temp YAML。`TestAtomicConfigWriteLeavesRestrictedFileAndNoTempFiles` GREEN | 软件/文件系统只能验证 API 调用成功，不能向用户保证所有硬件的断电持久性；无法因此替代双存储恢复 |
+
+**门禁**：Plugin `GOTOOLCHAIN=auto go test ./...` **PASS**；`go test -race ./internal/config ./internal/personalagent ./internal/daemon ./ -count=1` **PASS**。Desktop Root `go test ./internal/automations ./internal/personalagent ./internal/remotehost ./internal/hostd` **PASS**。本批没有重新运行整个 `nativeui` 全量 suite 或重新打包运行中的 App；以前的 UI suite 超时仍独立待处理。
+
+**当前发布安全阻断**：AUD-01/15 的可信 Owner 与 Agent OS 权限/CLI Broker 隔离，及真正开机启动、移动端离线/重启、power-loss 故障注入和多日保活实测。**新的安全保证是：具备 v19 意图日志的中断 Routine 不会因为 YAML/SQLite 写入间 SIGKILL 而擅自运行，恢复也只生成待审批请求，不会代替 Owner 作出决定。**
