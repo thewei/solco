@@ -103,25 +103,31 @@ func TestMemoryFolderProjection(t *testing.T) {
 	}
 }
 
-// U5-1: a person's edit of a current file becomes a user revision with its
-// history; the front matter is restored.
-func TestMemoryFileEditIsARevision(t *testing.T) {
+// U5-1: modifying an approved fact through the filesystem is untrusted:
+// it creates a correction candidate instead of silently rewriting an approved
+// fact. The authoritative fact and its version history remain untouched.
+func TestMemoryFileEditOfApprovedFactNeedsReview(t *testing.T) {
 	f, s := memFiles(t)
 	a := mustAssistant(t, s, "a1", "Ada")
 	m, _, _ := s.AddMemory("m1", a.ID, "Prefers short answers", "")
 	mustSync(t, f, a.ID)
 	writeMem(t, f, a.ID, "facts/"+m.ID+".md", "---\nid: junk\n---\nPrefers detailed answers\n")
 	r := mustSync(t, f, a.ID)
-	if r.Edited != 1 {
+	if r.Proposed != 1 || r.Edited != 0 {
 		t.Fatalf("report %+v", r)
 	}
 	got, _ := s.GetMemory(m.ID)
-	if got.Content != "Prefers detailed answers" || got.Revision != 2 {
-		t.Fatalf("item = %+v", got)
+	if got.Content != "Prefers short answers" || got.Revision != 1 || got.State != MemoryApproved {
+		t.Fatalf("approved fact changed without Owner approval: %+v", got)
 	}
 	hist, _ := s.MemoryHistory(m.ID)
-	if len(hist) != 2 || hist[0].Author != MemByFiles || hist[1].Author != MemByUser || hist[1].Content != "Prefers short answers" {
+	if len(hist) != 1 || hist[0].Author != MemByUser || hist[0].Content != "Prefers short answers" {
 		t.Fatalf("history = %+v", hist)
+	}
+	list, _ := s.ListMemory(a.ID)
+	if len(list) != 2 || list[1].State != MemoryCandidate || list[1].Kind != "correction" ||
+		list[1].Content != "Prefers detailed answers" || list[1].SourceRef != "edit:"+m.ID+"@1" {
+		t.Fatalf("file correction was not held for review: %+v", list)
 	}
 	if !strings.Contains(readMem(t, f, a.ID, "facts/"+m.ID+".md"), "id: "+m.ID) {
 		t.Fatal("front matter not restored")

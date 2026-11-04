@@ -28,7 +28,8 @@ type MemoryFiles struct {
 
 // SyncReport counts what one Sync did.
 type SyncReport struct {
-	Edited    int `json:"edited"`    // a person's edit became a new revision
+	Edited    int `json:"edited"`    // an edit to an unapproved candidate became a new revision
+	Proposed  int `json:"proposed"`  // an edit to an approved fact was retained for Owner approval
 	Conflicts int `json:"conflicts"` // an edit on an outdated file was kept as a candidate beside the newer text
 	Imported  int `json:"imported"`  // a new file became a candidate
 	Refused   int `json:"refused"`   // an edit that could not be accepted (credential, too big, empty); the file was restored
@@ -157,9 +158,29 @@ func (f *MemoryFiles) dropRecord(assistantID, rel string) error {
 	return wrapBusy(err)
 }
 
-// Sync reconciles one Assistant's folder with its memory: first what a person
-// changed on disk (checked, then committed as ordinary memory edits), then
-// what changed in the core (projected into the files).
+// ensureMemoryDirs rejects directory symlinks inside the Assistant-controlled
+// tree. A leaf-file check is not enough: a redirected facts/ directory can
+// otherwise copy private memories into another Assistant's folder.
+// This is path-hardening, not a replacement for OS-level Agent isolation.
+func ensureMemoryDirs(root, dir string) error {
+	for _, path := range []string{root, filepath.Dir(dir), dir, filepath.Join(dir, "facts"), filepath.Join(dir, "inbox"), filepath.Join(dir, "notes")} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			return err
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("%w: memory directory must be a real directory: %s", ErrInvalid, path)
+		}
+	}
+	return nil
+}
+
+// Sync reconciles one Assistant's folder with its memory: file changes to
+// approved facts are untrusted proposals, never silently approved; edits of
+// pending candidates may update that candidate. Then it projects the core.
 func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 	var rep SyncReport
 	dir, err := f.Dir(assistantID)
@@ -169,15 +190,17 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 	if _, err := f.Store.GetAssistant(assistantID); err != nil {
 		return rep, err
 	}
-	for _, d := range []string{"", "facts", "inbox", "notes"} {
-		if err := os.MkdirAll(filepath.Join(dir, d), 0o700); err != nil {
-			return rep, err
-		}
+	if err := ensureMemoryDirs(f.Root, dir); err != nil {
+		return rep, err
 	}
-	lock, err := os.OpenFile(filepath.Join(filepath.Dir(dir), ".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	// Refuse a symlink at the lock leaf as well; all cooperating Syncs use
+	// the same lock without following an attacker-chosen file.
+	lockPath := filepath.Join(filepath.Dir(dir), ".lock")
+	fd, err := syscall.Open(lockPath, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return rep, err
 	}
+	lock := os.NewFile(uintptr(fd), lockPath)
 	defer lock.Close()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		return rep, err
@@ -228,16 +251,36 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 			rep.Refused++
 			continue
 		}
-		rid := "file:" + rec.memoryID + ":" + h[:16]
+		// The base revision is part of the idempotency identity. A user may
+		// legitimately edit A -> B -> C -> B in different revisions.
+		rid := fmt.Sprintf("file:%s:%d:%s", rec.memoryID, rec.revision, h[:16])
 		if rec.revision == m.Revision {
-			_, _, err := f.Store.correctAs(MemByFiles, rid, m.ID, body, m.Revision)
-			if err == nil {
-				rep.Edited++
-				continue
-			}
-			if !errors.Is(err, ErrStaleRevision) {
-				rep.Refused++
-				continue
+			if m.State == MemoryApproved {
+				// A file's writer cannot be authenticated as the Owner: an Agent
+				// sharing this Unix account may have edited it. The original
+				// approved fact remains unchanged until an explicit approval.
+				_, _, err := f.Store.proposeAs(MemByFiles, rid, ProposeMemoryInput{
+					AssistantID: assistantID, Content: body,
+					SourceRef: fmt.Sprintf("edit:%s@%d", m.ID, rec.revision), Kind: "correction",
+				})
+				if err == nil {
+					rep.Proposed++
+					continue
+				}
+				if !errors.Is(err, ErrStaleRevision) {
+					rep.Refused++
+					continue
+				}
+			} else {
+				_, _, err := f.Store.correctAs(MemByFiles, rid, m.ID, body, m.Revision)
+				if err == nil {
+					rep.Edited++
+					continue
+				}
+				if !errors.Is(err, ErrStaleRevision) {
+					rep.Refused++
+					continue
+				}
 			}
 			// Raced with a change in the core: handled as the conflict it is.
 		}
@@ -267,7 +310,7 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 				rep.Refused++
 				continue
 			}
-			if _, _, err := f.Store.proposeAs(MemByFiles, "file-new:"+hashOf([]byte(rel + "\x00" + body))[:24],
+			if _, _, err := f.Store.proposeAs(MemByFiles, "file-new:"+hashOf([]byte(assistantID + "\x00" + rel + "\x00" + body))[:24],
 				ProposeMemoryInput{AssistantID: assistantID, Content: body, SourceRef: "file:" + rel, Kind: "note"}); err != nil {
 				rep.Refused++
 				continue
@@ -347,10 +390,11 @@ One Markdown file per remembered item.
 - inbox/   candidates waiting for your answer
 - notes/   drop a .md file here (or in facts/ or inbox/): it becomes a candidate
 
-Edit a file and save: Solco checks it and keeps it as a new revision. If the item
-changed in Solco meanwhile, your text is kept as a separate candidate next to the
-newer one — nothing is overwritten silently. Deleting a file does not forget the
-item; forget it in Solco.
+Edit an inbox/ candidate and save: Solco checks it and keeps a new revision.
+Edit an approved facts/ file: your text becomes a correction candidate awaiting
+explicit approval; untrusted file writes cannot silently change an approved fact.
+If the item changed in Solco meanwhile, your text is kept as a conflict candidate
+beside the newer one. Deleting a file does not forget the item; forget it in Solco.
 
 These files are plain text. Do not put passwords or API keys here — Solco refuses
 text that looks like a credential.
