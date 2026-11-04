@@ -3,6 +3,7 @@ import { assistants, type AssistantsView, type GroupFeed, type GroupMember, type
 import { Markdown } from "../turn";
 import { Icon } from "../icons";
 import { resolveMentions } from "./mentions";
+import { ChatComposerBox, ChatComposerTextarea, ChatComposerToolbar, useComposerAutoSize } from "../composer-surface";
 
 /**
  * A Group conversation (Assistants 3.1 U1). The plugin's message log is the
@@ -11,7 +12,7 @@ import { resolveMentions } from "./mentions";
  * facts — the person, an Assistant that really ran an Agent for this Group, or
  * a receipt the core wrote (a fact row or a live task card) — and only the
  * person's exact `@Name` wakes an Assistant; a message with no mention calls
- * nobody.
+ * every Group member.
  */
 
 const rid = () => crypto.randomUUID();
@@ -179,13 +180,7 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
     return by;
   }, [feed?.deliveries]);
 
-  // Same growth rule as the Chat's composer.
-  useLayoutEffect(() => {
-    const el = field.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, Math.floor(window.innerHeight * 0.4))}px`;
-  }, [draft]);
+  useComposerAutoSize(field, draft);
 
   // Keep the end in view while the person is at the end; a reader who scrolled up is left alone.
   useLayoutEffect(() => {
@@ -363,7 +358,7 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
             {error}
           </p>
         ) : null}
-        <div className="cmp gc-cmp">
+        <ChatComposerBox className="gc-cmp">
           {pop && candidates.length ? (
             <ul className="gc-pop" role="listbox" aria-label="Members">
               {candidates.map((m, i) => (
@@ -374,7 +369,7 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
               ))}
             </ul>
           ) : null}
-          <textarea
+          <ChatComposerTextarea
             ref={field}
             value={draft}
             rows={1}
@@ -387,13 +382,13 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
             onClick={(e) => readPop(draft, e.currentTarget.selectionStart)}
             onBlur={() => setPop(null)}
           />
-          <div className="cbar">
+          <ChatComposerToolbar>
             <span className="sp" />
             <button type="button" className="send" title="Send" aria-label="Send" disabled={!draft.trim() || sending} onClick={() => void send()}>
               <Icon name="up" size={16} stroke={2.2} />
             </button>
-          </div>
-        </div>
+          </ChatComposerToolbar>
+        </ChatComposerBox>
        </div>
       </div>
       {sheet === "rename" ? <RenameGroup group={g} onClose={() => setSheet("")} done={() => (pull(), refresh())} /> : null}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Fact, GoalPlan, MilestoneView } from "../mygo";
+import type { Fact, GoalPlan, MilestoneView, OverviewRow } from "../mygo";
 
 /**
  * Assistants 3.1 U3 — what the core knows about a Goal's progress.
@@ -22,6 +22,9 @@ const KIND_LABEL: Record<string, string> = {
   done: "Done",
   stale: "No progress",
   held: "Held",
+  task_added: "Task filed",
+  run_finished: "Run settled",
+  pulse: "Progress",
   routine: "Routine",
   routine_done: "Routine ran",
   routine_failed: "Routine failed",
@@ -36,6 +39,9 @@ const TONE: Record<string, string> = {
   ready: "warn",
   verifying: "work",
   delegated: "work",
+  task_added: "work",
+  run_finished: "work",
+  pulse: "work",
   routine_done: "ok",
   routine_failed: "bad",
 };
@@ -48,8 +54,36 @@ function ago(ms: number): string {
   return `${Math.round(s / 86400)} d ago`;
 }
 
-/** The newest facts above the chat: one line, unfolding into the last few. */
-export function FactStrip({ facts }: { facts: Fact[] }) {
+/**
+ * Live multi-task counters from the plugin's authoritative Overview. A
+ * Coordinator and Group Agent are not worker tasks in this projection.
+ * Statuses are not inferred from conversation prose, and "finished" never
+ * implies a coding task passed review.
+ */
+export function WorkPulse({ row, onTasks }: { row?: OverviewRow; onTasks: () => void }) {
+  if (!row || (row.tasks === 0 && row.goals === 0)) return null;
+  const other = Math.max(0, row.tasks - row.queued - row.running - row.done);
+  const parts = [
+    row.goals > 0 ? String(row.goals) + (row.goals === 1 ? " goal" : " goals") : "",
+    row.running > 0 ? String(row.running) + " running" : "",
+    row.queued > 0 ? String(row.queued) + " queued" : "",
+    row.needsYou > 0 ? String(row.needsYou) + " need review" : "",
+    row.done > 0 ? String(row.done) + " finished" : "",
+    other > 0 ? String(other) + " other statuses" : "",
+  ].filter(Boolean);
+  return (
+    <section className="as-workpulse" aria-label="Assistant task progress">
+      <span className="as-workpulse-title">Work</span>
+      <span className="as-workpulse-stats">{parts.join(" · ") || "Preparing work"}</span>
+      <button type="button" className="as-link" onClick={onTasks}>View tasks</button>
+    </section>
+  );
+}
+
+/** The newest facts above the chat: one line, unfolding into the last few.
+ * Navigate by authoritative task/goal IDs, never by a title string.
+ */
+export function FactStrip({ facts, onOpenTask, onOpenGoal }: { facts: Fact[]; onOpenTask: () => void; onOpenGoal: () => void }) {
   const [open, setOpen] = useState(false);
   if (facts.length === 0) return null;
   const [latest] = facts;
@@ -60,6 +94,7 @@ export function FactStrip({ facts }: { facts: Fact[] }) {
         <span className={`as-fact-kind ${TONE[latest.kind] ?? ""}`}>{KIND_LABEL[latest.kind] ?? latest.kind}</span>
         <span className="as-ellipsis as-facts-text">{latest.text}</span>
         <span className="as-meta">{ago(latest.createdAt)}</span>
+        {latest.taskId ? <button type="button" className="as-link" onClick={onOpenTask}>View task</button> : latest.goalId ? <button type="button" className="as-link" onClick={onOpenGoal}>View goal</button> : null}
         {facts.length > 1 ? (
           <button type="button" className="as-link" onClick={() => setOpen((v) => !v)}>
             {open ? "Hide" : `${facts.length - 1} earlier`}
@@ -73,6 +108,7 @@ export function FactStrip({ facts }: { facts: Fact[] }) {
               <span className={`as-fact-kind ${TONE[f.kind] ?? ""}`}>{KIND_LABEL[f.kind] ?? f.kind}</span>
               <span className="as-ellipsis as-facts-text">{f.text}</span>
               <span className="as-meta">{ago(f.createdAt)}</span>
+              {f.taskId ? <button type="button" className="as-link" onClick={onOpenTask}>View task</button> : f.goalId ? <button type="button" className="as-link" onClick={onOpenGoal}>View goal</button> : null}
             </div>
           ))
         : null}

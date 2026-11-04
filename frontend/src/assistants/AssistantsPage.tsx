@@ -20,7 +20,8 @@ import {
   type Routine,
 } from "../mygo";
 import { GroupChat, NewGroup } from "./GroupChat";
-import { FactStrip, PlanCard } from "./Progress";
+import { FactStrip, PlanCard, WorkPulse } from "./Progress";
+import { ChatComposerBox, ChatComposerTextarea, ChatComposerToolbar, useComposerAutoSize } from "../composer-surface";
 import { WorkStyle } from "./WorkStyle";
 import { MemoryTab } from "./MemoryTab";
 import { Behavior } from "./Behavior";
@@ -296,7 +297,8 @@ export function AssistantsPage() {
         </div>
       ) : null}
       {needsCount > 0 ? <Strip pending={pending} others={others} open={stripOpen} setOpen={setStripOpen} act={act} more={() => setTab("needs")} /> : null}
-      <FactStrip facts={detail.facts} />
+      <WorkPulse row={view.assistants.find((row) => row.id === a.id)} onTasks={() => setTab("tasks")} />
+      <FactStrip facts={detail.facts} onOpenTask={() => setTab("tasks")} onOpenGoal={() => setTab("watching")} />
       {a.status !== "active" ? (
         <div className="as-note warn">
           Paused — new tasks and watches are not started. The conversation keeps working.
@@ -358,6 +360,10 @@ function coordinatorStatus(assistant: string, state: string, open: boolean): { l
       return open ? { label: "Ready", tone: "ok" } : { label: "Not in this window", tone: "warn" };
     case "failed":
       return { label: "Could not start", tone: "bad" };
+    case "blocked":
+      return { label: "Needs permission", tone: "warn" };
+    case "uncertain":
+      return { label: "Check start", tone: "warn" };
     case "stopped":
       return { label: "Stopped", tone: "" };
   }
@@ -558,8 +564,12 @@ function Conversation({ view, detail, setError, refresh }: { view: AssistantsVie
       setHeld(null);
       setError(why);
     };
-    if (co.state === "failed" && !bound) return giveBack("The Coordinator could not start. Your message is back in the box.");
-    const timer = window.setTimeout(() => giveBack("The Coordinator is taking too long to start. Your message is back in the box."), Math.max(1000, HOLD_LIMIT_MS - (Date.now() - held.at)));
+    if (!bound && sentFor.current !== held.id) {
+      if (co.state === "failed") return giveBack("The Coordinator could not start. Your message was not sent and is back in the box.");
+      if (co.state === "blocked") return giveBack("The Coordinator needs your permission in Terminal. Your message was not sent and is back in the box.");
+      if (co.state === "uncertain") return giveBack("The Coordinator launch is uncertain. Your message was not sent and is back in the box; Solco will not start a second Agent.");
+    }
+    const timer = window.setTimeout(() => giveBack("The Coordinator is taking too long to start. Check the original Terminal before sending again; your text is back in the box."), Math.max(1000, HOLD_LIMIT_MS - (Date.now() - held.at)));
     return () => window.clearTimeout(timer);
   }, [held, bound, co.state, setError]);
 
@@ -584,6 +594,8 @@ function Conversation({ view, detail, setError, refresh }: { view: AssistantsVie
   if (bound) return <div className="as-chatwrap"><App key={`${a.id}|${co.paneId}`} /></div>;
   const starting = held !== null || co.state === "starting" || (live && !bind?.bound);
   const stranded = co.state === "ready" && !detail.coordinatorOpen;
+  const blocked = co.state === "blocked";
+  const uncertain = co.state === "uncertain";
   const paused = a.status !== "active";
   const noAgents = view.agentsReady && view.agents.length === 0;
   return (
@@ -597,8 +609,17 @@ function Conversation({ view, detail, setError, refresh }: { view: AssistantsVie
         ) : (
           <div className="as-hello">
             <h2>{a.name}</h2>
-            <p>{stranded ? "This Assistant's Coordinator ran in another Herdr session, so it can't be opened here." : starting ? "Getting the Coordinator ready…" : co.state === "failed" ? "The Coordinator could not start. Send a message to try again." : "Talk to it like a colleague. It turns goals into tasks and keeps them moving; you approve anything risky."}</p>
+            <p>{blocked ? "The Coordinator is waiting for a permission or trust decision in Herdr. Resolve it in the original Terminal; Solco will not launch another Agent." : uncertain ? "Herdr has not confirmed whether the original Coordinator started. Solco is checking that session and will not risk launching a duplicate. Check the original Terminal before retrying." : stranded ? "This Assistant's Coordinator ran in another Herdr session, so it can't be opened here." : starting ? "Getting the Coordinator ready…" : co.state === "failed" ? "The Coordinator could not start. Send a message to try again." : "Talk to it like a colleague. It turns goals into tasks and keeps them moving; you approve anything risky."}</p>
             {a.description ? <p className="as-meta">{a.description}</p> : null}
+            {(blocked || uncertain) && co.paneId ? (
+              <button type="button" className="as-btn" onClick={() => {
+                const paneId = co.paneId;
+                if (!paneId) return;
+                void assistants.openPane(paneId).then((opened) => {
+                  if (!opened) setError("The original Coordinator pane is not available in this Herdr window.");
+                }).catch((e) => setError(msg(e)));
+              }}>Open original Terminal</button>
+            ) : null}
           </div>
         )}
       </div>
@@ -606,8 +627,8 @@ function Conversation({ view, detail, setError, refresh }: { view: AssistantsVie
         value={draft}
         onChange={setDraft}
         onSend={send}
-        disabled={paused || noAgents || held !== null || starting || stranded}
-        placeholder={paused ? "Paused — resume to start a conversation" : noAgents ? "Turn on an agent in Settings → Agents" : starting ? "Starting the Coordinator…" : stranded ? "Restart the Coordinator from ⋯" : `Message ${a.name}…`}
+        disabled={paused || noAgents || held !== null || starting || stranded || blocked || uncertain}
+        placeholder={blocked ? "Resolve the permission request in Terminal" : uncertain ? "Checking the original Coordinator launch…" : paused ? "Paused — resume to start a conversation" : noAgents ? "Turn on an agent in Settings → Agents" : starting ? "Starting the Coordinator…" : stranded ? "Restart the Coordinator from ⋯" : `Message ${a.name}…`}
         agents={view.agents}
         agent={agent}
         onAgent={setAgent}
@@ -629,13 +650,7 @@ function agentLabel(agents: AssistantsAgent[], id: string): string {
  */
 function Composer({ value, onChange, onSend, disabled, placeholder, agents, agent, onAgent }: { value: string; onChange: (v: string) => void; onSend: () => void; disabled: boolean; placeholder: string; agents: AssistantsAgent[]; agent: string; onAgent: (v: string) => void; onStop?: undefined }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    // Same growth rule as the Chat's composer: fit the text, up to 40% of the window.
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, Math.floor(window.innerHeight * 0.4))}px`;
-  }, [value]);
+  useComposerAutoSize(ref, value);
   const key = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     // Enter sends; Shift+Enter breaks the line; an IME's own Enter never sends.
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -646,9 +661,9 @@ function Composer({ value, onChange, onSend, disabled, placeholder, agents, agen
   return (
     <div className="composer">
       <div className="col">
-        <div className="cmp">
-          <textarea ref={ref} rows={1} value={value} placeholder={placeholder} aria-label="Chat prompt" spellCheck disabled={disabled} onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
-          <div className="cbar">
+        <ChatComposerBox>
+          <ChatComposerTextarea ref={ref} rows={1} value={value} placeholder={placeholder} aria-label="Chat prompt" spellCheck disabled={disabled} onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
+          <ChatComposerToolbar>
             <span className="sp" />
             {agents.length > 1 ? (
               <select className="chip mono modelchip as-agent" aria-label="Agent that runs the Coordinator" title="Agent that runs the Coordinator" value={agent} disabled={disabled} onChange={(e) => onAgent(e.target.value)}>
@@ -664,8 +679,8 @@ function Composer({ value, onChange, onSend, disabled, placeholder, agents, agen
             <button type="button" className="send" title="Send" aria-label="Send" disabled={disabled || value.trim() === ""} onClick={onSend}>
               <Icon name="up" size={16} stroke={2.2} />
             </button>
-          </div>
-        </div>
+          </ChatComposerToolbar>
+        </ChatComposerBox>
       </div>
     </div>
   );

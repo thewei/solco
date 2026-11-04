@@ -1074,3 +1074,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+
+/* One status lane for every independent task owned by a Coordinator. */
+.as-workpulse {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 29px;
+  padding: 3px 20px;
+  border-bottom: 1px solid var(--hair);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.as-workpulse-title { font-weight: 600; color: var(--text); }
+.as-workpulse-stats { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-workpulse .as-link { flex: none; }

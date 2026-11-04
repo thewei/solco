@@ -17,6 +17,7 @@ import { SubagentContext, type SubagentContextValue } from "./subagents";
 import { DRAWER_DEFAULT, DRAWER_MAX, DRAWER_MIN, SubagentDrawer } from "./drawer";
 import { turnText, useTurnList } from "./turnlist";
 import { AttachChips, IMAGE_EXT, ModelPanel, PlusPanel, SlashPanel, fileToBase64, slashMatches } from "./composer";
+import { ChatComposerBox, ChatComposerTextarea, ChatComposerToolbar, useComposerAutoSize } from "./composer-surface";
 import { BlockedDock, QuestionDock, SessionState, TasksTray, WorkingLine, isFreeTextOption, planFinished } from "./dock";
 import { QueueCard } from "./queue-card";
 import { loadStored, saveStored } from "./drafts";
@@ -359,13 +360,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     composerRef.current?.focus();
   };
 
-  // Auto-grow the composer up to the viewport cap.
-  useEffect(() => {
-    const el = composerRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, Math.floor(window.innerHeight * 0.4))}px`;
-  }, [draft]);
+  useComposerAutoSize(composerRef, draft);
 
   const disposition = state?.disposition ?? "unknown";
   // What this host of the page offers (the phone turns some off); an absent
@@ -1507,9 +1502,9 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 </button>
               </div>
             ) : null}
-            <div className={`cmp${atRest ? " rest" : ""}`}>
+            <ChatComposerBox rest={atRest}>
               <AttachChips files={files} previews={previews.current} onRemove={removeFile} />
-              <textarea
+              <ChatComposerTextarea
                 ref={composerRef}
                 rows={1}
                 value={draft}
@@ -1541,7 +1536,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                 onCompositionStart={() => (composingRef.current = true)}
                 onCompositionEnd={() => (composingRef.current = false)}
               />
-              <div className="cbar">
+              <ChatComposerToolbar>
 {recording ? null : (
                 <button
                   type="button"
@@ -1647,8 +1642,8 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                     <Icon name="up" size={16} stroke={2.2} />
                   </button>
                 )}
-              </div>
-            </div>
+              </ChatComposerToolbar>
+            </ChatComposerBox>
             {hasHint ? (
             <div className="hint">
               {note}
