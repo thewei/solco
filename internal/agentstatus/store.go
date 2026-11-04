@@ -6,43 +6,51 @@ import (
 )
 
 /**
- * [INPUT]: 依赖 internal/agentstatus 的 Parse/Report/Set、sync、time
- * [OUTPUT]: 对外提供 Store 及其 NewStore、ApplyProgramReport、ApplyHookStatus、PaneClosed
- * [POS]: internal/agentstatus 的合并策略层：每 pane 一个记录集，裁定 OSC 7501 与 Hook 两条状态来源谁生效；nativeui 的 apphook 与终端回调各自喂入
+ * [INPUT]: 依赖 Parse/Report/Set 与 sync/time；Solco 直属 hook、Herdr spool 与终端 OSC 事件共用此模型
+ * [OUTPUT]: Store；原生/通用报文、Solco/Herdr Hook 来源仲裁、生命周期控制、Terminal/Agent 投影读取及 Pane 清理接口
+ * [POS]: 每个 Pane 的唯一状态仲裁器：生效中 OSC 7501 > Solco 自有 Hook > Herdr Hook；不用静默超时剥夺协议权威
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// paneState is one pane's status truth. records is the OSC 7501 record
-// set; hook is the last hook status that was allowed through; lastOSC is
-// when the protocol stream last spoke.
+// Control names terminal lifecycle events, not presentation events. In
+// particular, detaching a visible Terminal widget is NOT process exit.
+type Control uint8
+
+const (
+	ControlPrompt      Control = iota + 1 // OSC 133;A
+	ControlReset                          // RIS (ESC c)
+	ControlProcessExit                    // confirmed program process exit
+)
+
+type statusSource uint8
+
+const (
+	sourceNone statusSource = iota
+	sourceProgram
+	sourceSolco
+	sourceHerdr
+)
+
+// paneState is a status *projection*, not a second process/session runtime.
+// Herdr retains process ownership and Solco's hook retains session identity.
 type paneState struct {
 	records Set
-	hook    string
-	lastOSC time.Time
+	solco   string
+	herdr   string
+	source  statusSource
 }
 
-// oscAuthority bounds how long a transient record suppresses hook events:
-// a 7501-native agent reports at every turn boundary, so a working record
-// with no protocol report for two minutes while hooks still fire means the
-// protocol speaker is gone (a crash leaves no clear). After the window the
-// hook stream takes the pane back.
-const oscAuthority = 2 * time.Minute
-
-// Store keeps per-pane status and decides, for every pane, whether the
-// native OSC 7501 stream or the hook stream is authoritative right now.
-// It is safe for concurrent use: hook events arrive on the apphook
-// server's goroutine, program reports on a terminal's goroutine.
+// Store serializes OSC reports and provider hook reports from distinct
+// goroutines; its read path returns exactly the status currently applied.
 type Store struct {
 	mu    sync.Mutex
 	panes map[string]*paneState
 }
 
-// NewStore makes an empty store.
 func NewStore() *Store {
 	return &Store{panes: make(map[string]*paneState)}
 }
 
-// pane returns the pane's state, creating it when missing.
 func (s *Store) pane(paneID string) *paneState {
 	p, ok := s.panes[paneID]
 	if !ok {
@@ -52,11 +60,21 @@ func (s *Store) pane(paneID string) *paneState {
 	return p
 }
 
-// ApplyProgramReport parses one OSC 7501 report body from the pane's
-// terminal and applies it to the record set. A native report always wins:
-// the pane's status source becomes the protocol stream. It returns the
-// status word to display, or false when the body was not a valid report.
+// ApplyProgramReport first fully parses a report, then atomically applies
+// it to its id record. A child blocked record cannot be masked by a root
+// report: the return value is the *effective* Set.Display value.
 func (s *Store) ApplyProgramReport(paneID string, body []byte, now time.Time) (string, bool) {
+	return s.applyProgram(paneID, body, now, true)
+}
+
+// ApplyPassiveProgramReport tracks generic terminal programs without letting
+// them commandeer an already identified coding Agent's status. The records
+// still obey all OSC lifetimes, clear/subtree and reset rules.
+func (s *Store) ApplyPassiveProgramReport(paneID string, body []byte, now time.Time) (string, bool) {
+	return s.applyProgram(paneID, body, now, false)
+}
+
+func (s *Store) applyProgram(paneID string, body []byte, now time.Time, agentOwned bool) (string, bool) {
 	rep, ok := Parse(body)
 	if !ok {
 		return "", false
@@ -65,39 +83,112 @@ func (s *Store) ApplyProgramReport(paneID string, body []byte, now time.Time) (s
 	defer s.mu.Unlock()
 	p := s.pane(paneID)
 	p.records.Apply(rep, now)
-	p.lastOSC = now
-	if word := rep.StatusWord(); word != "" && rep.State != StateClear {
-		return word, true
+	if !agentOwned {
+		if p.source == sourceProgram {
+			p.restoreFallback()
+		}
+		return p.display(), true
+	}
+	if _, exists := p.records.Display(); exists {
+		p.source = sourceProgram
+	} else {
+		p.restoreFallback()
 	}
 	return p.display(), true
 }
 
-// ApplyHookStatus feeds one hook status event and decides whether it may
-// pass. While the pane's 7501 record set holds a transient state
-// (working/blocked) the protocol stream is mid-flight and the hook event
-// is dropped — a 7501-native agent always reports those transitions
-// itself. Once the records hold only surviving states (idle/done/error,
-// or nothing at all), a hook event means a hook-only program owns the
-// pane, and it takes over. `released` mirrors process exit: transient
-// records are dropped either way.
-func (s *Store) ApplyHookStatus(paneID string, status string, now time.Time) (string, bool) {
+// ApplySolcoHookStatus is the direct in-app Unix socket path. Solco's hook
+// is always preferred to the Herdr spool. While a native OSC 7501 record
+// is working/blocked it stays the source even during long silent periods:
+// the protocol explicitly has NO heartbeat requirement.
+func (s *Store) ApplySolcoHookStatus(paneID, status string, _ time.Time) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := s.pane(paneID)
-	fresh := now.Sub(p.lastOSC) <= oscAuthority
-	if p.records.Transient() && fresh && status != "released" {
+	p.solco = status
+	if status == "released" {
+		// The session_end event is the provider's own exit signal; terminal
+		// completion records remain even when transient records are dropped.
+		p.records.DropTransient()
+		if _, ok := p.records.Display(); ok && p.source == sourceProgram {
+			return p.display(), true
+		}
+		p.source = sourceSolco
+		return status, true
+	}
+	if p.source == sourceProgram && p.records.Transient() {
 		return p.display(), false
 	}
-	if status == "released" {
-		p.records.DropTransient()
-	}
-	p.hook = status
+	p.source = sourceSolco
 	return status, true
 }
 
-// Display returns the pane's current status word, or "" when the pane
-// is unknown. It is the read side of the store: the same resolution the
-// apply paths return, without touching state.
+// ApplyHerdrHookStatus is ONLY the fallback when no native report or active
+// Solco direct-hook source is authoritative. It never injects a Solco event
+// or overwrites a native record. It remains available for hook-less agents.
+func (s *Store) ApplyHerdrHookStatus(paneID, status string, _ time.Time) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := s.pane(paneID)
+	p.herdr = status
+	if (p.source == sourceProgram && p.hasProgramStatus()) ||
+		(p.solco != "" && p.solco != "released") {
+		return p.display(), false
+	}
+	p.source = sourceHerdr
+	return status, true
+}
+
+// ApplyHookStatus is kept as a compatibility name for existing Solco direct
+// hook clients; callers that read Herdr's spool MUST use ApplyHerdrHookStatus.
+func (s *Store) ApplyHookStatus(paneID, status string, now time.Time) (string, bool) {
+	return s.ApplySolcoHookStatus(paneID, status, now)
+}
+
+// ApplyControl enforces the protocol's event-based lifetime. No periodic
+// timer or window hide/reattach is permitted to remove stored records.
+func (s *Store) ApplyControl(paneID string, event Control) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, exists := s.panes[paneID]
+	if !exists {
+		return "", false
+	}
+	switch event {
+	case ControlPrompt, ControlProcessExit:
+		p.records.DropTransient()
+	case ControlReset:
+		p.records.Reset()
+	default:
+		return p.display(), false
+	}
+	if p.source == sourceProgram && !p.hasProgramStatus() {
+		p.restoreFallback()
+	}
+	return p.display(), true
+}
+
+// DisplayTerminal is the terminal's raw record projection, independent of
+// which status source currently leads an Agent card.
+func (s *Store) DisplayTerminal(paneID string) (Report, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.panes[paneID]
+	if !ok {
+		return Report{}, false
+	}
+	return p.records.Display()
+}
+
+// HasTransient lets an authoritative Herdr process-info observation
+// retire native in-flight records without disturbing done/error survivors.
+func (s *Store) HasTransient(paneID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.panes[paneID]
+	return ok && p.records.Transient()
+}
+
 func (s *Store) Display(paneID string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -108,21 +199,49 @@ func (s *Store) Display(paneID string) string {
 	return p.display()
 }
 
-// PaneClosed forgets the pane: its records die with the terminal, and the
-// next program starts from whichever source speaks first.
+// Reset releases all status projections when the active Herdr instance
+// changes; a Pane id is only unique inside its instance.
+func (s *Store) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.panes = make(map[string]*paneState)
+}
+
+// PaneClosed is for an authoritative Herdr Pane/terminal deletion only.
 func (s *Store) PaneClosed(paneID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.panes, paneID)
 }
 
-// display resolves the pane's current status word: the 7501 record set
-// when it has anything to show, else the hook status that passed last.
-func (p *paneState) display() string {
-	if rep, ok := p.records.Display(); ok {
-		if word := rep.StatusWord(); word != "" {
-			return word
-		}
+func (p *paneState) hasProgramStatus() bool {
+	_, ok := p.records.Display()
+	return ok
+}
+
+func (p *paneState) restoreFallback() {
+	switch {
+	case p.solco != "" && p.solco != "released":
+		p.source = sourceSolco
+	case p.herdr != "":
+		p.source = sourceHerdr
+	case p.solco != "":
+		p.source = sourceSolco
+	default:
+		p.source = sourceNone
 	}
-	return p.hook
+}
+
+func (p *paneState) display() string {
+	switch p.source {
+	case sourceProgram:
+		if rep, ok := p.records.Display(); ok {
+			return rep.StatusWord()
+		}
+	case sourceSolco:
+		return p.solco
+	case sourceHerdr:
+		return p.herdr
+	}
+	return ""
 }

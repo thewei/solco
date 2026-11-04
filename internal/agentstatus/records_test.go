@@ -164,3 +164,15 @@ func TestSetLRUEvictsLeastRecent(t *testing.T) {
 		t.Fatal("current root evicted")
 	}
 }
+
+func TestSetRootWinsEqualRankEvenIfChildIsNewer(t *testing.T) {
+	var s Set
+	s.Apply(mustParse(t, "state=blocked:app=parent"), base)
+	s.Apply(mustParse(t, "state=blocked:id=child"), base.Add(2*time.Second))
+	for i := 0; i < 100; i++ {
+		rep, ok := s.Display()
+		if !ok || rep.ID != "" || rep.App != "parent" {
+			t.Fatalf("root lost priority under map iteration: %+v ok=%v", rep, ok)
+		}
+	}
+}

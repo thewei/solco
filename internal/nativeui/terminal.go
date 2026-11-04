@@ -18,7 +18,7 @@ import (
 /**
  * [INPUT]: 依赖 mygo/plugins/terminal, mygo/ui, herdr, settings, gorex_style, brands 的 agentProvider/agentMark、markAgentReviewedForPane 聚焦取消 Review
  * [OUTPUT]: 对外提供 terminalCanvas, paneCard, paneCardHeader, paneStackInfo, paneLogoView, syncTerminals, closeAllTerminals, paneHeaderVisuals；画布内另渲染可拖拽的 split 分隔条（renderSplitDividers → splitGrowTarget/splitResizeAmount → resizePane），把拖拽解析成 Herdr pane.resize；终端聚焦时自动清除对应 Agent 的 Review 状态
- * [POS]: nativeui 的终端画布与 Gorex 窗格卡片主渲染器，管理活动的终端连接、最大化 Tab 的窗格数量角标、卡片拖拽放置（移动/拆分/交换）与窗格分栏拖拽调宽高（布局权威始终在 Herdr）
+ * [POS]: nativeui 的终端画布与 Gorex 窗格卡片主渲染器；可见 Pane 的 Herdr attach 与 OSC 回调通过 applyOnWindow + terminal identity 防迟到事件（隐藏不会删除状态记录），布局权威始终在 Herdr
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -764,7 +764,8 @@ func (s *Shell) syncTerminals(projection herdr.Projection) error {
 	for key, surface := range s.terminals {
 		if _, ok := desired[key]; !ok {
 			slog.Debug("detach native terminal", "instance", s.activeInstance, "pane_id", surface.paneID, "terminal_id", key)
-			s.statusStore.PaneClosed(surface.paneID)
+			// Visibility detach is not a Herdr Pane deletion and must not
+			// erase OSC records (done/error survive a shell prompt too).
 			_ = surface.term.Close()
 			delete(s.terminals, key)
 			closed++
@@ -804,11 +805,6 @@ func (s *Shell) syncTerminals(projection herdr.Projection) error {
 		slog.Info("attach native terminal", "instance", s.activeInstance, "pane_id", geometry.pane.ID, "terminal_id", geometry.pane.TerminalID)
 		options := terminalOptionsFromSettings(s.settings.Terminal)
 		options.LocalDragSelect = localDragSelectFor(geometry)
-		// OSC 7501 reports ride the attach stream; the store arbitrates
-		// them against the hook stream per pane (program_status.go).
-		options.OnProgramStatus = func(body []byte) {
-			s.applyProgramStatus(geometry.pane.ID, body)
-		}
 		// The gorex palettes (2026-10-06), or the pinned Ghostty theme.
 		applyGorexTerminalTheme(&options, s.settings.General.Appearance, s.settings.Terminal.ThemeName)
 		// Prefer the app-owned pty Conn: it carries the real-terminal mouse
@@ -836,6 +832,24 @@ func (s *Shell) syncTerminals(projection herdr.Projection) error {
 			agent:       geometry.pane.Agent,
 			agentStatus: geometry.pane.AgentStatus,
 			dragSelect:  options.LocalDragSelect,
+		}
+		// The terminal invokes callbacks from its reader goroutine. Marshal
+		// every mutation onto the window lane; reject late callbacks from
+		// a detached/replaced attachment (or another Herdr instance).
+		instance := s.activeInstance
+		options.OnProgramStatus = func(body []byte) {
+			s.applyOnWindow(func() {
+				if s.activeInstance == instance && s.terminals[key] == surface {
+					s.applyProgramStatus(surface.paneID, body)
+				}
+			})
+		}
+		options.OnProgramStatusControl = func(control terminal.ProgramStatusControl) {
+			s.applyOnWindow(func() {
+				if s.activeInstance == instance && s.terminals[key] == surface {
+					s.applyProgramStatusControl(surface.paneID, control)
+				}
+			})
 		}
 		if conn != nil {
 			conn.onMouse = func(seq string) {

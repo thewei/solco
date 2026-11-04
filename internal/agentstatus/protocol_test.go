@@ -1,6 +1,9 @@
 package agentstatus
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // mustParse parses a body or fails the test.
 func mustParse(t *testing.T, body string) Report {
@@ -132,9 +135,8 @@ func TestParseFieldRules(t *testing.T) {
 	if rep.App != "claude-code" {
 		t.Fatalf("app = %q", rep.App)
 	}
-	rep = mustParse(t, "state=done:app=thisappnameisfarlongerthanthirtytwobytes")
-	if rep.App != "" {
-		t.Fatal("over-cap app accepted")
+	if _, ok := Parse([]byte("state=done:app=thisappnameisfarlongerthanthirtytwobytes")); ok {
+		t.Fatal("over-cap app must discard the entire report")
 	}
 
 	// base64 padding is optional.
@@ -151,5 +153,27 @@ func TestParseLimits(t *testing.T) {
 	}
 	if _, ok := Parse([]byte("state=done:title=" + string(big))); ok {
 		t.Fatal("over-cap title accepted")
+	}
+}
+
+func TestOSC7501StrictLimitsAndEmptyValues(t *testing.T) {
+	for _, body := range []string{
+		"state=clear:id=",
+		"state=done:id=",
+		"state=done:" + strings.Repeat("a", 17) + "=x",
+		"state=working:app=" + strings.Repeat("x", 33),
+		"state=done:msg=" + strings.Repeat("YQ==", 684),
+		"state=done:msg=" + strings.Repeat("YQ==", 684) + ":msg=SGVsbG8=",
+		"state=done:title=" + strings.Repeat("YQ==", 65) + ":title=QQ==",
+		"state=done:msg=abcde:msg=SGVsbG8=",
+	} {
+		if report, ok := Parse([]byte(body)); ok {
+			t.Errorf("accepted invalid %q: %+v", body, report)
+		}
+	}
+	for _, body := range []string{"state=done:msg=", "state=idle:title="} {
+		if _, ok := Parse([]byte(body)); !ok {
+			t.Errorf("rejected valid empty base64 %q", body)
+		}
 	}
 }

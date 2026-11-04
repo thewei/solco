@@ -1,6 +1,10 @@
 package terminal
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
 
 // feedAll feeds the scanner one whole sequence and reports what it saw.
 func feedAll(t *testing.T, chunks ...string) ([][]byte, bool) {
@@ -85,5 +89,61 @@ func TestOSC7501CanceledAndCapped(t *testing.T) {
 	bodies, query := feedAll(t, "\x1b]7501;state=working", "\x1b]7501;state=done\x1b\\")
 	if query || len(bodies) != 1 || string(bodies[0]) != "state=done" {
 		t.Fatalf("after unterminated: bodies=%q query=%v", bodies, query)
+	}
+}
+
+func TestOSC7501WholeSequenceBoundariesAndLifecycle(t *testing.T) {
+	for _, term := range []string{"\a", "\x1b\\"} {
+		body := "state=idle:future=" + strings.Repeat("x", 4096-len("\x1b]7501;")-len(term)-len("state=idle:future="))
+		accepted, _ := feedAll(t, "\x1b]7501;"+body+term)
+		if len(accepted) != 1 {
+			t.Fatalf("4096-byte sequence should be accepted (%q terminator)", term)
+		}
+		rejected, _ := feedAll(t, "\x1b]7501;"+body+"x"+term)
+		if len(rejected) != 0 {
+			t.Fatalf("4097-byte sequence should be rejected (%q terminator)", term)
+		}
+	}
+	var s osc7501Scanner
+	got := s.feedEvents([]byte("\x1b]7501;?\x1b\\\x1b]7501;?\x07\x1b]7501;state=working\x1b\\\x1b]133;A\x07\x1bc"))
+	var kinds []osc7501EventKind
+	for _, ev := range got {
+		kinds = append(kinds, ev.kind)
+	}
+	want := []osc7501EventKind{osc7501Query, osc7501Query, osc7501Report, osc7501Prompt, osc7501Reset}
+	if !reflect.DeepEqual(kinds, want) {
+		t.Fatalf("events = %v want %v", kinds, want)
+	}
+}
+
+// This exercises the actual MyGo Terminal -> input queue reply path, not
+// only scanner recognition. Multiple queries must each receive one reply.
+func TestOSC7501TerminalQueryReplyAndCallbacks(t *testing.T) {
+	loadLib(t)
+	conn := newPipe()
+	var events []string
+	term, err := New(Options{
+		Conn: conn,
+		OnProgramStatus: func(body []byte) {
+			events = append(events, "report:"+string(body))
+		},
+		OnProgramStatusControl: func(control ProgramStatusControl) {
+			if control == ProgramStatusPrompt {
+				events = append(events, "prompt")
+			} else if control == ProgramStatusReset {
+				events = append(events, "reset")
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	term.Feed([]byte("\x1b]7501;?\x1b\\\x1b]7501;?\x07\x1b]7501;state=working\x1b\\\x1b]133;A\x07\x1bc"))
+	if got, want := conn.take(term), osc7501Reply+osc7501Reply; got != want {
+		t.Fatalf("query replies = %q, want %q", got, want)
+	}
+	if want := []string{"report:state=working", "prompt", "reset"}; !reflect.DeepEqual(events, want) {
+		t.Fatalf("event order = %q, want %q", events, want)
 	}
 }

@@ -14,6 +14,13 @@ import (
 	"github.com/thewei/solco/internal/services"
 )
 
+/**
+ * [INPUT]: 依赖 Herdr pane.process_info、lsof 监听快照与 statusStore 的 OSC 7501 生命周期接口
+ * [OUTPUT]: 提供服务、PaneBusy、shell-idle 判活索引；真实进程结束时只清瞬态 OSC 记录
+ * [POS]: nativeui 的有限采样 Herdr 运行事实投影层；它不是第二进程/PTY runtime
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 // The service index answers one sidebar question: which Panes (and which of
 // their collapsed ancestors) have something running right now. A Pane runs
 // a service when one of its foreground processes (Herdr pane.process_info)
@@ -531,6 +538,10 @@ func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation
 			return
 		}
 		livenessChanged := !maps.Equal(s.paneShellIdle, shellIdle)
+		// pane.process_info is Herdr-owned evidence that the foreground
+		// program returned to the shell. OSC 133 A may be unavailable;
+		// this is the real process-exit fallback, not a status heartbeat.
+		s.retireShellIdleProgramStatuses(shellIdle)
 		s.applyServiceHealth(panes, next.Panes, probes, shellIdle, s.clock())
 		s.serviceIndex = next
 		s.serviceOrigins = origins

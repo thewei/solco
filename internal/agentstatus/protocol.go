@@ -97,23 +97,49 @@ func (r Report) StatusWord() string {
 func Parse(body []byte) (Report, bool) {
 	var rep Report
 	var kind, progress, app, title, msg string
-	var hasKind, hasProgress, hasApp, hasTitle, hasMsg bool
+	var hasKind, hasProgress, hasApp, hasTitle, hasMsg, hasID bool
+	// Every pair is validated before a record can be touched, including
+	// values later replaced by duplicate keys. A bad hard limit is fatal.
+	if len(body)+len("\x1b]7501;")+2 > 4096 {
+		return Report{}, false
+	}
 
 	for _, rawPair := range strings.Split(string(body), ":") {
 		eq := strings.IndexByte(rawPair, '=')
 		if eq <= 0 {
 			continue // no '=' or empty key: skip the pair
 		}
-		key := strings.Trim(rawPair[:eq], " ")
-		value := strings.Trim(rawPair[eq+1:], " ")
+		key := strings.TrimSpace(rawPair[:eq])
+		value := strings.TrimSpace(rawPair[eq+1:])
+		if len(key) > maxKey {
+			return Report{}, false
+		}
 		if !validKey(key) || !validValue(value) {
 			continue
+		}
+		switch key {
+		case "id":
+			if !validID(value) {
+				return Report{}, false
+			}
+		case "app":
+			if len(value) > maxApp {
+				return Report{}, false
+			}
+		case "title":
+			if _, ok := decodeText(value, maxTtlEncoded, maxTtlPlain); !ok {
+				return Report{}, false
+			}
+		case "msg":
+			if _, ok := decodeText(value, maxMsgEncoded, maxMsgPlain); !ok {
+				return Report{}, false
+			}
 		}
 		switch key {
 		case "state":
 			rep.State = State(value)
 		case "id":
-			rep.ID = value
+			rep.ID, hasID = value, true
 		case "kind":
 			kind, hasKind = value, true
 		case "progress":
@@ -132,7 +158,7 @@ func Parse(body []byte) (Report, bool) {
 	default:
 		return Report{}, false // missing or unrecognized state: ignored whole
 	}
-	if rep.ID != "" && !validID(rep.ID) {
+	if hasID && !validID(rep.ID) {
 		return Report{}, false // a malformed id must not reach any record
 	}
 
@@ -171,7 +197,7 @@ func Parse(body []byte) (Report, bool) {
 // over the encoded cap, undecodable bytes, invalid UTF-8 or control
 // characters (C0, DEL, C1) discard the whole report.
 func decodeText(encoded string, maxEncoded, maxPlain int) (string, bool) {
-	if encoded == "" || len(encoded) > maxEncoded {
+	if len(encoded) > maxEncoded {
 		return "", false
 	}
 	decoder := base64.StdEncoding

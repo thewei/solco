@@ -135,6 +135,7 @@ func (s *Shell) enterInstance(name string, projection herdr.Projection) {
 	if s.activeInstance != name {
 		s.clearLocalSelection()
 		s.closeAllTerminals()
+		s.statusStore.Reset() // Same Pane IDs across instances are unrelated.
 		// Service activity is per-instance; the next scan rebuilds it.
 		s.serviceIndex = sidebarServiceIndex{}
 		s.paneBusyIndex = make(map[string]paneBusyInfo)
@@ -353,6 +354,8 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	// it; the diff needs the previous projection, so this runs before the
 	// assignment (chat_launch.go).
 	s.adoptPendingLaunchTab(projection)
+	s.pruneProgramStatuses(projection)
+	s.overlayProgramStatuses(&projection)
 	s.projection = projection
 	s.restampHookIdentities()
 	// A reconciled projection is the authority that the runtime is healthy

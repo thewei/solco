@@ -134,9 +134,9 @@ func (s *Set) Display() (Report, bool) {
 		switch {
 		case rank < bestRank:
 			best = rec
-		case rank == bestRank && id == "":
+		case rank == bestRank && id == "" && best.rep.ID != "":
 			best = rec
-		case rank == bestRank && rec.at.After(best.at):
+		case rank == bestRank && best.rep.ID != "" && rec.at.After(best.at):
 			best = rec
 		}
 	}

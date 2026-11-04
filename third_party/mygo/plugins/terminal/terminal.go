@@ -213,6 +213,10 @@ type Options struct {
 	// terminal answer the protocol's feature-detection query, so programs
 	// that probe before reporting learn that reports are consumed.
 	OnProgramStatus func(report []byte)
+	// OnProgramStatusControl reports the authoritative OSC 133;A prompt and
+	// RIS terminal lifecycle boundaries in their original output order.
+	// A detach/disconnect is not necessarily a foreground process exit.
+	OnProgramStatusControl func(control ProgramStatusControl)
 	// OnPasteStatus tells how a paste goes that a program reads itself
 	// (mode 5522, see PasteData), on a goroutine of the terminal: offered,
 	// then sending as the program reads, then sent; or not taken when the
@@ -554,6 +558,15 @@ type Terminal struct {
 	osc osc7501Scanner
 }
 
+// ProgramStatusControl is one terminal lifecycle boundary observed in
+// the same byte stream as OSC 7501. DECSTR deliberately causes no event.
+type ProgramStatusControl uint8
+
+const (
+	ProgramStatusPrompt ProgramStatusControl = iota + 1
+	ProgramStatusReset
+)
+
 // gridSize is the size of the screen in cells and of a cell in pixels.
 type gridSize struct{ cols, rows, cellW, cellH int }
 
@@ -563,10 +576,9 @@ type events struct {
 	title  bool
 	bells  int
 	notify [][2]string
-	// osc7501 carries the bodies of complete Program Status Protocol
-	// sequences; osc7501Query saw the feature-detection query.
-	osc7501      [][]byte
-	osc7501Query bool
+	// osc7501 carries reports, capability probes and lifecycle events in
+	// exact source order (multiple queries are never coalesced).
+	osc7501 []osc7501Event
 }
 
 // New makes a terminal running opts.Command, or connected to opts.Conn.
@@ -807,11 +819,7 @@ func (t *Terminal) write(p []byte) {
 		if ev.title {
 			title = t.term.Title()
 		}
-		bodies, query := t.osc.feed(p)
-		if len(bodies) > 0 {
-			ev.osc7501 = append(ev.osc7501, bodies...)
-		}
-		ev.osc7501Query = query
+		ev.osc7501 = append(ev.osc7501, t.osc.feedEvents(p)...)
 	}
 	t.mu.Unlock()
 	t.fire(ev, title)
@@ -834,11 +842,21 @@ func (t *Terminal) fire(ev events, title string) {
 		}
 	}
 	if o.OnProgramStatus != nil {
-		if ev.osc7501Query {
-			t.Send([]byte(osc7501Reply))
-		}
-		for _, body := range ev.osc7501 {
-			o.OnProgramStatus(body)
+		for _, event := range ev.osc7501 {
+			switch event.kind {
+			case osc7501Query:
+				t.Send([]byte(osc7501Reply))
+			case osc7501Report:
+				o.OnProgramStatus(event.body)
+			case osc7501Prompt:
+				if o.OnProgramStatusControl != nil {
+					o.OnProgramStatusControl(ProgramStatusPrompt)
+				}
+			case osc7501Reset:
+				if o.OnProgramStatusControl != nil {
+					o.OnProgramStatusControl(ProgramStatusReset)
+				}
+			}
 		}
 	}
 }

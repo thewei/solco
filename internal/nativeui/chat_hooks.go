@@ -21,7 +21,7 @@ import (
 /**
  * [INPUT]: 依赖 apphook（进程内 IPC Hook Server）、herdrhooks spool（可选兼容向后尾部）、runtime.ReadPane（pane.read 可见文本）、InteractionBroker
  * [OUTPUT]: 提供 Shell hook 层：直接 Hook 状态接收与会话更新、blocked 触发的交互检测 → 结构化 PendingInteraction、非 blocked 的 pane 级取消、实时投影重推
- * [POS]: 我们自己的原生 hook 层：进程内 Unix Domain Socket 服务就地接收并更新 Agent 状态，消除对 Herdr 插件与外部进程的硬依赖
+ * [POS]: Solco 自有 Unix Socket Hook 优先级高于 Herdr spool fallback；两个来源显式分支再汇入 agentstatus 唯一状态仲裁器，Herdr 仍掌管 runtime
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -252,7 +252,7 @@ func (s *Shell) handleAppHookStatus(evt apphook.StatusEvent) {
 	// The status lane is arbitrated per pane (OSC 7501 vs hooks); the
 	// session identity riding the same event is hook-only and always
 	// passes, even when the status is yielded to the protocol stream.
-	effective, applied := s.statusStore.ApplyHookStatus(evt.PaneID, evt.Status, time.Now())
+	effective, applied := s.statusStore.ApplySolcoHookStatus(evt.PaneID, evt.Status, time.Now())
 	if applied {
 		slog.Debug("hook status applied", "pane", evt.PaneID, "status", effective)
 	} else {
@@ -374,10 +374,29 @@ func (s *Shell) handleHookEvent(event herdrhooks.Event) {
 		slog.Warn("hook status payload undecodable", "event", event.Name)
 		return
 	}
-	s.handleAppHookStatus(apphook.StatusEvent{
-		PaneID: payload.PaneID,
-		Status: apphook.NormalizeStatus(payload.AgentStatus),
-	})
+	// Herdr's forwarded spool is a fallback only. It must never enter
+	// handleAppHookStatus: that is our privileged direct-hook lane and
+	// carries Solco-owned session identity and workbench semantics.
+	s.handleHerdrHookStatus(payload.PaneID, apphook.NormalizeStatus(payload.AgentStatus))
+}
+
+// handleHerdrHookStatus is deliberately separate from Solco's hook path:
+// Herdr provides runtime facts, but its plugin Hook cannot overwrite a
+// direct Solco Hook or valid native OSC Program Status source.
+func (s *Shell) handleHerdrHookStatus(paneID, status string) {
+	if paneID == "" {
+		return
+	}
+	effective, applied := s.statusStore.ApplyHerdrHookStatus(paneID, status, time.Now())
+	if !applied {
+		return
+	}
+	if s.paneAgent(paneID) != nil {
+		s.upsertProjectionAgent(paneID, func(agent *herdr.Agent) {
+			agent.Status = effective
+		})
+		s.applyPaneStatus(paneID, effective)
+	}
 }
 
 // chatRefreshDebounce coalesces hook-driven projection refetches; status
