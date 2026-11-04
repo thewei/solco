@@ -142,3 +142,38 @@ func TestAnUnknownFieldIsRefusedNotDropped(t *testing.T) {
 		t.Fatalf("the refused command still created %d task(s)", len(all))
 	}
 }
+
+// The Coordinator's standing Herdr session is not a worker task, even
+// when its queued launch is represented in the same tasks table.
+func TestOverviewCountsWorkerTasksNotCoordinatorSession(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "overview-real-work", "Ada")
+	co, _, err := s.StartCoordinator("co-start", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if co.TaskID == "" {
+		t.Fatal("coordinator task missing")
+	}
+	api := &API{Store: s}
+	got, err := call(t, api, ``, "assistant", "overview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := got["assistants"].([]any)[0].(map[string]any)
+	if row["tasks"] != float64(0) || row["queued"] != float64(0) {
+		t.Fatalf("chat counted as work: %v", row)
+	}
+	_, _, err = s.CreateTask("worker", CreateTaskInput{AssistantID: a.ID, Kind: KindResearch, Title: "Read docs", Brief: "Report findings"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = call(t, api, ``, "assistant", "overview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row = got["assistants"].([]any)[0].(map[string]any)
+	if row["tasks"] != float64(1) || row["queued"] != float64(1) {
+		t.Fatalf("worker count wrong: %v", row)
+	}
+}

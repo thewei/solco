@@ -12,17 +12,20 @@ import (
 // wrote about committed state (ids, titles, counts) — never an Agent's words
 // and never a run's output.
 const (
-	FactAccepted  = "accepted"  // the Goal was approved and is now being pursued
-	FactPlanned   = "planned"   // a plan exists
-	FactReplanned = "replanned" // the plan changed
-	FactDelegated = "delegated" // a milestone was handed to a task
-	FactVerifying = "verifying" // a task finished and awaits review
-	FactVerified  = "verified"  // a milestone's task is done
-	FactBlocked   = "blocked"   // a task failed, blocked or needs a person
-	FactReady     = "ready"     // everything automatic is verified; a person must confirm the rest
-	FactDone      = "done"      // the Goal completed, with its evidence
-	FactStale     = "stale"     // nothing moved for a while
-	FactHeld      = "held"      // a budget stopped the supervisor
+	FactAccepted    = "accepted"     // the Goal was approved and is now being pursued
+	FactPlanned     = "planned"      // a plan exists
+	FactReplanned   = "replanned"    // the plan changed
+	FactDelegated   = "delegated"    // a milestone was handed to a task
+	FactVerifying   = "verifying"    // a task finished and awaits review
+	FactVerified    = "verified"     // a milestone's task is done
+	FactBlocked     = "blocked"      // a task failed, blocked or needs a person
+	FactReady       = "ready"        // everything automatic is verified; a person must confirm the rest
+	FactDone        = "done"         // the Goal completed, with its evidence
+	FactStale       = "stale"        // nothing moved for a while
+	FactHeld        = "held"         // a budget stopped the supervisor
+	FactTaskAdded   = "task_added"   // a task was filed; draft is not yet queued
+	FactRunFinished = "run_finished" // a run settled; the task may still need review
+	FactPulse       = "pulse"        // objective periodic status when the user enabled reporting
 )
 
 // Fact is one ledger entry.
@@ -148,6 +151,11 @@ func (sv *Supervisor) Tick() (SupervisorReport, error) {
 			first = fmt.Errorf("goal %s: %w", id, err)
 		}
 	}
+	count, err := sv.periodicReports()
+	rep.Facts += count
+	if err != nil && first == nil {
+		first = err
+	}
 	return rep, first
 }
 
@@ -159,8 +167,20 @@ var eventFactKind = map[string]string{
 	"review.failed":  FactBlocked,
 }
 
-// eventFacts turns the task/review events of Goal-bound tasks into facts,
-// advancing a durable watermark so a restart resumes where it stopped.
+// These transitions also matter for tasks delegated without a Goal. They
+// are not Goal milestones and never claim a review already passed.
+var standaloneFactKind = map[string]string{
+	"task.added":     FactTaskAdded,
+	"task.completed": FactRunFinished,
+	"task.blocked":   FactBlocked,
+	"task.uncertain": FactBlocked,
+	"task.failed":    FactBlocked,
+	"review.ready":   FactVerifying,
+	"review.failed":  FactBlocked,
+}
+
+// eventFacts turns committed standalone/Goal task transitions into progress
+// facts. Its durable watermark keeps a restart from duplicating reports.
 func (sv *Supervisor) eventFacts() (int, error) {
 	s := sv.Store
 	var mark int64
@@ -209,11 +229,15 @@ func (sv *Supervisor) eventFacts() (int, error) {
 				continue
 			}
 			kind, ok := eventFactKind[e.kind]
-			if !ok || e.goal == "" {
-				continue
+			if e.goal == "" {
+				kind, ok = standaloneFactKind[e.kind]
+			} else {
+				var active string
+				if err := tx.QueryRow("SELECT state FROM goals WHERE id=?", e.goal).Scan(&active); err != nil || active != GoalActive {
+					continue
+				}
 			}
-			var active string
-			if err := tx.QueryRow(`SELECT state FROM goals WHERE id=?`, e.goal).Scan(&active); err != nil || active != GoalActive {
+			if !ok {
 				continue
 			}
 			isNew, err := addFactTx(tx, Fact{AssistantID: e.assistant, GoalID: e.goal, TaskID: e.task, Kind: kind, Text: e.detail}, "ev:"+e.id, s.nowMS())

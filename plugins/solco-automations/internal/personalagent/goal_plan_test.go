@@ -431,9 +431,169 @@ func factTexts(t *testing.T, s *Store, goalID string) []string {
 
 func TestCoordinatorBriefExplainsPlans(t *testing.T) {
 	p := CoordinatorPrompt(Assistant{ID: "a_1", Name: "Ada"})
-	for _, want := range []string{"goal set-plan", "goal plan", "verified", "routine draft", "Never enable"} {
+	for _, want := range []string{"goal set-plan", "goal plan", "verified", "routine draft", "Never enable", "Analyse the person's request", "dependsOn", "across ALL tasks"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("brief lacks %q", want)
 		}
+	}
+}
+
+// A Coordinator can delegate independent tasks without a Goal. Their
+// statuses must show up in the same durable progress record.
+func TestSupervisorReportsStandaloneTaskProgressIdempotently(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "standalone-progress", "Ada")
+	first, _, err := s.CreateTask("first", CreateTaskInput{AssistantID: a.ID, Title: "Inspect API", Brief: "Read APIs", Kind: KindResearch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := s.CreateTask("second", CreateTaskInput{AssistantID: a.ID, Title: "Inspect client", Brief: "Read UI", Kind: KindResearch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sv := &Supervisor{Store: s}
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := s.Facts(a.ID, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fs) != 2 || fs[0].Kind != FactTaskAdded || fs[1].Kind != FactTaskAdded {
+		t.Fatalf("queued facts: %+v", fs)
+	}
+	d := &Dispatcher{Store: s, Launcher: &fakeLauncher{}, Claimant: "daemon"}
+	if _, err := d.RunTask(t.Context(), first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	fs, _ = s.Facts(a.ID, "", 50)
+	if len(fs) != 3 || fs[0].Kind != FactRunFinished || fs[0].TaskID != first.ID {
+		t.Fatalf("finished facts: %+v", fs)
+	}
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := s.Facts(a.ID, "", 50)
+	if len(again) != len(fs) {
+		t.Fatalf("duplicate progress facts: %v -> %v", len(fs), len(again))
+	}
+	for _, f := range again {
+		if f.TaskID == second.ID && f.Kind == FactRunFinished {
+			t.Fatal("invented completion")
+		}
+	}
+}
+
+// The configured cadence produces an objective periodic status for
+// independent tasks; an unchanged tick cannot create a second report.
+func TestSupervisorPeriodicMultiTaskReportsRespectCadence(t *testing.T) {
+	clock := &tickClock{t: time.Unix(1_800_000_000, 0)}
+	s, _ := openTest(t, WithClock(clock.now))
+	a := mustAssistant(t, s, "report-owner", "Ada")
+	setPolicy(t, s, a, func(in *ProactivityInput) { in.ReportEveryMin = 1 })
+	first, _, err := s.CreateTask("r1", CreateTaskInput{AssistantID: a.ID, Kind: KindResearch, Title: "A", Brief: "Read A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = s.CreateTask("r2", CreateTaskInput{AssistantID: a.ID, Kind: KindResearch, Title: "B", Brief: "Read B"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sv := &Supervisor{Store: s}
+	pulse := func() []Fact {
+		facts, err := s.Facts(a.ID, "", 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := []Fact{}
+		for _, f := range facts {
+			if f.Kind == FactPulse {
+				out = append(out, f)
+			}
+		}
+		return out
+	}
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(pulse()); n != 0 {
+		t.Fatalf("premature report %d", n)
+	}
+	clock.t = clock.t.Add(61 * time.Second)
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pulse(); len(got) != 1 || !strings.Contains(got[0].Text, "2 queued") {
+		t.Fatalf("first report: %+v", got)
+	}
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(pulse()); n != 1 {
+		t.Fatalf("duplicate report: %d", n)
+	}
+	finishTaskAs(t, s, first.ID, RunDone)
+	clock.t = clock.t.Add(61 * time.Second)
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pulse(); len(got) != 2 || !strings.Contains(got[0].Text, "1 finished") {
+		t.Fatalf("second report: %+v", got)
+	}
+}
+
+// Progress digests must never bypass quiet hours or continue creating
+// notifications after all independent worker tasks have finished.
+func TestSupervisorPeriodicReportsQuietHoursAndSettledWork(t *testing.T) {
+	clock := &tickClock{t: time.Date(2027, 1, 15, 15, 0, 0, 0, time.UTC)}
+	s, _ := openTest(t, WithClock(clock.now))
+	a := mustAssistant(t, s, "quiet-pulse", "Ada")
+	setPolicy(t, s, a, func(in *ProactivityInput) {
+		in.ReportEveryMin = 30
+		in.QuietStart = "22:00"
+		in.QuietEnd = "08:00"
+		in.TZ = "Asia/Shanghai"
+	})
+	t1, _, err := s.CreateTask("qt1", CreateTaskInput{AssistantID: a.ID, Title: "Investigate", Brief: "Investigate", Kind: KindResearch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sv := &Supervisor{Store: s}
+	pulses := func() (count int) {
+		fs, err := s.Facts(a.ID, "", 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range fs {
+			if f.Kind == FactPulse {
+				count++
+			}
+		}
+		return
+	}
+	clock.t = clock.t.Add(61 * time.Minute) // still quiet
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pulses(); got != 0 {
+		t.Fatalf("report during quiet hours: %d", got)
+	}
+	clock.t = clock.t.Add(9 * time.Hour) // 09:01 in Shanghai
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pulses(); got != 1 {
+		t.Fatalf("missed report after quiet hours: %d", got)
+	}
+	finishTaskAs(t, s, t1.ID, RunDone)
+	clock.t = clock.t.Add(31 * time.Minute)
+	if _, err := sv.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pulses(); got != 1 {
+		t.Fatalf("unnecessary report with no outstanding tasks: %d", got)
 	}
 }

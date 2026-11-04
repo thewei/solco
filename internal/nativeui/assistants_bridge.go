@@ -522,6 +522,10 @@ func coordinatorReason(state string) string {
 		return "The Coordinator is starting."
 	case personalagent.CoordinatorFailed:
 		return "The Coordinator could not start."
+	case personalagent.CoordinatorBlocked:
+		return "The Coordinator is waiting for a permission or trust decision."
+	case personalagent.CoordinatorUncertain:
+		return "The original Coordinator launch is uncertain; do not start a duplicate."
 	case personalagent.CoordinatorStopped:
 		return "The Coordinator is stopped."
 	}

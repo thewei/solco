@@ -223,11 +223,13 @@ type Coordinator struct {
 
 // Coordinator states.
 const (
-	CoordinatorNone     = "none"
-	CoordinatorStarting = "starting"
-	CoordinatorReady    = "ready"
-	CoordinatorStopped  = "stopped"
-	CoordinatorFailed   = "failed"
+	CoordinatorNone      = "none"
+	CoordinatorStarting  = "starting"
+	CoordinatorReady     = "ready"
+	CoordinatorStopped   = "stopped"
+	CoordinatorFailed    = "failed"
+	CoordinatorUncertain = "uncertain"
+	CoordinatorBlocked   = "blocked"
 )
 
 // InboxItem is one thing that needs a person (or, for news, is worth a glance),

@@ -68,6 +68,9 @@ type API struct {
 	// Dispatcher is only set where a Launcher exists (the daemon); commands
 	// that need Herdr answer `unavailable` without it.
 	Dispatcher *Dispatcher
+	// PaneGone is a read-only Herdr check for irreversible Assistant deletion.
+	// Without it a recorded pane must block deletion, not be assumed gone.
+	PaneGone func(session, workspace, pane string) (bool, error)
 	// Config reads the legacy definitions (default config.Load); LegacyLast
 	// reads the old scheduler's watermarks (default: its schedule.json).
 	Config     func() (*config.Config, error)
@@ -184,7 +187,7 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 			x, replayed, err := a.Store.RestoreAssistant(in.RequestID, rest[0], in.ExpectedRevision)
 			return ok("assistant", x, "replayed", replayed), err
 		default:
-			err := a.Store.DeleteArchivedAssistant(rest[0], in.ExpectedRevision)
+			err := a.Store.DeleteArchivedAssistant(rest[0], in.ExpectedRevision, a.PaneGone)
 			return ok("deleted", err == nil), err
 		}
 	case "list":
@@ -456,11 +459,17 @@ func (a *API) overview() (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		row := OverviewRow{ID: x.ID, Name: x.Name, Status: x.Status, Revision: x.Revision, Tasks: len(tasks), UpdatedAt: x.UpdatedAt}
+		row := OverviewRow{ID: x.ID, Name: x.Name, Status: x.Status, Revision: x.Revision, UpdatedAt: x.UpdatedAt}
 		for _, t := range tasks {
 			if t.UpdatedAt > row.UpdatedAt {
 				row.UpdatedAt = t.UpdatedAt
 			}
+			// Coordinator and Group Agent panes are infrastructure,
+			// not user-visible worker tasks. Count the work, not the chat.
+			if t.Kind == KindCoordinator || t.Kind == KindGroupAgent {
+				continue
+			}
+			row.Tasks++
 			switch t.State {
 			case TaskQueued, TaskClaimed, TaskWaiting:
 				row.Queued++
