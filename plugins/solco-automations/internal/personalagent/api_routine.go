@@ -299,12 +299,6 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 	if ok, why := migratable(x, cfg.Backend); !ok {
 		return nil, coded("invalid", "%s", why)
 	}
-	rid := func(suffix string) string {
-		if requestID == "" {
-			return ""
-		}
-		return requestID + ":" + suffix
-	}
 	source := in.Source
 	if source == "" {
 		source = "chat"
@@ -317,10 +311,9 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 		Source: source, CorrelationID: in.CorrelationID, DefHash: DefinitionHash(x.WithDefaults())}
 	// The command's durable receipt must be checked BEFORE any YAML writes.
 	// A rejected replay must not change a Routine whose prompt it may not own.
-	// A matching replay also leaves the current file untouched.
 	var preflightReplay bool
 	if requestID != "" {
-		_, preflightReplay, err = peekReceipt[Routine](a.Store, rid("r"), "routine.upsert", routineInput)
+		_, preflightReplay, err = peekReceipt[Routine](a.Store, requestID+":r", "routine.upsert", routineInput)
 		if err != nil {
 			return nil, err
 		}
@@ -331,55 +324,66 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 			}
 		}
 	}
-	created := original == "" && !preflightReplay
-	undo := func() {
-		if created {
-			_ = a.cfgRemove(in.Name)
-		}
-	}
-	if !preflightReplay {
-		res, err := a.cfgPut(original, x)
-		if err != nil {
-			return nil, coded("internal", "%v", err)
-		}
-		if res.Problem != "" {
-			return nil, coded("invalid", "%s", res.Problem)
-		}
-	}
-	cfg, err = a.loadConfig()
-	if err != nil || cfg.Find(in.Name) == nil {
-		undo()
-		return nil, coded("internal", "the draft could not be read back")
-	}
-	loaded := *cfg.Find(in.Name)
-	routineInput.DefHash = DefinitionHash(loaded)
-	r, replayed, err := a.Store.UpsertRoutine(rid("r"), routineInput)
-	if err != nil {
-		undo()
-		return nil, err
-	}
-	// The rule scheduler owns it from the first moment, so the old scheduler can never fire it;
-	// being a draft, it fires nothing until a person approves.
-	if _, _, err := a.Store.AdoptLegacy(rid("d"), in.Name, cfg, a.legacyLast(), a.now()); err != nil {
-		undo()
-		return nil, err
-	}
+	// Freeze the exact approval wording and first predicted runs before
+	// touching YAML. Replaying the intent after a reboot must ask the same
+	// question, even if the wall clock has advanced.
 	next := []time.Time{}
-	if sched, err := config.CronParser.Parse(loaded.Cron); err == nil {
+	if sched, parseErr := config.CronParser.Parse(x.Cron); parseErr == nil {
 		t := a.now()
 		for range 3 {
 			t = sched.Next(t)
 			next = append(next, t)
 		}
 	}
-	ap, _, err := a.Store.RequestApproval(rid("a"), RequestApprovalInput{AssistantID: in.AssistantID, SubjectKind: "routine", SubjectID: in.Name,
-		Action: RoutineAction(loaded, next), TTL: 7 * 24 * time.Hour})
-	if err != nil {
-		return nil, err
-	}
 	nextMS := make([]int64, len(next))
 	for i, t := range next {
 		nextMS[i] = t.UnixMilli()
+	}
+	intentID := requestID
+	if intentID == "" {
+		intentID = newID("routine-request")
+	}
+	intent := routineIntent{RequestID: intentID, Input: routineInput, Action: RoutineAction(x.WithDefaults(), next), Next: nextMS}
+	if preflightReplay {
+		// A successful replay may be days old; the approval receipt contains
+		// the exact frozen action, not today's reconstructed NextRun.
+		if prev, found, err := a.Store.routineApprovalReceipt(intentID); err != nil {
+			return nil, err
+		} else if found {
+			if prev.SubjectKind != "routine" || prev.SubjectID != in.Name || prev.AssistantID != in.AssistantID {
+				return nil, ErrRequestConflict
+			}
+			intent.Action = prev.Action
+		}
+	} else {
+		// This WAL transaction commits first. Every possible process death
+		// after it leaves a recoverable, dispatch-reserved intent.
+		if err := a.Store.recordRoutineIntent(intent); err != nil {
+			return nil, err
+		}
+		res, err := a.cfgPut(original, x)
+		if err != nil {
+			return nil, coded("internal", "%v", err)
+		}
+		if res.Problem != "" {
+			if err := a.Store.dropRoutineIntent(in.Name); err != nil {
+				return nil, err
+			}
+			return nil, coded("invalid", "%s", res.Problem)
+		}
+	}
+	cfg, err = a.loadConfig()
+	if err != nil || cfg.Find(in.Name) == nil {
+		return nil, coded("internal", "the draft could not be read back; the intent will be retried")
+	}
+	r, ap, replayed, err := a.Store.completeRoutineIntent(intent, cfg, a.legacyLast(), a.now())
+	if err != nil {
+		return nil, err // journal is retained for recovery, never blindly undone
+	}
+	if !preflightReplay {
+		if err := a.Store.dropRoutineIntent(in.Name); err != nil {
+			return nil, err
+		}
 	}
 	return ok("routine", a.routineView(r, cfg), "approval", ap, "next", nextMS, "replayed", replayed), nil
 }

@@ -183,6 +183,48 @@ func approveUnlocked(name string, match func(Automation) bool) error {
 	return write(raw)
 }
 
+// RestoreDraftIf repairs an accidentally cleared Routine draft only if its
+// executable definition still matches the interrupted operation. Unlike a
+// read-then-Put, validation and the YAML edit share the same cross-process
+// lock, so recovery never overwrites an external editor's new definition.
+func RestoreDraftIf(name string, match func(Automation) bool) error {
+	if match == nil {
+		return ErrDefinitionChanged
+	}
+	return withEditLock(func() error {
+		doc, indent, err := readDoc()
+		if err != nil {
+			return err
+		}
+		seq := automationsOf(doc)
+		at := entryIndex(seq, name)
+		if at < 0 {
+			return fmt.Errorf("%w: %s not found", ErrDefinitionChanged, name)
+		}
+		current, err := encode(doc, indent)
+		if err != nil {
+			return err
+		}
+		cfg, err := parse(current)
+		if err != nil {
+			return err
+		}
+		a := cfg.Find(name)
+		if a == nil || !match(*a) {
+			return fmt.Errorf("%w: %s changed", ErrDefinitionChanged, name)
+		}
+		if a.Draft {
+			return nil
+		}
+		setBool(seq.Content[at], "draft", true)
+		raw, err := encode(doc, indent)
+		if err != nil {
+			return err
+		}
+		return write(raw)
+	})
+}
+
 // SetPaused pauses or resumes one automation (its disabled flag), or every
 // automation when name is empty (the top-level paused flag).
 func SetPaused(name string, paused bool) error {

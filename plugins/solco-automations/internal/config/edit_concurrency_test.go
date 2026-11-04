@@ -116,6 +116,39 @@ func TestSaveRefusesStaleSnapshotAfterConcurrentPut(t *testing.T) {
 	}
 }
 
+// A recovery process may restore a Draft flag only for the exact prompt
+// originally checked. A stale recovery may not overwrite a later edit.
+func TestRestoreDraftIfRefusesChangedDefinition(t *testing.T) {
+	withConfig(t, "")
+	initial := Automation{Name: "job", Cron: "@daily", Repo: "/tmp", Prompt: "Original", Agent: "claude", Draft: true}
+	if result, err := Put("", initial, false); err != nil || result.Problem != "" {
+		t.Fatalf("create draft: %+v %v", result, err)
+	}
+	if err := Approve("job"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestoreDraftIf("job", func(a Automation) bool { return a.Prompt == "Original" }); err != nil {
+		t.Fatalf("restore same definition: %v", err)
+	}
+	cfg, err := Load()
+	if err != nil || !cfg.Find("job").Draft {
+		t.Fatalf("failed to restore Draft: %+v %v", cfg, err)
+	}
+	updated := *cfg.Find("job")
+	updated.Prompt = "Changed after original approval"
+	updated.Draft = false
+	if result, err := Put("job", updated, false); err != nil || result.Problem != "" {
+		t.Fatalf("edit: %+v %v", result, err)
+	}
+	if err := RestoreDraftIf("job", func(a Automation) bool { return a.Prompt == "Original" }); !errors.Is(err, ErrDefinitionChanged) {
+		t.Fatalf("stale repair did not refuse changed prompt: %v", err)
+	}
+	cfg, err = Load()
+	if err != nil || cfg.Find("job").Prompt != updated.Prompt || cfg.Find("job").Draft {
+		t.Fatalf("stale repair overwrote prompt or Draft: %+v %v", cfg.Find("job"), err)
+	}
+}
+
 // AUD-18: the action actually cleared by ApproveIf must be the one whose
 // normalized definition was checked, rather than a later YAML revision.
 func TestApproveIfRefusesChangedDraft(t *testing.T) {

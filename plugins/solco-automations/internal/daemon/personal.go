@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"strings"
@@ -69,6 +70,20 @@ func startPersonal(n *notify.Notifier) *personal {
 	if err != nil {
 		log.Printf("assistants: store unavailable, Assistants are paused: %v", err)
 		return nil
+	}
+	if n, err := store.RecoverRoutineIntents(); err != nil {
+		if !errors.Is(err, config.ErrDefinitionChanged) {
+			// The core itself is unavailable or corrupt; never hand any
+			// Assistant-owned rules over to the legacy scheduler.
+			log.Printf("assistants: routine crash recovery failed, scheduling paused: %v", err)
+			_ = store.Close()
+			return nil
+		}
+		// One interrupted draft was edited externally. Its durable
+		// intent still reserves the name; other Assistants may continue.
+		log.Printf("assistants: interrupted routine needs review: %v", err)
+	} else if n > 0 {
+		log.Printf("assistants: recovered %d interrupted draft(s); awaiting Owner approval", n)
 	}
 	if exe, err := os.Executable(); err == nil {
 		personalagent.CLI = exe
@@ -286,7 +301,7 @@ func (p *personal) ownedRules() (map[string]bool, error) {
 	if p == nil {
 		return nil, nil
 	}
-	return p.store.OwnedLegacy()
+	return p.store.LegacyReservations()
 }
 
 // handbacks returns the watermarks of rules just given back to the old

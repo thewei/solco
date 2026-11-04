@@ -24,6 +24,18 @@ func assistantCmd(args []string) error {
 		return printAssistantError(err)
 	}
 	defer store.Close()
+	// Finish an interrupted YAML -> SQLite Routine draft before any CLI
+	// request sees the state. This never approves or runs the draft.
+	if n, err := store.RecoverRoutineIntents(); err != nil {
+		if !errors.Is(err, config.ErrDefinitionChanged) {
+			return printAssistantError(err)
+		}
+		// A changed interrupted draft remains quarantined from the
+		// legacy scheduler; unrelated Assistant commands stay available.
+		fmt.Fprintf(os.Stderr, "assistants: routine recovery needs review: %v\n", err)
+	} else if n > 0 {
+		fmt.Fprintf(os.Stderr, "assistants: recovered %d interrupted routine draft(s)\n", n)
+	}
 	var body []byte
 	if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice == 0 {
 		body, _ = io.ReadAll(io.LimitReader(os.Stdin, 4<<20))

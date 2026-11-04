@@ -534,6 +534,13 @@ var migrations = []string{
 		revision INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
 	);`,
+	// 19: SQLite intent survives YAML -> SQLite crash windows of routine drafts.
+	// It only authorizes finishing an approval *request*, never executing one.
+	`CREATE TABLE routine_intents (
+		name TEXT PRIMARY KEY,
+		payload TEXT NOT NULL,
+		created_at INTEGER NOT NULL
+	);`,
 }
 
 func (s *Store) migrate() error {
