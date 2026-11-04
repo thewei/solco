@@ -69,7 +69,7 @@ func (l *HostLauncher) automation(spec LaunchSpec) config.Automation {
 	}
 	return config.Automation{
 		Name: spec.RunID + " " + spec.titleHint(), Repo: repo, Workspace: mode, Agent: spec.Agent, Model: spec.Model,
-		Prompt: spec.Prompt, TimeoutMinutes: minutes, Session: l.Session,
+		Prompt: spec.Prompt, TimeoutMinutes: minutes, Session: l.Session, AgentArgs: spec.AgentArgs,
 	}
 }
 

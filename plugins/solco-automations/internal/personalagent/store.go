@@ -397,6 +397,52 @@ var migrations = []string{
 	// 14: the newest message a launching Group Agent's brief carried. It only
 	// becomes last_seq once the Agent really finished that turn.
 	`ALTER TABLE group_agents ADD COLUMN launch_seq INTEGER NOT NULL DEFAULT 0;`,
+	// 15: Assistants 3.1 U2 — a versioned "how you work" text per Assistant (the
+	// active text stays assistants.role_prompt; this table is the history), the
+	// revision each running surface actually launched with, the Assistant's own
+	// Agent/Model/Effort, per-Assistant MCP grants and what each launch bound.
+	`CREATE TABLE assistant_instructions (
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		revision INTEGER NOT NULL,
+		body TEXT NOT NULL,
+		source TEXT NOT NULL,
+		created_at INTEGER NOT NULL,
+		PRIMARY KEY (assistant_id, revision)
+	);
+	CREATE TABLE persona_applied (
+		assistant_id TEXT NOT NULL,
+		surface TEXT NOT NULL,
+		revision INTEGER NOT NULL,
+		applied_at INTEGER NOT NULL,
+		PRIMARY KEY (assistant_id, surface)
+	);
+	CREATE TABLE assistant_runtime (
+		assistant_id TEXT PRIMARY KEY REFERENCES assistants(id),
+		agent_kind TEXT NOT NULL DEFAULT '',
+		model TEXT NOT NULL DEFAULT '',
+		effort TEXT NOT NULL DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 1,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE TABLE mcp_grants (
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		server_id TEXT NOT NULL,
+		revision INTEGER NOT NULL DEFAULT 1,
+		updated_at INTEGER NOT NULL,
+		PRIMARY KEY (assistant_id, server_id)
+	);
+	CREATE TABLE mcp_bindings (
+		assistant_id TEXT NOT NULL,
+		surface TEXT NOT NULL,
+		agent_kind TEXT NOT NULL,
+		servers TEXT NOT NULL DEFAULT '[]',
+		strict INTEGER NOT NULL DEFAULT 0,
+		unsupported TEXT NOT NULL DEFAULT '',
+		bound_at INTEGER NOT NULL,
+		verified_state TEXT NOT NULL DEFAULT '',
+		verified_at INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (assistant_id, surface)
+	);`,
 }
 
 func (s *Store) migrate() error {

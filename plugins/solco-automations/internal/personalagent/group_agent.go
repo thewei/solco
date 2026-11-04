@@ -71,9 +71,7 @@ func (s *Store) GetGroupAgent(groupID, assistantID string) (GroupAgent, error) {
 // attempt. agentKind "" is DefaultCoordinatorAgent.
 func (s *Store) StartGroupAgent(requestID, groupID, assistantID, agentKind, model string) (GroupAgent, bool, error) {
 	agentKind, model = strings.TrimSpace(agentKind), strings.TrimSpace(model)
-	if agentKind == "" {
-		agentKind = DefaultCoordinatorAgent
-	}
+	agentKind, model = s.runtimeDefaults(assistantID, agentKind, model)
 	if !coordinatorAgentRe.MatchString(agentKind) {
 		return GroupAgent{}, false, fmt.Errorf("%w: agent %q is not a Herdr agent kind", ErrInvalid, agentKind)
 	}

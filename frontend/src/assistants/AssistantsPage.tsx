@@ -17,6 +17,7 @@ import {
   type MemoryItem,
 } from "../mygo";
 import { GroupChat, NewGroup } from "./GroupChat";
+import { WorkStyle } from "./WorkStyle";
 import "./assistants.css";
 
 /**
@@ -30,7 +31,7 @@ import "./assistants.css";
  * duplicating, and a refusal shows the plugin's own sentence.
  */
 
-type Tab = "needs" | "watching" | "tasks" | "done" | "memory" | "about";
+type Tab = "needs" | "watching" | "tasks" | "done" | "memory" | "style" | "about";
 type Form = "assistant" | "group" | "watch" | "task" | "rename" | null;
 
 const rid = () => crypto.randomUUID();
@@ -191,6 +192,7 @@ export function AssistantsPage() {
     ["tasks", "Tasks", drawer ? drawer.tasks.filter((t) => OPEN_TASK.has(t.state)).length : 0],
     ["done", "Done", 0],
     ["memory", "Memory", 0],
+    ["style", "Work style", 0],
     ["about", "About", 0],
   ];
   const choose = (fn: () => void) => () => {
@@ -229,6 +231,9 @@ export function AssistantsPage() {
                   New task…
                 </button>
                 <hr />
+                <button type="button" role="menuitem" onClick={choose(() => setTab("style"))}>
+                  Work style…
+                </button>
                 <button type="button" role="menuitem" onClick={choose(() => setForm("rename"))}>
                   Rename…
                 </button>
@@ -236,7 +241,7 @@ export function AssistantsPage() {
                   {a.status === "active" ? "Pause" : "Resume"} {a.name}
                 </button>
                 {a.status === "active" && co.state !== "none" ? (
-                  <button type="button" role="menuitem" onClick={choose(() => void act(() => assistants.startCoordinator(rid(), a.id, view.defaultAgent)))} disabled={canStop}>
+                  <button type="button" role="menuitem" onClick={choose(() => void act(() => assistants.startCoordinator(rid(), a.id, "")))} disabled={canStop}>
                     Restart Coordinator
                   </button>
                 ) : null}
@@ -368,6 +373,7 @@ function Strip({ pending, others, open, setOpen, act, more }: { pending: Approva
 function DrawerBody({ tab, detail, drawer, view, pending, act, pull }: { tab: Tab; detail: AssistantsDetail; drawer: AssistantsDrawer | null; view: AssistantsView; pending: Approval[]; act: Act; pull: () => void }) {
   const reasons = new Map(detail.inbox.items.filter((i) => i.kind !== "approval" && i.kind !== "news" && i.taskId).map((i) => [i.taskId as string, i]));
   if (tab === "about") return <About detail={detail} view={view} act={act} />;
+  if (tab === "style") return <WorkStyle id={detail.assistant.id} agents={view.agents} act={act} />;
   if (!drawer) return <Empty>Loading…</Empty>;
   const needTasks = drawer.tasks.filter((t) => reasons.has(t.id) || t.needsYou);
   const live = drawer.goals.filter((g) => g.state === "draft" || g.state === "active" || g.state === "paused");
@@ -406,7 +412,7 @@ function About({ detail, view, act }: { detail: AssistantsDetail; view: Assistan
         <p className="as-meta">The Agent you talk to. It runs as a real Herdr Agent and files tasks for you to publish.</p>
         <div className="as-row">
           {canStart ? (
-            <button type="button" className="as-btn" disabled={view.agents.length === 0} onClick={() => act(() => assistants.startCoordinator(rid(), a.id, view.defaultAgent))}>
+            <button type="button" className="as-btn" disabled={view.agents.length === 0} onClick={() => act(() => assistants.startCoordinator(rid(), a.id, ""))}>
               {co.state === "none" ? "Start" : "Start again"}
             </button>
           ) : null}
@@ -434,13 +440,13 @@ function Conversation({ view, detail, setError, refresh }: { view: AssistantsVie
   const co = detail.coordinator;
   const [bind, setBind] = useState<CoordinatorChat | null>(null);
   const [draft, setDraft] = useState(() => localStorage.getItem(DRAFT_KEY(a.id)) ?? "");
-  const [agent, setAgent] = useState(view.defaultAgent);
+  const [agent, setAgent] = useState(detail.profileAgent || view.defaultAgent);
   const [held, setHeld] = useState<{ id: string; text: string; at: number } | null>(null);
   const sentFor = useRef("");
   const live = co.state === "ready" && detail.coordinatorOpen;
   useEffect(() => {
-    if (!agent || !view.agents.some((x) => x.id === agent)) setAgent(view.defaultAgent);
-  }, [agent, view.agents, view.defaultAgent]);
+    if (!agent || !view.agents.some((x) => x.id === agent)) setAgent(detail.profileAgent || view.defaultAgent);
+  }, [agent, view.agents, view.defaultAgent, detail.profileAgent]);
   useEffect(() => {
     if (!live) {
       setBind(null);

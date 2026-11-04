@@ -76,9 +76,7 @@ var coordinatorAgentRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 // A kind or model the plugin cannot pass to Herdr safely is refused.
 func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model string) (Coordinator, bool, error) {
 	agentKind, model = strings.TrimSpace(agentKind), strings.TrimSpace(model)
-	if agentKind == "" {
-		agentKind = DefaultCoordinatorAgent
-	}
+	agentKind, model = s.runtimeDefaults(assistantID, agentKind, model)
 	if !coordinatorAgentRe.MatchString(agentKind) {
 		return Coordinator{}, false, fmt.Errorf("%w: agent %q is not a Herdr agent kind", ErrInvalid, agentKind)
 	}
@@ -193,7 +191,7 @@ var CLI = "solco-automations"
 // nothing from any other Assistant.
 func CoordinatorPrompt(a Assistant) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are the Coordinator of the Solco Assistant %q (id %s). You are the person's conversation partner for this Assistant: answer questions, think things through and report plainly, in the language the person writes in. When real work is needed you turn the person's goals into tasks and keep them moving; you do not do the tasks yourself.\n\n", a.Name, a.ID)
+	fmt.Fprintf(&b, "You are the Coordinator of the Solco Assistant %q (id %s). You are the person's conversation partner for this Assistant: answer questions, think things through and report plainly, in the language the person writes in. Handle quick questions and small jobs yourself; when real, multi-step work is needed, turn the person's goals into tasks, keep them moving and verify what comes back before you report it.\n\n", a.Name, a.ID)
 	if strings.TrimSpace(a.RolePrompt) != "" {
 		b.WriteString("Role: " + strings.TrimSpace(a.RolePrompt) + "\n\n")
 	}

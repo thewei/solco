@@ -1028,3 +1028,26 @@
   color: var(--accent);
   cursor: pointer;
 }
+
+/* Work style (Assistants 3.1 U2). */
+.as-field textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.45;
+}
+
+.as-mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.as-mcp .as-row {
+  flex-wrap: wrap;
+}
+
+.as-mcp-state {
+  padding-left: 24px;
+}

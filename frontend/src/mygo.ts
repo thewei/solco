@@ -4,6 +4,13 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/** AppliedRevision is the revision a running surface was launched with. */
+export interface AppliedRevision {
+  surface: string;
+  revision: number;
+  appliedAt: number;
+}
+
 /** Approval is a question to a person about one exact action. */
 export interface Approval {
   id: string;
@@ -64,6 +71,11 @@ export interface AssistantsDetail {
    * reviews, failed starts, stalls); the page draws it, never recomputes it.
    */
   inbox: Inbox;
+  /**
+   * ProfileAgent is the Agent the Assistant's own profile starts a Coordinator
+   * on ("" = none chosen); read only while no Coordinator runs, for the chip.
+   */
+  profileAgent: string;
 }
 
 /** AssistantsDrawer is the More drawer's content for one Assistant. */
@@ -779,6 +791,58 @@ export interface InboxItem {
   at: number;
 }
 
+/** InstructionRevision is one stored version of the working style. */
+export interface InstructionRevision {
+  revision: number;
+  source: string;
+  body: string;
+  createdAt: number;
+}
+
+/** Instructions is the Assistant's active working style and its history. */
+export interface Instructions {
+  assistantId: string;
+  revision: number;
+  body: string;
+  history: InstructionRevision[];
+  applied: AppliedRevision[];
+}
+
+/** MCPBinding is what one surface's last launch was handed. */
+export interface MCPBinding {
+  surface: string;
+  agent: string;
+  servers: string[];
+  strict: boolean;
+  unsupported?: string;
+  boundAt: number;
+}
+
+/** MCPServerState keeps the four states apart: configured, granted, bound, verified. */
+export interface MCPServerState {
+  id: string;
+  name: string;
+  transport: string;
+  summary: string;
+  sources: string[];
+  agents: string[];
+  configured: boolean;
+  granted: boolean;
+  bound: string[];
+  verified: string;
+  verifiedAt: number;
+}
+
+/** MCPView is an Assistant's MCP picture. */
+export interface MCPView {
+  assistantId: string;
+  agent: string;
+  supported: boolean;
+  unsupported?: string;
+  servers: MCPServerState[];
+  bindings: MCPBinding[];
+}
+
 /** MemoryItem is one remembered thing. */
 export interface MemoryItem {
   id: string;
@@ -820,6 +884,43 @@ export interface OverviewRow {
   done: number;
   goals: number;
   approvals: number;
+}
+
+/**
+ * PersonaView is the Work style tab: everything about how the Assistant works,
+ * read on open.
+ */
+export interface PersonaView {
+  instructions: Instructions;
+  runtime: Runtime;
+  mcp: MCPView;
+}
+
+/** RunningAgent is an Agent the Assistant really has right now. */
+export interface RunningAgent {
+  surface: string;
+  taskId: string;
+  agent: string;
+  model: string;
+  state: string;
+  paneId?: string;
+}
+
+/** Runtime is the profile plus what really runs. */
+export interface Runtime {
+  profile: RuntimeProfile;
+  running: RunningAgent[];
+}
+
+/** RuntimeProfile is the Agent an Assistant starts by default. */
+export interface RuntimeProfile {
+  assistantId: string;
+  agent: string;
+  model: string;
+  effort: string;
+  effortSupported: boolean;
+  revision: number;
+  updatedAt: number;
 }
 
 /** SubagentCard is one sub-agent card/roster row (the page's wire shape). */
@@ -1170,6 +1271,10 @@ export const assistants = {
   goalAction(requestID: string, action: string, id: string, revision: number, evidence: string): Promise<void> {
     return call("assistants.GoalAction", requestID, action, id, revision, evidence);
   },
+  /** GrantMCP allows or withdraws one server for the Assistant (next start). */
+  grantMCP(requestID: string, id: string, serverID: string, granted: boolean): Promise<void> {
+    return call("assistants.GrantMCP", requestID, id, serverID, granted);
+  },
   /**
    * GroupFeed reads a Group's log: the newest page when since is 0, else what
    * came after it. The page asks every couple of seconds while it is visible.
@@ -1196,6 +1301,10 @@ export const assistants = {
   pendingIntent(): Promise<AssistantsIntent | null> {
     return call("assistants.PendingIntent");
   },
+  /** Persona reads the working style, the Agent profile and the MCP picture. */
+  persona(id: string): Promise<PersonaView> {
+    return call("assistants.Persona", id);
+  },
   /**
    * PostGroupMessage is the person's own message. mentions are member ids; each
    * member's @Name must be in the text, and only those Assistants are woken.
@@ -1215,9 +1324,24 @@ export const assistants = {
   renameGroup(requestID: string, id: string, title: string, revision: number): Promise<void> {
     return call("assistants.RenameGroup", requestID, id, title, revision);
   },
+  /** RestoreInstructions makes an earlier revision's text current as a new revision. */
+  restoreInstructions(requestID: string, id: string, revision: number, expected: number): Promise<void> {
+    return call("assistants.RestoreInstructions", requestID, id, revision, expected);
+  },
   /** RetryTask re-queues a failed or cancelled task. */
   retryTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.RetryTask", requestID, id, revision);
+  },
+  /** SaveInstructions stores a new revision (it reaches Agents started afterwards). */
+  saveInstructions(requestID: string, id: string, body: string, revision: number): Promise<void> {
+    return call("assistants.SaveInstructions", requestID, id, body, revision);
+  },
+  /**
+   * SaveRuntime sets the Agent/Model/Effort new starts default to. An Agent the
+   * settings do not offer is refused; a running Agent is never restarted.
+   */
+  saveRuntime(requestID: string, id: string, agent: string, model: string, effort: string, revision: number): Promise<void> {
+    return call("assistants.SaveRuntime", requestID, id, agent, model, effort, revision);
   },
   /** Select records the Assistant the page is on (the sidebar row follows). */
   select(id: string): Promise<void> {
@@ -1248,6 +1372,10 @@ export const assistants = {
   /** StopCoordinator marks the Coordinator stopped. */
   stopCoordinator(requestID: string, id: string): Promise<void> {
     return call("assistants.StopCoordinator", requestID, id);
+  },
+  /** VerifyMCP asks a headless Agent which of the granted servers it connects to. */
+  verifyMCP(id: string): Promise<void> {
+    return call("assistants.VerifyMCP", id);
   },
 } as const;
 

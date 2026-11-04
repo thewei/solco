@@ -401,3 +401,91 @@ func (c *Client) PostGroupMessage(ctx context.Context, requestID, groupID, text 
 	}{req{RequestID: requestID}, groupID, text, mentions, replyTo}
 	return out.Result, c.do(ctx, body, &out, "group", "post")
 }
+
+// Instructions reads an Assistant's working style (text, history, applied revisions).
+func (c *Client) Instructions(ctx context.Context, id string) (Instructions, error) {
+	var out struct {
+		Instructions Instructions `json:"instructions"`
+	}
+	return out.Instructions, c.do(ctx, nil, &out, "persona", "instructions", id)
+}
+
+// SetInstructions saves a new revision of the working style.
+func (c *Client) SetInstructions(ctx context.Context, requestID, id, body string, rev int) (Instructions, error) {
+	var out struct {
+		Instructions Instructions `json:"instructions"`
+	}
+	in := struct {
+		req
+		Body string `json:"body"`
+	}{req{requestID, rev}, body}
+	return out.Instructions, c.do(ctx, in, &out, "persona", "set-instructions", id)
+}
+
+// RestoreInstructions makes an earlier revision's text current as a new revision.
+func (c *Client) RestoreInstructions(ctx context.Context, requestID, id string, revision, rev int) (Instructions, error) {
+	var out struct {
+		Instructions Instructions `json:"instructions"`
+	}
+	in := struct {
+		req
+		Revision int `json:"revision"`
+	}{req{requestID, rev}, revision}
+	return out.Instructions, c.do(ctx, in, &out, "persona", "restore-instructions", id)
+}
+
+// Runtime reads the Assistant's Agent/Model/Effort profile and its running Agents.
+func (c *Client) Runtime(ctx context.Context, id string) (Runtime, error) {
+	var out struct {
+		Runtime Runtime `json:"runtime"`
+	}
+	return out.Runtime, c.do(ctx, nil, &out, "persona", "runtime", id)
+}
+
+// SetRuntime saves the profile (applies to the next start).
+func (c *Client) SetRuntime(ctx context.Context, requestID, id, agent, model, effort string, rev int) (Runtime, error) {
+	var out struct {
+		Runtime Runtime `json:"runtime"`
+	}
+	in := struct {
+		requestIDOnly
+		Agent  string `json:"agent"`
+		Model  string `json:"model"`
+		Effort string `json:"effort"`
+		Rev    int    `json:"expectedRevision"`
+	}{requestIDOnly{requestID}, agent, model, effort, rev}
+	return out.Runtime, c.do(ctx, in, &out, "persona", "set-runtime", id)
+}
+
+type requestIDOnly struct {
+	RequestID string `json:"requestId"`
+}
+
+// MCP reads the Assistant's MCP servers with their four states.
+func (c *Client) MCP(ctx context.Context, id string) (MCPView, error) {
+	var out struct {
+		MCP MCPView `json:"mcp"`
+	}
+	return out.MCP, c.do(ctx, nil, &out, "persona", "mcp", id)
+}
+
+// GrantMCP allows or withdraws one server for the Assistant.
+func (c *Client) GrantMCP(ctx context.Context, requestID, id, serverID string, granted bool) (MCPView, error) {
+	var out struct {
+		MCP MCPView `json:"mcp"`
+	}
+	in := struct {
+		requestIDOnly
+		ServerID string `json:"serverId"`
+		Granted  bool   `json:"granted"`
+	}{requestIDOnly{requestID}, serverID, granted}
+	return out.MCP, c.do(ctx, in, &out, "persona", "mcp-grant", id)
+}
+
+// VerifyMCP probes what an Agent would load and records its own per-server status.
+func (c *Client) VerifyMCP(ctx context.Context, id string) (MCPView, error) {
+	var out struct {
+		MCP MCPView `json:"mcp"`
+	}
+	return out.MCP, c.do(ctx, nil, &out, "persona", "mcp-verify", id)
+}

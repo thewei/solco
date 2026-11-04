@@ -90,9 +90,16 @@ func (s *Store) CreateAssistant(requestID string, in CreateAssistantInput) (Assi
 		now := s.nowMS()
 		id := newID("a")
 		refs, _ := json.Marshal(append([]string{}, in.WorkspaceRefs...))
+		role, source := strings.TrimSpace(in.RolePrompt), SourceUser
+		if role == "" {
+			role, source = DefaultInstructions(in.Name, in.Description), SourceDefault
+		}
 		_, err := tx.Exec(`INSERT INTO assistants(`+assistantCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-			id, in.Name, in.Description, in.RolePrompt, in.Scope, string(refs), "", "review", StatusActive, 1, now, now)
+			id, in.Name, in.Description, role, in.Scope, string(refs), "", "review", StatusActive, 1, now, now)
 		if err != nil {
+			return Assistant{}, err
+		}
+		if _, err := tx.Exec(`INSERT INTO assistant_instructions(assistant_id,revision,body,source,created_at) VALUES(?,?,?,?,?)`, id, 1, role, source, now); err != nil {
 			return Assistant{}, err
 		}
 		return getAssistantTx(tx, id)

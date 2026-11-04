@@ -1,0 +1,15 @@
+{
+  "runtime": {
+    "profile": {
+      "assistantId": "a_0000000000000009",
+      "agent": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "effortSupported": true,
+      "revision": 1,
+      "updatedAt": 1800000000000
+    },
+    "running": []
+  },
+  "schema": 1
+}

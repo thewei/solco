@@ -184,13 +184,22 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 	if in.Kind == KindCoding && strings.TrimSpace(in.RepoPath) == "" {
 		return Task{}, false, fmt.Errorf("%w: a coding task needs a repoPath", ErrInvalid)
 	}
-	if in.Agent == "" {
-		in.Agent = "claude"
-	}
 	return execute(s, requestID, "task.create", in, func(tx *sql.Tx) (Task, error) {
 		a, err := getAssistantTx(tx, in.AssistantID)
 		if err != nil {
 			return Task{}, err
+		}
+		// An Agent the caller did not name is the Assistant's own (3.1 U2).
+		in := in
+		if in.Agent == "" {
+			p := s.profileOf(tx, in.AssistantID)
+			in.Agent = p.Agent
+			if in.Model == "" {
+				in.Model = p.Model
+			}
+			if in.Agent == "" {
+				in.Agent = "claude"
+			}
 		}
 		if a.Status != StatusActive {
 			return Task{}, ErrAssistantDisabled

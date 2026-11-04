@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -53,6 +54,14 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 		return []byte(`{"schema":1,"assistants":[` + paAssistant + `]}`), nil
 	case key == "create", strings.HasPrefix(key, "rename "), strings.HasPrefix(key, "pause "), strings.HasPrefix(key, "resume "), strings.HasPrefix(key, "enable "), strings.HasPrefix(key, "disable "):
 		return []byte(`{"schema":1,"assistant":` + paAssistant + `}`), nil
+	case strings.HasPrefix(key, "persona "):
+		name := map[string]string{"instructions": "persona-instructions", "set-instructions": "persona-instructions", "restore-instructions": "persona-instructions",
+			"runtime": "persona-runtime", "set-runtime": "persona-runtime", "mcp": "persona-mcp", "mcp-grant": "persona-mcp", "mcp-verify": "persona-mcp-verified"}[strings.Fields(key)[1]]
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
 	case key == "group list":
 		return []byte(`{"schema":1,"groups":[` + paGroup + `]}`), nil
 	case strings.HasPrefix(key, "group show"):
@@ -483,6 +492,21 @@ func TestPersonalAgentGolden(t *testing.T) {
 	golden(t, "personal-agent-group-message-request.json", []byte(`{"requestId":"8c1d5e2a-3b7f-4f60-9a11-2d4c6e8f0a13","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"]}`))
 	_, posted := h.send("POST", "/api/v3/personal-agent/groups/"+paGroupID+"/messages", h.token, `{"requestId":"8c1d5e2a-3b7f-4f60-9a11-2d4c6e8f0a13","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"]}`)
 	golden(t, "personal-agent-group-message.json", posted)
+	pbase := "/api/v3/personal-agent/assistants/" + paAssistantB
+	golden(t, "personal-agent-instructions.json", bodyOf(t, h.get(pbase+"/instructions", h.token, nil)))
+	golden(t, "personal-agent-instructions-request.json", []byte(`{"requestId":"2f6c1a90-5d3e-4b78-8c21-7a9e0b4d6f15","body":"Be brief and precise.","expectedRevision":1}`))
+	_, setIns := h.send("POST", pbase+"/instructions", h.token, `{"requestId":"2f6c1a90-5d3e-4b78-8c21-7a9e0b4d6f15","body":"Be brief and precise.","expectedRevision":1}`)
+	golden(t, "personal-agent-instructions-saved.json", setIns)
+	golden(t, "personal-agent-runtime.json", bodyOf(t, h.get(pbase+"/runtime", h.token, nil)))
+	golden(t, "personal-agent-runtime-request.json", []byte(`{"requestId":"9b4e7d21-0c3a-4f58-a6d9-3e1f8c2b5a70","agent":"claude","model":"sonnet","effort":"high","expectedRevision":0}`))
+	_, setRt := h.send("POST", pbase+"/runtime", h.token, `{"requestId":"9b4e7d21-0c3a-4f58-a6d9-3e1f8c2b5a70","agent":"claude","model":"sonnet","effort":"high","expectedRevision":0}`)
+	golden(t, "personal-agent-runtime-saved.json", setRt)
+	golden(t, "personal-agent-mcp.json", bodyOf(t, h.get(pbase+"/mcp", h.token, nil)))
+	golden(t, "personal-agent-mcp-grant-request.json", []byte(`{"requestId":"c7a3f5e8-1b2d-4960-8e4a-5d7f9a1c3b62","serverId":"alpha","granted":true}`))
+	_, grant := h.send("POST", pbase+"/mcp/grant", h.token, `{"requestId":"c7a3f5e8-1b2d-4960-8e4a-5d7f9a1c3b62","serverId":"alpha","granted":true}`)
+	golden(t, "personal-agent-mcp-granted.json", grant)
+	_, verified := h.send("POST", pbase+"/mcp/verify", h.token, `{}`)
+	golden(t, "personal-agent-mcp-verified.json", verified)
 	golden(t, "personal-agent-approvals.json", bodyOf(t, h.get("/api/v3/personal-agent/approvals", h.token, nil)))
 	golden(t, "personal-agent-inbox.json", bodyOf(t, h.get("/api/v3/personal-agent/inbox", h.token, nil)))
 	if resp := h.get("/api/v3/personal-agent/inbox?assistant=not%20an%20id", h.token, nil); resp.StatusCode != http.StatusBadRequest {
@@ -545,5 +569,79 @@ func TestReconnectReplaysTheRequestIdAndARevokedPhoneIsRefused(t *testing.T) {
 	}
 	if ctx.Err() != nil {
 		t.Fatal("the revoked phone's events socket stayed open")
+	}
+}
+
+func TestPersonalAgentPersonaRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA
+
+	h.get(base+"/instructions", h.token, nil)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona instructions "+paAssistantA) {
+		t.Fatalf("instructions call %q", call)
+	}
+	h.get(base+"/runtime", h.token, nil)
+	h.get(base+"/mcp", h.token, nil)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona mcp "+paAssistantA) {
+		t.Fatalf("mcp call %q", call)
+	}
+	if resp := h.get("/api/v3/personal-agent/assistants/not%20an%20id/mcp", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed id = %d", resp.StatusCode)
+	}
+	if resp := h.get(base+"/mcp", "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("mcp without a token = %d", resp.StatusCode)
+	}
+
+	if status, _ := h.send("POST", base+"/instructions", h.token, `{"requestId":"i1","body":"Be kind.","expectedRevision":2}`); status != http.StatusOK {
+		t.Fatalf("set instructions = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona set-instructions "+paAssistantA) || !strings.Contains(call, `"expectedRevision":2`) || !strings.Contains(call, `"requestId":"i1"`) {
+		t.Fatalf("set call %q", call)
+	}
+	if status, _ := h.send("POST", base+"/instructions/restore", h.token, `{"requestId":"i2","revision":1,"expectedRevision":2}`); status != http.StatusOK {
+		t.Fatalf("restore = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/runtime", h.token, `{"requestId":"r1","agent":"codex","model":"gpt 5","effort":"","expectedRevision":0}`); status != http.StatusOK {
+		t.Fatalf("set runtime = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/mcp/grant", h.token, `{"requestId":"g1","serverId":"alpha","granted":true}`); status != http.StatusOK {
+		t.Fatalf("grant = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/mcp/verify", h.token, `{}`); status != http.StatusOK {
+		t.Fatalf("verify = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona mcp-verify "+paAssistantA) {
+		t.Fatalf("verify call %q", call)
+	}
+
+	n := core.callCount()
+	for name, tc := range map[string][2]string{
+		"empty body":      {"/instructions", `{"requestId":"x","body":"  ","expectedRevision":1}`},
+		"no revision":     {"/instructions", `{"requestId":"x","body":"ok"}`},
+		"too long":        {"/instructions", `{"requestId":"x","body":"` + strings.Repeat("a", maxPAInstructions+1) + `","expectedRevision":1}`},
+		"no requestId":    {"/instructions", `{"body":"ok","expectedRevision":1}`},
+		"restore zero":    {"/instructions/restore", `{"requestId":"x","revision":0,"expectedRevision":1}`},
+		"agent has space": {"/runtime", `{"requestId":"x","agent":"my agent","expectedRevision":0}`},
+		"effort newline":  {"/runtime", `{"requestId":"x","effort":"a\nb","expectedRevision":0}`},
+		"negative rev":    {"/runtime", `{"requestId":"x","expectedRevision":-1}`},
+		"bad server id":   {"/mcp/grant", `{"requestId":"x","serverId":"a b","granted":true}`},
+		"empty server id": {"/mcp/grant", `{"requestId":"x","serverId":"","granted":true}`},
+	} {
+		if status, _ := h.send("POST", base+tc[0], h.token, tc[1]); status != http.StatusBadRequest {
+			t.Fatalf("%s = %d", name, status)
+		}
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused write reached the core: %v", core.calls[n:])
+	}
+	// The core's own refusals keep their codes.
+	core.fail = &personalagent.Error{Code: "mcp_unsupported", Message: "not for this Agent"}
+	status, body := h.send("POST", base+"/mcp/verify", h.token, `{}`)
+	if status != http.StatusConflict || !strings.Contains(string(body), "mcp_unsupported") {
+		t.Fatalf("unsupported = %d %s", status, body)
+	}
+	core.fail = &personalagent.Error{Code: "stale_revision", Message: "edited elsewhere"}
+	if status, _ := h.send("POST", base+"/instructions", h.token, `{"requestId":"i9","body":"x","expectedRevision":1}`); status != http.StatusConflict {
+		t.Fatalf("stale = %d", status)
 	}
 }

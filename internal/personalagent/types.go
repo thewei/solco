@@ -340,3 +340,98 @@ type PostResult struct {
 	Message    GroupMessage    `json:"message"`
 	Deliveries []GroupDelivery `json:"deliveries"`
 }
+
+// Persona (Assistants 3.1 U2): the Assistant's working style, its own
+// Agent/Model/Effort and its MCP grants. The wire shapes are pinned by the
+// plugin's persona-*.json goldens.
+
+// InstructionRevision is one stored version of the working style.
+type InstructionRevision struct {
+	Revision  int    `json:"revision"`
+	Source    string `json:"source"`
+	Body      string `json:"body"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+// AppliedRevision is the revision a running surface was launched with.
+type AppliedRevision struct {
+	Surface   string `json:"surface"`
+	Revision  int    `json:"revision"`
+	AppliedAt int64  `json:"appliedAt"`
+}
+
+// Instructions is the Assistant's active working style and its history.
+type Instructions struct {
+	AssistantID string                `json:"assistantId"`
+	Revision    int                   `json:"revision"`
+	Body        string                `json:"body"`
+	History     []InstructionRevision `json:"history"`
+	Applied     []AppliedRevision     `json:"applied"`
+}
+
+// RuntimeProfile is the Agent an Assistant starts by default.
+type RuntimeProfile struct {
+	AssistantID     string `json:"assistantId"`
+	Agent           string `json:"agent"`
+	Model           string `json:"model"`
+	Effort          string `json:"effort"`
+	EffortSupported bool   `json:"effortSupported"`
+	Revision        int    `json:"revision"`
+	UpdatedAt       int64  `json:"updatedAt"`
+}
+
+// RunningAgent is an Agent the Assistant really has right now.
+type RunningAgent struct {
+	Surface string `json:"surface"`
+	TaskID  string `json:"taskId"`
+	Agent   string `json:"agent"`
+	Model   string `json:"model"`
+	State   string `json:"state"`
+	PaneID  string `json:"paneId,omitempty"`
+}
+
+// Runtime is the profile plus what really runs.
+type Runtime struct {
+	Profile RuntimeProfile `json:"profile"`
+	Running []RunningAgent `json:"running"`
+}
+
+// MCPServer is a configured server: names, transport and program/host only.
+type MCPServer struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Transport string   `json:"transport"`
+	Summary   string   `json:"summary"`
+	Sources   []string `json:"sources"`
+	Agents    []string `json:"agents"`
+}
+
+// MCPServerState keeps the four states apart: configured, granted, bound, verified.
+type MCPServerState struct {
+	MCPServer
+	Configured bool     `json:"configured"`
+	Granted    bool     `json:"granted"`
+	Bound      []string `json:"bound"`
+	Verified   string   `json:"verified"`
+	VerifiedAt int64    `json:"verifiedAt"`
+}
+
+// MCPBinding is what one surface's last launch was handed.
+type MCPBinding struct {
+	Surface     string   `json:"surface"`
+	Agent       string   `json:"agent"`
+	Servers     []string `json:"servers"`
+	Strict      bool     `json:"strict"`
+	Unsupported string   `json:"unsupported,omitempty"`
+	BoundAt     int64    `json:"boundAt"`
+}
+
+// MCPView is an Assistant's MCP picture.
+type MCPView struct {
+	AssistantID string           `json:"assistantId"`
+	Agent       string           `json:"agent"`
+	Supported   bool             `json:"supported"`
+	Unsupported string           `json:"unsupported,omitempty"`
+	Servers     []MCPServerState `json:"servers"`
+	Bindings    []MCPBinding     `json:"bindings"`
+}

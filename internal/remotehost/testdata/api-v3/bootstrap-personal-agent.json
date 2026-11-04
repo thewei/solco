@@ -5,6 +5,7 @@
     "personalAgentApprove": true,
     "personalAgentGroups": true,
     "personalAgentManage": true,
+    "personalAgentPersona": true,
     "terminal": true
   },
   "hostId": "",

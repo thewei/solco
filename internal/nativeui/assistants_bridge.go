@@ -73,6 +73,9 @@ type AssistantsDetail struct {
 	// Inbox is the plugin's one snapshot of what needs a person (approvals,
 	// reviews, failed starts, stalls); the page draws it, never recomputes it.
 	Inbox personalagent.Inbox `json:"inbox"`
+	// ProfileAgent is the Agent the Assistant's own profile starts a Coordinator
+	// on ("" = none chosen); read only while no Coordinator runs, for the chip.
+	ProfileAgent string `json:"profileAgent"`
 }
 
 // AssistantsDrawer is the More drawer's content for one Assistant.
@@ -246,6 +249,12 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 	if co, err := client.Coordinator(ctx, id); err == nil {
 		d.Coordinator = co
 		d.CoordinatorOpen = co.PaneID != "" && coordinatorInSession(co, session) && panes[co.PaneID]
+		switch co.State {
+		case personalagent.CoordinatorNone, personalagent.CoordinatorStopped, personalagent.CoordinatorFailed:
+			if rt, err := client.Runtime(ctx, id); err == nil {
+				d.ProfileAgent = rt.Profile.Agent
+			}
+		}
 	}
 	return d, nil
 }
@@ -344,13 +353,30 @@ func coordinatorInSession(co personalagent.Coordinator, session string) bool {
 // StartCoordinator asks the daemon to bring the Assistant's Coordinator up as
 // a real Herdr Agent on the chosen agent kind (the plugin owns the lifecycle).
 func (b *AssistantsBridge) StartCoordinator(ctx context.Context, requestID, id, agentKind string) error {
-	if err := b.agentAllowed(agentKind); err != nil {
-		return err
-	}
 	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
-		_, err := c.StartCoordinator(ctx, requestID, id, agentKind, "")
+		agentKind, err := b.startAgent(ctx, c, id, agentKind)
+		if err != nil {
+			return err
+		}
+		_, err = c.StartCoordinator(ctx, requestID, id, agentKind, "")
 		return err
 	})
+}
+
+// startAgent decides the Agent kind for a Coordinator start: an explicit choice
+// (the chip) wins; otherwise the Assistant's own profile ("" lets the plugin
+// apply it, with its model — still fenced by the Settings → Agents toggles);
+// with no profile, the last-used launchable Agent.
+func (b *AssistantsBridge) startAgent(ctx context.Context, c *personalagent.Client, id, agentKind string) (string, error) {
+	if agentKind != "" {
+		return agentKind, b.agentAllowed(agentKind)
+	}
+	if rt, err := c.Runtime(ctx, id); err == nil && rt.Profile.Agent != "" {
+		return "", b.agentAllowed(rt.Profile.Agent)
+	}
+	var def string
+	b.shell.callOnWindow(func() { _, def = b.shell.assistantAgents() })
+	return def, nil
 }
 
 // agentAllowed fences the chip's choice: "" is the plugin default, anything
@@ -377,9 +403,6 @@ func (b *AssistantsBridge) agentAllowed(agentKind string) error {
 // double Send one start; a paused Assistant is refused by the plugin.
 func (b *AssistantsBridge) EnsureChat(ctx context.Context, requestID, id, agentKind string) (CoordinatorChat, error) {
 	out := CoordinatorChat{AssistantID: id, State: personalagent.CoordinatorNone}
-	if err := b.agentAllowed(agentKind); err != nil {
-		return out, err
-	}
 	c, err := b.client()
 	if err != nil {
 		return out, err
@@ -392,6 +415,9 @@ func (b *AssistantsBridge) EnsureChat(ctx context.Context, requestID, id, agentK
 	}
 	switch co.State {
 	case personalagent.CoordinatorNone, personalagent.CoordinatorStopped, personalagent.CoordinatorFailed:
+		if agentKind, err = b.startAgent(rctx, c, id, agentKind); err != nil {
+			return out, err
+		}
 		if co, err = c.StartCoordinator(rctx, requestID, id, agentKind, ""); err != nil {
 			return out, err
 		}

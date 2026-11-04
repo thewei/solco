@@ -53,6 +53,9 @@ type LaunchSpec struct {
 	AssistantID string
 	// GroupID is set for a Group Agent; its folder is named after the Group.
 	GroupID string
+	// AgentArgs are extra launch arguments for the Agent: the Assistant's
+	// thinking effort and its MCP binding (3.1 U2). Never set for a legacy rule.
+	AgentArgs []string
 }
 
 // Launcher is the Herdr seam. The production adapter drives the same
@@ -203,8 +206,25 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		workDir = info.Path
 		prompt += fmt.Sprintf("\n\nYou are working in an isolated git worktree on branch %s (baseline %s). Commit your work on this branch; do not switch branches, merge, push or touch any other checkout.", info.Branch, shortHash(info.BaseHead))
 	}
+	var agentArgs []string
+	if auto == nil {
+		// The Assistant's own effort and MCP grants, and the instructions
+		// revision this surface starts with (what was edited later is for the
+		// next start; nothing running is rewritten).
+		surface := "task"
+		switch task.Kind {
+		case KindCoordinator:
+			surface = "coordinator"
+		case KindGroupAgent:
+			surface = "group:" + groupID
+		}
+		agentArgs = append(agentArgs, effortArgs(task.Agent, d.Store.profileOf(d.Store.db, asst.ID).Effort)...)
+		agentArgs = append(agentArgs, d.Store.bindMCP(asst.ID, surface, task.Agent)...)
+		d.Store.markInstructionsApplied(asst.ID, surface)
+	}
 	spec := LaunchSpec{
-		RunID: run.ID, TaskID: task.ID, AssistantID: task.AssistantID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath,
+		AgentArgs: agentArgs,
+		RunID:     run.ID, TaskID: task.ID, AssistantID: task.AssistantID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath,
 		Label:   markerLabel(task.Title, run.ID),
 		Prompt:  prompt,
 		Timeout: timeout,

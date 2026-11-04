@@ -1,6 +1,7 @@
 package personalagent
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -47,6 +48,12 @@ func pretty(t *testing.T, v any, seen map[string]string) []byte {
 // decoded strictly by the root module's client (internal/personalagent).
 func TestGoldenFixtures(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
+	mcpHomeFixture(t) // the registry reads the person's own MCP files
+	oldProber := MCPProber
+	t.Cleanup(func() { MCPProber = oldProber })
+	MCPProber = func(context.Context, []string) ([]MCPProbeStatus, error) {
+		return []MCPProbeStatus{{Name: "alpha", Status: "connected"}}, nil
+	}
 	s, _ := openTest(t, WithClock(func() time.Time { return now }))
 	api := &API{Store: s}
 	seen := map[string]string{}
@@ -110,6 +117,13 @@ func TestGoldenFixtures(t *testing.T) {
 	run("group-said", fmt.Sprintf(`{"requestId":"g-say","groupId":%q,"as":%q,"body":"Looks fine; I filed a task.","replyTo":%q}`, grpID, bid, postedID), "assistant", "group", "say")
 	run("group-task-created", fmt.Sprintf(`{"requestId":"g-gt","assistantId":%q,"groupId":%q,"kind":"research","title":"Check the launch plan","brief":"Check."}`, bid, grpID), "assistant", "task", "create")
 	run("group-feed", ``, "assistant", "group", "show", grpID)
+
+	// Persona (Assistants 3.1 U2).
+	run("persona-instructions", fmt.Sprintf(`{"requestId":"g-pi","body":"Be brief and precise.","expectedRevision":1}`), "assistant", "persona", "set-instructions", bid)
+	run("persona-runtime", `{"requestId":"g-pr","agent":"claude","model":"sonnet","effort":"high","expectedRevision":0}`, "assistant", "persona", "set-runtime", bid)
+	run("persona-mcp", `{"requestId":"g-pg","serverId":"alpha","granted":true}`, "assistant", "persona", "mcp-grant", bid)
+	s.bindMCP(bid, "coordinator", "claude")
+	run("persona-mcp-verified", ``, "assistant", "persona", "mcp-verify", bid)
 
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError

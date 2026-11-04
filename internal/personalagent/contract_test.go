@@ -158,6 +158,38 @@ func TestGoldenFixturesDecodeStrictly(t *testing.T) {
 	}
 	load(t, "group-task-created", &tc)
 
+	var pi struct {
+		Schema       int          `json:"schema"`
+		Instructions Instructions `json:"instructions"`
+		Replayed     bool         `json:"replayed"`
+	}
+	load(t, "persona-instructions", &pi)
+	if pi.Instructions.Revision != 2 || pi.Instructions.Body != "Be brief and precise." || len(pi.Instructions.History) != 2 || pi.Instructions.History[1].Source != "default" {
+		t.Fatalf("instructions = %+v", pi.Instructions)
+	}
+	var pr struct {
+		Schema   int     `json:"schema"`
+		Runtime  Runtime `json:"runtime"`
+		Replayed bool    `json:"replayed"`
+	}
+	load(t, "persona-runtime", &pr)
+	if pr.Runtime.Profile.Agent != "claude" || pr.Runtime.Profile.Effort != "high" || !pr.Runtime.Profile.EffortSupported || pr.Runtime.Running == nil {
+		t.Fatalf("runtime = %+v", pr.Runtime)
+	}
+	var pm struct {
+		Schema   int     `json:"schema"`
+		MCP      MCPView `json:"mcp"`
+		Replayed bool    `json:"replayed"`
+	}
+	load(t, "persona-mcp", &pm)
+	if len(pm.MCP.Servers) != 3 || !pm.MCP.Servers[0].Granted || pm.MCP.Servers[0].Verified != "" {
+		t.Fatalf("mcp = %+v", pm.MCP)
+	}
+	load(t, "persona-mcp-verified", &pm)
+	if a := pm.MCP.Servers[0]; a.Verified != "connected" || len(a.Bound) != 1 || a.Bound[0] != "coordinator" || len(pm.MCP.Bindings) != 1 || !pm.MCP.Bindings[0].Strict {
+		t.Fatalf("verified mcp = %+v", pm.MCP)
+	}
+
 	var e struct {
 		Schema int    `json:"schema"`
 		Error  *Error `json:"error"`

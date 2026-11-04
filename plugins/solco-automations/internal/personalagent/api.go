@@ -128,7 +128,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|group|legacy-export>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|group|persona|legacy-export>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
@@ -229,6 +229,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.coordinator(rest, body)
 	case "group":
 		return a.group(rest, body)
+	case "persona":
+		return a.persona(rest, body)
 	case "run":
 		return a.run(rest, body)
 	}
