@@ -52,6 +52,10 @@ func TestBufferDeltaSequenceAndCanonicalReconcile(t *testing.T) {
 	}
 	thinking := "check"
 	canonical := []chatsession.ChatTurn{{Narration: "hello", Thinking: &thinking}}
+	if b.Reconciled(canonical) {
+		t.Fatal("retired tool before provider result")
+	}
+	canonical[0].Steps = []chatsession.ChatStep{{Kind: "tool", ToolName: "bash", ToolDone: true}}
 	if !b.Reconciled(canonical) || len(b.Overlay(canonical)) != 1 {
 		t.Fatal("failed to settle")
 	}
@@ -111,8 +115,12 @@ func TestStreamAddsRunningToolToCommittedNarrationWithoutDuplicatingTurn(t *test
 	}
 	toolEnd := frame(5, "tool_end", "m", "")
 	toolEnd.ToolCallID, toolEnd.ToolName = "id", "bash"
-	if !b.Apply(toolEnd) || !b.Reconciled(base) {
-		t.Fatal("tool did not settle")
+	if !b.Apply(toolEnd) || b.Reconciled(base) {
+		t.Fatal("tool must await authoritative result")
+	}
+	base[0].Steps = append(base[0].Steps, chatsession.ChatStep{Kind: "tool", ToolName: "bash", ToolDone: true})
+	if !b.Reconciled(base) {
+		t.Fatal("settled provider tool not reconciled")
 	}
 }
 
@@ -127,6 +135,32 @@ func TestToolOnlyEventAfterTranscriptReconcileMergesWithLastAssistant(t *testing
 	got := b.Overlay(base)
 	if len(got) != 1 || len(got[0].Steps) != 2 || got[0].Steps[1].ToolName != "read" {
 		t.Fatalf("tool only did not merge: %+v", got)
+	}
+}
+
+func TestBufferDropsIncompleteResponseAfterMissingFrame(t *testing.T) {
+	var b Buffer
+	if !b.Apply(frame(1, "message_start", "m1", "")) || !b.Apply(frame(2, "text_delta", "m1", "Hello")) {
+		t.Fatal("initial stream")
+	}
+	if !b.Apply(frame(4, "text_delta", "m1", " world")) {
+		t.Fatal("missing frame not detected")
+	}
+	if !b.Desynced || b.Text != "" || b.MessageID != "" {
+		t.Fatalf("unsafe text after gap: %+v", b)
+	}
+	canonical := []chatsession.ChatTurn{{Narration: "provider text"}}
+	if len(b.Overlay(canonical)) != 1 {
+		t.Fatal("desynced overlay leaked")
+	}
+	if b.Apply(frame(5, "text_delta", "m1", " more")) {
+		t.Fatal("old message resumed while desynced")
+	}
+	if !b.Apply(frame(8, "message_start", "m2", "")) || b.Desynced {
+		t.Fatal("next message did not recover")
+	}
+	if !b.Apply(frame(9, "text_delta", "m2", "new")) || b.Text != "new" {
+		t.Fatalf("recovery: %+v", b)
 	}
 }
 

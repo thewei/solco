@@ -29,6 +29,11 @@ func (s *Shell) handleAppChatStream(event chatstream.Event) {
 		return
 	}
 	s.publishChatStreamDelta()
+	if s.chatStream.Desynced {
+		// A dropped token invalidates the temporary text. Ask the canonical
+		// JSONL watcher to catch up rather than showing a corrupt suffix.
+		s.wakeLiveTail()
+	}
 	// The provider JSONL is still the authority: after message_end, nudge
 	// the live file pump for early convergence, never force a full rescan.
 	if event.Kind == "message_end" {

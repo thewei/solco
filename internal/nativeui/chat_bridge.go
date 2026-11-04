@@ -180,6 +180,9 @@ func (b *ChatBridge) Snapshot(ctx context.Context) (ChatBridgeState, error) {
 	var state ChatBridgeState
 	b.shell.callOnWindow(func() {
 		state = b.shell.chatBridgeState()
+		// The page receives this full baseline as an RPC response, not an
+		// event. Future deltas must use its sequence (or fail closed).
+		b.shell.chatLastPublishedState = &state
 	})
 	return state, nil
 }
@@ -832,8 +835,12 @@ func (s *Shell) emitChatBridge() {
 	if s.win == nil {
 		return
 	}
-	state := s.chatBridgeState()
-	s.chatLastPublishedSeq = state.Seq
-	s.chatLastPublishedConversation = state.ConversationID
+	s.emitChatBridgeState(s.chatBridgeState())
+}
+
+// emitChatBridgeState publishes one already-built full projection. A
+// metadata change or a shifted transcript prefix must take this path.
+func (s *Shell) emitChatBridgeState(state ChatBridgeState) {
+	s.chatLastPublishedState = &state
 	_ = chatUpdated.Emit(s.win, state)
 }

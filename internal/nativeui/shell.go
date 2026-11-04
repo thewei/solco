@@ -574,9 +574,10 @@ type Shell struct {
 	chatPublishTrailer *time.Timer
 	// OMP token bursts use an independent, 50ms coalesced tail patch. Full
 	// snapshots remain authoritative and cancel a pending patch on delivery.
-	chatDeltaTimer                *time.Timer
-	chatLastPublishedSeq          uint64
-	chatLastPublishedConversation string
+	chatDeltaTimer *time.Timer
+	// Only a snapshot actually emitted or returned to the page may serve as
+	// a delta base. Keep its immutable projection to verify the prefix.
+	chatLastPublishedState *ChatBridgeState
 	// hooksStop releases the hook spool tailer (our herdr plugin's event
 	// forwarder); nil when not started (headless sessions).
 	hooksStop func()

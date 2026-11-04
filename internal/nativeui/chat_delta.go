@@ -7,6 +7,7 @@
 package nativeui
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -27,16 +28,33 @@ type ChatDelta struct {
 
 var chatDelta = mygo.NewEvent[ChatDelta]("chat:delta")
 
-// chatDeltaPatch carries no headers/queue/settings and transmits at most the
-// last three turns. A suffix of three covers transcript-reconciled last turns,
-// the in-flight token row and pending echo without copying the whole log.
-func chatDeltaPatch(state ChatBridgeState, base uint64) ChatDelta {
+// chatDeltaPatch is allowed only when the untouched prefix and *all* other
+// visible metadata match the last projection actually delivered. A rolling
+// transcript can keep the same length while replacing its head; blindly
+// replacing the last three turns would otherwise leave stale older messages.
+func chatDeltaPatch(base, next ChatBridgeState) (ChatDelta, bool) {
 	const tailLimit = 3
-	start := max(0, len(state.Turns)-tailLimit)
-	return ChatDelta{
-		BaseSeq: base, Seq: state.Seq, ConversationID: state.ConversationID,
-		Start: start, Turns: state.Turns[start:],
+	start := max(0, len(next.Turns)-tailLimit)
+	if base.ConversationID != next.ConversationID || start > len(base.Turns) {
+		return ChatDelta{}, false
 	}
+	for i := 0; i < start; i++ {
+		if !reflect.DeepEqual(base.Turns[i], next.Turns[i]) {
+			return ChatDelta{}, false
+		}
+	}
+	// If disposition, queue, interaction cards or presentation settings
+	// changed, a delta alone would leave the page with stale metadata.
+	oldMeta, newMeta := base, next
+	oldMeta.Seq, newMeta.Seq = 0, 0
+	oldMeta.Turns, newMeta.Turns = nil, nil
+	if !reflect.DeepEqual(oldMeta, newMeta) {
+		return ChatDelta{}, false
+	}
+	return ChatDelta{
+		BaseSeq: base.Seq, Seq: next.Seq, ConversationID: next.ConversationID,
+		Start: start, Turns: next.Turns[start:],
+	}, true
 }
 
 // publishChatStreamDelta is only called on the UI lane after an accepted OMP
@@ -56,18 +74,22 @@ func (s *Shell) publishChatStreamDelta() {
 	})
 }
 
-// emitChatDelta will deliver a full snapshot if there is no published
-// baseline for this conversation (e.g. first chat frame after binding).
+// emitChatDelta falls back to a full snapshot when the prior delivered
+// projection cannot be patched safely (first bind, rolling window, metadata).
 func (s *Shell) emitChatDelta() {
 	if s.win == nil || s.chatLiveProvider != history.AgentOMP || s.chatStream == nil {
 		return
 	}
-	if s.chatLastPublishedSeq == 0 || s.chatLastPublishedConversation != s.chatConversationID {
-		s.emitChatBridge()
+	state := s.chatBridgeState()
+	if s.chatLastPublishedState == nil {
+		s.emitChatBridgeState(state)
 		return
 	}
-	state := s.chatBridgeState()
-	patch := chatDeltaPatch(state, s.chatLastPublishedSeq)
-	s.chatLastPublishedSeq = patch.Seq
+	patch, ok := chatDeltaPatch(*s.chatLastPublishedState, state)
+	if !ok {
+		s.emitChatBridgeState(state)
+		return
+	}
+	s.chatLastPublishedState = &state
 	_ = chatDelta.Emit(s.win, patch)
 }

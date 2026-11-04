@@ -80,6 +80,9 @@ type Buffer struct {
 	Thinking  string
 	Tools     []tool
 	Ended     bool
+	// Desynced disables provisional rendering after a missing event. The
+	// provider transcript is the recovery source until a new message starts.
+	Desynced bool
 }
 
 func (b *Buffer) Reset() { *b = Buffer{} }
@@ -102,6 +105,19 @@ func (b *Buffer) Apply(e Event) bool {
 	if b.Epoch == e.Epoch && e.Seq <= b.Seq {
 		return false
 	}
+	// Never concatenate tokens across a dropped frame. Losing one delta is
+	// inevitable under backpressure; until the next message_start we show
+	// only the provider-owned JSONL transcript rather than corrupted text.
+	if b.Epoch == e.Epoch && b.Seq != 0 && e.Seq != b.Seq+1 && e.Kind != "message_start" {
+		b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended = "", "", "", nil, false
+		b.Desynced = true
+		b.Seq = e.Seq
+		return true
+	}
+	if b.Desynced && e.Kind != "message_start" {
+		b.Seq = e.Seq
+		return false
+	}
 	// Failed event preconditions must not move the high watermark.
 	switch e.Kind {
 	case "text_delta", "thinking_delta", "message_end":
@@ -118,7 +134,7 @@ func (b *Buffer) Apply(e Event) bool {
 	}
 	switch e.Kind {
 	case "message_start":
-		b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended = e.MessageID, "", "", nil, false
+		b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended, b.Desynced = e.MessageID, "", "", nil, false, false
 	case "text_delta":
 		if len(b.Text)+len(e.Delta) > MaxTextBytes {
 			return false
@@ -163,7 +179,7 @@ func (b *Buffer) Apply(e Event) bool {
 // Reconciled reports that the authoritative transcript already contains the
 // provisional assistant content. Only completed messages can be retired.
 func (b *Buffer) Reconciled(base []chatsession.ChatTurn) bool {
-	if !b.Ended || b.Text == "" {
+	if b.Desynced || !b.Ended || b.Text == "" {
 		return false
 	}
 	for _, item := range b.Tools {
@@ -173,7 +189,26 @@ func (b *Buffer) Reconciled(base []chatsession.ChatTurn) bool {
 	}
 	for i := len(base) - 1; i >= 0 && i >= len(base)-3; i-- {
 		if !base[i].User && strings.Contains(base[i].Narration, b.Text) {
-			if b.Thinking == "" || (base[i].Thinking != nil && strings.Contains(*base[i].Thinking, b.Thinking)) {
+			if b.Thinking != "" && (base[i].Thinking == nil || !strings.Contains(*base[i].Thinking, b.Thinking)) {
+				continue
+			}
+			// A tool-end notification is not a persisted result. Do not retire
+			// the overlay until the canonical transcript records each completion.
+			settled := make(map[string]int)
+			for _, step := range base[i].Steps {
+				if step.Kind == "tool" && step.ToolDone {
+					settled[step.ToolName]++
+				}
+			}
+			matches := true
+			for _, item := range b.Tools {
+				if settled[item.name] == 0 {
+					matches = false
+					break
+				}
+				settled[item.name]--
+			}
+			if matches {
 				return true
 			}
 		}
@@ -194,7 +229,7 @@ func allToolsDone(tools []tool) bool {
 // If the transcript contains a prefix of the same assistant reply, extend
 // that row rather than adding a duplicate; otherwise render a transient row.
 func (b *Buffer) Overlay(base []chatsession.ChatTurn) []chatsession.ChatTurn {
-	if b.MessageID == "" || (b.Text == "" && b.Thinking == "" && len(b.Tools) == 0) {
+	if b.Desynced || b.MessageID == "" || (b.Text == "" && b.Thinking == "" && len(b.Tools) == 0) {
 		return base
 	}
 	if b.Reconciled(base) {

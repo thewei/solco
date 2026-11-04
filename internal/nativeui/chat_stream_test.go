@@ -7,11 +7,77 @@
 package nativeui
 
 import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/thewei/solco/internal/apphook"
 	"github.com/thewei/solco/internal/chatstream"
 	"github.com/thewei/solco/internal/history"
 )
+
+// The fixture owns a real private Socket; it does not start a provider or
+// touch the user's Herdr runtime. It proves Socket -> exact Pane gate ->
+// ChatBridgeState, including the fail-closed loss of a token frame.
+func TestChatStreamSocketToChatBridgeProjection(t *testing.T) {
+	shell := NewShell()
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	shell.chatPaneID = "stream-pane"
+	shell.chatLiveProvider = history.AgentOMP
+	shell.chatLivePath = path
+	shell.chatConversationID = "live:omp:stream-pane"
+	sock := filepath.Join(os.TempDir(), fmt.Sprintf("sc-%d.sock", time.Now().UnixNano()))
+	defer os.Remove(sock)
+	got := make(chan struct{}, 8)
+	server := apphook.NewServer(sock, apphook.Handler{OnChatStream: func(e chatstream.Event) {
+		shell.handleAppChatStream(e)
+		got <- struct{}{}
+	}})
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	send := func(seq uint64, kind, delta string) {
+		t.Helper()
+		e := chatstream.Event{Agent: "omp", PaneID: "stream-pane", SessionPath: path, Epoch: "0000000000001-probe", Seq: seq, Kind: kind, MessageID: "m1", Delta: delta}
+		wire, err := json.Marshal(map[string]any{"id": seq, "method": "chat.stream", "params": e})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conn.Write(append(wire, '\n')); err != nil {
+			t.Fatal(err)
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+		if _, err := reader.ReadString('\n'); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-got:
+		case <-time.After(time.Second):
+			t.Fatal("no callback")
+		}
+	}
+	send(1, "message_start", "")
+	send(2, "text_delta", "partial")
+	if view := shell.chatBridgeState().Turns; len(view) != 1 || view[0].Narration != "partial" {
+		t.Fatalf("Socket delta not rendered: %+v", view)
+	}
+	send(4, "text_delta", "invalid suffix") // missing seq=3
+	if view := shell.chatBridgeState().Turns; len(view) != 0 || !shell.chatStream.Desynced {
+		t.Fatalf("lost token rendered as complete message: %+v", view)
+	}
+}
 
 func TestChatStreamOnlyAffectsBoundOMPConversation(t *testing.T) {
 	s := &Shell{chatPaneID: "p1", chatLiveProvider: history.AgentOMP, chatLivePath: "/tmp/session.jsonl"}
