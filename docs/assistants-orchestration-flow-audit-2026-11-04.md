@@ -86,3 +86,11 @@
 - **Android 通知收敛**：复用 Solco Mobile 根部唯一 events socket、已有保活服务和 `expo-notifications`，Activity 变化提示立即重读，30 秒兜底查漏；同一 Assistant 一批事实汇总为一条通知，标识稳定并点击进入该 Assistant Activity history。锁屏通知不含事实/任务正文、Agent Prompt、助手名字或证据；只有通知调度成功才推进通知消费游标。OS 调度失败、网络失败均可重试；ACK 传输不确定时同一运行期间复用 requestId 并避免重复调度。
 - **静默时间**：每个 Assistant 只在 Mac 的 `proactivity.quietNow=false` 时投递本地通知；静默期不推进消费游标，解除静默后补读。此路径不修改用户 Activity History 的显式已读状态，也不拼接/伪造 OMP 对话。
 - **边界**：这是在线、Android JS/前台服务仍运行时的本地通知和离线补读，不是服务器级 FCM/APNs push，不保证 Android 系统强杀应用后即时到达；通知被 OS 展示不等于用户看到。iOS 还未接此后台投递；跨重启“OS 已调度、Host 尚未 ACK”的极端窗口可能重复提醒一次（at-least-once）；真实手机、Herdr/OMP 的端到端验收仍待完成。协调者生成带证据的自然语言主动总结未实现。
+
+## 继续优化：真实 OMP Coordinator 自然语言阶段汇报（2026-11-05）
+
+- 新增 `coordinator_reports` SQLite v21 outbox 与 `ReportPump`：用户在 Behavior 中 opt-in `reportEveryMin>0`、非 `respond` 且不在 quiet hours 时，只有原 Herdr OMP Coordinator `ready` 并有完整 session/workspace/pane 才可投递。沿已提交 `goal_facts.seq` 做批次窗口，引用真实任务/Run 状态，限制每批至多 12 条 Fact/12 个 Task，并限制文本长度；不启动新 Agent、不绕开审批、不拼接假回复。
+- 使用现有 Herdr `AgentSubmit` 把明确标为“Solco 自动汇报请求、不是用户消息”的输入交给**同一个原 OMP Chat**，由 OMP 生成自然语言总结。Herdr 收到仅记为 `submitted`，不声称 OMP 已回复；FactId/TaskId/GoalId 是其可验证的来源。新事实 + 用户配置的时间间隔到来后才再次投递。
+- 先持久化 `claimed` 再触碰 Herdr；明确 pre-send 拒绝可延期重试，超时/崩溃/不明结果 → `uncertain` 永不自动重发，并写明示的 Solco FactBlocked 告警（不进入后续报告源，防止自循环）；人工检查原 Chat 后，通过 CLI `assistant report show/resolve` 幂等地 Skip 或确认风险后 Retry。
+- daemon 单独 goroutine + atomic fence，Herdr 阻塞不拖住 Task/Goal dispatcher；Archive/Restore 维持不确定状态，永久删除清理 outbox。完整架构、恢复说明与仍未验收事项见 `docs/assistants-coordinator-report-delivery-2026-11-05.md`。
+- **未宣称完成**：尚未对真实 OMP/Herdr 会话验收模型自然语言答复与端到端交互，也未实现 Owner-only 的桌面/移动端人工恢复按钮，以及复杂请求到 Task/Goal 的强制 durable trace。

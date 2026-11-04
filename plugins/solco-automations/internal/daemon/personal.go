@@ -52,6 +52,7 @@ type personal struct {
 	watch         *personalagent.Watcher
 	beat          *personalagent.Beater
 	sup           *personalagent.Supervisor
+	reports       *personalagent.ReportPump
 	routines      *personalagent.RoutineKeeper
 	rules         *personalagent.RuleScheduler
 	reviewer      *personalagent.Reviewer
@@ -61,6 +62,7 @@ type personal struct {
 	lastMem       time.Time
 	lastReconcile time.Time
 	reconciling   atomic.Bool
+	reporting     atomic.Bool
 	lastLook      time.Time
 	polling       atomic.Bool
 
@@ -118,10 +120,19 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
 	p.sup = &personalagent.Supervisor{Store: store}
+	// One durable reporting outbox, submitted into the existing OMP
+	// Coordinator pane through the SAME Herdr AgentSubmit seam as Group chat.
+	// Never launch a second agent for narration.
+	p.reports = &personalagent.ReportPump{Store: store, Submit: submitToAgent, Blocked: paneDialog}
 	p.routines = &personalagent.RoutineKeeper{Store: store, Load: config.Load, ApproveChecked: personalagent.ApproveRoutineDefinition}
 	p.inbox = &personalagent.InboxWatcher{Store: store}
 	p.memFiles = &personalagent.MemoryFiles{Store: store, Root: personalagent.MemoryRoot()}
 	p.groups = &personalagent.GroupPump{Store: store, Submit: submitToAgent, Blocked: paneDialog}
+	if n, err := store.RecoverCoordinatorReports(); err != nil {
+		log.Printf("assistants: coordinator report recovery: %v", err)
+	} else if n > 0 {
+		log.Printf("assistants: %d interrupted coordinator report(s) need human reconciliation", n)
+	}
 	if n, err := store.RecoverGroupDeliveries(); err != nil {
 		log.Printf("assistants: group delivery recovery failed: %v", err)
 	} else if n > 0 {
@@ -172,6 +183,21 @@ func (p *personal) tick() {
 		log.Printf("assistants: goals: %v", err)
 	} else if r.Dispatched+r.Completed > 0 {
 		log.Printf("assistants: goals: %d milestone(s) delegated, %d goal(s) completed", r.Dispatched, r.Completed)
+	}
+	// Coordinator reporting can block on Herdr's AgentSubmit, and must never
+	// delay the normal dispatcher/supervisor scheduler. Only one report pump
+	// may run at once (including while a submitted prompt is uncertain).
+	if p.reports != nil && p.reporting.CompareAndSwap(false, true) {
+		go func() {
+			defer p.reporting.Store(false)
+			if r, err := p.reports.Tick(); err != nil {
+				if p.ctx.Err() == nil {
+					log.Printf("assistants: coordinator reports: %v", err)
+				}
+			} else if r.Submitted+r.Uncertain > 0 {
+				log.Printf("assistants: coordinator reports: %d accepted by Herdr, %d uncertain", r.Submitted, r.Uncertain)
+			}
+		}()
 	}
 	// A Routine a person approved is enabled here (the answer itself only records the yes).
 	if r, err := p.routines.Tick(); err != nil {
