@@ -17,12 +17,13 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/thewei/solco/internal/agentcatalog"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 )
 
 // [INPUT]: server_test.go 的假 Backend 与 harness，真实的 handler / WebSocket 帧
-// [OUTPUT]: testdata/api-v3/*.json|txt 黄金文件：手机端（solco-mobile 的 Zod 契约测试）逐字拷贝并解析
+// [OUTPUT]: testdata/api-v3/*.json|txt 黄金文件（含 SC-06 Chat t=chat + seq 初始帧、chat_delta 后续补丁）：手机端 Zod 契约逐字同步解析
 // [POS]: /api/v3 线格式的 Go 半边钉死：handler 输出与黄金文件逐字一致，漂移 = 两端同批修复；`go test ./internal/remotehost -run Golden -update` 重生成
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -202,6 +203,11 @@ func TestGoldenAPIv3(t *testing.T) {
 		t.Fatal(err)
 	}
 	golden(t, "chat-frame.json", readRaw(t, chat))
+	patch, _ := json.Marshal(chatWireDelta{
+		T: "chat_delta", PaneID: "w1:p1", BaseSeq: 1, Seq: 2, Start: 1,
+		Turns: []chatsession.ChatTurn{{Narration: "Hello live stream!"}},
+	})
+	golden(t, "chat-delta.json", patch)
 
 	// chat send/stop (P3): the request body, the ack and a named refusal
 	rawReq, _ := json.Marshal(chatSendRequest{Text: "run the tests", Interrupt: true})

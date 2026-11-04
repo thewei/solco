@@ -19,7 +19,7 @@ attach.go: POST /api/v3/panes/{paneId}/chat/attachments（scope terminal-input�
 attach_test.go: 存储与回路径、401/未知 pane/未知 instance/坏 JSON/坏 base64/空文件都不触达存储、无存储时 404 且不声明能力、超 32 MB 回 413
 question.go: 聊天帧里的 `interaction` 卡与 POST /panes/{id}/chat/answer——只在 agent 为 blocked 时派生（omp `ask` 来自转录 Reader.Ask、Claude 屏幕提问来自 Backend.ReadPane + chatsession.DetectScreenPrompt，读屏 ≥1.2 s 节流）；状态在每 pane 的 askCursor（ask 的步数、刚答过的卡 2.5 s 内隐藏）；id = pane+来源+步数+问题+选项哈希，答题时重新派生并比对（过期/已答 409 interaction_gone）；按键规则与桌面共用 conversation.AnswerKeys/MultiSelectKeys；投递只走 agent.send_keys / agent.prompt（被阻塞的输入框回退 pane.send_input），Herdr 拒绝原样回传，答案正文不进日志；不含 Queue
 picker.go: Claude Code/Codex `/model`、`/permissions` 的 Question 卡——只在 chat_send 发出 picker 命令（agentcatalog.Classify==KindPicker）后 armPicker 开 6 s 出现窗，窗内/在屏期间读屏（chatsession.DetectPicker，非 blocked 的 agent 也可带卡）、离屏即撤卡（最长 10 min）；答题仍走 handleChatAnswer（Claude 用 `s` 仅本会话，Close＝Escape），答后重开窗读下一步列表；屏幕内容不进日志
-chat.go 的 chat/stream：手机唯一会发的消息是 `{"t":"older"}`（该 socket 的 Reader 上移一页，翻页只属于这条流，重连回到最新一页），其余消息忽略
+chat.go 的 chat/stream：手机可发 `{"t":"older"}`（当前 socket Reader 上移一页）和 `{"t":"snapshot"}`（缺帧/无基线时重新发送完整帧）。OMP 扩展事件驱动 80ms 合并的 `chat_delta`（精确 baseSeq/seq + 最多尾 3 回合），旧 Host/非 OMP 仍发 `chat` 完整帧；切会话、状态/队列/交互元数据变化强制回退完整帧，JSONL 真值每秒校对
 files.go: GET /api/v3/panes/{id}/chat/files?token=（scope view）——手机输入框 `@` 补全，只列窗格 cwd 内匹配条目的名字（chatsession.ListFiles，contained=true：`..`/指向目录外的符号链接列空），不读内容；未知窗格 404
 files_test.go: 列表/子目录下钻、越界与空数组线格式、需要 view token 且窗格已知
 queue.go: 跟进队列的 Host 侧——`FollowUps` 接口（Enqueue/Items/CancelItem/EditItem/MoveItem/Cancel(全清；Edit/Move 对应 …/item/{id}/edit|move，capability `queueEdit`，被认领条目 409 already_delivered，越界/钉住 409 cannot_move)，实现是 app.RemoteFollowUps → 桌面同一个 conversation.FollowUpQueue，一会话一有序列表、指纹来自 Herdr agent_session、不确定即墓碑不自动重发）；chat_send 在 agent 处于 working 且请求带 `queue:true` 时追加（仅会话头 DeliveryUncertain 冻结时拒绝），chat 帧带 `queued{items[{id,text,state,detail}]}`，`POST …/chat/queue/cancel` 全清、`POST …/chat/queue/item/{requestID}/cancel` 单条撤回；错误码 queue_unavailable/queue_blocked/queue_failed/no_queued/already_delivered；capability `queue`
@@ -56,11 +56,13 @@ quota_test.go: 假缝——无缝 404/未鉴权不触达缝/refresh=1 传 force/
 terminal.go: GET /terminals/{id}/stream：每 WS 一个只读 `terminal session observe` 子进程（手机自己的栅格，不 attach/takeover、不重排 Mac 窗格），帧 = JSON 头文本帧 + ANSI 二进制帧；输入只走 pane.send_input（文本≤64KiB、键名白名单正则）；resize=用新栅格重启（100 ms 去抖）；每设备 ≤2 路；Herdr 结束流以 4404 + 机读原因关闭
 question_test.go: 屏幕提问显示/单次答题/二次答题 409 且不触达 Herdr、未知选项与错 id 拒绝、未 blocked 与投递失败（卡留着）、omp 多问题逐步（recommended 起始行、多选 space 序列）、自由文本行先选再打字（含 pane.send_input 回退）、流里出卡与离开 blocked 即撤
 remotehost_test.go: 模式/地址表（含通配拒绝）、证书稳定与续期/损坏重建、配对码单次/过期/替换/取消、token 不落盘、撤销、LastSeen 节流、损坏文件、名称边界
-chat.go: P2 只读 Chat——GET /panes/{paneId}/chat 与 WS /panes/{paneId}/chat/stream；pane → Herdr agent_session → history.ResolveLiveSource → chatsession.Reader（与桌面同一投影）；无会话 409 no_conversation；流内 1 s 轮询、4 s 重绑/子代理刷新，序列化相同不重推；每设备 ≤4 路，满了淘汰最老的一路而不是拒绝新的（手机切网后旧 socket 在 Host 侧半开，流只在内容变时才写，不会自己失败）；Options.Home 可注入（测试）；Options.Identity 是桌面 hook 学到的会话身份的借用口（Herdr 的 agent 列表没有 Claude Code/Codex 的 session）
+chat.go: P2/SC-06 只读 Chat——GET /panes/{paneId}/chat 与 WS /panes/{paneId}/chat/stream；pane → Herdr agent_session → history.ResolveLiveSource → chatsession.Reader + OMP 同进程临时 Buffer；无会话 409 no_conversation；非 OMP 仍 1s 轮询，OMP 80ms 事件驱动 delta、1s 原生转录校对、4s 身份重绑；每设备 ≤4 路，满了淘汰最老的一路而不是拒绝新的（手机切网后旧 socket 在 Host 侧半开，流只在内容变时才写，不会自己失败）；Options.Home 可注入（测试）；Options.Identity 是桌面 hook 学到的会话身份的借用口（Herdr 的 agent 列表没有 Claude Code/Codex 的 session）
 chat_send.go: P3 子集——POST /panes/{paneId}/chat/send（Sendable 才发；working 须 interrupt 才 Esc→Ctrl-C→发；blocked/failed needs_terminal；Herdr 拒绝原样 refused；DeliveryUncertain 504 不重发；正文不进日志）与 /chat/stop（一次 Esc）；Backend.PromptAgent/SendAgentKeys 即 Herdr 既有 agent.prompt/agent.send_keys
 chat_send_test.go: 门禁表驱动（拒绝从不触达 Herdr）、interrupt 顺序、Herdr 拒绝/不确定投递、Stop
 contract_chat_test.go: 可选真机契约（SOLCO_REMOTEHOST_CONTRACT_CHAT=1）：真 Herdr + 真 omp，经 Host 发 prompt、经共享投影读回答案
-chat_test.go: 投影形状、三类拒绝（401/404/409）、文件增长推新帧
+chat_delta.go: SC-06 OMP apphook → Remote Host 专用有界 32 Pane/转录 Buffer（2min TTL）、全局 wake、精确 Provider/Pane/Session 投影围栏、纯 chatWireFrame/chatWireDelta suffix patch；窗口滑动/元数据变化退回全帧，绝不持久化临时文本
+chat_delta_test.go: 40 回合 suffix 与窗口滑动/会话身份/状态变化回退；不匹配 Pane/Provider/Session、缺失 seq 不展示临时文本
+chat_test.go: 投影形状、三类拒绝（401/404/409）、文件增长推新帧、真实 OMP WebSocket 80ms 推送有界增量/缺帧真值恢复/手机请求完整 snapshot，以及 Herdr 会话路径切换强制全帧
 peek_test.go: PeekLine 表驱动（空屏/边框行/控制字符/多字节截断）、端点节流与失效、未知 pane 不触达 Herdr、失败不泄路径
 netaddr_test.go: 候选过滤表、列出即可 Validate、真机枚举不报错、Reconfigure 换口/作废配对码/坏配置与通配保持停止/关闭后不再可配对/端口被占失败
 watch_test.go: 注入假网卡表（fakeNet 自带锁）——换址触发 OnAddressLost（Reconfigure 修好即静默）、健康/无候选/loopback 静默、Close 停看门狗、advertised 只报正在服务的地址

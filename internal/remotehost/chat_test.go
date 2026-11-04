@@ -3,6 +3,7 @@ package remotehost
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/thewei/solco/internal/chatstream"
 	"github.com/thewei/solco/internal/herdr"
 )
 
@@ -79,6 +81,140 @@ func TestChatRefusalsAreNamed(t *testing.T) {
 		_ = json.NewDecoder(resp.Body).Decode(&body)
 		if resp.StatusCode != c.status || body.Error.Code != c.code {
 			t.Errorf("%s: %d %q, want %d %q", c.path, resp.StatusCode, body.Error.Code, c.status, c.code)
+		}
+	}
+}
+
+func TestChatStreamOMPCompanionSendsBoundedDeltasAndRecoversSnapshot(t *testing.T) {
+	h := newHarness(t)
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	body := `{"type":"session","version":3,"id":"omp-stream","timestamp":"2026-11-05T09:00:00Z","cwd":"/work/solco"}` + "\n"
+	for i := range 18 {
+		body += fmt.Sprintf(`{"type":"message","timestamp":"2026-11-05T09:00:%02dZ","message":{"role":"user","content":[{"type":"text","text":"prompt %d"}]}}`, i, i) + "\n"
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	proj := fixtureProjection()
+	proj.Agents = []herdr.Agent{{TerminalID: "term_a", PaneID: "w1:p1", Kind: "omp", Status: "working",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Value: path}}}
+	h.back.set(proj)
+	conn, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream?instance=default", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := readJSON(t, conn)
+	state, _ := first["state"].(map[string]any)
+	turns, _ := state["turns"].([]any)
+	if first["t"] != "chat" || len(turns) < 10 {
+		t.Fatalf("invalid baseline: %+v", first)
+	}
+	baseSeq, _ := first["seq"].(float64)
+	e := chatstream.Event{Agent: "omp", PaneID: "w1:p1", SessionPath: path,
+		Epoch: "0000000000001-real", MessageID: "m1", Kind: "message_start", Seq: 1}
+	h.srv.IngestOMPChatStream(e)
+	e.Seq = 2
+	e.Kind = "text_delta"
+	e.Delta = "Hello streaming from OMP!"
+	start := time.Now()
+	h.srv.IngestOMPChatStream(e)
+	second := readJSON(t, conn)
+	if got := second["t"]; got != "chat_delta" {
+		t.Fatalf("expected compact incremental frame, got %v: %+v", got, second)
+	}
+	if second["baseSeq"] != baseSeq || second["seq"] != baseSeq+1 {
+		t.Fatalf("incorrect delta sequence: %+v", second)
+	}
+	if time.Since(start) > 850*time.Millisecond {
+		t.Fatalf("stream was delayed to file poll: %v", time.Since(start))
+	}
+	patch, _ := second["turns"].([]any)
+	if len(patch) > 3 || len(patch) == 0 {
+		t.Fatalf("unbounded/empty suffix: %+v", second)
+	}
+	last, _ := patch[len(patch)-1].(map[string]any)
+	if last["narration"] != "Hello streaming from OMP!" {
+		t.Fatalf("wrong overlay: %+v", last)
+	}
+
+	// When a sequence is lost, the Host must withdraw the provisional text
+	// rather than render an incomplete answer or pretend it was committed.
+	e.Seq = 4
+	e.Delta = "unsafe"
+	h.srv.IngestOMPChatStream(e)
+	third := readJSON(t, conn)
+	if third["seq"] != baseSeq+2 {
+		t.Fatalf("missing desync recovery frame: %+v", third)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"t":"snapshot"}`)); err != nil {
+		t.Fatal(err)
+	}
+	full := readJSON(t, conn)
+	if full["t"] != "chat" || full["seq"] != baseSeq+3 {
+		t.Fatalf("snapshot recovery failed: %+v", full)
+	}
+	fresh, _ := full["state"].(map[string]any)
+	canonical, _ := fresh["turns"].([]any)
+	if len(canonical) != len(turns) {
+		t.Fatalf("desynced temporary turn leaked into snapshot: %d vs %d", len(canonical), len(turns))
+	}
+}
+
+func TestChatStreamRebindSendsFullFrameAfterOMPSessionChange(t *testing.T) {
+	h := newHarness(t)
+	makeTranscript := func(content string) string {
+		path := filepath.Join(t.TempDir(), "session.jsonl")
+		body := `{"type":"session","version":3,"id":"omp-sess","timestamp":"2026-11-05T09:00:00Z","cwd":"/work/solco"}` + "\n" +
+			fmt.Sprintf(`{"type":"message","message":{"role":"user","content":[{"type":"text","text":%q}]}}`, content) + "\n"
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	oldPath, newPath := makeTranscript("old session"), makeTranscript("new session")
+	bind := func(path string) {
+		proj := fixtureProjection()
+		proj.Agents = []herdr.Agent{{TerminalID: "term_a", PaneID: "w1:p1", Kind: "omp", Status: "working",
+			AgentSession: &herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Value: path}}}
+		h.back.set(proj)
+	}
+	bind(oldPath)
+	conn, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream?instance=default", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := readJSON(t, conn)
+	if first["t"] != "chat" {
+		t.Fatalf("initial frame: %v", first)
+	}
+	bind(newPath)
+	// Host re-resolves the Herdr session every four polls; the first
+	// frame for another source must be whole, never a suffix of old turns.
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
+	defer cancel()
+	for {
+		_, raw, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("no rebind frame: %v", err)
+		}
+		var frame map[string]any
+		if err := json.Unmarshal(raw, &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame["t"] != "chat" {
+			t.Fatalf("session switch sent a delta: %+v", frame)
+		}
+		state, _ := frame["state"].(map[string]any)
+		turns, _ := state["turns"].([]any)
+		if len(turns) != 1 {
+			t.Fatalf("new session state: %+v", state)
+		}
+		row, _ := turns[0].(map[string]any)
+		if row["text"] == "new session" {
+			break
 		}
 	}
 }

@@ -148,23 +148,24 @@ type Server struct {
 	devices *DeviceStore
 	pairing *Pairing
 
-	mu          sync.Mutex
-	httpServer  *http.Server
-	listenHost  string
-	listenPort  string
-	fingerprint string
-	conns       map[string]map[*liveConn]struct{} // deviceID → live sockets
-	terminals   map[string]int                    // deviceID → open terminal streams
-	chats       map[string][]*chatSlot            // deviceID → open chat streams, oldest first
-	windows     contextWindowCache                // context windows of open chats (60 s)
-	asks        map[string]*askCursor             // instance\x00pane → Question state
-	trees       map[string]*treeState
-	peeks       peekCache
-	poke        chan struct{}                    // closed and replaced by Poke; every events pump waits on the current one
-	paRevision  uint64                           // Assistants change counter (NotifyPersonalAgent)
-	notices     map[chan map[string]any]struct{} // open events sockets' queues for one-off frames (NotifyAutomation)
-	netStop     chan struct{}                    // closed by Close; stops the address watcher (watch.go)
-	netDone     chan struct{}                    // closed by the watcher goroutine on exit; Close joins it
+	mu             sync.Mutex
+	httpServer     *http.Server
+	listenHost     string
+	listenPort     string
+	fingerprint    string
+	conns          map[string]map[*liveConn]struct{} // deviceID → live sockets
+	terminals      map[string]int                    // deviceID → open terminal streams
+	chats          map[string][]*chatSlot            // deviceID → open chat streams, oldest first
+	chatStreamFeed companionStreamFeed               // bounded read-only OMP extension overlay; independent of Herdr state
+	windows        contextWindowCache                // context windows of open chats (60 s)
+	asks           map[string]*askCursor             // instance\x00pane → Question state
+	trees          map[string]*treeState
+	peeks          peekCache
+	poke           chan struct{}                    // closed and replaced by Poke; every events pump waits on the current one
+	paRevision     uint64                           // Assistants change counter (NotifyPersonalAgent)
+	notices        map[chan map[string]any]struct{} // open events sockets' queues for one-off frames (NotifyAutomation)
+	netStop        chan struct{}                    // closed by Close; stops the address watcher (watch.go)
+	netDone        chan struct{}                    // closed by the watcher goroutine on exit; Close joins it
 
 	relay       *relayClient // non-nil while the relay tunnel is running
 	relayStatus RelayStatus  // what Settings shows; written by startRelay and the client

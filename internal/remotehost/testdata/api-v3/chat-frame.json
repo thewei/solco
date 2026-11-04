@@ -1,6 +1,7 @@
 {
-  "agentStatus": "working",
+  "t": "chat",
   "paneId": "w1:p1",
+  "agentStatus": "working",
   "state": {
     "provider": "claude-code",
     "model": "claude-sonnet-4-5",
@@ -26,5 +27,5 @@
       }
     ]
   },
-  "t": "chat"
+  "seq": 1
 }

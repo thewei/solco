@@ -2,10 +2,10 @@ package remotehost
 
 import (
 	"context"
-	"crypto/sha256"
 	"log/slog"
 	"net/http"
 	"os"
+	"reflect"
 	"time"
 
 	"encoding/json"
@@ -17,8 +17,8 @@ import (
 
 /**
  * [INPUT]: 依赖 Backend.Projection（agent_session 身份）、internal/chatsession（Reader/State）、history.ResolveLiveSource、server.go 的 currentTree/trackConn/guard
- * [OUTPUT]: 对外提供 GET /api/v3/panes/{paneID}/chat（一次性只读 State）与 GET /api/v3/panes/{paneID}/chat/stream（WebSocket，`chat` 帧 = 完整 State，内容变才推）
- * [POS]: 手机 Chat 只读（P2）：窗格 → Herdr 的 agent_session 身份 → Provider 自己的转录文件 → 与桌面同一份 chatsession 投影；Host 只读文件，不 attach、不写 Provider、不记录对话内容；会话换了（新 session 文件）流里重绑；没有可读会话 = 409 no_conversation，手机退回 Terminal
+ * [OUTPUT]: 对外提供 GET /api/v3/panes/{paneID}/chat（一次性只读 State）与 GET /api/v3/panes/{paneID}/chat/stream（WebSocket：初次/会话切换/状态差异用 `chat` 全帧，OMP Token 优先 `chat_delta` 尾 3 回合/80ms 合并；手机发 `{t:snapshot}` 精确全量复位）
+ * [POS]: 手机 Chat 只读（P2/SC-06）：窗格 → Herdr 的 agent_session 身份 → Provider 转录文件；OMP 额外使用同进程 Solco apphook 的只读临时叠加，不启动第二 Agent；原始 JSONL 仍是真值，跨 Pane/路径拒绝；会话换了流里重绑并发全量帧；没有可读会话 = 409 no_conversation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -179,9 +179,10 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 	defer cancel()
 	defer s.acquireChat(dev.ID, cancel)()
 	defer s.trackConn(dev.ID, func() { _ = conn.Close(websocket.StatusPolicyViolation, "revoked"); cancel() })()
-	// The phone sends one message: {"t":"older"} asks for the previous page of this stream's window. Anything
-	// else is ignored; reading also detects a close.
+	// The phone may ask for older transcript turns or for a full snapshot
+	// after a missing/invalid suffix frame. Neither request mutates the runtime.
 	olderReq := make(chan struct{}, 1)
+	snapshotReq := make(chan struct{}, 1)
 	go func() {
 		for {
 			_, data, err := conn.Read(ctx)
@@ -192,56 +193,114 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 			var msg struct {
 				T string `json:"t"`
 			}
-			if json.Unmarshal(data, &msg) == nil && msg.T == "older" {
-				select {
-				case olderReq <- struct{}{}:
-				default: // one page at a time; the pending request already covers this one
+			if json.Unmarshal(data, &msg) == nil {
+				switch msg.T {
+				case "older":
+					select {
+					case olderReq <- struct{}{}:
+					default:
+					}
+				case "snapshot":
+					select {
+					case snapshotReq <- struct{}{}:
+					default:
+					}
 				}
 			}
 		}
 	}()
 
-	var last [sha256.Size]byte
+	if _, err := reader.Sync(); err != nil {
+		return
+	}
+	canonical := s.chatState(ctx, target, reader)
+	interaction := s.interactionFrame(ctx, instance, paneID, status, reader)
+	queued := s.queuedFor(target)
+	var last chatWireFrame
 	sent := false
-	push := func() bool {
-		frame := map[string]any{"t": "chat", "paneId": paneID, "agentStatus": status, "state": s.chatState(ctx, target, reader)}
-		if card := s.interactionFrame(ctx, instance, paneID, status, reader); card != nil {
-			frame["interaction"] = card
+	push := func(force bool) bool {
+		frame := chatWireFrame{
+			T: "chat", PaneID: paneID, AgentStatus: status,
+			Interaction: interaction, Queued: queued,
+			State: s.chatStreamOverlay(paneID, target, canonical),
+			Seq:   last.Seq + 1,
 		}
-		if queued := s.queuedFor(target); queued != nil {
-			frame["queued"] = queued
+		if sent && !force && reflect.DeepEqual(frame.State, last.State) &&
+			frame.AgentStatus == last.AgentStatus && reflect.DeepEqual(frame.Interaction, last.Interaction) &&
+			reflect.DeepEqual(frame.Queued, last.Queued) {
+			return true
 		}
-		raw, err := json.Marshal(frame)
+		full, err := json.Marshal(frame)
 		if err != nil {
 			return false
 		}
-		sum := sha256.Sum256(raw)
-		if sent && sum == last {
-			return true
+		raw := full
+		if sent && !force && target.Provider == history.AgentOMP {
+			if delta, ok := chatSuffixDelta(last, frame); ok {
+				if compact, err := json.Marshal(delta); err == nil && len(compact) < len(full) {
+					raw = compact
+				}
+			}
 		}
-		last, sent = sum, true
 		wctx, wcancel := context.WithTimeout(ctx, wsWriteTimeout)
 		defer wcancel()
-		return conn.Write(wctx, websocket.MessageText, raw) == nil
+		if err := conn.Write(wctx, websocket.MessageText, raw); err != nil {
+			return false
+		}
+		last, sent = frame, true
+		return true
 	}
-	if _, err := reader.Sync(); err != nil || !push() {
+	if !push(true) {
 		return
 	}
 	tick := time.NewTicker(chatPollEvery)
 	defer tick.Stop()
-	for n := 1; ; n++ {
+	var timer *time.Timer
+	var deadline <-chan time.Time
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+	wake := s.chatStreamWake()
+	for n := 1; ; {
 		select {
 		case <-ctx.Done():
 			return
 		case <-olderReq:
-			if reader.Older() && !push() {
+			if reader.Older() {
+				canonical = s.chatState(ctx, target, reader)
+				if !push(true) {
+					return
+				}
+			}
+			continue
+		case <-snapshotReq:
+			canonical = s.chatState(ctx, target, reader)
+			if !push(true) {
+				return
+			}
+			continue
+		case <-wake:
+			wake = s.chatStreamWake()
+			if timer == nil {
+				timer = time.NewTimer(chatStreamCoalesce)
+				deadline = timer.C
+			}
+			continue
+		case <-deadline:
+			deadline = nil
+			timer = nil
+			if !push(false) {
 				return
 			}
 			continue
 		case <-tick.C:
+			n++
 		}
 		watching := status == "blocked" || s.pickerWatching(instance, paneID) || s.queuedFor(target) != nil
-		if n%chatRebindEvery == 0 || watching { // a blocked agent retires its card the moment it moves on
+		forceFull := false
+		if n%chatRebindEvery == 0 || watching {
 			next := s.resolveChat(instance, paneID)
 			switch {
 			case next.Code == "unknown_pane":
@@ -251,24 +310,30 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 				_ = conn.Close(statusNoConversation, "no_conversation")
 				return
 			case next.Code == "":
-				status, target = next.Status, next // a status change alone changes the frame
+				status, target = next.Status, next
 				if next.Path != reader.Path() {
 					fresh, err := chatsession.Open(next.Provider, next.Path)
 					if err != nil {
 						_ = conn.Close(statusNoConversation, "no_conversation")
 						return
 					}
-					reader, sent = fresh, false
+					reader, sent, forceFull = fresh, false, true
 				}
 			}
 		}
 		changed, err := reader.Sync()
 		if err != nil {
-			continue // a momentarily unreadable file is retried, not fatal
+			continue
 		}
-		// A blocked agent re-derives its card every poll (the frame is hashed, so only a change goes out).
-		if (changed || n%chatRebindEvery == 0 || watching) && !push() {
-			return
+		// Periodic canonical refresh retires reconciled overlays, refreshes
+		// queue/interaction metadata, and remains the non-OMP fallback.
+		if changed || n%chatRebindEvery == 0 || watching || target.Provider == history.AgentOMP {
+			canonical = s.chatState(ctx, target, reader)
+			interaction = s.interactionFrame(ctx, instance, paneID, status, reader)
+			queued = s.queuedFor(target)
+			if !push(forceFull) {
+				return
+			}
 		}
 	}
 }

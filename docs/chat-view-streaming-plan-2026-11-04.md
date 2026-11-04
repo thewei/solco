@@ -1,6 +1,6 @@
 # Solco Chat View 原生流式事件实施计划（2026-11-04）
 
-状态：**SC-01–SC-04 已实现并加固；SC-05 已验证真实 Herdr 0.9.5 + OMP 18.16.0 TUI 双轮事件链路，OMP 扩展内嵌 App + Agents 安装 Doctor 已实现；Solco WebView 画面仍待验收**
+状态：**SC-01–SC-04 已实现并加固；SC-05 Herdr/OMP TUI 双轮通过、GUI 待验收；SC-06 桌面进程内 Host 的 OMP 有界增量与快照恢复已实现；常驻 hostd 扇出、Pi 复用和手机真机待补**
 
 目标：在**同一个 Herdr Pane / OMP TUI / Agent 会话**内，将模型增量文本和工具生命周期实时投影到现有 Chat View；不引入第二个 Agent 进程，不改变 Prompt/交互写路径。
 
@@ -56,7 +56,7 @@ Provider native JSONL → LiveDecoder/LivePump → canonical reconciliation
 | SC-03 | `internal/chatstream` + `internal/nativeui`：有界 overlay；严格 session 身份；优先给现有 ChatBridge 提供文本/思考增量与工具状态 | Go 单测验证跨 Pane/Session 过滤、序号/epoch 去重、工具阶段、转录回补；WebView 仍走现有 120ms 全量投影 | 代码完成 / 实机待验收 |
 | SC-04 | WebView 优化：独立 `chat:delta`、有序尾回合 suffix patch / 50ms 合并 | Go 端只传尾部至多 3 回合，且从最后实际交付的 Snapshot/事件核对历史前缀与非回合元数据；窗口滑动/状态改变自动退回完整快照。页面按 `baseSeq + conversationId` 严格验序；手机暂未发 delta | 代码完成 / 性能实测待补 |
 | SC-05 | 扩展安装/Doctor、CLI 兼容窗口、真实隔离 Herdr+OMP 演练 | 独立安装工具与 OMP RPC 测试已有；`scripts/check-herdr-omp-chat-stream.py` 真实 Herdr 0.9.5 + OMP 18.16.0 双轮 TUI 验证（单 Pane、单 Agent、14 帧、6 文本 delta、read tool、同 JSONL）通过。新增 App 内嵌唯一测试过的 `scripts/omp-chat-stream.ts` + `internal/ompstream` 安全 Doctor + Settings → Agents → OMP live text 明确点击 Install/Update；不修改 Herdr 扩展、不自动改 HOME。仍待 App WebView 画面及切换/中断验收 | 大部分完成 / GUI 待验收 |
-| SC-06 | Pi 扩展复用 / mobile Host delta 事件 | 桌面移动端共用事件模型且身份与回放一致 | 待后续 |
+| SC-06 | Pi 扩展复用 / mobile Host delta 事件 | Host 接收同进程 OMP apphook 事件（不要求桌面当前打开该 Pane），32 流/2min TTL 内存缓冲 + 精确 Pane/Provider/SessionPath 围栏，80ms 合并推最多 3 尾回合 `chat_delta`（baseSeq/seq/start）；非 OMP、元数据/历史前缀变化和会话切换全帧；手机验序失败只发一次 `{t:snapshot}` 请求真值恢复；Go WebSocket / TS reducer / Golden 测试落地。常驻 `hostd` 目前没有 AppHook 接线（退回原 1s JSONL），Pi Companion 和真实手机网络性能待后续 | 桌面 Host OMP 完成 / 常驻和 Pi 待验 |
 
 ## 4. 风险与护栏
 
@@ -65,7 +65,7 @@ Provider native JSONL → LiveDecoder/LivePump → canonical reconciliation
 3. **事件风暴/丢帧/容量**：IPC 帧、delta 和 overlay 均设硬限制，独立 coalescing。任何序号空洞、单消息文本/思考超 32KiB、工具记录超过 64 个都立即撤销临时投影、标记失同步并回退 Provider JSONL；绝不截断后继续展示或跨缺失 Token 拼接。下一条 `message_start` 从新回合恢复；不得通过每个 Token 触发网络/RPC 全量读取。
 4. **隐私**：文本只在用户级 Unix socket 内短暂传输；日志只写事件类型/统计，永不写内容。
 5. **兼容**：Extension 可缺失、socket 不可用时，回退现有 JSONL；安装不篡改 Herdr 提供的 extension。
-6. **移动端**：`frontend/src` 是桌面手机唯一 Chat 页面；后续 frontend 变更必须走同步与检查，不允许移动端自行维护另一版 UI。
+6. **移动端**：`frontend/src` 是桌面手机唯一 Chat 页面，本轮 SC-06 只修改 Host Wire 层和 WebView 桥之前的状态恢复，不新增一份 Chat UI。网络断线/不连续 delta 不拼接猜测 Token：手机通过授权 WS `{t:snapshot}` 请求原生转录完整状态；旧 Host 仍只发兼容的 `{t:chat}` 全帧。
 
 ## 5. 验收门槛
 
@@ -94,4 +94,6 @@ Provider native JSONL → LiveDecoder/LivePump → canonical reconciliation
 - SC-06 预审接口缺口：当前 `internal/remotehost/chat.go` 仍按 1 秒轮询原生 JSONL，WebSocket 只发全量 `{t:"chat"}`；`solco-mobile/src/features/chat-web/protocol.ts` 只识别页面事件 `chat:updated`，不能把桌面 MyGo 内部 `chat:delta` 当作手机真实网络增量。后续须先确认常驻 `hostd` 与桌面 AppHook 的同会话、单写入事件边界，Host 只广播已验证 Pane/Provider/Session 的有界临时投影；缺帧/跨会话时发全量 `chat` 回补，手机继续复用同一个 Chat 页面，不创建第二个 Agent 进程。
 - 2026-11-05（SC-05 App 安装 Doctor）：`main.go` 用 `go:embed` 内嵌唯一受 Socket/Herdr TUI 测试过的 `scripts/omp-chat-stream.ts`。新增 `internal/ompstream` 实现 read-only Doctor（missing/current/outdated/foreign/error）、显式安装/卸载，拒绝外来文件/符号链接、不动 Herdr 自有 Extension、不启动或重启 Agent。Settings → Agents → OMP 行新增附属 live text 状态与 Install/Update；开启 OMP 开关不会静默安装，只有用户点击才写 HOME。Go 领域用例覆盖幂等、升级、外来文件/符号链接保护，原生 UI 测试覆盖首次渲染零写入、点击安装/升级即时刷新、受保护文件不能操作；主包测试验证嵌入 bytes 与脚本源码完全一致。**App 安装入口完成，但真实用户 HOME 尚未触碰，Solco WebView 实屏仍待验。**
 - 2026-11-05（App Doctor 验收）：`go test ./...` 最终退出 0，`go tool mygo vet .` 退出 0，`go tool mygo build` 最终编译并签名 `build/darwin-arm64/Solco.app`；Go Installer 生命周期/外来文件/符号链接测试、原生 Settings 点击 Install/Update/Protected 测试、root `go:embed` 源码一致性测试通过。隔离 Herdr + OMP TUI 双轮 Smoke 再次通过，14 帧/单 Pane/单 Agent；没有覆盖写真实用户 HOME 或重新启动正在运行的 OMP。
-- 下一批：SC-05 Solco GUI WebView 的同沙箱渲染/切换/中断/重启验收、OOM/事件风暴性能测试；SC-06 手机 Host 实时流事件/掉帧回放和 Pi 复用。
+- 2026-11-05（SC-06 OMP 手机 Host 实时闭环）：Host 复用 `internal/chatstream.Buffer` 与原来的 AppHook 事件，不新建 OMP；只在 Herdr 权威目标精确匹配 Provider/Pane/转录路径时叠加有界临时状态。80ms 合并尾部最多 3 Turn 的 `chat_delta`，1s JSONL 真值回补、4s Agent 身份重绑；metadata 或历史滑窗变化发完整帧。手机 HostClient 增加 Zod 联合协议与 suffix reducer，`baseSeq/seq/paneId` 有任何不匹配则单次 `{t:snapshot}` 请求，不重用旧 Token；重连首帧为全量。Go WebSocket 真实集成测试验证约 170ms 推送、缺帧/回补、单会话围栏、重绑只发全帧。双端 Golden `chat-frame*` / `chat-delta.json` 同步；手机不修改共享 Chat HTML，也不引入第二个 agent。**限制：`internal/hostd/serve.go` 独立常驻进程未接入 AppHook，桌面 App 退出后手机仍能经 canonical JSONL 每秒轮询，但 OMP Token 的 80ms 增量尚不在常驻模式生效；不可宣称后台始终实时。**
+- 2026-11-05（SC-06 双端验收）：Mac `go test ./...` 退出 0、`go tool mygo vet .` 退出 0、`go tool mygo build` 通过并签名 `Solco.app`；Remote Host 的纯 Delta、真实 WebSocket 事件唤醒/失帧恢复、会话切换断言通过，`go test -race` 对这组回归也通过；手机 `pnpm typecheck`、`pnpm test`（606 passed / 2 skipped）、`pnpm check:fixtures`（185 份匹配）、`pnpm check:chat-page`（共享 HTML hash 匹配）通过。真实 Android 网络/后台恢复与常驻 hostd 场景**未验收**。
+- 下一批：SC-05 Solco GUI WebView 同沙箱视觉/中断/重启验收；SC-06 常驻 hostd 安全多 socket 扇出（不可抢桌面既有 AppHook socket）、真实手机网络抖动与性能、Pi Extension 复用。
