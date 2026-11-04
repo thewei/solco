@@ -50,6 +50,10 @@ type AssistantsView struct {
 	// first of them.
 	Agents       []AssistantsAgent `json:"agents"`
 	DefaultAgent string            `json:"defaultAgent"`
+	// AgentsReady is false while the launchable-agent catalog is still being
+	// read (the first seconds of a window): an empty list then is "not yet",
+	// not "none turned on".
+	AgentsReady bool `json:"agentsReady"`
 }
 
 // AssistantsAgent is one choice of the Coordinator's agent chip: ID is the
@@ -172,6 +176,7 @@ func (b *AssistantsBridge) Snapshot(ctx context.Context) (AssistantsView, error)
 	s.callOnWindow(func() {
 		s.ensureLaunchKinds()
 		view.Agents, view.DefaultAgent = s.assistantAgents()
+		view.AgentsReady = s.launchKinds != nil
 		view.Theme = s.chatBridgeTheme()
 		if s.assistantsAvailable() {
 			client = s.assistantsClientFor()

@@ -286,7 +286,7 @@ func (s *Store) groupDeliveryPrompt(ga GroupAgent, messageID string) (string, in
 	if err != nil {
 		return "", 0, err
 	}
-	msgs, err := groupMessagesAfter(s.db, ga.GroupID, ga.LastSeq, 50)
+	msgs, omitted, err := s.groupDeliveryWindow(ga, messageID)
 	if err != nil {
 		return "", 0, err
 	}
@@ -301,6 +301,9 @@ func (s *Store) groupDeliveryPrompt(ga GroupAgent, messageID string) (string, in
 		b.WriteString(groupBrief(a, g) + "\n")
 	}
 	b.WriteString("New in the group chat since you last looked (you are @-mentioned in the message marked >>>):\n")
+	if omitted > 0 {
+		fmt.Fprintf(&b, "(%d earlier messages are not shown; ask the group if you need them)\n", omitted)
+	}
 	last := ga.LastSeq
 	for _, m := range msgs {
 		if m.AuthorKind == AuthorAssistant && m.AuthorID == ga.AssistantID {
@@ -322,4 +325,70 @@ func (s *Store) groupDeliveryPrompt(ga GroupAgent, messageID string) (string, in
 	}
 	b.WriteString("\nAnswer with `group say` (replyTo the marked message).")
 	return b.String(), last, nil
+}
+
+// deliveryWindowSize is how many unseen messages one delivery prompt carries.
+const deliveryWindowSize = 50
+
+// groupDeliveryWindow picks the messages a delivery prompt shows: the unseen
+// ones after the Agent's last seq, at most deliveryWindowSize. When the message
+// being delivered lies beyond that first page the window is anchored on it
+// instead (the newest messages up to and including it), plus any other
+// delivery still waiting for this Agent in the part skipped — so a delivery is
+// never marked done with its @-mention absent from the prompt. omitted counts
+// the unseen messages left out.
+func (s *Store) groupDeliveryWindow(ga GroupAgent, messageID string) ([]GroupMessage, int, error) {
+	msgs, err := groupMessagesAfter(s.db, ga.GroupID, ga.LastSeq, deliveryWindowSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, m := range msgs {
+		if m.ID == messageID {
+			return msgs, 0, nil
+		}
+	}
+	var target int64
+	if err := s.db.QueryRow(`SELECT seq FROM group_messages WHERE id=? AND group_id=?`, messageID, ga.GroupID).Scan(&target); err != nil {
+		return msgs, 0, nil // not in this Group's log: nothing to anchor on
+	}
+	if target <= ga.LastSeq {
+		return msgs, 0, nil
+	}
+	rows, err := s.db.Query(`SELECT * FROM (SELECT `+groupMsgCols+` FROM group_messages WHERE group_id=? AND seq>? AND seq<=? ORDER BY seq DESC LIMIT ?) ORDER BY seq`,
+		ga.GroupID, ga.LastSeq, target, deliveryWindowSize-1)
+	if err != nil {
+		return nil, 0, wrapBusy(err)
+	}
+	var window []GroupMessage
+	for rows.Next() {
+		m, err := scanGroupMessage(rows)
+		if err != nil {
+			_ = rows.Close()
+			return nil, 0, err
+		}
+		window = append(window, m)
+	}
+	_ = rows.Close()
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM group_messages WHERE group_id=? AND seq>? AND seq<=?`, ga.GroupID, ga.LastSeq, target).Scan(&total); err != nil {
+		return nil, 0, wrapBusy(err)
+	}
+	// Other open deliveries of this Agent that fall in the skipped part.
+	if len(window) > 0 {
+		first := window[0].Seq
+		skipped, err := s.db.Query(`SELECT `+groupMsgColsM+` FROM group_messages m JOIN group_deliveries d ON d.message_id=m.id
+			WHERE m.group_id=? AND m.seq>? AND m.seq<? AND d.assistant_id=? AND d.state=? ORDER BY m.seq`,
+			ga.GroupID, ga.LastSeq, first, ga.AssistantID, DeliveryQueued)
+		if err == nil {
+			var extra []GroupMessage
+			for skipped.Next() {
+				if m, err := scanGroupMessage(skipped); err == nil {
+					extra = append(extra, m)
+				}
+			}
+			_ = skipped.Close()
+			window = append(extra, window...)
+		}
+	}
+	return window, max(total-len(window), 0), nil
 }

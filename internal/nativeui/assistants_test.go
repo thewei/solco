@@ -585,3 +585,31 @@ func TestAssistantsMemoryAndBehaviorBridge(t *testing.T) {
 		}
 	}
 }
+
+// A Workspace row is the way out of /assistants even when it is the Workspace
+// that was selected before the page opened (2026-11-04 user report: the click
+// only toggled the row and the page stayed).
+func TestAssistantsPageLeavesThroughAWorkspaceRow(t *testing.T) {
+	stubAssistants(t, false)
+	s := openAssistantsShell(t)
+	s.projection = herdr.Projection{
+		FocusedProjectID: "w1",
+		Projects:         []herdr.Project{{ID: "w1", Label: "Project A", TabCount: 1}},
+		Tabs:             []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "Tab 1", PaneCount: 1}},
+	}
+	s.selectedProjectID = "w1"
+	tt := ui.NewTester(s.View, 1200, 800)
+	if err := tt.Click("Ada"); err != nil {
+		t.Fatal(err)
+	}
+	if s.router.Path() != routeAssistants {
+		t.Fatalf("path=%q, want /assistants", s.router.Path())
+	}
+	tt.Frame()
+	if err := tt.Click("Project A"); err != nil {
+		t.Fatal(err)
+	}
+	if s.router.Path() != routeWorkspace {
+		t.Fatalf("path=%q after clicking the selected Workspace row, want /workspace", s.router.Path())
+	}
+}

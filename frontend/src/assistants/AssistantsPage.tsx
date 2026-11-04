@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { App } from "../App";
+import { Icon } from "../icons";
 import {
   assistants,
   chat,
@@ -50,15 +51,26 @@ function useAssistants() {
   const pull = useCallback(() => {
     assistants.snapshot().then(setView).catch((e) => setError(msg(e)));
   }, []);
+  // The launchable-agent catalog is read in the background at window start;
+  // until it lands, look again soon instead of waiting a whole poll.
+  const loading = view !== null && !view.agentsReady;
+  useEffect(() => {
+    if (!loading) return;
+    const t = window.setTimeout(pull, 700);
+    return () => window.clearTimeout(t);
+  }, [loading, view, pull]);
   useEffect(() => {
     pull();
     // The page polls only while it is visible: a hidden window costs no CLI calls.
     const timer = window.setInterval(() => !document.hidden && pull(), 4000);
     const show = () => !document.hidden && pull();
     document.addEventListener("visibilitychange", show);
+    // A sidebar click is a selection the page must show now, not at the next poll.
+    const off = events.assistantsSelect.on(() => pull());
     return () => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", show);
+      off();
     };
   }, [pull]);
   useEffect(() => {
@@ -128,17 +140,20 @@ export function AssistantsPage() {
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
   }, [menu, tab, form]);
-  /** Run one command; show the refusal, then re-read. */
+  /** Run one command; show the refusal, then re-read. Resolves with the refusal's words ("" when it went through), so a form closes only on success. */
   const act: Act = useCallback(
     async (call) => {
       setError("");
+      let refusal = "";
       try {
         await call();
       } catch (e) {
-        setError(msg(e));
+        refusal = msg(e) || "Failed";
+        setError(refusal);
       }
       pull();
       pullDrawer();
+      return refusal;
     },
     [pull, pullDrawer, setError],
   );
@@ -552,7 +567,7 @@ function Conversation({ view, detail, setError, refresh }: { view: AssistantsVie
   const starting = held !== null || co.state === "starting" || (live && !bind?.bound);
   const stranded = co.state === "ready" && !detail.coordinatorOpen;
   const paused = a.status !== "active";
-  const noAgents = view.agents.length === 0;
+  const noAgents = view.agentsReady && view.agents.length === 0;
   return (
     <div className="as-shell">
       <div className="as-shell-body">
@@ -587,7 +602,22 @@ function agentLabel(agents: AssistantsAgent[], id: string): string {
   return agents.find((x) => x.id === id)?.label ?? "the Coordinator";
 }
 
+/**
+ * The composer before a Coordinator exists. It wears the Chat page's own
+ * markup (`.composer > .col > .cmp > textarea + .cbar`, the `.chip.modelchip`
+ * agent chip, the round `.send`) so the conversation looks the same before and
+ * after the first message — only the controls the Chat needs a live Agent for
+ * (the + menu, model panel, context ring) are absent.
+ */
 function Composer({ value, onChange, onSend, disabled, placeholder, agents, agent, onAgent }: { value: string; onChange: (v: string) => void; onSend: () => void; disabled: boolean; placeholder: string; agents: AssistantsAgent[]; agent: string; onAgent: (v: string) => void; onStop?: undefined }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    // Same growth rule as the Chat's composer: fit the text, up to 40% of the window.
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, Math.floor(window.innerHeight * 0.4))}px`;
+  }, [value]);
   const key = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     // Enter sends; Shift+Enter breaks the line; an IME's own Enter never sends.
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -596,32 +626,34 @@ function Composer({ value, onChange, onSend, disabled, placeholder, agents, agen
     }
   };
   return (
-    <div className="as-composer-row">
-      <div className={`as-composer ${disabled ? "off" : ""}`}>
-        <textarea value={value} rows={1} placeholder={placeholder} aria-label="Message" disabled={disabled} onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
-        <div className="as-composer-bar">
-          {agents.length > 1 ? (
-            <select className="as-agent" aria-label="Agent that runs the Coordinator" value={agent} onChange={(e) => onAgent(e.target.value)}>
-              {agents.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.label}
-                </option>
-              ))}
-            </select>
-          ) : agents.length === 1 ? (
-            <span className="as-agent static">{agents[0].label}</span>
-          ) : null}
-          <span className="as-grow" />
-          <button type="button" className="as-send" aria-label="Send" disabled={disabled || value.trim() === ""} onClick={onSend}>
-            ↑
-          </button>
+    <div className="composer">
+      <div className="col">
+        <div className="cmp">
+          <textarea ref={ref} rows={1} value={value} placeholder={placeholder} aria-label="Chat prompt" spellCheck disabled={disabled} onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
+          <div className="cbar">
+            <span className="sp" />
+            {agents.length > 1 ? (
+              <select className="chip mono modelchip as-agent" aria-label="Agent that runs the Coordinator" title="Agent that runs the Coordinator" value={agent} disabled={disabled} onChange={(e) => onAgent(e.target.value)}>
+                {agents.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+            ) : agents.length === 1 ? (
+              <span className="chip mono">{agents[0].label}</span>
+            ) : null}
+            <button type="button" className="send" title="Send" aria-label="Send" disabled={disabled || value.trim() === ""} onClick={onSend}>
+              <Icon name="up" size={16} stroke={2.2} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-type Act = (call: () => Promise<unknown>) => Promise<void>;
+type Act = (call: () => Promise<unknown>) => Promise<string>;
 
 function Empty({ children }: { children: ReactNode }) {
   return <p className="as-none">{children}</p>;
@@ -913,15 +945,16 @@ function AgentPick({ agents, value, onChange }: { agents: AssistantsAgent[]; val
 
 function Rename({ assistant, onClose, act }: { assistant: { id: string; name: string; revision: number }; onClose: () => void; act: Act }) {
   const [name, setName] = useState(assistant.name);
+  const [failure, setFailure] = useState("");
   return (
     <Sheet
       title="Rename Assistant"
       submit="Rename"
       busy={!name.trim() || name.trim() === assistant.name}
+      error={failure}
       onClose={onClose}
       onSubmit={() => {
-        void act(() => assistants.renameAssistant(rid(), assistant.id, name, assistant.revision));
-        onClose();
+        void act(() => assistants.renameAssistant(rid(), assistant.id, name, assistant.revision)).then((e) => (e ? setFailure(e) : onClose()));
       }}
     >
       <Field label="Name">
@@ -977,12 +1010,14 @@ function NewWatch({ assistantId, agents, onClose, act }: { assistantId: string; 
   const [minutes, setMinutes] = useState("5");
   const [agent, setAgent] = useState(agents[0]?.id ?? "pi");
   const [repoPath, setRepoPath] = useState("");
+  const [failure, setFailure] = useState("");
   const valid = /^[\w.-]+\/[\w.-]+$/.test(repo.trim()) && Number(number) > 0;
   return (
     <Sheet
       title="Watch a pull request"
       submit="Start Watching"
       busy={!valid}
+      error={failure}
       onClose={onClose}
       onSubmit={() => {
         const n = Number(number);
@@ -994,8 +1029,7 @@ function NewWatch({ assistantId, agents, onClose, act }: { assistantId: string; 
             objective: "Tell me when it changes.",
             watch: { repo: repo.trim(), number: n, intervalSeconds: seconds, agent, model: "", repoPath: repoPath.trim() },
           });
-        });
-        onClose();
+        }).then((e) => (e ? setFailure(e) : onClose()));
       }}
     >
       <Field label="Repository (owner/name)">
@@ -1024,12 +1058,14 @@ function NewTask({ assistantId, agents, onClose, act }: { assistantId: string; a
   const [kind, setKind] = useState("research");
   const [agent, setAgent] = useState(agents[0]?.id ?? "pi");
   const [repoPath, setRepoPath] = useState("");
+  const [failure, setFailure] = useState("");
   const valid = title.trim() !== "" && brief.trim() !== "" && (kind !== "coding" || repoPath.trim() !== "");
   return (
     <Sheet
       title="New task"
       submit="Queue Task"
       busy={!valid}
+      error={failure}
       onClose={onClose}
       onSubmit={() => {
         void act(() =>
@@ -1041,8 +1077,7 @@ function NewTask({ assistantId, agents, onClose, act }: { assistantId: string; a
             agent,
             repoPath: repoPath.trim() || undefined,
           }),
-        );
-        onClose();
+        ).then((e) => (e ? setFailure(e) : onClose()));
       }}
     >
       <Field label="Title">

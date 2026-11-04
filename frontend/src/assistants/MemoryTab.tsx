@@ -11,7 +11,8 @@ import { assistants, type MemoryItem, type MemoryReview, type MemoryVersion } fr
  * separate candidate beside the newer text, never over it.
  */
 
-type Act = (call: () => Promise<unknown>) => Promise<void>;
+/** Resolves with the refusal's words ("" when the write went through): a draft is cleared only then. */
+type Act = (call: () => Promise<unknown>) => Promise<string>;
 
 const rid = () => crypto.randomUUID();
 
@@ -39,7 +40,7 @@ export function MemoryTab({ id, act }: { id: string; act: Act }) {
     const timer = window.setInterval(() => !document.hidden && load(), 5000);
     return () => window.clearInterval(timer);
   }, [load]);
-  const run: Act = useCallback(async (call) => act(call).then(load), [act, load]);
+  const run: Act = useCallback(async (call) => act(call).then((refusal) => (load(), refusal)), [act, load]);
   if (!review) return <p className="as-meta">{failed || "Loading…"}</p>;
 
   const candidates = review.items.filter((m) => m.state === "candidate");
@@ -90,7 +91,7 @@ function Add({ id, run }: { id: string; run: Act }) {
           type="button"
           className="as-btn primary"
           disabled={text.trim() === ""}
-          onClick={() => run(() => assistants.addMemory(rid(), id, text.trim())).then(() => setText(""))}
+          onClick={() => run(() => assistants.addMemory(rid(), id, text.trim())).then((refusal) => refusal === "" && setText(""))}
         >
           Remember
         </button>
@@ -123,7 +124,7 @@ function Item({ m, run, note }: { m: MemoryItem; run: Act; note: string }) {
           type="button"
           className="as-btn primary"
           disabled={text.trim() === "" || text.trim() === m.content.trim()}
-          onClick={() => run(() => assistants.editMemory(rid(), m.id, m.revision, text.trim())).then(() => setEditing(false))}
+          onClick={() => run(() => assistants.editMemory(rid(), m.id, m.revision, text.trim())).then((refusal) => refusal === "" && setEditing(false))}
         >
           Save
         </button>

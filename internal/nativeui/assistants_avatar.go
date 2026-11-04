@@ -57,12 +57,22 @@ func assistantAvatar(c *ui.Context, who avatarIdentity, size float32) {
 	})
 }
 
-// groupAvatarFaces are how many members a Group's stack shows.
-const groupAvatarFaces = 3
+// groupAvatarFaces are how many members a Group's stack shows: two discs at
+// the full avatar size, the second overlapping the first (2026-11-04: the
+// earlier three shrunken discs read as dots).
+const groupAvatarFaces = 2
 
-// groupAvatar stacks up to three members' faces, each a little right of the
-// last and ringed in the sidebar's own colour so they read as separate discs.
-// A Group with no member to show draws a single neutral disc.
+// groupAvatarWidth is the slot a Group's stack of n shown members needs: one
+// disc plus a step per extra disc.
+func groupAvatarWidth(n int, size float32) float32 {
+	n = min(max(n, 1), groupAvatarFaces)
+	return size + float32(n-1)*size*0.6
+}
+
+// groupAvatar stacks up to two members' faces at the same size as a single
+// Assistant's, each 60% of a disc right of the last and ringed in the
+// sidebar's own colour so they read as separate discs. A Group with no member
+// to show draws a single neutral disc.
 func groupAvatar(c *ui.Context, members []avatarIdentity, size float32) {
 	t := c.Theme()
 	if len(members) > groupAvatarFaces {
@@ -71,15 +81,14 @@ func groupAvatar(c *ui.Context, members []avatarIdentity, size float32) {
 	if len(members) == 0 {
 		members = []avatarIdentity{{ID: "group", Name: "G"}}
 	}
-	face := size * 0.72
-	step := (size - face) / float32(max(len(members)-1, 1))
-	ui.Box(c).Size(size, size).Shrink(0).PassThrough().Children(func() {
+	step := size * 0.6
+	ui.Box(c).Size(groupAvatarWidth(len(members), size), size).Shrink(0).PassThrough().Children(func() {
 		for i, m := range members {
-			ui.Box(c.Key("g"+m.ID)).Size(face, face).Shrink(0).Radius(face/2).
-				Absolute().Left(float32(i)*step).Top((size-face)/2).
+			ui.Box(c.Key("g"+m.ID)).Size(size, size).Shrink(0).Radius(size/2).
+				Absolute().Left(float32(i)*step).Top(0).
 				Background(avatarToneForID(m.ID, m.Name).Color(t.Dark)).
 				Border(1, t.Background).Center().Children(func() {
-				ui.Text(c, avatarInitial(m.Name)).FontSize(face * 0.6).FontWeight(WeightSemibold).
+				ui.Text(c, avatarInitial(m.Name)).FontSize(size * 0.62).FontWeight(WeightSemibold).
 					TextColor(ui.Hex("#ffffff")).PassThrough()
 			})
 		}

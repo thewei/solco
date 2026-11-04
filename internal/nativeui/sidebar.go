@@ -71,7 +71,7 @@ func (s *Shell) sidebar(c *ui.Context) {
 			s.historyNav(c)
 		} else if s.sidebarInnerPage() {
 			s.sidebarInnerNav(c)
-		} else if ui.Sidebar(c, &s.selected, func() {
+		} else if s.clearSidebarSelectionOnAssistants(); ui.Sidebar(c, &s.selected, func() {
 			// The Agents/Pin/Workspace sections wear the same tree header as
 			// the Git references and the Hosts groups. The Agents header's
 			// hover icon opens the list's sort menu (2026-11-02 user request):
@@ -1282,5 +1282,15 @@ func (s *Shell) handleSidebarSelection(selected string) {
 		s.selectPane(id)
 	case "recent":
 		s.router.Push("/history/" + id)
+	}
+}
+
+// clearSidebarSelectionOnAssistants keeps the Workspace tree from holding a
+// selection while the Assistants page is up: the page is not that Workspace,
+// and a tree row can only fire its click when it is not already the selected
+// one — so leaving the page by clicking the Workspace you came from works.
+func (s *Shell) clearSidebarSelectionOnAssistants() {
+	if s.router.Path() == routeAssistants {
+		s.selected = ""
 	}
 }

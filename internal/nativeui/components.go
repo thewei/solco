@@ -200,8 +200,11 @@ type treeRowSpec struct {
 	// Assistant's round initial, a Group's stack — 2026-11-04); Tile wins when
 	// both are set.
 	Avatar func()
-	Branch string
-	Dirty  bool
+	// AvatarWidth is the Avatar slot's width; 0 keeps the 16pt square (a
+	// Group's overlapping pair is wider).
+	AvatarWidth float32
+	Branch      string
+	Dirty       bool
 	// Action is the row's one primary action, an icon button at the
 	// trailing edge under the pointer (a project's "+"). Everything else
 	// lives in the row's right-click menu — no row of dots.
@@ -399,7 +402,7 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 				letterTile(c, spec.Tile, tileToneFor(spec.Label), 16)
 				ui.Box(c).Width(6).Shrink(0).PassThrough()
 			} else if spec.Avatar != nil {
-				ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Children(spec.Avatar)
+				ui.Box(c).Size(max(spec.AvatarWidth, 16), 16).Shrink(0).PassThrough().Children(spec.Avatar)
 				ui.Box(c).Width(6).Shrink(0).PassThrough()
 			} else if spec.Mark.svg != nil || spec.Mark.bmp != nil {
 				ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Children(func() {

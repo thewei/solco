@@ -1,6 +1,7 @@
 # Assistants 3.1 — 实施台账（Implementation Tracker）
 
 > 主规划：`docs/assistants-messenger-agent-v3-1-plan.md`（MU-01～MU-23）；手机配套：`solco-mobile/docs/assistants-messenger-agent-mobile-plan.md`。
+> **2026-11-04 深度复审警告**：历史 U0～U5 台账的 `22/22 VERIFIED` **不代表发布验收通过**。新审计在隔离副本中复现了 CLI 用户/Agent 角色未隔离、Group delivery 假 ACK、Goal 未验证成功标准即完成、Group feed 分页不准确等问题。后续修复优先级与复现见 `docs/assistants-v3-audit-2026-11-04.md` §6～7；**目前不得按“全部达成 Goal”结案**。
 > 规则：状态只走 `TODO → IN_PROGRESS → IMPLEMENTED → VERIFIED`，受阻写 `BLOCKED`；**VERIFIED 必须有本表“证据”列里的命令/实机记录**；没做过的验证写 `NOT VERIFIED`。进度百分比 = VERIFIED 条数 / 总条数，不做主观估算。
 > 契约先后：Go（插件 SQLite 核心 → `internal/personalagent` 客户端 → Host v3 golden）→ 桌面 bridge/UI → 手机 Zod/UI。桌面先跑通，手机真机联调在桌面验收之后。
 
@@ -151,3 +152,79 @@
 - 复验（新 release apk 装机后）：停 Coordinator、杀掉 daemon（`ps` 0 个）→ 手机点 Start conversation → 45 s 后 daemon 已被自动拉起（1 个）、手机直接落在共享 Chat 页、标题为 “Ada”（副标题 `claude · auto: … Ada · Coordinator`），不再经过 Terminal。PASS。
 - 收尾：Ada 的 Coordinator 已 stop，两个测试用 Herdr 工作区已关闭；daemon 留在运行。
 - 群聊真机（同日）：手机 Chats → Duo：@B 高亮、`✓ B` 投递标记、“B is starting…” 与“B 在等你：Claude Code 在问启用哪些 MCP”系统卡、B 的回复带 `You @B ping` 引用与 Reply；从手机发无 @ 的 “plain no mention” → 作为你的消息出现、无投递标记、无新 Agent 工作区。U1-7 → VERIFIED。进度：VERIFIED 22 / 22（不含 DEFERRED）= 100%；MU 逐项状态见 §2（VERIFIED 与 PARTIAL/NOT VERIFIED 的差别以该表为准，不因任务表 100% 而上调）。
+
+## 4. 深度复审发现的发布阻断项（独立于历史阶段完成率）
+
+> 本表更新于 2026-11-04；具体文件/行号、隔离 Go 负向测试输出、修复策略见 `docs/assistants-v3-audit-2026-11-04.md`。**状态 `BLOCKED` 意为用户的最终 Goal 尚未满足，并不是说原模块根本不存在。**
+>
+> 验收原则：修复者将临时复现变成正式 regression tests（先 RED，再修复，最终 GREEN），至少双端契约同步+真机验证，才能关闭下列项。原文 U0～U5 的 22/22 是历史子任务完成记录，不因这里新发现的漏洞自动改成未实现。
+
+| ID | 紧急度 | 真实缺口 | 状态 | 复审证据 / 关闭条件 |
+| --- | --- | --- | --- | --- |
+| AUD-01 | **P0 安全** | Agent shell 与 Owner 调用相同 unrestricted CLI；`approval decide` 可取卡片 hash 后批准、`group post` 可冒充人触发 B，且 `memory list` 可读他人私有记忆 / `memory add` 可伪装用户写入 approved | **BLOCKED** | 隔离 `TestAuditPublicAgentCLIHasNoUserActorBoundary` 与 `TestAuditAgentCLIReadsOthersMemoryAndForcesApprovedMemory` 均 PASS（证明越权入口存在）；关闭需 owner/agent principal + 可信进程权限隔离/受限 broker，测试 Agent 审批/冒充/跨助理 Memory 被拒 |
+| AUD-02 | **P0 可靠性** | GroupPump 的 50 条消息窗口未包含目标 @ 仍标记 delivered | **BLOCKED** | `TestAuditGroupTargetPastFiftyIsNotAcknowledgedWithoutDelivery` 失败；关闭需目标消息确认包含、到达 Agent、不可误 ACK，重启/多 @ 回归 |
+| AUD-03 | **P0 目标真实度** | `RunDone` → `MilestoneVerified` → `GoalCompleted`，未另行核验 Goal 的 `successCriteria` | **BLOCKED** | `TestAuditGoalNeedsSuccessCriteriaProofBeforeComplete` 失败；关闭需独立 evidence validator/人工验收 receipt |
+| AUD-04 | P1 消息一致性 | 多群交错时“最新 N 条”页不完整；delivery 查询不按消息页截断 | **BLOCKED** | `TestAuditGroupFeedMustReturnLatestTwentyWithInterleavedGroups`、`TestAuditGroupFeedDeliveryBoundedToMessagePage` 均失败；关闭需正确 pagination、delivery 有界、手机上翻旧消息 |
+| AUD-05 | P1 身份路由 | 同名 `@` 和名字前缀误识别；Assistant 自己 group say 可 claim 他人（缺 caller-bound identity） | **BLOCKED** | typed ID mention + server 检验 + spoofed author 拒绝 + 重名/前缀场景 |
+| AUD-06 | P1 聊天与回响 | 手机 idle 仍进入管理页；Goal/Routine 只有系统事实卡而无聊天里持久化 Agent 主动回复/outbox | **BLOCKED** | 空 Assistant 直接 ChatComposer；Goal→Task→Validation→Report→原聊天双端和断线恢复 |
+| AUD-07 | P1 资料与记忆 UX | Profile description/Permissions 不能编辑且强制生效；手机 Memory Add/Edit 失败后丢输入/退出编辑；手机文件树未实现（**私有记忆的跨助理访问安全另见 P0 AUD-01**） | **BLOCKED** | Go Host versioned grants/profile + 双端 More；失败保留输入、跨设备文件视图和权限回归 |
+| AUD-08 | P2 视觉和端侧 | 图片 Avatar、Chats 混排/未读/最近消息、Android 输入法/切后台、低网/MCP 跨 Provider 无完整验收 | **NOT VERIFIED** | 深浅主题/中文长名/真机与多 Provider 的能力门禁，每项记录证据 |
+
+**当前发布结论**：历史 22/22 的框架/模块功能不能代替新识别的 P0 级安全、消息可靠性和 Goal 成功核验门禁。优先修复 AUD-01～03，再解决 AUD-04～07，继续保持 Go 单 Scheduler/Herdr/SQLite 事实源；Workflow Go 框架选型仍延期。
+
+## 5. 第三轮深度复审发布阻断项（2026-11-04，独立于 22/22 历史进度）
+
+> 复现源码行号、隔离测试步骤、风险与精确修复门禁详见 `docs/assistants-v3-audit-2026-11-04.md` `8。测试均在 /tmp 临时插件副本中创建临时测试文件、运行后删除；**不修改本机真实 automations.yaml/SQLite**。期间另一个开发者持续改动 Group/Goal/Mobile 未提交文件，以下测试只核查本轮读到的快照。
+
+| ID | 优先级 | 现状 | 状态 | 闭环要求 |
+| --- | --- | --- | --- | --- |
+| AUD-09 | **P0** | **8 次并行 config.Put 最终只剩 2/8 Routine**，`config.indent` 被 `go test -race` 检测出 DATA RACE | **BLOCKED / RED** | `Put/Remove/Approve/Pause` 全部跨进程锁内读-改-替换，revision fence 和并发压力测试无丢失、race 检查 GREEN |
+| AUD-10 | **P0** | 同名草稿 requestId 重用但 body 变更：Store 正确返回 `request_conflict`，`automations.yaml` Prompt **却已被写成被拒绝的文本** | **BLOCKED / RED** | Receipt/版本检查在任何文件副作用前；YAML+SQLite 恢复协议，拒绝路径零副作用，kill-point 和重试回归 GREEN |
+| AUD-11 | P1（依赖部署） | `ensureDaemon` 非 standby；无 Herdr session、活跃任务时 daemon 自行退出，未来 Routine/Goal 需要安装 standby login service | **NOT VERIFIED** | 校验实际 service health、安装状态及 0 session/关闭 Mac App/睡眠/重启后照常调度；未安装时不许承诺持续运行 |
+| AUD-12 | P1 | Mobile 空闲 Assistant 点 `Send` 只创建 Coordinator，再把首条消息放入 `ChatPageView.seedDraft`，并未直接提交 Agent；离开页面前首条待发消息只在 `useState` | **PARTIAL / NOT E2E VERIFIED** | 首次点击就进入有收据的耐久发送或明确 Draft 语义；Android 冷启动、断网、重进与 trust 弹窗现场测试 |
+| AUD-13 | P1 风险 | `paWrite` 用 `context.WithoutCancel` 移除请求取消与 deadline，通用 CLI 进程没有二次超时 | **NOT REPRODUCED / NEEDS TEST** | 有界 background command + durable receipt，CLI hang、Host shutdown、断网限流与清理测试；不能无限占用 goroutine |
+
+**新基线门禁**：插件全模块 Go test PASS；Go Host/PersonalAgent/Hostd PASS；MyGo vet PASS；Frontend TS+双 build PASS；Mobile TS+Lint+Vitest **592 pass / 2 skip**；Host fixtures **178 synced**、共享 Chat **synced**。以上不代表 AUD-09/10 已修复：隔离负向用例明确仍 RED，也没有本轮长时间真机运行证据。
+
+## 6. 审计修复轮（2026-11-04，对应 `docs/assistants-v3-audit-2026-11-04.md`）
+
+> 状态词沿用本文：`PASS`＝有自动测试且（适用时）实机验证；`PARTIAL`＝已落地一部分；`DEFERRED`＝明确不在本轮、附原因；`NOT VERIFIED`＝代码在，缺真机证据。
+
+| 审计项 | 状态 | 做了什么 / 证据 | 未做与原因 |
+| --- | --- | --- | --- |
+| P0-01 / AUD-05 同名/前缀 @ | PASS（服务端）+ PASS（手机/桌面客户端单测） | Go `checkMentions`：@ 必须是成员 ID，且正文里要有对应的精确 `@Name`（词边界；CJK 无空格也算；`bo@x.com` 不算）；重名只能靠选择器的 ID，输入文字不会选中其一；`TestGroupMentionsTypedIDMustMatchExactName`、`group_audit_test.go`。手机/桌面 `resolveMentions(text, members, picks)`，重名未选择时报“choose which one”；`group-model.test.ts` 重名/前缀/CJK/picks 用例 | 实机双端未再逐项走 |
+| AUD-02 / BLOCKER-02 >50 条积压 @ | PASS | delivery 的 prompt 带“目标消息所在窗口”，窗口之外只写“earlier messages are not shown”，不会在目标不在窗口时 ACK（`groupDeliveryWindow`、`TestAuditGroupTargetPastFiftyIsNotAcknowledgedWithoutDelivery`） | — |
+| AUD-03 / BLOCKER-03 Goal 成功标准 | PASS | Supervisor 仅在“每个里程碑都是编码任务（合并即证据）”时自动 `CompleteGoal`；其余需要 owner 确认（plan 状态 `waiting_user`，`FactReady`）。`goal_plan_test.go` | 独立 evidence validator 未做（需要产品决策） |
+| AUD-04 / HIGH-01/02 群聊 feed 分页与 delivery 有界 | PASS | `GroupFeedSince` 取每群最新页；delivery 查询按页 seq 范围；两项审计测试转正 | — |
+| P1-06 / HIGH-04 手机 Memory 失败丢草稿 | PASS（逻辑）/ NOT VERIFIED（真机） | `memory/[id].tsx`：Add/Edit 只在 `onSuccess` 清空/退出编辑，失败保留输入，同一 job 重试沿用同一 requestId（`useMemoryWrite`）。桌面 `MemoryTab` 同类问题一并修（`Act` 返回拒绝原因，成功才清空）；Rename / Watch / New task 表单同理，失败时在 Sheet 内显示原因 | 手机离线/重载保留文本未做 |
+| P1-07 MCP 边界 | PASS | 桌面 Work style 与手机 Style 的 MCP 卡明写“按 server 授权、不是对 Agent 其它工具的沙箱” | 跨 Provider 绑定仍只有 Claude |
+| P2-08 Chats 混排 | PASS（排序）/ NOT VERIFIED（真机） | wire 增 `overview.assistants[].updatedAt`（Assistant 与其任务的最近活动，插件→根模块→Host→golden 双端同步）；手机 `mixedChats`：需要你的 Assistant 在前，其余 Assistants 与 Groups 按最近活动混排，老 Host 无该字段时按名字（`personal-agent-model.test.ts`） | 最近消息预览/未读计数/图片头像：需要新的已读游标与预览 wire，未做 |
+| P0-02 / AUD-06 手机 Assistant 空态 | PASS（逻辑）/ NOT VERIFIED（真机） | `assistants/[id].tsx`：Coordinator 未启动时顶部直接是“Message <name>”输入框 + Agent 选择，Send＝幂等 `coordinator start`，Coordinator 就绪后自动进入共享 Chat，首条文字作为 `draft` 预填；启动失败文字退回输入框 | 首条文字不自动发送（手机上宁可多按一次 Send，也不在断线时重复发送）；管理区仍在同页下方，未折进 More |
+| P0-03 ReportOutbox | DEFERRED | 需要新的持久化表、Report Turn 的授权/预算/QuietHours 规则与双端收据——是一个独立阶段，不是修补 | 下一阶段按审计 §P0-03 的设计做 |
+| P1-04 Peer 委派 / P1-05 群聊并入共享 Chat | DEFERRED | 都是架构级重写（授权 Peer DM + Directory；共享 ChatView 的 ConversationTarget）；短期已修身份/草稿/分页 | 见 `docs/assistants-collaboration-plan.md` |
+| HIGH-03 Profile/Permissions 可编辑 | DEFERRED | 目前只有改名 + Work style；`scope/workspaceRefs/defaultPolicy` 在核心里没有被强制执行的路径，补 UI 等于做假权限，故不加 | 需要“版本化 UpdateAssistantProfile + 服务端强制 grants” |
+| BLOCKER-01 CLI 无调用者身份 | DEFERRED（风险已记） | 同一 HOME 下的 CLI 无法区分 Agent 与 Owner，需要受控 Broker/OS 隔离；本轮不假装解决。Agent Prompt 仍声明不得替人批准，但这不是安全边界 | 单独的安全阶段 |
+
+### 用户直接报告的问题
+
+| 问题 | 状态 | 证据 |
+| --- | --- | --- |
+| 侧栏群聊头像重叠太小 | PASS（实机） | `treeRowSpec.AvatarWidth` + `groupAvatarWidth`：两个正常尺寸头像重叠 |
+| 切换助理很慢 | PASS（实机） | 选择事件 `assistants:select` 让页面立即重读；`agentsReady` 避免“请先开启 Agent”闪现；700 ms 补读 |
+| 在助理页点侧栏其他项不切换 | PASS（实机+测试） | `project_tree.go` 的 `treeShowsSelection()`（`/assistants` 时 Workspace 行不再被视为已选，点击不再走“已选则折叠”分支）；`TestAssistantsPageLeavesThroughAWorkspaceRow` 先 RED 后 GREEN |
+| 聊天 composer 与 Agent Chat 不一致 | PASS（实机目视） | `Composer`/`GroupChat` 改用与 `App.tsx` 相同的 `composer > cmp > textarea + cbar` 结构与样式 |
+| 长时间运行后崩溃 | 见 `docs/debug/2026-11-04-jsc-heap-collector-crash.md` | |
+
+## 7. 第四轮深度审计阻断项（2026-11-04）
+
+> 详细源码证据、临时复现步骤与关闭门禁见 `docs/assistants-v3-audit-2026-11-04.md` `9。以下 **5 项为隔离负向测试 RED**，不是说既有单元测试无法编译。所有 /tmp 临时测试副本已删除、没有操作真实 SQLite 或记忆文件；其它 Agent 同期进行的 Group/Goal/UI 修复应单独复验后记 PASS。
+
+| ID | 优先级 | 已证实问题 | 状态 | 关闭要求 |
+| --- | --- | --- | --- | --- |
+| AUD-14 | **P0 隔离** | 将 A 的 `facts/` 改成指向 B 的 `facts/` 的目录 symlink 后，A 的 approved fact 被投影到 B，再被 B Sync 成 **candidate**（**不是**自动 approved） | **BLOCKED / RED** | Memory 目录与父目录 no-follow、安全根路径；跨 Assistant 目录交叉和目录替换攻击的负向 GREEN |
+| AUD-15 | **P0 授权** | 在 `facts/<id>.md` 写入内容，`Sync` 无调用者认证就将它更新为新的 **approved** Memory；Agent 与 Owner 共 Unix 用户时文件 ingress 绕过人工审批 | **BLOCKED / RED** | Agent 写入最多 candidate、Owner 的可信编辑才直接批准；接入 AUD-01 owner-vs-agent 权限方案，并测试不可伪造 |
+| AUD-16 | P1 幂等 | 两位助理导入相同 `notes/shared.md` 正文，A Imported=1，但 B Imported=0 / Refused=1（`file-new:hash(rel,body)` 未含 assistant ID） | **BLOCKED / RED** | 请求键按 assistantId+相对路径+内容哈希分域，两边各自成功且不重复 |
+| AUD-17 | P1 版本 | Memory 文件编辑 `Apple→Banana`，UI 修改 `Cherry`，文件再次改 `Banana` 被拒绝并恢复 Cherry（`file:memoryId:hash` 未含 baseRevision） | **BLOCKED / RED** | 内容 hash + **基准 revision** 的幂等键，允许合法 ABA 回改；重试同一 revision 不重复 |
+| AUD-18 | **P0 审批** | `RoutineKeeper` 校验 definition hash 后、`config.Approve` 之前被并发修改 Prompt，仍启用新 Prompt 且标 Routine Active | **BLOCKED / RED** | 同一跨进程锁内对**同一版本文档** `ApproveIfHash`；SQLite/YAML crash-reconcile 协议，1000 次交错不启用未批准内容 |
+
+**独立门禁**：插件 Memory/Routine/Approval/Group/Rule 专项 Go race 测试 PASS；Go Host+PersonalAgent+Hostd PASS；Mobile TS/Lint/Vitest PASS（592 pass，2 skip）。真正的 OS 沙箱、生产部署、Mac/Android 实机与跨进程 stress 本轮没有执行。**优先次序：AUD-18 → AUD-14/15 → AUD-16/17**；不可因历史 22/22 VERIFIED 而关闭这些问题。

@@ -12,7 +12,8 @@
       "needsYou": 0,
       "done": 1,
       "goals": 1,
-      "approvals": 1
+      "approvals": 1,
+      "updatedAt": 0
     }
   ],
   "needsYou": 1,

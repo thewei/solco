@@ -22,7 +22,9 @@ func (s *Shell) projectItems(c *ui.Context) {
 	activity := buildSidebarActivity(s.projection, s.serviceIndex, s.paneShellIdle)
 	for _, project := range projects {
 		project := project
-		selectedProject := project.ID == s.selectedProjectID
+		// On /assistants nothing is selected in the tree, so a click always selects
+		// (and leaves the page) instead of toggling the row it would be on.
+		selectedProject := project.ID == s.selectedProjectID && s.treeShowsSelection()
 		tabs := tabsForProject(s.projection, project.ID)
 		expandedProject := s.projectExpanded(project.ID)
 		// The pane tally (2026-10-07, widened 2026-10-15 user request): the
@@ -74,7 +76,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 		for tabIndex, tab := range tabs {
 			tab := tab
 			lastTab := tabIndex == len(tabs)-1
-			selectedTab := tab.ID == s.selectedTabID
+			selectedTab := tab.ID == s.selectedTabID && s.treeShowsSelection()
 			panes := panesForTab(s.projection, tab.ID)
 			sortPanesByLayout(s.projection, tab.ID, panes)
 			expandedTab := s.tabExpanded(tab.ID)
@@ -98,7 +100,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 				Key:        "tab:" + tab.ID,
 				Depth:      1,
 				Last:       lastTab,
-				Selected:   selectedTab && tab.PaneCount <= 1,
+				Selected:   s.treeShowsSelection() && selectedTab && tab.PaneCount <= 1,
 				Expandable: len(panes) > 1,
 				Expanded:   expandedTab,
 				Mark:       s.tabRowMark(panes, dark),
@@ -157,7 +159,7 @@ func (s *Shell) projectItems(c *ui.Context) {
 					Depth:             2,
 					AncestorContinues: []bool{!lastTab},
 					Last:              paneIndex == len(panes)-1,
-					Selected:          pane.ID == s.selectedPaneID,
+					Selected:          s.treeShowsSelection() && pane.ID == s.selectedPaneID,
 					Mark:              mark,
 					Dot:               dot,
 					StatusSlot:        true,
@@ -218,8 +220,12 @@ func (s *Shell) liveAgentStatus(status string, panes []herdr.Pane) string {
 // the selection: when no Tab is selected, and always in the Tab bar mode,
 // where the tree lists no Tab rows for the selection to land on.
 func (s *Shell) workspaceRowSelected(isSelectedProject bool) bool {
-	return isSelectedProject && (s.selectedTabID == "" || s.tabsInTitleBar())
+	return s.treeShowsSelection() && isSelectedProject && (s.selectedTabID == "" || s.tabsInTitleBar())
 }
+
+// treeShowsSelection is whether the Workspace tree lights its selected rows:
+// not on the Assistants page, which shares the tree but is not a Workspace.
+func (s *Shell) treeShowsSelection() bool { return s.router.Path() != routeAssistants }
 
 // newProjectTab opens a Tab in project: the project row's hover "+" and its
 // context menu's New Tab share it.

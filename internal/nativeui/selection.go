@@ -166,7 +166,10 @@ func (s *Shell) selectionLocation() string {
 // repeat of the current location, so re-selecting the same node adds
 // nothing, and a push cuts the forward entries — the browser rule.
 func (s *Shell) pushSelectionLocation() {
-	if s.router.Path() != routeWorkspace {
+	// The Assistants page shares the Workspace sidebar tree, so a row click
+	// there is also the way out of it (2026-11-04 user report: clicking a
+	// Workspace on /assistants changed the selection and stayed on the page).
+	if p := s.router.Path(); p != routeWorkspace && p != routeAssistants {
 		return
 	}
 	s.router.Push(s.selectionLocation())

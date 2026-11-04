@@ -142,6 +142,7 @@ type OverviewRow struct {
 	Done      int    `json:"done"`
 	Goals     int    `json:"goals"`
 	Approvals int    `json:"approvals"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 // Overview is the sidebar/phone summary.

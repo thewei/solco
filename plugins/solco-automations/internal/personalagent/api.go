@@ -403,6 +403,8 @@ type OverviewRow struct {
 	Done      int    `json:"done"`
 	Goals     int    `json:"goals"`
 	Approvals int    `json:"approvals"`
+	// UpdatedAt is the Assistant's last activity (itself or any of its tasks), epoch ms: the order of the mixed Chats list.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // OverviewGroup is one Group's light row for the sidebar and the phone: who is
@@ -428,8 +430,11 @@ func (a *API) overview() (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		row := OverviewRow{ID: x.ID, Name: x.Name, Status: x.Status, Revision: x.Revision, Tasks: len(tasks)}
+		row := OverviewRow{ID: x.ID, Name: x.Name, Status: x.Status, Revision: x.Revision, Tasks: len(tasks), UpdatedAt: x.UpdatedAt}
 		for _, t := range tasks {
+			if t.UpdatedAt > row.UpdatedAt {
+				row.UpdatedAt = t.UpdatedAt
+			}
 			switch t.State {
 			case TaskQueued, TaskClaimed, TaskWaiting:
 				row.Queued++

@@ -169,14 +169,23 @@ func TestSupervisorDelegatesVerifiesAndOnlyThenCompletes(t *testing.T) {
 	}
 	finishTaskAs(t, s, second.ID, RunDone)
 	r, _ = sv.Tick()
-	if r.Completed != 1 {
-		t.Fatalf("tick 4 = %+v", r)
+	if r.Completed != 0 {
+		t.Fatalf("a research task finishing is not proof of the success criteria: %+v", r)
 	}
-	done, _ := s.GetGoal(g.ID)
-	if done.State != GoalCompleted || !strings.Contains(done.Evidence, "Collect numbers") || !strings.Contains(done.Evidence, "Write report") {
-		t.Fatalf("goal = %s evidence=%q", done.State, done.Evidence)
+	if plan, _ := s.GetGoalPlan(g.ID); plan.State != "waiting_user" {
+		t.Fatalf("plan state = %q, want waiting_user", plan.State)
 	}
-	want := []string{"planned", "accepted", "delegated", "verified", "delegated", "verified", "done"}
+	gg, _ := s.GetGoal(g.ID)
+	if gg.State != GoalActive {
+		t.Fatalf("goal = %s before the person confirmed", gg.State)
+	}
+	// The person's confirmation is what completes it.
+	plan, _ = s.GetGoalPlan(g.ID)
+	done, _, err := s.CompleteGoal("person-done", g.ID, gg.Revision, completionEvidence(plan))
+	if err != nil || done.State != GoalCompleted || !strings.Contains(done.Evidence, "Collect numbers") || !strings.Contains(done.Evidence, "Write report") {
+		t.Fatalf("goal = %+v err=%v", done, err)
+	}
+	want := []string{"planned", "accepted", "delegated", "verified", "delegated", "verified", "ready"}
 	if got := factKinds(t, s, g.ID); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("facts = %v want %v", got, want)
 	}

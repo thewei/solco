@@ -252,6 +252,19 @@ func (sv *Supervisor) step(goalID string, rep *SupervisorReport) error {
 		}
 	}
 	// 2. Completion is earned: every milestone delegated and verified from task state.
+	// "Its task finished" proves the work ran, not that the Goal's success
+	// criteria hold: only a merged coding task is machine-verified, so a plan
+	// with any other milestone is handed to the person for the final check.
+	if plan.Total > 0 && plan.Verified == plan.Total && allDelegated(plan) && !planMachineVerified(plan) {
+		if added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: goalID, Kind: FactReady,
+			Text:     fmt.Sprintf("Ready for you: every milestone of %q finished its work; confirm it meets the success criteria", g.Title),
+			Evidence: completionEvidence(plan)}, fmt.Sprintf("ready:%s:%d:all", goalID, plan.PlanRevision)); err != nil {
+			return err
+		} else if added {
+			rep.Facts++
+		}
+		return nil
+	}
 	if plan.Total > 0 && plan.Verified == plan.Total && allDelegated(plan) {
 		ev := completionEvidence(plan)
 		done, _, err := s.CompleteGoal(fmt.Sprintf("sup-done-%s-%d", goalID, g.Revision), goalID, g.Revision, ev)

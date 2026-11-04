@@ -10,7 +10,7 @@ import { assistants, type Proactivity } from "../mygo";
  * tasks started that way.
  */
 
-type Act = (call: () => Promise<unknown>) => Promise<void>;
+type Act = (call: () => Promise<unknown>) => Promise<string>;
 
 const rid = () => crypto.randomUUID();
 
@@ -45,7 +45,7 @@ export function Behavior({ id, act }: { id: string; act: Act }) {
     setP(null);
     load();
   }, [load]);
-  const run: Act = useCallback(async (call) => act(call).then(load), [act, load]);
+  const run: Act = useCallback(async (call) => act(call).then((refusal) => (load(), refusal)), [act, load]);
   if (!p) return <p className="as-meta">{failed || "Loading…"}</p>;
   return <Form key={`${id}:${p.revision}`} id={id} p={p} run={run} />;
 }

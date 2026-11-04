@@ -10,7 +10,7 @@ import { assistants, type AssistantsAgent, type MCPServerState, type PersonaView
  * (bound), and — only after Check — confirmed connected by the Agent itself.
  */
 
-type Act = (call: () => Promise<unknown>) => Promise<void>;
+type Act = (call: () => Promise<unknown>) => Promise<string>;
 
 const rid = () => crypto.randomUUID();
 
@@ -47,7 +47,7 @@ export function WorkStyle({ id, agents, act }: { id: string; agents: AssistantsA
     const timer = window.setInterval(() => !document.hidden && load(), 6000);
     return () => window.clearInterval(timer);
   }, [load]);
-  const run: Act = useCallback(async (call) => act(call).then(load), [act, load]);
+  const run: Act = useCallback(async (call) => act(call).then((refusal) => (load(), refusal)), [act, load]);
   if (!view) return <p className="as-meta">{failed || "Loading…"}</p>;
   return (
     <>
@@ -172,7 +172,7 @@ function MCP({ id, view, run }: { id: string; view: PersonaView; run: Act }) {
         <strong>MCP servers</strong>
         <span className="as-chip">{granted} allowed</span>
       </div>
-      <p className="as-meta">The servers from your own Claude and Codex setup. Allowed servers are the only ones this Assistant&apos;s Claude Code agents load. Changes apply to the next start.</p>
+      <p className="as-meta">The servers from your own Claude and Codex setup. Allowed servers are the only ones this Assistant&apos;s Claude Code agents load. Changes apply to the next start. Access is per server: a server's every tool is allowed or none, and this is a launch setting for Claude Code agents, not a sandbox for the other tools those agents can run on this Mac.</p>
       {!mcp.supported ? <p className="as-meta">{mcp.unsupported}</p> : null}
       {mcp.servers.length === 0 ? <p className="as-meta">No MCP servers found in your configuration.</p> : null}
       {mcp.servers.map((s) => (

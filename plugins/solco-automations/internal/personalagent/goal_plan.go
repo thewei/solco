@@ -378,6 +378,8 @@ func planViewTx(q queryer, goalID string) (GoalPlan, error) {
 		view.State = "verifying"
 	case counts[MilestoneNeedsYou] > 0:
 		view.State = "waiting_user"
+	case view.Total > 0 && view.Verified == view.Total && !planMachineVerified(view):
+		view.State = "waiting_user" // the work ran; only a person confirms the success criteria
 	default:
 		view.State = "active"
 	}
@@ -398,4 +400,16 @@ func planViewTx(q queryer, goalID string) (GoalPlan, error) {
 		view.Revisions = append(view.Revisions, r)
 	}
 	return view, wrapBusy(rows.Err())
+}
+
+// planMachineVerified is whether every milestone's verification came from the
+// system's own evidence (a coding task counts as verified only once merged)
+// rather than from a task simply finishing.
+func planMachineVerified(v GoalPlan) bool {
+	for _, m := range v.Milestones {
+		if m.Task == nil || m.Task.Kind != KindCoding {
+			return false
+		}
+	}
+	return true
 }

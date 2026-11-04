@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/thewei/solco/internal/personalagent"
@@ -65,12 +66,13 @@ func (s *Shell) assistantsSection(c *ui.Context) {
 				dot = opWorking
 			}
 			entry := treeRow(c, treeRowSpec{
-				Height:   s.sidebarRowHeight(),
-				Key:      "group:" + g.ID,
-				Selected: s.router.Path() == routeAssistants && s.assistants.selectedGroup == g.ID,
-				Avatar:   func() { groupAvatar(c, faces, 16) },
-				Label:    g.Title,
-				Dot:      dot,
+				Height:      s.sidebarRowHeight(),
+				Key:         "group:" + g.ID,
+				Selected:    s.router.Path() == routeAssistants && s.assistants.selectedGroup == g.ID,
+				Avatar:      func() { groupAvatar(c, faces, 16) },
+				AvatarWidth: groupAvatarWidth(len(faces), 16),
+				Label:       g.Title,
+				Dot:         dot,
 			})
 			tipped(c, entry, groupTip(g))
 			if entry.Clicked() {
@@ -121,6 +123,24 @@ func assistantTip(row personalagent.OverviewRow) string {
 	return text
 }
 
+// AssistantsSelection is what the sidebar just chose: an Assistant's chat or a
+// Group's. A mounted page reads it at once instead of at its next poll.
+type AssistantsSelection struct {
+	ID    string `json:"id"`
+	Group bool   `json:"group"`
+}
+
+// assistantsSelectEvent wakes a mounted page on a sidebar selection: without
+// it a click waited for the page's 4 s poll before anything changed.
+var assistantsSelectEvent = mygo.NewEvent[AssistantsSelection]("assistants:select")
+
+// emitAssistantsSelection tells a mounted page. Window lane.
+func (s *Shell) emitAssistantsSelection(id string, group bool) {
+	if s.win != nil {
+		_ = assistantsSelectEvent.Emit(s.win, AssistantsSelection{ID: id, Group: group})
+	}
+}
+
 // showAssistant opens the Assistants page on one Assistant ("" keeps the page's
 // own choice).
 func (s *Shell) showAssistant(id string) {
@@ -135,6 +155,9 @@ func (s *Shell) showAssistant(id string) {
 	if s.router.Path() != routeAssistants {
 		s.router.Push(routeAssistants)
 	}
+	if id != "" {
+		s.emitAssistantsSelection(id, false)
+	}
 }
 
 // showGroup opens the Assistants page on one Group's conversation.
@@ -147,6 +170,7 @@ func (s *Shell) showGroup(id string) {
 	if s.router.Path() != routeAssistants {
 		s.router.Push(routeAssistants)
 	}
+	s.emitAssistantsSelection(id, true)
 }
 
 // newAssistantMenu is the "+" menu — exactly two items, shared by the header

@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { assistants, type AssistantsView, type GroupFeed, type GroupMember, type GroupMessage, type GroupTaskCard } from "../mygo";
 import { Markdown } from "../turn";
+import { Icon } from "../icons";
+import { resolveMentions } from "./mentions";
 
 /**
  * A Group conversation (Assistants 3.1 U1). The plugin's message log is the
@@ -62,21 +64,6 @@ function msg(e: unknown): string {
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** The member ids whose exact `@Name` stands in the text (longest names first, so "@Bobby" never reads as "@Bo"). */
-export function mentionsIn(text: string, members: GroupMember[]): string[] {
-  const out: string[] = [];
-  const byLen = [...members].sort((a, b) => b.name.length - a.name.length);
-  let rest = text;
-  for (const m of byLen) {
-    const re = new RegExp(`(^|[^\\p{L}\\p{N}_@])@${escapeRe(m.name)}(?![\\p{L}\\p{N}_])`, "u");
-    if (re.test(rest)) {
-      out.push(m.assistantId);
-      rest = rest.replace(new RegExp(`@${escapeRe(m.name)}(?![\\p{L}\\p{N}_])`, "gu"), " ");
-    }
-  }
-  return out;
-}
 
 /** The body with every member mention drawn as a chip. */
 function Body({ text, members, mine }: { text: string; members: GroupMember[]; mine: boolean }): ReactNode {
@@ -176,6 +163,8 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
   const [sheet, setSheet] = useState<"" | "rename" | "members">("");
   const [menu, setMenu] = useState(false);
   const [pop, setPop] = useState<{ query: string; index: number } | null>(null);
+  // Members chosen from the popover: what tells two members of one name apart.
+  const [picks, setPicks] = useState<GroupMember[]>([]);
   const request = useRef({ key: "", id: "" });
   const scroller = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -190,6 +179,14 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
     return by;
   }, [feed?.deliveries]);
 
+  // Same growth rule as the Chat's composer.
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, Math.floor(window.innerHeight * 0.4))}px`;
+  }, [draft]);
+
   // Keep the end in view while the person is at the end; a reader who scrolled up is left alone.
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -203,6 +200,7 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
     setDraft("");
     setReplyTo(null);
     setError("");
+    setPicks([]);
     stick.current = true;
   }, [id]);
 
@@ -223,6 +221,7 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
     const before = draft.slice(0, caret).replace(/@[^\s@]*$/u, `@${m.name} `);
     const next = before + draft.slice(caret);
     setDraft(next);
+    setPicks((all) => [...all, m]);
     setPop(null);
     requestAnimationFrame(() => {
       el.focus();
@@ -233,14 +232,19 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
   const send = async () => {
     const text = draft.trim();
     if (!text || sending) return;
-    const mentions = mentionsIn(text, members);
-    const key = `${text}\n${replyTo?.id ?? ""}`;
+    const { ids: mentions, ambiguous } = resolveMentions(text, members, picks);
+    if (ambiguous.length) {
+      setError(`More than one member is called ${ambiguous[0]} — pick which one from the list after typing @.`);
+      return;
+    }
+    const key = `${text}\n${replyTo?.id ?? ""}\n${mentions.join(",")}`;
     if (request.current.key !== key) request.current = { key, id: rid() };
     setSending(true);
     setError("");
     try {
       await assistants.postGroupMessage(request.current.id, id, text, mentions, replyTo?.id ?? "");
       setDraft("");
+      setPicks([]);
       setReplyTo(null);
       stick.current = true;
       pull();
@@ -342,7 +346,8 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
         {!starting.length && waiting > 0 ? <p className="gc-status">Waiting for {waiting === 1 ? "a reply to be handed over" : `${waiting} messages to be handed over`}…</p> : null}
       </div>
       {feedError ? <p className="gc-warn">{feedError}</p> : null}
-      <div className="gc-composer">
+      <div className="composer">
+       <div className="col">
         {replyTo ? (
           <div className="gc-replying">
             <span>
@@ -358,7 +363,7 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
             {error}
           </p>
         ) : null}
-        <div className="gc-box">
+        <div className="cmp gc-cmp">
           {pop && candidates.length ? (
             <ul className="gc-pop" role="listbox" aria-label="Members">
               {candidates.map((m, i) => (
@@ -382,10 +387,14 @@ export function GroupChat({ view, id, refresh }: { view: AssistantsView; id: str
             onClick={(e) => readPop(draft, e.currentTarget.selectionStart)}
             onBlur={() => setPop(null)}
           />
-          <button type="button" className="gc-send" aria-label="Send" disabled={!draft.trim() || sending} onClick={() => void send()}>
-            ↑
-          </button>
+          <div className="cbar">
+            <span className="sp" />
+            <button type="button" className="send" title="Send" aria-label="Send" disabled={!draft.trim() || sending} onClick={() => void send()}>
+              <Icon name="up" size={16} stroke={2.2} />
+            </button>
+          </div>
         </div>
+       </div>
       </div>
       {sheet === "rename" ? <RenameGroup group={g} onClose={() => setSheet("")} done={() => (pull(), refresh())} /> : null}
       {sheet === "members" ? <Members group={g} all={view.assistants.map((a) => ({ assistantId: a.id, name: a.name, status: a.status }))} onClose={() => setSheet("")} done={() => (pull(), refresh())} /> : null}

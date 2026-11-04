@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Assistants 3.1 U1: a Group is a real conversation of the person with two or
@@ -467,20 +469,9 @@ func (s *Store) PostGroupMessage(requestID string, in PostMessageInput) (PostRes
 				return PostResult{}, fmt.Errorf("%w: no running agent of %s in this group", ErrBadState, byID[in.AuthorID].Name)
 			}
 		}
-		mentions := []string{}
-		seen := map[string]bool{}
-		for _, id := range in.Mentions {
-			m, ok := byID[id]
-			if !ok {
-				return PostResult{}, fmt.Errorf("%w: %s is not a member of this group", ErrInvalid, id)
-			}
-			if !strings.Contains(in.Body, "@"+m.Name) {
-				return PostResult{}, fmt.Errorf("%w: the message does not say @%s", ErrInvalid, m.Name)
-			}
-			if !seen[id] {
-				seen[id] = true
-				mentions = append(mentions, id)
-			}
+		mentions, err := checkMentions(in.Body, in.Mentions, g.Members)
+		if err != nil {
+			return PostResult{}, err
 		}
 		if in.ReplyTo != "" {
 			var gid string
@@ -546,9 +537,30 @@ func scanGroupMessage(r rowScanner) (GroupMessage, error) {
 
 const groupMsgCols = `seq,id,group_id,author_kind,author_id,kind,body,mentions,reply_to,task_id,fact,created_at`
 
+// groupMsgColsM is groupMsgCols qualified for a join aliased `m`.
+const groupMsgColsM = `m.seq,m.id,m.group_id,m.author_kind,m.author_id,m.kind,m.body,m.mentions,m.reply_to,m.task_id,m.fact,m.created_at`
+
 // GroupMessagesAfter reads the log after a seq, oldest first, at most limit.
 func groupMessagesAfter(q queryer, groupID string, after int64, limit int) ([]GroupMessage, error) {
 	rows, err := q.Query(`SELECT `+groupMsgCols+` FROM group_messages WHERE group_id=? AND seq>? ORDER BY seq LIMIT ?`, groupID, after, limit)
+	if err != nil {
+		return nil, wrapBusy(err)
+	}
+	defer rows.Close()
+	out := []GroupMessage{}
+	for rows.Next() {
+		m, err := scanGroupMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, wrapBusy(rows.Err())
+}
+
+// groupMessagesNewest is the last `limit` messages of one Group, oldest first.
+func groupMessagesNewest(q queryer, groupID string, limit int) ([]GroupMessage, error) {
+	rows, err := q.Query(`SELECT * FROM (SELECT `+groupMsgCols+` FROM group_messages WHERE group_id=? ORDER BY seq DESC LIMIT ?) ORDER BY seq`, groupID, limit)
 	if err != nil {
 		return nil, wrapBusy(err)
 	}
@@ -577,18 +589,25 @@ func (s *Store) GroupFeedSince(groupID string, since int64, limit int) (GroupFee
 	}
 	feed := GroupFeed{Group: g, Seq: g.LastSeq, Deliveries: []GroupDelivery{}, Tasks: []GroupTaskCard{}, Agents: []GroupAgentState{}}
 	if since <= 0 {
-		since = g.LastSeq - int64(limit)
-		if since < 0 {
-			since = 0
-		}
+		// Message seq is global across Groups, so "the newest N of this Group"
+		// is its own query, never LastSeq-N.
+		feed.Messages, err = groupMessagesNewest(s.db, groupID, limit)
+	} else {
+		feed.Messages, err = groupMessagesAfter(s.db, groupID, since, limit)
 	}
-	feed.Messages, err = groupMessagesAfter(s.db, groupID, since, limit)
 	if err != nil {
 		return GroupFeed{}, err
 	}
-	// Deliveries and task cards for the messages that are in this page.
-	rows, err := s.db.Query(`SELECT d.id,d.message_id,d.assistant_id,d.state,d.attempts FROM group_deliveries d
-		JOIN group_messages m ON m.id=d.message_id WHERE d.group_id=? AND m.seq>? ORDER BY m.seq, d.assistant_id`, groupID, since)
+	// Deliveries and task cards for the messages that are in this page — only
+	// theirs, whatever the Group's history holds beyond it.
+	var rows *sql.Rows
+	if len(feed.Messages) == 0 {
+		rows, err = s.db.Query(`SELECT d.id,d.message_id,d.assistant_id,d.state,d.attempts FROM group_deliveries d WHERE 0`)
+	} else {
+		lo, hi := feed.Messages[0].Seq, feed.Messages[len(feed.Messages)-1].Seq
+		rows, err = s.db.Query(`SELECT d.id,d.message_id,d.assistant_id,d.state,d.attempts FROM group_deliveries d
+			JOIN group_messages m ON m.id=d.message_id WHERE d.group_id=? AND m.seq>=? AND m.seq<=? ORDER BY m.seq, d.assistant_id`, groupID, lo, hi)
+	}
 	if err != nil {
 		return GroupFeed{}, wrapBusy(err)
 	}
@@ -648,4 +667,83 @@ func linkGroupTask(tx *sql.Tx, s *Store, groupID string, t Task, now int64) erro
 		Body: t.Title, TaskID: t.ID,
 	})
 	return err
+}
+
+// checkMentions is the authority on who a message may wake. The client says
+// which member ids it means; the body must back each one with an `@Name` that
+// really stands in the text:
+//
+//   - the name must not be the head of a longer member name or word (`@Bobby`
+//     never reads as `@Bo`, and `@Bob` followed by letters is no mention);
+//   - members that share a name are told apart only by what the person picked,
+//     so a message may wake no more of them than it has `@Name` occurrences
+//     (one `@Ada` with two Adas' ids is refused, never delivered twice).
+func checkMentions(body string, ids []string, members []GroupMember) ([]string, error) {
+	byID := map[string]GroupMember{}
+	for _, m := range members {
+		byID[m.AssistantID] = m
+	}
+	occurrences := mentionOccurrences(body, members)
+	out := []string{}
+	seen := map[string]bool{}
+	picked := map[string]int{}
+	for _, id := range ids {
+		m, ok := byID[id]
+		if !ok {
+			return nil, fmt.Errorf("%w: %s is not a member of this group", ErrInvalid, id)
+		}
+		if seen[id] {
+			continue
+		}
+		picked[m.Name]++
+		if picked[m.Name] > occurrences[m.Name] {
+			if occurrences[m.Name] == 0 {
+				return nil, fmt.Errorf("%w: the message does not say @%s", ErrInvalid, m.Name)
+			}
+			return nil, fmt.Errorf("%w: more members called %s were picked than the message names", ErrInvalid, m.Name)
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+// mentionOccurrences counts, per member name, the `@Name` tokens in body. Each
+// `@` belongs to the longest member name that follows it, and an ASCII-word
+// name must end where the word ends (CJK names carry no spaces, so they only
+// need the longest-match rule).
+func mentionOccurrences(body string, members []GroupMember) map[string]int {
+	out := map[string]int{}
+	for i := 0; i < len(body); i++ {
+		if body[i] != '@' {
+			continue
+		}
+		if i > 0 {
+			if r, _ := utf8.DecodeLastRuneInString(body[:i]); (isMentionWordRune(r) && r < utf8.RuneSelf) || r == '@' {
+				continue
+			}
+		}
+		rest := body[i+1:]
+		best := ""
+		for _, m := range members {
+			if m.Name == "" || !strings.HasPrefix(rest, m.Name) || len(m.Name) <= len(best) {
+				continue
+			}
+			if last, _ := utf8.DecodeLastRuneInString(m.Name); isMentionWordRune(last) && last < utf8.RuneSelf {
+				if next, size := utf8.DecodeRuneInString(rest[len(m.Name):]); size > 0 && isMentionWordRune(next) && next < utf8.RuneSelf {
+					continue
+				}
+			}
+			best = m.Name
+		}
+		if best != "" {
+			out[best]++
+			i += len(best)
+		}
+	}
+	return out
+}
+
+func isMentionWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }

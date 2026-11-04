@@ -11,7 +11,8 @@
       "revision": 1,
       "running": 0,
       "status": "active",
-      "tasks": 1
+      "tasks": 1,
+      "updatedAt": 1800000000000
     }
   ],
   "groups": [],

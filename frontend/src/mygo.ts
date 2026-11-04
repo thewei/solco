@@ -141,6 +141,15 @@ export interface AssistantsRun {
   canOpen: boolean;
 }
 
+/**
+ * AssistantsSelection is what the sidebar just chose: an Assistant's chat or a
+ * Group's. A mounted page reads it at once instead of at its next poll.
+ */
+export interface AssistantsSelection {
+  id: string;
+  group: boolean;
+}
+
 /** AssistantsTask is a Task with the Runs the page lists under it. */
 export interface AssistantsTask {
   id: string;
@@ -187,6 +196,12 @@ export interface AssistantsView {
    */
   agents: AssistantsAgent[];
   defaultAgent: string;
+  /**
+   * AgentsReady is false while the launchable-agent catalog is still being
+   * read (the first seconds of a window): an empty list then is "not yet",
+   * not "none turned on".
+   */
+  agentsReady: boolean;
 }
 
 /** AssistantsWatch is the PR Watch spec the page collects. */
@@ -988,6 +1003,7 @@ export interface OverviewRow {
   done: number;
   goals: number;
   approvals: number;
+  updatedAt: number;
 }
 
 /**
@@ -1436,7 +1452,7 @@ export const assistants = {
   /**
    * Drawer reads the More drawer's lists for one Assistant: its Goals, Tasks
    * with their Runs (a Run can be opened only while it ran in the window's Herdr
-   * session and its pane is still in the tree) . The page
+   * session and its pane is still in the tree). The page
    * asks only while the drawer is open, so the chat's own polling stays light.
    */
   drawer(id: string): Promise<AssistantsDrawer> {
@@ -1604,6 +1620,11 @@ export const events = {
    * instead of at its next poll.
    */
   assistantsIntent: event<AssistantsIntent>("assistants:intent"),
+  /**
+   * assistantsSelectEvent wakes a mounted page on a sidebar selection: without
+   * it a click waited for the page's 4 s poll before anything changed.
+   */
+  assistantsSelect: event<AssistantsSelection>("assistants:select"),
   /**
    * chatUpdated pushes the projection after every chat state mutation. Events
    * emitted before the page is ready are delivered once it is, so the page
