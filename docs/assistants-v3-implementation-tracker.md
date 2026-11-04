@@ -58,7 +58,7 @@
 | MU-04 | VERIFIED | `assistants_intent_test.go`：多次 Snapshot 不丢、单调、TTL、门关闭、插件不可读仍可取；实机从其他路由首次进入、插件缺失时仍打开表单（U0-4） |
 | MU-05 | VERIFIED | 实机：缺插件→Create 报错、名称保留；恢复后同输入恰新增 1 个并进入其聊天（`assistant list` 核对）；requestId 幂等见核心 receipts 测试（U0-5） |
 | MU-06 | PARTIAL | Host `groups` 路由与 capability `personalAgentGroups`，golden 双端；旧 Host 在手机/桌面的“unavailable、不冒充普通 Assistant”无专项实机/测试，NOT VERIFIED |
-| MU-07 | PARTIAL | `group_test.go`：成员/消息/作者以 participant id 记录；改名/同名/移除成员的串线专项用例未单列，NOT VERIFIED |
+| MU-07 | VERIFIED | `group_test.go`：成员/消息/delivery 以 participant id 记录；`TestGroupAuthorshipFollowsIdsNotNames`（两个成员改成同名后 @ 仍只投给被指定的 id、改群名不移动消息、同成员的另一个群是独立会话）；`TestGroupMembersKeepAtLeastTwoAndRemovalSkipsPendingDeliveries`（移除成员其待投递被跳过、不可低于 2 人） |
 | MU-08 | NOT VERIFIED | 手机 `[id].tsx` 已直达共享 ChatView（U1-7 IMPLEMENTED）；真机验证被手机锁屏阻塞（见 §3 手机真机） |
 | MU-09 | NOT VERIFIED | Android 键盘/附件/长列表/草稿保留需真机；原 Pane Chat 的 `pnpm test` 无回归，但不等于真机验证 |
 | MU-10 | PARTIAL | 仅用户精确 @ 建 delivery、无 @ 不起 Agent、`say` 要求真实在线 Agent；实机 Duo 验证无 @ → 无 Agent（U1-3/4）；预算/ACL 对跨 Assistant 交互的专项未做（Peer 交互整体 DEFERRED） |

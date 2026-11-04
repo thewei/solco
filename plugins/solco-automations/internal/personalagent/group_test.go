@@ -503,3 +503,41 @@ func TestPumpWaitsOutADialogInsteadOfTypingIntoIt(t *testing.T) {
 		t.Fatalf("a never-answered dialog must fail visibly: %+v", last)
 	}
 }
+
+// MU-07: a message belongs to the participant id that wrote it, never to a name —
+// renames, equal names and removed members cannot move a message or a delivery.
+func TestGroupAuthorshipFollowsIdsNotNames(t *testing.T) {
+	s, _ := openTest(t)
+	g, as := groupOf(t, s, "Ada", "Bo")
+	// Bo is renamed to the other member's name: two members now read "Ada".
+	if _, _, err := s.RenameAssistant("rn", as[1].ID, "Ada", 1); err != nil {
+		t.Fatal(err)
+	}
+	res, _, err := s.PostGroupMessage("p1", PostMessageInput{GroupID: g.ID, AuthorKind: AuthorUser, Body: "@Ada first", Mentions: []string{as[1].ID}})
+	if err != nil || len(res.Deliveries) != 1 || res.Deliveries[0].AssistantID != as[1].ID {
+		t.Fatalf("an equal name must still address exactly the id asked: %+v %v", res, err)
+	}
+	// The member that was renamed keeps its id on the stored message and delivery.
+	feed, _ := s.GroupFeedSince(g.ID, 0, 0)
+	if len(feed.Messages) != 1 || feed.Messages[0].Mentions[0] != as[1].ID || feed.Deliveries[0].AssistantID != as[1].ID {
+		t.Fatalf("feed follows ids: %+v", feed)
+	}
+	// Renaming the group changes only its title.
+	g2, _, err := s.RenameGroup("rg", g.ID, "Renamed", g.Revision)
+	if err != nil || g2.Title != "Renamed" || len(g2.Members) != 2 {
+		t.Fatalf("rename group = %+v %v", g2, err)
+	}
+	after, _ := s.GroupFeedSince(g.ID, 0, 0)
+	if len(after.Messages) != 1 || after.Messages[0].ID != res.Message.ID || after.Messages[0].GroupID != g.ID {
+		t.Fatalf("a rename moved a message: %+v", after.Messages)
+	}
+	// Another group keeps a separate conversation even with the same members' names.
+	g3, _, err := s.CreateGroup("g3", "Other", []string{as[0].ID, as[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _ := s.GroupFeedSince(g3.ID, 0, 0)
+	if g3.ID == g.ID || len(other.Messages) != 0 {
+		t.Fatalf("groups share a conversation: %+v", other)
+	}
+}
