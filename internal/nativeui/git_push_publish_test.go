@@ -167,8 +167,8 @@ func TestSyncClusterShowsTheRunningOp(t *testing.T) {
 // TestPushOutlivesTheWorkingTreeBudget pins the network budget: a push that
 // needs longer than the 30s working-tree budget must still complete, because
 // the Runner only ever tightens a parent deadline. The fake git sleeps 31s
-// for everything but the reads pushRepo makes first; under the old shared
-// 30s parent this exact push was killed with "signal: killed".
+// only for the push command, not the preceding remote/branch reads; under
+// the old shared 30s parent this exact push was killed with "signal: killed".
 func TestPushOutlivesTheWorkingTreeBudget(t *testing.T) {
 	if testing.Short() {
 		t.Skip("sleeps 31s")
@@ -176,7 +176,7 @@ func TestPushOutlivesTheWorkingTreeBudget(t *testing.T) {
 	root, _, _ := pushFixture(t)
 	shell := gitSurfaceTestShell(t, root)
 	fake := filepath.Join(t.TempDir(), "slowgit")
-	script := "#!/bin/sh\nif [ \"$1\" = \"rev-parse\" ]; then echo main; exit 0; fi\nsleep 31\nexit 0\n"
+	script := "#!/bin/sh\nif [ \"$1\" = \"rev-parse\" ]; then echo main; exit 0; fi\nif [ \"$1\" = \"push\" ]; then sleep 31; fi\nexit 0\n"
 	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
