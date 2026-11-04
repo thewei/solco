@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/thewei/solco/internal/personalagent"
@@ -35,6 +36,9 @@ const (
 	maxPARequestID   = 128
 	maxPACommitments = 4
 	maxPATasksDetail = 30 // task details (with runs) one Assistant page reads
+	// Command receipts preserve a retry across a phone disconnect. A hung
+	// plugin CLI must nevertheless release Host goroutines and subprocesses.
+	maxPAWriteDuration = 2 * time.Minute
 )
 
 var paIDRe = regexp.MustCompile(`^[a-z]_[A-Za-z0-9]{1,40}$`)
@@ -350,16 +354,31 @@ func (s *Server) handlePAInbox(w http.ResponseWriter, r *http.Request, dev Devic
 
 // --- writes ---------------------------------------------------------------
 
-// paWrite runs one command under a context that outlives the request (a phone
-// that drops the connection must not leave a half-sent command ambiguous: the
-// requestId makes the retry a replay).
+// durablePAContext keeps an in-flight idempotent write alive after a phone
+// disconnect, but gives the plugin CLI an independent hard deadline. The
+// incoming HTTP deadline/cancellation must not silently remove this bound.
+func durablePAContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), timeout)
+}
+
+// paWrite runs one bounded command that outlives the request: a phone may
+// disconnect before the CLI answers and retry with the same requestId.
 func (s *Server) paWrite(w http.ResponseWriter, r *http.Request, dev Device, op string, run func(ctx context.Context, c *personalagent.Client) (any, error)) {
 	c := s.paSeam(w, r)
 	if c == nil {
 		return
 	}
-	out, err := run(context.WithoutCancel(r.Context()), c)
+	ctx, cancel := durablePAContext(r.Context(), maxPAWriteDuration)
+	defer cancel()
+	out, err := run(ctx, c)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// The CLI may have committed before its reply was lost. Do not
+			// promise a failure or encourage a new requestId here.
+			slog.Warn("remote host personal agent write uncertain", "device", dev.ID, "op", op)
+			writeError(w, http.StatusGatewayTimeout, "personal_agent_uncertain", "Execution timed out; retry with the same requestId")
+			return
+		}
 		s.paRefuse(w, dev, op, err)
 		return
 	}
