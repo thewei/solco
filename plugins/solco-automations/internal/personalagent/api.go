@@ -390,7 +390,7 @@ func (a *API) coordinator(args []string, body []byte) (any, error) {
 		var replayed bool
 		var err error
 		if cmd == "start" {
-			c, replayed, err = a.Store.StartCoordinatorAs(in.RequestID, id, in.Agent, in.Model)
+			c, replayed, err = a.Store.StartCoordinatorAs(in.RequestID, id, in.Agent, in.Model, a.PaneGone)
 		} else {
 			c, replayed, err = a.Store.StopCoordinator(in.RequestID, id)
 		}

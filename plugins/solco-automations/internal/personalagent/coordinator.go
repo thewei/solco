@@ -76,10 +76,32 @@ const AssistantAgentKind = "omp"
 
 var coordinatorAgentRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
+// checkCoordinatorPaneGone never treats missing/offline Herdr as proof that
+// the previous OMP process stopped. The verifier belongs to the Herdr seam.
+func checkCoordinatorPaneGone(verifiers []func(string, string, string) (bool, error), session, workspace, pane string) error {
+	if session == "" || workspace == "" || pane == "" {
+		return fmt.Errorf("%w: previous Coordinator has an incomplete Herdr identity; reconcile it before restarting", ErrBadState)
+	}
+	if len(verifiers) == 0 || verifiers[0] == nil {
+		return fmt.Errorf("%w: close the previous Coordinator's Herdr pane before restarting; closure was not verified", ErrBadState)
+	}
+	gone, err := verifiers[0](session, workspace, pane)
+	if err != nil {
+		return fmt.Errorf("%w: cannot verify the previous Coordinator's pane closure: %v", ErrBadState, err)
+	}
+	if !gone {
+		return fmt.Errorf("%w: the previous Coordinator's Herdr pane is still open; close it before restarting", ErrBadState)
+	}
+	return nil
+}
+
 // StartCoordinatorAs is StartCoordinator with the Herdr agent kind (and an
-// optional model) the person chose for this Coordinator; empty = the default.
-// A kind or model the plugin cannot pass to Herdr safely is refused.
-func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model string) (Coordinator, bool, error) {
+// optional model). A stopped/failed Coordinator with an old Herdr pane must
+// first have that pane's closure confirmed by the read-only callback. This
+// protects against Stop merely changing SQLite state while OMP is still alive.
+// Verification occurs outside the writer transaction; the transaction checks
+// the exact coordinator revision/pane again before launching.
+func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model string, paneGone ...func(string, string, string) (bool, error)) (Coordinator, bool, error) {
 	agentKind, model = strings.TrimSpace(agentKind), strings.TrimSpace(model)
 	if agentKind == "" {
 		agentKind = AssistantAgentKind
@@ -94,7 +116,45 @@ func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model stri
 	if len(model) > 120 || strings.ContainsAny(model, "\n\r\x00") {
 		return Coordinator{}, false, fmt.Errorf("%w: invalid model", ErrInvalid)
 	}
-	return execute(s, requestID, "coordinator.start", map[string]string{"assistant": assistantID, "agent": agentKind, "model": model}, func(tx *sql.Tx) (Coordinator, error) {
+	payload := map[string]string{"assistant": assistantID, "agent": agentKind, "model": model}
+	// A replay is not a new launch; return the exact previous receipt even if
+	// the original session was stopped later.
+	if prior, replayed, err := peekReceipt[Coordinator](s, requestID, "coordinator.start", payload); err != nil || replayed {
+		return prior, replayed, err
+	}
+	observed, err := s.GetCoordinator(assistantID)
+	if err != nil {
+		return Coordinator{}, false, err
+	}
+	verifiedClosure := false
+	priorRuns := map[string]Run{}
+	if observed.State == CoordinatorStopped || observed.State == CoordinatorFailed {
+		if observed.TaskID != "" {
+			runs, err := s.ListRuns(observed.TaskID)
+			if err != nil {
+				return Coordinator{}, false, err
+			}
+			for _, run := range runs {
+				priorRuns[run.ID] = run
+				if run.PaneID == "" && (run.Status == RunClaimed || run.Status == RunStarting || run.Status == RunRunning || run.Status == RunBlocked || run.Status == RunUncertain) {
+					return Coordinator{}, false, fmt.Errorf("%w: the previous Coordinator run has not settled and has no confirmed Herdr pane; reconcile it before restarting", ErrBadState)
+				}
+				if run.PaneID != "" {
+					if err := checkCoordinatorPaneGone(paneGone, run.HerdrSession, run.WorkspaceID, run.PaneID); err != nil {
+						return Coordinator{}, false, err
+					}
+					verifiedClosure = true
+				}
+			}
+		}
+		if observed.PaneID != "" {
+			if err := checkCoordinatorPaneGone(paneGone, observed.HerdrSession, observed.WorkspaceID, observed.PaneID); err != nil {
+				return Coordinator{}, false, err
+			}
+			verifiedClosure = true
+		}
+	}
+	return execute(s, requestID, "coordinator.start", payload, func(tx *sql.Tx) (Coordinator, error) {
 		a, err := getAssistantTx(tx, assistantID)
 		if err != nil {
 			return Coordinator{}, err
@@ -111,7 +171,53 @@ func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model stri
 		if cur.State == CoordinatorStarting || cur.State == CoordinatorReady || cur.State == CoordinatorUncertain || cur.State == CoordinatorBlocked {
 			return cur, nil
 		}
+		if cur.State != observed.State || cur.TaskID != observed.TaskID || cur.Revision != observed.Revision || cur.PaneID != observed.PaneID {
+			return Coordinator{}, fmt.Errorf("%w: the Coordinator changed while verifying the previous launch", ErrBadState)
+		}
+		if cur.State == CoordinatorStopped || cur.State == CoordinatorFailed {
+			// A stopped Coordinator row can be missing pane refs while its old
+			// Run has already recorded Herdr's identity. Verify both sources.
+			rows, err := tx.Query("SELECT "+runCols+" FROM runs WHERE task_id=?", cur.TaskID)
+			if err != nil {
+				return Coordinator{}, err
+			}
+			seen := 0
+			for rows.Next() {
+				run, err := scanRun(rows)
+				if err != nil {
+					rows.Close()
+					return Coordinator{}, err
+				}
+				prior, ok := priorRuns[run.ID]
+				if !ok || run.Status != prior.Status || run.PaneID != prior.PaneID || run.HerdrSession != prior.HerdrSession || run.WorkspaceID != prior.WorkspaceID {
+					rows.Close()
+					return Coordinator{}, fmt.Errorf("%w: the previous Coordinator Run changed while checking Herdr", ErrBadState)
+				}
+				seen++
+			}
+			if err := rows.Err(); err != nil {
+				rows.Close()
+				return Coordinator{}, err
+			}
+			rows.Close()
+			if seen != len(priorRuns) || (cur.PaneID != "" && !verifiedClosure) {
+				return Coordinator{}, fmt.Errorf("%w: the previous Coordinator is not fully reconciled", ErrBadState)
+			}
+		}
 		now := s.nowMS()
+		if verifiedClosure {
+			// Once Herdr proves the original pane gone, settle an old Run that
+			// was left running by the logical Stop. A daemon restart must not
+			// resume that dead session alongside a replacement.
+			if _, err := tx.Exec(`UPDATE runs SET status=?, finished_at=? WHERE task_id=? AND status IN ('claimed','starting','running','blocked','uncertain')`,
+				RunCancelled, now, cur.TaskID); err != nil {
+				return Coordinator{}, err
+			}
+			if _, err := tx.Exec(`UPDATE tasks SET state=?, needs_you=0, revision=revision+1, updated_at=? WHERE id=? AND state IN ('claimed','starting','running','blocked','uncertain')`,
+				TaskCancelled, now, cur.TaskID); err != nil {
+				return Coordinator{}, err
+			}
+		}
 		taskID := newID("t")
 		brief := "Coordinate the work of the assistant " + a.Name + "."
 		if _, err := tx.Exec(`INSERT INTO tasks(`+taskCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,

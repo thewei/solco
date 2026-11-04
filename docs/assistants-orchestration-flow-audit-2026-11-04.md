@@ -54,3 +54,11 @@
 - 插件 `go test ./...`：**PASS**（包含 independent Task event ledger、周期报告与原有 GoalPlan/Supervisor suite）。
 - 前端 `bun run typecheck`：**PASS**，桌面 `bun run build`：**PASS**（其他验证见开发回合记录）。
 - 未进行真实 OMP + Herdr + GUI 端到端验收；不能据此宣称最终目标全部实现。
+
+## 继续优化：Stop → Restart 防重复（2026-11-04）
+
+- **新增安全闸**：Coordinator 的 `stopped / failed` 不再意味着可以直接重新启动。如果旧协调者或其 Run 仍关联 Herdr Pane，`coordinator start` 必须由只读 `HerdrPaneGone` 正面确认旧 Pane 已关闭；Herdr 不可用、Pane 仍在或记录的 Session / Workspace / Pane 不完整，全部拒绝。由于 `StopCoordinator` 目前只变更 SQLite 状态，用户必须先在原 Terminal 结束旧 Agent/关闭 Pane，再启动新 Coordinator。
+- **核对 Run**：即使 Coordinator 行没有记录 Pane，依然读取旧 Task 的所有 Runs 验证；原 Run 处于 `claimed/starting/running/blocked/uncertain` 且没有可查 Pane 时直接拒绝，避免未经确认的重复启动。
+- **并发和幂等**：Herdr 读在 SQLite 写事务之外完成；写入前比较 Coordinator revision 与所有旧 Runs 的状态和 Pane 身份。验证后才把遗留 `running` Run 收敛成 `cancelled`，并创建下一次 Task。同一 `requestId` 优先返回已有收据，不需要再次触碰 Herdr。
+- **测试**：`TestStoppedCoordinatorCannotDuplicateLiveHerdrPane`、`TestAPICoordinatorRestartRefusesUnclosedPane`、`TestCoordinatorStopAndRestart`，插件全量测试 PASS；这不等于真实 OMP 进程停止的实机验证。
+- **仍待修复**：Stop 目前不是 Herdr 的真实 kill/close；后续要增加受控的运行时停止控制器，并处理关闭时与运行中 Dispatcher 的竞态，不能把“已停止”标签当作真实进程存活证明。

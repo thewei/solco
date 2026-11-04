@@ -284,7 +284,15 @@ func TestCoordinatorStopAndRestart(t *testing.T) {
 	if err != nil || stopped.State != CoordinatorStopped {
 		t.Fatalf("stop = %+v %v", stopped, err)
 	}
-	restarted, _, err := s.StartCoordinator("s2", a.ID)
+	if _, _, err := s.StartCoordinator("s2", a.ID); !errors.Is(err, ErrBadState) {
+		t.Fatalf("must verify old Herdr pane closure before restart, got %v", err)
+	}
+	restarted, _, err := s.StartCoordinatorAs("s2", a.ID, "omp", "", func(sess, workspace, pane string) (bool, error) {
+		if sess == "" || workspace == "" || pane == "" {
+			t.Fatalf("missing prior Herdr identity: %q/%q/%q", sess, workspace, pane)
+		}
+		return true, nil
+	})
 	if err != nil || restarted.State != CoordinatorStarting || restarted.TaskID == c.TaskID {
 		t.Fatalf("restart = %+v %v", restarted, err)
 	}
@@ -447,5 +455,94 @@ func TestCoordinatorPromptNamesTheConfiguredCLI(t *testing.T) {
 	p := CoordinatorPrompt(Assistant{ID: "a_1", Name: "Ada"})
 	if !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task create") || !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task graph") || !strings.Contains(p, "printf '%s'") || strings.Contains(p, "research|coding|manual") {
 		t.Fatalf("prompt does not carry the absolute CLI path:\n%s", p)
+	}
+}
+
+// Stop is a logical state transition, not a Herdr pane close. No replacement
+// OMP may start until Herdr positively proves the old pane disappeared. Only
+// then can the old running Run be settled and the new one queued.
+func TestStoppedCoordinatorCannotDuplicateLiveHerdrPane(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "stop-live", "Ada")
+	c, _, err := s.StartCoordinator("create", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _, err := s.ClaimTask(c.TaskID, "daemon")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkStarting(r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordLaunch(r.ID, Session{HerdrSession: "default", WorkspaceID: "w1", PaneID: "w1:p1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.StopCoordinator("stop", a.ID); err != nil {
+		t.Fatal(err)
+	}
+	var probes int
+	openPane := func(session, workspace, pane string) (bool, error) {
+		probes++
+		if session != "default" || workspace != "w1" || pane != "w1:p1" {
+			t.Fatalf("wrong pane checked: %q/%q/%q", session, workspace, pane)
+		}
+		return false, nil
+	}
+	if _, _, err := s.StartCoordinatorAs("relaunch", a.ID, "omp", "", openPane); !errors.Is(err, ErrBadState) {
+		t.Fatalf("must refuse while old pane exists: %v", err)
+	}
+	if probes != 1 {
+		t.Fatalf("expected a real Herdr pane check, got %d", probes)
+	}
+	if old, _ := s.GetRun(r.ID); old.Status != RunRunning {
+		t.Fatalf("a failed restart must not rewrite the old Run: %+v", old)
+	}
+	if co, _ := s.GetCoordinator(a.ID); co.TaskID != c.TaskID || co.State != CoordinatorStopped {
+		t.Fatalf("a refused restart must not mutate the Coordinator: %+v", co)
+	}
+	closed := func(session, workspace, pane string) (bool, error) { return true, nil }
+	next, replay, err := s.StartCoordinatorAs("relaunch", a.ID, "omp", "", closed)
+	if err != nil || replay || next.TaskID == c.TaskID || next.State != CoordinatorStarting {
+		t.Fatalf("verified restart: %+v %v replay=%t", next, err, replay)
+	}
+	if old, _ := s.GetRun(r.ID); old.Status != RunCancelled {
+		t.Fatalf("old Run should be settled only after Herdr proved the pane gone: %+v", old)
+	}
+	if prior, replay, err := s.StartCoordinatorAs("relaunch", a.ID, "omp", ""); err != nil || !replay || prior.TaskID != next.TaskID {
+		t.Fatalf("idempotent replay must not require a second Herdr check: %+v %v replay=%t", prior, err, replay)
+	}
+}
+
+// The public CLI must enforce the same closure proof; it cannot bypass the
+// Store's restart guard because it has a fresh requestId.
+func TestAPICoordinatorRestartRefusesUnclosedPane(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "api-restart", "Ada")
+	co, _, err := s.StartCoordinator("start", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: &fakeLauncher{}, Claimant: "daemon"}
+	if _, err := d.RunTask(t.Context(), co.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	paneGone := false
+	api := &API{Store: s, PaneGone: func(sess, workspace, pane string) (bool, error) {
+		if pane == "" || workspace == "" || sess == "" {
+			t.Fatal("Herdr identity missing")
+		}
+		return paneGone, nil
+	}}
+	if _, err := call(t, api, "{\"requestId\":\"stop\"}", "assistant", "coordinator", "stop", a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := call(t, api, "{\"requestId\":\"restart\"}", "assistant", "coordinator", "start", a.ID); codeOf(err) != "bad_state" {
+		t.Fatalf("unclosed Herdr pane must reject CLI restart: %v", err)
+	}
+	paneGone = true
+	restarted, err := call(t, api, "{\"requestId\":\"restart\"}", "assistant", "coordinator", "start", a.ID)
+	if err != nil || restarted["coordinator"].(map[string]any)["state"] != CoordinatorStarting {
+		t.Fatalf("verified restart: %v %v", restarted, err)
 	}
 }
