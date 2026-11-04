@@ -297,7 +297,7 @@ func (t *tray) recordClick() {
 	if len(screens) <= 1 {
 		return
 	}
-	for i := 1; i < len(screens); i++ {
+	for i := 0; i < len(screens); i++ {
 		s := screens[i]
 		frame := msgRect(s, sel("frame"))
 		if p.X >= frame.Origin.X && p.X < frame.Origin.X+frame.Size.Width &&

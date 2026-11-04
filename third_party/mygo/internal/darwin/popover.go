@@ -116,6 +116,16 @@ func (w *window) adoptPopoverWindow() {
 	w.forgetPopoverWindow()
 	w.win = win
 	w.b.byNSWindow[win] = w
+	if w.flyout.Tray != nil {
+		// The tray anchor lives on the active space of the display it was
+		// placed on (tray.recordClick), and showPopover activates the app,
+		// which can switch that display's space. The popover window then
+		// needs the same space behavior as the flyout panel and the anchor
+		// (createFlyout, popoverAnchor): MoveToActiveSpace plus full-screen
+		// auxiliary, or the panel stays behind on the space it was placed
+		// in and flickers in and out while the spaces fight over it.
+		send(win, "setCollectionBehavior:", collectionTransient|collectionIgnoresCycle|collectionFullScreenAuxiliary)
+	}
 	if w.surface != nil {
 		send(win, "makeFirstResponder:", uintptr(w.surface.view))
 	}

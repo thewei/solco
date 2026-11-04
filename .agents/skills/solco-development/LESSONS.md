@@ -69,3 +69,8 @@
 - 2026-11-03 daemon 在 `--standby` 且二进制路径≠已安装路径时会自我 relaunch 退出（daemon.go shouldRelaunch）→ 判忙必须包含所有在途 run（含 Assistants dispatcher），否则会把还在等 Agent 的 run 丢在 `running`；沙箱里的二进制天然≠已安装，会放大该问题。
 - 2026-11-03 herdr 的 `agent_not_running` 一码两义（工作区已关 / 窗格里没 Agent）→ 区分要再查 workspace list；活工作区无 Agent = `uncertain` 交给人，不当取消。
 - 2026-11-03 macOS bash 3.2 下裸 `[[ … ]]` 失败不触发 `set -e`（脚本会假 PASS）→ e2e 脚本一律用 `assert '[[ … ]]'` 辅助；daemon e2e 不要 `--standby`（沙箱二进制≠已安装路径会 ~30s 自退）。
+- 2026-11-04 多屏托盘浮层闪动（全屏 Space 搏斗）→ popover 采纳窗必须带锚窗同款 collectionBehavior（MoveToActiveSpace|Auxiliary）；落点 third_party/mygo/internal/darwin/popover.go adoptPopoverWindow（Delta 6）
+- 2026-11-04 终端 screencapture 无 TCC 会把其他 App 窗口从截图中剥离，壁纸照常 → "窗口不渲染"先对照 CGWindowList onscreen 再下结论，授权捕获走 cua-driver
+- 2026-11-04 cua-driver desktop 像素坐标 = 主屏点数×2（÷2 映射），负 x 可达左侧屏，超出域即钳 0 → 右侧/第三屏点不可达，只能 move_cursor+AXPress 组合
+- 2026-11-04 两个同名 Solco 进程并存时 System Events AX 按名字解析会串进程（window 1 取错）→ 用 unix id 过滤并注意其内部仍可能按名缓存；托盘图标位置每轮点击前重读（状态项动态位移）
+- 2026-11-04 单实例锁键 = bundle id+name，改签 .app 副本会在 hardened-runtime 校验处 SIGTRAP；并实例隔离用 unpackaged go build（名字 Solco-dev）或 worktree 改 mygo.config.ts identifier 官方构建

@@ -1,12 +1,12 @@
 # Solco Personal Agent — Go 原生核心、WebView 复用、阶段 A–E 交付规划
 
-> **状态：2026-11-03 最新实施提案；待按阶段开发。** 用户已明确要求：MVP 优先、阶段 E 必须完整完成业务核心 Go 化、界面使用 WebView 并复用当前 Chat View。这是对同路径旧稿的**完整改版**：不再执行“生产期先用 Rust TaskBackend”的路线，也取代 `personal-agent-plan.md` 中“Rust 永久持有业务数据”的设计。**尚未引入/运行新业务核心，也未修改用户自动化。**
+> **状态：2026-11-03 的 Go-only A–E 实施路线与历史计划；截至 2026-11-04 已有 Go Personal Agent / Coordinator / Memory / Host / Desktop+Mobile Assistants 代码。** 本文件保留后端模块边界与源测试基线，但一些“待实现/未上线”文案是规划当时的状态，不代表当前仓库。**新产品交互规划以 `docs/assistants-chat-first-redesign.md` 为准：Assistant 以共享 ChatView 为主页，任务/记忆/Context 收入更多面板，手机同一方案。新增的 **联系人/三种会话/群聊/@提及** 产品规范见 `docs/assistants-conversation-product-spec.md`（UX0–UX6），Go 授权 Directory、Herdr Skill 通讯/Mailbox 与 Control Center 领域实现见 `docs/assistants-collaboration-plan.md`（N0–N6）。** 不采用生产 Rust TaskBackend。
 >
 > **完整测试驱动实施规范**：`docs/shepherdr-2.1-test-parity.md`；冻结 2.1 全量测试目录 `docs/shepherdr-2.1-test-cases.jsonl`（**168 文件 / 1,193 静态声明**）、分批决策台账 `docs/shepherdr-2.1-parity-decisions.jsonl`（目前 46 planned，0 verified）、**31 条必测 Solco 自有用例** `docs/solco-assistants-required-cases.jsonl`（31 planned，0 verified）、对应生成/验收脚本均已建立。**测试资产 A0 已完成，不等于 Go 业务实现已完成。**
 >
 > 对应移动端：`solco-mobile/docs/personal-agent-mobile-plan.md`。架构权威仍是 `docs/client-product-architecture.md`；**本文是下一阶段的批准设计，不描述已经上线的行为**。实施入口若修改插件所有权、/projects、/automations、Host 生命周期，先向该权威文档写入明确的批准决议。
 >
-> **最新技术决议**：以 Shepherdr **2.1.0** 固定提交 `8df9402c63ebd97ae05ed309b0444e2d755cacc6` 为 **Go 功能/测试的唯一主基准**（行为、状态机、可移植测试），吸收成熟设计而不是部署其 TypeScript/Bun/hc 后端；**不再 Fork/部署 herdr-projects v1.2.27**。生产 MVP 从第一天使用现有 Go automations daemon、Herdr CLI/SessionStarter 和真实 Session；E 必须达到所采纳的 2.1 能力对照并提供 Go 常驻服务。**产品入口由旧侧栏 Projects 改为 `Assistants`（New Assistant）**，原 `Agents` 继续表示运行中 Agent，`Workspace` 继续是真实 Herdr 工作区。
+> **技术基线（保留）**：以 Shepherdr **2.1.0** 固定提交 `8df9402c63ebd97ae05ed309b0444e2d755cacc6` 为 **Go 功能/测试的唯一主基准**（行为、状态机、可移植测试），吸收成熟设计而不是部署其 TypeScript/Bun/hc 后端；**不再 Fork/部署 herdr-projects v1.2.27**。生产 MVP 从第一天使用现有 Go automations daemon、Herdr CLI/SessionStarter 和真实 Session；E 必须达到所采纳的 2.1 能力对照并提供 Go 常驻服务。**产品入口由旧侧栏 Projects 改为 `Assistants`（New Assistant）**，原 `Agents` 继续表示运行中 Agent，`Workspace` 继续是真实 Herdr 工作区。
 
 ## 1. 审计：之前路线会拖慢 MVP 的原因
 

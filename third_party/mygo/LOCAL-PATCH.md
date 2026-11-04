@@ -1,7 +1,30 @@
 # Local patch over mygo v0.6.4
 
-Five deltas, re-applied by hand after every pin bump. They live outside
+Six deltas, re-applied by hand after every pin bump. They live outside
 Solco and stay as small as deletion allows.
+
+## Delta 6: the tray popover follows the tray anchor's space (2026-11-04)
+
+macOS only. A focusable tray flyout shows as an `NSPopover` whose window
+AppKit creates at `showRelativeToRect` and we adopt (`adoptPopoverWindow`).
+With Delta 3's secondary-display anchoring the anchor is the auxiliary
+`trayAnchorWin` (`MoveToActiveSpace` + full-screen auxiliary), placed on
+the active space of the display the icon was clicked on. `showPopover`
+also activates the app, and that activation can switch the clicked
+display's space (a fullscreen app occupies it, the app's window lives in
+another). The adopted popover window carried the default collection
+behavior, so it stayed behind on the space it was placed in while the
+activation flipped the display: the panel vanished and reappeared
+continuously (Solco 2026-11-04 multi-display tray flicker report; user
+reproduces only with a fullscreen app on the clicked display). The fix
+gives the adopted window of a tray flyout the same triple the non-popover
+flyout panel already gets in `createFlyout` — `MoveToActiveSpace`,
+`IgnoresCycle`, full-screen auxiliary — so it re-homes with the anchor
+when the space switches. Parent-anchored popovers keep the default
+behavior, which is correct for a popover of a visible window.
+
+Site: one guarded `setCollectionBehavior:` in `adoptPopoverWindow`
+(`internal/darwin/popover.go`).
 
 ## Delta 5: the page's bridge posts through the scheme handler (2026-11-04)
 
@@ -91,6 +114,19 @@ screen without jumping to the primary display and stealing focus.
 Reason: Solco multi-monitor workflow — clicking the status tray while working
 in an editor on a secondary monitor must display the quick panel on that monitor
 rather than dragging the window and cursor focus over to the main screen.
+
+2026-11-04 extension: `recordClick` records the primary screen's clicks too
+(the loop used to start at screen 1), and on a multi-display Mac the popover
+always anchors to `trayAnchorWin`. The real status-item button's hosting
+window is AppKit-owned and gets re-homed across displays and off-screen
+strips as focus, fullscreen and mirroring states change; a popover anchored
+to it lands wherever that window currently sits — the panel jumped to the
+clicked display's neighbour's top-left corner, partially off-screen
+(Solco 2026-11-04 report: content on the secondary screen, tray clicked on
+the primary, panel seen at the secondary's corner; window server sampled it
+at the status-bar layer, off the display's corner). Anchoring to our own
+recorded position on every display makes the panel appear under the icon
+that was clicked and stay there.
 
 Sites: `clickScreen` and `clickAnchor` tracking + `recordClick` in
 `internal/darwin/menu.go`; `trayAnchorWin` and secondary-display anchoring +
