@@ -34,11 +34,11 @@
 | U1-3 | U1 | Go：@ 精确投递（仅 Owner 的 @ 触发；Agent 发言不再触发）+ 预算/去重 | U1-1 | VERIFIED | 仅用户精确 @ 建 delivery；无 @ 不起 Agent；`say` 要求真实在线 Agent（防冒充）；单测 + 实机“无 @ → 无 Agent” |
 | U1-4 | U1 | Go：daemon 投递泵 → 目标 Coordinator（`herdr agent prompt`），Agent 经 CLI 回群 | U1-3 | VERIFIED | 投递泵 claim-before-send；启动即“Agent 已启动≠已就绪”：对话框(`host.StartupDialog`)期间不输入、`agent_blocked` 事实；实机 Duo：B 起 Claude→MCP 对话框→不输入→人按 Esc→送达→B 经 `group say` 回复（seq 19） |
 | U1-5 | U1 | 桌面：New Group、群聊页（成员、作者、@、Reply、任务状态卡）、侧栏叠头像 | U0, U1-2 | VERIFIED | 桌面群页（成员/作者/@ 自动补全/Reply/任务卡/事实行/Open Terminal）；`TestAssistantsGroupRowOpensTheGroupConversation`；实机截图：用户气泡 + “B is starting…” + “B is waiting for you in its terminal: …” + B 回复气泡（带 Reply 引用）。亮色主题/任务卡实机 NOT VERIFIED（单测覆盖） |
-| U1-6 | U1 | Host v3：groups 读/建/发/消息 + golden；手机 Zod | U1-2 | IMPLEMENTED | `internal/remotehost/personal_agent_group.go`：GET groups、groups/{id}；POST groups、messages、rename、members/add、members/remove，capability `personalAgentGroups`，goldens 钉住；无 say 路由。`go test ./internal/remotehost` 215 PASS。手机 Zod/fixtures 待 U1-7 |
-| U1-7 | U1 | 手机：Chats 列表、直达单聊、群聊 | U1-6 | TODO | |
-| U2-1 | U2 | Assistant 初始提示词版本化（instructions revisions）+ 默认模板 | — | TODO | |
-| U2-2 | U2 | Assistant 级 Provider/Model/Effort，真实运行 Agent 展示 | — | TODO | |
-| U2-3 | U2 | MCP：Provider 配置发现（只读 Registry）+ per-Assistant grants + 绑定/生效校验 | U2-2 | TODO | |
+| U1-6 | U1 | Host v3：groups 读/建/发/消息 + golden；手机 Zod | U1-2 | VERIFIED | `personal_agent_group.go`，capability `personalAgentGroups`，goldens 双端钉住；`go test ./internal/remotehost` PASS；手机 Zod 契约 `pnpm test` PASS（`pnpm check:fixtures` 171 文件一致） |
+| U1-7 | U1 | 手机：Chats 列表、直达单聊、群聊 | U1-6 | IMPLEMENTED | Chats 列表、点 Assistant 直达共享 ChatView、真群聊页（solco-mobile `4076612`）；`pnpm typecheck/lint/test/export:web` PASS。真机安装 BLOCKED（手机锁屏 `INSTALL_FAILED_ABORTED: User rejected permissions`，未绕过），故不标 VERIFIED |
+| U2-1 | U2 | Assistant 初始提示词版本化（instructions revisions）+ 默认模板 | — | VERIFIED | 迁移 15 `assistant_instructions`+`persona_applied`；Instructions 单一真相仍在 `assistants.role_prompt`，历史/恢复生成新 revision，stale 拒绝；默认模板、旧 Assistant 懒物化、启动记录所用 revision。`persona_test.go` 前 4 例 PASS；Host `instructions*` 路由+golden；桌面 Work style 与手机 `assistants/style/[id]`（视觉 NOT VERIFIED，类型/契约测试 PASS） |
+| U2-2 | U2 | Assistant 级 Provider/Model/Effort，真实运行 Agent 展示 | — | VERIFIED | `assistant_runtime`(agent/model/effort)；未显式选择的 Coordinator/Group/Task 回落到档案，显式选择优先；effort 仅 claude 传 `--effort`；`runtime` 同时列出 claimed/starting/running/blocked 的真实 Agent。实机（隔离 state、真实 claude）：Coordinator 进程 `claude --effort low …`，pane 显示 `low · /effort` |
+| U2-3 | U2 | MCP：Provider 配置发现（只读 Registry）+ per-Assistant grants + 绑定/生效校验 | U2-2 | VERIFIED | Registry 读 `~/.claude.json`/`~/.mcp.json`/`~/.codex/config.toml`（仅名称/传输/程序，不含 args/env/header）；grants per server；Claude 绑定 0600 的 per-Assistant `--strict-mcp-config --mcp-config`；configured/granted/bound/verified 四态分开。实机：12 个已配置、仅授权 `sequential-thinking`，运行中 claude 的 `/mcp` 恰列 1 个 server ✔ connected；probe 报 `sequential-thinking` connected、`figma-desktop` failed。Codex/其它 Agent 明确 `mcp_unsupported` |
 | U3-1 | U3 | GoalPlan（成功条件/里程碑/nextAction/nextCheckAt/planRevision）+ ProgressLedger | — | TODO | |
 | U3-2 | U3 | 系统事实卡（Accepted/Planned/Working/Blocked/Verifying/Done）≠ Agent 发言 | U1-1, U3-1 | TODO | |
 | U3-3 | U3 | GoalSupervisor（确定性推进 + 预算/最大轮数/重规划上限） | U3-1 | TODO | |
@@ -64,3 +64,13 @@
 - 根因记录：旧 `newForm bool` 随 Snapshot 读取清除，Snapshot 失败/并发/页面重载时事件丢失；现在意图独立于插件读取，`PendingIntent`+事件+ACK。
 - 教训：打开 NSMenu 期间不要重装（主线程被菜单循环占住）；computer-use 点击 Create 需先 hover；窗口被遮挡时页面 4 s 轮询暂停（document.hidden），属预期。
 - 进度：VERIFIED 5 / 总 22（不含 DEFERRED）。
+
+### U2（2026-11-04）
+- 插件：`cd plugins/solco-automations && GOTOOLCHAIN=auto go test ./...` PASS（含 `persona_test.go` 10 例与 persona goldens）。
+- 根/Host：`GOTOOLCHAIN=auto go test ./internal/personalagent ./internal/remotehost ./internal/hostd` PASS；`go test ./internal/nativeui -run "Assistants|Coordinator|Persona"` PASS；`frontend: bun run typecheck && bun run build && bun run build:mobile` PASS。桌面提交 `1d8d738`。
+- 手机：`pnpm typecheck`、`pnpm lint`、`pnpm test`（570 PASS）、`pnpm check:fixtures`（171 一致）、`pnpm export:web` 均 PASS；提交 `c7bbe96`。
+- 实机（`HERDR_PLUGIN_STATE_DIR` 隔离目录，重建插件二进制并以 `start_new_session` 重启 daemon，真实 HOME 的 MCP 配置与真实 claude）：创建 Assistant 得默认指令 rev 1；授权 1 个 MCP + effort=low；`coordinator start` → 进程参数含 `--effort low --strict-mcp-config --mcp-config <0600 文件>`；pane `/mcp` 只列 `sequential-thinking`（✔）。
+- 发现（非 U2 引入，待 U3 前处理）：Coordinator 的工作目录若不在已信任文件夹之下，Claude 启动时会停在“信任此文件夹”对话框（本次隔离目录触发；真实 state 目录此前已信任，未触发）。`blocked` 状态已被投递泵识别，但没有自动放行（符合“不替用户点信任”的边界）。
+- NOT VERIFIED：Work style 桌面/手机 UI 的实机视觉；Host `mcp/verify` 经 relay 最长约 45 s 的超时体验；真机手机联测。
+- 进度：VERIFIED 14 / 总 22（不含 DEFERRED）= 64%。
+
