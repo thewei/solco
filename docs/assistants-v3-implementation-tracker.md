@@ -128,3 +128,8 @@
 - 桌面：`solco-install` 流程（vet → build → 退出旧实例 → 替换 → 签名 → 启动）完成，`assistants available` 日志出现。
 - NOT VERIFIED：手机上 Assistants 入口 → Memory/Behavior 两屏的真机视觉与读写。截图序列中途发现手机前台已是微信（用户在使用手机），而 adb 截图疑似停在旧帧，随即停止所有 adb 输入，避免误触用户的前台应用；其间有一次落点 (1175,1366) 的点击发生在此判断之前，对象不明，需用户自查微信是否被误触。Mac 端重装后手机顶栏暂未再显示 Assistants 机器人图标，尚未定位（Host `capabilities.personalAgent` 由 `assistantsRemote` 动态给出，日志里桌面端 `assistants available` 已出现；需要在手机前台稳定、用户在场时重新核对，不能用 NOT VERIFIED 以外的状态记录）。
 
+### U5 桌面实机视觉（2026-11-04 14:3x，重装后的 `Solco.app` 0.12.2，Computer Use 后台截图）
+- Assistants ▸ Ada ▸ More 的标签条含 Memory / Behavior / Work style；Memory 标签显示 `0 of 500`、Open folder、添加框与空态文案；Behavior 标签显示三档等级（当前 Follow up）、Quiet hours 开关、提醒间隔 0、日预算 20、`0 of 20 started today`、Save、说明“批准的 routine 与心跳唤醒不受影响”。数据来自真实核心（默认值，revision 0），证明已安装的插件二进制与 bridge 读路径联通。
+- 仍 NOT VERIFIED：桌面 UI 里的写入（Computer Use 往 WebView 文本框输入未生效，读回为空，未强行）；写路径由 `TestAssistantsMemoryAndBehaviorBridge`、Host 路由测试与隔离 daemon 实机覆盖。
+- 手机顶栏 Assistants 入口消失一事：Host 的 `personalAgent` 能力由 `syncRemoteAssistants` 在首次 overview 到达（日志 14:25:55）后才置位，手机若在此前取了 bootstrap 且之后没刷新就会缺该入口；也可能是 adb 截图停在旧帧（状态栏时钟从未走动）。未在手机上复核（用户正在用手机）。
+
