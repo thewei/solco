@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 	"github.com/thewei/solco/plugins/solco-automations/internal/daemon"
@@ -46,10 +47,53 @@ func assistantCmd(args []string) error {
 	if err != nil {
 		return printAssistantError(err)
 	}
-	if len(args) >= 2 && args[0] == "coordinator" && args[1] == "start" {
+	if assistantNeedsDaemon(args) {
 		ensureDaemon()
 	}
 	return printJSON(out, nil)
+}
+
+// assistantNeedsDaemon selects successful commands that can queue or unblock
+// future work. A phone may create a Task, approve a Routine or post a Group
+// message without starting a Coordinator, so none of those operations may
+// silently depend on a previously running scheduler. Read-only polling does
+// not spawn background processes.
+func assistantNeedsDaemon(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	if args[0] == "create" || args[0] == "enable" {
+		return true
+	}
+	if len(args) < 2 {
+		return false
+	}
+	op := args[1]
+	switch args[0] {
+	case "coordinator":
+		return op == "start"
+	case "task":
+		return op == "create" || op == "retry" || op == "publish" || op == "ack" || op == "deps"
+	case "goal":
+		return op == "create" || op == "set-plan" || op == "approve" || op == "resume" || op == "complete"
+	case "routine":
+		return op == "draft" || op == "resume" || op == "pause" || op == "cancel"
+	case "approval":
+		return op == "decide" || op == "request"
+	case "heartbeat":
+		return op == "set" || op == "request-wake"
+	case "group":
+		return op == "create" || op == "add" || op == "remove" || op == "post" || op == "say"
+	case "rule":
+		return op == "adopt" || op == "rollback"
+	case "review":
+		return op == "start" || op == "agent" || op == "merge" || op == "request-merge"
+	case "proactivity":
+		return op == "set"
+	case "checks":
+		return op == "set"
+	}
+	return false
 }
 
 // assistantDaemonArgs starts the Assistant fallback as a persistent scheduler.
@@ -64,6 +108,26 @@ func assistantDaemonArgs() []string { return []string{"daemon", "--standby"} }
 // on "starting" for ever. A second daemon exits on its own (flock), so this is
 // idempotent. It never fails the command: the queue row is already written.
 func ensureDaemon() {
+	if err := os.MkdirAll(config.StateDir(), 0o700); err != nil {
+		fmt.Fprintf(os.Stderr, "assistants: cannot prepare scheduler state: %v\n", err)
+		return
+	}
+	// daemon.Running() is a snapshot, not an atomic claim. Two simultaneous
+	// Host/CLI calls must not each spawn a standby child while the first is
+	// still acquiring daemon.pid. Serialize bootstrap across processes and
+	// check readiness before releasing this lock.
+	lockPath := filepath.Join(config.StateDir(), ".assistant-daemon-bootstrap.lock")
+	fd, err := syscall.Open(lockPath, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "assistants: cannot lock scheduler bootstrap: %v\n", err)
+		return
+	}
+	lock := os.NewFile(uintptr(fd), lockPath)
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	if _, running := daemon.Running(); running {
 		return
 	}
@@ -73,15 +137,23 @@ func ensureDaemon() {
 	}
 	cmd := exec.Command(exe, assistantDaemonArgs()...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := os.MkdirAll(config.StateDir(), 0o755); err == nil {
-		if f, err := os.OpenFile(filepath.Join(config.StateDir(), "daemon.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
-			defer f.Close()
-			cmd.Stdout, cmd.Stderr = f, f
+	if f, err := os.OpenFile(filepath.Join(config.StateDir(), "daemon.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+		defer f.Close()
+		cmd.Stdout, cmd.Stderr = f, f
+	}
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "assistants: scheduler start failed: %v\n", err)
+		return
+	}
+	go func() { _ = cmd.Wait() }()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, running := daemon.Running(); running {
+			return
 		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	if cmd.Start() == nil {
-		go func() { _ = cmd.Wait() }()
-	}
+	fmt.Fprintln(os.Stderr, "assistants: scheduler launch did not become ready; inspect daemon.log")
 }
 
 func printAssistantError(err error) error {
