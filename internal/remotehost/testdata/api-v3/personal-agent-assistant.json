@@ -13,6 +13,25 @@
     "createdAt": 1800000000000,
     "updatedAt": 1800000000000
   },
+  "coordinator": {
+    "assistantId": "a_0000000000000001",
+    "state": "ready",
+    "taskId": "t_0000000000000004",
+    "herdrSession": "default",
+    "workspaceId": "w1",
+    "paneId": "w1:p1",
+    "revision": 3
+  },
+  "agents": [
+    {
+      "id": "pi",
+      "label": "Pi"
+    },
+    {
+      "id": "claude",
+      "label": "Claude Code"
+    }
+  ],
   "goals": [
     {
       "id": "g_0000000000000002",

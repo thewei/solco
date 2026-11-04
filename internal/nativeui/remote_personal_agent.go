@@ -14,6 +14,7 @@ import (
 
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/personalagent"
+	"github.com/thewei/solco/internal/remotehost"
 )
 
 // syncRemoteAssistants publishes (or withdraws) the client the phones' routes
@@ -31,6 +32,19 @@ func (s *Shell) syncRemoteAssistants() {
 func (s *Shell) hostPersonalAgent(context.Context) (*personalagent.Client, bool) {
 	c := s.assistantsRemote.Load()
 	return c, c != nil
+}
+
+// hostAssistantAgents is the Agent choice the phone's Start conversation
+// offers: the same list the desktop chip shows (window lane read).
+func (s *Shell) hostAssistantAgents() []remotehost.PersonalAgentKind {
+	out := []remotehost.PersonalAgentKind{}
+	s.callOnWindow(func() {
+		list, _ := s.assistantAgents()
+		for _, a := range list {
+			out = append(out, remotehost.PersonalAgentKind{ID: a.ID, Label: a.Label})
+		}
+	})
+	return out
 }
 
 // notifyAssistantsChanged tells the open phones the overview moved. The first

@@ -107,6 +107,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		Automations:      s.hostAutomations,
 		AutomationsAdmin: s.hostAutomationsAdmin(),
 		PersonalAgent:    s.hostPersonalAgent,
+		AssistantAgents:  s.hostAssistantAgents,
 		Sessions:         s.hostSessions(s.hist.service),
 		HostName:         host,
 		Version:          mygo.App.Version(),

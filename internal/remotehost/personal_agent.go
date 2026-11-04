@@ -52,14 +52,24 @@ type PersonalTask struct {
 	Runs []personalagent.Run `json:"runs"`
 }
 
-// PersonalAssistantDetail is one Assistant's page: its goals, tasks,
-// approvals and visible memory, isolated per Assistant by the core.
+// PersonalAgentKind is one Agent a Coordinator may run on: the Herdr kind id the
+// plugin takes and the label the desktop shows.
+type PersonalAgentKind struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// PersonalAssistantDetail is one Assistant's page: its Coordinator (the
+// conversation), goals, tasks, approvals and visible memory, isolated per
+// Assistant by the core. Agents is what Start conversation may choose from.
 type PersonalAssistantDetail struct {
-	Assistant personalagent.Assistant    `json:"assistant"`
-	Goals     []personalagent.Goal       `json:"goals"`
-	Tasks     []PersonalTask             `json:"tasks"`
-	Approvals []personalagent.Approval   `json:"approvals"`
-	Memory    []personalagent.MemoryItem `json:"memory"`
+	Assistant   personalagent.Assistant    `json:"assistant"`
+	Coordinator personalagent.Coordinator  `json:"coordinator"`
+	Agents      []PersonalAgentKind        `json:"agents"`
+	Goals       []personalagent.Goal       `json:"goals"`
+	Tasks       []PersonalTask             `json:"tasks"`
+	Approvals   []personalagent.Approval   `json:"approvals"`
+	Memory      []personalagent.MemoryItem `json:"memory"`
 }
 
 func (s *Server) paSeam(w http.ResponseWriter, r *http.Request) *personalagent.Client {
@@ -168,7 +178,7 @@ func (s *Server) handlePAAssistant(w http.ResponseWriter, r *http.Request, dev D
 		s.paRefuse(w, dev, "assistant", err)
 		return
 	}
-	d := PersonalAssistantDetail{Goals: []personalagent.Goal{}, Tasks: []PersonalTask{}, Approvals: []personalagent.Approval{}, Memory: []personalagent.MemoryItem{}}
+	d := PersonalAssistantDetail{Agents: s.paAgents(), Goals: []personalagent.Goal{}, Tasks: []PersonalTask{}, Approvals: []personalagent.Approval{}, Memory: []personalagent.MemoryItem{}}
 	found := false
 	for _, a := range list {
 		if a.ID == id {
@@ -178,6 +188,11 @@ func (s *Server) handlePAAssistant(w http.ResponseWriter, r *http.Request, dev D
 	if !found {
 		writeError(w, http.StatusNotFound, "not_found", "")
 		return
+	}
+	// A Coordinator that cannot be read is "none": the page then offers Start.
+	d.Coordinator = personalagent.Coordinator{AssistantID: id, State: personalagent.CoordinatorNone}
+	if co, err := c.Coordinator(ctx, id); err == nil {
+		d.Coordinator = co
 	}
 	if goals, err := c.Goals(ctx, id); err != nil {
 		s.paRefuse(w, dev, "assistant", err)
@@ -347,6 +362,49 @@ func (s *Server) paWrite(w http.ResponseWriter, r *http.Request, dev Device, op 
 	}
 	slog.Info("remote host personal agent op", "device", dev.ID, "op", op)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// paAgents is the Agent choice offered for a Coordinator; never nil on the wire.
+func (s *Server) paAgents() []PersonalAgentKind {
+	if s.opts.AssistantAgents != nil {
+		if list := s.opts.AssistantAgents(); list != nil {
+			return list
+		}
+	}
+	return []PersonalAgentKind{}
+}
+
+// handlePAStartCoordinator brings the Assistant's Coordinator up as a real
+// Herdr Agent (the plugin owns the lifecycle; the requestId makes a double tap
+// one start). The Agent must be one the desktop offers; empty = the default.
+func (s *Server) handlePAStartCoordinator(w http.ResponseWriter, r *http.Request, dev Device) {
+	id, ok := paID(w, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	var req struct {
+		RequestID string `json:"requestId"`
+		Agent     string `json:"agent"`
+	}
+	if !paBody(w, r, &req, func() string { return req.RequestID }) {
+		return
+	}
+	if req.Agent != "" {
+		allowed := false
+		for _, kind := range s.paAgents() {
+			if kind.ID == req.Agent {
+				allowed = true
+			}
+		}
+		if !allowed {
+			writeError(w, http.StatusBadRequest, "bad_request", "")
+			return
+		}
+	}
+	s.paWrite(w, r, dev, "coordinator.start", func(ctx context.Context, c *personalagent.Client) (any, error) {
+		co, err := c.StartCoordinator(ctx, req.RequestID, id, req.Agent, "")
+		return map[string]any{"schema": 1, "coordinator": co}, err
+	})
 }
 
 func (s *Server) handlePACreateAssistant(w http.ResponseWriter, r *http.Request, dev Device) {

@@ -53,6 +53,10 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 		return []byte(`{"schema":1,"assistants":[` + paAssistant + `]}`), nil
 	case key == "create", strings.HasPrefix(key, "rename "), strings.HasPrefix(key, "pause "), strings.HasPrefix(key, "resume "), strings.HasPrefix(key, "enable "), strings.HasPrefix(key, "disable "):
 		return []byte(`{"schema":1,"assistant":` + paAssistant + `}`), nil
+	case strings.HasPrefix(key, "coordinator show"):
+		return []byte(`{"schema":1,"coordinator":` + paCoordinator("ready") + `}`), nil
+	case strings.HasPrefix(key, "coordinator start"):
+		return []byte(`{"schema":1,"replayed":false,"coordinator":` + paCoordinator("starting") + `}`), nil
 	case strings.HasPrefix(key, "goal list"):
 		return []byte(`{"schema":1,"goals":[` + paGoal + `]}`), nil
 	case strings.HasPrefix(key, "goal "):
@@ -96,6 +100,15 @@ const (
 	paApproval  = `{"id":"` + paApprovalP + `","assistantId":"` + paAssistantA + `","subjectKind":"task","subjectId":"` + paTaskT + `","action":"merge work/x","actionHash":"` + paHash + `","expectedRevision":5,"state":"pending","createdAt":1800000000000,"expiresAt":1800003600000,"decidedAt":0}`
 	paMemory    = `{"id":"m_0000000000000006","assistantId":"` + paAssistantA + `","kind":"fact","content":"Prefers short reports","sourceRef":"run:r_1","scope":"assistant","sharedWith":[],"state":"approved","revision":2,"createdAt":1800000000000,"updatedAt":1800000000000}`
 )
+
+// paCoordinator is the core's Coordinator row in one state.
+func paCoordinator(state string) string {
+	row := `{"assistantId":"` + paAssistantA + `","state":"` + state + `","taskId":"` + paTaskT + `","revision":2}`
+	if state == "ready" {
+		row = `{"assistantId":"` + paAssistantA + `","state":"ready","taskId":"` + paTaskT + `","herdrSession":"default","workspaceId":"w1","paneId":"w1:p1","revision":3}`
+	}
+	return row
+}
 
 func paHarness(t *testing.T, open bool) (*harness, *fakeCore) {
 	t.Helper()
@@ -306,8 +319,47 @@ func TestPersonalAgentEventCarriesCountsOnly(t *testing.T) {
 	}
 }
 
+// The phone starts the Coordinator on an Agent the desktop offers, once per
+// requestId; an Agent outside that list never reaches the core.
+func TestPersonalAgentStartsTheCoordinatorOnAnOfferedAgent(t *testing.T) {
+	h, core := paHarness(t, true)
+	h.srv.opts.AssistantAgents = func() []PersonalAgentKind {
+		return []PersonalAgentKind{{ID: "pi", Label: "Pi"}, {ID: "claude", Label: "Claude Code"}}
+	}
+	path := "/api/v3/personal-agent/assistants/" + paAssistantA + "/coordinator/start"
+	if status, _ := h.send("POST", path, h.token, `{"requestId":"s1","agent":"codex"}`); status != http.StatusBadRequest {
+		t.Fatalf("an Agent the desktop does not offer = %d", status)
+	}
+	if core.callCount() != 0 {
+		t.Fatalf("a refused Agent reached the core: %v", core.calls)
+	}
+	status, body := h.send("POST", path, h.token, `{"requestId":"s1","agent":"pi"}`)
+	if status != http.StatusOK || !strings.Contains(string(body), `"state":"starting"`) {
+		t.Fatalf("start = %d %s", status, body)
+	}
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant coordinator start "+paAssistantA) || !strings.Contains(last, `"agent":"pi"`) || !strings.Contains(last, `"requestId":"s1"`) {
+		t.Fatalf("core call %q", last)
+	}
+	if status, _ := h.send("POST", path, h.token, `{"requestId":"s2"}`); status != http.StatusOK {
+		t.Fatalf("the default Agent (empty) = %d", status)
+	}
+	if status, _ := h.send("POST", path, h.token, `{"agent":"pi"}`); status != http.StatusBadRequest {
+		t.Fatalf("no requestId = %d", status)
+	}
+	detail := bodyOf(t, h.get("/api/v3/personal-agent/assistants/"+paAssistantA, h.token, nil))
+	if !strings.Contains(string(detail), `"agents":[{"id":"pi","label":"Pi"}`) || !strings.Contains(string(detail), `"coordinator":{"assistantId":"`+paAssistantA+`","state":"ready"`) {
+		t.Fatalf("the Assistant page carries its Coordinator and the Agent choice: %s", detail)
+	}
+}
+
 func TestPersonalAgentGolden(t *testing.T) {
 	h, _ := paHarness(t, true)
+	h.srv.opts.AssistantAgents = func() []PersonalAgentKind {
+		return []PersonalAgentKind{{ID: "pi", Label: "Pi"}, {ID: "claude", Label: "Claude Code"}}
+	}
+	golden(t, "personal-agent-coordinator-start-request.json", []byte(`{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"pi"}`))
+	_, started := h.send("POST", "/api/v3/personal-agent/assistants/"+paAssistantA+"/coordinator/start", h.token, `{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"pi"}`)
+	golden(t, "personal-agent-coordinator-start.json", started)
 	golden(t, "bootstrap-personal-agent.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
 	golden(t, "personal-agent-overview.json", bodyOf(t, h.get("/api/v3/personal-agent/overview", h.token, nil)))
 	golden(t, "personal-agent-assistants.json", bodyOf(t, h.get("/api/v3/personal-agent/assistants", h.token, nil)))

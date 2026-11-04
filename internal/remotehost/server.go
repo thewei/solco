@@ -98,6 +98,10 @@ type Options struct {
 	// CLI client to the Go core: nil, or ok=false (gate closed), means no such
 	// surface and bootstrap does not advertise personalAgent. Runs on the Host's goroutines.
 	PersonalAgent PersonalAgentFunc
+	// AssistantAgents lists the Agents a Coordinator may run on (the desktop's
+	// own chat-capable, switched-on kinds, last used first). nil = none offered:
+	// the phone can then start a Coordinator only on the plugin's default.
+	AssistantAgents func() []PersonalAgentKind
 	// Sessions serves the desktop's session catalog for the phone (GET /sessions):
 	// metadata, search and the running-pane link; nil = no such view and bootstrap
 	// says so. It runs on the Host's goroutines.
@@ -516,6 +520,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+pa+"/assistants/{id}/rename", s.guard(ScopeManage, s.handlePARenameAssistant))
 	mux.Handle("POST "+pa+"/assistants/{id}/pause", s.guard(ScopeManage, s.handlePAAssistantEnabled(false)))
 	mux.Handle("POST "+pa+"/assistants/{id}/resume", s.guard(ScopeManage, s.handlePAAssistantEnabled(true)))
+	mux.Handle("POST "+pa+"/assistants/{id}/coordinator/start", s.guard(ScopeManage, s.handlePAStartCoordinator))
 	mux.Handle("POST "+pa+"/goals/draft", s.guard(ScopeManage, s.handlePADraftGoal))
 	for _, action := range []string{"approve", "pause", "resume", "cancel"} {
 		mux.Handle("POST "+pa+"/goals/{id}/"+action, s.guard(ScopeManage, s.handlePAGoalAction(action)))
