@@ -98,7 +98,7 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
 	p.sup = &personalagent.Supervisor{Store: store}
-	p.routines = &personalagent.RoutineKeeper{Store: store, Load: config.Load, Approve: config.Approve}
+	p.routines = &personalagent.RoutineKeeper{Store: store, Load: config.Load, ApproveChecked: personalagent.ApproveRoutineDefinition}
 	p.inbox = &personalagent.InboxWatcher{Store: store}
 	p.memFiles = &personalagent.MemoryFiles{Store: store, Root: personalagent.MemoryRoot()}
 	p.groups = &personalagent.GroupPump{Store: store, Submit: submitToAgent, Blocked: paneDialog}
@@ -404,8 +404,8 @@ func (p *personal) syncMemory() {
 			log.Printf("assistants: memory folder of %s: %v", a.ID, err)
 			continue
 		}
-		if r.Edited+r.Conflicts+r.Imported+r.Refused > 0 {
-			log.Printf("assistants: memory folder of %s: %d edit(s) kept, %d conflict(s), %d new file(s), %d refused", a.ID, r.Edited, r.Conflicts, r.Imported, r.Refused)
+		if r.Edited+r.Proposed+r.Conflicts+r.Imported+r.Refused > 0 {
+			log.Printf("assistants: memory folder of %s: %d candidate edit(s), %d correction(s) awaiting approval, %d conflict(s), %d new file(s), %d refused", a.ID, r.Edited, r.Proposed, r.Conflicts, r.Imported, r.Refused)
 		}
 	}
 }

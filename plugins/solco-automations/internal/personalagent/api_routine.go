@@ -82,11 +82,13 @@ func (a *API) cfgPause(name string, paused bool) error {
 }
 
 func (a *API) keeper() *RoutineKeeper {
-	return &RoutineKeeper{Store: a.Store, Load: a.loadConfig, Now: a.now, Approve: func(name string) error {
+	return &RoutineKeeper{Store: a.Store, Load: a.loadConfig, Now: a.now, ApproveChecked: func(name, expectedHash string) error {
 		if a.ConfigApprove != nil {
+			// The injectable legacy callback is a testing seam. Normal Host
+			// and CLI requests must conditionally approve the actual YAML.
 			return a.ConfigApprove(name)
 		}
-		return config.Approve(name)
+		return ApproveRoutineDefinition(name, expectedHash)
 	}}
 }
 
@@ -277,25 +279,6 @@ func (a *API) routineDraft(requestID string, in RoutineDraftInput) (any, error) 
 	if ok, why := migratable(x, cfg.Backend); !ok {
 		return nil, coded("invalid", "%s", why)
 	}
-	res, err := a.cfgPut(original, x)
-	if err != nil {
-		return nil, coded("internal", "%v", err)
-	}
-	if res.Problem != "" {
-		return nil, coded("invalid", "%s", res.Problem)
-	}
-	created := original == ""
-	undo := func() {
-		if created {
-			_ = a.cfgRemove(in.Name)
-		}
-	}
-	cfg, err = a.loadConfig()
-	if err != nil || cfg.Find(in.Name) == nil {
-		undo()
-		return nil, coded("internal", "the draft could not be read back")
-	}
-	loaded := *cfg.Find(in.Name)
 	rid := func(suffix string) string {
 		if requestID == "" {
 			return ""
@@ -306,8 +289,51 @@ func (a *API) routineDraft(requestID string, in RoutineDraftInput) (any, error) 
 	if source == "" {
 		source = "chat"
 	}
-	r, replayed, err := a.Store.UpsertRoutine(rid("r"), RoutineInput{AssistantID: in.AssistantID, Name: in.Name, RequestedBy: in.RequestedBy,
-		Source: source, CorrelationID: in.CorrelationID, DefHash: DefinitionHash(loaded)})
+	requestedBy := in.RequestedBy
+	if requestedBy == "" {
+		requestedBy = "assistant"
+	}
+	routineInput := RoutineInput{AssistantID: in.AssistantID, Name: in.Name, RequestedBy: requestedBy,
+		Source: source, CorrelationID: in.CorrelationID, DefHash: DefinitionHash(x.WithDefaults())}
+	// The command's durable receipt must be checked BEFORE any YAML writes.
+	// A rejected replay must not change a Routine whose prompt it may not own.
+	// A matching replay also leaves the current file untouched.
+	var preflightReplay bool
+	if requestID != "" {
+		_, preflightReplay, err = peekReceipt[Routine](a.Store, rid("r"), "routine.upsert", routineInput)
+		if err != nil {
+			return nil, err
+		}
+		if preflightReplay {
+			current := cfg.Find(in.Name)
+			if current == nil || DefinitionHash(*current) != routineInput.DefHash || current.Rationale != x.Rationale {
+				return nil, ErrRequestConflict
+			}
+		}
+	}
+	created := original == "" && !preflightReplay
+	undo := func() {
+		if created {
+			_ = a.cfgRemove(in.Name)
+		}
+	}
+	if !preflightReplay {
+		res, err := a.cfgPut(original, x)
+		if err != nil {
+			return nil, coded("internal", "%v", err)
+		}
+		if res.Problem != "" {
+			return nil, coded("invalid", "%s", res.Problem)
+		}
+	}
+	cfg, err = a.loadConfig()
+	if err != nil || cfg.Find(in.Name) == nil {
+		undo()
+		return nil, coded("internal", "the draft could not be read back")
+	}
+	loaded := *cfg.Find(in.Name)
+	routineInput.DefHash = DefinitionHash(loaded)
+	r, replayed, err := a.Store.UpsertRoutine(rid("r"), routineInput)
 	if err != nil {
 		undo()
 		return nil, err

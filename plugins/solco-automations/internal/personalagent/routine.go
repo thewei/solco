@@ -207,10 +207,11 @@ func RoutineAction(a config.Automation, next []time.Time) string {
 // definition that was approved, and restarts the rule's watermark at now so
 // nothing from the draft period is replayed.
 type RoutineKeeper struct {
-	Store   *Store
-	Load    func() (*config.Config, error)
-	Approve func(name string) error
-	Now     func() time.Time
+	Store          *Store
+	Load           func() (*config.Config, error)
+	Approve        func(name string) error // legacy test seam; use ApproveChecked in production
+	ApproveChecked func(name, expectedHash string) error
+	Now            func() time.Time
 }
 
 // RoutineReport counts one keeper pass.
@@ -221,6 +222,14 @@ func (k *RoutineKeeper) now() time.Time {
 		return k.Now()
 	}
 	return time.Now()
+}
+
+// ApproveRoutineDefinition atomically checks the exact normalized definition
+// the Owner approved and enables only that version of automations.yaml.
+func ApproveRoutineDefinition(name, expectedHash string) error {
+	return config.ApproveIf(name, func(a config.Automation) bool {
+		return DefinitionHash(a) == expectedHash
+	})
 }
 
 // Tick enables every approved draft routine whose definition still matches.
@@ -271,8 +280,30 @@ func (k *RoutineKeeper) Tick() (RoutineReport, error) {
 				return rep, wrapBusy(err)
 			}
 			if a.Draft {
-				if err := k.Approve(r.Name); err != nil {
-					return rep, err
+				approve := k.ApproveChecked
+				if approve == nil {
+					if k.Approve != nil {
+						// Retained for tests that supply a fake file writer. Real
+						// daemon/API wiring always uses the conditional writer.
+						approve = func(name, _ string) error { return k.Approve(name) }
+					} else {
+						approve = ApproveRoutineDefinition
+					}
+				}
+				if err := approve(r.Name, r.DefHash); err != nil {
+					if !errors.Is(err, config.ErrDefinitionChanged) {
+						return rep, err
+					}
+					// The document changed after the initial check. Neither
+					// a new prompt nor a different schedule may be enabled.
+					if err := k.Store.setRoutineState(r.Name, RoutineStale); err != nil {
+						return rep, err
+					}
+					rep.Stale++
+					if err := fact(fmt.Sprintf("Routine %s changed during approval — not enabled; ask for a new approval", r.Name), fmt.Sprintf("routine-stale:%s:%d", r.Name, r.Revision)); err != nil {
+						return rep, err
+					}
+					continue
 				}
 			}
 			if err := k.Store.setRoutineState(r.Name, RoutineActive); err != nil {
