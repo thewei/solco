@@ -316,3 +316,27 @@
 - **未执行**：Android 实机首次发送/断线、macOS 多日保活、进程强杀 crash-point 故障注入、OS 级 Assistant Owner 隔离；生产环境没有做隐式数据迁移和破坏性测试。
 
 **后续发布阻断优先级**：AUD-01/15 可信 Agent 进程隔离 + AUD-14 dirfd/no-follow → AUD-10/18 SQLite/YAML durable intent/reconcile → AUD-11 持久服务/重启恢复 → AUD-12 原始消息持久化与 Android E2E。当前已修复的局部不变量有正式 GREEN 证据，**Assistants 3.1 全面安全兼容与可无人值守运行尚未达到最终发布门槛**。
+
+## 11. 追加修复批次：Routine dispatch / Scheduler 常驻 / Memory 句柄隔离（2026-11-04）
+
+本节覆盖第 10 节当时的未修复/未验证表述，原始 RED 取证仍保留以便追溯。本批只修改插件，没有移动端接口变更或真实用户库迁移。
+
+| Commit | 证据 | 安全结论 |
+| --- | --- | --- |
+| `a425db0` Routine dispatch 最终闸门 | `RuleScheduler.Tick` 在同一 SQLite 事务中检查 YAML 与 `RoutineActive && Approved && DefinitionHash==DefHash`；普通未绑定的 Legacy Automation 不受影响。`TestRuleSchedulerRefusesRoutineUntilApprovedAndActive`、`TestRuleSchedulerRefusesEnabledRoutineWithChangedDefinition` 原本均 **RED**：非批准 YAML 也会 `Fired=1`；改后 **GREEN**。`TestApprovedRoutineFiresOnceUnderItsOwnerAndReportsBack` 保持 GREEN | **AUD-18 的跨库崩溃窗口 fail-closed**：YAML 已启用但 DB 未 Active 时不调度，已批准的 Keeper 在下一 Tick 可恢复 Active。**不代表**已经实现 `routineDraft` 第一次 YAML 写入前后的 durable intent 日志；AUD-10 的 orphan Draft 恢复仍 OPEN |
+| `bce7ba0` Assistant 长驻 scheduler | `ensureDaemon` 补启动由 `daemon` 改成 `daemon --standby`；hook-started daemon 在 SQLite 里已注册 Assistant 时不因 Herdr Sessions 为零而退出。`TestAssistantBootstrapDaemonIsResident`、`TestPersistentAssistantsSurviveSessionlessScheduler` GREEN（覆盖无会话、旧模式、standby、运行中等） | **AUD-11 代码路径 PASS**；真实进程强杀、launchd 未安装时系统重启自动拉起、长期离线/无会话 E2E 尚未验证，不宣称 complete |
+| `f930bce` Memory OS 目录根句柄 | `os.Root` pin Assistant / memory / facts / inbox / notes；`Lstat` + `SameFile` 验证打开后同一 inode，leaf `O_NOFOLLOW/O_NONBLOCK`，所有 read/write/rename/remove/readDir 走 Root 相对句柄。测试 `TestMemoryTreePinsFactsAcrossDirectorySwap`、`TestMemoryTreePinsParentAcrossDirectorySwap`、`TestMemoryTreeReadRejectsLeafSymlink` GREEN，原有 Memory 全量 GREEN | **AUD-14 路径替换风险已实质加固**，替换目录不会将 Sync IO 导入 B 的内存文件。仍无 OS Principal/同 Unix UID Agent 隔离（AUD-01/15）：同 UID Agent 可直接打开绝对路径/SQLite，不能将此技术防线视作权限边界 |
+| `f1e41a8` 调度归属读取失败时 fail-closed | `personal.ownedRules` 读取 SQLite 失败现在返回错误，`evaluateWith` 在改变任何水位/启动 Legacy runner 前终止；`Run` 无法打开 Assistant Store 不再运行 Legacy fallback。`TestLegacySchedulerFailsClosedWhenAssistantLedgerIsUnavailable` GREEN | 宕库期间所有规则暂停是故意的安全默认；恢复服务后重新进入日程计算，需实机故障注入和观察 |
+
+**新验收门禁（本批）**：插件 `GOTOOLCHAIN=auto go test ./...` **PASS**，`go test -race ./internal/personalagent ./internal/daemon ./internal/config -count=1` **PASS**。没有碰其它 Agent 的 OSC 7501/Hook、Onboarding、旧文档暂存文件。
+
+**仍未关闭的 P0**：AUD-01/15 高权限 CLI 没有身份 Broker 或 OS 沙箱；AUD-10 在 `routineDraft` YAML 写入和 SQLite 写入之间遭遇 `SIGKILL` 后，尚缺 durable intent / orphan Draft reconciliation；AUD-18 的审批原子性已经被额外的 dispatch gate 防护，但仍缺完整跨库 crash-point 恢复协议。此处仅对**负向测试覆盖的安全不变量**宣称 PASS，不宣称全部实现与完全无人值守。
+
+### 11.1 全仓库测试套件的独立阻断与修补
+
+- 本批 Plugin **完整 `go test ./...` + Race 检查 PASS**；Root 的 `go test ./internal/personalagent ./internal/remotehost ./internal/hostd ./internal/automations` PASS。不能用插件 PASS 替代整个 GUI 测试。
+- Root `go test ./...` **NOT PASS / 全量 UI 套件超时**。第一次卡在 `TestPushOutlivesTheWorkingTreeBudget`：原测试桩把所有非 `rev-parse` 命令都延迟 31s，与“只测 push >30s”的目标不符。`733520a` 修改**仅测试桩**为只有 `git push` 延迟 31s；该测试单独 `go test ./internal/nativeui -run '^TestPushOutlivesTheWorkingTreeBudget$' -count=1 -timeout=55s` **PASS，31.51s**，真实 Push 生产代码未改。
+- 修补后重新运行 Root `go test ./... -timeout=120s`，`internal/nativeui` 仍超过整个包 120s 的超时预算；超时发生时正在执行 `TestEveryInnerPageLeavesByTheTerminalTab`，**不能仅凭堆栈断言该测试本身死锁**，因为同一个包此前的测试已消耗大量总时间。本批不缩短生产代码、不删用例，也不伪称全量 GREEN。其他根模块包在该次输出中均 PASS。
+- 同期其他开发者的 `internal/nativeui/page_onboarding.go` / `page_onboarding_test.go` WIP 未修改或提交；三个 Onboarding 专项测试独立运行均 PASS。
+
+**结论**：新增四个插件安全/可靠性 commit 具备完整插件全量与 Race 证据；额外 Git 测试修补 commit 具备独立 GREEN 证据；全量 GUI 测试超时需下一批做可重复基准、测试运行时间预算/隔离，不应将其归因于本批插件行为。

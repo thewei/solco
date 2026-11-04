@@ -229,9 +229,9 @@
 
 **独立门禁**：插件 Memory/Routine/Approval/Group/Rule 专项 Go race 测试 PASS；Go Host+PersonalAgent+Hostd PASS；Mobile TS/Lint/Vitest PASS（592 pass，2 skip）。真正的 OS 沙箱、生产部署、Mac/Android 实机与跨进程 stress 本轮没有执行。**优先次序：AUD-18 → AUD-14/15 → AUD-16/17**；不可因历史 22/22 VERIFIED 而关闭这些问题。
 
-## 8. 后续实现修复与提交记录（2026-11-04；覆盖 `7 的初始 RED 状态）
+## 8. 后续实现修复与提交记录（2026-11-04；覆盖第 7 节的初始 RED 状态）
 
-> 详细变更、测试依据与剩余风险见 `docs/assistants-v3-audit-2026-11-04.md` `10。`7` 是**修复前**的证据；本节是**修复后**的台账。PASS 仅表示对应原子不变量，绝非 Assistant 产品整体最终验收。
+> 详细变更、测试依据与剩余风险见 `docs/assistants-v3-audit-2026-11-04.md` 第 10 节。第 7 节是**修复前**的证据；本节是**修复后**的台账。PASS 仅表示对应原子不变量，绝非 Assistant 产品整体最终验收。
 
 | 问题 | 本次状态 | 修复 commit / 证据 | 不可忽略的剩余项 |
 | --- | --- | --- | --- |
@@ -251,3 +251,20 @@
 **长时间崩溃**：修复 `eb9b5bc`（JSC scheme bridge），25 分钟 / 约 12 万消息压力测试无崩溃；用户提交的 16:59.ips 是 17:52 修复版安装之前。截止 18:35 +0800，安装版进程已连续运行 42 分钟、未见新 Solco.ips。继续做多日观察、不要从这一段判断“永不崩溃”。
 
 **不混提交**：以上五笔 Desktop + 一笔 Mobile 是本轮工作；OSC 7501 与 Hook 修复 `dea65e9`、之前的 Group/Goal `d792552`、MyGo JSC `eb9b5bc` 属其他独立提交。所有其它 staged/unstaged 用户改动保留。需要真正关闭的发布 P0 仍是 AUD-01/14/15 的可信角色隔离与 AUD-10/18 的 YAML/SQLite crash-recovery。
+
+## 9. 第五次持续修复（2026-11-04；4 笔独立 Plugin commits）
+
+> 第 8 节保留上批完成时的状态；**下表是当前更新的状态**。详见 `docs/assistants-v3-audit-2026-11-04.md` 第 11 节。
+
+| ID | 当前进度 | 实际代码与提交 | 余项 |
+| --- | --- | --- | --- |
+| AUD-18 / Routine dispatch | **PASS（未批准不得触发）** | `a425db0`：`RuleScheduler.Tick` 在事务中核验 `active + approved + definitionHash` 才派发；清掉 YAML draft 但 SQLite 未 Active、或修改已经启用的 Prompt，都不生成任务；原有正常执行测试仍 PASS | YAML/SQLite 持久化意图与强杀恢复尚未整体验收 |
+| AUD-11 / 后台长驻 | **PASS（代码） / NOT VERIFIED（登录重启）** | `bce7ba0`：`ensureDaemon` 用 `--standby`；hook-started daemon 在已有 Assistant 注册时不因零 Herdr Session 退出；7 组分支测试 GREEN | macOS launchd/Herdr 退出、设备重启与实际手机重连需要实测 |
+| AUD-14 / Memory 目录替换 | **PASS（confined IO） / PARTIAL（OS 权限）** | `f930bce`：`os.Root` + SameFile pin A 的 Assistant/memory/categories 句柄，读写与原子重命名只走 Root；替换 `facts/`、替换 `memory/`、leaf symlink 指向 B 的 3 组负向测试 GREEN | AUD-01 同 UID Agent 仍可自己直接打开 SQLite/文件；未实现进程身份 Broker |
+| 归属账本失效 / 新发现 | **PASS（故障隔离）** | `f1e41a8`：SQLite 打不开或查不出 ownedRules 时，旧调度器 fail-closed，不向 Legacy 放行，也不更新水位；DB closed 注入测试 GREEN | 故障期间自动任务暂停，恢复后需实机观察 |
+
+**验证**：插件全量 `go test ./...` 和 `go test -race ./internal/personalagent ./internal/daemon ./internal/config -count=1` PASS；尚无 App/Android 多日无会话与 `SIGKILL` 各 crash-point E2E。先前的 Desktop/MyGo 编译、Mobile 592 项测试是上批验证，**不作为本批新构建的证据**。
+
+**发布阻断仍存在**：AUD-01/15 Owner 与 Agent 权限身份隔离；AUD-10 Routine 首次 YAML → SQLite 中断时的 durable intent/reconciliation。其它 staged 文档和 UI 更改保持原样。
+
+**全仓库额外验证（独立于插件门禁）**：`733520a` 仅修 Git Push 测试桩，使 31 秒延迟只用于真正的 `push`，独立 `TestPushOutlivesTheWorkingTreeBudget` **PASS（31.51s）**。但 Root `go test ./... -timeout=120s` 在 `internal/nativeui` 整包超时（截至超时时正在执行 `TestEveryInnerPageLeavesByTheTerminalTab`；此事实不代表单独证实它死锁），因此 **Root 全量仍 NOT PASS**；根模块 PersonalAgent/RemoteHost/Hostd/Automations 子集 PASS。详情见审计报告 `11.1。对其他开发者正在修改的 Onboarding/文档未作任何混入或重置。
