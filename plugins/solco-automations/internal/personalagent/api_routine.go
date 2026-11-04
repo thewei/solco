@@ -173,6 +173,16 @@ func (a *API) routine(args []string, body []byte) (any, error) {
 }
 
 func (a *API) routineChange(cmd, name string) (any, error) {
+	var out any
+	err := withRoutineMutationLock(func() error {
+		var err error
+		out, err = a.routineChangeLocked(cmd, name)
+		return err
+	})
+	return out, err
+}
+
+func (a *API) routineChangeLocked(cmd, name string) (any, error) {
 	r, err := a.Store.GetRoutine(name)
 	if err != nil {
 		return nil, err
@@ -217,6 +227,16 @@ func (a *API) routineChange(cmd, name string) (any, error) {
 }
 
 func (a *API) routineDraft(requestID string, in RoutineDraftInput) (any, error) {
+	var out any
+	err := withRoutineMutationLock(func() error {
+		var err error
+		out, err = a.routineDraftLocked(requestID, in)
+		return err
+	})
+	return out, err
+}
+
+func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Repo = strings.TrimSpace(in.Repo)
 	in.Prompt = strings.TrimSpace(in.Prompt)

@@ -235,6 +235,16 @@ func ApproveRoutineDefinition(name, expectedHash string) error {
 // Tick enables every approved draft routine whose definition still matches.
 func (k *RoutineKeeper) Tick() (RoutineReport, error) {
 	var rep RoutineReport
+	err := withRoutineMutationLock(func() error {
+		var err error
+		rep, err = k.tickLocked()
+		return err
+	})
+	return rep, err
+}
+
+func (k *RoutineKeeper) tickLocked() (RoutineReport, error) {
+	var rep RoutineReport
 	rows, err := k.Store.db.Query(`SELECT `+routineCols+` FROM routines WHERE state=? AND approved=1 ORDER BY name`, RoutineDraft)
 	if err != nil {
 		return rep, wrapBusy(err)
