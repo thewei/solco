@@ -1,0 +1,62 @@
+{
+  "feed": {
+    "group": {
+      "id": "g_0000000000000010",
+      "title": "Launch crew",
+      "status": "active",
+      "members": [
+        {
+          "assistantId": "a_0000000000000001",
+          "name": "Ada",
+          "status": "active"
+        },
+        {
+          "assistantId": "a_0000000000000009",
+          "name": "Bo",
+          "status": "active"
+        }
+      ],
+      "lastSeq": 1,
+      "revision": 1,
+      "createdAt": 1800000000000,
+      "updatedAt": 1800000000000
+    },
+    "messages": [
+      {
+        "seq": 1,
+        "id": "m_0000000000000012",
+        "groupId": "g_0000000000000010",
+        "authorKind": "user",
+        "kind": "text",
+        "body": "@Bo can you check the launch plan?",
+        "mentions": [
+          "a_0000000000000009"
+        ],
+        "createdAt": 1800000000000
+      }
+    ],
+    "deliveries": [
+      {
+        "id": "d_0000000000000011",
+        "messageId": "m_0000000000000012",
+        "assistantId": "a_0000000000000009",
+        "state": "queued",
+        "attempts": 0
+      }
+    ],
+    "tasks": [],
+    "agents": [
+      {
+        "assistantId": "a_0000000000000001",
+        "state": "none"
+      },
+      {
+        "assistantId": "a_0000000000000009",
+        "state": "starting",
+        "paneId": "w3:p1"
+      }
+    ],
+    "seq": 1
+  },
+  "schema": 1
+}

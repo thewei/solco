@@ -1,0 +1,19 @@
+{
+  "replayed": false,
+  "result": {
+    "deliveries": [],
+    "message": {
+      "authorId": "a_0000000000000009",
+      "authorKind": "assistant",
+      "body": "Looks fine; I filed a task.",
+      "createdAt": 1800000000000,
+      "groupId": "g_0000000000000010",
+      "id": "m_0000000000000013",
+      "kind": "text",
+      "mentions": [],
+      "replyTo": "m_0000000000000012",
+      "seq": 2
+    }
+  },
+  "schema": 1
+}

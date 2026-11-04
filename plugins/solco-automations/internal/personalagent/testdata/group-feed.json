@@ -1,0 +1,95 @@
+{
+  "feed": {
+    "agents": [
+      {
+        "assistantId": "a_0000000000000001",
+        "state": "none"
+      },
+      {
+        "assistantId": "a_0000000000000009",
+        "paneId": "w3:p1",
+        "state": "starting"
+      }
+    ],
+    "deliveries": [
+      {
+        "assistantId": "a_0000000000000009",
+        "attempts": 0,
+        "id": "d_0000000000000011",
+        "messageId": "m_0000000000000012",
+        "state": "queued"
+      }
+    ],
+    "group": {
+      "createdAt": 1800000000000,
+      "id": "g_0000000000000010",
+      "lastSeq": 3,
+      "members": [
+        {
+          "assistantId": "a_0000000000000001",
+          "name": "Ada",
+          "status": "active"
+        },
+        {
+          "assistantId": "a_0000000000000009",
+          "name": "Bo",
+          "status": "active"
+        }
+      ],
+      "revision": 1,
+      "status": "active",
+      "title": "Launch crew",
+      "updatedAt": 1800000000000
+    },
+    "messages": [
+      {
+        "authorKind": "user",
+        "body": "@Bo can you check the launch plan?",
+        "createdAt": 1800000000000,
+        "groupId": "g_0000000000000010",
+        "id": "m_0000000000000012",
+        "kind": "text",
+        "mentions": [
+          "a_0000000000000009"
+        ],
+        "seq": 1
+      },
+      {
+        "authorId": "a_0000000000000009",
+        "authorKind": "assistant",
+        "body": "Looks fine; I filed a task.",
+        "createdAt": 1800000000000,
+        "groupId": "g_0000000000000010",
+        "id": "m_0000000000000013",
+        "kind": "text",
+        "mentions": [],
+        "replyTo": "m_0000000000000012",
+        "seq": 2
+      },
+      {
+        "authorId": "a_0000000000000009",
+        "authorKind": "assistant",
+        "body": "Check the launch plan",
+        "createdAt": 1800000000000,
+        "groupId": "g_0000000000000010",
+        "id": "m_0000000000000015",
+        "kind": "task",
+        "mentions": [],
+        "seq": 3,
+        "taskId": "t_0000000000000014"
+      }
+    ],
+    "seq": 3,
+    "tasks": [
+      {
+        "assistantId": "a_0000000000000009",
+        "needsYou": false,
+        "state": "queued",
+        "taskId": "t_0000000000000014",
+        "title": "Check the launch plan",
+        "updatedAt": 1800000000000
+      }
+    ]
+  },
+  "schema": 1
+}
