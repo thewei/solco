@@ -11,6 +11,7 @@
 package config
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -125,6 +126,9 @@ type Automation struct {
 }
 
 type Config struct {
+	// sourceDigest fences full-file saves from the TUI/wizard against a
+	// concurrent Put, Remove, Approve or Pause. Not serialized into YAML.
+	sourceDigest [32]byte
 	// Backend picks where runs are launched. Defaults to herdr, so a file
 	// written before backends existed keeps running where it always did.
 	Backend Backend `yaml:"backend,omitempty"`
@@ -176,6 +180,16 @@ func (a *Automation) applyDefaults() {
 	if a.CatchUpMinutes == 0 {
 		a.CatchUpMinutes = 120
 	}
+}
+
+// WithDefaults returns the same semantic values that Load would use for a
+// draft before it is written. It lets the Assistants API verify an existing
+// request receipt before touching automations.yaml.
+func (a Automation) WithDefaults() Automation {
+	a.applyDefaults()
+	a.Repo = expandHome(a.Repo)
+	a.MCPConfig = expandHome(a.MCPConfig)
+	return a
 }
 
 // OverlapQueues reports whether an occurrence that lands on a still-working
@@ -336,7 +350,7 @@ func Path() string { return filepath.Join(Dir(), "automations.yaml") }
 func Load() (*Config, error) {
 	raw, err := os.ReadFile(Path())
 	if os.IsNotExist(err) {
-		return &Config{}, nil
+		return &Config{sourceDigest: sha256.Sum256(nil)}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -366,7 +380,7 @@ func parse(raw []byte) (*Config, error) {
 		return nil, fmt.Errorf("%s: backend must be herdr, hc or auto, got %q", Path(), doc.Backend)
 	}
 
-	cfg := &Config{Backend: doc.Backend, Paused: doc.Paused}
+	cfg := &Config{Backend: doc.Backend, Paused: doc.Paused, sourceDigest: sha256.Sum256(raw)}
 	seen := map[string]bool{}
 	for _, node := range doc.Automations {
 		var a Automation
@@ -443,19 +457,29 @@ func Save(cfg *Config) error {
 			filepath.Base(Path()), len(cfg.Invalid),
 			plural(len(cfg.Invalid), "y", "ies"), cfg.Invalid[0])
 	}
-	if err := os.MkdirAll(Dir(), 0o755); err != nil {
-		return err
-	}
-	// herdr is the default: writing it would add a line to every file saved.
-	out := *cfg
-	if out.Backend == BackendHerdr {
-		out.Backend = ""
-	}
-	raw, err := yaml.Marshal(&out)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(Path(), raw, 0o644)
+	return withEditLock(func() error {
+		current, err := os.ReadFile(Path())
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if sha256.Sum256(current) != cfg.sourceDigest {
+			return ErrDefinitionChanged // stale whole-file snapshot; never overwrite a newer Put
+		}
+		// herdr is the default: writing it would add a line to every file saved.
+		out := *cfg
+		if out.Backend == BackendHerdr {
+			out.Backend = ""
+		}
+		raw, err := yaml.Marshal(&out)
+		if err != nil {
+			return err
+		}
+		if err := write(raw); err != nil {
+			return err
+		}
+		cfg.sourceDigest = sha256.Sum256(raw)
+		return nil
+	})
 }
 
 // Find returns the automation named name, or nil.

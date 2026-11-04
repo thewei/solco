@@ -2,9 +2,11 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -22,10 +24,47 @@ type PutResult struct {
 	Next    []time.Time `json:"next,omitempty"`
 }
 
+// ErrDefinitionChanged means the draft's executable definition no longer
+// matches the version an Owner approved. A failed conditional approval never
+// clears draft and must not launch the changed automation.
+var ErrDefinitionChanged = errors.New("automation definition changed since approval")
+
+// withEditLock locks a stable sibling file, NOT automations.yaml (which write
+// atomically replaces). Distinct CLI/Host/Agent processes use this same lock.
+// The entire read-modify-write must run under it; locking only os.Rename loses
+// updates. It is an advisory lock and cannot restrain external YAML editors.
+func withEditLock(fn func() error) error {
+	if err := os.MkdirAll(Dir(), 0o755); err != nil {
+		return err
+	}
+	lockPath := filepath.Join(Dir(), ".automations.lock")
+	fd, err := syscall.Open(lockPath, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return err
+	}
+	lock := os.NewFile(uintptr(fd), lockPath)
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	return fn()
+}
+
 // Put writes a, replacing the entry named original, or appending when
 // original is empty. Nothing is written when the result would not load.
 func Put(original string, a Automation, dryRun bool) (PutResult, error) {
-	doc, err := readDoc()
+	var out PutResult
+	err := withEditLock(func() error {
+		var err error
+		out, err = putUnlocked(original, a, dryRun)
+		return err
+	})
+	return out, err
+}
+
+func putUnlocked(original string, a Automation, dryRun bool) (PutResult, error) {
+	doc, indent, err := readDoc()
 	if err != nil {
 		return PutResult{}, err
 	}
@@ -49,7 +88,7 @@ func Put(original string, a Automation, dryRun bool) (PutResult, error) {
 		seq.Content = append(seq.Content, &node)
 	}
 
-	raw, err := encode(doc)
+	raw, err := encode(doc, indent)
 	if err != nil {
 		return PutResult{}, err
 	}
@@ -69,7 +108,11 @@ func Put(original string, a Automation, dryRun bool) (PutResult, error) {
 
 // Remove deletes the entry named name, valid or not.
 func Remove(name string) error {
-	doc, err := readDoc()
+	return withEditLock(func() error { return removeUnlocked(name) })
+}
+
+func removeUnlocked(name string) error {
+	doc, indent, err := readDoc()
 	if err != nil {
 		return err
 	}
@@ -79,7 +122,7 @@ func Remove(name string) error {
 		return fmt.Errorf("no automation named %q", name)
 	}
 	seq.Content = append(seq.Content[:at], seq.Content[at+1:]...)
-	raw, err := encode(doc)
+	raw, err := encode(doc, indent)
 	if err != nil {
 		return err
 	}
@@ -90,7 +133,19 @@ func Remove(name string) error {
 // that is not a draft is an error rather than a no-op: approval is a decision
 // somebody is recording, and silence would read as if it happened.
 func Approve(name string) error {
-	doc, err := readDoc()
+	return ApproveIf(name, nil)
+}
+
+// ApproveIf checks the normalized executable definition and clears its draft
+// flag in one locked read-modify-write. The match callback must be pure: it
+// runs while the cross-process file lock is held. This prevents the TOCTOU
+// interval between checking the approval hash and enabling a Routine.
+func ApproveIf(name string, match func(Automation) bool) error {
+	return withEditLock(func() error { return approveUnlocked(name, match) })
+}
+
+func approveUnlocked(name string, match func(Automation) bool) error {
+	doc, indent, err := readDoc()
 	if err != nil {
 		return err
 	}
@@ -99,12 +154,29 @@ func Approve(name string) error {
 	if at < 0 {
 		return fmt.Errorf("no automation named %q", name)
 	}
+	if match != nil {
+		// Parse the exact document we will edit, applying normal defaults as
+		// in config.Load (Agent, Workspace, Timeout, CatchUp). The semantic
+		// DefinitionHash comes from the caller; config avoids importing it.
+		current, err := encode(doc, indent)
+		if err != nil {
+			return err
+		}
+		cfg, err := parse(current)
+		if err != nil {
+			return err
+		}
+		a := cfg.Find(name)
+		if a == nil || !match(*a) {
+			return fmt.Errorf("%w: %s", ErrDefinitionChanged, name)
+		}
+	}
 	v := valueOf(seq.Content[at], "draft")
 	if v == nil || v.Value != "true" {
 		return fmt.Errorf("%s is not a draft", name)
 	}
 	setBool(seq.Content[at], "draft", false)
-	raw, err := encode(doc)
+	raw, err := encode(doc, indent)
 	if err != nil {
 		return err
 	}
@@ -114,7 +186,11 @@ func Approve(name string) error {
 // SetPaused pauses or resumes one automation (its disabled flag), or every
 // automation when name is empty (the top-level paused flag).
 func SetPaused(name string, paused bool) error {
-	doc, err := readDoc()
+	return withEditLock(func() error { return setPausedUnlocked(name, paused) })
+}
+
+func setPausedUnlocked(name string, paused bool) error {
+	doc, indent, err := readDoc()
 	if err != nil {
 		return err
 	}
@@ -128,7 +204,7 @@ func SetPaused(name string, paused bool) error {
 		target, key = seq.Content[at], "disabled"
 	}
 	setBool(target, key, paused)
-	raw, err := encode(doc)
+	raw, err := encode(doc, indent)
 	if err != nil {
 		return err
 	}
@@ -136,25 +212,25 @@ func SetPaused(name string, paused bool) error {
 }
 
 // readDoc parses the file as a node tree; a missing file is an empty mapping.
-func readDoc() (*yaml.Node, error) {
+func readDoc() (*yaml.Node, int, error) {
 	raw, err := os.ReadFile(Path())
 	if err != nil && !os.IsNotExist(err) {
-		return nil, err
+		return nil, 0, err
 	}
 	var doc yaml.Node
-	indent = detectIndent(raw)
+	indent := detectIndent(raw)
 	if len(bytes.TrimSpace(raw)) > 0 {
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", Path(), err)
+			return nil, 0, fmt.Errorf("parse %s: %w", Path(), err)
 		}
 	}
 	if len(doc.Content) == 0 {
 		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode}}}
 	}
 	if doc.Content[0].Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("%s: expected a mapping at the top", Path())
+		return nil, 0, fmt.Errorf("%s: expected a mapping at the top", Path())
 	}
-	return &doc, nil
+	return &doc, indent, nil
 }
 
 // automationsOf returns the automations sequence, creating it if absent.
@@ -216,10 +292,6 @@ func setBool(m *yaml.Node, key string, on bool) {
 	}
 }
 
-// indent is the file's own indentation, so an edit does not reformat entries
-// it did not touch. Set by readDoc; every edit reads, then encodes, once.
-var indent = 4
-
 // detectIndent reads where the first list dash sits: yaml.v3 puts it at the
 // indent width. 4 is what yaml.Marshal (and so Save) writes.
 func detectIndent(raw []byte) int {
@@ -232,7 +304,7 @@ func detectIndent(raw []byte) int {
 	return 4
 }
 
-func encode(doc *yaml.Node) ([]byte, error) {
+func encode(doc *yaml.Node, indent int) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(indent)
