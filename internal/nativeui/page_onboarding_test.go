@@ -22,6 +22,61 @@ func TestOnboardingOnlyFreshInstalls(t *testing.T) {
 	}
 }
 
+// TestOnboardingMainContentCentered verifies that the onboarding main content
+// stage is vertically and horizontally centered in the window with balanced
+// breathing room.
+func TestOnboardingMainContentCentered(t *testing.T) {
+	service := app.NewSettingsService(settings.NewFileStore(t.TempDir()))
+	shell := NewShell(WithSettings(service))
+	shell.bootstrapPending = false
+	shell.newTabStarter = toggleKindsStarter{providersTestKinds}
+	tester := ui.NewTester(shell.View, 1200, 800)
+
+	welcomeRect, ok := tester.Find("Welcome to Solco")
+	if !ok {
+		t.Fatalf("welcome title missing: %q", tester.Texts())
+	}
+	centerX := welcomeRect.X + welcomeRect.W/2
+	if centerX < 595 || centerX > 605 {
+		t.Fatalf("welcome title not horizontally centered: X=%.2f, W=%.2f, center=%.2f (want ~600)", welcomeRect.X, welcomeRect.W, centerX)
+	}
+	if welcomeRect.Y < 200 || welcomeRect.Y > 350 {
+		t.Fatalf("welcome title not vertically centered: Y=%.2f (expected ~280-320 in 800px window)", welcomeRect.Y)
+	}
+
+	lightRect, ok := tester.Find("Light")
+	if !ok {
+		t.Fatalf("light preview card missing")
+	}
+	// Light card should sit centered horizontally in the three-card layout.
+	lightCenterX := lightRect.X + lightRect.W/2
+	if lightCenterX < 590 || lightCenterX > 610 {
+		t.Fatalf("middle theme card not horizontally centered: center=%.2f", lightCenterX)
+	}
+
+	// Move to step 2 (Phone) and check illustration centering.
+	if err := tester.Click("Continue"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if err := tester.Click("Continue"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+
+	netRect, ok := tester.Find("your network")
+	if !ok {
+		t.Fatalf("phone companion illustration missing")
+	}
+	// Illustration consists of: Mac (210) + gap (20) + network label (netRect.W) + gap (20) + Phone (96).
+	illustrationLeft := netRect.X - Spacing().XL - 210
+	illustrationRight := netRect.X + netRect.W + Spacing().XL + 96
+	illustrationCenter := (illustrationLeft + illustrationRight) / 2
+	if illustrationCenter < 595 || illustrationCenter > 605 {
+		t.Fatalf("phone illustration not centered: center=%.2f (want ~600)", illustrationCenter)
+	}
+}
+
 // TestOnboardingSkipPersistsAndLandsWorkspace pins the exit: skipping
 // completes the guide once (Onboarded persists) and lands on Workspace.
 func TestOnboardingSkipPersistsAndLandsWorkspace(t *testing.T) {

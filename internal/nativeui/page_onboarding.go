@@ -2,8 +2,8 @@ package nativeui
 
 /**
  * [INPUT]: Shell.settings/applySettings、launchKinds（ensureLaunchKinds）、page_providers.go 的 agentToggleRow/setAgentEnabled/requestProvidersAudit、controls.go 的按钮、brands.go 的 brandPNG、theme.go 的 designTokens/solcoTheme、settingsService.FreshInstall（NewShell 的首启闸门）
- * [OUTPUT]: routeOnboarding、Shell.onboardingPage（三步全窗首启引导：固定头部（应用标记 + 步骤标题 + 副标题）→ 可滚动内容区 → 固定底部操作栏（圆点步进 + Skip/Back/Continue））；onboardAppearance 的三张主题预览卡（System 半明半暗、Light、Dark，designTokens 固定调色）、onboardAgents 的 Agent 开关组、onboardPhone 的 Mac+手机组件示意、finishOnboarding
- * [POS]: 首启引导拥有整个画布（无侧栏/标题栏/浮层，Shell.View 专用分支）；仅 fresh install 且未完成时进入（NewShell），完成或跳过写 General.Onboarded 并回 Workspace；每步选择即时持久化，跳过不回滚已做的选择；内容超长走滚动条，操作区固定不滚
+ * [OUTPUT]: routeOnboarding、Shell.onboardingPage（三步全窗首启引导：居中自适应主内容区（应用标记 + 步骤标题 + 副标题 + 步骤卡片/选项，垂直水平居中且超长自适应滚动）与固定底部操作栏（圆点步进 + Skip/Back/Continue））；onboardAppearance 的三张主题预览卡（System 半明半暗、Light、Dark，designTokens 固定调色）、onboardAgents 的 Agent 开关组、onboardPhone 的 Mac+手机居中组件示意、finishOnboarding
+ * [POS]: 首启引导拥有整个画布（无侧栏/标题栏/浮层，Shell.View 专用分支）；仅 fresh install 且未完成时进入（NewShell），完成或跳过写 General.Onboarded 并回 Workspace；每步选择即时持久化，跳过不回滚已做的选择；内容超长走滚动条，主要内容区垂直水平居中呈现呼吸感，操作区固定不滚
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -41,26 +41,28 @@ func (s *Shell) finishOnboarding() {
 	s.router.Replace(routeWorkspace)
 }
 
-// onboardingPage draws the guide: a fixed header (mark, step title,
-// subtitle), a scrollable content region, and a fixed footer (step dots,
-// Skip / Back / Continue) — the content scrolls, the controls never do.
+// onboardingPage draws the guide: the main content region (mark, step
+// title, subtitle, and step options) is vertically and horizontally
+// centered with generous breathing room, scrolling smoothly if the content
+// overflows, while the footer controls stay pinned at the bottom.
 func (s *Shell) onboardingPage(c *ui.Context) {
 	sp := Spacing()
 	ui.Column(c).Fill().Children(func() {
-		// Fixed header.
-		ui.Column(c).FillWidth().Padding(sp.XL, sp.XL, sp.L, sp.XL).Children(func() {
-			ui.Column(c).Grow(1).Center().Gap(sp.S).Children(func() {
-				if bmp := brandPNG("solco-128"); bmp != nil {
-					ui.Image(c, bmp).Width(44).Height(44).Fit(ui.ScaleDown)
-				}
-				s.onboardingStepHeader(c)
-			})
-		})
-		// Scrollable content.
-		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Padding(sp.S, sp.XL, sp.XL, sp.XL).Children(func() {
-				ui.Column(c).Grow(1).Center().Children(func() {
-					ui.Column(c).Width(onboardingContentWidth).Gap(sp.XL).Children(func() {
+		// Centered main content stage.
+		ui.Column(c).Grow(1).MinHeight(0).Center().Children(func() {
+			ui.Scroll(c).FillWidth().MaxWidth(onboardingContentWidth + sp.XL*2).MinHeight(0).Children(func() {
+				ui.Column(c).FillWidth().Padding(sp.XL, sp.XL).Gap(28).AlignItems(ui.Center).Children(func() {
+					// Hero header block: App brand mark + Step title & subtitle with breathing space.
+					ui.Column(c).FillWidth().Gap(sp.L).AlignItems(ui.Center).Children(func() {
+						if bmp := brandPNG("solco-128"); bmp != nil {
+							ui.Image(c, bmp).Width(48).Height(48).Fit(ui.ScaleDown)
+						}
+						ui.Column(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
+							s.onboardingStepHeader(c)
+						})
+					})
+					// Step content block.
+					ui.Column(c).Width(onboardingContentWidth).Children(func() {
 						switch s.onboardStep {
 						case 0:
 							s.onboardAppearance(c)
@@ -154,9 +156,9 @@ func (s *Shell) themeCard(c *ui.Context, label string, selected bool, paint func
 	if selected {
 		border = t.Accent
 	}
-	card := ui.ButtonBase(c).Grow(1).Padding(sp.S).Radius(Radius().Card).
+	card := ui.ButtonBase(c).Grow(1).Padding(sp.M).Radius(Radius().Card).
 		Border(1.5, border).FocusRing(false).Label(label).Children(func() {
-		ui.Column(c).FillWidth().Gap(sp.S).Children(func() {
+		ui.Column(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
 			paint()
 			ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
 				dot := ui.Box(c).Width(13).Height(13).Radius(6.5).Shrink(0)
@@ -283,7 +285,7 @@ func (s *Shell) onboardPhone(c *ui.Context) {
 	sp := Spacing()
 	t := c.Theme()
 	k := designTokens(t.Dark)
-	ui.Row(c).FillWidth().Gap(sp.XL).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).FillWidth().Gap(sp.XL).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
 		// The Mac: the same mini window, plus one live agent row.
 		ui.Box(c).Width(210).Height(140).Shrink(0).Radius(Radius().Card).
 			Background(k.Content).Border(1, k.BorderSubtle).Clip().Children(func() {
