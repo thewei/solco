@@ -217,7 +217,7 @@
 
 ## 7. 第四轮深度审计阻断项（2026-11-04）
 
-> 详细源码证据、临时复现步骤与关闭门禁见 `docs/assistants-v3-audit-2026-11-04.md` `9。以下 **5 项为隔离负向测试 RED**，不是说既有单元测试无法编译。所有 /tmp 临时测试副本已删除、没有操作真实 SQLite 或记忆文件；其它 Agent 同期进行的 Group/Goal/UI 修复应单独复验后记 PASS。
+> 详细源码证据、临时复现步骤与关闭门禁见 `docs/assistants-v3-audit-2026-11-04.md` 第 9 节。以下 **5 项为隔离负向测试 RED**，不是说既有单元测试无法编译。所有 /tmp 临时测试副本已删除、没有操作真实 SQLite 或记忆文件；其它 Agent 同期进行的 Group/Goal/UI 修复应单独复验后记 PASS。
 
 | ID | 优先级 | 已证实问题 | 状态 | 关闭要求 |
 | --- | --- | --- | --- | --- |
@@ -228,3 +228,26 @@
 | AUD-18 | **P0 审批** | `RoutineKeeper` 校验 definition hash 后、`config.Approve` 之前被并发修改 Prompt，仍启用新 Prompt 且标 Routine Active | **BLOCKED / RED** | 同一跨进程锁内对**同一版本文档** `ApproveIfHash`；SQLite/YAML crash-reconcile 协议，1000 次交错不启用未批准内容 |
 
 **独立门禁**：插件 Memory/Routine/Approval/Group/Rule 专项 Go race 测试 PASS；Go Host+PersonalAgent+Hostd PASS；Mobile TS/Lint/Vitest PASS（592 pass，2 skip）。真正的 OS 沙箱、生产部署、Mac/Android 实机与跨进程 stress 本轮没有执行。**优先次序：AUD-18 → AUD-14/15 → AUD-16/17**；不可因历史 22/22 VERIFIED 而关闭这些问题。
+
+## 8. 后续实现修复与提交记录（2026-11-04；覆盖 `7 的初始 RED 状态）
+
+> 详细变更、测试依据与剩余风险见 `docs/assistants-v3-audit-2026-11-04.md` `10。`7` 是**修复前**的证据；本节是**修复后**的台账。PASS 仅表示对应原子不变量，绝非 Assistant 产品整体最终验收。
+
+| 问题 | 本次状态 | 修复 commit / 证据 | 不可忽略的剩余项 |
+| --- | --- | --- | --- |
+| AUD-14：Memory 父目录 symlink | **PARTIAL** | Desktop `d6f0df6`，目录 `Lstat` + 锁文件 `O_NOFOLLOW`，跨 Assistant `facts/` 投影负向测试 GREEN | 未实现完整 dirfd / `openat` + 防目录切换竞态，同 UID OS 隔离未完成 |
+| AUD-15：文件编辑 bypass 审批 | **PARTIAL** | Desktop `d6f0df6`，文件直接改 approved 的行为改成等待 Owner 的 correction candidate；测试 GREEN | Agent 与 Owner 仍同 UID，可直调高权限 CLI；关联 AUD-01 继续 **P0 OPEN** |
+| AUD-16：同内容跨 Assistant 幂等碰撞 | **PASS（核心）** | Desktop `d6f0df6`，requestId 含 assistantId，跨 Assistant import 回归 GREEN | 未做真机跨端验收 |
+| AUD-17：Memory ABA 修订冲突 | **PASS（核心）** | Desktop `d6f0df6`，file requestId 含 base revision，合法回改 GREEN | — |
+| AUD-09：YAML 并发与 Race | **PASS（插件写入者）** | Desktop `9657565`，跨进程 flock + Save CAS + 去全局 indent，12 goroutine / 6 子进程和 race PASS | 外部任意编辑器不合作 flock 时无强隔离 |
+| AUD-18：审批 hash/启用 TOCTOU | **PASS（定义校验） / PARTIAL（跨库恢复）** | Desktop `9e877b5`，`config.ApproveIf` 同一文件锁内校验 hash 并解除 Draft；中途换 Prompt 的 RED→GREEN | YAML 生效但 SQLite 未落库时需要 crash/recovery reconciliation |
+| AUD-10：拒绝重放改 YAML | **PASS（顺序 + 同 requestId 并发） / PARTIAL（崩溃恢复）** | Desktop `9e877b5` + `1ab92c1`，收据写前校验 + routine mutation 跨进程锁；reject replay / 双 CLI 竞争 GREEN | 首次写 YAML→写 SQLite 之间被 SIGKILL 的 durable intent / recovery 仍未实现 |
+| AUD-13：Host 无限等待 CLI | **PASS（有界）** | Desktop `b87ded8`，120 秒 deadline、请求断线保留、超时 `personal_agent_uncertain` 同 requestId 重试；Host 与 Race 测试 PASS | — |
+| AUD-12：手机第一条 Send | **PASS（在线行为逻辑） / PARTIAL（持久性）** | Mobile `536579d`，Coordinator ready 后真正 `sendChat` 一次，再进 Chat；无法确认发送则返还草稿；TS/Lint/Vitest 592 pass | Android E2E / App 强杀后的首条消息持久 outbox **未实现** |
+| AUD-11：后台 daemon 生命周期 | **OPEN** | launchd service `--standby` 已有，未改服务协议 | 未证明 App/Herdr 退出、无 session、重启后继续工作 |
+
+**门禁**：Desktop `go test ./...`、`go tool mygo vet .`、`go tool mygo build`（生成并签名 Solco.app + DMG）、`plutil -lint` PASS；插件 `go test ./...`、`go test -race ./internal/config ./internal/personalagent ./internal/daemon` PASS；Mobile 178 fixtures/chat-page hash/TS/Lint/592 tests PASS。
+
+**长时间崩溃**：修复 `eb9b5bc`（JSC scheme bridge），25 分钟 / 约 12 万消息压力测试无崩溃；用户提交的 16:59.ips 是 17:52 修复版安装之前。截止 18:35 +0800，安装版进程已连续运行 42 分钟、未见新 Solco.ips。继续做多日观察、不要从这一段判断“永不崩溃”。
+
+**不混提交**：以上五笔 Desktop + 一笔 Mobile 是本轮工作；OSC 7501 与 Hook 修复 `dea65e9`、之前的 Group/Goal `d792552`、MyGo JSC `eb9b5bc` 属其他独立提交。所有其它 staged/unstaged 用户改动保留。需要真正关闭的发布 P0 仍是 AUD-01/14/15 的可信角色隔离与 AUD-10/18 的 YAML/SQLite crash-recovery。
