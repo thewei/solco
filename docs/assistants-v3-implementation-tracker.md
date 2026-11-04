@@ -52,7 +52,29 @@
 
 | 编号 | 状态 | 证据 |
 | --- | --- | --- |
-| MU-01 … MU-23 | NOT VERIFIED | 逐条在对应批次验证后回填 |
+| MU-01 | PARTIAL | 圆形首字头像（深色主题）实机截图 + Workspace 方形 Tile 未动（U0-1/2）；Group 叠头像有单测/实机截图（U1-5）；亮色主题、超长名、状态位逐项对比 NOT VERIFIED |
+| MU-02 | PARTIAL | `TestAvatarInitialAndToneAreStable`：改名不换色、CJK/emoji/空值回退；用户头像图片未实现，NOT VERIFIED |
+| MU-03 | PARTIAL | 实机 AX 树：`+` 菜单恰两项，Workspace 与 /assistants 路由均可开（U0-3）；键盘开合/切换、与 row selection 互不影响 NOT VERIFIED |
+| MU-04 | VERIFIED | `assistants_intent_test.go`：多次 Snapshot 不丢、单调、TTL、门关闭、插件不可读仍可取；实机从其他路由首次进入、插件缺失时仍打开表单（U0-4） |
+| MU-05 | VERIFIED | 实机：缺插件→Create 报错、名称保留；恢复后同输入恰新增 1 个并进入其聊天（`assistant list` 核对）；requestId 幂等见核心 receipts 测试（U0-5） |
+| MU-06 | PARTIAL | Host `groups` 路由与 capability `personalAgentGroups`，golden 双端；旧 Host 在手机/桌面的“unavailable、不冒充普通 Assistant”无专项实机/测试，NOT VERIFIED |
+| MU-07 | PARTIAL | `group_test.go`：成员/消息/作者以 participant id 记录；改名/同名/移除成员的串线专项用例未单列，NOT VERIFIED |
+| MU-08 | NOT VERIFIED | 手机 `[id].tsx` 已直达共享 ChatView（U1-7 IMPLEMENTED）；真机验证被手机锁屏阻塞（见 §3 手机真机） |
+| MU-09 | NOT VERIFIED | Android 键盘/附件/长列表/草稿保留需真机；原 Pane Chat 的 `pnpm test` 无回归，但不等于真机验证 |
+| MU-10 | PARTIAL | 仅用户精确 @ 建 delivery、无 @ 不起 Agent、`say` 要求真实在线 Agent；实机 Duo 验证无 @ → 无 Agent（U1-3/4）；预算/ACL 对跨 Assistant 交互的专项未做（Peer 交互整体 DEFERRED） |
+| MU-11 | NOT VERIFIED | Peer Delegation 未实现（审计表：Peer DM/Group、跨 Assistant @ 延后）；Worker Task 与 Assistant 分离是既有模型，Memory 默认不共享（share 需显式） |
+| MU-12 | PARTIAL | 每个 Assistant 创建即有默认 Prompt 与版本（U2-1）；Coordinator prompt 规定 Memory 只能提议、不改设置（U5）；“Memory 不能覆盖更高优先级 Policy”仅在 prompt 层，无对抗性测试，NOT VERIFIED |
+| MU-13 | VERIFIED | configured/granted/bound/verified 四态分开；实机：12 个已配置、仅授权 1 个，运行中 `/mcp` 恰 1 个 connected；probe 报 connected 与 failed 各一（U2-3） |
+| MU-14 | PARTIAL | Registry 只读名称/传输/程序，不含 args/env/header，Host 不下发 secret；Codex/其它 Agent 明确 `mcp_unsupported`；撤销授权后运行中会话的行为、服务器断开实机 NOT VERIFIED |
+| MU-15 | PARTIAL | Assistant 级 Agent/Model/Effort 与 MCP 绑定互不污染（单测 + 实机 `--effort low`）；已运行 Agent 不被重启（设计 + `runtime` 展示 behind 标记）；A/B 并发切换的实机交叉验证 NOT VERIFIED |
+| MU-16 | PARTIAL | 接受→计划→委派→核验→才完成→汇报事实卡的闭环单测齐全；实机：批准计划后 12 s 内出现任务 + `delegated` 事实，重启不重复；真实 Agent 跑完一个里程碑并回证据的端到端 NOT VERIFIED（为省预算只走 Draft 路径） |
+| MU-17 | PARTIAL | 结果只由核心写成系统事实卡（“Solco record”），不经 Agent 转述（U3-2/3-4）；requestId 幂等保证重试不重复；手机断网中途的实机 NOT VERIFIED |
+| MU-18 | PARTIAL | `Supervisor` 只推进已批准计划；任务预算 held 一次、扇出上限、重规划上限 5、陈旧退避（U3）；Quiet Hours/日预算/等级/汇报间隔单测（U5）；多设备撤销与长时间无限循环观测 NOT VERIFIED |
+| MU-19 | PARTIAL | `routine draft` 只写草稿（`draft: true`，70 s 0 任务），批准卡绑定定义哈希后才启用（U4 实机）；Coordinator 在真实对话里自己调用 `routine draft` NOT VERIFIED |
+| MU-20 | PARTIAL | Routine 记录 owner/requestedBy/source/correlationId，任务归 owner、`routine_done` 回 owner 账本；triggeredBy/executedBy/reportedBy 未作为独立字段，NOT VERIFIED |
+| MU-21 | PARTIAL | 旧 `automations.yaml` 保持；实机整分触发恰 1 次、无双跑，暂停后不再触发；sleep/DST/重复事件/launch uncertain 沿用 schedule 包既有测试，本轮未新增 |
+| MU-22 | PARTIAL | User add/edit、Agent propose、files 编辑作者分开记录；Forget 清空所有版本；陈旧 revision → conflict 候选并存、拒绝清单（实机见 §3 U5）；跨助手保护沿用 share ACL；每周模型整理未做 |
+| MU-23 | NOT VERIFIED | Android/macOS 真机快切需手机；常驻 Host 不宣告桌面绑定能力的门禁有 E05 单测，真机 NOT VERIFIED |
 
 ## 3. 验证记录
 
@@ -100,3 +122,9 @@
 - NOT VERIFIED：桌面 Memory/Behavior 标签与手机两屏的实机视觉；手机真机；Quiet Hours 真实跨午夜在 daemon 里的墙钟行为（单测用注入时钟）；每周模型整理（需要模型预算，未做）；“批准后自主”等级（未做）。
 - 已知限制：作者标签不是证明；重复项的“保留两者”即不处理；Routines 不受主动等级影响；手机展示条目而非文件树。
 - 进度：VERIFIED 21 / 总 22（不含 DEFERRED）= 95%（U1-7 仍因手机锁屏无法真机安装停在 IMPLEMENTED）。
+
+### 手机真机（2026-11-04 14:2x）
+- `scripts/android-release.sh`（首次因 gradle 客户端随 shell 返回被杀，改用 `start_new_session` 分离启动后 BUILD SUCCESSFUL）：arm64-v8a release apk 72 MB；手机亮屏后按 vivo 流程勾选“已了解风险检测结果”+“继续安装”，`adb install -r` → `Success`，`pm grant POST_NOTIFICATIONS`，电池白名单已加，`pidof` 有进程，截图显示 Agents 列表且连上 Mac（Relay → 桌面 `Solco.app` 0.12.2 重装后 P2P `192.168.5.68`）。
+- 桌面：`solco-install` 流程（vet → build → 退出旧实例 → 替换 → 签名 → 启动）完成，`assistants available` 日志出现。
+- NOT VERIFIED：手机上 Assistants 入口 → Memory/Behavior 两屏的真机视觉与读写。截图序列中途发现手机前台已是微信（用户在使用手机），而 adb 截图疑似停在旧帧，随即停止所有 adb 输入，避免误触用户的前台应用；其间有一次落点 (1175,1366) 的点击发生在此判断之前，对象不明，需用户自查微信是否被误触。Mac 端重装后手机顶栏暂未再显示 Assistants 机器人图标，尚未定位（Host `capabilities.personalAgent` 由 `assistantsRemote` 动态给出，日志里桌面端 `assistants available` 已出现；需要在手机前台稳定、用户在场时重新核对，不能用 NOT VERIFIED 以外的状态记录）。
+
