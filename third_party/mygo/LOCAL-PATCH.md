@@ -1,7 +1,27 @@
 # Local patch over mygo v0.6.4
 
-Four deltas, re-applied by hand after every pin bump. They live outside
+Five deltas, re-applied by hand after every pin bump. They live outside
 Solco and stay as small as deletion allows.
+
+## Delta 5: the page's bridge posts through the scheme handler (2026-11-04)
+
+macOS only. `WKScriptMessage.body` is deserialized by WebKit inside Solco's
+own process, in a JavaScriptCore VM whose "JSC Heap Collector Thread" traps
+(`EXC_BREAKPOINT` at one fixed JavaScriptCore address) after a few tens of
+thousands of messages; a flood of page→Go calls reproduces it in 3–12
+minutes and it ended long-running sessions after about an hour (five
+reports on 2026-11-04). `JSC_useConcurrentGC=0` did not change it. A page
+served from the app's own `mygo:` origin therefore sends each bridge message
+as one serial `fetch("/__mygo/msg", {method:"POST"})` that the existing
+scheme handler delivers (the body never enters that VM); a refusal falls
+back to `postMessage` for good, so a build without the Go side keeps
+working. Only the page→Go direction changes — replies, events and channels
+still travel through `evaluateJavaScript` — and every message still passes
+the per-window secret check in `handleMessage` and runs on the main thread.
+
+Sites: `protocol.go` (`serveBridgeMessage`, called from `serveScheme`),
+`packages/bridge/src/bridge.ts` (`viaFetch`) and its generated
+`internal/bridge/bridge.js` (`Z`). Evidence: `docs/debug/2026-11-04-jsc-heap-collector-crash.md`.
 
 ## Delta 4: terminal OSC 7501 program status (2026-10-15)
 

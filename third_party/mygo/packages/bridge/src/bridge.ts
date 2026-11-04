@@ -180,9 +180,33 @@ interface Transport {
   postWithFiles?(message: string, files: FileList): void;
 }
 
+// Solco local patch (Delta 5): on macOS a WKScriptMessage body is deserialized
+// by WebKit in this process's JavaScriptCore VM, whose heap collector trapped
+// after tens of thousands of messages. Pages served from the app's own origin
+// therefore send through one serial fetch to the scheme handler instead; a
+// refusal (no body delivered) falls back to postMessage for good.
+function viaFetch(handler: any): (m: string) => void {
+  if (location.protocol !== "mygo:") return (m) => handler.postMessage(m);
+  let queue: Promise<unknown> = Promise.resolve();
+  let ok = true;
+  return (m) => {
+    if (!ok) return handler.postMessage(m);
+    queue = queue.then(() =>
+      fetch("/__mygo/msg", { method: "POST", body: m, cache: "no-store" })
+        .then((r) => {
+          if (!r.ok) throw 0;
+        })
+        .catch(() => {
+          ok = false;
+          handler.postMessage(m);
+        }),
+    );
+  };
+}
+
 function transport(w: any): Transport | null {
   const handler = w.webkit?.messageHandlers?.mygo;
-  if (handler) return { post: (m) => handler.postMessage(m) };
+  if (handler) return { post: viaFetch(handler) };
   const webview = w.chrome?.webview;
   if (!webview) return null;
   return {

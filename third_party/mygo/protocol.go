@@ -4,6 +4,7 @@ package mygo
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"mime"
@@ -144,6 +145,9 @@ func serveScheme(win *Window, h http.Handler, req *platform.SchemeRequest) {
 	body := req.Body
 	if body == nil {
 		body = http.NoBody
+	}
+	if serveBridgeMessage(win, rw, req, body) {
+		return
 	}
 	r, err := http.NewRequestWithContext(req.Context, req.Method, req.URL, body)
 	if err != nil {
@@ -482,4 +486,43 @@ func (d *downloadWriter) Write(b []byte) (int, error) {
 		d.err = err
 	}
 	return n, err
+}
+
+// bridgeMessagePath is where the page's bridge posts its messages on macOS
+// (Solco local patch, Delta 5; see third_party/mygo/LOCAL-PATCH.md).
+const bridgeMessagePath = "/__mygo/msg"
+
+var bridgeFetchOnce sync.Once
+
+// maxBridgeMessage bounds one message (a 32 MiB attachment travels as base64).
+const maxBridgeMessage = 96 << 20
+
+// serveBridgeMessage takes a bridge message posted to the frontend origin's
+// scheme handler instead of through WKScriptMessageHandler, whose bodies
+// WebKit deserializes in this process's JavaScriptCore heap. It reports
+// whether the request was one. An empty or refused body answers an error so
+// the page falls back to postMessage; the message still passes the secret
+// check in handleMessage and runs on the main thread like a script message.
+func serveBridgeMessage(win *Window, rw *schemeWriter, req *platform.SchemeRequest, body io.Reader) bool {
+	if runtime.GOOS != "darwin" || req.Method != http.MethodPost {
+		return false
+	}
+	u, err := url.Parse(req.URL)
+	if err != nil || u.Path != bridgeMessagePath || !strings.EqualFold(u.Scheme, frontendScheme) {
+		return false
+	}
+	if origin := http.Header(req.Header).Get("Origin"); origin != "" && origin != "null" && !win.isTrusted(appOrigin(origin)) {
+		rw.WriteHeader(http.StatusForbidden)
+		return true
+	}
+	data, err := io.ReadAll(io.LimitReader(body, maxBridgeMessage))
+	if err != nil || len(data) == 0 {
+		rw.WriteHeader(http.StatusBadRequest)
+		return true
+	}
+	msg := string(data)
+	bridgeFetchOnce.Do(func() { log.Printf("mygo: bridge messages arrive through the scheme handler") })
+	postMain(func() { win.handleMessage(msg) })
+	rw.WriteHeader(http.StatusNoContent)
+	return true
 }
