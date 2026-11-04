@@ -1,0 +1,16 @@
+{
+  "report": {
+    "assistantId": "a_0000000000000001",
+    "state": "uncertain",
+    "fromSeq": 4,
+    "throughSeq": 9,
+    "submittedSeq": 4,
+    "attempts": 1,
+    "nextAt": 0,
+    "lastSubmittedAt": 0,
+    "lastError": "Herdr submission outcome is unknown",
+    "coordinatorRevision": 0,
+    "updatedAt": 0
+  },
+  "schema": 1
+}

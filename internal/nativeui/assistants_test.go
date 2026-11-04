@@ -43,6 +43,9 @@ const assistantsOverviewWithGroup = `{"schema":1,"needsYou":0,"assistants":[{"id
 // assistantsOverviewOverride, when set, replaces the scripted overview.
 var assistantsOverviewOverride string
 
+// assistantsReportOverride scripts the opt-in Coordinator reporting outbox.
+var assistantsReportOverride string
+
 // assistantsCoordinators scripts `coordinator show <id>` for a test.
 var assistantsCoordinators = map[string]string{}
 
@@ -71,6 +74,11 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 				return []byte(`{"schema":1,"coordinator":{"assistantId":"` + id + `","state":"none","revision":0}}`), nil
 			}
 			switch strings.Join(args, " ") {
+			case "report show a_1":
+				if assistantsReportOverride != "" {
+					return []byte(assistantsReportOverride), nil
+				}
+				return []byte(`{"schema":1,"report":{"assistantId":"a_1","state":"idle"}}`), nil
 			case "routine list --assistant a_1":
 				return []byte(`{"schema":1,"routines":[{"name":"morning-check","assistantId":"a_1","requestedBy":"assistant","source":"chat","state":"draft","revision":1,"approved":false,"createdAt":1,"updatedAt":1,"cron":"0 9 * * *","repo":"/tmp","agent":"claude","headless":true,"paused":false}]}`), nil
 			case "memory review a_1":
@@ -116,6 +124,7 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 	t.Cleanup(func() {
 		assistantsCoordinators = map[string]string{}
 		assistantsOverviewOverride = ""
+		assistantsReportOverride = ""
 		newAssistantsClient = func(root, session string) *personalagent.Client {
 			return personalagent.NewClient(root, []string{"HERDR_SOCKET_PATH=" + herdr.SocketPath(session)})
 		}
@@ -611,5 +620,34 @@ func TestAssistantsPageLeavesThroughAWorkspaceRow(t *testing.T) {
 	}
 	if s.router.Path() != routeWorkspace {
 		t.Fatalf("path=%q after clicking the selected Workspace row, want /workspace", s.router.Path())
+	}
+}
+
+func TestAssistantsBridgeReportsUncertainProgressAndFencesOwnerResolution(t *testing.T) {
+	calls := stubAssistants(t, false)
+	assistantsReportOverride = `{"schema":1,"report":{"assistantId":"a_1","state":"uncertain","fromSeq":4,"throughSeq":9,"submittedSeq":4,"attempts":1,"lastError":"Herdr submission outcome is unknown"}}`
+	s := openAssistantsShell(t)
+	bridge := NewAssistantsBridge(s)
+	view, err := bridge.Snapshot(t.Context())
+	if err != nil || view.Detail == nil || view.Detail.Report == nil || view.Detail.Report.State != "uncertain" || view.Detail.Report.ThroughSeq != 9 {
+		t.Fatalf("uncertain report missing from light snapshot: %+v %v", view.Detail, err)
+	}
+	if err := bridge.ResolveCoordinatorReport(t.Context(), "owner-checked", "a_1", 9, "skip", true); err != nil {
+		t.Fatalf("bridge resolve: %v", err)
+	}
+	var found bool
+	for _, c := range *calls {
+		if c[0] == "report resolve a_1" {
+			found = true
+			if !strings.Contains(c[1], `"requestId":"owner-checked"`) ||
+				!strings.Contains(c[1], `"throughSeq":9`) ||
+				!strings.Contains(c[1], `"action":"skip"`) ||
+				!strings.Contains(c[1], `"confirmed":true`) {
+				t.Fatalf("owner decision lost its exact sequence/action: %q", c[1])
+			}
+		}
+	}
+	if !found {
+		t.Fatal("owner report decision did not reach the plugin")
 	}
 }

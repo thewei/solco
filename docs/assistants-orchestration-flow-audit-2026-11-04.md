@@ -94,3 +94,13 @@
 - 先持久化 `claimed` 再触碰 Herdr；明确 pre-send 拒绝可延期重试，超时/崩溃/不明结果 → `uncertain` 永不自动重发，并写明示的 Solco FactBlocked 告警（不进入后续报告源，防止自循环）；人工检查原 Chat 后，通过 CLI `assistant report show/resolve` 幂等地 Skip 或确认风险后 Retry。
 - daemon 单独 goroutine + atomic fence，Herdr 阻塞不拖住 Task/Goal dispatcher；Archive/Restore 维持不确定状态，永久删除清理 outbox。完整架构、恢复说明与仍未验收事项见 `docs/assistants-coordinator-report-delivery-2026-11-05.md`。
 - **未宣称完成**：尚未对真实 OMP/Herdr 会话验收模型自然语言答复与端到端交互，也未实现 Owner-only 的桌面/移动端人工恢复按钮，以及复杂请求到 Task/Goal 的强制 durable trace。
+
+## 继续实施：原 OMP Coordinator 的主动自然语言汇报（2026-11-05）
+
+- **真实对话而非伪造消息**：`ReportPump` 只向 `CoordinatorReady` 且具备完整 Herdr session/workspace/pane 身份的原协调者发送受控 `agent.prompt`；不创建第二个 Agent、不会把 Solco Fact 插入 OMP 转录。提示词明确声明是自动状态请求、不是人的消息，要求按事实序号/任务/Run/证据说明进度、阻塞和下一步，不执行任务或猜测完成比例。
+- **唯一事实源**：摘要请求读取当前 Assistant 的持久化 `goal_facts`（有界最新 12 条，携带 seq/Task/Goal）和真实 Task/最近 Run（有界 12 条）；不能证明 OMP 回复完成，`submitted` 只代表 Herdr 确认接收。默认 `reportEveryMin=0` 不提交；启用后尊重 cadence、level、静默期，原会话未就绪时不投递。
+- **crash-safe outbox**：`coordinator_reports`（DB v21）先持久化 `claimed` 再发送 Herdr。明确未输入的拒绝才有限次数退避重试；Herdr 提交结果不确定及崩溃后 claim 一律停为 `uncertain`，并向事实账本写一条需要人确认的警示，不自行重发。用户必须检查原对话，再在 desktop/phone 选择 `skip`（不重发）或 `retry`（可能重复），通过 requestId + throughSeq + confirmed 的 CAS/幂等门禁恢复。
+- **跨端可操作**：桌面 Assistants 的对话上方显示独立报告状态条与二次确认 Sheet；MyGo `assistants.ResolveCoordinatorReport` 通过 `internal/personalagent.Client` 仍调用同一插件。手机 Host `GET /assistants/{id}/report`（ScopeView）、`POST .../report/resolve`（ScopeManage）从插件获取/更新状态，手机 Activity history 上显示相同告警并用原生二次确认。`personalAgentNarrativeReports` 需要插件实际 `assistant report probe` 成功，旧版插件不误展示。手机响应和恢复命令通过 Zod+Host 金样验证。
+- **变更竞态**：Herdr pane 检查可能耗时，发送前再读个人 Proactivity，并在 SQL claim 中检查 Coordinator 的 revision/Herdr 身份、Assistant Active、reportEveryMin 和 level。若静默规则中途变化，不能仅靠旧时间点状态接受后续投递。提交后任何情况不会宣称 OMP 已输出回复。
+- **自动验证**：插件多项 ReportPump 功能/崩溃/幂等/清理/竞态测试；Go NativeUI 桥、Host Scope + 请求体拒绝测试；WebView TypeScript 构建及移动 Zod/端测试。真实 OMP/Herdr/手机 UI 端到端仍待实机验收。
+- **未完成**：没有 Chat turn 与 Task ID 的强制请求关联、Agent 自然语言输出的端到端验收/证据质量检查、关闭手机进程后依然投递的系统级推送；模型回复由原 Herdr transcript 单独拥有，不保证每次请求都有成功回复。CLI 的 `confirmed=true` 是操作者显式声明，当前还不是无法被 Agent 伪造的权限身份认证，跨端 Host ScopeManage 仍受真实配对设备授权约束。

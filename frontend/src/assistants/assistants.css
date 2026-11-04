@@ -479,6 +479,20 @@
   color: var(--warning);
 }
 
+/* The reporting outbox is Solco metadata above the conversation, never a
+   synthetic Chat turn. Keep owner-reconciliation controls quiet and readable. */
+.as-report {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+}
+.as-report p { margin: 0; line-height: 1.45; }
+.as-report .as-meta { color: var(--text-muted); }
+.as-report-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.as-report-actions .as-btn { font-size: 12px; }
+
 .as-strip {
   margin: 10px 16px 0;
   border: 1px solid var(--border-subtle);

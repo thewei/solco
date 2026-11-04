@@ -83,3 +83,4 @@ remotedesktop.go: Remote Desktop 接缝与端点——`RemoteDesktop` 接口（E
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 personal_agent_activity.go: Assistant Activity（2026-11-04）——有界 cursor GET 与显式 per-device ACK POST，消费端身份由已配对 Device ID 派生、ScopeView/ScopeManage 分开、严格拒绝伪造 consumer；权威是插件 `goal_facts` AUTOINCREMENT seq 与 `activity_cursors`，没有第二套消息库，读取不 ACK。
 personal_agent_activity.go（2026-11-05 增强）: 另有 `/activity/notifications` 与 `/notifications/ack`，通知 cursor `device:<id>:notifications` 与人的 `device:<id>` 完全分离；`GET` 使用插件 `--unread` 单读，ScopeView；ACK ScopeManage、从不接收客户端 consumer；bootstrap 宣告 `personalAgentActivityNotices` 仅在插件可用时。
+personal_agent_report.go（2026-11-05）：Coordinator 原 OMP 主动汇报的只读 status + ScopeManage `report/resolve`；严格校验 requestId / throughSeq / action skip|retry / confirmed，拒绝多余 JSON/冒名参数；`personalAgentNarrativeReports` capability 必须由 `assistant report probe` 实际支持来开启，旧插件不误展示。

@@ -110,6 +110,10 @@ export function AssistantsPage() {
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const archiveRequest = useRef("");
+  // A decision belongs to the exact Assistant and fact watermark. A
+  // selection change must never resolve another Assistant's report.
+  const [reportDecision, setReportDecision] = useState<{ assistantId: string; throughSeq: number; action: "skip" | "retry"; requestId: string } | null>(null);
+  const [resolvingReport, setResolvingReport] = useState(false);
   const selected = view?.selected ?? "";
   const { drawer, pull: pullDrawer } = useDrawer(selected, tab !== null);
   // The sidebar's "+" posts an intent (a monotonic seq). The page reads it
@@ -208,6 +212,7 @@ export function AssistantsPage() {
   const others = detail.inbox.items.filter((i) => i.kind !== "approval" && i.kind !== "news");
   const needsCount = pending.length + others.length;
   const co = detail.coordinator;
+  const report = detail.report;
   const status = coordinatorStatus(a.status, co.state, detail.coordinatorOpen);
   const canStop = co.state === "starting" || co.state === "ready";
   const tabs: [Tab, string, number][] = [
@@ -299,6 +304,22 @@ export function AssistantsPage() {
       {needsCount > 0 ? <Strip pending={pending} others={others} open={stripOpen} setOpen={setStripOpen} act={act} more={() => setTab("needs")} /> : null}
       <WorkPulse row={view.assistants.find((row) => row.id === a.id)} onTasks={() => setTab("tasks")} />
       <FactStrip facts={detail.facts} onOpenTask={() => setTab("tasks")} onOpenGoal={() => setTab("watching")} />
+      {report?.state === "uncertain" ? (
+        <section className="as-note warn as-report" aria-label="Coordinator progress report needs review">
+          <strong>Progress report delivery uncertain</strong>
+          <p>Herdr might have received the automatic update. Check the original OMP conversation first; Solco will not send it again without your decision.</p>
+          <p className="as-meta">Activity through fact #{report.throughSeq}. This is delivery status, not an OMP reply.</p>
+          <div className="as-report-actions">
+            {report.paneId ? <button type="button" className="as-btn" onClick={() => { if (report.paneId) void assistants.openPane(report.paneId).catch((e) => setError(msg(e))); }}>Open original Terminal</button> : null}
+            <button type="button" className="as-btn" disabled={report.throughSeq <= 0} onClick={() => setReportDecision({ assistantId: a.id, throughSeq: report.throughSeq, action: "skip", requestId: rid() })}>Already delivered · Skip</button>
+            <button type="button" className="as-btn" disabled={report.throughSeq <= 0} onClick={() => setReportDecision({ assistantId: a.id, throughSeq: report.throughSeq, action: "retry", requestId: rid() })}>Send again…</button>
+          </div>
+        </section>
+      ) : report?.state === "queued" || report?.state === "claimed" ? (
+        <div className="as-note as-report" role="status">
+          Solco is {report.state === "claimed" ? "submitting" : "waiting to submit"} a progress update to the existing Coordinator. This is not a completed reply.
+        </div>
+      ) : null}
       {a.status !== "active" ? (
         <div className="as-note warn">
           Paused — new tasks and watches are not started. The conversation keeps working.
@@ -334,6 +355,27 @@ export function AssistantsPage() {
       {form === "rename" ? <Rename assistant={a} onClose={() => setForm(null)} act={act} /> : null}
       {form === "watch" ? <NewWatch assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
       {form === "task" ? <NewTask assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
+      {reportDecision?.assistantId === a.id && report?.state === "uncertain" && report.throughSeq === reportDecision.throughSeq ? (
+        <Sheet title={reportDecision.action === "skip" ? "Confirm report already delivered" : "Send the progress report again?"}
+          submit={resolvingReport ? "Saving…" : reportDecision.action === "skip" ? "Mark handled" : "Retry delivery"}
+          busy={resolvingReport} error={error}
+          onClose={() => setReportDecision(null)}
+          onSubmit={() => {
+            if (resolvingReport || !reportDecision) return;
+            setResolvingReport(true);
+            void act(() => assistants.resolveCoordinatorReport(reportDecision.requestId, reportDecision.assistantId,
+              reportDecision.throughSeq, reportDecision.action, true)).then((failure) => {
+              setResolvingReport(false);
+              if (!failure) { setReportDecision(null); pull(); }
+            });
+          }}>
+          <p>Check the original OMP conversation before proceeding. Solco cannot prove whether Herdr accepted the report at the last attempt.</p>
+          <p>{reportDecision.action === "skip"
+            ? "Choose this only if the report already arrived, or if you intentionally want to discard this pending update. The activity facts remain available."
+            : "Retrying can add the same progress message twice. Only proceed after checking the original conversation and accepting that risk."}</p>
+          <p className="as-meta">This decision applies only to activity through fact #{reportDecision.throughSeq} for {a.name}.</p>
+        </Sheet>
+      ) : null}
       {confirmArchive ? (
         <Sheet title={"Archive " + a.name + "?"} submit={archiving ? "Archiving…" : "Archive"} busy={archiving}
           error={error} onClose={() => setConfirmArchive(false)} onSubmit={() => {

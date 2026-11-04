@@ -5,6 +5,12 @@
 package personalagent
 
 func (a *API) report(args []string, body []byte) (any, error) {
+	// No Assistant identity is required for capability probing. Older plugins
+	// reject the unknown subcommand, so Hosts fail closed instead of exposing
+	// report routes they cannot actually serve.
+	if len(args) == 1 && args[0] == "probe" {
+		return ok("supported", true), nil
+	}
 	if len(args) != 2 {
 		return nil, coded("invalid", "usage: assistant report <show|resolve> <assistantId>")
 	}

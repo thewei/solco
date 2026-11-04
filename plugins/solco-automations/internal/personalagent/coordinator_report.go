@@ -260,6 +260,15 @@ func (p *ReportPump) tickOne(id string) (string, error) {
 			return "", nil
 		}
 	}
+	// The person may have paused work or enabled quiet hours while the
+	// Herdr pane was being checked. Re-read the owner's current rules.
+	latestPolicy, err := s.GetProactivity(id)
+	if err != nil {
+		return "", err
+	}
+	if latestPolicy.ReportEveryMin <= 0 || latestPolicy.QuietNow || latestPolicy.Level == LevelRespond {
+		return "", nil
+	}
 	prompt, err := s.coordinatorReportPrompt(id, r)
 	if err != nil {
 		return "", err
@@ -268,10 +277,13 @@ func (p *ReportPump) tickOne(id string) (string, error) {
 	// revision. No database lock is held across a potentially slow submission.
 	res, err := s.db.Exec(`UPDATE coordinator_reports SET state=?,herdr_session=?,workspace_id=?,pane_id=?,
         coordinator_revision=?,updated_at=? WHERE assistant_id=? AND state=? AND through_seq=?
-        AND EXISTS(SELECT 1 FROM coordinators c WHERE c.assistant_id=coordinator_reports.assistant_id
+        AND EXISTS(SELECT 1 FROM coordinators c JOIN assistants a ON a.id=c.assistant_id
+         JOIN proactivity p ON p.assistant_id=c.assistant_id
+         WHERE c.assistant_id=coordinator_reports.assistant_id
+         AND a.status=? AND p.report_every_min>0 AND p.level<>?
          AND c.state=? AND c.revision=? AND c.herdr_session=? AND c.workspace_id=? AND c.pane_id=?)`,
 		ReportClaimed, c.HerdrSession, c.WorkspaceID, c.PaneID, c.Revision, now, id, ReportQueued, r.ThroughSeq,
-		CoordinatorReady, c.Revision, c.HerdrSession, c.WorkspaceID, c.PaneID)
+		StatusActive, LevelRespond, CoordinatorReady, c.Revision, c.HerdrSession, c.WorkspaceID, c.PaneID)
 	if err != nil {
 		return "", wrapBusy(err)
 	}

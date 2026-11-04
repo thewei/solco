@@ -34,3 +34,4 @@ assistants/AssistantsPage.tsx: `/assistants` 对话优先页（2026-11-04，desi
 assistants/assistants.css: 上述页面样式（沿用 theme.css 令牌）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+assistants/AssistantsPage.tsx（2026-11-05）：Coordinator 定期汇报由原 Herdr OMP 对话生成；UI 独立显示 queued/claimed/uncertain 交付状态，uncertain 需检查原 Terminal 并二次确认 skip/retry，exact throughSeq + requestId；`mygo.ts` 必须由 Go `mygo generate` 自动生成，移动端仍复用同一 Chat 组件。

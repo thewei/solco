@@ -67,6 +67,11 @@ export interface AssistantsDetail {
   coordinator: Coordinator;
   coordinatorOpen: boolean;
   /**
+   * Report is the delivery state of an opt-in progress narration request.
+   * Its words remain Solco metadata; OMP's answer stays in the real Chat.
+   */
+  report?: CoordinatorReport;
+  /**
    * Inbox is the plugin's one snapshot of what needs a person (approvals,
    * reviews, failed starts, stalls); the page draws it, never recomputes it.
    */
@@ -663,6 +668,30 @@ export interface CoordinatorChat {
    */
   invitation: boolean;
   reason: string;
+}
+
+/**
+ * CoordinatorReport describes an opt-in periodic narrative prompt sent to an
+ * existing OMP Coordinator through the Herdr pane. "submitted" means Herdr
+ * accepted the prompt; it does not prove an Agent reply was produced.
+ * "uncertain" forbids automatic retries until the person checks the original
+ * conversation and explicitly resolves that exact throughSeq.
+ */
+export interface CoordinatorReport {
+  assistantId: string;
+  state: string;
+  fromSeq: number;
+  throughSeq: number;
+  submittedSeq: number;
+  attempts: number;
+  nextAt: number;
+  lastSubmittedAt: number;
+  lastError?: string;
+  herdrSession?: string;
+  workspaceId?: string;
+  paneId?: string;
+  coordinatorRevision: number;
+  updatedAt: number;
 }
 
 /** CreateTaskInput is the body of a task creation. */
@@ -1561,6 +1590,14 @@ export const assistants = {
   /** RenameGroup changes a Group's title. */
   renameGroup(requestID: string, id: string, title: string, revision: number): Promise<void> {
     return call("assistants.RenameGroup", requestID, id, title, revision);
+  },
+  /**
+   * ResolveCoordinatorReport is an explicit choice after the person checks
+   * whether the progress prompt reached their original OMP conversation.
+   * "retry" may duplicate a message, so the UI must confirm that risk.
+   */
+  resolveCoordinatorReport(requestID: string, id: string, throughSeq: number, action: string, confirmed: boolean): Promise<void> {
+    return call("assistants.ResolveCoordinatorReport", requestID, id, throughSeq, action, confirmed);
   },
   /** RestoreInstructions makes an earlier revision's text current as a new revision. */
   restoreInstructions(requestID: string, id: string, revision: number, expected: number): Promise<void> {

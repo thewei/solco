@@ -294,3 +294,4 @@ service_origin_test.go: 推断端到端（真机 argv 形状：bun.native wrappe
 remote_desktop.go: Remote Desktop 的桌面端呈现（2026-11-03）：`Shell.rdesk`（仅窗口通道）、`shellAuthorizer`（approveOpen + 前置窗口 + mygo 通知；弹窗 Deny / View Only / Allow Control，关闭=拒绝）、设置页 `/settings/remote-desktop`（开关 → 状态卡 → 权限两行各带「Allow…」跳系统设置 → Ask-before-each / 质量 → 当前会话 + Disconnect）、页面可见期每 2 s 轮询权限与会话；会话变化即刻重投托盘（`remoteDesktopTrayLabel`：菜单栏标题加 🖥、tooltip 带观看者名）并在快捷面板 Agents 页顶部显示带 Disconnect 的横幅（`quickPanelRemoteDesktop`）；ICE 暂仅主机候选（过滤虚拟网卡，保留 utun）；Lock screen 行：保存锁屏密码（`appSecrets` 键 `remotedesktop.unlock`，设置只存 `UnlockSaved`/`AutoUnlock`）与「Unlock automatically」开关
 
 remote_personal_agent.go（2026-11-05）: overview fingerprint 纳入 `activitySeq`，Fact 发生变化但其他计数不变也发送既有 `personal-agent.changed` hint；帧不带正文，手机按自己的 cursor 重读。
+assistants_bridge.go（2026-11-05）：Snapshot 所选 Assistant 附加可选 `report`（老插件失败即不显示，不关功能门），`ResolveCoordinatorReport` 明确人工确认、带 throughSeq + requestId 写回插件。界面不把 `submitted` 当作 OMP 已回复，不向聊天转录插入系统句子。

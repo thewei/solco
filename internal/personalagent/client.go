@@ -322,6 +322,40 @@ func (c *Client) StopCoordinator(ctx context.Context, requestID, assistantID str
 	return out.Coordinator, c.do(ctx, req{RequestID: requestID}, &out, "coordinator", "stop", assistantID)
 }
 
+// SupportsCoordinatorReports verifies a plugin explicitly implements the
+// report protocol. An older Overview-capable plugin must not advertise this
+// feature to a newer phone.
+func (c *Client) SupportsCoordinatorReports(ctx context.Context) bool {
+	var out struct {
+		Supported bool `json:"supported"`
+	}
+	return c.do(ctx, nil, &out, "report", "probe") == nil && out.Supported
+}
+
+// CoordinatorReport is the persisted delivery status for periodic progress
+// narration. A submitted prompt may still need time for OMP to reply.
+func (c *Client) CoordinatorReport(ctx context.Context, assistantID string) (CoordinatorReport, error) {
+	var out struct {
+		Report CoordinatorReport `json:"report"`
+	}
+	return out.Report, c.do(ctx, nil, &out, "report", "show", assistantID)
+}
+
+// ResolveCoordinatorReport is an explicit human review of one uncertain
+// delivery, not an automatic retry. The throughSeq fences a stale click.
+func (c *Client) ResolveCoordinatorReport(ctx context.Context, requestID, assistantID string, throughSeq int64, action string, confirmed bool) (CoordinatorReport, error) {
+	var out struct {
+		Report CoordinatorReport `json:"report"`
+	}
+	in := struct {
+		RequestID  string `json:"requestId"`
+		ThroughSeq int64  `json:"throughSeq"`
+		Action     string `json:"action"`
+		Confirmed  bool   `json:"confirmed"`
+	}{requestID, throughSeq, action, confirmed}
+	return out.Report, c.do(ctx, in, &out, "report", "resolve", assistantID)
+}
+
 // Approvals lists an Assistant's approvals.
 func (c *Client) Approvals(ctx context.Context, assistantID string) ([]Approval, error) {
 	var out struct {

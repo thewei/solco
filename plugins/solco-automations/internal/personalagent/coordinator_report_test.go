@@ -290,6 +290,10 @@ func TestReportPumpClaimCrashAlwaysBecomesUncertain(t *testing.T) {
 		t.Fatalf("visible uncertain fact: %+v %v", facts, err)
 	}
 	api := &API{Store: s}
+	probe, err := call(t, api, "", "assistant", "report", "probe")
+	if err != nil || probe["supported"] != true {
+		t.Fatalf("capability probe: %v %v", probe, err)
+	}
 	got, err := call(t, api, "", "assistant", "report", "show", a.ID)
 	if err != nil || got["report"].(map[string]any)["state"] != ReportUncertain {
 		t.Fatalf("CLI status: %+v %v", got, err)
@@ -356,5 +360,31 @@ func TestReportPumpDefaultOffAndBoundedRefusals(t *testing.T) {
 	now = now.Add(24 * time.Hour)
 	if _, err := p.Tick(); err != nil || attempts != reportRetryLimit {
 		t.Fatalf("unexpected retry of exhausted delivery: %d %v", attempts, err)
+	}
+}
+
+// Herdr pane reads may outlive the original policy snapshot; switching the
+// Assistant to respond-only while checking the pane must cancel the submit.
+func TestReportPumpRechecksPolicyBeforeIrrevocableHerdrClaim(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	s, _ := openTest(t, WithClock(func() time.Time { return now }))
+	a := mustAssistant(t, s, "report-policy-race", "Ada")
+	readyReportCoordinator(t, s, a)
+	setPolicy(t, s, a, func(p *ProactivityInput) { p.ReportEveryMin = 1 })
+	if _, err := s.newFact(Fact{AssistantID: a.ID, Kind: FactPulse, Text: "Working"}, "policy-race"); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	p := &ReportPump{Store: s, Submit: func(_, _, _ string) error { calls++; return nil }, Blocked: func(_, _ string) (string, bool) {
+		setPolicy(t, s, a, func(p *ProactivityInput) { p.Level = LevelRespond })
+		return "", false
+	}}
+	if r, err := p.Tick(); err != nil || r.Submitted != 0 || calls != 0 {
+		t.Fatalf("owner changed policy during Herdr read: %+v %v; calls=%d", r, err, calls)
+	}
+	p.Blocked = nil
+	setPolicy(t, s, a, func(p *ProactivityInput) { p.Level = LevelFollowUp })
+	if r, err := p.Tick(); err != nil || r.Submitted != 1 || calls != 1 {
+		t.Fatalf("safe resume after restored owner setting: %+v %v; calls=%d", r, err, calls)
 	}
 }

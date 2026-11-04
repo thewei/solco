@@ -74,6 +74,9 @@ type AssistantsDetail struct {
 	// says its pane is in this window's Herdr tree (so its Chat can bind).
 	Coordinator     personalagent.Coordinator `json:"coordinator"`
 	CoordinatorOpen bool                      `json:"coordinatorOpen"`
+	// Report is the delivery state of an opt-in progress narration request.
+	// Its words remain Solco metadata; OMP's answer stays in the real Chat.
+	Report *personalagent.CoordinatorReport `json:"report,omitempty"`
 	// Inbox is the plugin's one snapshot of what needs a person (approvals,
 	// reviews, failed starts, stalls); the page draws it, never recomputes it.
 	Inbox personalagent.Inbox `json:"inbox"`
@@ -274,6 +277,11 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 			}
 		}
 	}
+	// Older plugins do not have the report CLI: keep their Assistants page
+	// available while the plugin upgrade finishes.
+	if report, err := client.CoordinatorReport(ctx, id); err == nil {
+		d.Report = &report
+	}
 	return d, nil
 }
 
@@ -472,6 +480,16 @@ func (b *AssistantsBridge) EnsureChat(ctx context.Context, requestID, id, agentK
 func (b *AssistantsBridge) StopCoordinator(ctx context.Context, requestID, id string) error {
 	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
 		_, err := c.StopCoordinator(ctx, requestID, id)
+		return err
+	})
+}
+
+// ResolveCoordinatorReport is an explicit choice after the person checks
+// whether the progress prompt reached their original OMP conversation.
+// "retry" may duplicate a message, so the UI must confirm that risk.
+func (b *AssistantsBridge) ResolveCoordinatorReport(ctx context.Context, requestID, id string, throughSeq int64, action string, confirmed bool) error {
+	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
+		_, err := c.ResolveCoordinatorReport(ctx, requestID, id, throughSeq, action, confirmed)
 		return err
 	})
 }

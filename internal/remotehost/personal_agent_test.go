@@ -66,6 +66,12 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 		return []byte(`{"schema":1,"activity":{"facts":[{"seq":4,"id":"f_0000000000000017","assistantId":"` + paAssistantA + `","goalId":"` + paGoalG + `","taskId":"` + paTaskT + `","kind":"delegated","text":"Delegated: Collect numbers","createdAt":1800000000000}],"nextSeq":4,"ackSeq":0,"hasMore":false}}`), nil
 	case strings.HasPrefix(key, "activity ack "):
 		return []byte(`{"schema":1,"ackSeq":4,"replayed":false}`), nil
+	case key == "report probe":
+		return []byte(`{"schema":1,"supported":true}`), nil
+	case strings.HasPrefix(key, "report show "):
+		return []byte(`{"schema":1,"report":{"assistantId":"` + paAssistantA + `","state":"uncertain","fromSeq":4,"throughSeq":9,"submittedSeq":4,"attempts":1,"lastError":"Herdr submission outcome is unknown"}}`), nil
+	case strings.HasPrefix(key, "report resolve "):
+		return []byte(`{"schema":1,"report":{"assistantId":"` + paAssistantA + `","state":"submitted","fromSeq":4,"throughSeq":9,"submittedSeq":9,"attempts":0}}`), nil
 	case key == "group list":
 		return []byte(`{"schema":1,"groups":[` + paGroup + `]}`), nil
 	case strings.HasPrefix(key, "group show"):
@@ -258,10 +264,29 @@ func TestPersonalAgentCapabilitiesFollowTheGate(t *testing.T) {
 	if err := json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&boot); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"personalAgent", "personalAgentManage", "personalAgentApprove"} {
+	for _, k := range []string{"personalAgent", "personalAgentManage", "personalAgentApprove", "personalAgentNarrativeReports"} {
 		if !boot.Capabilities[k] {
 			t.Errorf("open gate misses %s: %v", k, boot.Capabilities)
 		}
+	}
+}
+
+// An older plugin can answer assistant overview but lacks "assistant report".
+// The Host must not advertise the new recovery UI based on Overview alone.
+func TestOlderAssistantPluginDoesNotClaimNarrativeReports(t *testing.T) {
+	h, _ := paHarness(t, true)
+	old := personalagent.NewClientWithExec(func(context.Context, string, ...string) ([]byte, error) {
+		return []byte(`{"schema":1,"error":{"code":"invalid","message":"unknown command"}}`), nil
+	})
+	h.srv.opts.PersonalAgent = func(context.Context) (*personalagent.Client, bool) { return old, true }
+	var boot struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	if err := json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&boot); err != nil {
+		t.Fatal(err)
+	}
+	if !boot.Capabilities["personalAgent"] || boot.Capabilities["personalAgentNarrativeReports"] {
+		t.Fatalf("older plugin must not expose report recovery: %v", boot.Capabilities)
 	}
 }
 
@@ -630,6 +655,9 @@ func TestPersonalAgentPlanRoutes(t *testing.T) {
 	golden(t, "personal-agent-activity-notifications.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/activity/notifications?limit=20", h.token, nil)))
 	_, noticeReceipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/activity/notifications/ack", h.token, `{"requestId":"notification-ack-1","seq":4}`)
 	golden(t, "personal-agent-activity-notifications-ack.json", noticeReceipt)
+	golden(t, "personal-agent-coordinator-report.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/report", h.token, nil)))
+	_, reportReceipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/report/resolve", h.token, `{"requestId":"report-ack-1","throughSeq":9,"action":"skip","confirmed":true}`)
+	golden(t, "personal-agent-coordinator-report-resolved.json", reportReceipt)
 	for _, bad := range []string{pbase + "/assistants/" + paAssistantA + "/facts?limit=0", pbase + "/assistants/" + paAssistantA + "/facts?limit=101", pbase + "/assistants/" + paAssistantA + "/facts?limit=x", pbase + "/goals/not%20an%20id/plan"} {
 		if r := h.get(bad, h.token, nil); r.StatusCode != http.StatusBadRequest {
 			t.Errorf("%s = %d", bad, r.StatusCode)
@@ -906,5 +934,59 @@ func TestPersonalAgentNotificationCursorIsDistinctFromSeenAndBoundToDevice(t *te
 	}
 	if st, _ := h.send("POST", notice+"/ack", "", `{"requestId":"bad","seq":4}`); st != http.StatusUnauthorized {
 		t.Fatalf("anonymous notice ACK = %d", st)
+	}
+}
+
+// The same Report and idempotent owner decision must cross the Host seam.
+// A phone cannot "resolve" uncertain delivery by omitting confirmation or
+// pointing to a different Assistant/fact window.
+func TestPersonalAgentReportStatusAndOwnerResolveAreScoped(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA + "/report"
+	resp := h.get(base, h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("read: %d", resp.StatusCode)
+	}
+	var result struct {
+		Report personalagent.CoordinatorReport `json:"report"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.Report.State != "uncertain" || result.Report.ThroughSeq != 9 {
+		t.Fatalf("uncertain report: %+v %v", result, err)
+	}
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant report show "+paAssistantA+"|") {
+		t.Fatalf("report route: %q", last)
+	}
+	status, raw := h.send("POST", base+"/resolve", h.token, `{"requestId":"report-human-1","throughSeq":9,"action":"skip","confirmed":true}`)
+	if status != http.StatusOK {
+		t.Fatalf("resolve: %d %s", status, raw)
+	}
+	if last := core.lastCall(); !strings.Contains(last, "assistant report resolve "+paAssistantA+"|") ||
+		!strings.Contains(last, `"throughSeq":9`) || !strings.Contains(last, `"confirmed":true`) || !strings.Contains(last, `"action":"skip"`) {
+		t.Fatalf("owner decision not forwarded: %q", last)
+	}
+	for _, body := range []string{
+		`{"requestId":"bad","throughSeq":9,"action":"retry"}`,
+		`{"requestId":"bad","throughSeq":9,"action":"retry","confirmed":false}`,
+		`{"requestId":"bad","throughSeq":0,"action":"skip","confirmed":true}`,
+		`{"requestId":"bad","throughSeq":9,"action":"approve","confirmed":true}`,
+		`{"requestId":"bad","throughSeq":9,"action":"retry","confirmed":true,"assistantId":"a_forged"}`,
+		`{"requestId":"bad","throughSeq":9,"action":"retry","confirmed":true}{} `,
+	} {
+		if st, _ := h.send("POST", base+"/resolve", h.token, body); st != http.StatusBadRequest {
+			t.Errorf("invalid body accepted %s: %d", body, st)
+		}
+	}
+	if r := h.get(base, "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous read: %d", r.StatusCode)
+	}
+	if st, _ := h.send("POST", base+"/resolve", "", `{"requestId":"no","throughSeq":9,"action":"skip","confirmed":true}`); st != http.StatusUnauthorized {
+		t.Fatalf("anonymous write: %d", st)
+	}
+	closed, core2 := paHarness(t, false)
+	if r := closed.get(base, closed.token, nil); r.StatusCode != http.StatusNotFound {
+		t.Fatalf("gate closed: %d", r.StatusCode)
+	}
+	if core2.callCount() != 0 {
+		t.Fatal("closed gate invoked the plugin")
 	}
 }

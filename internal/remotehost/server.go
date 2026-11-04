@@ -546,6 +546,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+pa+"/assistants/{id}/activity/ack", s.guard(ScopeManage, s.handlePAActivityAck))
 	mux.Handle("GET "+pa+"/assistants/{id}/activity/notifications", s.guard(ScopeView, s.handlePAActivityNotices))
 	mux.Handle("POST "+pa+"/assistants/{id}/activity/notifications/ack", s.guard(ScopeManage, s.handlePAActivityNoticesAck))
+	mux.Handle("GET "+pa+"/assistants/{id}/report", s.guard(ScopeView, s.handlePAReport))
+	mux.Handle("POST "+pa+"/assistants/{id}/report/resolve", s.guard(ScopeManage, s.handlePAReportResolve))
 	mux.Handle("GET "+pa+"/assistants/{id}/routines", s.guard(ScopeView, s.handlePARoutines))
 	mux.Handle("GET "+pa+"/assistants/{id}/memory", s.guard(ScopeView, s.handlePAMemory))
 	mux.Handle("GET "+pa+"/memory/{id}/history", s.guard(ScopeView, s.handlePAMemoryHistory))
@@ -775,6 +777,12 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["personalAgentMemory"] = true
 			capabilities["personalAgentProactivity"] = true
 			capabilities["personalAgentActivityNotices"] = true
+			// An older plugin can answer Overview while lacking the report
+			// outbox. Probe the actual subcommand instead of guessing by the
+			// presence of the Assistants gate.
+			if c.SupportsCoordinatorReports(r.Context()) {
+				capabilities["personalAgentNarrativeReports"] = true
+			}
 		}
 	}
 	if s.opts.Sessions != nil {
