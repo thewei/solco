@@ -59,7 +59,7 @@
 | MU-05 | VERIFIED | 实机：缺插件→Create 报错、名称保留；恢复后同输入恰新增 1 个并进入其聊天（`assistant list` 核对）；requestId 幂等见核心 receipts 测试（U0-5） |
 | MU-06 | PARTIAL | Host `groups` 路由与 capability `personalAgentGroups`，golden 双端；旧 Host 在手机/桌面的“unavailable、不冒充普通 Assistant”无专项实机/测试，NOT VERIFIED |
 | MU-07 | VERIFIED | `group_test.go`：成员/消息/delivery 以 participant id 记录；`TestGroupAuthorshipFollowsIdsNotNames`（两个成员改成同名后 @ 仍只投给被指定的 id、改群名不移动消息、同成员的另一个群是独立会话）；`TestGroupMembersKeepAtLeastTwoAndRemovalSkipsPendingDeliveries`（移除成员其待投递被跳过、不可低于 2 人） |
-| MU-08 | NOT VERIFIED | 手机 `[id].tsx` 已直达共享 ChatView（U1-7 IMPLEMENTED）；真机验证被手机锁屏阻塞（见 §3 手机真机） |
+| MU-08 | VERIFIED | 手机真机（vivo，release apk）：Assistant 页 Start conversation → Mac 起真实 Claude Coordinator（工作区 `auto: … Ada · Coordinator`）→ 共享 Chat 页打开，Coordinator 的“Ada 已就位”回复可见；在手机输入框发 “Reply with exactly PONG…” → 约 40 s 后回复 `PONG`（见 §3 手机 Chat 真机）。附带修复两处真实缺陷（守护进程缺失、首次落到 Terminal）与一处标题问题 |
 | MU-09 | NOT VERIFIED | Android 键盘/附件/长列表/草稿保留需真机；原 Pane Chat 的 `pnpm test` 无回归，但不等于真机验证 |
 | MU-10 | PARTIAL | 仅用户精确 @ 建 delivery、无 @ 不起 Agent、`say` 要求真实在线 Agent；实机 Duo 验证无 @ → 无 Agent（U1-3/4）；预算/ACL 对跨 Assistant 交互的专项未做（Peer 交互整体 DEFERRED） |
 | MU-11 | NOT VERIFIED | Peer Delegation 未实现（审计表：Peer DM/Group、跨 Assistant @ 延后）；Worker Task 与 Assistant 分离是既有模型，Memory 默认不共享（share 需显式） |
@@ -141,3 +141,11 @@
 - Memory 屏：`Ada · Memory`、`REMEMBERED · 0/500`、空态；添加 “U5 phone check note” → `1/500`，`you · rev 1`；Edit → Save → `rev 2`；History 展开出 `rev 2 · You · approved` 与 `rev 1`；Forget → Forget for good → `0/500`（已清理，无遗留）。
 - Behavior 屏：三档等级（当前 Follow up）、Quiet hours Off、间隔 0、日预算 20；选 Suggest → Save → 退出重进仍为 Suggest（落盘）；恢复 Follow up → Save → 重进确认已还原。
 - 仍 NOT VERIFIED：手机上 Quiet Hours 开启与时区选择、预算为 0 的行为；MU-08/09/23 的手机聊天路径尚未逐项驱动。
+
+### 手机 Chat 真机（MU-08，2026-11-04 15:0x，vivo + 真实 Mac，Ada 为测试 Assistant）
+- 过程：手机 Assistant 页 Start conversation → 页面停在 “Starting the Coordinator on your Mac…” 超过 2 分钟，Mac 日志只有 `coordinator.start` 操作、无后续。
+- 根因 1（真实缺陷）：插件守护进程根本没在运行（`ps` 无 `solco-automations daemon`，`herdr plugin log` 无该插件日志）——Herdr 只在 server 启动时跑插件的 startup hook，Solco 之后才 link/更新的插件没有 daemon，排队的 Coordinator 永远停在 `starting`；Assistants 路径此前不会自启它（只有 Automations 页的 Start Scheduler 按钮会）。修复：`plugins/solco-automations/main_assistant.go` 的 `ensureDaemon`——`assistant coordinator start` 成功后若 `daemon.Running()` 为假，就 `Setsid` 拉起 `daemon`（日志进插件 state 目录 `daemon.log`，flock 保证第二份自行退出，幂等，不让命令失败）。实机：重建插件二进制后再次 start，3 s 内 daemon 在跑，30 s 内出现真实 Herdr 工作区与 Claude 窗格（状态 done）。`go test ./...`（插件）484 PASS。
+- 根因 2：Coordinator ready 的瞬间 Herdr 树里该窗格还没有 `agent`，手机 `paneRoute` 因此选了 Terminal 而不是 Chat，手机落在终端画面。修复：`assistants/[id].tsx` 在窗格带 `agent`（或 Host 不提供 chat）之前不自动跳转；重新进入后落在共享 Chat 页。
+- 问题 3：Chat 页标题被窗格自己的标题（首条用户消息，即 Coordinator 启动 prompt）占用，显示 “You are the Coordinator of t…”。修复：从 Assistant 页进入时把 Assistant 名带成 `title`，聊天页在带 `assistant` 参数时以它为标题；“Open conversation” 按钮也补上 `assistant` 参数（此前缺，导致聊天页里“回到 Assistant”入口丢失）。`pnpm typecheck`/`lint`/`test`（583 PASS）通过；新 apk 尚未安装复验——NOT VERIFIED。
+- 已知限制（未改）：Coordinator 的 152 行启动 prompt 作为首条“用户消息”出现在 Chat 里（折叠为 “Show all 152 lines”），因为它确是该会话的真实首条输入；模型名徽标显示 `glm-flash`（该 Claude 的本机配置）。
+- 收尾：测试用的 Ada Coordinator 仍在运行，需停止（见本节之后）。

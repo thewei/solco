@@ -6,7 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"syscall"
 
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/daemon"
 	"github.com/thewei/solco/plugins/solco-automations/internal/personalagent"
 )
 
@@ -29,7 +34,36 @@ func assistantCmd(args []string) error {
 	if err != nil {
 		return printAssistantError(err)
 	}
+	if len(args) >= 2 && args[0] == "coordinator" && args[1] == "start" {
+		ensureDaemon()
+	}
 	return printJSON(out, nil)
+}
+
+// ensureDaemon starts the scheduler when nothing holds its lock. Herdr runs
+// the plugin's startup hook only with its server, so a plugin linked or
+// updated while the server is up has no daemon; a queued Coordinator would sit
+// on "starting" for ever. A second daemon exits on its own (flock), so this is
+// idempotent. It never fails the command: the queue row is already written.
+func ensureDaemon() {
+	if _, running := daemon.Running(); running {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "daemon")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := os.MkdirAll(config.StateDir(), 0o755); err == nil {
+		if f, err := os.OpenFile(filepath.Join(config.StateDir(), "daemon.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			defer f.Close()
+			cmd.Stdout, cmd.Stderr = f, f
+		}
+	}
+	if cmd.Start() == nil {
+		go func() { _ = cmd.Wait() }()
+	}
 }
 
 func printAssistantError(err error) error {
