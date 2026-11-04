@@ -22,7 +22,7 @@
   ],
   "schema": 1,
   "task": {
-    "agent": "claude",
+    "agent": "omp",
     "assistantId": "a_0000000000000001",
     "attempt": 1,
     "brief": "Read it.",

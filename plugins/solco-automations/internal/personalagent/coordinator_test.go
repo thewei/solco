@@ -379,12 +379,12 @@ func TestStartCoordinatorAsCarriesTheChosenAgent(t *testing.T) {
 	if _, _, err := s.StartCoordinatorAs("bad", a.ID, "pi; rm -rf /", ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("an unsafe agent kind must be refused: %v", err)
 	}
-	c, _, err := s.StartCoordinatorAs("ok", a.ID, "pi", "magpie/zhipu/glm-5.3-flash")
+	c, _, err := s.StartCoordinatorAs("ok", a.ID, "omp", "example-model")
 	if err != nil || c.State != CoordinatorStarting {
 		t.Fatalf("start = %+v %v", c, err)
 	}
 	task, err := s.GetTask(c.TaskID)
-	if err != nil || task.Agent != "pi" || task.Model != "magpie/zhipu/glm-5.3-flash" {
+	if err != nil || task.Agent != "omp" || task.Model != "example-model" {
 		t.Fatalf("task = %+v %v", task, err)
 	}
 	b := mustAssistant(t, s, "a2", "Bob")
@@ -398,9 +398,8 @@ func TestStartCoordinatorAsCarriesTheChosenAgent(t *testing.T) {
 }
 
 // A launch whose outcome Herdr could not confirm (the run parks as uncertain)
-// leaves no Coordinator the person can talk to: it reads failed, so the next
-// Send starts a fresh attempt instead of waiting on "starting" forever.
-func TestCoordinatorWithAnUncertainLaunchReadsFailed(t *testing.T) {
+// is not a confirmed failure and must keep the same task until reconciled.
+func TestCoordinatorWithAnUncertainLaunchPreventsDuplicateStart(t *testing.T) {
 	s, _ := openTest(t)
 	a := mustAssistant(t, s, "a1", "Ada")
 	c, _, _ := s.StartCoordinator("s1", a.ID)
@@ -409,11 +408,35 @@ func TestCoordinatorWithAnUncertainLaunchReadsFailed(t *testing.T) {
 	if _, err := d.RunTask(context.Background(), c.TaskID); !errors.Is(err, ErrUncertain) {
 		t.Fatalf("want an uncertain launch, got %v", err)
 	}
-	if got, _ := s.GetCoordinator(a.ID); got.State != CoordinatorFailed {
+	if got, _ := s.GetCoordinator(a.ID); got.State != CoordinatorUncertain {
 		t.Fatalf("an uncertain launch must not leave the Coordinator starting: %+v", got)
 	}
-	if again, _, err := s.StartCoordinatorAs("s2", a.ID, "pi", ""); err != nil || again.State != CoordinatorStarting || again.TaskID == c.TaskID {
-		t.Fatalf("the next Send starts a new attempt: %+v %v", again, err)
+	if again, _, err := s.StartCoordinatorAs("s2", a.ID, "omp", ""); err != nil || again.State != CoordinatorUncertain || again.TaskID != c.TaskID {
+		t.Fatalf("an uncertain launch must not spawn another coordinator: %+v %v", again, err)
+	}
+}
+
+// A timeout after provisioning a Herdr pane is not proof that OMP failed to
+// start. A second start request must reuse the uncertain Coordinator instead.
+func TestCoordinatorWorkErrorAfterProvisionCannotDuplicate(t *testing.T) {
+	store, _ := openTest(t)
+	assistant := mustAssistant(t, store, "timeout", "Ada")
+	coordinator, _, err := store.StartCoordinator("s1", assistant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	launcher := &fakeLauncher{workErr: errors.New("timed out waiting for OMP")}
+	dispatcher := &Dispatcher{Store: store, Launcher: launcher, Claimant: "daemon"}
+	run, err := dispatcher.RunTask(t.Context(), coordinator.TaskID)
+	if !errors.Is(err, ErrUncertain) || run.Status != RunUncertain || run.PaneID == "" {
+		t.Fatalf("run must stay uncertain with the Herdr pane: %+v %v", run, err)
+	}
+	again, _, err := store.StartCoordinator("s2", assistant.ID)
+	if err != nil || again.TaskID != coordinator.TaskID || again.State != CoordinatorUncertain {
+		t.Fatalf("unexpected restart: %+v %v", again, err)
+	}
+	if launcher.provisions != 1 || launcher.works != 1 {
+		t.Fatalf("duplicate side effects: provision=%d work=%d", launcher.provisions, launcher.works)
 	}
 }
 
@@ -422,7 +445,7 @@ func TestCoordinatorPromptNamesTheConfiguredCLI(t *testing.T) {
 	CLI = "/opt/solco/bin/solco-automations"
 	t.Cleanup(func() { CLI = old })
 	p := CoordinatorPrompt(Assistant{ID: "a_1", Name: "Ada"})
-	if !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task create") || !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task graph") {
+	if !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task create") || !strings.Contains(p, "/opt/solco/bin/solco-automations assistant task graph") || !strings.Contains(p, "printf '%s'") || strings.Contains(p, "research|coding|manual") {
 		t.Fatalf("prompt does not carry the absolute CLI path:\n%s", p)
 	}
 }

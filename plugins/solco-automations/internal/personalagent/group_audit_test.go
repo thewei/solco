@@ -57,6 +57,23 @@ func TestMentionsWorkForCJKNamesWithoutSpaces(t *testing.T) {
 	}
 }
 
+// appendHistoryOnly builds pagination fixtures without filling the live
+// delivery queue, which is independently capped at twenty messages.
+func appendHistoryOnly(t *testing.T, s *Store, groupID, body string) {
+	t.Helper()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := insertMessage(tx, s.nowMS(), GroupMessage{ID: newID("m"), GroupID: groupID, AuthorKind: AuthorUser, Kind: MsgText, Body: body}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Audit HIGH-01/02: the newest page of one Group, with only its own deliveries.
 func TestGroupFeedNewestPageSurvivesInterleavedGroups(t *testing.T) {
 	s, _ := openTest(t)
@@ -67,9 +84,7 @@ func TestGroupFeedNewestPageSurvivesInterleavedGroups(t *testing.T) {
 	g2, _, _ := s.CreateGroup("ig2", "two", []string{b.ID, c.ID})
 	for i := 0; i < 30; i++ {
 		for _, g := range []Group{g1, g2} {
-			if _, _, err := s.PostGroupMessage("", PostMessageInput{GroupID: g.ID, AuthorKind: AuthorUser, Body: fmt.Sprintf("%s-%d", g.Title, i)}); err != nil {
-				t.Fatal(err)
-			}
+			appendHistoryOnly(t, s, g.ID, fmt.Sprintf("%s-%d", g.Title, i))
 		}
 	}
 	feed, err := s.GroupFeedSince(g1.ID, 0, 20)
@@ -98,9 +113,7 @@ func TestDeliveryBeyondTheFirstFiftyUnseenStillCarriesTheMention(t *testing.T) {
 	g, as := groupOf(t, s, "Ada", "Bo")
 	readyGroupAgent(t, s, g, as[0])
 	for i := 0; i < 55; i++ {
-		if _, _, err := s.PostGroupMessage("", PostMessageInput{GroupID: g.ID, AuthorKind: AuthorUser, Body: fmt.Sprintf("ordinary context %d", i)}); err != nil {
-			t.Fatal(err)
-		}
+		appendHistoryOnly(t, s, g.ID, fmt.Sprintf("ordinary context %d", i))
 	}
 	if _, _, err := s.PostGroupMessage("", PostMessageInput{GroupID: g.ID, AuthorKind: AuthorUser, Body: "@Ada important action", Mentions: []string{as[0].ID}}); err != nil {
 		t.Fatal(err)

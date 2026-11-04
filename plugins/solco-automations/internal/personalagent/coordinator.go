@@ -15,11 +15,13 @@ import (
 // Herdr's own terms — and sees only its own Assistant's approved memory.
 
 const (
-	CoordinatorNone     = "none"
-	CoordinatorStarting = "starting"
-	CoordinatorReady    = "ready"
-	CoordinatorStopped  = "stopped"
-	CoordinatorFailed   = "failed"
+	CoordinatorNone      = "none"
+	CoordinatorStarting  = "starting"
+	CoordinatorReady     = "ready"
+	CoordinatorStopped   = "stopped"
+	CoordinatorFailed    = "failed"
+	CoordinatorUncertain = "uncertain"
+	CoordinatorBlocked   = "blocked"
 )
 
 // Coordinator is an Assistant's Coordinator as Solco knows it. The session
@@ -67,7 +69,10 @@ func (s *Store) StartCoordinator(requestID, assistantID string) (Coordinator, bo
 
 // DefaultCoordinatorAgent is the Herdr agent kind a Coordinator runs when the
 // caller names none.
-const DefaultCoordinatorAgent = "claude"
+const DefaultCoordinatorAgent = "omp"
+
+// AssistantAgentKind is the single supported provider during the OMP rollout.
+const AssistantAgentKind = "omp"
 
 var coordinatorAgentRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
@@ -76,8 +81,14 @@ var coordinatorAgentRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 // A kind or model the plugin cannot pass to Herdr safely is refused.
 func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model string) (Coordinator, bool, error) {
 	agentKind, model = strings.TrimSpace(agentKind), strings.TrimSpace(model)
-	agentKind, model = s.runtimeDefaults(assistantID, agentKind, model)
-	if !coordinatorAgentRe.MatchString(agentKind) {
+	if agentKind == "" {
+		agentKind = AssistantAgentKind
+	}
+	// The locked Assistant rollout never inherits another provider's model.
+	if agentKind == AssistantAgentKind {
+		model = strings.TrimSpace(model)
+	}
+	if !coordinatorAgentRe.MatchString(agentKind) || agentKind != AssistantAgentKind {
 		return Coordinator{}, false, fmt.Errorf("%w: agent %q is not a Herdr agent kind", ErrInvalid, agentKind)
 	}
 	if len(model) > 120 || strings.ContainsAny(model, "\n\r\x00") {
@@ -95,7 +106,9 @@ func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model stri
 		if err != nil {
 			return Coordinator{}, err
 		}
-		if cur.State == CoordinatorStarting || cur.State == CoordinatorReady {
+		// Never launch a second Coordinator while Herdr may already own the
+		// first. An uncertain launch must be reconciled, not retried.
+		if cur.State == CoordinatorStarting || cur.State == CoordinatorReady || cur.State == CoordinatorUncertain || cur.State == CoordinatorBlocked {
 			return cur, nil
 		}
 		now := s.nowMS()
@@ -156,13 +169,16 @@ func (s *Store) syncCoordinator(t Task, r Run) {
 	switch r.Status {
 	case RunClaimed, RunStarting:
 		state = CoordinatorStarting
-	case RunRunning, RunDone, RunBlocked:
+	case RunRunning, RunDone:
 		state = CoordinatorReady
-	case RunFailed, RunUncertain:
-		// An unconfirmed launch is not a Coordinator the person can talk to;
-		// the next Send starts a fresh, explicit attempt. A run that is
-		// re-attached later (uncertain → running) flips this back to ready.
+	case RunBlocked:
+		// Directory trust and permission dialogs are not a ready Agent.
+		state = CoordinatorBlocked
+	case RunFailed:
 		state = CoordinatorFailed
+	case RunUncertain:
+		// A Herdr launch may already be alive. Do not create another run.
+		state = CoordinatorUncertain
 	case RunCancelled:
 		state = CoordinatorStopped
 	default:
@@ -191,20 +207,22 @@ var CLI = "solco-automations"
 // nothing from any other Assistant.
 func CoordinatorPrompt(a Assistant) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are the Coordinator of the Solco Assistant %q (id %s). You are the person's conversation partner for this Assistant: answer questions, think things through and report plainly, in the language the person writes in. Handle quick questions and small jobs yourself; when real, multi-step work is needed, turn the person's goals into tasks, keep them moving and verify what comes back before you report it.\n\n", a.Name, a.ID)
+	fmt.Fprintf(&b, "You are the Coordinator of the Solco Assistant %q (id %s). You are the person's conversation partner for this Assistant: answer questions, think things through and report plainly, in the language the person writes in. Answer conversational questions yourself, but do not execute substantive research, coding, file modifications, or multi-step tasks in this Coordinator conversation. Your job is to split work into bounded tasks, dispatch them via the CLI, track their status, verify their results, and report a concise summary. Do not replace a worker with your own tool calls.\n\n", a.Name, a.ID)
 	if strings.TrimSpace(a.RolePrompt) != "" {
 		b.WriteString("Role: " + strings.TrimSpace(a.RolePrompt) + "\n\n")
 	}
-	b.WriteString("How you file work (run these in your shell; the JSON goes on stdin):\n")
-	fmt.Fprintf(&b, "  %s assistant task create   {\"assistantId\":%q,\"kind\":\"research|coding|manual\",\"title\":\"…\",\"brief\":\"…\",\"repoPath\":\"…\",\"parentTaskId\":\"t_…\",\"dependsOn\":[\"t_…\"],\"draft\":true}\n", CLI, a.ID)
-	fmt.Fprintf(&b, "  %s assistant task graph    %s\n", CLI, a.ID)
-	b.WriteString("For a goal that needs several steps, write a plan; Solco then hands each milestone out, verifies it from the task's own state and tells the person:\n")
-	fmt.Fprintf(&b, "  %s assistant goal create   {\"requestId\":\"…\",\"assistantId\":%q,\"title\":\"…\",\"objective\":\"…\"}   (a draft the person approves)\n", CLI, a.ID)
-	fmt.Fprintf(&b, "  %s assistant goal set-plan <goalId>   {\"requestId\":\"…\",\"expectedRevision\":0,\"reason\":\"…\",\"successCriteria\":\"…\",\"milestones\":[{\"id\":\"m1\",\"title\":\"…\",\"dependsOn\":[],\"task\":{\"kind\":\"research|coding|manual\",\"title\":\"…\",\"brief\":\"…\"}}]}   (a milestone with no task is one the person confirms; expectedRevision is the plan's current planRevision — 0 for the first plan)\n", CLI)
-	fmt.Fprintf(&b, "  %s assistant goal plan <goalId>   (the plan with every milestone's real state)\n\n", CLI)
-	b.WriteString("For work the person wants repeated on a schedule, draft a routine; it never runs until the person approves the card Solco shows them:\n")
-	fmt.Fprintf(&b, "  %s assistant routine draft   {\"requestId\":\"…\",\"assistantId\":%q,\"name\":\"kebab-case\",\"cron\":\"0 9 * * *\",\"repo\":\"/absolute/folder\",\"prompt\":\"what the run should do\",\"rationale\":\"why\"}   (answers with the card, the next run times and any refusal; tell the person what you drafted and when it would run)\n", CLI, a.ID)
+	b.WriteString("How to delegate work (these are real shell commands; replace the example values, make each requestId unique and reuse it on retries). JSON MUST be piped into stdin, not passed as a command argument:\n")
+	fmt.Fprintf(&b, "  printf '%%s' '{\"requestId\":\"<unique-id>\",\"assistantId\":%q,\"kind\":\"research\",\"title\":\"Short task\",\"brief\":\"Deliverable and acceptance criteria\",\"draft\":false}' | %s assistant task create\n", a.ID, CLI)
+	fmt.Fprintf(&b, "  printf '%%s' '{\"requestId\":\"<unique-id>\",\"assistantId\":%q,\"kind\":\"coding\",\"title\":\"Implement X\",\"brief\":\"Requirements and acceptance criteria\",\"repoPath\":\"/absolute/repository\",\"draft\":true}' | %s assistant task create\n", a.ID, CLI)
+	fmt.Fprintf(&b, "  %s assistant task graph %s\n", CLI, a.ID)
+	b.WriteString("For a multi-step Goal, draft a goal, then write a milestone plan. The person must approve a draft before work starts:\n")
+	fmt.Fprintf(&b, "  printf '%%s' '{\"requestId\":\"<unique-id>\",\"assistantId\":%q,\"title\":\"Goal\",\"objective\":\"Measurable outcome\"}' | %s assistant goal create\n", a.ID, CLI)
+	fmt.Fprintf(&b, "  printf '%%s' '{\"requestId\":\"<unique-id>\",\"expectedRevision\":0,\"reason\":\"Initial plan\",\"successCriteria\":\"Demonstrable outcome\",\"milestones\":[{\"id\":\"m1\",\"title\":\"Research\",\"dependsOn\":[],\"task\":{\"kind\":\"research\",\"title\":\"Find answer\",\"brief\":\"Deliver sources and summary\"}}]}' | %s assistant goal set-plan <goalId>\n", CLI)
+	fmt.Fprintf(&b, "  %s assistant goal plan <goalId>\n\n", CLI)
+	b.WriteString("For scheduled work, propose a routine as a draft; only the person can approve it:\n")
+	fmt.Fprintf(&b, "  printf '%%s' '{\"requestId\":\"<unique-id>\",\"assistantId\":%q,\"name\":\"daily-review\",\"cron\":\"0 9 * * *\",\"repo\":\"/absolute/repository\",\"prompt\":\"Standalone work instructions\",\"rationale\":\"Why it helps\"}' | %s assistant routine draft\n", a.ID, CLI)
 	fmt.Fprintf(&b, "  %s assistant routine list --assistant %s\n\n", CLI, a.ID)
+	b.WriteString("Delegation protocol: when the person requests work, immediately create one or more research/coding/manual tasks with brief, scope and acceptance criteria. Use assistant task graph to monitor progress, and report the real task state. Never do worker-sized work here. For coding tasks, create a draft and ask the person to publish it; for research, queue it directly. A task completion is evidence, not a reason to replay the whole transcript. Summarize milestones and decisions concisely and let OMP manage its own automatic context compaction; keep durable task state, approved memory and plan records as the source of truth.\n\n")
 	b.WriteString("Rules:\n")
 	b.WriteString("- Never enable, approve or edit a routine yourself and never write automations.yaml: you only draft; the person's yes is the only way it starts. A routine's prompt must stand alone — the run has none of this conversation.\n")
 	b.WriteString("- Memory: only propose it (`assistant memory propose`, with a sourceRef); the person approves. Never edit the files of your memory folder or change the proactivity settings (level, quiet hours, budget) yourself — they are the person's rules for what you may start unasked.\n")

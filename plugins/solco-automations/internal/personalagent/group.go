@@ -426,8 +426,8 @@ func insertFactReason(tx *sql.Tx, groupID, event, assistantID, deliveryID, reaso
 	return err
 }
 
-// PostGroupMessage appends one message. Only a `user` message that @-mentions
-// members queues deliveries; everything else is just log.
+// PostGroupMessage appends one message. A user message with explicit mentions
+// targets those members; a message without mentions broadcasts to the group.
 func (s *Store) PostGroupMessage(requestID string, in PostMessageInput) (PostResult, bool, error) {
 	in.Body = strings.TrimSpace(in.Body)
 	if in.Body == "" || len(in.Body) > maxGroupBody {
@@ -489,7 +489,13 @@ func (s *Store) PostGroupMessage(requestID string, in PostMessageInput) (PostRes
 		}
 		out := PostResult{Message: msg, Deliveries: []GroupDelivery{}}
 		if in.AuthorKind == AuthorUser {
-			for _, id := range mentions {
+			targets := mentions
+			if len(targets) == 0 {
+				for _, member := range g.Members {
+					targets = append(targets, member.AssistantID)
+				}
+			}
+			for _, id := range targets {
 				m := byID[id]
 				if m.Status != StatusActive {
 					if err := insertFactKeyed(tx, in.GroupID, "assistant_disabled", id, "", newID("m"), now); err != nil {

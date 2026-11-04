@@ -19,6 +19,8 @@ type fakeLauncher struct {
 	provisionedAs Session
 	found         map[string]Session // marker -> session Herdr already has
 	findErr       error
+	probeAgent    bool
+	probeErr      error
 	specs         []LaunchSpec
 	workGate      chan struct{}
 }
@@ -66,6 +68,12 @@ func (f *fakeLauncher) Find(marker string) (Session, bool, error) {
 	}
 	s, ok := f.found[marker]
 	return s, ok, nil
+}
+
+func (f *fakeLauncher) HasAgent(_ Session, kind string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.probeAgent && kind != "", f.probeErr
 }
 
 func newQueuedTask(t *testing.T, s *Store, kind string) (Assistant, Task) {
@@ -422,5 +430,44 @@ func TestShutdownClaimsAndLaunchesNothing(t *testing.T) {
 	}
 	if runs, _ := s.ListRuns(task.ID); len(runs) != 0 {
 		t.Fatalf("a run was claimed during shutdown: %+v", runs)
+	}
+}
+
+// The daemon auto-reconciles only a confirmed running Agent. Empty workspaces,
+// stale labels and unavailable Herdr do not authorize duplicate execution.
+func TestAutoReconcileUncertainNeedsRunningIdentity(t *testing.T) {
+	store, _ := openTest(t)
+	asst := mustAssistant(t, store, "reconcile-auto", "Ada")
+	coordinator, _, err := store.StartCoordinator("first", asst.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := &fakeLauncher{provisionErr: errors.New("Herdr timed out"), findErr: errors.New("offline")}
+	d := &Dispatcher{Store: store, Launcher: l, Claimant: "daemon"}
+	r, err := d.RunTask(t.Context(), coordinator.TaskID)
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("need uncertain run, got %v", err)
+	}
+	l.findErr = nil
+	l.found = map[string]Session{r.ID: {HerdrSession: "default", WorkspaceID: "w1", PaneID: "w1:p1"}}
+	if n, err := d.ReconcilePending(t.Context()); err != nil || n != 0 {
+		t.Fatalf("empty pane reconciled: %d %v", n, err)
+	}
+	if got, _ := store.GetCoordinator(asst.ID); got.State != CoordinatorUncertain {
+		t.Fatalf("must remain uncertain: %+v", got)
+	}
+	l.probeAgent = true
+	if n, err := d.ReconcilePending(t.Context()); err != nil || n != 1 {
+		t.Fatalf("running Agent must reattach: %d %v", n, err)
+	}
+	d.Wait()
+	if n, err := d.ReconcilePending(t.Context()); err != nil || n != 0 {
+		t.Fatalf("reattached twice: %d %v", n, err)
+	}
+	if l.provisions != 1 || l.works != 1 {
+		t.Fatalf("accidental relaunch: provisions %d, awaits %d", l.provisions, l.works)
+	}
+	if got, _ := store.GetCoordinator(asst.ID); got.TaskID != coordinator.TaskID {
+		t.Fatalf("coordinator task changed: %+v", got)
 	}
 }

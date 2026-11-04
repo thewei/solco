@@ -34,6 +34,9 @@ const inboxEvery = 15 * time.Second
 // memoryEvery is how often each Assistant's memory folder is reconciled.
 const memoryEvery = 5 * time.Second
 
+// reconcileEvery bounds remote Herdr lookups for uncertain Agent starts.
+const reconcileEvery = 20 * time.Second
+
 // pumpInterval is how often queued Assistant tasks are looked for. Much
 // shorter than the cron tick: a task a person just delegated should start now.
 const pumpInterval = 3 * time.Second
@@ -42,22 +45,24 @@ const pumpInterval = 3 * time.Second
 // lock, the one scheduler. It opens the store, settles what a crash left
 // behind and then pumps queued tasks into real Herdr Agents.
 type personal struct {
-	store    *personalagent.Store
-	disp     *personalagent.Dispatcher
-	cancel   context.CancelFunc
-	ctx      context.Context
-	watch    *personalagent.Watcher
-	beat     *personalagent.Beater
-	sup      *personalagent.Supervisor
-	routines *personalagent.RoutineKeeper
-	rules    *personalagent.RuleScheduler
-	reviewer *personalagent.Reviewer
-	inbox    *personalagent.InboxWatcher
-	groups   *personalagent.GroupPump
-	memFiles *personalagent.MemoryFiles
-	lastMem  time.Time
-	lastLook time.Time
-	polling  atomic.Bool
+	store         *personalagent.Store
+	disp          *personalagent.Dispatcher
+	cancel        context.CancelFunc
+	ctx           context.Context
+	watch         *personalagent.Watcher
+	beat          *personalagent.Beater
+	sup           *personalagent.Supervisor
+	routines      *personalagent.RoutineKeeper
+	rules         *personalagent.RuleScheduler
+	reviewer      *personalagent.Reviewer
+	inbox         *personalagent.InboxWatcher
+	groups        *personalagent.GroupPump
+	memFiles      *personalagent.MemoryFiles
+	lastMem       time.Time
+	lastReconcile time.Time
+	reconciling   atomic.Bool
+	lastLook      time.Time
+	polling       atomic.Bool
 
 	notifier *notify.Notifier
 	lastRule time.Time
@@ -187,6 +192,20 @@ func (p *personal) tick() {
 	if time.Since(p.lastRule) >= ruleEvery {
 		p.lastRule = time.Now()
 		p.tickRules()
+	}
+	// Reattach positively identified Agents from uncertain starts without
+	// re-launching them. This lookup can block on Herdr, so keep it off the
+	// scheduler lane and allow only one pass at a time.
+	if time.Since(p.lastReconcile) >= reconcileEvery && p.reconciling.CompareAndSwap(false, true) {
+		p.lastReconcile = time.Now()
+		go func() {
+			defer p.reconciling.Store(false)
+			if n, err := p.disp.ReconcilePending(p.ctx); err != nil && p.ctx.Err() == nil {
+				log.Printf("assistants: reconciling uncertain starts: %v", err)
+			} else if n > 0 {
+				log.Printf("assistants: reattached %d previously uncertain Agent(s)", n)
+			}
+		}()
 	}
 	if n := p.disp.Pump(p.ctx); n > 0 {
 		log.Printf("assistants: started %d task(s)", n)

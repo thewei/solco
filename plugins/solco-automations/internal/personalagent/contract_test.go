@@ -75,7 +75,7 @@ func TestGoldenFixtures(t *testing.T) {
 	gid := field(g, "goal", "id").(string)
 	run("goal-active", `{"requestId":"g-ap","expectedRevision":1}`, "assistant", "goal", "approve", gid)
 
-	task := run("task-created", fmt.Sprintf(`{"requestId":"g-t","assistantId":%q,"goalId":%q,"kind":"research","title":"Check the PR","brief":"Read it.","agent":"claude"}`, aid, gid), "assistant", "task", "create")
+	task := run("task-created", fmt.Sprintf(`{"requestId":"g-t","assistantId":%q,"goalId":%q,"kind":"research","title":"Check the PR","brief":"Read it.","agent":"omp"}`, aid, gid), "assistant", "task", "create")
 	tid := field(task, "task", "id").(string)
 	r, _, _ := s.ClaimTask(tid, "daemon")
 	_ = s.MarkStarting(r.ID)

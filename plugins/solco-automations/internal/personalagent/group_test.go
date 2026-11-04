@@ -50,20 +50,19 @@ func TestCreateGroupNeedsTwoRealAssistantsAndIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestPostWithoutMentionCallsNobody(t *testing.T) {
+func TestPostWithoutMentionBroadcastsToAllMembers(t *testing.T) {
 	s, _ := openTest(t)
 	g, _ := groupOf(t, s, "Ada", "Bo")
 	res, _, err := s.PostGroupMessage("p1", PostMessageInput{GroupID: g.ID, AuthorKind: AuthorUser, Body: "hello everyone"})
-	if err != nil || len(res.Deliveries) != 0 {
-		t.Fatalf("res=%+v err=%v", res, err)
+	if err != nil || len(res.Deliveries) != 2 {
+		t.Fatalf("broadcast must queue both members: %+v err=%v", res, err)
 	}
 	rep, err := (&GroupPump{Store: s}).Tick()
-	if err != nil || rep != (GroupPumpReport{}) {
-		t.Fatalf("pump did something: %+v %v", rep, err)
+	if err != nil || rep.Started != 2 {
+		t.Fatalf("pump must start both group agents: %+v %v", rep, err)
 	}
-	ls, _ := s.ListTasks("")
-	if len(ls) != 0 {
-		t.Fatalf("an unmentioned message started work: %v", ls)
+	if res.Deliveries[0].AssistantID == res.Deliveries[1].AssistantID {
+		t.Fatalf("broadcast targets must be unique: %+v", res.Deliveries)
 	}
 }
 
@@ -100,7 +99,7 @@ func TestMentionsAreExactAndMembersOnly(t *testing.T) {
 		t.Fatalf("replay = %+v %v %v", again, replayed, err)
 	}
 	feed, _ := s.GroupFeedSince(g.ID, 0, 0)
-	if len(feed.Messages) != 2 || len(feed.Deliveries) != 1 {
+	if len(feed.Messages) != 2 || len(feed.Deliveries) != 3 {
 		t.Fatalf("feed = %d msgs, %d deliveries", len(feed.Messages), len(feed.Deliveries))
 	}
 }
@@ -225,7 +224,7 @@ func TestPumpDeliversOnlyWhatTheRunningAgentHasNotSeen(t *testing.T) {
 		return nil
 	}}
 	rep, err := p.Tick()
-	if err != nil || rep.Delivered != 1 || len(got) != 1 {
+	if err != nil || rep.Started != 1 || rep.Delivered != 2 || len(got) != 1 {
 		t.Fatalf("rep=%+v err=%v got=%d", rep, err, len(got))
 	}
 	text := got[0]

@@ -114,7 +114,7 @@ func TestRuntimeProfileDefaultsAndExplicitWins(t *testing.T) {
 	s, _ := openTest(t)
 	a, _, _ := s.CreateAssistant("c1", CreateAssistantInput{Name: "Ada"})
 	rt, err := s.GetRuntime(a.ID)
-	if err != nil || rt.Profile.Agent != "" || rt.Profile.Revision != 0 || !rt.Profile.EffortSupported || len(rt.Running) != 0 {
+	if err != nil || rt.Profile.Agent != "" || rt.Profile.Revision != 0 || rt.Profile.EffortSupported || len(rt.Running) != 0 {
 		t.Fatalf("fresh = %+v err=%v", rt, err)
 	}
 	if _, _, err := s.SetRuntime("r0", a.ID, "codex", "gpt-x", "high", 5); !errors.Is(err, ErrStaleRevision) {
@@ -137,11 +137,11 @@ func TestRuntimeProfileDefaultsAndExplicitWins(t *testing.T) {
 	// Unnamed Agent = the profile (with its model); a named Agent wins and does
 	// not inherit the profile's model.
 	co, _, _ := s.StartCoordinator("co1", a.ID)
-	if tk, _ := s.GetTask(co.TaskID); tk.Agent != "codex" || tk.Model != "gpt-x" {
+	if tk, _ := s.GetTask(co.TaskID); tk.Agent != "omp" || tk.Model != "" {
 		t.Fatalf("coordinator task = %s/%s", tk.Agent, tk.Model)
 	}
 	tk, _, err := s.CreateTask("t1", CreateTaskInput{AssistantID: a.ID, Title: "T", Brief: "B", Kind: KindResearch})
-	if err != nil || tk.Agent != "codex" || tk.Model != "gpt-x" {
+	if err != nil || tk.Agent != "omp" || tk.Model != "" {
 		t.Fatalf("task = %s/%s %v", tk.Agent, tk.Model, err)
 	}
 	tk2, _, _ := s.CreateTask("t2", CreateTaskInput{AssistantID: a.ID, Title: "T", Brief: "B", Kind: KindResearch, Agent: "claude"})
@@ -159,7 +159,7 @@ func TestRuntimeProfileDefaultsAndExplicitWins(t *testing.T) {
 func TestRuntimeShowsTheRealRunningAgent(t *testing.T) {
 	s, _ := openTest(t)
 	a, _, _ := s.CreateAssistant("c1", CreateAssistantInput{Name: "Ada"})
-	co, _, _ := s.StartCoordinatorAs("co1", a.ID, "codex", "gpt-9")
+	co, _, _ := s.StartCoordinatorAs("co1", a.ID, "omp", "gpt-9")
 	run, _, err := s.ClaimTask(co.TaskID, "t")
 	if err != nil {
 		t.Fatal(err)
@@ -168,7 +168,7 @@ func TestRuntimeShowsTheRealRunningAgent(t *testing.T) {
 	_ = s.RecordLaunch(run.ID, Session{HerdrSession: "default", WorkspaceID: "w1", PaneID: "w1:p1"})
 	_, _, _ = s.SetRuntime("r1", a.ID, "claude", "", "", 0)
 	rt, _ := s.GetRuntime(a.ID)
-	if len(rt.Running) != 1 || rt.Running[0].Surface != "coordinator" || rt.Running[0].Agent != "codex" || rt.Running[0].Model != "gpt-9" || rt.Running[0].PaneID != "w1:p1" {
+	if len(rt.Running) != 1 || rt.Running[0].Surface != "coordinator" || rt.Running[0].Agent != "omp" || rt.Running[0].Model != "gpt-9" || rt.Running[0].PaneID != "w1:p1" {
 		t.Fatalf("running = %+v (profile %+v)", rt.Running, rt.Profile)
 	}
 }
@@ -178,10 +178,11 @@ func TestLaunchPassesEffortOnlyWhereTheAgentTakesIt(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	a, _, _ := s.CreateAssistant("c1", CreateAssistantInput{Name: "Ada"})
 	_, _, _ = s.SetRuntime("r1", a.ID, "claude", "", "high", 0)
-	co, _, _ := s.StartCoordinator("co1", a.ID)
+	// OMP Coordinator is locked; verify legacy Claude effort on a worker.
+	co, _, _ := s.CreateTask("effort-task", CreateTaskInput{AssistantID: a.ID, Title: "Check", Brief: "brief", Kind: KindResearch, Agent: "claude"})
 	l := &fakeLauncher{}
 	d := &Dispatcher{Store: s, Launcher: l, Claimant: "t"}
-	if _, err := d.RunTask(t.Context(), co.TaskID); err != nil {
+	if _, err := d.RunTask(t.Context(), co.ID); err != nil {
 		t.Fatal(err)
 	}
 	args := strings.Join(l.specs[0].AgentArgs, " ")
@@ -250,6 +251,8 @@ func TestMCPGrantsBindStrictlyAndHonestly(t *testing.T) {
 	s, path := openTest(t)
 	a, _, _ := s.CreateAssistant("c1", CreateAssistantInput{Name: "Ada"})
 	b, _, _ := s.CreateAssistant("c2", CreateAssistantInput{Name: "Bo"})
+	_, _, _ = s.SetRuntime("a-claude", a.ID, "claude", "", "", 0)
+	_, _, _ = s.SetRuntime("b-claude", b.ID, "claude", "", "", 0)
 
 	v, err := s.GetMCP(a.ID)
 	if err != nil || !v.Supported || len(v.Servers) != 3 {
@@ -345,6 +348,7 @@ func TestMCPVerifyRecordsTheAgentsOwnStatus(t *testing.T) {
 	mcpHomeFixture(t)
 	s, _ := openTest(t)
 	a, _, _ := s.CreateAssistant("c1", CreateAssistantInput{Name: "Ada"})
+	_, _, _ = s.SetRuntime("claude-profile", a.ID, "claude", "", "", 0)
 	_, _, _ = s.SetMCPGrant("g1", a.ID, "alpha", true)
 	_, _, _ = s.SetMCPGrant("g2", a.ID, "beta", true)
 
@@ -383,7 +387,7 @@ func TestMCPVerifyRecordsTheAgentsOwnStatus(t *testing.T) {
 	if _, err := s.VerifyMCP(t.Context(), a.ID); err == nil || codeFor(err).Code != "mcp_probe_failed" {
 		t.Fatalf("probe failure = %v", err)
 	}
-	_, _, _ = s.SetRuntime("r1", a.ID, "codex", "", "", 0)
+	_, _, _ = s.SetRuntime("r1", a.ID, "codex", "", "", 1)
 	if _, err := s.VerifyMCP(t.Context(), a.ID); err == nil || codeFor(err).Code != "mcp_unsupported" {
 		t.Fatalf("unsupported = %v", err)
 	}

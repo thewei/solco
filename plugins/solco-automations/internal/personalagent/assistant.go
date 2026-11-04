@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -127,6 +128,13 @@ func (s *Store) SetAssistantStatus(requestID, id, status string, expectedRevisio
 	}
 	payload := map[string]any{"id": id, "status": status, "rev": expectedRevision}
 	return execute(s, requestID, "assistant.status", payload, func(tx *sql.Tx) (Assistant, error) {
+		cur, err := getAssistantTx(tx, id)
+		if err != nil {
+			return Assistant{}, err
+		}
+		if cur.Status == StatusArchived {
+			return Assistant{}, fmt.Errorf("%w: restore an archived Assistant through Settings", ErrBadState)
+		}
 		return updateAssistant(tx, s.nowMS(), id, expectedRevision, `status=?`, status)
 	})
 }
@@ -162,7 +170,7 @@ func (s *Store) GetAssistant(id string) (Assistant, error) {
 
 // ListAssistants returns every identity, oldest first.
 func (s *Store) ListAssistants() ([]Assistant, error) {
-	rows, err := s.db.Query(`SELECT ` + assistantCols + ` FROM assistants ORDER BY created_at, id`)
+	rows, err := s.db.Query(`SELECT ` + assistantCols + ` FROM assistants WHERE status<>'archived' ORDER BY created_at, id`)
 	if err != nil {
 		return nil, wrapBusy(err)
 	}

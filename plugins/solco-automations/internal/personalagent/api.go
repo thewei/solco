@@ -165,6 +165,28 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		}
 		res, err := ExportLegacy(src, dst, time.Now())
 		return ok("export", res), err
+	case "archived":
+		list, err := a.Store.ListArchivedAssistants()
+		return ok("assistants", list), err
+	case "archive", "restore", "delete-forever":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant %s <id>", cmd)
+		}
+		var in common
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		switch cmd {
+		case "archive":
+			x, replayed, err := a.Store.ArchiveAssistant(in.RequestID, rest[0], in.ExpectedRevision)
+			return ok("assistant", x, "replayed", replayed), err
+		case "restore":
+			x, replayed, err := a.Store.RestoreAssistant(in.RequestID, rest[0], in.ExpectedRevision)
+			return ok("assistant", x, "replayed", replayed), err
+		default:
+			err := a.Store.DeleteArchivedAssistant(rest[0], in.ExpectedRevision)
+			return ok("deleted", err == nil), err
+		}
 	case "list":
 		list, err := a.Store.ListAssistants()
 		return ok("assistants", list), err
@@ -270,6 +292,10 @@ func (a *API) task(args []string, body []byte) (any, error) {
 		if err := decode(body, &in); err != nil {
 			return nil, err
 		}
+		if in.Agent != "" && in.Agent != AssistantAgentKind {
+			return nil, fmt.Errorf("%w: Assistants can only dispatch omp tasks", ErrInvalid)
+		}
+		in.Agent = AssistantAgentKind
 		x, replayed, err := a.Store.CreateTask(in.RequestID, in.CreateTaskInput)
 		return ok("task", x, "replayed", replayed), err
 	case "list":

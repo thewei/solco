@@ -7,10 +7,10 @@ import (
 )
 
 // GroupPump turns queued deliveries into real Agent work. It is deterministic:
-// one pass reads the queue, starts at most the Group Agents that were really
-// @-mentioned, and hands each running one the messages it has not seen. It
-// never calls a model by itself and a message without a mention never reaches
-// it, so a quiet Group costs nothing.
+// one pass reads the queue, starts the Group Agents targeted by each message
+// (all members for a broadcast, explicitly mentioned members otherwise),
+// and hands each running Agent the messages it has not seen. A quiet Group
+// costs nothing.
 type GroupPump struct {
 	Store *Store
 	// Submit hands text to the Agent in a pane (production: Herdr `agent

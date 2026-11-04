@@ -293,6 +293,12 @@ func (d *Dispatcher) work(ctx context.Context, runID string, sess Session, spec 
 		// picked up again by Resume. Leave the run as it is.
 		return d.reload(runID), err
 	default:
+		// A failed post-provision call cannot prove that Herdr did not
+		// start this Agent. Preserve its identity; never launch blindly.
+		if spec.Kind == KindCoordinator || spec.Kind == KindGroupAgent {
+			_, _ = d.Store.parkUncertain(runID, "Herdr Agent outcome needs reconciliation")
+			return d.reload(runID), fmt.Errorf("%w: %v", ErrUncertain, err)
+		}
 		_ = d.Store.FinishRun(runID, RunFailed, err.Error())
 		return d.reload(runID), err
 	}
@@ -353,6 +359,67 @@ func (d *Dispatcher) Reconcile(ctx context.Context, runID string) (Run, error) {
 	}
 	d.settle(run.ID)
 	return d.reload(run.ID), nil
+}
+
+// AgentPresenceProber proves a discovered Herdr pane actually runs the
+// expected Agent. A workspace label by itself does not prove it.
+type AgentPresenceProber interface {
+	HasAgent(Session, string) (bool, error)
+}
+
+// ReconcilePending looks for uncertain runs in Herdr. A missing/unreadable
+// workspace, an empty pane, or an unknown identity remains uncertain: none
+// of those facts safely authorizes retrying or claiming the Agent finished.
+// A positively identified Agent is reattached exactly once via its run status.
+func (d *Dispatcher) ReconcilePending(ctx context.Context) (int, error) {
+	probe, ok := d.Launcher.(AgentPresenceProber)
+	if !ok {
+		return 0, nil
+	}
+	runs, err := d.Store.RunsWithStatus(RunUncertain)
+	if err != nil {
+		return 0, err
+	}
+	confirmed := 0
+	for _, r := range runs {
+		if err := ctx.Err(); err != nil {
+			return confirmed, err
+		}
+		task, err := d.Store.GetTask(r.TaskID)
+		if err != nil {
+			continue
+		}
+		sess, found, err := d.Launcher.Find(r.ID)
+		if err != nil || !found {
+			continue
+		}
+		yes, err := probe.HasAgent(sess, task.Agent)
+		if err != nil || !yes {
+			continue
+		}
+		if err := d.Store.RecordLaunch(r.ID, sess); err != nil {
+			continue
+		}
+		d.settle(r.ID)
+		current, err := d.Store.GetRun(r.ID)
+		if err != nil || current.Status != RunRunning {
+			continue
+		}
+		d.resumeRun(ctx, current, task)
+		confirmed++
+	}
+	return confirmed, nil
+}
+
+func (d *Dispatcher) resumeRun(ctx context.Context, r Run, task Task) {
+	sess := Session{HerdrSession: r.HerdrSession, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, AgentSessionID: r.AgentSessionID}
+	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout()}
+	d.active.Add(1)
+	d.wg.Add(1)
+	go func() {
+		defer d.finish()
+		_, _ = d.work(ctx, r.ID, sess, spec, true)
+	}()
 }
 
 // Pump claims queued tasks of active Assistants, up to MaxParallel at a time,
@@ -418,19 +485,15 @@ func (d *Dispatcher) Resume(ctx context.Context) int {
 	}
 	n := 0
 	for _, r := range runs {
+		if ctx.Err() != nil {
+			break
+		}
 		task, err := d.Store.GetTask(r.TaskID)
 		if err != nil {
 			continue
 		}
-		sess := Session{HerdrSession: r.HerdrSession, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, AgentSessionID: r.AgentSessionID}
-		spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout()}
+		d.resumeRun(ctx, r, task)
 		n++
-		d.active.Add(1)
-		d.wg.Add(1)
-		go func() {
-			defer d.finish()
-			_, _ = d.work(ctx, r.ID, sess, spec, true)
-		}()
 	}
 	return n
 }

@@ -189,16 +189,15 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 		if err != nil {
 			return Task{}, err
 		}
-		// An Agent the caller did not name is the Assistant's own (3.1 U2).
+		// During the OMP rollout, new Assistant work is dispatched through
+		// OMP even when an old saved profile refers to a legacy provider.
+		// Explicit legacy kinds are only used by pre-existing internal callers.
 		in := in
 		if in.Agent == "" {
 			p := s.profileOf(tx, in.AssistantID)
-			in.Agent = p.Agent
-			if in.Model == "" {
+			in.Agent = AssistantAgentKind
+			if p.Agent == AssistantAgentKind && in.Model == "" {
 				in.Model = p.Model
-			}
-			if in.Agent == "" {
-				in.Agent = "claude"
 			}
 		}
 		if a.Status != StatusActive {

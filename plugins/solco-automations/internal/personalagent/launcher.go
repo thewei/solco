@@ -172,3 +172,59 @@ func (l *HostLauncher) Find(marker string) (Session, bool, error) {
 	}
 	return Session{}, false, nil
 }
+
+// HasAgent only confirms a pane when Herdr registers the expected provider.
+// A workspace marker alone cannot prove the launch or its first prompt
+// succeeded. In particular, an empty pane must remain uncertain.
+func (l *HostLauncher) HasAgent(sess Session, expected string) (bool, error) {
+	if sess.PaneID == "" || expected == "" {
+		return false, nil
+	}
+	client := herdr.Client{Session: sess.HerdrSession}
+	kind, status, err := client.AgentIdentity(sess.PaneID)
+	if err != nil {
+		return false, err
+	}
+	// Idle/blocked is not proof that the original prompt was delivered.
+	// Only an actually working Agent is safe to reattach automatically.
+	if kind != expected || status != "working" {
+		return false, nil
+	}
+	// Do not interpret a startup trust or permission dialog as a running worker.
+	if screen, err := client.PaneRead(sess.PaneID, 60); err == nil {
+		if _, blocked := host.StartupDialog(screen); blocked {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// HerdrPaneGone verifies a previously owned pane is no longer present. An
+// unavailable Herdr server is NOT evidence of closure. Do not release or
+// close a pane automatically when permanently deleting an Assistant.
+func HerdrPaneGone(session, workspace, pane string) (bool, error) {
+	if workspace == "" || pane == "" {
+		return false, fmt.Errorf("missing recorded Herdr identity")
+	}
+	client := herdr.Client{Session: session}
+	workspaces, err := client.WorkspaceList()
+	if err != nil {
+		return false, err
+	}
+	for _, w := range workspaces {
+		if w.WorkspaceID != workspace {
+			continue
+		}
+		ids, err := client.PaneIDs(workspace)
+		if err != nil {
+			return false, err
+		}
+		for _, id := range ids {
+			if id == pane {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	return true, nil
+}
