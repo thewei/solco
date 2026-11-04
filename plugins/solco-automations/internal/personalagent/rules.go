@@ -367,15 +367,33 @@ func (r *RuleScheduler) Tick() (RuleReport, error) {
 		return RuleReport{}, err
 	}
 	now := r.now()
-	mine := *cfg
-	mine.Automations = nil
-	for _, a := range cfg.Automations {
-		if owned[a.Name] {
-			mine.Automations = append(mine.Automations, a)
-		}
-	}
 	rep, _, err := execute(r.Store, "", "legacy.tick", nil, func(tx *sql.Tx) (RuleReport, error) {
 		var rep RuleReport
+		// A Routine's YAML draft flag is not proof of Owner approval: it
+		// can have been cleared by an external automation editor, or just
+		// before a Keeper process crashed. The SQLite approval and active
+		// state, AND the approved executable hash, must all agree before
+		// the rule scheduler can create even one Task. Query inside the
+		// same transaction that advances the watermark and emits tasks.
+		mine := *cfg
+		mine.Automations = nil
+		for _, a := range cfg.Automations {
+			if !owned[a.Name] {
+				continue
+			}
+			routine, err := getRoutineTx(tx, a.Name)
+			if errors.Is(err, ErrNotFound) {
+				// Ordinary Automations are still controlled by YAML alone.
+				mine.Automations = append(mine.Automations, a)
+				continue
+			}
+			if err != nil {
+				return rep, err
+			}
+			if routine.State == RoutineActive && routine.Approved && DefinitionHash(a) == routine.DefHash {
+				mine.Automations = append(mine.Automations, a)
+			}
+		}
 		ledger := map[string]LegacyRule{}
 		state := schedule.State{LastOccurrence: map[string]time.Time{}}
 		for name := range owned {
