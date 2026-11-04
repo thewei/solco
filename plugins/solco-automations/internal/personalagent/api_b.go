@@ -100,7 +100,7 @@ func (a *API) goal(args []string, body []byte) (any, error) {
 
 func (a *API) memory(args []string, body []byte) (any, error) {
 	if len(args) == 0 {
-		return nil, coded("invalid", "usage: assistant memory <propose|list|visible|context|search|approve|correct|forget|share|unshare>")
+		return nil, coded("invalid", "usage: assistant memory <propose|add|list|visible|context|search|approve|correct|forget|share|unshare|history|review|sync|folder>")
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {
@@ -114,6 +114,41 @@ func (a *API) memory(args []string, body []byte) (any, error) {
 		}
 		m, replayed, err := a.Store.ProposeMemory(in.RequestID, in.ProposeMemoryInput)
 		return ok("memory", m, "replayed", replayed), err
+	case "add":
+		var in struct {
+			common
+			AssistantID string `json:"assistantId"`
+			Content     string `json:"content"`
+			Kind        string `json:"kind"`
+		}
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		m, replayed, err := a.Store.AddMemory(in.RequestID, in.AssistantID, in.Content, in.Kind)
+		return ok("memory", m, "replayed", replayed), err
+	case "history":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant memory history <id>")
+		}
+		v, err := a.Store.MemoryHistory(rest[0])
+		return ok("versions", v), err
+	case "review":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant memory review <assistantId>")
+		}
+		r, err := a.Store.ReviewMemory(rest[0])
+		return ok("review", r), err
+	case "sync", "folder":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant memory %s <assistantId>", cmd)
+		}
+		files := &MemoryFiles{Store: a.Store, Root: MemoryRoot()}
+		rep, err := files.Sync(rest[0])
+		if err != nil {
+			return nil, err
+		}
+		dir, _ := files.Dir(rest[0])
+		return ok("path", dir, "sync", rep), nil
 	case "list", "visible":
 		if len(rest) != 1 {
 			return nil, coded("invalid", "usage: assistant memory %s <assistantId>", cmd)

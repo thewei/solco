@@ -1,0 +1,16 @@
+{
+  "proactivity": {
+    "assistantId": "a_0000000000000001",
+    "dailyBudget": 20,
+    "dispatchToday": 1,
+    "level": "follow_up",
+    "quietEnd": "",
+    "quietNow": false,
+    "quietStart": "",
+    "reportEveryMin": 0,
+    "revision": 0,
+    "tz": "",
+    "updatedAt": 1800000000000
+  },
+  "schema": 1
+}

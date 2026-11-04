@@ -1,0 +1,17 @@
+{
+  "memory": {
+    "assistantId": "a_0000000000000001",
+    "content": "Prefers short answers with one example",
+    "createdAt": 1800000001000,
+    "id": "m_0000000000000021",
+    "kind": "preference",
+    "revision": 2,
+    "scope": "assistant",
+    "sharedWith": [],
+    "sourceRef": "user",
+    "state": "approved",
+    "updatedAt": 1800000001000
+  },
+  "replayed": false,
+  "schema": 1
+}

@@ -5,8 +5,10 @@
     "personalAgentApprove": true,
     "personalAgentGroups": true,
     "personalAgentManage": true,
+    "personalAgentMemory": true,
     "personalAgentPersona": true,
     "personalAgentPlans": true,
+    "personalAgentProactivity": true,
     "personalAgentRoutines": true,
     "terminal": true
   },

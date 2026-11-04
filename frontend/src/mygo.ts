@@ -54,7 +54,7 @@ export interface AssistantsAgent {
 /**
  * AssistantsDetail is the selected Assistant's light page: what the
  * conversation header, the Needs-You strip and the Chat need. The long lists
- * (Goals, Tasks and their Runs, Memory) are the More drawer's, read by Drawer
+ * (Goals, Tasks and their Runs) are the More drawer's, read by Drawer
  * only while it is open.
  */
 export interface AssistantsDetail {
@@ -99,7 +99,6 @@ export interface AssistantsDrawer {
    */
   routines: Routine[];
   tasks: AssistantsTask[];
-  memory: MemoryItem[];
 }
 
 /** AssistantsGoalInput creates a Goal; Watch makes it a PR Watch. */
@@ -910,6 +909,34 @@ export interface MemoryItem {
   updatedAt: number;
 }
 
+/**
+ * MemoryReview is one Assistant's live memory (candidates and approved) with
+ * what looks wrong: duplicate wording, unanswered candidates, edit conflicts.
+ */
+export interface MemoryReview {
+  assistantId: string;
+  approved: number;
+  candidates: number;
+  max: number;
+  duplicates: string[][];
+  staleCandidates: string[];
+  conflicts: string[];
+  items: MemoryItem[];
+}
+
+/**
+ * MemoryVersion is one revision of a memory item; Author is who made it
+ * (user, agent, files, system) — a label, not a proof.
+ */
+export interface MemoryVersion {
+  memoryId: string;
+  revision: number;
+  author: string;
+  state: string;
+  content: string;
+  at: number;
+}
+
 /** MilestoneTask is the work a plan milestone delegates. */
 export interface MilestoneTask {
   kind: string;
@@ -979,6 +1006,34 @@ export interface PlanRevision {
   reason: string;
   milestones: number;
   createdAt: number;
+}
+
+/**
+ * Proactivity is the rules for what the system may start on its own for one
+ * Assistant. Revision 0 = never set (the defaults apply).
+ */
+export interface Proactivity {
+  assistantId: string;
+  level: string;
+  quietStart: string;
+  quietEnd: string;
+  tz: string;
+  reportEveryMin: number;
+  dailyBudget: number;
+  dispatchToday: number;
+  quietNow: boolean;
+  revision: number;
+  updatedAt: number;
+}
+
+/** ProactivityInput is what a person may change. */
+export interface ProactivityInput {
+  level: string;
+  quietStart: string;
+  quietEnd: string;
+  tz: string;
+  reportEveryMin: number;
+  dailyBudget: number;
 }
 
 /**
@@ -1333,6 +1388,18 @@ export const assistants = {
   ackTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.AckTask", requestID, id, revision);
   },
+  /** AddMemory writes a fact down; it is approved at once. */
+  addMemory(requestID: string, id: string, content: string): Promise<void> {
+    return call("assistants.AddMemory", requestID, id, content);
+  },
+  /** ApproveMemory turns a candidate into something the Assistant may use. */
+  approveMemory(requestID: string, memoryID: string, revision: number): Promise<void> {
+    return call("assistants.ApproveMemory", requestID, memoryID, revision);
+  },
+  /** Behavior reads the proactivity rules (defaults when never set). */
+  behavior(id: string): Promise<Proactivity> {
+    return call("assistants.Behavior", id);
+  },
   /**
    * BindCoordinator points the embedded Chat at this Assistant's Coordinator.
    * The pane comes only from the plugin's own record of the Coordinator's run —
@@ -1369,11 +1436,15 @@ export const assistants = {
   /**
    * Drawer reads the More drawer's lists for one Assistant: its Goals, Tasks
    * with their Runs (a Run can be opened only while it ran in the window's Herdr
-   * session and its pane is still in the tree) and approved Memory. The page
+   * session and its pane is still in the tree) . The page
    * asks only while the drawer is open, so the chat's own polling stays light.
    */
   drawer(id: string): Promise<AssistantsDrawer> {
     return call("assistants.Drawer", id);
+  },
+  /** EditMemory rewrites an item; what the Assistant may use changes at once. */
+  editMemory(requestID: string, memoryID: string, revision: number, content: string): Promise<void> {
+    return call("assistants.EditMemory", requestID, memoryID, revision, content);
   },
   /**
    * EnsureChat is the conversation's first-Send entry (2026-11-04): it starts the
@@ -1384,6 +1455,10 @@ export const assistants = {
    */
   ensureChat(requestID: string, id: string, agentKind: string): Promise<CoordinatorChat> {
     return call("assistants.EnsureChat", requestID, id, agentKind);
+  },
+  /** ForgetMemory removes an item's text everywhere (versions and file included). */
+  forgetMemory(requestID: string, memoryID: string, revision: number): Promise<void> {
+    return call("assistants.ForgetMemory", requestID, memoryID, revision);
   },
   /** GoalAction runs approve | pause | resume | cancel | complete on a Goal. */
   goalAction(requestID: string, action: string, id: string, revision: number, evidence: string): Promise<void> {
@@ -1403,6 +1478,18 @@ export const assistants = {
   /** GroupMember adds or removes one Assistant. */
   groupMember(requestID: string, id: string, assistantID: string, add: boolean): Promise<void> {
     return call("assistants.GroupMember", requestID, id, assistantID, add);
+  },
+  /** Memory reads one Assistant's live memory with the tidy-up findings. */
+  memory(id: string): Promise<MemoryReview> {
+    return call("assistants.Memory", id);
+  },
+  /** MemoryHistory lists an item's versions, newest first. */
+  memoryHistory(memoryID: string): Promise<MemoryVersion[]> {
+    return call("assistants.MemoryHistory", memoryID);
+  },
+  /** OpenMemoryFolder brings the Assistant's memory folder up to date and opens it in Finder. */
+  openMemoryFolder(id: string): Promise<void> {
+    return call("assistants.OpenMemoryFolder", id);
   },
   /**
    * OpenPane selects a Run's pane in the Workspace (only a pane the tree still
@@ -1456,6 +1543,10 @@ export const assistants = {
    */
   routineAction(requestID: string, action: string, name: string): Promise<void> {
     return call("assistants.RoutineAction", requestID, action, name);
+  },
+  /** SaveBehavior stores the rules; they govern only what starts unasked. */
+  saveBehavior(requestID: string, id: string, in_: ProactivityInput, revision: number): Promise<void> {
+    return call("assistants.SaveBehavior", requestID, id, in_, revision);
   },
   /** SaveInstructions stores a new revision (it reaches Agents started afterwards). */
   saveInstructions(requestID: string, id: string, body: string, revision: number): Promise<void> {

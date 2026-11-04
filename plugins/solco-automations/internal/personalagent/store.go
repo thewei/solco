@@ -498,6 +498,42 @@ var migrations = []string{
 		updated_at INTEGER NOT NULL
 	);
 	CREATE INDEX routines_by_assistant ON routines(assistant_id);`,
+	// 18: Memory workspace and proactivity (U5). memory_versions keeps every
+	// revision (a forgotten item's versions keep no content); memory_files is
+	// what the folder projection last wrote, so a person's edit is the file
+	// that no longer matches it; proactivity is one Assistant's rules for what
+	// the system may start on its own.
+	`CREATE TABLE memory_versions (
+		memory_id TEXT NOT NULL,
+		revision INTEGER NOT NULL,
+		author TEXT NOT NULL,
+		state TEXT NOT NULL,
+		content TEXT NOT NULL,
+		at INTEGER NOT NULL,
+		PRIMARY KEY (memory_id, revision)
+	);
+	INSERT INTO memory_versions(memory_id,revision,author,state,content,at) SELECT id,revision,'system',state,content,updated_at FROM memory_items;
+	CREATE TABLE memory_files (
+		assistant_id TEXT NOT NULL,
+		rel TEXT NOT NULL,
+		memory_id TEXT NOT NULL,
+		revision INTEGER NOT NULL,
+		hash TEXT NOT NULL,
+		PRIMARY KEY (assistant_id, rel)
+	);
+	CREATE TABLE proactivity (
+		assistant_id TEXT PRIMARY KEY REFERENCES assistants(id),
+		level TEXT NOT NULL,
+		quiet_start TEXT NOT NULL DEFAULT '',
+		quiet_end TEXT NOT NULL DEFAULT '',
+		tz TEXT NOT NULL DEFAULT '',
+		report_every_min INTEGER NOT NULL DEFAULT 0,
+		daily_budget INTEGER NOT NULL DEFAULT 20,
+		dispatch_day TEXT NOT NULL DEFAULT '',
+		dispatch_today INTEGER NOT NULL DEFAULT 0,
+		revision INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);`,
 }
 
 func (s *Store) migrate() error {

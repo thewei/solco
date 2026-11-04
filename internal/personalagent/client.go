@@ -552,3 +552,73 @@ func (c *Client) RoutineAction(ctx context.Context, requestID, action, name stri
 	}
 	return out.Routine, c.do(ctx, req{RequestID: requestID}, &out, "routine", action, name)
 }
+
+// AddMemory is a person writing a fact down: approved at once.
+func (c *Client) AddMemory(ctx context.Context, requestID, assistantID, content, kind string) (MemoryItem, error) {
+	var out struct {
+		Memory MemoryItem `json:"memory"`
+	}
+	body := struct {
+		req
+		AssistantID string `json:"assistantId"`
+		Content     string `json:"content"`
+		Kind        string `json:"kind,omitempty"`
+	}{req{RequestID: requestID}, assistantID, content, kind}
+	return out.Memory, c.do(ctx, body, &out, "memory", "add")
+}
+
+// EditMemory approves a candidate, rewrites an item (content) or forgets it.
+func (c *Client) EditMemory(ctx context.Context, requestID, action, id string, rev int, content string) (MemoryItem, error) {
+	var out struct {
+		Memory MemoryItem `json:"memory"`
+	}
+	body := struct {
+		req
+		Content string `json:"content,omitempty"`
+	}{req{requestID, rev}, content}
+	return out.Memory, c.do(ctx, body, &out, "memory", action, id)
+}
+
+// MemoryHistory lists one item's versions, newest first.
+func (c *Client) MemoryHistory(ctx context.Context, id string) ([]MemoryVersion, error) {
+	var out struct {
+		Versions []MemoryVersion `json:"versions"`
+	}
+	return out.Versions, c.do(ctx, nil, &out, "memory", "history", id)
+}
+
+// ReviewMemory is the live memory plus the tidy-up findings.
+func (c *Client) ReviewMemory(ctx context.Context, assistantID string) (MemoryReview, error) {
+	var out struct {
+		Review MemoryReview `json:"review"`
+	}
+	return out.Review, c.do(ctx, nil, &out, "memory", "review", assistantID)
+}
+
+// MemoryFolder reconciles the Assistant's memory folder and returns its path.
+func (c *Client) MemoryFolder(ctx context.Context, assistantID string) (string, error) {
+	var out struct {
+		Path string `json:"path"`
+	}
+	return out.Path, c.do(ctx, nil, &out, "memory", "folder", assistantID)
+}
+
+// Proactivity reads one Assistant's proactivity rules.
+func (c *Client) Proactivity(ctx context.Context, assistantID string) (Proactivity, error) {
+	var out struct {
+		Proactivity Proactivity `json:"proactivity"`
+	}
+	return out.Proactivity, c.do(ctx, nil, &out, "proactivity", "show", assistantID)
+}
+
+// SetProactivity writes them (rev 0 creates).
+func (c *Client) SetProactivity(ctx context.Context, requestID, assistantID string, in ProactivityInput, rev int) (Proactivity, error) {
+	var out struct {
+		Proactivity Proactivity `json:"proactivity"`
+	}
+	body := struct {
+		req
+		ProactivityInput
+	}{req{requestID, rev}, in}
+	return out.Proactivity, c.do(ctx, body, &out, "proactivity", "set", assistantID)
+}

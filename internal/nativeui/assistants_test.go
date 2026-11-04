@@ -73,6 +73,18 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 			switch strings.Join(args, " ") {
 			case "routine list --assistant a_1":
 				return []byte(`{"schema":1,"routines":[{"name":"morning-check","assistantId":"a_1","requestedBy":"assistant","source":"chat","state":"draft","revision":1,"approved":false,"createdAt":1,"updatedAt":1,"cron":"0 9 * * *","repo":"/tmp","agent":"claude","headless":true,"paused":false}]}`), nil
+			case "memory review a_1":
+				return []byte(`{"schema":1,"review":{"assistantId":"a_1","approved":1,"candidates":1,"max":500,"duplicates":[],"staleCandidates":[],"conflicts":[],"items":[{"id":"m_1","assistantId":"a_1","content":"short reports","state":"approved","kind":"fact","revision":2},{"id":"m_2","assistantId":"a_1","content":"maybe tea","state":"candidate","kind":"fact","revision":1}]}}`), nil
+			case "memory history m_1":
+				return []byte(`{"schema":1,"versions":[{"memoryId":"m_1","revision":2,"author":"files","state":"approved","content":"short reports","at":2},{"memoryId":"m_1","revision":1,"author":"user","state":"approved","content":"reports","at":1}]}`), nil
+			case "memory folder a_1":
+				return []byte(`{"schema":1,"path":"/tmp/solco-memory/a_1/memory","sync":{}}`), nil
+			case "proactivity show a_1":
+				return []byte(`{"schema":1,"proactivity":{"assistantId":"a_1","level":"follow_up","quietStart":"","quietEnd":"","tz":"","reportEveryMin":0,"dailyBudget":20,"dispatchToday":0,"quietNow":false,"revision":0,"updatedAt":0}}`), nil
+			case "memory add", "memory correct m_1", "memory approve m_2", "memory forget m_1":
+				return []byte(`{"schema":1,"replayed":false,"memory":{"id":"m_1","assistantId":"a_1","content":"x","state":"approved","revision":3}}`), nil
+			case "proactivity set a_1":
+				return []byte(`{"schema":1,"replayed":false,"proactivity":{"assistantId":"a_1","level":"suggest","dailyBudget":10,"revision":1}}`), nil
 			case "goal plan g_1":
 				return []byte(`{"schema":1,"plan":{"goalId":"g_1","assistantId":"a_1","successCriteria":"Merged","milestones":[{"id":"m1","title":"Review","state":"working","task":{"kind":"research","title":"Review","brief":"b"},"taskId":"t_1"}],"nextAction":"","planRevision":1,"replans":0,"maxTasks":12,"staleAfterMs":2700000,"verified":0,"total":1,"state":"working","revisions":[],"updatedAt":1}}`), nil
 			case "facts a_1 --limit 6", "facts a_1 --limit 40":
@@ -192,7 +204,7 @@ func TestAssistantsBridgeSnapshotReadsTheSelectedAssistant(t *testing.T) {
 		}
 	}
 	d, err := b.Drawer(context.Background(), "a_1")
-	if err != nil || len(d.Goals) != 1 || len(d.Memory) != 1 || len(d.Tasks) != 1 {
+	if err != nil || len(d.Goals) != 1 || len(d.Tasks) != 1 {
 		t.Fatalf("drawer = %+v err=%v", d, err)
 	}
 	if len(d.Routines) != 1 || d.Routines[0].Name != "morning-check" || d.Routines[0].State != "draft" {
@@ -518,5 +530,58 @@ func TestAssistantsGroupRowOpensTheGroupConversation(t *testing.T) {
 	s.applyAssistantsOverview(personalagent.Overview{Assistants: view.Assistants, Groups: view.Groups}, nil)
 	if s.assistants.selectedGroup != "" {
 		t.Fatalf("an unknown Group stayed selected: %q", s.assistants.selectedGroup)
+	}
+}
+
+func TestAssistantsMemoryAndBehaviorBridge(t *testing.T) {
+	calls := stubAssistants(t, false)
+	var opened string
+	old := openFolder
+	openFolder = func(p string) error { opened = p; return nil }
+	t.Cleanup(func() { openFolder = old })
+	s := openAssistantsShell(t)
+	b := NewAssistantsBridge(s)
+	ctx := context.Background()
+
+	review, err := b.Memory(ctx, "a_1")
+	if err != nil || len(review.Items) != 2 || review.Candidates != 1 || review.Items[1].State != "candidate" {
+		t.Fatalf("memory = %+v %v", review, err)
+	}
+	if hist, err := b.MemoryHistory(ctx, "m_1"); err != nil || len(hist) != 2 || hist[0].Author != "files" {
+		t.Fatalf("history = %+v %v", hist, err)
+	}
+	if err := b.AddMemory(ctx, "r1", "a_1", "likes tea"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.EditMemory(ctx, "r2", "m_1", 2, "new text"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ApproveMemory(ctx, "r3", "m_2", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ForgetMemory(ctx, "r4", "m_1", 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.OpenMemoryFolder(ctx, "a_1"); err != nil || opened != "/tmp/solco-memory/a_1/memory" {
+		t.Fatalf("open = %q %v", opened, err)
+	}
+	p, err := b.Behavior(ctx, "a_1")
+	if err != nil || p.Level != "follow_up" || p.DailyBudget != 20 || p.Revision != 0 {
+		t.Fatalf("behavior = %+v %v", p, err)
+	}
+	if err := b.SaveBehavior(ctx, "r5", "a_1", personalagent.ProactivityInput{Level: "suggest", DailyBudget: 10}, 0); err != nil {
+		t.Fatal(err)
+	}
+	var sent []string
+	for _, c := range *calls {
+		sent = append(sent, c[0]+"|"+c[1])
+	}
+	all := strings.Join(sent, "\n")
+	for _, want := range []string{`memory add|{"requestId":"r1"`, `"assistantId":"a_1"`, `memory correct m_1|{"requestId":"r2","expectedRevision":2,"content":"new text"}`,
+		`memory approve m_2|{"requestId":"r3","expectedRevision":1}`, `memory forget m_1|{"requestId":"r4","expectedRevision":3}`,
+		`proactivity set a_1|{"requestId":"r5"`, `"level":"suggest"`} {
+		if !strings.Contains(all, want) {
+			t.Fatalf("missing %q in\n%s", want, all)
+		}
 	}
 }

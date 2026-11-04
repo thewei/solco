@@ -145,6 +145,16 @@ func TestGoldenFixtures(t *testing.T) {
 	run("routine-draft", fmt.Sprintf(`{"requestId":"g-rt","assistantId":%q,"name":"morning-check","cron":"*/30 * * * *","repo":"/tmp","prompt":"Check the repository for risky changes.","rationale":"A recurring check the user asked for in chat."}`, aid), "assistant", "routine", "draft")
 	run("routine-list", ``, "assistant", "routine", "list", "--assistant", aid)
 
+	// Memory workspace and proactivity (Assistants 3.1 U5). The clock moves on so item order never rests on random ids.
+	now = now.Add(time.Second)
+	madd := run("memory-add", fmt.Sprintf(`{"requestId":"g-ma","assistantId":%q,"content":"Prefers short answers","kind":"preference"}`, aid), "assistant", "memory", "add")
+	umid := field(madd, "memory", "id").(string)
+	run("memory-corrected", `{"requestId":"g-mc","content":"Prefers short answers with one example","expectedRevision":1}`, "assistant", "memory", "correct", umid)
+	run("memory-history", ``, "assistant", "memory", "history", umid)
+	run("memory-review", ``, "assistant", "memory", "review", aid)
+	run("proactivity-default", ``, "assistant", "proactivity", "show", aid)
+	run("proactivity-set", `{"requestId":"g-pa","expectedRevision":0,"level":"suggest","quietStart":"22:00","quietEnd":"08:00","tz":"Asia/Shanghai","reportEveryMin":120,"dailyBudget":10}`, "assistant", "proactivity", "set", aid)
+
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError
 	if !asCodedErr(err, &ce) {

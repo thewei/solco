@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "versions": [
+    {
+      "at": 1800000001000,
+      "author": "user",
+      "content": "Prefers short answers with one example",
+      "memoryId": "m_0000000000000021",
+      "revision": 2,
+      "state": "approved"
+    },
+    {
+      "at": 1800000001000,
+      "author": "user",
+      "content": "Prefers short answers",
+      "memoryId": "m_0000000000000021",
+      "revision": 1,
+      "state": "approved"
+    }
+  ]
+}

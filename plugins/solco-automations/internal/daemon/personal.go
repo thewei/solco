@@ -30,6 +30,9 @@ const (
 // inboxEvery is how often the inbox is read for something new to say.
 const inboxEvery = 15 * time.Second
 
+// memoryEvery is how often each Assistant's memory folder is reconciled.
+const memoryEvery = 5 * time.Second
+
 // pumpInterval is how often queued Assistant tasks are looked for. Much
 // shorter than the cron tick: a task a person just delegated should start now.
 const pumpInterval = 3 * time.Second
@@ -50,6 +53,8 @@ type personal struct {
 	reviewer *personalagent.Reviewer
 	inbox    *personalagent.InboxWatcher
 	groups   *personalagent.GroupPump
+	memFiles *personalagent.MemoryFiles
+	lastMem  time.Time
 	lastLook time.Time
 	polling  atomic.Bool
 
@@ -95,6 +100,7 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.sup = &personalagent.Supervisor{Store: store}
 	p.routines = &personalagent.RoutineKeeper{Store: store, Load: config.Load, Approve: config.Approve}
 	p.inbox = &personalagent.InboxWatcher{Store: store}
+	p.memFiles = &personalagent.MemoryFiles{Store: store, Root: personalagent.MemoryRoot()}
 	p.groups = &personalagent.GroupPump{Store: store, Submit: submitToAgent, Blocked: paneDialog}
 	if n, err := store.RecoverGroupDeliveries(); err != nil {
 		log.Printf("assistants: group delivery recovery failed: %v", err)
@@ -152,6 +158,12 @@ func (p *personal) tick() {
 		log.Printf("assistants: routines: %v", err)
 	} else if r.Enabled+r.Stale+r.Withdrawn > 0 {
 		log.Printf("assistants: routines: %d enabled, %d changed since approval, %d withdrawn", r.Enabled, r.Stale, r.Withdrawn)
+	}
+	// The memory folders: a person's edits in, the core's changes out. Cheap
+	// (a few small files per Assistant), so a short throttle is plenty.
+	if time.Since(p.lastMem) >= memoryEvery {
+		p.lastMem = time.Now()
+		p.syncMemory()
 	}
 	if time.Since(p.lastLook) >= inboxEvery {
 		p.lastLook = time.Now()
@@ -375,5 +387,25 @@ func (p *personal) prune() {
 		log.Printf("assistants: rule history prune failed: %v", err)
 	} else if n > 0 {
 		log.Printf("assistants: pruned %d rule task(s) past retention", n)
+	}
+}
+
+// syncMemory reconciles every active Assistant's memory folder. Counts only in
+// the log: never a file name or a line of memory text.
+func (p *personal) syncMemory() {
+	list, err := p.store.ListAssistants()
+	if err != nil {
+		log.Printf("assistants: memory: %v", err)
+		return
+	}
+	for _, a := range list {
+		r, err := p.memFiles.Sync(a.ID)
+		if err != nil {
+			log.Printf("assistants: memory folder of %s: %v", a.ID, err)
+			continue
+		}
+		if r.Edited+r.Conflicts+r.Imported+r.Refused > 0 {
+			log.Printf("assistants: memory folder of %s: %d edit(s) kept, %d conflict(s), %d new file(s), %d refused", a.ID, r.Edited, r.Conflicts, r.Imported, r.Refused)
+		}
 	}
 }

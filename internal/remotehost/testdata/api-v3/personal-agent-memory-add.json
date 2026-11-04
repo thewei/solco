@@ -1,0 +1,16 @@
+{
+  "memory": {
+    "id": "m_0000000000000021",
+    "assistantId": "a_0000000000000001",
+    "scope": "assistant",
+    "kind": "preference",
+    "content": "Prefers short answers",
+    "sourceRef": "user",
+    "state": "approved",
+    "sharedWith": [],
+    "revision": 1,
+    "createdAt": 1800000001000,
+    "updatedAt": 1800000001000
+  },
+  "schema": 1
+}

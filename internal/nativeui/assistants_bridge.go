@@ -61,7 +61,7 @@ type AssistantsAgent struct {
 
 // AssistantsDetail is the selected Assistant's light page: what the
 // conversation header, the Needs-You strip and the Chat need. The long lists
-// (Goals, Tasks and their Runs, Memory) are the More drawer's, read by Drawer
+// (Goals, Tasks and their Runs) are the More drawer's, read by Drawer
 // only while it is open.
 type AssistantsDetail struct {
 	Assistant personalagent.Assistant  `json:"assistant"`
@@ -91,9 +91,8 @@ type AssistantsDrawer struct {
 	Facts []personalagent.Fact     `json:"facts"`
 	// Routines are the Assistant's scheduled work: drafts waiting for a person's
 	// approval and the ones already enabled, with their next and last run.
-	Routines []personalagent.Routine    `json:"routines"`
-	Tasks    []AssistantsTask           `json:"tasks"`
-	Memory   []personalagent.MemoryItem `json:"memory"`
+	Routines []personalagent.Routine `json:"routines"`
+	Tasks    []AssistantsTask        `json:"tasks"`
 }
 
 // CoordinatorChat is the answer to "bind the embedded Chat to this Assistant's
@@ -275,10 +274,10 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 
 // Drawer reads the More drawer's lists for one Assistant: its Goals, Tasks
 // with their Runs (a Run can be opened only while it ran in the window's Herdr
-// session and its pane is still in the tree) and approved Memory. The page
+// session and its pane is still in the tree). The page
 // asks only while the drawer is open, so the chat's own polling stays light.
 func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDrawer, error) {
-	out := AssistantsDrawer{Goals: []personalagent.Goal{}, Plans: []personalagent.GoalPlan{}, Facts: []personalagent.Fact{}, Routines: []personalagent.Routine{}, Tasks: []AssistantsTask{}, Memory: []personalagent.MemoryItem{}}
+	out := AssistantsDrawer{Goals: []personalagent.Goal{}, Plans: []personalagent.GoalPlan{}, Facts: []personalagent.Fact{}, Routines: []personalagent.Routine{}, Tasks: []AssistantsTask{}}
 	c, err := b.client()
 	if err != nil {
 		return out, err
@@ -314,11 +313,6 @@ func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDra
 	// Best effort, like plans: an older plugin has no routines and that is "none".
 	if routines, err := c.Routines(ctx, id); err == nil && routines != nil {
 		out.Routines = routines
-	}
-	if memory, err := c.VisibleMemory(ctx, id); err != nil {
-		return out, err
-	} else if memory != nil {
-		out.Memory = memory
 	}
 	tasks, err := c.Tasks(ctx, id)
 	if err != nil {

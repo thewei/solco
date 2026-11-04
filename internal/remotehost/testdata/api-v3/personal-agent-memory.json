@@ -1,0 +1,40 @@
+{
+  "review": {
+    "assistantId": "a_0000000000000001",
+    "approved": 2,
+    "candidates": 0,
+    "max": 500,
+    "duplicates": [],
+    "staleCandidates": [],
+    "conflicts": [],
+    "items": [
+      {
+        "id": "m_0000000000000006",
+        "assistantId": "a_0000000000000001",
+        "scope": "assistant",
+        "kind": "fact",
+        "content": "Prefers short reports",
+        "sourceRef": "run:r_1",
+        "state": "approved",
+        "sharedWith": [],
+        "revision": 2,
+        "createdAt": 1800000000000,
+        "updatedAt": 1800000000000
+      },
+      {
+        "id": "m_0000000000000021",
+        "assistantId": "a_0000000000000001",
+        "scope": "assistant",
+        "kind": "preference",
+        "content": "Prefers short answers with one example",
+        "sourceRef": "user",
+        "state": "approved",
+        "sharedWith": [],
+        "revision": 2,
+        "createdAt": 1800000001000,
+        "updatedAt": 1800000001000
+      }
+    ]
+  },
+  "schema": 1
+}

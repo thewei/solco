@@ -362,6 +362,16 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 		}
 		canWake := h.WakeApproved && h.WakeBudget > 0 && wakes < h.WakeBudget
 		if canWake {
+			// The Assistant's own rules: a model wake is the system starting
+			// something unasked, so Respond/Suggest and quiet hours hold it
+			// (the news waits in `held`, nothing is lost).
+			pol, err := getProactivityTx(tx, assistantID, now)
+			if err != nil {
+				return BeatReport{}, err
+			}
+			canWake = pol.Level == LevelFollowUp && !pol.QuietNow
+		}
+		if canWake {
 			var inFlight int
 			if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE assistant_id=? AND rule_id=? AND state NOT IN (?,?,?,?)`,
 				assistantID, HeartbeatRule, TaskDone, TaskFailed, TaskCancelled, TaskReviewRequired).Scan(&inFlight); err != nil {

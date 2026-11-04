@@ -264,7 +264,8 @@
 
 .as-field input,
 .as-field textarea,
-.as-field select {
+.as-field select,
+.as-input {
   font: inherit;
   color: var(--text);
   background: var(--content);
@@ -273,6 +274,27 @@
   padding: 6px 8px;
   -webkit-user-select: text;
   user-select: text;
+}
+
+.as-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.as-sub {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.as-clip {
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .as-reason {

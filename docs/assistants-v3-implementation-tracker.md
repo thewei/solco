@@ -44,8 +44,8 @@
 | U3-3 | U3 | GoalSupervisor（确定性推进 + 预算/最大轮数/重规划上限） | U3-1 | VERIFIED | `Supervisor.Tick` 接入 daemon；9 个单测（委派→核验→才完成、失败不编造进度、任务预算 held 一次、扇出上限、人工里程碑、陈旧退避、暂停/取消不动、coding 等发布者）；实机隔离 daemon：批准计划后 12 s 内出现 1 个草稿任务 + `delegated` 事实 |
 | U3-4 | U3 | 核验后汇报 + 重启恢复 | U3-3 | VERIFIED | Goal 仅在全部里程碑 verified 后才 `CompleteGoal`（证据 `sup-done-<goal>-<rev>`）；汇报为确定性的系统事实卡（不经 Agent 转述）；实机重启 daemon 15 s 后仍 1 个任务、事实不重复 |
 | U4-1 | U4 | Chat 生成 Routine Draft → 批准 → Go Automations 调度；无双触发 | U3 | VERIFIED | 迁移 17 `routines`（owner/requestedBy/source/correlationId/def_hash/approved）；`routine draft|list|show|cancel|pause|resume`；批准卡 `subjectKind=routine` 绑定定义哈希，定义被改→`stale` 不启用；`RoutineKeeper` 启用；`RuleScheduler.fire` 任务归 owner Assistant；`routine_done/failed` 事实；`routine_test.go` 5 例 + goldens；实机见 §3 U4 |
-| U5-1 | U5 | Memory 目录/Markdown、版本冲突、候选/整理 | — | TODO | |
-| U5-2 | U5 | 主动等级 / Quiet Hours / 报告频率 / 预算 | U3-3 | TODO | |
+| U5-1 | U5 | Memory 目录/Markdown、版本冲突、候选/整理 | — | VERIFIED | 迁移 18 `memory_versions`/`memory_files`；`MemoryFiles.Sync` 投影 `facts|inbox|notes|INDEX|README`（0700/0600/原子）；人改文件→新 revision，陈旧→`conflict` 候选并存、凭据/空/超长拒绝并还原、notes 投放→候选、符号链接不读、删文件不遗忘；`add|history|review|sync|folder` CLI + Host 路由（`personalAgentMemory`，golden 双端）+ 桌面 Memory 标签 + 手机 `assistants/memory/[id]`；`memory_files_test.go` + 实机见 §3 U5。手机/桌面视觉 NOT VERIFIED；每周模型整理未做 |
+| U5-2 | U5 | 主动等级 / Quiet Hours / 报告频率 / 预算 | U3-3 | VERIFIED | `proactivity` 表；`respond`/`suggest`/`follow_up`；Quiet Hours（可跨午夜、IANA 时区）延后派发/提醒/心跳唤醒且自行恢复；日预算 1..100 超额写一次 Held 事实；报告间隔限频；`proactivity_test.go` 8 例；CLI `proactivity show|set`、Host `personalAgentProactivity`、桌面 Behavior 标签、手机 `assistants/behavior/[id]`；实机见 §3 U5。“批准后自主”等级未做（刻意） |
 | TODO-WF | — | Go Workflow 选型（仅登记：待三个真实复杂场景证明 TaskGraph 不够） | — | DEFERRED | 不引依赖 |
 
 ## 2. MU-01～MU-23 验收
@@ -91,3 +91,12 @@
 - 教训：隔离 state 目录不隔离 config 目录——daemon 会读到真实的 `automations.yaml`；做会写 yaml 的实机验证必须同时设置 `HERDR_PLUGIN_CONFIG_DIR`（本轮已隔离；此前 U2/U3 的隔离 daemon 读的是真实 yaml，只读，未写入）。
 - NOT VERIFIED：桌面 Routines 抽屉页与手机 RoutinesList 的实机视觉；Coordinator 自己在聊天里调用 `routine draft` 的真实对话；DST/睡眠恢复（沿用 schedule 包既有测试，未新增）；Agent 非 claude（headless 能力随 `KindRunsHeadless`）。
 - 进度：VERIFIED 19 / 总 22（不含 DEFERRED）= 86%。
+
+### U5（2026-11-04）
+- 插件：`cd plugins/solco-automations && GOTOOLCHAIN=auto go test ./...` PASS（`memory_files_test.go`：投影/编辑 revision/陈旧冲突并存/拒绝清单/导入与隔离/整理/上限；`proactivity_test.go`：默认与校验、Quiet 跨午夜、三个等级、延后并恢复、日预算、报告间隔、心跳随等级）。golden `memory-*`/`proactivity-*` 的条目顺序原本依赖随机 id（固定时钟下 created_at 相同）——契约测试里让时钟前进 1 s，连跑 5 次稳定。
+- 根/Host/桌面：`go test ./internal/personalagent ./internal/remotehost ./internal/hostd ./internal/nativeui` PASS，`go tool mygo vet .` PASS；`frontend: bun run typecheck && bun run build && bun run build:mobile` PASS。
+- 手机：`pnpm typecheck`、`lint`、`test`（583 PASS，含 `memory-model.test.ts` 与 Memory/Proactivity golden）、`check:fixtures`（178）、`check:chat-page`、`export:web`（含 `/assistants/memory/[id]`、`/assistants/behavior/[id]`）PASS。
+- 实机（隔离 state+config 的真实 daemon，`SOLCO_ASSISTANTS_MEMORY` 指向临时目录，无 Agent 启动）：`memory add` 5 s 内出现 `facts/<id>.md` 与 INDEX；手改正文→revision 2（history：`files` 作者）；`notes/idea.md` → 1 个 candidate 且原文件被移除；再改文件（核心未动）→ 正常新 revision；改文件的同时经 CLI 以 expectedRevision 改核心 → 核心文本为准，文件被还原，另有一条 `conflict:<id>@4` 候选保留了文件版本；写入 `sk-ant-…` 的编辑被还原（文件中 0 处）。`proactivity show` 默认 follow_up/20/revision 0；`set` 后 revision 1；`25:00` 被拒（`invalid`）。收尾：daemon 已停、临时目录与环境变量已清。
+- NOT VERIFIED：桌面 Memory/Behavior 标签与手机两屏的实机视觉；手机真机；Quiet Hours 真实跨午夜在 daemon 里的墙钟行为（单测用注入时钟）；每周模型整理（需要模型预算，未做）；“批准后自主”等级（未做）。
+- 已知限制：作者标签不是证明；重复项的“保留两者”即不处理；Routines 不受主动等级影响；手机展示条目而非文件树。
+- 进度：VERIFIED 21 / 总 22（不含 DEFERRED）= 95%（U1-7 仍因手机锁屏无法真机安装停在 IMPLEMENTED）。

@@ -355,6 +355,10 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 	if err != nil {
 		return err
 	}
+	pol, err := s.GetProactivity(g.AssistantID)
+	if err != nil {
+		return err
+	}
 	for _, m := range plan.Milestones {
 		if m.State != MilestonePending || m.Task == nil || m.TaskID != "" {
 			continue
@@ -365,6 +369,32 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 		}
 		if !ready {
 			continue
+		}
+		// The Assistant's own rules come first: they decide whether the system
+		// may start anything unasked right now.
+		switch {
+		case pol.Level == LevelRespond:
+			return nil
+		case pol.Level == LevelSuggest:
+			if added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: g.ID, Kind: FactHeld,
+				Text: fmt.Sprintf("Next up for %q: %s. Nothing starts on its own while this Assistant is set to Suggest; raise it to Follow up to let it go", g.Title, m.Title)},
+				fmt.Sprintf("policy:%s:%d:%s", g.ID, plan.PlanRevision, m.ID)); err != nil {
+				return err
+			} else if added {
+				rep.Facts++
+			}
+			continue
+		case pol.QuietNow:
+			return nil // quiet hours: resumes by itself afterwards, nothing to say
+		case pol.DispatchToday >= pol.DailyBudget:
+			if added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: g.ID, Kind: FactHeld,
+				Text: fmt.Sprintf("Held: today's budget of %d task(s) started on their own is used up; %q continues tomorrow or when you raise it", pol.DailyBudget, g.Title)},
+				fmt.Sprintf("held:%s:day:%s", g.ID, pol.day)); err != nil {
+				return err
+			} else if added {
+				rep.Facts++
+			}
+			return nil
 		}
 		if total >= plan.MaxTasks {
 			if added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: g.ID, Kind: FactHeld,
@@ -393,6 +423,10 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 		if err := s.bindMilestone(g.ID, plan.PlanRevision, m.ID, task); err != nil {
 			return err
 		}
+		if err := s.countDispatch(g.AssistantID, 1); err != nil {
+			return err
+		}
+		pol.DispatchToday++
 		open++
 		total++
 		rep.Dispatched++
@@ -445,6 +479,22 @@ func (sv *Supervisor) stale(g Goal, plan GoalPlan, rep *SupervisorReport) error 
 	if last == 0 || plan.StaleAfterMS <= 0 {
 		return nil
 	}
+	pol, err := s.GetProactivity(g.AssistantID)
+	if err != nil {
+		return err
+	}
+	if pol.Level == LevelRespond || pol.QuietNow {
+		return nil // a quiet reminder is only late: it is said once the window ends
+	}
+	if pol.ReportEveryMin > 0 {
+		var lastSaid int64
+		if err := s.db.QueryRow(`SELECT COALESCE(MAX(created_at),0) FROM goal_facts WHERE assistant_id=? AND kind=?`, g.AssistantID, FactStale).Scan(&lastSaid); err != nil {
+			return wrapBusy(err)
+		}
+		if lastSaid > 0 && s.nowMS()-lastSaid < int64(pol.ReportEveryMin)*60000 {
+			return nil
+		}
+	}
 	elapsed := s.nowMS() - last
 	for k := 0; k < MaxStaleReminders; k++ {
 		if elapsed < plan.StaleAfterMS<<k {
@@ -458,6 +508,9 @@ func (sv *Supervisor) stale(g Goal, plan GoalPlan, rep *SupervisorReport) error 
 		}
 		if added {
 			rep.Facts++
+			if pol.ReportEveryMin > 0 {
+				break // with a cadence, one reminder per pass
+			}
 		}
 	}
 	return nil

@@ -207,6 +207,7 @@ func CoordinatorPrompt(a Assistant) string {
 	fmt.Fprintf(&b, "  %s assistant routine list --assistant %s\n\n", CLI, a.ID)
 	b.WriteString("Rules:\n")
 	b.WriteString("- Never enable, approve or edit a routine yourself and never write automations.yaml: you only draft; the person's yes is the only way it starts. A routine's prompt must stand alone — the run has none of this conversation.\n")
+	b.WriteString("- Memory: only propose it (`assistant memory propose`, with a sourceRef); the person approves. Never edit the files of your memory folder or change the proactivity settings (level, quiet hours, budget) yourself — they are the person's rules for what you may start unasked.\n")
 	b.WriteString("- Create every coding task as a draft (\"draft\":true); a person publishes it. Research tasks may go straight to the queue.\n")
 	b.WriteString("- Split a big goal into small tasks with parentTaskId, and order them with dependsOn; a task waits until what it depends on is done.\n")
 	b.WriteString("- A plan may be revised only a few times; when a milestone is blocked, read the plan, fix the cause or change the milestone, and say so plainly. Never report a milestone as done until `goal plan` shows it verified.\n")

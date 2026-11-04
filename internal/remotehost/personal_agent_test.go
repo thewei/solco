@@ -92,6 +92,17 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 			return nil, err
 		}
 		return raw, nil
+	case strings.HasPrefix(key, "memory review"), strings.HasPrefix(key, "memory history"), strings.HasPrefix(key, "memory add"),
+		strings.HasPrefix(key, "memory approve"), strings.HasPrefix(key, "memory correct"), strings.HasPrefix(key, "memory forget"),
+		strings.HasPrefix(key, "proactivity "):
+		name := map[string]string{"memory review": "memory-review", "memory history": "memory-history", "memory add": "memory-add",
+			"memory approve": "memory-corrected", "memory correct": "memory-corrected", "memory forget": "memory-corrected",
+			"proactivity show": "proactivity-set", "proactivity set": "proactivity-set"}[strings.Join(strings.Fields(key)[:2], " ")]
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
 	case strings.HasPrefix(key, "goal list"):
 		return []byte(`{"schema":1,"goals":[` + paGoal + `]}`), nil
 	case strings.HasPrefix(key, "goal "):
@@ -140,6 +151,7 @@ const (
 	paTask      = `{"id":"` + paTaskT + `","assistantId":"` + paAssistantA + `","goalId":"` + paGoalG + `","parentTaskId":"","ruleId":"","kind":"research","title":"Check the PR","brief":"Read it.","agent":"claude","model":"","repoPath":"","state":"running","reviewState":"","needsYou":false,"attempt":1,"revision":5,"createdAt":1800000000000,"updatedAt":1800000000000}`
 	paRun       = `{"id":"r_0000000000000005","taskId":"` + paTaskT + `","ruleId":"","eventId":"","idempotencyKey":"task:` + paTaskT + `:1","claimant":"daemon","status":"running","herdrSession":"default","workspaceId":"w1","paneId":"w1:p1","agentSessionId":"","label":"","result":"","error":"","startedAt":1800000000000,"finishedAt":0,"createdAt":1800000000000}`
 	paApproval  = `{"id":"` + paApprovalP + `","assistantId":"` + paAssistantA + `","subjectKind":"task","subjectId":"` + paTaskT + `","action":"merge work/x","actionHash":"` + paHash + `","expectedRevision":5,"state":"pending","createdAt":1800000000000,"expiresAt":1800003600000,"decidedAt":0}`
+	paMemoryID  = "m_0000000000000006"
 	paMemory    = `{"id":"m_0000000000000006","assistantId":"` + paAssistantA + `","kind":"fact","content":"Prefers short reports","sourceRef":"run:r_1","scope":"assistant","sharedWith":[],"state":"approved","revision":2,"createdAt":1800000000000,"updatedAt":1800000000000}`
 )
 
@@ -709,5 +721,88 @@ func TestPersonalAgentPersonaRoutes(t *testing.T) {
 	core.fail = &personalagent.Error{Code: "stale_revision", Message: "edited elsewhere"}
 	if status, _ := h.send("POST", base+"/instructions", h.token, `{"requestId":"i9","body":"x","expectedRevision":1}`); status != http.StatusConflict {
 		t.Fatalf("stale = %d", status)
+	}
+}
+
+func TestPersonalAgentMemoryAndProactivityRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA
+	golden(t, "personal-agent-memory.json", bodyOf(t, h.get(base+"/memory", h.token, nil)))
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant memory review "+paAssistantA) {
+		t.Fatalf("review call %q", call)
+	}
+	golden(t, "personal-agent-memory-history.json", bodyOf(t, h.get("/api/v3/personal-agent/memory/"+paMemoryID+"/history", h.token, nil)))
+	golden(t, "personal-agent-proactivity.json", bodyOf(t, h.get(base+"/proactivity", h.token, nil)))
+	if r := h.get("/api/v3/personal-agent/assistants/not%20an%20id/memory", h.token, nil); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad id = %d", r.StatusCode)
+	}
+	if r := h.get(base+"/memory", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without a token = %d", r.StatusCode)
+	}
+
+	status, body := h.send("POST", base+"/memory/add", h.token, `{"requestId":"m1","content":"Prefers short answers","kind":"preference"}`)
+	if status != http.StatusOK {
+		t.Fatalf("add = %d %s", status, body)
+	}
+	golden(t, "personal-agent-memory-add.json", body)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant memory add") || !strings.Contains(call, `"assistantId":"`+paAssistantA+`"`) {
+		t.Fatalf("add call %q", call)
+	}
+	mem := "/api/v3/personal-agent/memory/" + paMemoryID
+	for action, core1 := range map[string]string{"edit": "correct", "approve": "approve", "forget": "forget"} {
+		payload := `{"requestId":"e-` + action + `","expectedRevision":2}`
+		if action == "edit" {
+			payload = `{"requestId":"e-edit","expectedRevision":2,"content":"New text"}`
+		}
+		if st, b := h.send("POST", mem+"/"+action, h.token, payload); st != http.StatusOK {
+			t.Fatalf("%s = %d %s", action, st, b)
+		}
+		if call := core.lastCall(); !strings.HasPrefix(call, "assistant memory "+core1+" "+paMemoryID) || !strings.Contains(call, `"expectedRevision":2`) {
+			t.Fatalf("%s call %q", action, call)
+		}
+	}
+	for name, payload := range map[string]string{
+		"edit without text": `{"requestId":"x","expectedRevision":2}`,
+		"approve with text": `{"requestId":"x","expectedRevision":2,"content":"hi"}`,
+		"no revision":       `{"requestId":"x","content":"hi"}`,
+		"no request id":     `{"expectedRevision":2,"content":"hi"}`,
+		"oversized":         `{"requestId":"x","expectedRevision":2,"content":"` + strings.Repeat("x", maxPAText+1) + `"}`,
+	} {
+		action := "edit"
+		if name == "approve with text" {
+			action = "approve"
+		}
+		before := core.callCount()
+		if st, _ := h.send("POST", mem+"/"+action, h.token, payload); st != http.StatusBadRequest {
+			t.Fatalf("%s = %d", name, st)
+		}
+		if core.callCount() != before {
+			t.Fatalf("%s reached the core", name)
+		}
+	}
+	if st, b := h.send("POST", base+"/proactivity", h.token, `{"requestId":"p1","expectedRevision":0,"level":"suggest","quietStart":"22:00","quietEnd":"08:00","tz":"Asia/Shanghai","reportEveryMin":120,"dailyBudget":10}`); st != http.StatusOK {
+		t.Fatalf("set proactivity = %d %s", st, b)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant proactivity set "+paAssistantA) || !strings.Contains(call, `"level":"suggest"`) || !strings.Contains(call, `"dailyBudget":10`) {
+		t.Fatalf("set call %q", call)
+	}
+	if st, _ := h.send("POST", base+"/proactivity", h.token, `{"requestId":"p2","expectedRevision":-1,"level":"suggest"}`); st != http.StatusBadRequest {
+		t.Fatalf("negative revision = %d", st)
+	}
+	core.fail = &personalagent.Error{Code: "invalid", Message: "level is respond, suggest or follow_up"}
+	if st, _ := h.send("POST", base+"/proactivity", h.token, `{"requestId":"p3","expectedRevision":1,"level":"autopilot"}`); st != http.StatusBadRequest {
+		t.Fatalf("core refusal = %d", st)
+	}
+	core.fail = nil
+	h2, _ := paHarness(t, false)
+	if r := h2.get(base+"/memory", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("memory served without the seam")
+	}
+	var boot struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	_ = json.Unmarshal(bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)), &boot)
+	if !boot.Capabilities["personalAgentMemory"] || !boot.Capabilities["personalAgentProactivity"] {
+		t.Fatalf("capabilities = %v", boot.Capabilities)
 	}
 }

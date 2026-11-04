@@ -259,3 +259,41 @@ func TestRoutineGolden(t *testing.T) {
 		t.Fatalf("list = %+v", l)
 	}
 }
+
+func TestMemoryAndProactivityGolden(t *testing.T) {
+	var add struct {
+		Schema   int        `json:"schema"`
+		Memory   MemoryItem `json:"memory"`
+		Replayed bool       `json:"replayed"`
+	}
+	load(t, "memory-add", &add)
+	if add.Memory.State != "approved" || add.Memory.SourceRef != "user" || add.Memory.Revision != 1 {
+		t.Fatalf("add = %+v", add)
+	}
+	var hist struct {
+		Schema   int             `json:"schema"`
+		Versions []MemoryVersion `json:"versions"`
+	}
+	load(t, "memory-history", &hist)
+	if len(hist.Versions) != 2 || hist.Versions[0].Revision != 2 || hist.Versions[1].Author != "user" || hist.Versions[1].Content != add.Memory.Content {
+		t.Fatalf("history = %+v", hist)
+	}
+	var rev struct {
+		Schema int          `json:"schema"`
+		Review MemoryReview `json:"review"`
+	}
+	load(t, "memory-review", &rev)
+	if rev.Review.Max != 500 || len(rev.Review.Items) == 0 || rev.Review.Duplicates == nil || rev.Review.Conflicts == nil || rev.Review.StaleCandidates == nil {
+		t.Fatalf("review = %+v", rev.Review)
+	}
+	var def, set struct {
+		Schema      int         `json:"schema"`
+		Proactivity Proactivity `json:"proactivity"`
+		Replayed    bool        `json:"replayed"`
+	}
+	load(t, "proactivity-default", &def)
+	load(t, "proactivity-set", &set)
+	if def.Proactivity.Level != "follow_up" || def.Proactivity.Revision != 0 || set.Proactivity.Level != "suggest" || set.Proactivity.Revision != 1 || set.Proactivity.TZ != "Asia/Shanghai" {
+		t.Fatalf("proactivity = %+v / %+v", def.Proactivity, set.Proactivity)
+	}
+}

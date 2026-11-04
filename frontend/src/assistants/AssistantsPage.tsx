@@ -16,12 +16,13 @@ import {
   type Goal,
   type GoalPlan,
   type InboxItem,
-  type MemoryItem,
   type Routine,
 } from "../mygo";
 import { GroupChat, NewGroup } from "./GroupChat";
 import { FactStrip, PlanCard } from "./Progress";
 import { WorkStyle } from "./WorkStyle";
+import { MemoryTab } from "./MemoryTab";
+import { Behavior } from "./Behavior";
 import "./assistants.css";
 
 /**
@@ -35,7 +36,7 @@ import "./assistants.css";
  * duplicating, and a refusal shows the plugin's own sentence.
  */
 
-type Tab = "needs" | "watching" | "routines" | "tasks" | "done" | "memory" | "style" | "about";
+type Tab = "needs" | "watching" | "routines" | "tasks" | "done" | "memory" | "behavior" | "style" | "about";
 type Form = "assistant" | "group" | "watch" | "task" | "rename" | null;
 
 const rid = () => crypto.randomUUID();
@@ -197,6 +198,7 @@ export function AssistantsPage() {
     ["tasks", "Tasks", drawer ? drawer.tasks.filter((t) => OPEN_TASK.has(t.state)).length : 0],
     ["done", "Done", 0],
     ["memory", "Memory", 0],
+    ["behavior", "Behavior", 0],
     ["style", "Work style", 0],
     ["about", "About", 0],
   ];
@@ -379,6 +381,8 @@ function Strip({ pending, others, open, setOpen, act, more }: { pending: Approva
 function DrawerBody({ tab, detail, drawer, view, pending, act, pull }: { tab: Tab; detail: AssistantsDetail; drawer: AssistantsDrawer | null; view: AssistantsView; pending: Approval[]; act: Act; pull: () => void }) {
   const reasons = new Map(detail.inbox.items.filter((i) => i.kind !== "approval" && i.kind !== "news" && i.taskId).map((i) => [i.taskId as string, i]));
   if (tab === "about") return <About detail={detail} view={view} act={act} />;
+  if (tab === "memory") return <MemoryTab id={detail.assistant.id} act={act} />;
+  if (tab === "behavior") return <Behavior id={detail.assistant.id} act={act} />;
   if (tab === "style") return <WorkStyle id={detail.assistant.id} agents={view.agents} act={act} />;
   if (!drawer) return <Empty>Loading…</Empty>;
   const needTasks = drawer.tasks.filter((t) => reasons.has(t.id) || t.needsYou);
@@ -397,8 +401,6 @@ function DrawerBody({ tab, detail, drawer, view, pending, act, pull }: { tab: Ta
       return <Tasks tasks={open} act={act} />;
     case "done":
       return <Done tasks={done} goals={closedGoals} act={act} />;
-    case "memory":
-      return <Memory memory={drawer.memory} />;
   }
 }
 
@@ -830,23 +832,6 @@ function Routines({ routines, act }: { routines: Routine[]; act: Act }) {
               </button>
             ) : null}
           </div>
-        </section>
-      ))}
-    </>
-  );
-}
-
-function Memory({ memory }: { memory: MemoryItem[] }) {
-  if (memory.length === 0) return <Empty>No memory yet. Memory is only kept after you approve it.</Empty>;
-  return (
-    <>
-      {memory.map((m) => (
-        <section key={m.id} className="as-card quiet">
-          <p className="as-text">{m.content}</p>
-          <p className="as-meta">
-            {m.kind} · {m.scope}
-            {m.sourceRef ? ` · ${m.sourceRef}` : ""}
-          </p>
         </section>
       ))}
     </>

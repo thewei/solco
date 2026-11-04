@@ -543,6 +543,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+pa+"/goals/{id}/plan", s.guard(ScopeView, s.handlePAGoalPlan))
 	mux.Handle("GET "+pa+"/assistants/{id}/facts", s.guard(ScopeView, s.handlePAFacts))
 	mux.Handle("GET "+pa+"/assistants/{id}/routines", s.guard(ScopeView, s.handlePARoutines))
+	mux.Handle("GET "+pa+"/assistants/{id}/memory", s.guard(ScopeView, s.handlePAMemory))
+	mux.Handle("GET "+pa+"/memory/{id}/history", s.guard(ScopeView, s.handlePAMemoryHistory))
+	mux.Handle("POST "+pa+"/assistants/{id}/memory/add", s.guard(ScopeManage, s.handlePAMemoryAdd))
+	for _, action := range []string{"edit", "approve", "forget"} {
+		mux.Handle("POST "+pa+"/memory/{id}/"+action, s.guard(ScopeManage, s.handlePAMemoryEdit(action)))
+	}
+	mux.Handle("GET "+pa+"/assistants/{id}/proactivity", s.guard(ScopeView, s.handlePAProactivity))
+	mux.Handle("POST "+pa+"/assistants/{id}/proactivity", s.guard(ScopeManage, s.handlePASetProactivity))
 	mux.Handle("POST "+pa+"/approvals/{id}/decision", s.guard(ScopeManage, s.handlePADecideApproval))
 	mux.Handle("POST "+pa+"/tasks/{id}/ack", s.guard(ScopeManage, s.handlePATaskAction("ack")))
 	mux.Handle("POST "+pa+"/tasks/{id}/retry", s.guard(ScopeManage, s.handlePATaskAction("retry")))
@@ -760,6 +768,8 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["personalAgentPersona"] = true
 			capabilities["personalAgentPlans"] = true
 			capabilities["personalAgentRoutines"] = true
+			capabilities["personalAgentMemory"] = true
+			capabilities["personalAgentProactivity"] = true
 		}
 	}
 	if s.opts.Sessions != nil {

@@ -23,3 +23,12 @@ func WorkDirRoot() string {
 	}
 	return filepath.Join(hostpath.StateDir(), "assistants-work")
 }
+
+// MemoryRoot holds each Assistant's memory folder (<root>/<assistantId>/memory).
+// It sits beside the database, not in any project repository.
+func MemoryRoot() string {
+	if p := os.Getenv("SOLCO_ASSISTANTS_MEMORY"); p != "" {
+		return p
+	}
+	return filepath.Join(hostpath.StateDir(), "assistants-memory")
+}

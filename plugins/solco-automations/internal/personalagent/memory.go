@@ -17,6 +17,15 @@ const (
 	MemoryForgotten = "forgotten"
 
 	MemoryScopeAssistant = "assistant"
+
+	// Who made a version. Informational: the CLI cannot prove who is typing, so
+	// the only enforcement is the approval rules, not this label.
+	MemByUser     = "user"
+	MemByAgent    = "agent"
+	MemByFiles    = "files"
+	MemBySystem   = "system"
+	MaxMemoryText = 8 << 10 // bytes in one memory item
+	MaxMemoryKept = 500     // items an Assistant may keep (forgotten ones do not count)
 )
 
 // MemoryItem is one remembered thing, owned by exactly one Assistant.
@@ -68,6 +77,10 @@ func getMemoryTx(q queryer, id string) (MemoryItem, error) {
 
 // ProposeMemory records a candidate. It must say where it came from.
 func (s *Store) ProposeMemory(requestID string, in ProposeMemoryInput) (MemoryItem, bool, error) {
+	return s.proposeAs(MemByAgent, requestID, in)
+}
+
+func (s *Store) proposeAs(author, requestID string, in ProposeMemoryInput) (MemoryItem, bool, error) {
 	in.Content = strings.TrimSpace(in.Content)
 	if in.AssistantID == "" || in.Content == "" || strings.TrimSpace(in.SourceRef) == "" {
 		return MemoryItem{}, false, fmt.Errorf("%w: memory needs content and a sourceRef", ErrInvalid)
@@ -75,27 +88,63 @@ func (s *Store) ProposeMemory(requestID string, in ProposeMemoryInput) (MemoryIt
 	if looksLikeSecret(in.Content) {
 		return MemoryItem{}, false, fmt.Errorf("%w: that looks like a credential; memory never keeps credentials", ErrInvalid)
 	}
+	return execute(s, requestID, "memory.propose", in, func(tx *sql.Tx) (MemoryItem, error) {
+		return s.insertMemoryTx(tx, in, MemoryCandidate, author)
+	})
+}
+
+// insertMemoryTx is the one place a memory row is born: it checks the bounds,
+// writes the row and its first version.
+func (s *Store) insertMemoryTx(tx *sql.Tx, in ProposeMemoryInput, state, author string) (MemoryItem, error) {
+	if len(in.Content) > MaxMemoryText {
+		return MemoryItem{}, fmt.Errorf("%w: a memory item is at most %d bytes; split it", ErrInvalid, MaxMemoryText)
+	}
 	if in.Kind == "" {
 		in.Kind = "fact"
 	}
-	return execute(s, requestID, "memory.propose", in, func(tx *sql.Tx) (MemoryItem, error) {
-		if _, err := getAssistantTx(tx, in.AssistantID); err != nil {
-			return MemoryItem{}, err
-		}
-		now := s.nowMS()
-		id := newID("m")
-		if _, err := tx.Exec(`INSERT INTO memory_items(`+memoryCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-			id, in.AssistantID, MemoryScopeAssistant, in.Kind, in.Content, in.SourceRef, MemoryCandidate, "[]", 1, now, now); err != nil {
-			return MemoryItem{}, err
-		}
-		return getMemoryTx(tx, id)
+	if _, err := getAssistantTx(tx, in.AssistantID); err != nil {
+		return MemoryItem{}, err
+	}
+	var kept int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM memory_items WHERE assistant_id=? AND state<>?`, in.AssistantID, MemoryForgotten).Scan(&kept); err != nil {
+		return MemoryItem{}, err
+	}
+	if kept >= MaxMemoryKept {
+		return MemoryItem{}, fmt.Errorf("%w: this Assistant already keeps %d memory items; forget some first", ErrInvalid, MaxMemoryKept)
+	}
+	now := s.nowMS()
+	id := newID("m")
+	if _, err := tx.Exec(`INSERT INTO memory_items(`+memoryCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		id, in.AssistantID, MemoryScopeAssistant, in.Kind, in.Content, in.SourceRef, state, "[]", 1, now, now); err != nil {
+		return MemoryItem{}, err
+	}
+	m, err := getMemoryTx(tx, id)
+	if err != nil {
+		return m, err
+	}
+	return m, recordVersionTx(tx, m, author, now)
+}
+
+// AddMemory is a person writing a fact down themselves: it is approved at
+// once, because the approval is the act of writing it.
+func (s *Store) AddMemory(requestID, assistantID, content, kind string) (MemoryItem, bool, error) {
+	content = strings.TrimSpace(content)
+	if assistantID == "" || content == "" {
+		return MemoryItem{}, false, fmt.Errorf("%w: memory needs content", ErrInvalid)
+	}
+	if looksLikeSecret(content) {
+		return MemoryItem{}, false, fmt.Errorf("%w: that looks like a credential; memory never keeps credentials", ErrInvalid)
+	}
+	in := ProposeMemoryInput{AssistantID: assistantID, Content: content, SourceRef: "user", Kind: kind}
+	return execute(s, requestID, "memory.add", in, func(tx *sql.Tx) (MemoryItem, error) {
+		return s.insertMemoryTx(tx, in, MemoryApproved, MemByUser)
 	})
 }
 
 // GetMemory reads one item.
 func (s *Store) GetMemory(id string) (MemoryItem, error) { return getMemoryTx(s.db, id) }
 
-func (s *Store) editMemory(requestID, kind, id string, expected int, payload any, fn func(tx *sql.Tx, m MemoryItem, now int64) error) (MemoryItem, bool, error) {
+func (s *Store) editMemory(requestID, kind, author, id string, expected int, payload any, fn func(tx *sql.Tx, m MemoryItem, now int64) error) (MemoryItem, bool, error) {
 	return execute(s, requestID, kind, payload, func(tx *sql.Tx) (MemoryItem, error) {
 		m, err := getMemoryTx(tx, id)
 		if err != nil {
@@ -107,10 +156,20 @@ func (s *Store) editMemory(requestID, kind, id string, expected int, payload any
 		if m.State == MemoryForgotten {
 			return m, fmt.Errorf("%w: memory was forgotten", ErrBadState)
 		}
-		if err := fn(tx, m, s.nowMS()); err != nil {
+		now := s.nowMS()
+		if err := fn(tx, m, now); err != nil {
 			return m, err
 		}
-		return getMemoryTx(tx, id)
+		next, err := getMemoryTx(tx, id)
+		if err != nil {
+			return next, err
+		}
+		if next.Revision != m.Revision {
+			if err := recordVersionTx(tx, next, author, now); err != nil {
+				return next, err
+			}
+		}
+		return next, nil
 	})
 }
 
@@ -121,7 +180,11 @@ func bump(tx *sql.Tx, now int64, id, set string, args ...any) error {
 
 // ApproveMemory promotes a candidate to a long-term fact.
 func (s *Store) ApproveMemory(requestID, id string, expectedRevision int) (MemoryItem, bool, error) {
-	return s.editMemory(requestID, "memory.approve", id, expectedRevision, map[string]any{"id": id, "rev": expectedRevision},
+	return s.approveAs(MemByUser, requestID, id, expectedRevision)
+}
+
+func (s *Store) approveAs(author, requestID, id string, expectedRevision int) (MemoryItem, bool, error) {
+	return s.editMemory(requestID, "memory.approve", author, id, expectedRevision, map[string]any{"id": id, "rev": expectedRevision},
 		func(tx *sql.Tx, m MemoryItem, now int64) error {
 			if m.State != MemoryCandidate {
 				return fmt.Errorf("%w: memory is %s", ErrBadState, m.State)
@@ -132,6 +195,10 @@ func (s *Store) ApproveMemory(requestID, id string, expectedRevision int) (Memor
 
 // CorrectMemory rewrites an item; what is visible changes immediately.
 func (s *Store) CorrectMemory(requestID, id, content string, expectedRevision int) (MemoryItem, bool, error) {
+	return s.correctAs(MemByUser, requestID, id, content, expectedRevision)
+}
+
+func (s *Store) correctAs(author, requestID, id, content string, expectedRevision int) (MemoryItem, bool, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return MemoryItem{}, false, ErrInvalid
@@ -139,22 +206,32 @@ func (s *Store) CorrectMemory(requestID, id, content string, expectedRevision in
 	if looksLikeSecret(content) {
 		return MemoryItem{}, false, fmt.Errorf("%w: that looks like a credential; memory never keeps credentials", ErrInvalid)
 	}
-	return s.editMemory(requestID, "memory.correct", id, expectedRevision, map[string]any{"id": id, "c": content, "rev": expectedRevision},
+	if len(content) > MaxMemoryText {
+		return MemoryItem{}, false, fmt.Errorf("%w: a memory item is at most %d bytes; split it", ErrInvalid, MaxMemoryText)
+	}
+	return s.editMemory(requestID, "memory.correct", author, id, expectedRevision, map[string]any{"id": id, "c": content, "rev": expectedRevision},
 		func(tx *sql.Tx, m MemoryItem, now int64) error { return bump(tx, now, id, `content=?`, content) })
 }
 
 // ForgetMemory deletes the content and every share; the row stays as a
 // tombstone so ids and receipts remain valid.
 func (s *Store) ForgetMemory(requestID, id string, expectedRevision int) (MemoryItem, bool, error) {
-	return s.editMemory(requestID, "memory.forget", id, expectedRevision, map[string]any{"id": id, "rev": expectedRevision},
+	return s.forgetAs(MemByUser, requestID, id, expectedRevision)
+}
+
+func (s *Store) forgetAs(author, requestID, id string, expectedRevision int) (MemoryItem, bool, error) {
+	return s.editMemory(requestID, "memory.forget", author, id, expectedRevision, map[string]any{"id": id, "rev": expectedRevision},
 		func(tx *sql.Tx, m MemoryItem, now int64) error {
+			if _, err := tx.Exec(`UPDATE memory_versions SET content='' WHERE memory_id=?`, id); err != nil {
+				return err
+			}
 			return bump(tx, now, id, `state=?, content='', shared_with='[]'`, MemoryForgotten)
 		})
 }
 
 // ShareMemory grants another Assistant read access to an approved item.
 func (s *Store) ShareMemory(requestID, id, withAssistant string, expectedRevision int) (MemoryItem, bool, error) {
-	return s.editMemory(requestID, "memory.share", id, expectedRevision, map[string]any{"id": id, "with": withAssistant, "rev": expectedRevision},
+	return s.editMemory(requestID, "memory.share", MemByUser, id, expectedRevision, map[string]any{"id": id, "with": withAssistant, "rev": expectedRevision},
 		func(tx *sql.Tx, m MemoryItem, now int64) error {
 			if m.State != MemoryApproved {
 				return fmt.Errorf("%w: only approved memory can be shared", ErrBadState)
@@ -175,7 +252,7 @@ func (s *Store) ShareMemory(requestID, id, withAssistant string, expectedRevisio
 
 // UnshareMemory revokes a grant.
 func (s *Store) UnshareMemory(requestID, id, withAssistant string, expectedRevision int) (MemoryItem, bool, error) {
-	return s.editMemory(requestID, "memory.unshare", id, expectedRevision, map[string]any{"id": id, "with": withAssistant, "rev": expectedRevision},
+	return s.editMemory(requestID, "memory.unshare", MemByUser, id, expectedRevision, map[string]any{"id": id, "with": withAssistant, "rev": expectedRevision},
 		func(tx *sql.Tx, m MemoryItem, now int64) error {
 			next := slices.DeleteFunc(slices.Clone(m.SharedWith), func(x string) bool { return x == withAssistant })
 			raw, _ := json.Marshal(next)

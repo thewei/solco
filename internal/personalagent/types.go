@@ -542,3 +542,53 @@ type Routine struct {
 	ApprovalID    string `json:"approvalId,omitempty"`
 	ApprovalState string `json:"approvalState,omitempty"`
 }
+
+// MemoryVersion is one revision of a memory item; Author is who made it
+// (user, agent, files, system) — a label, not a proof.
+type MemoryVersion struct {
+	MemoryID string `json:"memoryId"`
+	Revision int    `json:"revision"`
+	Author   string `json:"author"`
+	State    string `json:"state"`
+	Content  string `json:"content"`
+	At       int64  `json:"at"`
+}
+
+// MemoryReview is one Assistant's live memory (candidates and approved) with
+// what looks wrong: duplicate wording, unanswered candidates, edit conflicts.
+type MemoryReview struct {
+	AssistantID     string       `json:"assistantId"`
+	Approved        int          `json:"approved"`
+	Candidates      int          `json:"candidates"`
+	Max             int          `json:"max"`
+	Duplicates      [][]string   `json:"duplicates"`
+	StaleCandidates []string     `json:"staleCandidates"`
+	Conflicts       []string     `json:"conflicts"`
+	Items           []MemoryItem `json:"items"`
+}
+
+// Proactivity is the rules for what the system may start on its own for one
+// Assistant. Revision 0 = never set (the defaults apply).
+type Proactivity struct {
+	AssistantID    string `json:"assistantId"`
+	Level          string `json:"level"`
+	QuietStart     string `json:"quietStart"`
+	QuietEnd       string `json:"quietEnd"`
+	TZ             string `json:"tz"`
+	ReportEveryMin int    `json:"reportEveryMin"`
+	DailyBudget    int    `json:"dailyBudget"`
+	DispatchToday  int    `json:"dispatchToday"`
+	QuietNow       bool   `json:"quietNow"`
+	Revision       int    `json:"revision"`
+	UpdatedAt      int64  `json:"updatedAt"`
+}
+
+// ProactivityInput is what a person may change.
+type ProactivityInput struct {
+	Level          string `json:"level"`
+	QuietStart     string `json:"quietStart"`
+	QuietEnd       string `json:"quietEnd"`
+	TZ             string `json:"tz"`
+	ReportEveryMin int    `json:"reportEveryMin"`
+	DailyBudget    int    `json:"dailyBudget"`
+}
