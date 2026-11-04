@@ -82,6 +82,15 @@ export interface AssistantsGoalInput {
   watch?: AssistantsWatch;
 }
 
+/**
+ * AssistantsIntent is one thing the sidebar asked the page to do. Seq grows
+ * with every post; the page acts on a Seq once and acknowledges it.
+ */
+export interface AssistantsIntent {
+  seq: number;
+  kind: string;
+}
+
 /** AssistantsRun is one Run plus whether its pane can be opened from here. */
 export interface AssistantsRun {
   id: string;
@@ -144,11 +153,6 @@ export interface AssistantsView {
    */
   agents: AssistantsAgent[];
   defaultAgent: string;
-  /**
-   * NewForm asks the page to open its New Assistant form (the sidebar's "+");
-   * reading it clears it.
-   */
-  newForm: boolean;
 }
 
 /** AssistantsWatch is the PR Watch spec the page collects. */
@@ -1006,6 +1010,10 @@ export const filesPreview = {
 
 /** AssistantsBridge is the page's bound service. */
 export const assistants = {
+  /** AckIntent is the page telling the shell it opened what seq asked for. */
+  ackIntent(seq: number): Promise<void> {
+    return call("assistants.AckIntent", seq);
+  },
   /** AckTask clears a finished task's needs-you. */
   ackTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.AckTask", requestID, id, revision);
@@ -1069,6 +1077,14 @@ export const assistants = {
   openPane(paneID: string): Promise<boolean> {
     return call("assistants.OpenPane", paneID);
   },
+  /**
+   * PendingIntent is the page's own cheap read of the outstanding intent: no
+   * plugin call, so a failing or slow CLI read can never hide a click (the
+   * first version rode the Snapshot and an erroring read dropped it).
+   */
+  pendingIntent(): Promise<AssistantsIntent | null> {
+    return call("assistants.PendingIntent");
+  },
   /** PublishTask releases a draft the Coordinator (or the person) filed. */
   publishTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.PublishTask", requestID, id, revision);
@@ -1113,6 +1129,11 @@ export const assistants = {
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
 export const events = {
+  /**
+   * assistantsIntentEvent wakes a mounted page so it reads the intent now
+   * instead of at its next poll.
+   */
+  assistantsIntent: event<AssistantsIntent>("assistants:intent"),
   /**
    * chatUpdated pushes the projection after every chat state mutation. Events
    * emitted before the page is ready are delivered once it is, so the page

@@ -23,13 +23,13 @@ func (s *Shell) assistantsSection(c *ui.Context) {
 	}
 	s.refreshAssistants(false)
 	rows := s.assistants.overview.Assistants
-	add := &treeRowAction{Label: "New Assistant…", Glyph: iconPlus, Run: s.openNewAssistant}
+	// One "+" with a real menu: the two things a person can start here.
+	add := &treeRowAction{Label: "New…", Tooltip: "New Assistant or Group", Glyph: iconPlus, Menu: s.newAssistantMenu}
 	s.sidebarSection(c, sidebarSectionSpec{
 		Key: "section:assistants", Title: "Assistants", Count: len(rows), Action: add,
 		Menu: func(m *ui.Menu) {
-			if m.Item(add.Label).Chosen() {
-				add.Run()
-			}
+			s.newAssistantMenu(m)
+			m.Separator()
 			if m.Item("Open Assistants").Chosen() {
 				s.showAssistant("")
 			}
@@ -42,7 +42,7 @@ func (s *Shell) assistantsSection(c *ui.Context) {
 				Height:   s.sidebarRowHeight(),
 				Key:      "assistant:" + row.ID,
 				Selected: onPage,
-				Mark:     visualMark{svg: iconAssistant},
+				Avatar:   func() { assistantAvatar(c, avatarIdentity{ID: row.ID, Name: row.Name}, 16) },
 				Label:    row.Name,
 				Dot:      assistantDot(row),
 				Count:    row.NeedsYou,
@@ -102,9 +102,19 @@ func (s *Shell) showAssistant(id string) {
 	}
 }
 
-// openNewAssistant opens the page with its New Assistant form up.
-func (s *Shell) openNewAssistant() {
-	s.assistants.selected = ""
-	s.showAssistant("")
-	s.assistants.newForm = true
+// newAssistantMenu is the "+" menu — exactly two items, shared by the header
+// button and the section's context menu.
+func (s *Shell) newAssistantMenu(m *ui.Menu) {
+	if m.Item("New Assistant").Chosen() {
+		s.openNewAssistant()
+	}
+	if m.Item("New Group").Chosen() {
+		s.openNewGroup()
+	}
 }
+
+// openNewAssistant opens the page with its New Assistant sheet up.
+func (s *Shell) openNewAssistant() { s.postAssistantsIntent(intentNewAssistant) }
+
+// openNewGroup opens the page with its New Group sheet up.
+func (s *Shell) openNewGroup() { s.postAssistantsIntent(intentNewGroup) }

@@ -40,8 +40,8 @@ type assistantsState struct {
 	loading  bool
 	// selected is the Assistant the page is on (client-local navigation).
 	selected string
-	// newForm asks the page to open its New Assistant form on its next read.
-	newForm bool
+	// intent is the sidebar's outstanding ask of the page (assistants_intent.go).
+	intent intentState
 	// webview is the page's embedded WebView; broken latches a failed creation.
 	webview *mygo.WebView
 	broken  bool

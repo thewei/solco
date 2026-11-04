@@ -679,3 +679,10 @@
   flex-direction: column;
   gap: 10px;
 }
+
+.as-sheet-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+}

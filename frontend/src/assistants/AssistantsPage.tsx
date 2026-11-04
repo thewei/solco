@@ -3,6 +3,7 @@ import { App } from "../App";
 import {
   assistants,
   chat,
+  events,
   type AssistantsAgent,
   type AssistantsDetail,
   type AssistantsDrawer,
@@ -29,7 +30,7 @@ import "./assistants.css";
  */
 
 type Tab = "needs" | "watching" | "tasks" | "done" | "memory" | "about";
-type Form = "assistant" | "watch" | "task" | "rename" | null;
+type Form = "assistant" | "group" | "watch" | "task" | "rename" | null;
 
 const rid = () => crypto.randomUUID();
 const OPEN_TASK = new Set(["draft", "waiting", "queued", "claimed", "starting", "running", "blocked", "review_required", "uncertain"]);
@@ -88,9 +89,29 @@ export function AssistantsPage() {
   const [stripOpen, setStripOpen] = useState(false);
   const selected = view?.selected ?? "";
   const { drawer, pull: pullDrawer } = useDrawer(selected, tab !== null);
+  // The sidebar's "+" posts an intent (a monotonic seq). The page reads it
+  // through its own cheap bridge call — never through the plugin-backed
+  // Snapshot, whose failure would hide the click — and the event hands it over
+  // at once. It stays pending until acknowledged, so a page that was still
+  // loading or a reply that arrives out of order cannot lose it; a seq is
+  // acted on once.
+  const handledIntent = useRef(0);
+  const takeIntent = useCallback((i: { seq: number; kind: string } | null | undefined) => {
+    if (!i || i.seq <= handledIntent.current) return;
+    handledIntent.current = i.seq;
+    setForm(i.kind === "group" ? "group" : "assistant");
+    assistants.ackIntent(i.seq).catch(() => undefined);
+  }, []);
   useEffect(() => {
-    if (view?.newForm) setForm("assistant");
-  }, [view?.newForm]);
+    const read = () => assistants.pendingIntent().then(takeIntent).catch(() => undefined);
+    void read();
+    const off = events.assistantsIntent.on(takeIntent);
+    const timer = window.setInterval(() => !document.hidden && void read(), 1500);
+    return () => {
+      off();
+      window.clearInterval(timer);
+    };
+  }, [takeIntent]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || form) return;
@@ -115,7 +136,16 @@ export function AssistantsPage() {
     [pull, pullDrawer, setError],
   );
 
-  if (!view) return <div className="as-boot" />;
+  if (!view) {
+    return error ? (
+      <div className="as-empty">
+        <h2>Assistants can't be read</h2>
+        <p>{error}</p>
+      </div>
+    ) : (
+      <div className="as-boot" />
+    );
+  }
   if (!view.available) {
     return (
       <div className="as-empty">
@@ -133,7 +163,8 @@ export function AssistantsPage() {
         <button type="button" className="as-btn primary" onClick={() => setForm("assistant")}>
           New Assistant
         </button>
-        {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} act={act} /> : null}
+        {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} onCreated={pull} /> : null}
+        {form === "group" ? <NewGroup onClose={() => setForm(null)} /> : null}
       </div>
     );
   }
@@ -252,7 +283,8 @@ export function AssistantsPage() {
           </aside>
         ) : null}
       </main>
-      {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} act={act} /> : null}
+      {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} onCreated={pull} /> : null}
+      {form === "group" ? <NewGroup onClose={() => setForm(null)} /> : null}
       {form === "rename" ? <Rename assistant={a} onClose={() => setForm(null)} act={act} /> : null}
       {form === "watch" ? <NewWatch assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
       {form === "task" ? <NewTask assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
@@ -769,7 +801,7 @@ function ago(ms: number): string {
 }
 
 /** A sheet: a title, fields, Cancel + submit. Esc and the backdrop close it. */
-function Sheet({ title, submit, busy, onClose, onSubmit, children }: { title: string; submit: string; busy: boolean; onClose: () => void; onSubmit: () => void; children: ReactNode }) {
+function Sheet({ title, submit, busy, error, onClose, onSubmit, children }: { title: string; submit: string; busy: boolean; error?: string; onClose: () => void; onSubmit: () => void; children: ReactNode }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", key);
@@ -784,6 +816,11 @@ function Sheet({ title, submit, busy, onClose, onSubmit, children }: { title: st
       <form className="as-sheet" onSubmit={go}>
         <h2>{title}</h2>
         {children}
+        {error ? (
+          <p className="as-sheet-error" role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="as-row end">
           <button type="button" className="as-btn" onClick={onClose}>
             Cancel
@@ -840,26 +877,51 @@ function Rename({ assistant, onClose, act }: { assistant: { id: string; name: st
   );
 }
 
-function NewAssistant({ onClose, act }: { onClose: () => void; act: Act }) {
+/**
+ * The New Assistant sheet. The create call is awaited: the sheet closes only
+ * on success (the bridge selects the new Assistant, so the page lands in its
+ * conversation), a refusal keeps every typed character and shows the reason,
+ * a double submit is ignored, and a retry of the same input reuses one
+ * requestId so the plugin replays instead of creating a second Assistant.
+ */
+function NewAssistant({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const request = useRef({ key: "", id: "" });
+  const submit = async () => {
+    if (submitting || !name.trim()) return;
+    const key = `${name.trim()}\n${description.trim()}`;
+    if (request.current.key !== key) request.current = { key, id: rid() };
+    setSubmitting(true);
+    setError("");
+    try {
+      await assistants.createAssistant(request.current.id, name, description);
+      onCreated();
+      onClose();
+    } catch (e) {
+      setError(msg(e));
+      setSubmitting(false);
+    }
+  };
   return (
-    <Sheet
-      title="New Assistant"
-      submit="Create"
-      busy={!name.trim()}
-      onClose={onClose}
-      onSubmit={() => {
-        void act(() => assistants.createAssistant(rid(), name, description));
-        onClose();
-      }}
-    >
+    <Sheet title="New Assistant" submit={submitting ? "Creating…" : "Create"} busy={!name.trim() || submitting} error={error} onClose={onClose} onSubmit={() => void submit()}>
       <Field label="Name">
         <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
       </Field>
       <Field label="What does it do?">
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
       </Field>
+    </Sheet>
+  );
+}
+
+/** Groups need the plugin's group store; until it answers, say so instead of making a lookalike. */
+function NewGroup({ onClose }: { onClose: () => void }) {
+  return (
+    <Sheet title="New Group" submit="Create" busy onClose={onClose} onSubmit={() => undefined}>
+      <p className="as-meta">Group chats are not available in this version of the Automations plugin. Nothing was created.</p>
     </Sheet>
   );
 }

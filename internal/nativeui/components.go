@@ -196,6 +196,10 @@ type treeRowSpec struct {
 	// label in fixed columns (branch, then the pane tally): the branch muted,
 	// amber when files changed — never a second dot.
 	Tile   string
+	// Avatar, when set, draws the row's identity in the Tile's 16pt slot (an
+	// Assistant's round initial, a Group's stack — 2026-11-04); Tile wins when
+	// both are set.
+	Avatar func()
 	Branch string
 	Dirty  bool
 	// Action is the row's one primary action, an icon button at the
@@ -393,6 +397,9 @@ func treeRow(c *ui.Context, spec treeRowSpec) ui.Element {
 			ui.Box(c).Width(float32(spec.Depth) * 14).Shrink(0).PassThrough()
 			if spec.Tile != "" {
 				letterTile(c, spec.Tile, tileToneFor(spec.Label), 16)
+				ui.Box(c).Width(6).Shrink(0).PassThrough()
+			} else if spec.Avatar != nil {
+				ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Children(spec.Avatar)
 				ui.Box(c).Width(6).Shrink(0).PassThrough()
 			} else if spec.Mark.svg != nil || spec.Mark.bmp != nil {
 				ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Children(func() {

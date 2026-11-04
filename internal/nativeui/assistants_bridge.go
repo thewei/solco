@@ -46,9 +46,6 @@ type AssistantsView struct {
 	// first of them.
 	Agents       []AssistantsAgent `json:"agents"`
 	DefaultAgent string            `json:"defaultAgent"`
-	// NewForm asks the page to open its New Assistant form (the sidebar's "+");
-	// reading it clears it.
-	NewForm bool `json:"newForm"`
 }
 
 // AssistantsAgent is one choice of the Coordinator's agent chip: ID is the
@@ -159,7 +156,6 @@ func (b *AssistantsBridge) Snapshot(ctx context.Context) (AssistantsView, error)
 		s.ensureLaunchKinds()
 		view.Agents, view.DefaultAgent = s.assistantAgents()
 		view.Theme = s.chatBridgeTheme()
-		view.NewForm, s.assistants.newForm = s.assistants.newForm, false
 		if s.assistantsAvailable() {
 			client = s.assistantsClientFor()
 			session = herdr.ParseRef(s.activeInstance).Session
