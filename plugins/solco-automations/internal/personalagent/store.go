@@ -572,6 +572,26 @@ var migrations = []string{
 		updated_at INTEGER NOT NULL,
 		PRIMARY KEY (assistant_id,consumer)
 	);`,
+	// v21: one durable, non-replaying progress-prompt outbox per Assistant.
+	// A crash after claiming but before confirming the Herdr submit is never
+	// automatically replayed. The submitted watermark is only advanced by a
+	// positively confirmed Herdr AgentSubmit, not by a model completion guess.
+	`CREATE TABLE coordinator_reports (
+		assistant_id TEXT PRIMARY KEY REFERENCES assistants(id),
+		state TEXT NOT NULL DEFAULT 'idle',
+		from_seq INTEGER NOT NULL DEFAULT 0,
+		through_seq INTEGER NOT NULL DEFAULT 0,
+		submitted_seq INTEGER NOT NULL DEFAULT 0,
+		attempts INTEGER NOT NULL DEFAULT 0,
+		next_at INTEGER NOT NULL DEFAULT 0,
+		last_submitted_at INTEGER NOT NULL DEFAULT 0,
+		last_error TEXT NOT NULL DEFAULT '',
+		herdr_session TEXT NOT NULL DEFAULT '',
+		workspace_id TEXT NOT NULL DEFAULT '',
+		pane_id TEXT NOT NULL DEFAULT '',
+		coordinator_revision INTEGER NOT NULL DEFAULT 0,
+		updated_at INTEGER NOT NULL DEFAULT 0
+	);`,
 }
 
 func (s *Store) migrate() error {

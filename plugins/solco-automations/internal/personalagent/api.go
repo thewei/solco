@@ -138,7 +138,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|group|persona|routine|proactivity|legacy-export>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|activity|report|group|persona|routine|proactivity|legacy-export>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
@@ -158,6 +158,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.overview()
 	case "activity":
 		return a.activity(rest, body)
+	case "report":
+		return a.report(rest, body)
 	case "legacy-export":
 		// Explicit, read-only: copies the retired herdr-projects data aside; nothing is ever removed from it.
 		dst, rest := flagValue(rest, "--to")
