@@ -177,3 +177,41 @@ func TestOverviewCountsWorkerTasksNotCoordinatorSession(t *testing.T) {
 		t.Fatalf("worker count wrong: %v", row)
 	}
 }
+
+// A progress pulse is independent of Task/Goal counters. The sidebar and
+// phone must still observe a changed watermark and refresh the fact ledger.
+func TestOverviewExposesActivityWatermarkWhenCountersDoNotMove(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "overview-activity", "Ada")
+	api := &API{Store: s}
+	first, err := call(t, api, "", "assistant", "overview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first["activitySeq"] != float64(0) {
+		t.Fatalf("initial watermark = %v", first["activitySeq"])
+	}
+	if _, err := s.newFact(Fact{AssistantID: a.ID, Kind: FactPulse, Text: "2 tasks still running"}, "overview:pulse"); err != nil {
+		t.Fatal(err)
+	}
+	second, err := call(t, api, "", "assistant", "overview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second["activitySeq"] == first["activitySeq"] {
+		t.Fatalf("unchanged activity watermark: %v", second)
+	}
+	if second["needsYou"] != first["needsYou"] {
+		t.Fatal("a pulse must not change the Needs-You count")
+	}
+	if _, err := s.newFact(Fact{AssistantID: a.ID, Kind: FactPulse, Text: "2 tasks still running"}, "overview:pulse"); err != nil {
+		t.Fatal(err)
+	}
+	third, err := call(t, api, "", "assistant", "overview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third["activitySeq"] != second["activitySeq"] {
+		t.Fatalf("deduplicated Fact changed watermark: %v / %v", second, third)
+	}
+}

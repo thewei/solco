@@ -1,0 +1,18 @@
+{
+  "ackSeq": 0,
+  "facts": [
+    {
+      "seq": 4,
+      "id": "f_0000000000000017",
+      "assistantId": "a_0000000000000001",
+      "goalId": "g_0000000000000002",
+      "taskId": "t_0000000000000004",
+      "kind": "delegated",
+      "text": "Delegated: Collect numbers",
+      "createdAt": 1800000000000
+    }
+  ],
+  "hasMore": false,
+  "nextSeq": 4,
+  "schema": 1
+}

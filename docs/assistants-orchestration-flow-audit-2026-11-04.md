@@ -78,3 +78,11 @@
 - **Host / 手机**：Host `GET /api/v3/personal-agent/assistants/{id}/activity?after=&limit=`（ScopeView）和 `POST .../activity/ack`（ScopeManage）共用原插件 CLI 缝；消费者 ID **完全由已配对的 Device ID 派生**，手机无法伪造；ACK JSON 拒绝未知字段。手机独立 Activity History 页面：显示新到旧逐页传递的消息（画面按旧到新排序）、支持主动标记已读、定期拉取、重连去重、跨 Mac 隔离；最新事实条保留。
 - **自动测试**：迁移后序号无复用、分页跨多个消费端、幂等/拒绝非法 ACK、断线重开重放、删除游标、Host 鉴权/门关闭/设备绑定、手机 Zod Goldens/行为单测。
 - **仍未实现**：不会自动把 Fact 插入 OMP 的聊天记录；没有可靠 OS Push/后台通知投递、自然语言总结生成与推送 ACK；启用 reportEveryMin 只产生可读的事实，不等于 Coordinator 主动发话。后续将复用 `personal-agent.changed` 事件提示客户端主动补读，而不是把事件帧当内容本体。
+
+## 继续优化：Activity 变化提示与 Android 本地通知（2026-11-05）
+
+- **变更提示不再遗漏“仅有事实变化”**：插件 Overview 增加 `activitySeq`（事实表最大 AUTOINCREMENT seq，无正文）；Mac `assistantsOverviewFingerprint` 将其纳入比对。同样任务数、Needs You 数但新产生 Fact 时，也通过既有 `personal-agent.changed` socket 触发手机重读。此帧依然只有 revision / assistants / needsYou，绝无 Prompt、目标、记忆或进度正文。旧 Host 的 ActivitySeq 字段缺省可兼容。
+- **独立通知通道**：Host 新增 `GET/POST /api/v3/personal-agent/assistants/{id}/activity/notifications[ /ack ]`，ScopeView 只读 / ScopeManage ACK；consumer 完全由配对 Device ID + `:notifications` 派生，与 `device:<ID>` 的手工已读游标分离。`--unread` 使插件单次查询即可从通知 ACK 开始，GET 绝不标记已读。仅新 Host 声明 `personalAgentActivityNotices`，旧 Host 不进行后台轮询。
+- **Android 通知收敛**：复用 Solco Mobile 根部唯一 events socket、已有保活服务和 `expo-notifications`，Activity 变化提示立即重读，30 秒兜底查漏；同一 Assistant 一批事实汇总为一条通知，标识稳定并点击进入该 Assistant Activity history。锁屏通知不含事实/任务正文、Agent Prompt、助手名字或证据；只有通知调度成功才推进通知消费游标。OS 调度失败、网络失败均可重试；ACK 传输不确定时同一运行期间复用 requestId 并避免重复调度。
+- **静默时间**：每个 Assistant 只在 Mac 的 `proactivity.quietNow=false` 时投递本地通知；静默期不推进消费游标，解除静默后补读。此路径不修改用户 Activity History 的显式已读状态，也不拼接/伪造 OMP 对话。
+- **边界**：这是在线、Android JS/前台服务仍运行时的本地通知和离线补读，不是服务器级 FCM/APNs push，不保证 Android 系统强杀应用后即时到达；通知被 OS 展示不等于用户看到。iOS 还未接此后台投递；跨重启“OS 已调度、Host 尚未 ACK”的极端窗口可能重复提醒一次（at-least-once）；真实手机、Herdr/OMP 的端到端验收仍待完成。协调者生成带证据的自然语言主动总结未实现。

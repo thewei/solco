@@ -170,3 +170,38 @@ func TestDeletingArchivedAssistantClearsActivityCursors(t *testing.T) {
 		t.Fatalf("leftover Activity ACK receipt: %d %v", n, err)
 	}
 }
+
+func TestUnreadActivityIsSeparateFromExplicitSeenCursor(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "notice-owner", "Ada")
+	for _, v := range []string{"created", "working", "done"} {
+		if _, err := s.newFact(Fact{AssistantID: a.ID, Kind: FactPulse, Text: v}, "notice:"+v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := s.UnreadActivity(a.ID, "device:phone:notifications", 2)
+	if err != nil || len(page.Facts) != 2 || !page.HasMore || page.AckSeq != 0 {
+		t.Fatalf("notifications: %+v %v", page, err)
+	}
+	if _, _, err := s.AckActivity("delivered", a.ID, "device:phone:notifications", page.NextSeq); err != nil {
+		t.Fatal(err)
+	}
+	unread, err := s.UnreadActivity(a.ID, "device:phone:notifications", 2)
+	if err != nil || len(unread.Facts) != 1 || unread.Facts[0].Text != "done" || unread.HasMore {
+		t.Fatalf("pending notification: %+v %v", unread, err)
+	}
+	seen, err := s.UnreadActivity(a.ID, "device:phone", 5)
+	if err != nil || len(seen.Facts) != 3 || seen.AckSeq != 0 {
+		t.Fatalf("notification delivery changed seen state: %+v %v", seen, err)
+	}
+	got, err := call(t, &API{Store: s}, ``, "assistant", "activity", "list", a.ID, "--consumer", "device:phone:notifications", "--unread", "--limit", "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got["activity"].(map[string]any)["facts"].([]any)) != 1 {
+		t.Fatalf("CLI unread mismatch: %v", got)
+	}
+	if _, err := call(t, &API{Store: s}, ``, "assistant", "activity", "list", a.ID, "--consumer", "device:phone", "--after", "0", "--unread"); codeOf(err) != "invalid" {
+		t.Fatalf("ambiguous cursor accepted: %v", err)
+	}
+}

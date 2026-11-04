@@ -517,5 +517,12 @@ func (a *API) overview() (any, error) {
 		}
 		grows = append(grows, OverviewGroup{ID: g.ID, Title: g.Title, Members: g.Members, LastSeq: g.LastSeq, Open: open, UpdatedAt: g.UpdatedAt})
 	}
-	return ok("assistants", rows, "needsYou", needs, "groups", grows), nil
+	// A completed step may add a Fact without altering Task/Goal counters.
+	// Expose only the global watermark, never the Fact text, so the desktop
+	// can nudge phones to re-read the authoritative activity feed.
+	var activitySeq int64
+	if err := a.Store.db.QueryRow("SELECT COALESCE(MAX(seq),0) FROM goal_facts").Scan(&activitySeq); err != nil {
+		return nil, wrapBusy(err)
+	}
+	return ok("assistants", rows, "needsYou", needs, "groups", grows, "activitySeq", activitySeq), nil
 }

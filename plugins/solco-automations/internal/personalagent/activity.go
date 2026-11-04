@@ -37,11 +37,25 @@ func checkActivityConsumer(consumer string) error {
 }
 
 func (s *Store) Activity(assistantID, consumer string, after int64, limit int) (ActivityPage, error) {
-	page := ActivityPage{Facts: []Fact{}, NextSeq: after}
+	if after < 0 {
+		return ActivityPage{}, fmt.Errorf("%w: activity cursor out of range", ErrInvalid)
+	}
+	return s.activityPage(assistantID, consumer, after, limit)
+}
+
+// UnreadActivity is one bounded read starting after this consumer's durable
+// ACK. It avoids a second CLI invocation just to discover the cursor; unlike
+// an inbox fetch, it still NEVER advances that cursor.
+func (s *Store) UnreadActivity(assistantID, consumer string, limit int) (ActivityPage, error) {
+	return s.activityPage(assistantID, consumer, -1, limit)
+}
+
+func (s *Store) activityPage(assistantID, consumer string, after int64, limit int) (ActivityPage, error) {
+	page := ActivityPage{Facts: []Fact{}}
 	if err := checkActivityConsumer(consumer); err != nil {
 		return ActivityPage{}, err
 	}
-	if after < 0 || limit < 0 || limit > ActivityMaxPageLimit {
+	if after < -1 || limit < 0 || limit > ActivityMaxPageLimit {
 		return ActivityPage{}, fmt.Errorf("%w: activity cursor or limit out of range", ErrInvalid)
 	}
 	if limit == 0 {
@@ -53,6 +67,10 @@ func (s *Store) Activity(assistantID, consumer string, after int64, limit int) (
 	if err := s.db.QueryRow("SELECT COALESCE((SELECT ack_seq FROM activity_cursors WHERE assistant_id=? AND consumer=?),0)", assistantID, consumer).Scan(&page.AckSeq); err != nil {
 		return ActivityPage{}, wrapBusy(err)
 	}
+	if after == -1 {
+		after = page.AckSeq
+	}
+	page.NextSeq = after
 	rows, err := s.db.Query(`SELECT seq,id,assistant_id,goal_id,task_id,kind,text,evidence,created_at
          FROM goal_facts WHERE assistant_id=? AND seq>? ORDER BY seq ASC LIMIT ?`, assistantID, after, limit+1)
 	if err != nil {

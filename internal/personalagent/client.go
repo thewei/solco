@@ -573,6 +573,18 @@ func (c *Client) Activity(ctx context.Context, assistantID, consumer string, aft
 	return out.Activity, c.do(ctx, nil, &out, args...)
 }
 
+// UnreadActivity returns the page after this consumer's durable ACK.
+func (c *Client) UnreadActivity(ctx context.Context, assistantID, consumer string, limit int) (ActivityPage, error) {
+	var out struct {
+		Activity ActivityPage `json:"activity"`
+	}
+	args := []string{"activity", "list", assistantID, "--consumer", consumer, "--unread"}
+	if limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+	return out.Activity, c.do(ctx, nil, &out, args...)
+}
+
 // AckActivity stores one consumer's processed progress watermark. A caller
 // must ACK only after it has handled the returned Activity facts.
 func (c *Client) AckActivity(ctx context.Context, requestID, assistantID, consumer string, seq int64) (int64, error) {

@@ -50,13 +50,20 @@ func (s *Shell) hostAssistantAgents() []remotehost.PersonalAgentKind {
 // notifyAssistantsChanged tells the open phones the overview moved. The first
 // read after launch (or after the gate reopens) announces nothing; the phone
 // reads authoritative state when it connects anyway.
-func (s *Shell) notifyAssistantsChanged() {
-	st := &s.assistants
+func assistantsOverviewFingerprint(overview personalagent.Overview) string {
 	var b strings.Builder
-	for _, a := range st.overview.Assistants {
+	for _, a := range overview.Assistants {
 		fmt.Fprintf(&b, "%s:%d:%s:%d:%d:%d:%d:%d:%d:%d;", a.ID, a.Revision, a.Status, a.Goals, a.Tasks, a.Running, a.Queued, a.Done, a.NeedsYou, a.Approvals)
 	}
-	next := "v1|" + b.String()
+	// A Fact can arrive without changing the sidebar counters. Include its
+	// committed sequence in the hint fingerprint so open phones refresh.
+	fmt.Fprintf(&b, "activity:%d;", overview.ActivitySeq)
+	return "v2|" + b.String()
+}
+
+func (s *Shell) notifyAssistantsChanged() {
+	st := &s.assistants
+	next := assistantsOverviewFingerprint(st.overview)
 	prev := st.fingerprint
 	st.fingerprint = next
 	if next == prev || prev == "" || s.remote.srv == nil {

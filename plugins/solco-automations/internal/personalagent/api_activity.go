@@ -21,8 +21,16 @@ func (a *API) activity(args []string, body []byte) (any, error) {
 		afterValue, rest := flagValue(args[2:], "--after")
 		limitValue, rest := flagValue(rest, "--limit")
 		consumer, rest := flagValue(rest, "--consumer")
-		if len(rest) != 0 || consumer == "" {
-			return nil, coded("invalid", "activity list needs --consumer and only --after/--limit")
+		unread := false
+		for i, v := range rest {
+			if v == "--unread" {
+				unread = true
+				rest = append(rest[:i:i], rest[i+1:]...)
+				break
+			}
+		}
+		if len(rest) != 0 || consumer == "" || (unread && afterValue != "") {
+			return nil, coded("invalid", "activity list needs --consumer and either --after or --unread")
 		}
 		after := int64(0)
 		limit := 0
@@ -39,6 +47,10 @@ func (a *API) activity(args []string, body []byte) (any, error) {
 				return nil, coded("invalid", "--limit must be 1..200")
 			}
 			limit = n
+		}
+		if unread {
+			page, err := a.Store.UnreadActivity(id, consumer, limit)
+			return ok("activity", page), err
 		}
 		page, err := a.Store.Activity(id, consumer, after, limit)
 		return ok("activity", page), err

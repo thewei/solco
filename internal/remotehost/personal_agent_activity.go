@@ -17,13 +17,52 @@ import (
 
 const maxPAActivityPage = 100
 
-// Device identity, not a phone-supplied string, owns the durable cursor.
-func paActivityConsumer(dev Device) string { return "device:" + dev.ID }
+// Device identity, not a phone-supplied string, owns both cursors.
+func paActivityConsumer(dev Device) string       { return "device:" + dev.ID }
+func paActivityNoticeConsumer(dev Device) string { return paActivityConsumer(dev) + ":notifications" }
 
 // handlePAActivity is read-only. The client may start at zero or at the
 // last ackSeq, re-read duplicates, and advance page-by-page without gaps.
 // GET never acknowledges an Activity item.
 func (s *Server) handlePAActivity(w http.ResponseWriter, r *http.Request, dev Device) {
+	s.handlePAActivityFor(w, r, dev, paActivityConsumer(dev))
+}
+
+// Notification delivery is separately acknowledged from a person's explicit
+// "Mark seen": a background notice can never silently consume their inbox.
+// A single core read starts after this notification consumer's persisted ACK.
+func (s *Server) handlePAActivityNotices(w http.ResponseWriter, r *http.Request, dev Device) {
+	c := s.paSeam(w, r)
+	if c == nil {
+		return
+	}
+	id, ok := paID(w, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	query := r.URL.Query()
+	if len(query) > 1 || (len(query) == 1 && !query.Has("limit")) {
+		writeError(w, http.StatusBadRequest, "bad_request", "")
+		return
+	}
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > maxPAActivityPage {
+			writeError(w, http.StatusBadRequest, "bad_request", "")
+			return
+		}
+		limit = parsed
+	}
+	page, err := c.UnreadActivity(r.Context(), id, paActivityNoticeConsumer(dev), limit)
+	if err != nil {
+		s.paRefuse(w, dev, "activity.notifications", err)
+		return
+	}
+	writePAActivityPage(w, page)
+}
+
+func (s *Server) handlePAActivityFor(w http.ResponseWriter, r *http.Request, dev Device, consumer string) {
 	c := s.paSeam(w, r)
 	if c == nil {
 		return
@@ -50,11 +89,15 @@ func (s *Server) handlePAActivity(w http.ResponseWriter, r *http.Request, dev De
 		}
 		limit = parsed
 	}
-	page, err := c.Activity(r.Context(), id, paActivityConsumer(dev), after, limit)
+	page, err := c.Activity(r.Context(), id, consumer, after, limit)
 	if err != nil {
 		s.paRefuse(w, dev, "activity", err)
 		return
 	}
+	writePAActivityPage(w, page)
+}
+
+func writePAActivityPage(w http.ResponseWriter, page personalagent.ActivityPage) {
 	if page.Facts == nil {
 		page.Facts = []personalagent.Fact{}
 	}
@@ -71,6 +114,14 @@ func (s *Server) handlePAActivity(w http.ResponseWriter, r *http.Request, dev De
 // connection drops after commit but before a response, retry exactly the
 // same requestId; the plugin returns the original receipt.
 func (s *Server) handlePAActivityAck(w http.ResponseWriter, r *http.Request, dev Device) {
+	s.handlePAActivityAckFor(w, r, dev, paActivityConsumer(dev))
+}
+
+func (s *Server) handlePAActivityNoticesAck(w http.ResponseWriter, r *http.Request, dev Device) {
+	s.handlePAActivityAckFor(w, r, dev, paActivityNoticeConsumer(dev))
+}
+
+func (s *Server) handlePAActivityAckFor(w http.ResponseWriter, r *http.Request, dev Device, consumer string) {
 	id, ok := paID(w, r.PathValue("id"))
 	if !ok {
 		return
@@ -101,7 +152,7 @@ func (s *Server) handlePAActivityAck(w http.ResponseWriter, r *http.Request, dev
 		return
 	}
 	s.paWrite(w, r, dev, "activity.ack", func(ctx context.Context, c *personalagent.Client) (any, error) {
-		seq, err := c.AckActivity(ctx, body.RequestID, id, paActivityConsumer(dev), body.Seq)
+		seq, err := c.AckActivity(ctx, body.RequestID, id, consumer, body.Seq)
 		return map[string]any{"schema": 1, "ackSeq": seq}, err
 	})
 }

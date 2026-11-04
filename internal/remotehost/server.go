@@ -544,6 +544,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+pa+"/assistants/{id}/facts", s.guard(ScopeView, s.handlePAFacts))
 	mux.Handle("GET "+pa+"/assistants/{id}/activity", s.guard(ScopeView, s.handlePAActivity))
 	mux.Handle("POST "+pa+"/assistants/{id}/activity/ack", s.guard(ScopeManage, s.handlePAActivityAck))
+	mux.Handle("GET "+pa+"/assistants/{id}/activity/notifications", s.guard(ScopeView, s.handlePAActivityNotices))
+	mux.Handle("POST "+pa+"/assistants/{id}/activity/notifications/ack", s.guard(ScopeManage, s.handlePAActivityNoticesAck))
 	mux.Handle("GET "+pa+"/assistants/{id}/routines", s.guard(ScopeView, s.handlePARoutines))
 	mux.Handle("GET "+pa+"/assistants/{id}/memory", s.guard(ScopeView, s.handlePAMemory))
 	mux.Handle("GET "+pa+"/memory/{id}/history", s.guard(ScopeView, s.handlePAMemoryHistory))
@@ -772,6 +774,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["personalAgentRoutines"] = true
 			capabilities["personalAgentMemory"] = true
 			capabilities["personalAgentProactivity"] = true
+			capabilities["personalAgentActivityNotices"] = true
 		}
 	}
 	if s.opts.Sessions != nil {

@@ -49,7 +49,7 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 	case strings.HasPrefix(key, "inbox"):
 		return []byte(`{"schema":1,"inbox":{"items":[{"id":"task:` + paTaskT + `","kind":"stalled","assistantId":"` + paAssistantA + `","taskId":"` + paTaskT + `","title":"Check it","detail":"Has not started","priority":3,"at":1800000000000}],"needsYou":1,"seq":4}}`), nil
 	case key == "overview":
-		return []byte(`{"schema":1,"needsYou":1,"assistants":[{"id":"` + paAssistantA + `","name":"Ada","status":"active","revision":1,"goals":1,"tasks":1,"running":0,"queued":0,"done":1,"needsYou":0,"approvals":1}]}`), nil
+		return []byte(`{"schema":1,"activitySeq":4,"needsYou":1,"assistants":[{"id":"` + paAssistantA + `","name":"Ada","status":"active","revision":1,"goals":1,"tasks":1,"running":0,"queued":0,"done":1,"needsYou":0,"approvals":1}]}`), nil
 	case key == "list":
 		return []byte(`{"schema":1,"assistants":[` + paAssistant + `]}`), nil
 	case key == "create", strings.HasPrefix(key, "rename "), strings.HasPrefix(key, "pause "), strings.HasPrefix(key, "resume "), strings.HasPrefix(key, "enable "), strings.HasPrefix(key, "disable "):
@@ -627,6 +627,9 @@ func TestPersonalAgentPlanRoutes(t *testing.T) {
 	golden(t, "personal-agent-activity.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/activity?after=0&limit=20", h.token, nil)))
 	_, receipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/activity/ack", h.token, `{"requestId":"activity-ack-1","seq":4}`)
 	golden(t, "personal-agent-activity-ack.json", receipt)
+	golden(t, "personal-agent-activity-notifications.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/activity/notifications?limit=20", h.token, nil)))
+	_, noticeReceipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/activity/notifications/ack", h.token, `{"requestId":"notification-ack-1","seq":4}`)
+	golden(t, "personal-agent-activity-notifications-ack.json", noticeReceipt)
 	for _, bad := range []string{pbase + "/assistants/" + paAssistantA + "/facts?limit=0", pbase + "/assistants/" + paAssistantA + "/facts?limit=101", pbase + "/assistants/" + paAssistantA + "/facts?limit=x", pbase + "/goals/not%20an%20id/plan"} {
 		if r := h.get(bad, h.token, nil); r.StatusCode != http.StatusBadRequest {
 			t.Errorf("%s = %d", bad, r.StatusCode)
@@ -867,5 +870,41 @@ func TestPersonalAgentActivityReplayAndDeviceBoundACK(t *testing.T) {
 	}
 	if core2.callCount() != 0 {
 		t.Fatal("closed seam reached the core")
+	}
+}
+
+func TestPersonalAgentNotificationCursorIsDistinctFromSeenAndBoundToDevice(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA + "/activity"
+	notice := base + "/notifications"
+	resp := h.get(notice+"?limit=5", h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("notification page status = %d", resp.StatusCode)
+	}
+	if last := core.lastCall(); !strings.Contains(last, "--consumer device:dev_") || !strings.Contains(last, ":notifications --unread --limit 5") {
+		t.Fatalf("notification consumer/one unread query: %q", last)
+	}
+	if st, _ := h.send("POST", notice+"/ack", h.token, `{"requestId":"notice-ack","seq":4}`); st != http.StatusOK {
+		t.Fatalf("notification ack = %d", st)
+	}
+	if last := core.lastCall(); !strings.Contains(last, `"consumer":"device:dev_`) || !strings.Contains(last, `:notifications"`) {
+		t.Fatalf("ACK was not device-scoped notice: %q", last)
+	}
+	if st, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"seen-ack","seq":4}`); st != http.StatusOK {
+		t.Fatalf("seen ACK = %d", st)
+	}
+	if last := core.lastCall(); strings.Contains(last, `:notifications"`) || !strings.Contains(last, `"consumer":"device:dev_`) {
+		t.Fatalf("seen ACK used notice consumer: %q", last)
+	}
+	for _, path := range []string{notice + "?after=4", notice + "?limit=101", notice + "?limit=oops"} {
+		if resp := h.get(path, h.token, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("invalid notice request %s = %d", path, resp.StatusCode)
+		}
+	}
+	if resp := h.get(notice, "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous notices = %d", resp.StatusCode)
+	}
+	if st, _ := h.send("POST", notice+"/ack", "", `{"requestId":"bad","seq":4}`); st != http.StatusUnauthorized {
+		t.Fatalf("anonymous notice ACK = %d", st)
 	}
 }

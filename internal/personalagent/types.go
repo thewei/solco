@@ -151,6 +151,9 @@ type Overview struct {
 	Assistants []OverviewRow   `json:"assistants"`
 	NeedsYou   int             `json:"needsYou"`
 	Groups     []OverviewGroup `json:"groups"`
+	// Latest committed Solco system fact sequence. It is a hint, never
+	// a replacement for activity cursor replay.
+	ActivitySeq int64 `json:"activitySeq"`
 }
 
 // OverviewGroup is one Group's light row: members, log length, @-mentions

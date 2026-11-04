@@ -2,6 +2,7 @@
   "capabilities": {
     "chat": true,
     "personalAgent": true,
+    "personalAgentActivityNotices": true,
     "personalAgentApprove": true,
     "personalAgentGroups": true,
     "personalAgentManage": true,
