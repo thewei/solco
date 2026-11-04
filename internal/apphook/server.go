@@ -3,6 +3,7 @@ package apphook
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,11 +13,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/thewei/solco/internal/chatstream"
 )
 
 /**
  * [INPUT]: 依赖 net、os、bufio、encoding/json 处理 Unix Domain Socket 流
- * [OUTPUT]: 对外提供 Server、NewServer、DefaultSocketPath、DefaultRuntimeSocketPath、NormalizeStatus
+ * [OUTPUT]: 对外提供 Server、NewServer、DefaultSocketPath、DefaultRuntimeSocketPath、NormalizeStatus 与 chat.stream 有界接入
  * [POS]: internal/apphook 的进程内 IPC 监听服务，统一接收并规范化各 Agent Hook 上报
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -241,13 +244,18 @@ func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 
+	// Bound incoming lines before conversion to a string: the hook IPC is
+	// shared with providers that can emit token events at high frequency.
 	reader := bufio.NewReaderSize(conn, 64*1024)
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadSlice('\n')
+		if errors.Is(err, bufio.ErrBufferFull) {
+			return // reject oversized frames; never allocate for an unbounded line
+		}
 		if len(line) > 0 {
-			line = strings.TrimRight(line, "\r\n")
-			if len(line) > 0 {
-				s.dispatchLine(line, conn)
+			trimmed := strings.TrimRight(string(line), "\r\n")
+			if trimmed != "" {
+				s.dispatchLine(trimmed, conn)
 			}
 		}
 		if err != nil {
@@ -338,6 +346,17 @@ func (s *Server) dispatchLine(line string, conn net.Conn) {
 
 func (s *Server) handleJSONRPC(req jsonRPCRequest, now time.Time, conn net.Conn) {
 	switch req.Method {
+	case "chat.stream":
+		var event chatstream.Event
+		if len(req.Params) == 0 || len(req.Params) > 12*1024 || json.Unmarshal(req.Params, &event) != nil || event.Validate() != nil {
+			writeJSONRPCResponse(conn, req.ID, map[string]any{"ok": false})
+			return
+		}
+		if s.handler.OnChatStream != nil {
+			s.handler.OnChatStream(event)
+		}
+		writeJSONRPCResponse(conn, req.ID, map[string]any{"ok": true})
+
 	case "pane.report_agent_session":
 		var params struct {
 			PaneID             string `json:"pane_id"`

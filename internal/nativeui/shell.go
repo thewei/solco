@@ -22,6 +22,7 @@ import (
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/apphook"
 	"github.com/thewei/solco/internal/chatsession"
+	"github.com/thewei/solco/internal/chatstream"
 	"github.com/thewei/solco/internal/commandcenter"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/gitworkbench"
@@ -571,6 +572,11 @@ type Shell struct {
 	chatPublishMu      sync.Mutex
 	chatPublishAt      time.Time
 	chatPublishTrailer *time.Timer
+	// OMP token bursts use an independent, 50ms coalesced tail patch. Full
+	// snapshots remain authoritative and cancel a pending patch on delivery.
+	chatDeltaTimer                *time.Timer
+	chatLastPublishedSeq          uint64
+	chatLastPublishedConversation string
 	// hooksStop releases the hook spool tailer (our herdr plugin's event
 	// forwarder); nil when not started (headless sessions).
 	hooksStop func()
@@ -613,7 +619,10 @@ type Shell struct {
 	// chatLiveProvider is the provider of the live-bound transcript;
 	// chatSubagents are that conversation's sub-agents (chat_subagents.go),
 	// refreshed in the background and cleared with the binding.
-	chatLiveProvider    history.AgentID
+	chatLiveProvider history.AgentID
+	// chatStream overlays OMP's in-process token events until JSONL catches up;
+	// the live transcript remains authoritative and this is never persisted.
+	chatStream          *chatstream.Buffer
 	chatSubagents       []chatsession.View
 	chatSubagentsTimer  *time.Timer
 	chatSubagentsBusy   bool

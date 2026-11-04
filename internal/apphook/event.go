@@ -2,11 +2,13 @@ package apphook
 
 import (
 	"time"
+
+	"github.com/thewei/solco/internal/chatstream"
 )
 
 /**
  * [INPUT]: 无外部依赖，接收原生 Go 类型与时间规范
- * [OUTPUT]: 对外提供 StatusEvent、SessionEvent 结构体与 Handler 回调模型
+ * [OUTPUT]: 对外提供 StatusEvent、SessionEvent 结构体与含 OnChatStream 的 Handler 回调模型
  * [POS]: internal/apphook 的核心事件模型契约，由 server.go 解析生成，由 nativeui 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -38,6 +40,7 @@ type SessionEvent struct {
 
 // Handler contains event callbacks dispatched by the hook server.
 type Handler struct {
-	OnStatus  func(StatusEvent)
-	OnSession func(SessionEvent)
+	OnStatus     func(StatusEvent)
+	OnSession    func(SessionEvent)
+	OnChatStream func(chatstream.Event)
 }

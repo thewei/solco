@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 import { event as bridgeEvent } from "mygo-runtime";
-import { chat, events, type ChatBridgeState, type ChatCatalog, type ChatCatalogEntry } from "./mygo";
+import { chat, events, type ChatBridgeState, type ChatDelta, type ChatCatalog, type ChatCatalogEntry } from "./mygo";
 import { Icon, StopIcon } from "./icons";
 import { selectContents, useLinkHint } from "./native";
 import { OutboxRow, TurnRow, userDisplay, type Outbox } from "./turn";
@@ -21,6 +21,7 @@ import { ChatComposerBox, ChatComposerTextarea, ChatComposerToolbar, useComposer
 import { BlockedDock, QuestionDock, SessionState, TasksTray, WorkingLine, isFreeTextOption, planFinished } from "./dock";
 import { QueueCard } from "./queue-card";
 import { loadStored, saveStored } from "./drafts";
+import { applyChatDelta } from "./chat-delta";
 import "./chat.css";
 
 /**
@@ -48,12 +49,32 @@ function shortModel(id: string): string {
 
 export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
   const [state, setStateRaw] = useState<ChatBridgeState | null>(null);
-  // A projection built before the one on screen never replaces it (snapshot
-  // replies and chatUpdated events can arrive out of order).
-  const setState = useCallback(
-    (next: ChatBridgeState) => setStateRaw((prev) => (prev && next.seq < prev.seq ? prev : next)),
-    [],
-  );
+  // Synchronous watermark: snapshots, full notifications and delta patches
+  // must use one ordering gate even when React batches state updates.
+  const stateRef = useRef<ChatBridgeState | null>(null);
+  const setState = useCallback((next: ChatBridgeState) => {
+    const previous = stateRef.current;
+    if (previous && next.seq < previous.seq) return;
+    stateRef.current = next;
+    setStateRaw(next);
+  }, []);
+  const repairingRef = useRef(false);
+  const onChatDelta = useCallback((delta: ChatDelta) => {
+    const previous = stateRef.current;
+    if (previous && delta.seq <= previous.seq) return;
+    const next = applyChatDelta(previous, delta);
+    if (next) {
+      setState(next);
+      return;
+    }
+    // Missing event or an intervening snapshot: resolve through the
+    // canonical bridge, not through a guessed tail or stale message index.
+    if (repairingRef.current) return;
+    repairingRef.current = true;
+    void chat.snapshot().then(setState).catch(() => {}).finally(() => {
+      repairingRef.current = false;
+    });
+  }, [setState]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [showJump, setShowJump] = useState(false);
@@ -141,14 +162,13 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
     // Events emitted before the DOM was ready are replayed by the runtime;
     // every later projection change arrives through chatUpdated.
     const off = events.chatUpdated.on(setState);
-    return off;
-  }, [refresh]);
+    const offDelta = events.chatDelta.on(onChatDelta);
+    return () => { off(); offDelta(); };
+  }, [refresh, setState, onChatDelta]);
 
   // Follow the app-resolved appearance (Settings -> General -> Appearance,
   // carried by the bridge state once it arrives); until then, the system
   // preference.
-  const stateRef = useRef(state);
-  stateRef.current = state;
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {

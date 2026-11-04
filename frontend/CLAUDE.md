@@ -7,10 +7,12 @@ Chat WebView 页（产品决策 2026-10-11）的唯一源码：一份嵌入式 S
 main.tsx: 桌面入口，createRoot 挂 `App`，引入 highlight.js github 主题、`nozoom` 与 `theme.css`（`vite.config.ts`，target safari15）
 mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），渲染同一个 `App`，引入 `nozoom`，零客户端分支
 nozoom.ts: 双指缩放关闭（副作用导入）：gesture 事件与 Ctrl+wheel 的默认缩放被取消——页面是原生窗口里的 App UI，双指放大不原生；普通滚动不受影响
-App.tsx: 页面根：桥接状态（`chat.*` / events 订阅）、`data-theme`/`data-contrast`/`data-prose` 写入 html、sticky-bottom 跟尾、会话绑定与开关（`bindLiveAgent` 等）
-mygo.ts: `mygo generate` 生成的类型化桥客户端——唯一桥 API 面，禁止手改
+App.tsx: 页面根：桥接状态（`chat.*` / events 订阅）、`chat:delta` 有序尾 Patch / 缺帧 snapshot 自愈、`data-theme`/`data-contrast`/`data-prose` 写入 html、sticky-bottom 跟尾、会话绑定与开关（`bindLiveAgent` 等）
+mygo.ts: `mygo generate` 生成的类型化桥客户端——唯一桥 API 面，禁止手改；SC-04 包含 chat:delta 的 ChatDelta DTO
 turn.tsx: 转录行渲染器：用户气泡（提及 chips、折叠）、助手纯文本、run 折叠（thinking+工具）、工具行、changes 卡、脚注（时间/复制/重发）、`Markdown`→`CodeBlock`——fenced 块统一脸：SVG 以 `<img>` data URL 预览（Preview|Code），mermaid 经懒加载库渲染图（Diagram|Code，strict 模式，350ms 流式去抖，解析失败回落源码+一行 `mmerr` 提示，主题翻转经 MutationObserver 重绘），超 30 行折叠、复制取 `textContent`
 turnlist.ts: 转录虚拟滚动（@tanstack/react-virtual）
+chat-delta.ts: 桌面/手机唯一的流式回合尾 Patch 合并器；baseSeq + conversationId 双重门控、缺帧返回 null 触发 Snapshot
+测试：`tests/chat-delta.test.ts` 只测纯 reducer，未进入 WebView 产物
 composer-surface.tsx: Chat / Assistant 冷启动 / Group 共用的 React Composer Box、Toolbar、Textarea 与扩容规则；发送与模型等状态仍由各场景 controller 拥有，不复制 Herdr runtime
 composer.tsx: 输入区：`/` `$` 目录弹层（agentcatalog 经桥）、模型/思考档面板、附件 chips、语音键
 dock.tsx: 输入区上方卡片栈：Tasks tray、Question 卡、Blocked 卡、Working line

@@ -479,6 +479,19 @@ export interface ChatContextUsage {
 }
 
 /**
+ * ChatDelta is a suffix replacement of the visible turn window, NOT a
+ * source transcript mutation. The receiver must have exactly BaseSeq or
+ * obtain a canonical chat.snapshot() before applying any later patch.
+ */
+export interface ChatDelta {
+  baseSeq: number;
+  seq: number;
+  conversationId: string;
+  start: number;
+  turns: ChatTurn[];
+}
+
+/**
  * ChatFeatures are the optional abilities of a page host (see
  * ChatBridgeState.Features). The page treats an absent field as "on".
  */
@@ -1635,6 +1648,7 @@ export const events = {
    * also starts from Snapshot and stays current through this event alone.
    */
   chatUpdated: event<ChatBridgeState>("chat:updated"),
+  chatDelta: event<ChatDelta>("chat:delta"),
   /** chatMenu is the page's own menu actions (the ones only the page can run). */
   chatMenu: event<string>("chat:menu"),
   /**

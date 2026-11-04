@@ -4,6 +4,7 @@
 Members:
 - `README.md` — documentation entry point.
 - `client-product-architecture.md` — unique architecture source of truth; defines Solco product ownership and Herdr runtime ownership.
+- `chat-view-streaming-plan-2026-11-04.md` — OMP 原生流式 Chat View 的 SC-01–SC-06 设计、同会话/单运行时约束、Socket/overlay 契约和验收证据；SC-01–04 已落地，真实同会话验收待做。
 - `personal-agent-plan.md` — historical Rust-first source audit (v1.2.27 / Shepherdr 2.1 / hc); architecture implementation superseded; cite as historical evidence only.
 - `personal-agent-go-mvp-plan.md` — **historical 2026-11-03 Go-native A–E implementation roadmap**: Shepherdr 2.1 test alignment, Assistant memory/task/coordinator, one Go daemon/Host. Substantial Go/Desktop/Mobile implementation now exists; consult current code and the newer Chat-first plan rather than its old pending-state text.
 - `assistants-chat-first-redesign.md` — **2026-11-04 Chat-first product/UI transition plan**: shared ChatView, scoped Herdr binding and More drawers; portions of the desktop implementation now exist, verify current code.

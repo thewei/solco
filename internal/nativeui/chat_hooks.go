@@ -12,6 +12,7 @@ import (
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/apphook"
 	"github.com/thewei/solco/internal/chatsession"
+	"github.com/thewei/solco/internal/chatstream"
 	"github.com/thewei/solco/internal/conversation"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/herdrhooks"
@@ -20,7 +21,7 @@ import (
 
 /**
  * [INPUT]: 依赖 apphook（进程内 IPC Hook Server）、herdrhooks spool（可选兼容向后尾部）、runtime.ReadPane（pane.read 可见文本）、InteractionBroker
- * [OUTPUT]: 提供 Shell hook 层：直接 Hook 状态接收与会话更新、blocked 触发的交互检测 → 结构化 PendingInteraction、非 blocked 的 pane 级取消、实时投影重推
+ * [OUTPUT]: 提供 Shell hook 层：直接 Hook 状态/会话更新与 OMP Chat 事件分流、blocked 触发的交互检测 → 结构化 PendingInteraction、非 blocked 的 pane 级取消、实时投影重推
  * [POS]: Solco 自有 Unix Socket Hook 优先级高于 Herdr spool fallback；两个来源显式分支再汇入 agentstatus 唯一状态仲裁器，Herdr 仍掌管 runtime
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,6 +36,9 @@ func (s *Shell) AttachHookServer() {
 			},
 			OnSession: func(evt apphook.SessionEvent) {
 				s.applyOnWindow(func() { s.handleAppHookSession(evt) })
+			},
+			OnChatStream: func(evt chatstream.Event) {
+				s.applyOnWindow(func() { s.handleAppChatStream(evt) })
 			},
 		})
 		if runtimeSock := apphook.DefaultRuntimeSocketPath(); runtimeSock != "" {

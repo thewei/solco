@@ -25,7 +25,7 @@ const (
 
 /**
  * [INPUT]: 依赖 Shell 的 0.6 Chat 状态（chatTurns/chatDisposition/chatOutcome/chatQueuedItems 现读跟进队列）、launch 发送路径、mygo Bind 事件
- * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/CancelQueuedItem/ReorderQueued/EditQueuedItem/ReviewChanges）与 chat:updated 事件、Shell.publishChatBridge、sendChatText 共享发送路径
+ * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/CancelQueuedItem/ReorderQueued/EditQueuedItem/ReviewChanges）、chat:updated 完整快照、chat:delta 仅覆盖 OMP token 增量、Shell.publishChatBridge、sendChatText 共享发送路径
  * [POS]: WebView Chat 的唯一表现层桥：投影与动作编组到窗口 UI 通道，会话运行时/Herdr 方法零改动；页面只能通过此桥读取聊天投影
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -745,6 +745,9 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		state.Turns = kept
 	}
 	state.attachSubagents(s.chatSubagents, s.chatTurns, s.chatLiveProvider, time.Now())
+	if s.chatStream != nil && !state.ReadOnly && s.chatLiveProvider == history.AgentOMP {
+		state.Turns = s.chatStream.Overlay(state.Turns)
+	}
 	state.Plan = chatsession.PlanOf(s.chatTurns)
 	return state
 }
@@ -819,8 +822,18 @@ func (s *Shell) publishChatBridge() {
 	s.chatPublishMu.Unlock()
 }
 
-// emitChatBridge delivers the current state immediately (UI lane).
+// emitChatBridge delivers the canonical full snapshot immediately (UI lane).
 func (s *Shell) emitChatBridge() {
+	if s.chatDeltaTimer != nil {
+		s.chatDeltaTimer.Stop()
+		s.chatDeltaTimer = nil
+	}
 	// A closed window ends delivery; the page is gone with it.
-	_ = chatUpdated.Emit(s.win, s.chatBridgeState())
+	if s.win == nil {
+		return
+	}
+	state := s.chatBridgeState()
+	s.chatLastPublishedSeq = state.Seq
+	s.chatLastPublishedConversation = state.ConversationID
+	_ = chatUpdated.Emit(s.win, state)
 }
