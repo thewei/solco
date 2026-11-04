@@ -100,8 +100,12 @@ func (s *Store) ResolveCoordinatorReport(requestID, id string, throughSeq int64,
 // It does not create a Coordinator, execute worker tasks, or write a fake
 // assistant message. OMP's reply belongs to its genuine Herdr Chat transcript.
 type ReportPump struct {
-	Store   *Store
-	Submit  func(session, paneID, text string) error
+	Store  *Store
+	Submit func(session, paneID, text string) error
+	// Ready is a live read-only Herdr gate. The SQLite CoordinatorReady flag
+	// proves a successful launch, NOT that OMP is currently idle or even alive.
+	// Both Ready and Blocked are REQUIRED before any automatic delivery.
+	Ready   func(session, paneID string) bool
 	Blocked func(session, paneID string) (what string, blocked bool)
 }
 type ReportPumpResult struct{ Queued, Submitted, Uncertain int }
@@ -255,10 +259,14 @@ func (p *ReportPump) tickOne(id string) (string, error) {
 	if r.State != ReportQueued || r.ThroughSeq <= r.FromSeq {
 		return "", nil
 	}
-	if p.Blocked != nil {
-		if _, blocked := p.Blocked(c.HerdrSession, c.PaneID); blocked {
-			return "", nil
-		}
+	// A missing runtime check must never disable the safety gate. An OMP
+	// dialog can be classified as idle by process status alone, so we need
+	// BOTH the Herdr agent identity and the startup-dialog screen check.
+	if p.Ready == nil || p.Blocked == nil {
+		return "", nil
+	}
+	if _, blocked := p.Blocked(c.HerdrSession, c.PaneID); blocked {
+		return "", nil
 	}
 	// The person may have paused work or enabled quiet hours while the
 	// Herdr pane was being checked. Re-read the owner's current rules.
@@ -272,6 +280,12 @@ func (p *ReportPump) tickOne(id string) (string, error) {
 	prompt, err := s.coordinatorReportPrompt(id, r)
 	if err != nil {
 		return "", err
+	}
+	// The coordinator can be busy with a person's Chat turn even though
+	// SQLite remembers its successful launch. Probe Herdr as close as possible
+	// to the irreversible outbox claim, after all other read-only work.
+	if !p.Ready(c.HerdrSession, c.PaneID) {
+		return "", nil
 	}
 	// Claim BEFORE calling Herdr, fenced to the exact Coordinator pane and
 	// revision. No database lock is held across a potentially slow submission.

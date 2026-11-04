@@ -1,6 +1,7 @@
 package herdr
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -210,5 +211,67 @@ func TestAnErrorFromABoundClientIsLabelledByTheCommandNotTheSession(t *testing.T
 		`{"error":{"code":"agent_not_ready","message":"m"}}`, errors.New("exit status 1"))
 	if want := "agent start: agent_not_ready: m"; err.Error() != want {
 		t.Fatalf("got %q, want %q", err.Error(), want)
+	}
+}
+
+func TestAgentLiveStateIsBoundToPaneAndRecognizesRealOMPIdle(t *testing.T) {
+	cases := []struct {
+		name, body   string
+		wantErr      bool
+		kind, status string
+		ready        bool
+	}{
+		{name: "interactive omp idle", body: `{"result":{"type":"agent_info","agent":{"pane_id":"w1:p1","agent":"omp","agent_status":"idle","interactive_ready":true}}}`, kind: "omp", status: "idle", ready: true},
+		{name: "human turn working", body: `{"result":{"type":"agent_info","agent":{"pane_id":"w1:p1","agent":"omp","agent_status":"working","interactive_ready":true}}}`, kind: "omp", status: "working", ready: true},
+		{name: "trust dialog", body: `{"result":{"type":"agent_info","agent":{"pane_id":"w1:p1","agent":"omp","agent_status":"blocked","interactive_ready":false}}}`, kind: "omp", status: "blocked"},
+		{name: "different pane", body: `{"result":{"type":"agent_info","agent":{"pane_id":"w8:p9","agent":"omp","agent_status":"idle","interactive_ready":true}}}`, wantErr: true},
+		{name: "incomplete identity", body: `{"result":{"type":"agent_info","agent":{"pane_id":"w1:p1","agent_status":"idle","interactive_ready":true}}}`, wantErr: true},
+		{name: "unknown response", body: `{"result":{"type":"pane_info","agent":{"pane_id":"w1:p1","agent":"omp","agent_status":"idle","interactive_ready":true}}}`, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHerdr(t, tc.body)
+			state, err := (Client{Session: "work"}).AgentState("w1:p1")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("state=%+v error=%v", state, err)
+			}
+			if !tc.wantErr && (state.Kind != tc.kind || state.Status != tc.status || state.InteractiveReady != tc.ready) {
+				t.Fatalf("status: %+v", state)
+			}
+		})
+	}
+}
+
+func TestAgentPromptAcceptedUsesNonWaitingHerdrPromptAndVerifiesReceipt(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		ok         bool
+	}{
+		{"right pane", `{"result":{"type":"agent_prompted","agent":{"pane_id":"w1:p1","agent_status":"working"}}}`, true},
+		{"wrong pane", `{"result":{"type":"agent_prompted","agent":{"pane_id":"w2:p2"}}}`, false},
+		{"wrong response", `{"result":{"type":"agent_info","agent":{"pane_id":"w1:p1"}}}`, false},
+		{"missing receipt", `{"result":{}}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := fakeHerdr(t, tc.body)
+			err := (Client{Session: "work"}).AgentPromptAccepted("w1:p1", "automated status text")
+			if (err == nil) != tc.ok {
+				t.Fatalf("receipt: %v", err)
+			}
+			got := readArgs(t, args)
+			expected := []string{"--session", "work", "agent", "prompt", "w1:p1", "automated status text"}
+			if !reflect.DeepEqual(got, expected) {
+				t.Fatalf("unsafe CLI options: %q", got)
+			}
+		})
+	}
+}
+
+func TestPaneReadContextHonorsCancelledReportProbe(t *testing.T) {
+	fakeHerdr(t, `{"result":{"text":"should not execute"}}`)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := (Client{}).PaneReadContext(ctx, "w1:p1", 60); err == nil {
+		t.Fatal("cancelled Herdr Pane read did not fail closed")
 	}
 }

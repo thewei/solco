@@ -253,12 +253,40 @@ def main() -> None:
             if started.get("agent", {}).get("pane_id") != pane:
                 raise RuntimeError("Herdr did not start OMP in the existing Pane")
 
-            # Do not use --wait: a very fast local model can finish between
-            # Herdr status samples, yielding agent_prompt_stalled after a
-            # successful submission. The Pane and Extension evidence are
-            # authoritative here.
-            run_cli([herdr, "agent", "prompt", pane, "Read the test file, then say hello."],
-                    env=env, cwd=work)
+            # The Assistant's periodic report gate checks Herdr's CURRENT
+            # identity/state, not its historical SQLite 'ready' flag. Verify
+            # the real protocol's agent.get response in this isolated TUI.
+            def wait_idle_omp() -> None:
+                deadline = time.monotonic() + 12
+                latest: dict[str, Any] = {}
+                while time.monotonic() < deadline:
+                    latest = run_cli([herdr, "agent", "get", pane],
+                                     env=env, cwd=work)
+                    agent = latest.get("agent", {})
+                    if (latest.get("type") == "agent_info"
+                            and agent.get("pane_id") == pane
+                            and agent.get("agent") == "omp"
+                            and agent.get("agent_status") == "idle"
+                            and agent.get("interactive_ready") is True):
+                        return
+                    time.sleep(.2)
+                raise RuntimeError("Herdr never confirmed the original OMP idle/interactive: "
+                                   + json.dumps(latest)[:450])
+
+            def accepted_prompt(text: str) -> None:
+                # No --wait: a very fast model can finish before Herdr
+                # samples working, yielding a false agent_prompt_stalled.
+                # Only agent_prompted with the same Pane is an accepted
+                # delivery, not proof that OMP has answered.
+                receipt = run_cli([herdr, "agent", "prompt", pane, text],
+                                   env=env, cwd=work)
+                if (receipt.get("type") != "agent_prompted"
+                        or receipt.get("agent", {}).get("pane_id") != pane):
+                    raise RuntimeError("Herdr prompt receipt is not bound to original pane: "
+                                       + json.dumps(receipt)[:450])
+
+            wait_idle_omp()
+            accepted_prompt("Read the test file, then say hello.")
 
             def await_turns(message_ends: int, text_chunks: int) -> None:
                 deadline = time.monotonic() + TIMEOUT
@@ -276,8 +304,8 @@ def main() -> None:
             # Reuse the same real Herdr Pane/OMP process for another prompt.
             # The extension sequence must remain contiguous and identity
             # cannot jump to a second runtime or new session file.
-            run_cli([herdr, "agent", "prompt", pane, "Please answer one more time."],
-                    env=env, cwd=work)
+            wait_idle_omp()
+            accepted_prompt("Please answer one more time.")
             await_turns(3, len(CHUNKS) * 2)
             with lock:
                 recorded = list(frames)
@@ -295,7 +323,7 @@ def main() -> None:
             if provider.request_count < 2:
                 raise RuntimeError("the real OMP process did not complete the tool round-trip")
 
-            print(f"Herdr OMP Chat stream: PASS (1 Pane/1 Agent, 2 prompts; {len(recorded)} IPC frames; "
+            print(f"Herdr OMP Chat stream: PASS (1 Pane/1 Agent, 2 idle guards + 2 pane-fenced prompt receipts; {len(recorded)} IPC frames; "
                   f"{len(CHUNKS) * 2} deltas; read tool + TUI answer)")
         finally:
             if daemon is not None and daemon.poll() is None:

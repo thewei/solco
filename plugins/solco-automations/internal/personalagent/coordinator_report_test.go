@@ -46,7 +46,7 @@ func TestReportPumpUsesRealCoordinatorAndFactWatermark(t *testing.T) {
 	a := mustAssistant(t, s, "report-owner", "Ada")
 	b := mustAssistant(t, s, "report-other", "Bo")
 	setPolicy(t, s, a, func(p *ProactivityInput) { p.ReportEveryMin = 1 })
-	p := &ReportPump{Store: s}
+	p := &ReportPump{Store: s, Ready: reportTestReady, Blocked: reportTestClear}
 	if r, err := p.Tick(); err != nil || r.Submitted != 0 {
 		t.Fatalf("without original Coordinator: %+v %v", r, err)
 	}
@@ -116,7 +116,7 @@ func TestReportPumpHonorsQuietAndDoesNotStartCoordinator(t *testing.T) {
 		t.Fatal(err)
 	}
 	called := 0
-	p := &ReportPump{Store: s, Submit: func(_, _, _ string) error { called++; return nil }}
+	p := &ReportPump{Store: s, Ready: reportTestReady, Blocked: reportTestClear, Submit: func(_, _, _ string) error { called++; return nil }}
 	if rep, err := p.Tick(); err != nil || rep.Submitted != 0 || called != 0 {
 		t.Fatalf("quiet: %+v %v", rep, err)
 	}
@@ -154,7 +154,7 @@ func TestReportPumpDoesNotTypeIntoBlockedHerdrDialog(t *testing.T) {
 		t.Fatal(err)
 	}
 	attempts := 0
-	p := &ReportPump{Store: s, Blocked: func(_, _ string) (string, bool) { return "Trust this folder?", true },
+	p := &ReportPump{Store: s, Ready: reportTestReady, Blocked: func(_, _ string) (string, bool) { return "Trust this folder?", true },
 		Submit: func(_, _, _ string) error { attempts++; return nil }}
 	if r, err := p.Tick(); err != nil || r.Submitted != 0 || attempts != 0 {
 		t.Fatalf("dialog intercepted: %+v %v", r, err)
@@ -179,7 +179,7 @@ func TestReportPumpSafePreSubmitRefusalRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	attempts := 0
-	pump := &ReportPump{Store: s, Submit: func(_, _, _ string) error {
+	pump := &ReportPump{Store: s, Ready: reportTestReady, Blocked: reportTestClear, Submit: func(_, _, _ string) error {
 		attempts++
 		if attempts == 1 {
 			return ErrSubmitRefused
@@ -212,7 +212,7 @@ func TestReportPumpUncertainIsPermanentUntilOwnerResolves(t *testing.T) {
 		t.Fatal(err)
 	}
 	attempts := 0
-	p := &ReportPump{Store: s, Submit: func(_, _, _ string) error { attempts++; return errors.New("ambiguous transport") }}
+	p := &ReportPump{Store: s, Ready: reportTestReady, Blocked: reportTestClear, Submit: func(_, _, _ string) error { attempts++; return errors.New("ambiguous transport") }}
 	if r, err := p.Tick(); err != nil || r.Uncertain != 1 {
 		t.Fatalf("uncertain: %+v %v", r, err)
 	}
@@ -333,7 +333,7 @@ func TestReportPumpDefaultOffAndBoundedRefusals(t *testing.T) {
 		t.Fatal(err)
 	}
 	attempts := 0
-	p := &ReportPump{Store: s, Submit: func(_, _, _ string) error { attempts++; return ErrSubmitRefused }}
+	p := &ReportPump{Store: s, Ready: reportTestReady, Blocked: reportTestClear, Submit: func(_, _, _ string) error { attempts++; return ErrSubmitRefused }}
 	for i := 0; i < 3; i++ {
 		if rep, err := p.Tick(); err != nil || rep.Submitted != 0 || attempts != 0 {
 			t.Fatalf("reportEveryMin=0 auto-prompted OMP: %+v %v", rep, err)
@@ -375,16 +375,85 @@ func TestReportPumpRechecksPolicyBeforeIrrevocableHerdrClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := 0
-	p := &ReportPump{Store: s, Submit: func(_, _, _ string) error { calls++; return nil }, Blocked: func(_, _ string) (string, bool) {
+	p := &ReportPump{Store: s, Ready: reportTestReady, Submit: func(_, _, _ string) error { calls++; return nil }, Blocked: func(_, _ string) (string, bool) {
 		setPolicy(t, s, a, func(p *ProactivityInput) { p.Level = LevelRespond })
 		return "", false
 	}}
 	if r, err := p.Tick(); err != nil || r.Submitted != 0 || calls != 0 {
 		t.Fatalf("owner changed policy during Herdr read: %+v %v; calls=%d", r, err, calls)
 	}
-	p.Blocked = nil
+	p.Blocked = reportTestClear
 	setPolicy(t, s, a, func(p *ProactivityInput) { p.Level = LevelFollowUp })
 	if r, err := p.Tick(); err != nil || r.Submitted != 1 || calls != 1 {
 		t.Fatalf("safe resume after restored owner setting: %+v %v; calls=%d", r, err, calls)
+	}
+}
+
+// P0: CoordinatorReady is a cached SQLite state. The original OMP can be working on a
+// human's prompt, so the report must not type until Herdr says idle and ready.
+// An unavailable Herdr status is a defer, not an uncertain submission.
+func TestReportPumpWaitsForOriginalOMPPaneIdle(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "report-live-idle", "Ada")
+	readyReportCoordinator(t, s, a)
+	setPolicy(t, s, a, func(p *ProactivityInput) { p.ReportEveryMin = 1 })
+	if _, err := s.newFact(Fact{AssistantID: a.ID, Kind: FactPulse, Text: "Worker running"}, "report:live-guard"); err != nil {
+		t.Fatal(err)
+	}
+	ready := false
+	submits := 0
+	checks := 0
+	pump := &ReportPump{Store: s, Blocked: reportTestClear, Ready: func(session, pane string) bool {
+		if session != "default" || pane != "w1:p1" {
+			t.Fatalf("different coordinator: %s %s", session, pane)
+		}
+		checks++
+		return ready
+	}, Submit: func(_, _, _ string) error { submits++; return nil }}
+	for range 3 {
+		if res, err := pump.Tick(); err != nil || res.Submitted != 0 || submits != 0 {
+			t.Fatalf("busy OMP prompted: %+v %v", res, err)
+		}
+	}
+	state, err := s.GetCoordinatorReport(a.ID)
+	if err != nil || state.State != ReportQueued || state.Attempts != 0 {
+		t.Fatalf("Herdr defer advanced outbox: %+v %v", state, err)
+	}
+	ready = true
+	if res, err := pump.Tick(); err != nil || res.Submitted != 1 || submits != 1 || checks != 4 {
+		t.Fatalf("idle not delivered: %+v %v, checks=%d sends=%d", res, err, checks, submits)
+	}
+}
+
+func reportTestReady(_, _ string) bool           { return true }
+func reportTestClear(_, _ string) (string, bool) { return "", false }
+
+// Production cannot silently bypass a live Herdr identity or unreadable
+// trust/composer screen because a future caller forgot to wire a callback.
+func TestReportPumpMissingAnyHerdrGateNeverSends(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "report-required-guards", "Ada")
+	readyReportCoordinator(t, s, a)
+	setPolicy(t, s, a, func(p *ProactivityInput) { p.ReportEveryMin = 1 })
+	if _, err := s.newFact(Fact{AssistantID: a.ID, Kind: FactPulse, Text: "pending"}, "report:missing-guard"); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	p := &ReportPump{Store: s, Submit: func(_, _, _ string) error { calls++; return nil }}
+	if _, err := p.Tick(); err != nil || calls != 0 {
+		t.Fatalf("missing both probes delivered report: %v", err)
+	}
+	p.Ready = reportTestReady
+	if _, err := p.Tick(); err != nil || calls != 0 {
+		t.Fatalf("missing screen guard delivered report: %v", err)
+	}
+	p.Ready = nil
+	p.Blocked = reportTestClear
+	if _, err := p.Tick(); err != nil || calls != 0 {
+		t.Fatalf("missing state guard delivered report: %v", err)
+	}
+	p.Ready = reportTestReady
+	if r, err := p.Tick(); err != nil || r.Submitted != 1 || calls != 1 {
+		t.Fatalf("both gates failed to resume report: %+v %v", r, err)
 	}
 }

@@ -260,6 +260,68 @@ func (c Client) AgentSubmit(target, text string) error {
 		"--timeout", "30000")
 }
 
+// AgentPromptAccepted confirms ONLY that Herdr accepted a prompt into this
+// exact Pane; it deliberately does not await an observed transition to working.
+// On real OMP TUI a fast model can answer before Herdr polls working, causing
+// the --wait form to report agent_prompt_stalled even though OMP replied.
+// An accepted prompt is NOT proof of an OMP completion; the real transcript is.
+func (c Client) AgentPromptAccepted(paneID, text string) error {
+	// A hung Herdr Socket must not stall the one report lane indefinitely.
+	// Timeout after a prompt attempt remains an uncertain delivery, not an
+	// automatic retry, because Herdr might already have accepted the text.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var response struct {
+		Type  string `json:"type"`
+		Agent struct {
+			PaneID string `json:"pane_id"`
+		} `json:"agent"`
+	}
+	if err := c.runCtx(ctx, &response, "agent", "prompt", paneID, text); err != nil {
+		return err
+	}
+	if response.Type != "agent_prompted" || response.Agent.PaneID != paneID {
+		return fmt.Errorf("herdr agent prompt: cannot confirm target pane")
+	}
+	return nil
+}
+
+// AgentLiveState is Herdr's real-time read-only agent.get projection. It is
+// independent of Solco's persistent CoordinatorReady launch history.
+type AgentLiveState struct {
+	PaneID           string
+	Kind             string
+	Status           string
+	InteractiveReady bool
+}
+
+// AgentState reads one exact Pane, without starting or interrupting its Agent.
+func (c Client) AgentState(target string) (AgentLiveState, error) {
+	// This is a pre-send read, not an operation that may hang a report worker
+	// indefinitely. An unavailable Herdr answer means "defer".
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var res struct {
+		Type  string `json:"type"`
+		Agent struct {
+			PaneID           string `json:"pane_id"`
+			Kind             string `json:"agent"`
+			Status           string `json:"agent_status"`
+			InteractiveReady bool   `json:"interactive_ready"`
+		} `json:"agent"`
+	}
+	if err := c.runCtx(ctx, &res, "agent", "get", target); err != nil {
+		return AgentLiveState{}, err
+	}
+	if res.Type != "agent_info" || res.Agent.PaneID != target || res.Agent.Kind == "" || res.Agent.Status == "" {
+		return AgentLiveState{}, fmt.Errorf("herdr agent get: incomplete or mismatched agent identity")
+	}
+	return AgentLiveState{
+		PaneID: res.Agent.PaneID, Kind: res.Agent.Kind, Status: res.Agent.Status,
+		InteractiveReady: res.Agent.InteractiveReady,
+	}, nil
+}
+
 // CodeKindMismatch is herdr's answer when `agent start` looked at the pane
 // and saw a different agent than the one it was asked to start. Right after
 // launch that is often not a verdict: an agent that is still unpacking a
@@ -383,7 +445,13 @@ func (c Client) PaneRun(paneID string, command ...string) error {
 // channel a delegated command has, so this is how its result gets read back.
 // Unlike the rest of the API this one prints the screen, not a JSON envelope.
 func (c Client) PaneRead(paneID string, lines int) (string, error) {
-	cmd := exec.Command(hostpath.Bin(), c.argv([]string{"pane", "read", paneID,
+	return c.PaneReadContext(context.Background(), paneID, lines)
+}
+
+// PaneReadContext allows an automated reporting probe to limit how long it
+// waits for the real Herdr Pane. Ordinary Workers still use PaneRead.
+func (c Client) PaneReadContext(ctx context.Context, paneID string, lines int) (string, error) {
+	cmd := exec.CommandContext(ctx, hostpath.Bin(), c.argv([]string{"pane", "read", paneID,
 		"--source", "recent", "--lines", fmt.Sprintf("%d", lines), "--format", "text"})...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

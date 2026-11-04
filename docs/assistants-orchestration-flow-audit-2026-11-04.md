@@ -104,3 +104,12 @@
 - **变更竞态**：Herdr pane 检查可能耗时，发送前再读个人 Proactivity，并在 SQL claim 中检查 Coordinator 的 revision/Herdr 身份、Assistant Active、reportEveryMin 和 level。若静默规则中途变化，不能仅靠旧时间点状态接受后续投递。提交后任何情况不会宣称 OMP 已输出回复。
 - **自动验证**：插件多项 ReportPump 功能/崩溃/幂等/清理/竞态测试；Go NativeUI 桥、Host Scope + 请求体拒绝测试；WebView TypeScript 构建及移动 Zod/端测试。真实 OMP/Herdr/手机 UI 端到端仍待实机验收。
 - **未完成**：没有 Chat turn 与 Task ID 的强制请求关联、Agent 自然语言输出的端到端验收/证据质量检查、关闭手机进程后依然投递的系统级推送；模型回复由原 Herdr transcript 单独拥有，不保证每次请求都有成功回复。CLI 的 `confirmed=true` 是操作者显式声明，当前还不是无法被 Agent 伪造的权限身份认证，跨端 Host ScopeManage 仍受真实配对设备授权约束。
+
+## 继续开发：原 OMP 自动汇报的实时忙碌门禁与隔离 Herdr 验收（2026-11-05）
+
+- 旧实现只确认 SQLite CoordinatorReady / Herdr startup dialogue：无法知道 OMP 是否正在处理用户 Chat Turn；Worker 通用 `AgentSubmit --wait --until working` 又会在本地极快模型已经回复时误报 `agent_prompt_stalled`（先前隔离证据）。
+- 现在 ReportPump 的 `Ready`（真实 Herdr `agent.get`）、`Blocked`（真实 `pane.read`，读取失败 fail-closed）**缺一不可**：精确匹配 OMP kind、目标 pane、`idle` 与 `interactive_ready`；Busy、Trust、未知/不完整状态都保留 `queued`，不 claim、不触发 Model。状态取证在其他只读工作之后、SQLite claim 之前进行；SQL 仍核对原 Coordinator revision/session/workspace/pane + Owner 现有设置。
+- 报告专用 `AgentPromptAccepted` 改为无 `--wait` 的 `agent.prompt` 并强制校验 `type=agent_prompted` + exact pane ID。只推进 Herdr **accepted** 水位，不伪称 OMP completed/replied。Worker/Group 原有 `AgentSubmit` 不变。
+- 测试先见失败（新增 Busy 场景不具备 Ready gate 的编译错误），随后单测包含 Hero/Herdr 状态不明/不同 Agent/Pane、Pane 读取失败、缺任一回调、被占用后解阻塞、返回收据不匹配。真实沙箱 `python3 scripts/check-herdr-omp-chat-stream.py` **PASS**：Herdr 0.9.5 + OMP 18.16.0 一个真实 Pane/Agent，两次真实 `agent.get idle/interactive_ready` 和无等待 `agent.prompted` 凭据，OMP TUI 输出与 14 帧/6 delta 一致；全程本地 SSE 模型、隔离 HOME；证据见 `docs/debug/2026-11-05-assistant-report-herdr-idle.md`。
+- 仍待：**SQLite Assistant report batch 到模型回复 ID 的强制关联**、完整 Assistant→Herdr+OMP→Chat UI E2E、Herdr API 的原子 `if_idle` 请求前置条件及用户发送竞态、实际 Android 应用验收。以上无法由“已收到 Herdr 凭据”替代。
+- 有界 Herdr IO：Report 的实时 `agent.get` (5s)、`pane.read` (5s)、无等待 `agent.prompt` CLI (30s) 均有 deadline；探测失败留在 queued，提交不确定仍按原 Outbox uncertain。其他 Worker/Group 的原 API 不变。
