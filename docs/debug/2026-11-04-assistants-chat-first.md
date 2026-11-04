@@ -34,3 +34,10 @@ Needs-You approve/deny (needs a real approval: a coding run or a PR watch), fail
 
 ## Left for the phone phase
 Host v3 `conversation/ensure` DTO + goldens in both repos, solco-mobile `/assistants` over the shared chat page (`pnpm sync:chat-page`, `pnpm sync:fixtures`), real-phone run.
+
+## 手机端阶段（2026-11-04，未上真机）
+
+- Host v3：`GET …/assistants/{id}` 增加 `coordinator`、`agents`；新增 `POST …/assistants/{id}/coordinator/start`（scope manage，agent 必须在 `Options.AssistantAgents` 提供的列表内，否则 400）。golden：`personal-agent-assistant.json`（改）、`personal-agent-coordinator-start-request.json`、`personal-agent-coordinator-start.json`，两仓一致。
+- 手机：`/assistants/[id]` 的 Conversation 卡（idle → 选 Agent「Start conversation」；starting 3 s 轮询；ready → 仅当 Coordinator 的 `herdrSession`+`paneId` 在手机 tree 中才打开其共享 Chat；failed → 重试）。
+- 验证：solco `go test ./...`、`go vet`、`git diff --check` 通过；solco-mobile `pnpm typecheck / lint / vitest（552 通过）/ check:fixtures / check:chat-page` 通过。
+- 未做（按用户指示「电脑端先跑通，后面再联调手机端」）：vivo 真机 USB 联调。
