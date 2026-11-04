@@ -40,6 +40,12 @@ func assistantCmd(args []string) error {
 	return printJSON(out, nil)
 }
 
+// assistantDaemonArgs starts the Assistant fallback as a persistent scheduler.
+// Herdr's startup-hook daemon may exit with the last TUI session; an
+// Assistants-initiated daemon cannot, because mobile requests and scheduled
+// work continue without a Terminal.
+func assistantDaemonArgs() []string { return []string{"daemon", "--standby"} }
+
 // ensureDaemon starts the scheduler when nothing holds its lock. Herdr runs
 // the plugin's startup hook only with its server, so a plugin linked or
 // updated while the server is up has no daemon; a queued Coordinator would sit
@@ -53,7 +59,7 @@ func ensureDaemon() {
 	if err != nil {
 		return
 	}
-	cmd := exec.Command(exe, "daemon")
+	cmd := exec.Command(exe, assistantDaemonArgs()...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := os.MkdirAll(config.StateDir(), 0o755); err == nil {
 		if f, err := os.OpenFile(filepath.Join(config.StateDir(), "daemon.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {

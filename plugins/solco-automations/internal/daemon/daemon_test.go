@@ -168,6 +168,44 @@ func TestTheDaemonStopsOnlyOnceNoSessionIsLeft(t *testing.T) {
 	}
 }
 
+// AUD-11: Assistants are persistent actors, not TUI session accessories.
+// Absence of Herdr sessions must not stop their scheduler, even when idle.
+func TestPersistentAssistantsSurviveSessionlessScheduler(t *testing.T) {
+	cases := []struct {
+		name                                                string
+		standby                                             bool
+		backend                                             config.Backend
+		runnerBusy, assistantBusy, registered, sessionsLeft bool
+		wantExit                                            bool
+	}{
+		{"legacy no assistants, no sessions", false, config.BackendHerdr, false, false, false, true, true},
+		{"has Assistant, no sessions", false, config.BackendHerdr, false, false, true, true, false},
+		{"has Assistant waiting, no sessions", false, config.BackendHerdr, false, true, true, true, false},
+		{"no registrations, active run", false, config.BackendHerdr, true, false, false, true, false},
+		{"no registrations, active Herdr session", false, config.BackendHerdr, false, false, false, false, false},
+		{"standby is resident", true, config.BackendHerdr, false, false, false, true, false},
+		{"other backend independent of session", false, config.BackendHC, false, false, false, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			shouldExit := shouldExitWithoutSessions(tc.standby, tc.backend, tc.runnerBusy, tc.assistantBusy, tc.registered, func() ([]string, error) {
+				called = true
+				if tc.sessionsLeft {
+					return nil, nil
+				}
+				return []string{"active"}, nil
+			})
+			if shouldExit != tc.wantExit {
+				t.Fatalf("exit=%v want=%v", shouldExit, tc.wantExit)
+			}
+			if tc.registered && called {
+				t.Fatal("registered Assistant caused a session check that might evict its daemon")
+			}
+		})
+	}
+}
+
 // A plugin update installs into a new checkout and keeps the old one, so the
 // login service keeps running the old build unless it notices. It leaves, and
 // launchd relaunches it through the shim onto the installed one. A daemon a

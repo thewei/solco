@@ -103,7 +103,7 @@ func Run(standby bool) error {
 			// daemon a TUI session started, running TUI automations, ends with
 			// the last session (ADR 0010): hc needs no session, and the login
 			// service owns its own lifetime (launchd would only relaunch it).
-			if !standby && resolved == config.BackendHerdr && !runs.Busy() && !assistants.busy() && noSessionLeft(herdr.Client{}.RunningSessions) {
+			if shouldExitWithoutSessions(standby, resolved, runs.Busy(), assistants.busy(), assistants.hasRegistrations(), herdr.Client{}.RunningSessions) {
 				log.Printf("no Herdr session is running, shutting down")
 				return nil
 			}
@@ -146,6 +146,17 @@ func shouldRelaunch(standby bool, stamp, exe, installed string) bool {
 		return false
 	}
 	return stamp == "" || (installed != "" && filepath.Clean(installed) != filepath.Clean(exe))
+}
+
+// shouldExitWithoutSessions preserves the old startup-hook lifecycle only
+// for a scheduler with no persistent Assistant registrations. Once a user has
+// any Assistant, work can arrive later from a phone or a timed wake even when
+// Herdr currently reports zero sessions. Such a scheduler must stay resident.
+func shouldExitWithoutSessions(standby bool, resolved config.Backend, runsBusy, assistantBusy, hasRegisteredAssistants bool, sessions func() ([]string, error)) bool {
+	if standby || resolved != config.BackendHerdr || runsBusy || assistantBusy || hasRegisteredAssistants {
+		return false
+	}
+	return noSessionLeft(sessions)
 }
 
 // noSessionLeft decides when the daemon is done. It outlives the session that

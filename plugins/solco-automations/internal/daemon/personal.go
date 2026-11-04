@@ -263,6 +263,22 @@ func (p *personal) close() {
 // to a newer binary while it still waits on Agents.
 func (p *personal) busy() bool { return p != nil && p.disp.Busy() }
 
+// hasRegistrations is the persistence gate for a hook-started scheduler.
+// The Owner may use Assistants from the phone long after the last Herdr
+// terminal session exits. On a transient DB error, retain the scheduler:
+// an unknown registration state is not evidence that there is no work.
+func (p *personal) hasRegistrations() bool {
+	if p == nil {
+		return false
+	}
+	assistants, err := p.store.ListAssistants()
+	if err != nil {
+		log.Printf("assistants: cannot confirm registrations: %v", err)
+		return true
+	}
+	return len(assistants) > 0
+}
+
 // ownedRules is what the old scheduler must leave alone (nil without a store).
 func (p *personal) ownedRules() map[string]bool {
 	if p == nil {
