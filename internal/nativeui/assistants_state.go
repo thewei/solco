@@ -38,6 +38,12 @@ type assistantsState struct {
 	overview personalagent.Overview
 	loadedAt time.Time
 	loading  bool
+	// Archived identities are cached for the Settings page only; the plugin
+	// remains authoritative and reads happen off the UI lane.
+	archived       []personalagent.Assistant
+	archiveLoaded  bool
+	archiveLoading bool
+	archiveError   string
 	// selected is the Assistant the page is on (client-local navigation).
 	selected string
 	// selectedGroup is the Group the page is on ("" = an Assistant's chat);

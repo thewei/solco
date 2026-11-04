@@ -39,7 +39,7 @@ files_search.go: Files 侧栏统一搜索（2026-10-30）——头部搜索钮�
 files_search_test.go: 搜索钮开合并清空、按名排序/点击打开、Content 分组高亮与点击定位到命中行并选中、Markdown 命中开源码、眼睛联动忽略文件、换项目重置
 files_static_preview.go: Files 查看条里 HTML 文件的「Open Preview」「Open in Browser」（2026-10-30）——点了才在项目根起 internal/preview.StaticServer（只读、127.0.0.1 随机端口、同根复用、忽略集合随树的眼睛开关同步、换项目即关），页面进既有 Local Preview 窗口（已开则跳页）或系统浏览器；桌面调用是可替换 var
 files_static_preview_test.go: 只有 HTML 有预览入口、点了才起服务且同根一个端口、相对资源可取、忽略项随眼睛、换项目服务即关
-assistants_state.go: Assistants 门与侧栏概览缓存（2026-11-03）——assistantsAvailable = 自动化插件门 ∧ `assistant overview` 探测成功，refreshAssistants 后台节流重读（assistantsGo/newAssistantsClient 测试缝），门关 resetAssistants 零痕迹；权威在插件 SQLite 核心，这里只缓存计数
+settings_assistants_archive.go: Settings → Archived Assistants 的异步归档列表、Restore、二次确认 Delete Forever（真实外部会话/共享群聊不明时由插件拒绝彻底删除；渲染零 IO）\nassistants_state.go: Assistants 门与侧栏概览缓存（2026-11-03）——assistantsAvailable = 自动化插件门 ∧ `assistant overview` 探测成功，refreshAssistants 后台节流重读（assistantsGo/newAssistantsClient 测试缝），门关 resetAssistants 零痕迹；权威在插件 SQLite 核心，这里只缓存计数
 assistants_section.go: 侧栏 Assistants 区（门开时取代 Projects 区）——每行一个 Assistant，状态点（需要你>运行中）+ 待处理数，“+” = New Assistant；渲染零 IO
 assistants_page.go: /assistants 路由体——惰性创建的 WebView + 失败锁存；页面自己轮询桥
 assistants_bridge.go: AssistantsBridge（`mygo.BindAs("assistants", …)`）——Snapshot（轻：概览 + 选中 Assistant 的 Approval/Inbox/Coordinator + 可选 agent）、Drawer（Goal/Task/Run/Memory，Run 的窗格仍在树里才可打开，抽屉开着才读）、EnsureChat（首条消息拉起 Coordinator）、BindCoordinator（静默绑定，不移动 Mac 选中项）与全部命令（建/改名/启停 Assistant、Goal 与 PR Watch、Goal 动作、Task、Approval 带 actionHash）；每个命令带 requestId，拒绝原文透传

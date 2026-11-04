@@ -24,12 +24,8 @@
   },
   "agents": [
     {
-      "id": "pi",
-      "label": "Pi"
-    },
-    {
-      "id": "claude",
-      "label": "Claude Code"
+      "id": "omp",
+      "label": "OMP"
     }
   ],
   "goals": [

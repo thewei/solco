@@ -378,30 +378,33 @@ func TestPersonalAgentEventCarriesCountsOnly(t *testing.T) {
 func TestPersonalAgentStartsTheCoordinatorOnAnOfferedAgent(t *testing.T) {
 	h, core := paHarness(t, true)
 	h.srv.opts.AssistantAgents = func() []PersonalAgentKind {
-		return []PersonalAgentKind{{ID: "pi", Label: "Pi"}, {ID: "claude", Label: "Claude Code"}}
+		return []PersonalAgentKind{{ID: "omp", Label: "OMP"}, {ID: "pi", Label: "Pi"}}
 	}
 	path := "/api/v3/personal-agent/assistants/" + paAssistantA + "/coordinator/start"
 	if status, _ := h.send("POST", path, h.token, `{"requestId":"s1","agent":"codex"}`); status != http.StatusBadRequest {
 		t.Fatalf("an Agent the desktop does not offer = %d", status)
 	}
+	if status, _ := h.send("POST", path, h.token, `{"requestId":"reject-pi","agent":"pi"}`); status != http.StatusBadRequest {
+		t.Fatalf("a currently unsupported Agent must be refused: %d", status)
+	}
 	if core.callCount() != 0 {
 		t.Fatalf("a refused Agent reached the core: %v", core.calls)
 	}
-	status, body := h.send("POST", path, h.token, `{"requestId":"s1","agent":"pi"}`)
+	status, body := h.send("POST", path, h.token, `{"requestId":"s1","agent":"omp"}`)
 	if status != http.StatusOK || !strings.Contains(string(body), `"state":"starting"`) {
 		t.Fatalf("start = %d %s", status, body)
 	}
-	if last := core.lastCall(); !strings.HasPrefix(last, "assistant coordinator start "+paAssistantA) || !strings.Contains(last, `"agent":"pi"`) || !strings.Contains(last, `"requestId":"s1"`) {
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant coordinator start "+paAssistantA) || !strings.Contains(last, `"agent":"omp"`) || !strings.Contains(last, `"requestId":"s1"`) {
 		t.Fatalf("core call %q", last)
 	}
 	if status, _ := h.send("POST", path, h.token, `{"requestId":"s2"}`); status != http.StatusOK {
 		t.Fatalf("the default Agent (empty) = %d", status)
 	}
-	if status, _ := h.send("POST", path, h.token, `{"agent":"pi"}`); status != http.StatusBadRequest {
+	if status, _ := h.send("POST", path, h.token, `{"agent":"omp"}`); status != http.StatusBadRequest {
 		t.Fatalf("no requestId = %d", status)
 	}
 	detail := bodyOf(t, h.get("/api/v3/personal-agent/assistants/"+paAssistantA, h.token, nil))
-	if !strings.Contains(string(detail), `"agents":[{"id":"pi","label":"Pi"}`) || !strings.Contains(string(detail), `"coordinator":{"assistantId":"`+paAssistantA+`","state":"ready"`) {
+	if !strings.Contains(string(detail), `"agents":[{"id":"omp","label":"OMP"}`) || !strings.Contains(string(detail), `"coordinator":{"assistantId":"`+paAssistantA+`","state":"ready"`) {
 		t.Fatalf("the Assistant page carries its Coordinator and the Agent choice: %s", detail)
 	}
 }
@@ -506,10 +509,10 @@ func TestPersonalAgentGroupRoutes(t *testing.T) {
 func TestPersonalAgentGolden(t *testing.T) {
 	h, _ := paHarness(t, true)
 	h.srv.opts.AssistantAgents = func() []PersonalAgentKind {
-		return []PersonalAgentKind{{ID: "pi", Label: "Pi"}, {ID: "claude", Label: "Claude Code"}}
+		return []PersonalAgentKind{{ID: "omp", Label: "OMP"}}
 	}
-	golden(t, "personal-agent-coordinator-start-request.json", []byte(`{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"pi"}`))
-	_, started := h.send("POST", "/api/v3/personal-agent/assistants/"+paAssistantA+"/coordinator/start", h.token, `{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"pi"}`)
+	golden(t, "personal-agent-coordinator-start-request.json", []byte(`{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"omp"}`))
+	_, started := h.send("POST", "/api/v3/personal-agent/assistants/"+paAssistantA+"/coordinator/start", h.token, `{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"omp"}`)
 	golden(t, "personal-agent-coordinator-start.json", started)
 	golden(t, "bootstrap-personal-agent.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
 	golden(t, "personal-agent-overview.json", bodyOf(t, h.get("/api/v3/personal-agent/overview", h.token, nil)))

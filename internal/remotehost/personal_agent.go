@@ -414,7 +414,7 @@ func (s *Server) handlePAStartCoordinator(w http.ResponseWriter, r *http.Request
 	if req.Agent != "" {
 		allowed := false
 		for _, kind := range s.paAgents() {
-			if kind.ID == req.Agent {
+			if kind.ID == req.Agent && kind.ID == "omp" {
 				allowed = true
 			}
 		}

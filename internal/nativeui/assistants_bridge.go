@@ -351,7 +351,7 @@ func (s *Shell) assistantAgents() ([]AssistantsAgent, string) {
 	out := []AssistantsAgent{}
 	seen := map[string]bool{}
 	add := func(kind app.SessionKind) {
-		if kind.ID == app.TerminalKind || seen[kind.ID] || !chatCapableAgents[history.AgentID(kind.ID)] {
+		if kind.ID != string(history.AgentOMP) || seen[kind.ID] {
 			return
 		}
 		seen[kind.ID] = true
@@ -379,6 +379,17 @@ func coordinatorInSession(co personalagent.Coordinator, session string) bool {
 	return co.HerdrSession == "" || herdr.ParseRef(co.HerdrSession).Session == session || co.HerdrSession == session
 }
 
+// ArchiveAssistant preserves every record but hides this Assistant from live surfaces.
+func (b *AssistantsBridge) ArchiveAssistant(ctx context.Context, requestID, id string, revision int) error {
+	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
+		_, err := c.ArchiveAssistant(ctx, requestID, id, revision)
+		if err == nil {
+			b.shell.applyOnWindow(func() { b.shell.assistants.archiveLoaded = false })
+		}
+		return err
+	})
+}
+
 // StartCoordinator asks the daemon to bring the Assistant's Coordinator up as
 // a real Herdr Agent on the chosen agent kind (the plugin owns the lifecycle).
 func (b *AssistantsBridge) StartCoordinator(ctx context.Context, requestID, id, agentKind string) error {
@@ -396,15 +407,17 @@ func (b *AssistantsBridge) StartCoordinator(ctx context.Context, requestID, id, 
 // (the chip) wins; otherwise the Assistant's own profile ("" lets the plugin
 // apply it, with its model — still fenced by the Settings → Agents toggles);
 // with no profile, the last-used launchable Agent.
-func (b *AssistantsBridge) startAgent(ctx context.Context, c *personalagent.Client, id, agentKind string) (string, error) {
+func (b *AssistantsBridge) startAgent(_ context.Context, _ *personalagent.Client, _ string, agentKind string) (string, error) {
 	if agentKind != "" {
 		return agentKind, b.agentAllowed(agentKind)
 	}
-	if rt, err := c.Runtime(ctx, id); err == nil && rt.Profile.Agent != "" {
-		return "", b.agentAllowed(rt.Profile.Agent)
-	}
+	// During the OMP rollout, saved profiles for other providers must not
+	// launch that provider even if they predate the restriction.
 	var def string
 	b.shell.callOnWindow(func() { _, def = b.shell.assistantAgents() })
+	if def == "" {
+		return "", errors.New("invalid: omp is not available in Settings → Agents")
+	}
 	return def, nil
 }
 

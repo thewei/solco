@@ -424,24 +424,24 @@ func coordinatorStartCalls(calls *[][2]string) (n int, stdin string) {
 func TestAssistantsEnsureChatStartsOnlyWhatIsMissing(t *testing.T) {
 	calls := stubAssistants(t, false)
 	s := openAssistantsShell(t)
-	s.launchKinds = []app.SessionKind{{ID: app.TerminalKind, Label: "Terminal"}, {ID: "pi", Label: "pi"}, {ID: "claude-code", Label: "Claude Code"}, {ID: "droid", Label: "Droid"}}
+	s.launchKinds = []app.SessionKind{{ID: app.TerminalKind, Label: "Terminal"}, {ID: "omp", Label: "OMP"}, {ID: "claude-code", Label: "Claude Code"}, {ID: "droid", Label: "Droid"}}
 	b := NewAssistantsBridge(s)
 
-	got, err := b.EnsureChat(context.Background(), "req-start", "a_1", "pi")
+	got, err := b.EnsureChat(context.Background(), "req-start", "a_1", "omp")
 	if err != nil || got.State != "starting" {
 		t.Fatalf("ensure = %+v err=%v", got, err)
 	}
 	n, stdin := coordinatorStartCalls(calls)
-	if n != 1 || !strings.Contains(stdin, `"requestId":"req-start"`) || !strings.Contains(stdin, `"agent":"pi"`) {
+	if n != 1 || !strings.Contains(stdin, `"requestId":"req-start"`) || !strings.Contains(stdin, `"agent":"omp"`) {
 		t.Fatalf("start calls = %d stdin=%q", n, stdin)
 	}
 
 	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "starting", "")
-	if _, err := b.EnsureChat(context.Background(), "req-2", "a_1", "pi"); err != nil {
+	if _, err := b.EnsureChat(context.Background(), "req-2", "a_1", "omp"); err != nil {
 		t.Fatal(err)
 	}
 	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "ready", "p9")
-	if _, err := b.EnsureChat(context.Background(), "req-3", "a_1", "pi"); err != nil {
+	if _, err := b.EnsureChat(context.Background(), "req-3", "a_1", "omp"); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := coordinatorStartCalls(calls); n != 1 {
@@ -449,7 +449,7 @@ func TestAssistantsEnsureChatStartsOnlyWhatIsMissing(t *testing.T) {
 	}
 
 	assistantsCoordinators["a_1"] = coordinatorJSON("a_1", "failed", "")
-	if _, err := b.EnsureChat(context.Background(), "req-4", "a_1", "pi"); err != nil {
+	if _, err := b.EnsureChat(context.Background(), "req-4", "a_1", "omp"); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := coordinatorStartCalls(calls); n != 2 {
@@ -462,9 +462,9 @@ func TestAssistantsEnsureChatStartsOnlyWhatIsMissing(t *testing.T) {
 func TestAssistantsEnsureChatRefusesAnAgentTheChatCannotRead(t *testing.T) {
 	calls := stubAssistants(t, false)
 	s := openAssistantsShell(t)
-	s.launchKinds = []app.SessionKind{{ID: "pi", Label: "pi"}, {ID: "droid", Label: "Droid"}}
+	s.launchKinds = []app.SessionKind{{ID: "omp", Label: "OMP"}, {ID: "droid", Label: "Droid"}}
 	b := NewAssistantsBridge(s)
-	for _, kind := range []string{"droid", "claude", "pi; rm -rf /"} {
+	for _, kind := range []string{"droid", "claude", "pi", "omp; rm -rf /"} {
 		if _, err := b.EnsureChat(context.Background(), "r", "a_1", kind); err == nil {
 			t.Fatalf("agent %q must be refused", kind)
 		}
@@ -473,8 +473,8 @@ func TestAssistantsEnsureChatRefusesAnAgentTheChatCannotRead(t *testing.T) {
 		t.Fatalf("a refused agent started %d Coordinators", n)
 	}
 	view, _ := b.Snapshot(context.Background())
-	if len(view.Agents) != 1 || view.Agents[0].ID != "pi" || view.DefaultAgent != "pi" {
-		t.Fatalf("agents = %+v default=%q, want pi only (droid has no Chat)", view.Agents, view.DefaultAgent)
+	if len(view.Agents) != 1 || view.Agents[0].ID != "omp" || view.DefaultAgent != "omp" {
+		t.Fatalf("agents = %+v default=%q, want omp only (other Agents are locked)", view.Agents, view.DefaultAgent)
 	}
 }
 

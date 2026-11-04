@@ -127,6 +127,35 @@ func (c *Client) Assistants(ctx context.Context) ([]Assistant, error) {
 	return out.Assistants, c.do(ctx, nil, &out, "list")
 }
 
+// ArchivedAssistants lists identities held in the Settings archive.
+func (c *Client) ArchivedAssistants(ctx context.Context) ([]Assistant, error) {
+	var out struct {
+		Assistants []Assistant `json:"assistants"`
+	}
+	return out.Assistants, c.do(ctx, nil, &out, "archived")
+}
+
+// ArchiveAssistant removes an Assistant from active surfaces, retaining data.
+func (c *Client) ArchiveAssistant(ctx context.Context, requestID, id string, rev int) (Assistant, error) {
+	var out struct {
+		Assistant Assistant `json:"assistant"`
+	}
+	return out.Assistant, c.do(ctx, req{RequestID: requestID, ExpectedRevision: rev}, &out, "archive", id)
+}
+
+// RestoreAssistant reactivates an archived identity and all of its records.
+func (c *Client) RestoreAssistant(ctx context.Context, requestID, id string, rev int) (Assistant, error) {
+	var out struct {
+		Assistant Assistant `json:"assistant"`
+	}
+	return out.Assistant, c.do(ctx, req{RequestID: requestID, ExpectedRevision: rev}, &out, "restore", id)
+}
+
+// DeleteAssistantForever refuses if shared or external Agent state is unresolved.
+func (c *Client) DeleteAssistantForever(ctx context.Context, requestID, id string, rev int) error {
+	return c.do(ctx, req{RequestID: requestID, ExpectedRevision: rev}, nil, "delete-forever", id)
+}
+
 // CreateAssistant records a new identity (idempotent on requestID).
 func (c *Client) CreateAssistant(ctx context.Context, requestID, name, description string) (Assistant, error) {
 	var out struct {

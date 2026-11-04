@@ -61,6 +61,9 @@ var gitConfirmActions = map[string]string{
 
 // confirmActionText is the confirm button's label for a confirm kind.
 func confirmActionText(kind string) string {
+	if kind == "assistant-delete" {
+		return "Delete Forever"
+	}
 	if text, ok := gitConfirmActions[kind]; ok {
 		return text
 	}
@@ -213,6 +216,8 @@ func (s *Shell) submitConfirm(kind, target string) {
 	switch kind {
 	case "delete-workspace":
 		s.deleteWorkspace(target)
+	case "assistant-delete":
+		s.runArchiveAction("delete", target)
 	case "forget-machine":
 		s.forgetMachine(target)
 	case "close-project":

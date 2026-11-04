@@ -106,6 +106,9 @@ export function AssistantsPage() {
   const [menu, setMenu] = useState(false);
   const [form, setForm] = useState<Form>(null);
   const [stripOpen, setStripOpen] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const archiveRequest = useRef("");
   const selected = view?.selected ?? "";
   const { drawer, pull: pullDrawer } = useDrawer(selected, tab !== null);
   // The sidebar's "+" posts an intent (a monotonic seq). The page reads it
@@ -259,6 +262,9 @@ export function AssistantsPage() {
                 <button type="button" role="menuitem" onClick={choose(() => setForm("rename"))}>
                   Rename…
                 </button>
+                <button type="button" role="menuitem" onClick={choose(() => { archiveRequest.current = rid(); setConfirmArchive(true); })}>
+                  Archive Assistant…
+                </button>
                 <button type="button" role="menuitem" onClick={choose(() => void act(() => assistants.setAssistantEnabled(rid(), a.id, a.status !== "active", a.revision)))}>
                   {a.status === "active" ? "Pause" : "Resume"} {a.name}
                 </button>
@@ -326,6 +332,18 @@ export function AssistantsPage() {
       {form === "rename" ? <Rename assistant={a} onClose={() => setForm(null)} act={act} /> : null}
       {form === "watch" ? <NewWatch assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
       {form === "task" ? <NewTask assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
+      {confirmArchive ? (
+        <Sheet title={"Archive " + a.name + "?"} submit={archiving ? "Archiving…" : "Archive"} busy={archiving}
+          error={error} onClose={() => setConfirmArchive(false)} onSubmit={() => {
+            if (archiving) return;
+            setArchiving(true);
+            void act(() => assistants.archiveAssistant(archiveRequest.current, a.id, a.revision))
+              .then((failure) => { setArchiving(false); if (!failure) { setConfirmArchive(false); pull(); } });
+          }}>
+          <p>The Assistant will disappear from your active list. Conversations, goals, tasks and memories stay intact.</p>
+          <p>Restore it later from Settings → Archived Assistants.</p>
+        </Sheet>
+      ) : null}
     </div>
   );
 }

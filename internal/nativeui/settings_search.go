@@ -49,6 +49,7 @@ var settingsLabels = map[string][][2]string{
 		{"Permissions", "Screen Recording"}, {"Permissions", "Accessibility"},
 		{"Connection", "Ask before each connection"}, {"Connection", "Quality"},
 	},
+	"/settings/assistants-archive": {{"", "Archived Assistants"}},
 	"/settings/providers": {
 		{"", "Integration"}, {"", "Status hook"},
 	},

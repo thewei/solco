@@ -1412,6 +1412,10 @@ export const assistants = {
   approveMemory(requestID: string, memoryID: string, revision: number): Promise<void> {
     return call("assistants.ApproveMemory", requestID, memoryID, revision);
   },
+  /** ArchiveAssistant preserves every record but hides this Assistant from live surfaces. */
+  archiveAssistant(requestID: string, id: string, revision: number): Promise<void> {
+    return call("assistants.ArchiveAssistant", requestID, id, revision);
+  },
   /** Behavior reads the proactivity rules (defaults when never set). */
   behavior(id: string): Promise<Proactivity> {
     return call("assistants.Behavior", id);
