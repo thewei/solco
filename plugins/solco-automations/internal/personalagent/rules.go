@@ -388,13 +388,20 @@ func (r *RuleScheduler) Tick() (RuleReport, error) {
 				state.LastOccurrence[name] = time.UnixMilli(row.LastOccurrence)
 			}
 		}
-		asst, err := automationsAssistantTx(tx, now.UnixMilli())
+		sys, err := automationsAssistantTx(tx, now.UnixMilli())
 		if err != nil {
 			return rep, err
 		}
+		asst := sys
 		nowMS := now.UnixMilli()
 
 		fire := func(a config.Automation, revision string, trigger string) error {
+			// An enabled Routine's runs belong to the Assistant that owns it.
+			owner := sys
+			if id, ok := routineOwnerTx(tx, a.Name); ok {
+				owner.ID = id
+			}
+			asst := owner
 			created, err := emitTx(tx, Event{AssistantID: asst.ID, Source: "rule", Kind: "rule.fired", Resource: a.Name, Revision: revision,
 				Detail: fmt.Sprintf("%s: fired (%s)", a.Name, trigger)}, nowMS)
 			if err != nil || !created {

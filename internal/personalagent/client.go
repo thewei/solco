@@ -531,3 +531,24 @@ func (c *Client) Facts(ctx context.Context, assistantID string, limit int) ([]Fa
 	}
 	return out.Facts, c.do(ctx, nil, &out, args...)
 }
+
+// Routines lists an Assistant's routines (everyone's when empty), newest first.
+func (c *Client) Routines(ctx context.Context, assistantID string) ([]Routine, error) {
+	var out struct {
+		Routines []Routine `json:"routines"`
+	}
+	args := []string{"routine", "list"}
+	if assistantID != "" {
+		args = append(args, "--assistant", assistantID)
+	}
+	return out.Routines, c.do(ctx, nil, &out, args...)
+}
+
+// RoutineAction runs cancel | pause | resume on a routine (an Assistant never
+// enables one: that is the approval's answer).
+func (c *Client) RoutineAction(ctx context.Context, requestID, action, name string) (Routine, error) {
+	var out struct {
+		Routine Routine `json:"routine"`
+	}
+	return out.Routine, c.do(ctx, req{RequestID: requestID}, &out, "routine", action, name)
+}

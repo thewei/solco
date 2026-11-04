@@ -17,6 +17,7 @@ import {
   type GoalPlan,
   type InboxItem,
   type MemoryItem,
+  type Routine,
 } from "../mygo";
 import { GroupChat, NewGroup } from "./GroupChat";
 import { FactStrip, PlanCard } from "./Progress";
@@ -34,7 +35,7 @@ import "./assistants.css";
  * duplicating, and a refusal shows the plugin's own sentence.
  */
 
-type Tab = "needs" | "watching" | "tasks" | "done" | "memory" | "style" | "about";
+type Tab = "needs" | "watching" | "routines" | "tasks" | "done" | "memory" | "style" | "about";
 type Form = "assistant" | "group" | "watch" | "task" | "rename" | null;
 
 const rid = () => crypto.randomUUID();
@@ -192,6 +193,7 @@ export function AssistantsPage() {
   const tabs: [Tab, string, number][] = [
     ["needs", "Needs you", needsCount],
     ["watching", "Watching", drawer ? drawer.goals.filter((g) => g.state === "draft" || g.state === "active" || g.state === "paused").length : 0],
+    ["routines", "Routines", drawer ? drawer.routines.filter((r) => r.state === "draft" || r.state === "active").length : 0],
     ["tasks", "Tasks", drawer ? drawer.tasks.filter((t) => OPEN_TASK.has(t.state)).length : 0],
     ["done", "Done", 0],
     ["memory", "Memory", 0],
@@ -389,6 +391,8 @@ function DrawerBody({ tab, detail, drawer, view, pending, act, pull }: { tab: Ta
       return <NeedsYou approvals={pending} tasks={needTasks} reasons={reasons} act={act} pull={pull} />;
     case "watching":
       return <Watching goals={live} plans={drawer.plans} facts={drawer.facts} act={act} />;
+    case "routines":
+      return <Routines routines={drawer.routines} act={act} />;
     case "tasks":
       return <Tasks tasks={open} act={act} />;
     case "done":
@@ -785,6 +789,50 @@ function RunLine({ run }: { run: AssistantsRun }) {
         </button>
       ) : null}
     </p>
+  );
+}
+
+function when(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+const ROUTINE_STATE: Record<string, string> = { draft: "waiting for you", active: "on", stale: "changed — ask again", cancelled: "withdrawn" };
+
+/** Scheduled work this Assistant drafted. Enabling is the approval card's answer; only withdrawing and pausing live here. */
+function Routines({ routines, act }: { routines: Routine[]; act: Act }) {
+  const shown = routines.filter((r) => r.state !== "cancelled");
+  if (shown.length === 0) return <Empty>No routines. Ask {"“"}check this repo every morning{"”"} in the chat; it is only a draft until you approve it.</Empty>;
+  return (
+    <>
+      {shown.map((r) => (
+        <section key={r.name} className="as-card">
+          <div className="as-row">
+            <strong>{r.name}</strong>
+            <span className={`as-chip ${r.state}`}>{r.paused ? "paused" : (ROUTINE_STATE[r.state] ?? r.state)}</span>
+          </div>
+          {r.rationale ? <p className="as-text">{r.rationale}</p> : null}
+          <p className="as-meta">
+            {r.cron} · {r.agent}
+            {r.headless ? " · headless" : ""} · {r.repo}
+          </p>
+          {r.state === "active" && r.next && !r.paused ? <p className="as-meta">Next run {when(r.next)}</p> : null}
+          {r.lastState ? <p className="as-meta">Last run {r.lastState} · {ago(r.lastAt ?? 0)}</p> : null}
+          {r.missing ? <p className="as-meta">Its automation is gone from the Automations list.</p> : null}
+          <div className="as-row">
+            {r.state === "active" ? (
+              <button type="button" className="as-btn" onClick={() => act(() => assistants.routineAction(rid(), r.paused ? "resume" : "pause", r.name))}>
+                {r.paused ? "Resume" : "Pause"}
+              </button>
+            ) : null}
+            {r.state === "draft" || r.state === "stale" ? (
+              <button type="button" className="as-btn" onClick={() => act(() => assistants.routineAction(rid(), "cancel", r.name))}>
+                Withdraw
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ))}
+    </>
   );
 }
 

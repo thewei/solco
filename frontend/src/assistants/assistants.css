@@ -180,6 +180,7 @@
 .as-chip.review_required,
 .as-chip.uncertain,
 .as-chip.paused,
+.as-chip.stale,
 .as-chip.draft {
   color: var(--warning);
 }

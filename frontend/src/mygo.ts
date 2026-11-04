@@ -93,6 +93,11 @@ export interface AssistantsDrawer {
    */
   plans: GoalPlan[];
   facts: Fact[];
+  /**
+   * Routines are the Assistant's scheduled work: drafts waiting for a person's
+   * approval and the ones already enabled, with their next and last run.
+   */
+  routines: Routine[];
   tasks: AssistantsTask[];
   memory: MemoryItem[];
 }
@@ -976,6 +981,39 @@ export interface PlanRevision {
   createdAt: number;
 }
 
+/**
+ * Routine is a scheduled automation that belongs to an Assistant, with the
+ * definition it points at and how it is doing. The definition itself lives in
+ * the Automations plugin's own file; prompt and rationale are clipped.
+ */
+export interface Routine {
+  name: string;
+  assistantId: string;
+  requestedBy: string;
+  source: string;
+  correlationId?: string;
+  /** State: draft | active | stale | cancelled. */
+  state: string;
+  revision: number;
+  approved: boolean;
+  createdAt: number;
+  updatedAt: number;
+  cron: string;
+  repo: string;
+  agent: string;
+  model?: string;
+  headless: boolean;
+  paused: boolean;
+  missing?: boolean;
+  rationale?: string;
+  prompt?: string;
+  next?: number;
+  lastState?: string;
+  lastAt?: number;
+  approvalId?: string;
+  approvalState?: string;
+}
+
 /** RunningAgent is an Agent the Assistant really has right now. */
 export interface RunningAgent {
   surface: string;
@@ -1411,6 +1449,13 @@ export const assistants = {
   /** RetryTask re-queues a failed or cancelled task. */
   retryTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.RetryTask", requestID, id, revision);
+  },
+  /**
+   * RoutineAction withdraws a draft routine or pauses/resumes an enabled one
+   * (action cancel | pause | resume). Enabling is the approval card's answer.
+   */
+  routineAction(requestID: string, action: string, name: string): Promise<void> {
+    return call("assistants.RoutineAction", requestID, action, name);
   },
   /** SaveInstructions stores a new revision (it reaches Agents started afterwards). */
   saveInstructions(requestID: string, id: string, body: string, revision: number): Promise<void> {

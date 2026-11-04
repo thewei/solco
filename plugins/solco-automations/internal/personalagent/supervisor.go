@@ -168,19 +168,19 @@ func (sv *Supervisor) eventFacts() (int, error) {
 	if err := s.db.QueryRow(`SELECT value FROM meta WHERE key=?`, supervisorMark).Scan(&raw); err == nil {
 		mark, _ = strconv.ParseInt(raw, 10, 64)
 	}
-	rows, err := s.db.Query(`SELECT e.rowid,e.id,e.assistant_id,e.kind,e.task_id,e.detail,t.goal_id FROM events e JOIN tasks t ON t.id=e.task_id
+	rows, err := s.db.Query(`SELECT e.rowid,e.id,e.assistant_id,e.kind,e.task_id,e.detail,t.goal_id,t.rule_id FROM events e JOIN tasks t ON t.id=e.task_id
 		WHERE e.rowid>? AND e.task_id<>'' ORDER BY e.rowid LIMIT 500`, mark)
 	if err != nil {
 		return 0, wrapBusy(err)
 	}
 	type ev struct {
-		seq                                     int64
-		id, assistant, kind, task, detail, goal string
+		seq                                           int64
+		id, assistant, kind, task, detail, goal, rule string
 	}
 	var evs []ev
 	for rows.Next() {
 		var e ev
-		if err := rows.Scan(&e.seq, &e.id, &e.assistant, &e.kind, &e.task, &e.detail, &e.goal); err != nil {
+		if err := rows.Scan(&e.seq, &e.id, &e.assistant, &e.kind, &e.task, &e.detail, &e.goal, &e.rule); err != nil {
 			rows.Close()
 			return 0, err
 		}
@@ -193,6 +193,21 @@ func (sv *Supervisor) eventFacts() (int, error) {
 	added := 0
 	_, _, err = execute(s, "", "supervisor.events", nil, func(tx *sql.Tx) (struct{}, error) {
 		for _, e := range evs {
+			if name, isRule := LegacyRuleName(e.rule); isRule && e.goal == "" {
+				// A scheduled run of an enabled Routine: say what happened to its owner.
+				if owner, owned := routineOwnerTx(tx, name); owned && owner == e.assistant {
+					if fk, text, ok := routineEventFact(e.kind, name); ok {
+						isNew, err := addFactTx(tx, Fact{AssistantID: e.assistant, TaskID: e.task, Kind: fk, Text: text}, "ev:"+e.id, s.nowMS())
+						if err != nil {
+							return struct{}{}, err
+						}
+						if isNew {
+							added++
+						}
+					}
+				}
+				continue
+			}
 			kind, ok := eventFactKind[e.kind]
 			if !ok || e.goal == "" {
 				continue

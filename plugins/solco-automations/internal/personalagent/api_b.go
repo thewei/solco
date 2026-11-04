@@ -199,6 +199,9 @@ func (a *API) approval(args []string, body []byte) (any, error) {
 			return nil, err
 		}
 		x, replayed, err := a.Store.DecideApproval(in.RequestID, rest[0], in.ActionHash, in.Approve)
+		if err == nil {
+			a.afterApproval(x, in.Approve)
+		}
 		return ok("approval", x, "replayed", replayed), err
 	}
 	return nil, coded("invalid", "unknown approval command %q", cmd)

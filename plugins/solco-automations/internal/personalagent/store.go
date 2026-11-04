@@ -481,6 +481,23 @@ var migrations = []string{
 	);
 	CREATE INDEX goal_facts_by_assistant ON goal_facts(assistant_id);
 	CREATE INDEX goal_facts_by_goal ON goal_facts(goal_id);`,
+	// 17: routines — the owner binding of a scheduled automation. The definition
+	// stays in automations.yaml (one scheduler, one file); this row says whose it
+	// is, who asked, which exact definition a person approved, and whether it was enabled.
+	`CREATE TABLE routines (
+		name TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		requested_by TEXT NOT NULL DEFAULT 'assistant',
+		source TEXT NOT NULL DEFAULT 'chat',
+		correlation_id TEXT NOT NULL DEFAULT '',
+		state TEXT NOT NULL DEFAULT 'draft',
+		revision INTEGER NOT NULL DEFAULT 1,
+		def_hash TEXT NOT NULL DEFAULT '',
+		approved INTEGER NOT NULL DEFAULT 0,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX routines_by_assistant ON routines(assistant_id);`,
 }
 
 func (s *Store) migrate() error {

@@ -86,6 +86,12 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 			return nil, err
 		}
 		return raw, nil
+	case strings.HasPrefix(key, "routine list"):
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/routine-list.json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
 	case strings.HasPrefix(key, "goal list"):
 		return []byte(`{"schema":1,"goals":[` + paGoal + `]}`), nil
 	case strings.HasPrefix(key, "goal "):
@@ -610,6 +616,25 @@ func TestPersonalAgentPlanRoutes(t *testing.T) {
 	h2, _ := paHarness(t, false)
 	if r := h2.get(pbase+"/goals/"+paGoalG+"/plan", h2.token, nil); r.StatusCode == http.StatusOK {
 		t.Fatal("plan served without the seam")
+	}
+}
+
+func TestPersonalAgentRoutineRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	pbase := "/api/v3/personal-agent"
+	golden(t, "personal-agent-routines.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/routines", h.token, nil)))
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant routine list --assistant "+paAssistantA) {
+		t.Fatalf("routines call %q", call)
+	}
+	if r := h.get(pbase+"/assistants/not%20an%20id/routines", h.token, nil); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad id = %d", r.StatusCode)
+	}
+	if r := h.get(pbase+"/assistants/"+paAssistantA+"/routines", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without a token = %d", r.StatusCode)
+	}
+	h2, _ := paHarness(t, false)
+	if r := h2.get(pbase+"/assistants/"+paAssistantA+"/routines", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("routines served without the seam")
 	}
 }
 

@@ -74,6 +74,11 @@ type API struct {
 	LegacyLast func() map[string]time.Time
 	// Now is a test seam.
 	Now func() time.Time
+	// Routine commands edit automations.yaml through these (defaults: the config package).
+	ConfigPut     func(original string, a config.Automation) (config.PutResult, error)
+	ConfigRemove  func(name string) error
+	ConfigPause   func(name string, paused bool) error
+	ConfigApprove func(name string) error
 	// Reviewer serves `assistant review|checks`; nil answers `unavailable`.
 	Reviewer *Reviewer
 }
@@ -241,6 +246,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.group(rest, body)
 	case "persona":
 		return a.persona(rest, body)
+	case "routine":
+		return a.routine(rest, body)
 	case "run":
 		return a.run(rest, body)
 	}

@@ -100,6 +100,16 @@ func subjectRevision(tx queryer, assistantID, kind, id string) (int, error) {
 			return 0, ErrNotFound
 		}
 		return rev, wrapBusy(err)
+	case "routine":
+		// The subject is a routine (its name); the card is for exactly one draft revision.
+		r, err := getRoutineTx(tx, id)
+		if err != nil {
+			return 0, err
+		}
+		if r.AssistantID != assistantID {
+			return 0, fmt.Errorf("%w: routine belongs to another assistant", ErrInvalid)
+		}
+		return r.Revision, nil
 	case "heartbeat":
 		// The subject is the Assistant's heartbeat; its id is the Assistant's.
 		if id != assistantID {
@@ -180,6 +190,13 @@ func (s *Store) DecideApproval(requestID, id, hash string, approve bool) (Approv
 		if approve && a.SubjectKind == "heartbeat" {
 			// The approval is for these exact settings (the revision just matched).
 			if _, err := tx.Exec(`UPDATE heartbeats SET wake_approved=1 WHERE assistant_id=?`, a.SubjectID); err != nil {
+				return a, err
+			}
+		}
+		if approve && a.SubjectKind == "routine" {
+			// The answer is for this draft revision (just matched); the keeper enables it
+			// only while the definition still hashes to what was drafted.
+			if _, err := tx.Exec(`UPDATE routines SET approved=1, updated_at=? WHERE name=? AND revision=?`, s.nowMS(), a.SubjectID, a.ExpectedRevision); err != nil {
 				return a, err
 			}
 		}

@@ -542,6 +542,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+pa+"/assistants/{id}/mcp/verify", s.guard(ScopeManage, s.handlePAMCPVerify))
 	mux.Handle("GET "+pa+"/goals/{id}/plan", s.guard(ScopeView, s.handlePAGoalPlan))
 	mux.Handle("GET "+pa+"/assistants/{id}/facts", s.guard(ScopeView, s.handlePAFacts))
+	mux.Handle("GET "+pa+"/assistants/{id}/routines", s.guard(ScopeView, s.handlePARoutines))
 	mux.Handle("POST "+pa+"/approvals/{id}/decision", s.guard(ScopeManage, s.handlePADecideApproval))
 	mux.Handle("POST "+pa+"/tasks/{id}/ack", s.guard(ScopeManage, s.handlePATaskAction("ack")))
 	mux.Handle("POST "+pa+"/tasks/{id}/retry", s.guard(ScopeManage, s.handlePATaskAction("retry")))
@@ -758,6 +759,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["personalAgentGroups"] = true
 			capabilities["personalAgentPersona"] = true
 			capabilities["personalAgentPlans"] = true
+			capabilities["personalAgentRoutines"] = true
 		}
 	}
 	if s.opts.Sessions != nil {

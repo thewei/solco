@@ -18,3 +18,9 @@ Progress and acceptance live in `docs/assistants-v3-implementation-tracker.md`; 
 - Result after approve + 12 s: plan `waiting_user`, m1 `needs_you` with one task, m2 `pending`; facts `accepted`, `planned`, `delegated`. After a daemon restart and 15 s: still one task, same three facts (requestId `sup-<goal>-<ms>-<attempt>` + the `delegated` fact written in the same transaction).
 - Lesson: a milestone with `kind: coding` needs `repoPath`; research/other kinds would be picked up by the real runner and start an Agent — use a Draft path for live checks.
 
+
+## U4 live check (isolated state **and** config dirs, real daemon, temp repo `/tmp/u3repo`)
+
+- Finding before the run: `HERDR_PLUGIN_STATE_DIR` isolates the database, not `automations.yaml` — the daemon's config path comes from `HERDR_PLUGIN_CONFIG_DIR`. The earlier U2/U3 live checks therefore read (never wrote) the real yaml with an isolated schedule state. From U4 on both variables are set before anything that writes.
+- Loop observed: draft (yaml `draft: true`, 70 s of an every-minute cron → 0 tasks) → `approval decide` with the card's own hash → draft flag cleared, routine `active` → one task at the next occurrence, owner = the drafting Assistant, done in 15 s (real headless `claude -p`) → ledger `routine_done`. The old scheduler's history log has exactly one entry for it. `routine pause` stopped further runs.
+- Cleanup done by hand: automation removed from the isolated yaml, temp worktree and branch removed, the Herdr workspaces this testing created (`auto: …` ones and the temp repo's) closed.

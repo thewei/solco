@@ -71,3 +71,26 @@ func (s *Server) handlePAFacts(w http.ResponseWriter, r *http.Request, dev Devic
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"schema": 1, "facts": facts})
 }
+
+// handlePARoutines lists an Assistant's routines: scheduled work the Assistant
+// drafted and a person approved (or is still asked to). Read-only; the card that
+// enables one is an ordinary approval answered through the approvals route.
+func (s *Server) handlePARoutines(w http.ResponseWriter, r *http.Request, dev Device) {
+	c := s.paSeam(w, r)
+	if c == nil {
+		return
+	}
+	id, ok := paID(w, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	routines, err := c.Routines(r.Context(), id)
+	if err != nil {
+		s.paRefuse(w, dev, "assistant.routines", err)
+		return
+	}
+	if routines == nil {
+		routines = []personalagent.Routine{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"schema": 1, "routines": routines})
+}

@@ -87,10 +87,13 @@ type AssistantsDrawer struct {
 	Goals []personalagent.Goal `json:"goals"`
 	// Plans are the plans of the Goals that have one, with each milestone's
 	// state derived by the core from its task; Facts the Assistant's ledger.
-	Plans  []personalagent.GoalPlan   `json:"plans"`
-	Facts  []personalagent.Fact       `json:"facts"`
-	Tasks  []AssistantsTask           `json:"tasks"`
-	Memory []personalagent.MemoryItem `json:"memory"`
+	Plans []personalagent.GoalPlan `json:"plans"`
+	Facts []personalagent.Fact     `json:"facts"`
+	// Routines are the Assistant's scheduled work: drafts waiting for a person's
+	// approval and the ones already enabled, with their next and last run.
+	Routines []personalagent.Routine    `json:"routines"`
+	Tasks    []AssistantsTask           `json:"tasks"`
+	Memory   []personalagent.MemoryItem `json:"memory"`
 }
 
 // CoordinatorChat is the answer to "bind the embedded Chat to this Assistant's
@@ -275,7 +278,7 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 // session and its pane is still in the tree) and approved Memory. The page
 // asks only while the drawer is open, so the chat's own polling stays light.
 func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDrawer, error) {
-	out := AssistantsDrawer{Goals: []personalagent.Goal{}, Plans: []personalagent.GoalPlan{}, Facts: []personalagent.Fact{}, Tasks: []AssistantsTask{}, Memory: []personalagent.MemoryItem{}}
+	out := AssistantsDrawer{Goals: []personalagent.Goal{}, Plans: []personalagent.GoalPlan{}, Facts: []personalagent.Fact{}, Routines: []personalagent.Routine{}, Tasks: []AssistantsTask{}, Memory: []personalagent.MemoryItem{}}
 	c, err := b.client()
 	if err != nil {
 		return out, err
@@ -307,6 +310,10 @@ func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDra
 	}
 	if facts, err := c.Facts(ctx, id, 40); err == nil && facts != nil {
 		out.Facts = facts
+	}
+	// Best effort, like plans: an older plugin has no routines and that is "none".
+	if routines, err := c.Routines(ctx, id); err == nil && routines != nil {
+		out.Routines = routines
 	}
 	if memory, err := c.VisibleMemory(ctx, id); err != nil {
 		return out, err
@@ -603,6 +610,18 @@ func (b *AssistantsBridge) CreateGoal(ctx context.Context, requestID string, in 
 func (b *AssistantsBridge) GoalAction(ctx context.Context, requestID, action, id string, revision int, evidence string) error {
 	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
 		_, err := c.GoalAction(ctx, requestID, action, id, revision, evidence)
+		return err
+	})
+}
+
+// RoutineAction withdraws a draft routine or pauses/resumes an enabled one
+// (action cancel | pause | resume). Enabling is the approval card's answer.
+func (b *AssistantsBridge) RoutineAction(ctx context.Context, requestID, action, name string) error {
+	if action != "cancel" && action != "pause" && action != "resume" {
+		return errors.New("unknown routine action")
+	}
+	return b.write(ctx, func(ctx context.Context, c *personalagent.Client) error {
+		_, err := c.RoutineAction(ctx, requestID, action, name)
 		return err
 	})
 }

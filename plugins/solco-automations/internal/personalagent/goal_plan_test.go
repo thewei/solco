@@ -422,7 +422,7 @@ func factTexts(t *testing.T, s *Store, goalID string) []string {
 
 func TestCoordinatorBriefExplainsPlans(t *testing.T) {
 	p := CoordinatorPrompt(Assistant{ID: "a_1", Name: "Ada"})
-	for _, want := range []string{"goal set-plan", "goal plan", "verified"} {
+	for _, want := range []string{"goal set-plan", "goal plan", "verified", "routine draft", "Never enable"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("brief lacks %q", want)
 		}

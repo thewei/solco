@@ -234,3 +234,28 @@ func TestGoalPlanAndFactsGolden(t *testing.T) {
 		}
 	}
 }
+
+func TestRoutineGolden(t *testing.T) {
+	var d struct {
+		Schema   int      `json:"schema"`
+		Routine  Routine  `json:"routine"`
+		Approval Approval `json:"approval"`
+		Next     []int64  `json:"next"`
+		Replayed bool     `json:"replayed"`
+	}
+	load(t, "routine-draft", &d)
+	if d.Routine.State != "draft" || d.Routine.RequestedBy != "assistant" || d.Approval.SubjectKind != "routine" || d.Approval.SubjectID != d.Routine.Name || len(d.Next) != 3 {
+		t.Fatalf("draft = %+v", d)
+	}
+	if d.Routine.ApprovalID != d.Approval.ID || d.Routine.ApprovalState != "pending" || !d.Routine.Headless {
+		t.Fatalf("routine view = %+v", d.Routine)
+	}
+	var l struct {
+		Schema   int       `json:"schema"`
+		Routines []Routine `json:"routines"`
+	}
+	load(t, "routine-list", &l)
+	if len(l.Routines) != 1 || l.Routines[0].Name != "morning-check" {
+		t.Fatalf("list = %+v", l)
+	}
+}

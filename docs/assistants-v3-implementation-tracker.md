@@ -43,7 +43,7 @@
 | U3-2 | U3 | 系统事实卡（Accepted/Planned/Working/Blocked/Verifying/Done）≠ Agent 发言 | U1-1, U3-1 | VERIFIED | 事实只由核心写、去重键唯一；桌面抽屉/Header 与手机 `FactsStrip` 标注“Solco record”；`progress-model.test.ts`、合同测试；视觉 NOT VERIFIED |
 | U3-3 | U3 | GoalSupervisor（确定性推进 + 预算/最大轮数/重规划上限） | U3-1 | VERIFIED | `Supervisor.Tick` 接入 daemon；9 个单测（委派→核验→才完成、失败不编造进度、任务预算 held 一次、扇出上限、人工里程碑、陈旧退避、暂停/取消不动、coding 等发布者）；实机隔离 daemon：批准计划后 12 s 内出现 1 个草稿任务 + `delegated` 事实 |
 | U3-4 | U3 | 核验后汇报 + 重启恢复 | U3-3 | VERIFIED | Goal 仅在全部里程碑 verified 后才 `CompleteGoal`（证据 `sup-done-<goal>-<rev>`）；汇报为确定性的系统事实卡（不经 Agent 转述）；实机重启 daemon 15 s 后仍 1 个任务、事实不重复 |
-| U4-1 | U4 | Chat 生成 Routine Draft → 批准 → Go Automations 调度；无双触发 | U3 | TODO | |
+| U4-1 | U4 | Chat 生成 Routine Draft → 批准 → Go Automations 调度；无双触发 | U3 | VERIFIED | 迁移 17 `routines`（owner/requestedBy/source/correlationId/def_hash/approved）；`routine draft|list|show|cancel|pause|resume`；批准卡 `subjectKind=routine` 绑定定义哈希，定义被改→`stale` 不启用；`RoutineKeeper` 启用；`RuleScheduler.fire` 任务归 owner Assistant；`routine_done/failed` 事实；`routine_test.go` 5 例 + goldens；实机见 §3 U4 |
 | U5-1 | U5 | Memory 目录/Markdown、版本冲突、候选/整理 | — | TODO | |
 | U5-2 | U5 | 主动等级 / Quiet Hours / 报告频率 / 预算 | U3-3 | TODO | |
 | TODO-WF | — | Go Workflow 选型（仅登记：待三个真实复杂场景证明 TaskGraph 不够） | — | DEFERRED | 不引依赖 |
@@ -82,3 +82,12 @@
 - 边界：汇报是确定性系统事实卡，不唤醒 Agent 转述（有意，避免“Agent 自述完成”）；“核验后完成”的完整闭环（任务 done → verified → completed）由 `TestSupervisorDelegatesVerifiesAndOnlyThenCompletes` 在 Store 层覆盖，没有用真实 Agent 跑完整任务（避免费用/副作用）。
 - NOT VERIFIED：桌面抽屉 Progress 区与手机 GoalPlanBlock/FactsStrip 的实机视觉；真实 Coordinator 自己写出 plan 的行为；真机手机联测（手机锁屏，BLOCKED）。
 - 进度：VERIFIED 18 / 总 22（不含 DEFERRED）= 82%。
+
+### U4（2026-11-04）
+- 插件：`cd plugins/solco-automations && GOTOOLCHAIN=auto go test ./...` PASS（`routine_test.go`：草稿不触发且等人、拒绝清单、批准后恰好触发一次且任务属 owner、完成后 owner 账本 `routine_done`、批准后改定义→stale 不启用且旧卡作废、取消/暂停/拒绝）。
+- 根/Host/桌面：`go test ./internal/personalagent ./internal/remotehost ./internal/hostd` 与 `go test ./internal/nativeui -run "Assistants|Coordinator|Persona"` PASS（`TestPersonalAgentRoutineRoutes`、`TestRoutineGolden`、抽屉 Routines 断言）；`frontend: bun run typecheck && bun run build` PASS。`internal/nativeui` 全量、`go tool mygo vet .` PASS。`TestAddressWatcherQuietWhileHealthy` 依赖本机网卡，早先一次运行失败、全量重跑通过，`watch*.go` 本轮无 diff（环境相关，非本改动）。
+- 手机：`pnpm typecheck`、`lint`（0 error）、`test`（575 PASS）、`check:fixtures`（174）PASS。
+- 实机（隔离 state + 隔离 `HERDR_PLUGIN_CONFIG_DIR` 的真实 daemon、临时 git 仓库、真实 headless claude `-p` 一句 OK）：`routine draft` 每分钟 cron → 草稿写入 yaml（`draft: true`、`headless: true`），70 s 内 0 个任务（草稿不触发）；`approval decide`（actionHash 来自卡）→ draft 标记消失、状态 active；下一个整分 1 个任务（归 owner、done、15 s），facts 为 `routine_done / routine enabled / routine drafted`；旧调度器历史日志同一时间只有 1 条（无双触发）；`routine pause` 后 65 s 无新任务。收尾：删除该 automation，关闭测试期间创建的 Herdr 工作区，删除临时 worktree。
+- 教训：隔离 state 目录不隔离 config 目录——daemon 会读到真实的 `automations.yaml`；做会写 yaml 的实机验证必须同时设置 `HERDR_PLUGIN_CONFIG_DIR`（本轮已隔离；此前 U2/U3 的隔离 daemon 读的是真实 yaml，只读，未写入）。
+- NOT VERIFIED：桌面 Routines 抽屉页与手机 RoutinesList 的实机视觉；Coordinator 自己在聊天里调用 `routine draft` 的真实对话；DST/睡眠恢复（沿用 schedule 包既有测试，未新增）；Agent 非 claude（headless 能力随 `KindRunsHeadless`）。
+- 进度：VERIFIED 19 / 总 22（不含 DEFERRED）= 86%。

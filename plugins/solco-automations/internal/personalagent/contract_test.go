@@ -134,6 +134,17 @@ func TestGoldenFixtures(t *testing.T) {
 	run("goal-facts", ``, "assistant", "goal", "facts", gid)
 	run("assistant-facts", ``, "assistant", "facts", aid)
 
+	// Routines (Assistants 3.1 U4): drafted in chat, an approval card, listed with their owner.
+	cfgDir := t.TempDir()
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", cfgDir)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", cfgDir)
+	oldLocal := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = oldLocal })
+	api.Now = func() time.Time { return now }
+	run("routine-draft", fmt.Sprintf(`{"requestId":"g-rt","assistantId":%q,"name":"morning-check","cron":"*/30 * * * *","repo":"/tmp","prompt":"Check the repository for risky changes.","rationale":"A recurring check the user asked for in chat."}`, aid), "assistant", "routine", "draft")
+	run("routine-list", ``, "assistant", "routine", "list", "--assistant", aid)
+
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError
 	if !asCodedErr(err, &ce) {

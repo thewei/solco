@@ -511,3 +511,34 @@ type Fact struct {
 	Evidence    string `json:"evidence,omitempty"`
 	CreatedAt   int64  `json:"createdAt"`
 }
+
+// Routine is a scheduled automation that belongs to an Assistant, with the
+// definition it points at and how it is doing. The definition itself lives in
+// the Automations plugin's own file; prompt and rationale are clipped.
+type Routine struct {
+	Name          string `json:"name"`
+	AssistantID   string `json:"assistantId"`
+	RequestedBy   string `json:"requestedBy"`
+	Source        string `json:"source"`
+	CorrelationID string `json:"correlationId,omitempty"`
+	// State: draft | active | stale | cancelled.
+	State         string `json:"state"`
+	Revision      int    `json:"revision"`
+	Approved      bool   `json:"approved"`
+	CreatedAt     int64  `json:"createdAt"`
+	UpdatedAt     int64  `json:"updatedAt"`
+	Cron          string `json:"cron"`
+	Repo          string `json:"repo"`
+	Agent         string `json:"agent"`
+	Model         string `json:"model,omitempty"`
+	Headless      bool   `json:"headless"`
+	Paused        bool   `json:"paused"`
+	Missing       bool   `json:"missing,omitempty"`
+	Rationale     string `json:"rationale,omitempty"`
+	Prompt        string `json:"prompt,omitempty"`
+	Next          int64  `json:"next,omitempty"`
+	LastState     string `json:"lastState,omitempty"`
+	LastAt        int64  `json:"lastAt,omitempty"`
+	ApprovalID    string `json:"approvalId,omitempty"`
+	ApprovalState string `json:"approvalState,omitempty"`
+}

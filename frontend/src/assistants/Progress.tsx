@@ -22,6 +22,9 @@ const KIND_LABEL: Record<string, string> = {
   done: "Done",
   stale: "No progress",
   held: "Held",
+  routine: "Routine",
+  routine_done: "Routine ran",
+  routine_failed: "Routine failed",
 };
 
 const TONE: Record<string, string> = {
@@ -33,6 +36,8 @@ const TONE: Record<string, string> = {
   ready: "warn",
   verifying: "work",
   delegated: "work",
+  routine_done: "ok",
+  routine_failed: "bad",
 };
 
 function ago(ms: number): string {

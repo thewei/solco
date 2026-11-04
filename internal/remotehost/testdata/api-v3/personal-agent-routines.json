@@ -1,0 +1,25 @@
+{
+  "routines": [
+    {
+      "name": "morning-check",
+      "assistantId": "a_0000000000000001",
+      "requestedBy": "assistant",
+      "source": "chat",
+      "state": "draft",
+      "revision": 1,
+      "approved": false,
+      "createdAt": 1800000000000,
+      "updatedAt": 1800000000000,
+      "cron": "*/30 * * * *",
+      "repo": "/tmp",
+      "agent": "claude",
+      "headless": true,
+      "paused": false,
+      "rationale": "A recurring check the user asked for in chat.",
+      "prompt": "Check the repository for risky changes.",
+      "approvalId": "p_0000000000000020",
+      "approvalState": "pending"
+    }
+  ],
+  "schema": 1
+}

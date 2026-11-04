@@ -45,6 +45,7 @@ type personal struct {
 	watch    *personalagent.Watcher
 	beat     *personalagent.Beater
 	sup      *personalagent.Supervisor
+	routines *personalagent.RoutineKeeper
 	rules    *personalagent.RuleScheduler
 	reviewer *personalagent.Reviewer
 	inbox    *personalagent.InboxWatcher
@@ -92,6 +93,7 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
 	p.sup = &personalagent.Supervisor{Store: store}
+	p.routines = &personalagent.RoutineKeeper{Store: store, Load: config.Load, Approve: config.Approve}
 	p.inbox = &personalagent.InboxWatcher{Store: store}
 	p.groups = &personalagent.GroupPump{Store: store, Submit: submitToAgent, Blocked: paneDialog}
 	if n, err := store.RecoverGroupDeliveries(); err != nil {
@@ -144,6 +146,12 @@ func (p *personal) tick() {
 		log.Printf("assistants: goals: %v", err)
 	} else if r.Dispatched+r.Completed > 0 {
 		log.Printf("assistants: goals: %d milestone(s) delegated, %d goal(s) completed", r.Dispatched, r.Completed)
+	}
+	// A Routine a person approved is enabled here (the answer itself only records the yes).
+	if r, err := p.routines.Tick(); err != nil {
+		log.Printf("assistants: routines: %v", err)
+	} else if r.Enabled+r.Stale+r.Withdrawn > 0 {
+		log.Printf("assistants: routines: %d enabled, %d changed since approval, %d withdrawn", r.Enabled, r.Stale, r.Withdrawn)
 	}
 	if time.Since(p.lastLook) >= inboxEvery {
 		p.lastLook = time.Now()
