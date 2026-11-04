@@ -356,8 +356,10 @@ func encode(doc *yaml.Node, indent int) ([]byte, error) {
 	return buf.Bytes(), enc.Close()
 }
 
-// write replaces the file through a rename, so a crash mid-write cannot leave
-// half a config for the daemon to read as "no automations".
+// write fsyncs the new file before atomic rename and then fsyncs the parent
+// directory. A process crash cannot expose partial YAML; a power interruption
+// must not acknowledge a committed config before the new directory entry is
+// durable. The SQLite Routine intent is committed *before* this call.
 func write(raw []byte) error {
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {
 		return err
@@ -371,10 +373,22 @@ func write(raw []byte) error {
 		tmp.Close()
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), filepath.Join(Dir(), "automations.yaml"))
+	if err := os.Rename(tmp.Name(), filepath.Join(Dir(), "automations.yaml")); err != nil {
+		return err
+	}
+	dir, err := os.Open(Dir())
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 // nextRuns lists the next n occurrences of a cron line already validated.

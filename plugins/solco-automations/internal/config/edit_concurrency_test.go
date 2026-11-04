@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -146,6 +147,39 @@ func TestRestoreDraftIfRefusesChangedDefinition(t *testing.T) {
 	cfg, err = Load()
 	if err != nil || cfg.Find("job").Prompt != updated.Prompt || cfg.Find("job").Draft {
 		t.Fatalf("stale repair overwrote prompt or Draft: %+v %v", cfg.Find("job"), err)
+	}
+}
+
+// Atomic writes must not leave temp files, and the YAML containing
+// unattended commands must be private to the local account after replacement.
+func TestAtomicConfigWriteLeavesRestrictedFileAndNoTempFiles(t *testing.T) {
+	withConfig(t, "automations: []\n")
+	a := Automation{Name: "job", Cron: "@daily", Repo: "/tmp", Prompt: "private command", Draft: true}
+	for i := 0; i < 2; i++ {
+		original := ""
+		if i > 0 {
+			original = "job"
+		}
+		result, err := Put(original, a, false)
+		if err != nil || result.Problem != "" {
+			t.Fatalf("write %d: %+v %v", i, result, err)
+		}
+	}
+	info, err := os.Stat(Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config mode=%o, want 0600", got)
+	}
+	entries, err := os.ReadDir(Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".automations-") && strings.HasSuffix(e.Name(), ".yaml") {
+			t.Fatalf("atomic write leaked a temp file: %s", e.Name())
+		}
 	}
 }
 
