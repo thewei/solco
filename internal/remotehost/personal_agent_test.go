@@ -53,6 +53,14 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 		return []byte(`{"schema":1,"assistants":[` + paAssistant + `]}`), nil
 	case key == "create", strings.HasPrefix(key, "rename "), strings.HasPrefix(key, "pause "), strings.HasPrefix(key, "resume "), strings.HasPrefix(key, "enable "), strings.HasPrefix(key, "disable "):
 		return []byte(`{"schema":1,"assistant":` + paAssistant + `}`), nil
+	case key == "group list":
+		return []byte(`{"schema":1,"groups":[` + paGroup + `]}`), nil
+	case strings.HasPrefix(key, "group show"):
+		return []byte(`{"schema":1,"feed":{"group":` + paGroup + `,"messages":[` + paGroupMsg + `],"deliveries":[{"id":"d_0000000000000011","messageId":"m_0000000000000012","assistantId":"` + paAssistantB + `","state":"queued","attempts":0}],"tasks":[],"agents":[{"assistantId":"` + paAssistantA + `","state":"none"},{"assistantId":"` + paAssistantB + `","state":"starting","paneId":"w3:p1"}],"seq":1}}`), nil
+	case strings.HasPrefix(key, "group post"):
+		return []byte(`{"schema":1,"replayed":false,"result":{"message":` + paGroupMsg + `,"deliveries":[{"id":"d_0000000000000011","messageId":"m_0000000000000012","assistantId":"` + paAssistantB + `","state":"queued","attempts":0}]}}`), nil
+	case strings.HasPrefix(key, "group "):
+		return []byte(`{"schema":1,"replayed":false,"group":` + paGroup + `}`), nil
 	case strings.HasPrefix(key, "coordinator show"):
 		return []byte(`{"schema":1,"coordinator":` + paCoordinator("ready") + `}`), nil
 	case strings.HasPrefix(key, "coordinator start"):
@@ -91,6 +99,13 @@ func (f *fakeCore) callCount() int {
 	defer f.mu.Unlock()
 	return len(f.calls)
 }
+
+const (
+	paAssistantB = "a_0000000000000009"
+	paGroupID    = "g_0000000000000010"
+	paGroup      = `{"id":"` + paGroupID + `","title":"Launch crew","status":"active","members":[{"assistantId":"` + paAssistantA + `","name":"Ada","status":"active"},{"assistantId":"` + paAssistantB + `","name":"Bo","status":"active"}],"lastSeq":1,"revision":1,"createdAt":1800000000000,"updatedAt":1800000000000}`
+	paGroupMsg   = `{"seq":1,"id":"m_0000000000000012","groupId":"` + paGroupID + `","authorKind":"user","kind":"text","body":"@Bo can you check the launch plan?","mentions":["` + paAssistantB + `"],"createdAt":1800000000000}`
+)
 
 const (
 	paAssistant = `{"id":"` + paAssistantA + `","name":"Ada","description":"Follows my pull requests","scope":"personal","status":"active","defaultPolicy":"review","coordinatorSession":"","rolePrompt":"","workspaceRefs":[],"revision":1,"createdAt":1800000000000,"updatedAt":1800000000000}`
@@ -352,6 +367,103 @@ func TestPersonalAgentStartsTheCoordinatorOnAnOfferedAgent(t *testing.T) {
 	}
 }
 
+func TestPersonalAgentGroupRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/groups"
+	var list struct {
+		Groups []personalagent.Group `json:"groups"`
+	}
+	if err := json.NewDecoder(h.get(base, h.token, nil).Body).Decode(&list); err != nil || len(list.Groups) != 1 || len(list.Groups[0].Members) != 2 {
+		t.Fatalf("groups %v %+v", err, list)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group list") {
+		t.Fatalf("core call %q", call)
+	}
+	h.get(base+"/"+paGroupID+"?since=4&limit=50", h.token, nil)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group show "+paGroupID+" --since 4 --limit 50") {
+		t.Fatalf("feed call %q", call)
+	}
+	for _, bad := range []string{"?since=-1", "?since=x", "?limit=0", "?limit=999"} {
+		if resp := h.get(base+"/"+paGroupID+bad, h.token, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("feed%s = %d", bad, resp.StatusCode)
+		}
+	}
+	if resp := h.get(base+"/not%20an%20id", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed id = %d", resp.StatusCode)
+	}
+
+	members := `["` + paAssistantA + `","` + paAssistantB + `"]`
+	if status, _ := h.send("POST", base, h.token, `{"requestId":"g1","title":"Launch crew","members":`+members+`}`); status != http.StatusOK {
+		t.Fatalf("create = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group create") || !strings.Contains(call, `"requestId":"g1"`) {
+		t.Fatalf("create call %q", call)
+	}
+	n := core.callCount()
+	for name, body := range map[string]string{
+		"one member":   `{"requestId":"g2","members":["` + paAssistantA + `"]}`,
+		"duplicate":    `{"requestId":"g2","members":["` + paAssistantA + `","` + paAssistantA + `"]}`,
+		"bad id":       `{"requestId":"g2","members":["x","y"]}`,
+		"no requestId": `{"members":` + members + `}`,
+		"too many":     `{"requestId":"g2","members":["a_1","a_2","a_3","a_4","a_5","a_6","a_7","a_8","a_9"]}`,
+	} {
+		if status, _ := h.send("POST", base, h.token, body); status != http.StatusBadRequest {
+			t.Fatalf("create %s = %d", name, status)
+		}
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused create reached the core: %v", core.calls[n:])
+	}
+
+	post := base + "/" + paGroupID + "/messages"
+	if status, _ := h.send("POST", post, h.token, `{"requestId":"m1","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"],"replyTo":"m_0000000000000012"}`); status != http.StatusOK {
+		t.Fatalf("post = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group post") || !strings.Contains(call, `"groupId":"`+paGroupID+`"`) || !strings.Contains(call, `"mentions":["`+paAssistantB+`"]`) {
+		t.Fatalf("post call %q", call)
+	}
+	n = core.callCount()
+	for name, body := range map[string]string{
+		"empty":        `{"requestId":"m2","body":"  "}`,
+		"bad mention":  `{"requestId":"m2","body":"hi","mentions":["nope"]}`,
+		"bad reply":    `{"requestId":"m2","body":"hi","replyTo":"nope"}`,
+		"no requestId": `{"body":"hi"}`,
+	} {
+		if status, _ := h.send("POST", post, h.token, body); status != http.StatusBadRequest {
+			t.Fatalf("post %s = %d", name, status)
+		}
+	}
+	// The phone has no way to speak as an Assistant.
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/say", h.token, `{"requestId":"s1","as":"`+paAssistantB+`","body":"hi"}`); status == http.StatusOK {
+		t.Fatalf("a say route exists")
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused post reached the core: %v", core.calls[n:])
+	}
+
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/rename", h.token, `{"requestId":"n1","title":"Crew","expectedRevision":1}`); status != http.StatusOK {
+		t.Fatalf("rename = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/rename", h.token, `{"requestId":"n2","title":"Crew"}`); status != http.StatusBadRequest {
+		t.Fatalf("rename without revision = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/members/add", h.token, `{"requestId":"a1","assistantId":"`+paAssistantB+`"}`); status != http.StatusOK {
+		t.Fatalf("add member = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group add "+paGroupID) {
+		t.Fatalf("add call %q", call)
+	}
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/members/remove", h.token, `{"requestId":"a2","assistantId":"`+paAssistantB+`"}`); status != http.StatusOK {
+		t.Fatalf("remove member = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group remove "+paGroupID) {
+		t.Fatalf("remove call %q", call)
+	}
+	if status, _ := h.send("POST", post, "", `{"requestId":"m9","body":"hi"}`); status != http.StatusUnauthorized {
+		t.Fatalf("post without token = %d", status)
+	}
+}
+
 func TestPersonalAgentGolden(t *testing.T) {
 	h, _ := paHarness(t, true)
 	h.srv.opts.AssistantAgents = func() []PersonalAgentKind {
@@ -366,6 +478,11 @@ func TestPersonalAgentGolden(t *testing.T) {
 	golden(t, "personal-agent-assistant.json", bodyOf(t, h.get("/api/v3/personal-agent/assistants/"+paAssistantA, h.token, nil)))
 	golden(t, "personal-agent-goals.json", bodyOf(t, h.get("/api/v3/personal-agent/goals?assistant="+paAssistantA, h.token, nil)))
 	golden(t, "personal-agent-task.json", bodyOf(t, h.get("/api/v3/personal-agent/tasks/"+paTaskT, h.token, nil)))
+	golden(t, "personal-agent-groups.json", bodyOf(t, h.get("/api/v3/personal-agent/groups", h.token, nil)))
+	golden(t, "personal-agent-group-feed.json", bodyOf(t, h.get("/api/v3/personal-agent/groups/"+paGroupID, h.token, nil)))
+	golden(t, "personal-agent-group-message-request.json", []byte(`{"requestId":"8c1d5e2a-3b7f-4f60-9a11-2d4c6e8f0a13","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"]}`))
+	_, posted := h.send("POST", "/api/v3/personal-agent/groups/"+paGroupID+"/messages", h.token, `{"requestId":"8c1d5e2a-3b7f-4f60-9a11-2d4c6e8f0a13","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"]}`)
+	golden(t, "personal-agent-group-message.json", posted)
 	golden(t, "personal-agent-approvals.json", bodyOf(t, h.get("/api/v3/personal-agent/approvals", h.token, nil)))
 	golden(t, "personal-agent-inbox.json", bodyOf(t, h.get("/api/v3/personal-agent/inbox", h.token, nil)))
 	if resp := h.get("/api/v3/personal-agent/inbox?assistant=not%20an%20id", h.token, nil); resp.StatusCode != http.StatusBadRequest {

@@ -195,7 +195,7 @@ type treeRowSpec struct {
 	// row, 2026-10-30), Branch/Dirty add the repository facts after the
 	// label in fixed columns (branch, then the pane tally): the branch muted,
 	// amber when files changed — never a second dot.
-	Tile   string
+	Tile string
 	// Avatar, when set, draws the row's identity in the Tile's 16pt slot (an
 	// Assistant's round initial, a Group's stack — 2026-11-04); Tile wins when
 	// both are set.

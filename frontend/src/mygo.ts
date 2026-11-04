@@ -147,6 +147,12 @@ export interface AssistantsView {
   selected: string;
   detail?: AssistantsDetail;
   /**
+   * Groups are the Group rows; SelectedGroup, when set, is the Group the
+   * page is on instead of an Assistant's chat (no Detail is read then).
+   */
+  groups: OverviewGroup[];
+  selectedGroup: string;
+  /**
    * Agents are the Herdr agents a Coordinator may run on (Chat-capable and
    * switched on in Settings → Agents, last used first); DefaultAgent is the
    * first of them.
@@ -670,6 +676,83 @@ export interface Goal {
   updatedAt: number;
 }
 
+/** Group is a conversation of the person with two or more Assistants. */
+export interface Group {
+  id: string;
+  title: string;
+  status: string;
+  members: GroupMember[];
+  lastSeq: number;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * GroupAgentState is the Agent an Assistant runs for a Group (none until the
+ * first @-mention starts it).
+ */
+export interface GroupAgentState {
+  assistantId: string;
+  state: string;
+  paneId?: string;
+}
+
+/** GroupDelivery says whether a mentioned Assistant has been told of a message. */
+export interface GroupDelivery {
+  id: string;
+  messageId: string;
+  assistantId: string;
+  state: string;
+  attempts: number;
+}
+
+/** GroupFeed is what a client renders. */
+export interface GroupFeed {
+  group: Group;
+  messages: GroupMessage[];
+  deliveries: GroupDelivery[];
+  tasks: GroupTaskCard[];
+  agents: GroupAgentState[];
+  seq: number;
+}
+
+/** GroupMember is one Assistant in a Group. */
+export interface GroupMember {
+  assistantId: string;
+  name: string;
+  status: string;
+}
+
+/**
+ * GroupMessage is one row of a Group's log. A `fact` is a receipt the core
+ * wrote itself (Fact says which); a `task` row points at a live task.
+ */
+export interface GroupMessage {
+  seq: number;
+  id: string;
+  groupId: string;
+  authorKind: string;
+  authorId?: string;
+  kind: string;
+  body: string;
+  mentions: string[];
+  replyTo?: string;
+  taskId?: string;
+  fact?: unknown;
+  createdAt: number;
+}
+
+/** GroupTaskCard is a task's live state for a card in a Group. */
+export interface GroupTaskCard {
+  taskId: string;
+  assistantId: string;
+  title: string;
+  state: string;
+  needsYou: boolean;
+  updatedAt: number;
+}
+
 /**
  * Inbox is the snapshot: items by priority, the count that needs a person and
  * the event watermark it was read at.
@@ -708,6 +791,19 @@ export interface MemoryItem {
   sharedWith: string[];
   revision: number;
   createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * OverviewGroup is one Group's light row: members, log length, @-mentions
+ * still on their way.
+ */
+export interface OverviewGroup {
+  id: string;
+  title: string;
+  members: GroupMember[];
+  lastSeq: number;
+  open: number;
   updatedAt: number;
 }
 
@@ -1036,6 +1132,10 @@ export const assistants = {
   createGoal(requestID: string, in_: AssistantsGoalInput): Promise<void> {
     return call("assistants.CreateGoal", requestID, in_);
   },
+  /** CreateGroup records a Group of at least two Assistants and opens it. */
+  createGroup(requestID: string, title: string, members: string[]): Promise<string> {
+    return call("assistants.CreateGroup", requestID, title, members);
+  },
   /** CreateTask queues a task for an Assistant. */
   createTask(requestID: string, in_: CreateTaskInput): Promise<void> {
     return call("assistants.CreateTask", requestID, in_);
@@ -1071,6 +1171,17 @@ export const assistants = {
     return call("assistants.GoalAction", requestID, action, id, revision, evidence);
   },
   /**
+   * GroupFeed reads a Group's log: the newest page when since is 0, else what
+   * came after it. The page asks every couple of seconds while it is visible.
+   */
+  groupFeed(id: string, since: number): Promise<GroupFeed> {
+    return call("assistants.GroupFeed", id, since);
+  },
+  /** GroupMember adds or removes one Assistant. */
+  groupMember(requestID: string, id: string, assistantID: string, add: boolean): Promise<void> {
+    return call("assistants.GroupMember", requestID, id, assistantID, add);
+  },
+  /**
    * OpenPane selects a Run's pane in the Workspace (only a pane the tree still
    * lists; no new Herdr method, no --takeover).
    */
@@ -1085,6 +1196,13 @@ export const assistants = {
   pendingIntent(): Promise<AssistantsIntent | null> {
     return call("assistants.PendingIntent");
   },
+  /**
+   * PostGroupMessage is the person's own message. mentions are member ids; each
+   * member's @Name must be in the text, and only those Assistants are woken.
+   */
+  postGroupMessage(requestID: string, groupID: string, text: string, mentions: string[], replyTo: string): Promise<void> {
+    return call("assistants.PostGroupMessage", requestID, groupID, text, mentions, replyTo);
+  },
   /** PublishTask releases a draft the Coordinator (or the person) filed. */
   publishTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.PublishTask", requestID, id, revision);
@@ -1093,6 +1211,10 @@ export const assistants = {
   renameAssistant(requestID: string, id: string, name: string, revision: number): Promise<void> {
     return call("assistants.RenameAssistant", requestID, id, name, revision);
   },
+  /** RenameGroup changes a Group's title. */
+  renameGroup(requestID: string, id: string, title: string, revision: number): Promise<void> {
+    return call("assistants.RenameGroup", requestID, id, title, revision);
+  },
   /** RetryTask re-queues a failed or cancelled task. */
   retryTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.RetryTask", requestID, id, revision);
@@ -1100,6 +1222,10 @@ export const assistants = {
   /** Select records the Assistant the page is on (the sidebar row follows). */
   select(id: string): Promise<void> {
     return call("assistants.Select", id);
+  },
+  /** SelectGroup records the Group the page is on (the sidebar row follows). */
+  selectGroup(id: string): Promise<void> {
+    return call("assistants.SelectGroup", id);
   },
   /** SetAssistantEnabled pauses or resumes one Assistant. */
   setAssistantEnabled(requestID: string, id: string, enabled: boolean, revision: number): Promise<void> {

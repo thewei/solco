@@ -13,7 +13,7 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden fixtures in testdata/")
 
-var idRe = regexp.MustCompile(`\b[agtrcmpe]_[0-9a-f]{16}\b`)
+var idRe = regexp.MustCompile(`\b[adgtrcmpe]_[0-9a-f]{16}\b`)
 
 // stable renames random ids to a_0000000000000001… in order of first sight so
 // a fixture is byte-identical between runs.
@@ -94,6 +94,22 @@ func TestGoldenFixtures(t *testing.T) {
 	cr, _ = s.GetRun(cr.ID)
 	s.syncCoordinator(ctask, cr)
 	run("coordinator-ready", ``, "assistant", "coordinator", "show", aid)
+
+	// Groups (Assistants 3.1 U1).
+	bo := run("assistant-created-b", `{"requestId":"g-b","name":"Bo"}`, "assistant", "create")
+	bid := field(bo, "assistant", "id").(string)
+	grp := run("group-created", fmt.Sprintf(`{"requestId":"g-grp","title":"Launch crew","members":[%q,%q]}`, aid, bid), "assistant", "group", "create")
+	grpID := field(grp, "group", "id").(string)
+	run("group-list", ``, "assistant", "group", "list")
+	posted := run("group-posted", fmt.Sprintf(`{"requestId":"g-post","groupId":%q,"body":"@Bo can you check the launch plan?","mentions":[%q]}`, grpID, bid), "assistant", "group", "post")
+	postedID := field(posted, "result", "message", "id").(string)
+	ga, _, _ := s.StartGroupAgent("g-ga", grpID, bid, "", "")
+	gat, _ := s.GetTask(ga.TaskID)
+	_, _ = s.groupLaunchPrompt(Assistant{ID: bid, Name: "Bo"}, grpID)
+	s.syncGroupAgent(gat, Run{Status: RunRunning, HerdrSession: "default", WorkspaceID: "w3", PaneID: "w3:p1"})
+	run("group-said", fmt.Sprintf(`{"requestId":"g-say","groupId":%q,"as":%q,"body":"Looks fine; I filed a task.","replyTo":%q}`, grpID, bid, postedID), "assistant", "group", "say")
+	run("group-task-created", fmt.Sprintf(`{"requestId":"g-gt","assistantId":%q,"groupId":%q,"kind":"research","title":"Check the launch plan","brief":"Check."}`, bid, grpID), "assistant", "task", "create")
+	run("group-feed", ``, "assistant", "group", "show", grpID)
 
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError

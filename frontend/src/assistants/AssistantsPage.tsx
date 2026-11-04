@@ -16,6 +16,7 @@ import {
   type InboxItem,
   type MemoryItem,
 } from "../mygo";
+import { GroupChat, NewGroup } from "./GroupChat";
 import "./assistants.css";
 
 /**
@@ -154,6 +155,15 @@ export function AssistantsPage() {
       </div>
     );
   }
+  if (view.selectedGroup) {
+    return (
+      <>
+        <GroupChat view={view} id={view.selectedGroup} refresh={pull} />
+        {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} onCreated={pull} /> : null}
+        {form === "group" ? <NewGroup view={view} onClose={() => setForm(null)} onCreated={pull} /> : null}
+      </>
+    );
+  }
   const detail = view.detail;
   if (!detail) {
     return (
@@ -164,7 +174,7 @@ export function AssistantsPage() {
           New Assistant
         </button>
         {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} onCreated={pull} /> : null}
-        {form === "group" ? <NewGroup onClose={() => setForm(null)} /> : null}
+        {form === "group" ? <NewGroup view={view} onClose={() => setForm(null)} onCreated={pull} /> : null}
       </div>
     );
   }
@@ -284,7 +294,7 @@ export function AssistantsPage() {
         ) : null}
       </main>
       {form === "assistant" ? <NewAssistant onClose={() => setForm(null)} onCreated={pull} /> : null}
-      {form === "group" ? <NewGroup onClose={() => setForm(null)} /> : null}
+      {form === "group" ? <NewGroup view={view} onClose={() => setForm(null)} onCreated={pull} /> : null}
       {form === "rename" ? <Rename assistant={a} onClose={() => setForm(null)} act={act} /> : null}
       {form === "watch" ? <NewWatch assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
       {form === "task" ? <NewTask assistantId={a.id} agents={view.agents} onClose={() => setForm(null)} act={act} /> : null}
@@ -913,15 +923,6 @@ function NewAssistant({ onClose, onCreated }: { onClose: () => void; onCreated: 
       <Field label="What does it do?">
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
       </Field>
-    </Sheet>
-  );
-}
-
-/** Groups need the plugin's group store; until it answers, say so instead of making a lookalike. */
-function NewGroup({ onClose }: { onClose: () => void }) {
-  return (
-    <Sheet title="New Group" submit="Create" busy onClose={onClose} onSubmit={() => undefined}>
-      <p className="as-meta">Group chats are not available in this version of the Automations plugin. Nothing was created.</p>
     </Sheet>
   );
 }

@@ -15,6 +15,10 @@ const (
 	// KindCoordinator is an Assistant's long-lived Coordinator Agent. It is made
 	// only by StartCoordinator, never through CreateTask.
 	KindCoordinator = "coordinator"
+	// KindGroupAgent is the Agent an Assistant runs for one Group conversation
+	// (its own session, never the private Coordinator's). Made only by the
+	// Group pump when the person @-mentions the Assistant.
+	KindGroupAgent = "groupagent"
 )
 
 // Task states (docs/personal-agent-go-mvp-plan.md §5.2).
@@ -119,6 +123,10 @@ type CreateTaskInput struct {
 	Draft bool `json:"draft,omitempty"`
 	// DependsOn lists tasks of the same Assistant that must be done first.
 	DependsOn []string `json:"dependsOn,omitempty"`
+	// GroupID files the task from a Group conversation: the Group gets a task
+	// card that follows the task's real state. Only a member with a running
+	// Group Agent may do it.
+	GroupID string `json:"groupId,omitempty"`
 }
 
 const taskCols = `id,assistant_id,goal_id,rule_id,parent_task_id,kind,title,brief,repo_path,agent,model,state,needs_you,review_state,attempt,revision,created_at,updated_at`
@@ -227,7 +235,16 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 		if err := emitTask(tx, id, "task.added", now); err != nil {
 			return Task{}, err
 		}
-		return getTaskTx(tx, id)
+		created, err := getTaskTx(tx, id)
+		if err != nil {
+			return Task{}, err
+		}
+		if in.GroupID != "" {
+			if err := linkGroupTask(tx, s, in.GroupID, created, now); err != nil {
+				return Task{}, err
+			}
+		}
+		return created, nil
 	})
 }
 
@@ -243,8 +260,8 @@ func (s *Store) GetRun(id string) (Run, error) { return getRunTx(s.db, id) }
 func (s *Store) ListTasks(assistantID string) ([]Task, error) {
 	// An Assistant's Coordinator task is plumbing, not work the person queued:
 	// it never shows in lists, counters or the task graph.
-	q := `SELECT ` + taskCols + ` FROM tasks WHERE kind<>?`
-	args := []any{KindCoordinator}
+	q := `SELECT ` + taskCols + ` FROM tasks WHERE kind NOT IN (?,?)`
+	args := []any{KindCoordinator, KindGroupAgent}
 	if assistantID != "" {
 		q += ` AND assistant_id=?`
 		args = append(args, assistantID)

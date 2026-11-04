@@ -144,6 +144,9 @@ func (s *Server) handlePAOverview(w http.ResponseWriter, r *http.Request, dev De
 	if out.Assistants == nil {
 		out.Assistants = []personalagent.OverviewRow{}
 	}
+	if out.Groups == nil {
+		out.Groups = []personalagent.OverviewGroup{}
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 

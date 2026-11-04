@@ -525,6 +525,13 @@ func (s *Server) Handler() http.Handler {
 	for _, action := range []string{"approve", "pause", "resume", "cancel"} {
 		mux.Handle("POST "+pa+"/goals/{id}/"+action, s.guard(ScopeManage, s.handlePAGoalAction(action)))
 	}
+	mux.Handle("GET "+pa+"/groups", s.guard(ScopeView, s.handlePAGroups))
+	mux.Handle("GET "+pa+"/groups/{id}", s.guard(ScopeView, s.handlePAGroupFeed))
+	mux.Handle("POST "+pa+"/groups", s.guard(ScopeManage, s.handlePACreateGroup))
+	mux.Handle("POST "+pa+"/groups/{id}/messages", s.guard(ScopeManage, s.handlePAGroupMessage))
+	mux.Handle("POST "+pa+"/groups/{id}/rename", s.guard(ScopeManage, s.handlePAGroupRename))
+	mux.Handle("POST "+pa+"/groups/{id}/members/add", s.guard(ScopeManage, s.handlePAGroupMember(true)))
+	mux.Handle("POST "+pa+"/groups/{id}/members/remove", s.guard(ScopeManage, s.handlePAGroupMember(false)))
 	mux.Handle("POST "+pa+"/approvals/{id}/decision", s.guard(ScopeManage, s.handlePADecideApproval))
 	mux.Handle("POST "+pa+"/tasks/{id}/ack", s.guard(ScopeManage, s.handlePATaskAction("ack")))
 	mux.Handle("POST "+pa+"/tasks/{id}/retry", s.guard(ScopeManage, s.handlePATaskAction("retry")))
@@ -738,6 +745,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["personalAgent"] = true
 			capabilities["personalAgentManage"] = true
 			capabilities["personalAgentApprove"] = true
+			capabilities["personalAgentGroups"] = true
 		}
 	}
 	if s.opts.Sessions != nil {

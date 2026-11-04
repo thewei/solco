@@ -333,6 +333,70 @@ var migrations = []string{
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
 	);`,
+	// v-next: Groups (Assistants 3.1 U1): one ordered message log, members,
+	// per-mention deliveries, and the Agent an Assistant runs for a Group.
+	`CREATE TABLE chat_groups (
+		id TEXT PRIMARY KEY,
+		title TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'active',
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE TABLE group_members (
+		group_id TEXT NOT NULL REFERENCES chat_groups(id),
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		added_at INTEGER NOT NULL,
+		PRIMARY KEY (group_id, assistant_id)
+	);
+	CREATE TABLE group_messages (
+		seq INTEGER PRIMARY KEY AUTOINCREMENT,
+		id TEXT NOT NULL UNIQUE,
+		group_id TEXT NOT NULL REFERENCES chat_groups(id),
+		author_kind TEXT NOT NULL,
+		author_id TEXT NOT NULL DEFAULT '',
+		kind TEXT NOT NULL DEFAULT 'text',
+		body TEXT NOT NULL DEFAULT '',
+		mentions TEXT NOT NULL DEFAULT '[]',
+		reply_to TEXT NOT NULL DEFAULT '',
+		task_id TEXT NOT NULL DEFAULT '',
+		fact TEXT NOT NULL DEFAULT '',
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX group_messages_by_group ON group_messages(group_id, seq);
+	CREATE TABLE group_deliveries (
+		id TEXT PRIMARY KEY,
+		group_id TEXT NOT NULL REFERENCES chat_groups(id),
+		message_id TEXT NOT NULL REFERENCES group_messages(id),
+		assistant_id TEXT NOT NULL,
+		state TEXT NOT NULL,
+		attempts INTEGER NOT NULL DEFAULT 0,
+		next_at INTEGER NOT NULL DEFAULT 0,
+		last_error TEXT NOT NULL DEFAULT '',
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		UNIQUE (message_id, assistant_id)
+	);
+	CREATE INDEX group_deliveries_open ON group_deliveries(state, created_at);
+	CREATE TABLE group_agents (
+		group_id TEXT NOT NULL REFERENCES chat_groups(id),
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		state TEXT NOT NULL,
+		task_id TEXT NOT NULL DEFAULT '',
+		herdr_session TEXT NOT NULL DEFAULT '',
+		workspace_id TEXT NOT NULL DEFAULT '',
+		pane_id TEXT NOT NULL DEFAULT '',
+		agent_session_id TEXT NOT NULL DEFAULT '',
+		last_seq INTEGER NOT NULL DEFAULT 0,
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		PRIMARY KEY (group_id, assistant_id)
+	);
+	CREATE INDEX group_agents_by_task ON group_agents(task_id);`,
+	// 14: the newest message a launching Group Agent's brief carried. It only
+	// becomes last_seq once the Agent really finished that turn.
+	`ALTER TABLE group_agents ADD COLUMN launch_seq INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func (s *Store) migrate() error {

@@ -55,6 +55,11 @@ func startupDialog(screen string) (string, bool) {
 	return "", false
 }
 
+// StartupDialog reports which agent startup dialog a screen shows, so a caller
+// that must type into a live agent (the Group pump) can wait instead of typing
+// into a question.
+func StartupDialog(screen string) (string, bool) { return startupDialog(screen) }
+
 // blockedBy reads the pane once and says whether the agent is sitting on a
 // startup dialog. A pane that cannot be read is not a dialog: the guard only
 // ever adds a refusal, it never invents a failure.

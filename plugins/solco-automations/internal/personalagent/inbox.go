@@ -128,8 +128,8 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 	// Tasks, with the facts of their latest run.
 	tq := `SELECT ` + prefixed("t", taskCols) + `,
 		COALESCE((SELECT r.pane_id FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),'')
-		FROM tasks t WHERE t.kind<>?`
-	targs := []any{KindCoordinator}
+		FROM tasks t WHERE t.kind NOT IN (?,?)`
+	targs := []any{KindCoordinator, KindGroupAgent}
 	if assistantID != "" {
 		tq += ` AND t.assistant_id=?`
 		targs = append(targs, assistantID)

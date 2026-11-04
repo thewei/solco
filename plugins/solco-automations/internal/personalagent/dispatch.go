@@ -51,6 +51,8 @@ type LaunchSpec struct {
 	WorkDir string
 	// AssistantID owns the run; a Coordinator's folder is named after it.
 	AssistantID string
+	// GroupID is set for a Group Agent; its folder is named after the Group.
+	GroupID string
 }
 
 // Launcher is the Herdr seam. The production adapter drives the same
@@ -144,6 +146,25 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 	if task.Kind == KindCoordinator && d.Policy == nil {
 		prompt = CoordinatorPrompt(asst)
 	}
+	groupID := ""
+	if task.Kind == KindGroupAgent {
+		gid, ok := d.Store.groupOfTask(task.ID)
+		if !ok {
+			_ = d.Store.FinishRun(run.ID, RunFailed, "the group of this agent is gone")
+			d.settle(run.ID)
+			return d.reload(run.ID), ErrNotFound
+		}
+		groupID = gid
+		if d.Policy == nil {
+			p, err := d.Store.groupLaunchPrompt(asst, gid)
+			if err != nil {
+				_ = d.Store.FinishRun(run.ID, RunFailed, "no group brief: "+err.Error())
+				d.settle(run.ID)
+				return d.reload(run.ID), err
+			}
+			prompt = p
+		}
+	}
 	var auto *config.Automation
 	timeout := d.timeout()
 	if name, isRule := LegacyRuleName(task.RuleID); isRule {
@@ -189,6 +210,7 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		Timeout: timeout,
 		Auto:    auto,
 		WorkDir: workDir,
+		GroupID: groupID,
 	}
 	d.settle(run.ID)
 	// The label is stored before anything is created, so an uncertain run can
@@ -274,6 +296,7 @@ func (d *Dispatcher) settle(runID string) {
 		return
 	}
 	d.Store.syncCoordinator(task, run)
+	d.Store.syncGroupAgent(task, run)
 	if d.OnSettled != nil {
 		d.OnSettled(task, run)
 	}

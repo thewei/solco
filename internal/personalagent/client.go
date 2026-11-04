@@ -320,3 +320,84 @@ func (c *Client) VisibleMemory(ctx context.Context, assistantID string) ([]Memor
 	}
 	return out.Memory, c.do(ctx, nil, &out, "memory", "visible", assistantID)
 }
+
+// Groups lists every Group, most recently active first.
+func (c *Client) Groups(ctx context.Context) ([]Group, error) {
+	var out struct {
+		Groups []Group `json:"groups"`
+	}
+	return out.Groups, c.do(ctx, nil, &out, "group", "list")
+}
+
+// CreateGroup records a Group of at least two Assistants (idempotent on requestID).
+func (c *Client) CreateGroup(ctx context.Context, requestID, title string, members []string) (Group, error) {
+	var out struct {
+		Group Group `json:"group"`
+	}
+	body := struct {
+		req
+		Title   string   `json:"title,omitempty"`
+		Members []string `json:"members"`
+	}{req{RequestID: requestID}, title, members}
+	return out.Group, c.do(ctx, body, &out, "group", "create")
+}
+
+// GroupFeed reads a Group's log: the newest page when since is 0, else what
+// came after the message seq.
+func (c *Client) GroupFeed(ctx context.Context, id string, since int64, limit int) (GroupFeed, error) {
+	var out struct {
+		Feed GroupFeed `json:"feed"`
+	}
+	args := []string{"group", "show", id}
+	if since > 0 {
+		args = append(args, "--since", fmt.Sprint(since))
+	}
+	if limit > 0 {
+		args = append(args, "--limit", fmt.Sprint(limit))
+	}
+	return out.Feed, c.do(ctx, nil, &out, args...)
+}
+
+// RenameGroup changes a Group's title.
+func (c *Client) RenameGroup(ctx context.Context, requestID, id, title string, rev int) (Group, error) {
+	var out struct {
+		Group Group `json:"group"`
+	}
+	body := struct {
+		req
+		Title string `json:"title"`
+	}{req{requestID, rev}, title}
+	return out.Group, c.do(ctx, body, &out, "group", "rename", id)
+}
+
+// GroupMember adds or removes (add=false) one Assistant.
+func (c *Client) GroupMember(ctx context.Context, requestID, id, assistantID string, add bool) (Group, error) {
+	var out struct {
+		Group Group `json:"group"`
+	}
+	body := struct {
+		req
+		AssistantID string `json:"assistantId"`
+	}{req{RequestID: requestID}, assistantID}
+	verb := "remove"
+	if add {
+		verb = "add"
+	}
+	return out.Group, c.do(ctx, body, &out, "group", verb, id)
+}
+
+// PostGroupMessage is the person's own message; mentions are member ids whose
+// `@Name` must appear in the text. Only those Assistants are ever woken.
+func (c *Client) PostGroupMessage(ctx context.Context, requestID, groupID, text string, mentions []string, replyTo string) (PostResult, error) {
+	var out struct {
+		Result PostResult `json:"result"`
+	}
+	body := struct {
+		req
+		GroupID  string   `json:"groupId"`
+		Body     string   `json:"body"`
+		Mentions []string `json:"mentions,omitempty"`
+		ReplyTo  string   `json:"replyTo,omitempty"`
+	}{req{RequestID: requestID}, groupID, text, mentions, replyTo}
+	return out.Result, c.do(ctx, body, &out, "group", "post")
+}

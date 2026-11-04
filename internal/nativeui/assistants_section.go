@@ -9,6 +9,7 @@ package nativeui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 
@@ -23,10 +24,11 @@ func (s *Shell) assistantsSection(c *ui.Context) {
 	}
 	s.refreshAssistants(false)
 	rows := s.assistants.overview.Assistants
+	groups := s.assistants.overview.Groups
 	// One "+" with a real menu: the two things a person can start here.
 	add := &treeRowAction{Label: "New…", Tooltip: "New Assistant or Group", Glyph: iconPlus, Menu: s.newAssistantMenu}
 	s.sidebarSection(c, sidebarSectionSpec{
-		Key: "section:assistants", Title: "Assistants", Count: len(rows), Action: add,
+		Key: "section:assistants", Title: "Assistants", Count: len(rows) + len(groups), Action: add,
 		Menu: func(m *ui.Menu) {
 			s.newAssistantMenu(m)
 			m.Separator()
@@ -37,7 +39,7 @@ func (s *Shell) assistantsSection(c *ui.Context) {
 	}, &s.tasksOpen, func() {
 		for _, row := range rows {
 			row := row
-			onPage := s.router.Path() == routeAssistants && s.assistants.selected == row.ID
+			onPage := s.router.Path() == routeAssistants && s.assistants.selectedGroup == "" && s.assistants.selected == row.ID
 			entry := treeRow(c, treeRowSpec{
 				Height:   s.sidebarRowHeight(),
 				Key:      "assistant:" + row.ID,
@@ -52,7 +54,39 @@ func (s *Shell) assistantsSection(c *ui.Context) {
 				s.showAssistant(row.ID)
 			}
 		}
+		for _, g := range groups {
+			g := g
+			faces := make([]avatarIdentity, 0, len(g.Members))
+			for _, m := range g.Members {
+				faces = append(faces, avatarIdentity{ID: m.AssistantID, Name: m.Name})
+			}
+			dot := opUnknown
+			if g.Open > 0 {
+				dot = opWorking
+			}
+			entry := treeRow(c, treeRowSpec{
+				Height:   s.sidebarRowHeight(),
+				Key:      "group:" + g.ID,
+				Selected: s.router.Path() == routeAssistants && s.assistants.selectedGroup == g.ID,
+				Avatar:   func() { groupAvatar(c, faces, 16) },
+				Label:    g.Title,
+				Dot:      dot,
+			})
+			tipped(c, entry, groupTip(g))
+			if entry.Clicked() {
+				s.showGroup(g.ID)
+			}
+		}
 	})
+}
+
+// groupTip names a Group by its members.
+func groupTip(g personalagent.OverviewGroup) string {
+	names := make([]string, 0, len(g.Members))
+	for _, m := range g.Members {
+		names = append(names, m.Name)
+	}
+	return g.Title + " · " + strings.Join(names, ", ")
 }
 
 // assistantDot is the row's one state: waiting on a person beats work in
@@ -95,7 +129,20 @@ func (s *Shell) showAssistant(id string) {
 	}
 	if id != "" {
 		s.assistants.selected = id
+		s.assistants.selectedGroup = ""
 	}
+	s.hideQuickPanel()
+	if s.router.Path() != routeAssistants {
+		s.router.Push(routeAssistants)
+	}
+}
+
+// showGroup opens the Assistants page on one Group's conversation.
+func (s *Shell) showGroup(id string) {
+	if !s.assistantsAvailable() || s.holdCommitNavigation() {
+		return
+	}
+	s.assistants.selectedGroup = id
 	s.hideQuickPanel()
 	if s.router.Path() != routeAssistants {
 		s.router.Push(routeAssistants)

@@ -37,6 +37,12 @@ const (
 
 const assistantsInboxJSON = `{"schema":1,"inbox":{"items":[{"id":"task:t_1","kind":"stalled","assistantId":"a_1","taskId":"t_1","title":"Check it","detail":"Has not started","priority":3,"at":1}],"needsYou":1,"seq":4}}`
 
+// assistantsOverviewWithGroup is the overview when a Group exists beside Ada.
+const assistantsOverviewWithGroup = `{"schema":1,"needsYou":0,"assistants":[{"id":"a_1","name":"Ada","status":"active","revision":1,"tasks":0,"queued":0,"running":0,"needsYou":0,"done":0,"goals":0,"approvals":0},{"id":"a_2","name":"Bo","status":"active","revision":1,"tasks":0,"queued":0,"running":0,"needsYou":0,"done":0,"goals":0,"approvals":0}],"groups":[{"id":"gr_1","title":"Launch crew","members":[{"assistantId":"a_1","name":"Ada","status":"active"},{"assistantId":"a_2","name":"Bo","status":"active"}],"lastSeq":3,"open":0,"updatedAt":1}]}`
+
+// assistantsOverviewOverride, when set, replaces the scripted overview.
+var assistantsOverviewOverride string
+
 // assistantsCoordinators scripts `coordinator show <id>` for a test.
 var assistantsCoordinators = map[string]string{}
 
@@ -66,6 +72,9 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 			}
 			switch strings.Join(args, " ") {
 			case "overview":
+				if assistantsOverviewOverride != "" {
+					return []byte(assistantsOverviewOverride), nil
+				}
 				return []byte(assistantsOverviewJSON), nil
 			case "list":
 				return []byte(assistantsListJSON), nil
@@ -88,6 +97,7 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 	assistantsGo = func(f func()) { f() }
 	t.Cleanup(func() {
 		assistantsCoordinators = map[string]string{}
+		assistantsOverviewOverride = ""
 		newAssistantsClient = func(root, session string) *personalagent.Client {
 			return personalagent.NewClient(root, []string{"HERDR_SOCKET_PATH=" + herdr.SocketPath(session)})
 		}
@@ -458,5 +468,39 @@ func TestAssistantsChatHidesTheCoordinatorBrief(t *testing.T) {
 	shell.chatBriefPane = "other"
 	if got := shell.chatBridgeState().Turns; len(got) != 3 {
 		t.Fatalf("a pane the page did not bind keeps its first row: %+v", got)
+	}
+}
+
+func TestAssistantsGroupRowOpensTheGroupConversation(t *testing.T) {
+	assistantsOverviewOverride = assistantsOverviewWithGroup
+	stubAssistants(t, false)
+	s := openAssistantsShell(t)
+	tt := ui.NewTester(s.View, 1200, 800)
+	if !tt.HasText("Launch crew") {
+		t.Fatalf("sidebar missing the Group row: %q", tt.Texts())
+	}
+	if err := tt.Click("Launch crew"); err != nil {
+		t.Fatal(err)
+	}
+	if s.router.Path() != routeAssistants || s.assistants.selectedGroup != "gr_1" {
+		t.Fatalf("path=%q group=%q, want /assistants on gr_1", s.router.Path(), s.assistants.selectedGroup)
+	}
+	b := NewAssistantsBridge(s)
+	view, err := b.Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.SelectedGroup != "gr_1" || view.Detail != nil || len(view.Groups) != 1 {
+		t.Fatalf("a Group snapshot is the Group alone: %+v", view)
+	}
+	// Choosing an Assistant leaves the Group; a vanished Group clears itself.
+	b.Select("a_2")
+	if s.assistants.selectedGroup != "" {
+		t.Fatalf("Select kept the Group: %q", s.assistants.selectedGroup)
+	}
+	s.assistants.selectedGroup = "gr_gone"
+	s.applyAssistantsOverview(personalagent.Overview{Assistants: view.Assistants, Groups: view.Groups}, nil)
+	if s.assistants.selectedGroup != "" {
+		t.Fatalf("an unknown Group stayed selected: %q", s.assistants.selectedGroup)
 	}
 }

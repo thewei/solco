@@ -29,12 +29,12 @@
 | U0-3 | U0 | 头部 `+` = 真菜单，仅 New Assistant / New Group | — | VERIFIED | 实机 AX 树：AXMenu 恰有两项；Workspace 路由与 /assistants 路由均可打开 |
 | U0-4 | U0 | create intent（单调 id + ACK + 事件推送）取代 `newForm bool` | — | VERIFIED | `assistants_intent_test.go`（多次 Snapshot 不丢、单调、TTL、门关闭拒绝、插件不可读仍可取）；实机：插件二进制被移走时仍能打开 New Assistant 表单 |
 | U0-5 | U0 | NewAssistant：稳定 requestId、失败保留输入、成功进入新 Assistant 聊天 | U0-4 | VERIFIED | 实机：插件缺失→点 Create→表单内报错、名称保留；恢复后再点→恰好新增 1 个 C（`assistant list` 核对）并直接进入 C 的聊天 |
-| U1-1 | U1 | Go：groups/group_members/group_messages/group_deliveries 迁移 + Store | — | TODO | |
-| U1-2 | U1 | Go：CLI `assistant group …` + Client + golden | U1-1 | TODO | |
-| U1-3 | U1 | Go：@ 精确投递（仅 Owner 的 @ 触发；Agent 发言不再触发）+ 预算/去重 | U1-1 | TODO | |
-| U1-4 | U1 | Go：daemon 投递泵 → 目标 Coordinator（`herdr agent prompt`），Agent 经 CLI 回群 | U1-3 | TODO | |
-| U1-5 | U1 | 桌面：New Group、群聊页（成员、作者、@、Reply、任务状态卡）、侧栏叠头像 | U0, U1-2 | TODO | |
-| U1-6 | U1 | Host v3：groups 读/建/发/消息 + golden；手机 Zod | U1-2 | TODO | |
+| U1-1 | U1 | Go：groups/group_members/group_messages/group_deliveries 迁移 + Store | — | VERIFIED | 迁移 12–14（groups/members/messages/deliveries/group_agents、launch_seq）；`group_test.go` 全绿；插件 443 tests PASS |
+| U1-2 | U1 | Go：CLI `assistant group …` + Client + golden | U1-1 | VERIFIED | `assistant group create/list/show/rename/add/remove/post/say`；golden `group-*.json` 双端钉住（`internal/personalagent` TestGoldenFixturesDecodeStrictly PASS） |
+| U1-3 | U1 | Go：@ 精确投递（仅 Owner 的 @ 触发；Agent 发言不再触发）+ 预算/去重 | U1-1 | VERIFIED | 仅用户精确 @ 建 delivery；无 @ 不起 Agent；`say` 要求真实在线 Agent（防冒充）；单测 + 实机“无 @ → 无 Agent” |
+| U1-4 | U1 | Go：daemon 投递泵 → 目标 Coordinator（`herdr agent prompt`），Agent 经 CLI 回群 | U1-3 | VERIFIED | 投递泵 claim-before-send；启动即“Agent 已启动≠已就绪”：对话框(`host.StartupDialog`)期间不输入、`agent_blocked` 事实；实机 Duo：B 起 Claude→MCP 对话框→不输入→人按 Esc→送达→B 经 `group say` 回复（seq 19） |
+| U1-5 | U1 | 桌面：New Group、群聊页（成员、作者、@、Reply、任务状态卡）、侧栏叠头像 | U0, U1-2 | VERIFIED | 桌面群页（成员/作者/@ 自动补全/Reply/任务卡/事实行/Open Terminal）；`TestAssistantsGroupRowOpensTheGroupConversation`；实机截图：用户气泡 + “B is starting…” + “B is waiting for you in its terminal: …” + B 回复气泡（带 Reply 引用）。亮色主题/任务卡实机 NOT VERIFIED（单测覆盖） |
+| U1-6 | U1 | Host v3：groups 读/建/发/消息 + golden；手机 Zod | U1-2 | IMPLEMENTED | `internal/remotehost/personal_agent_group.go`：GET groups、groups/{id}；POST groups、messages、rename、members/add、members/remove，capability `personalAgentGroups`，goldens 钉住；无 say 路由。`go test ./internal/remotehost` 215 PASS。手机 Zod/fixtures 待 U1-7 |
 | U1-7 | U1 | 手机：Chats 列表、直达单聊、群聊 | U1-6 | TODO | |
 | U2-1 | U2 | Assistant 初始提示词版本化（instructions revisions）+ 默认模板 | — | TODO | |
 | U2-2 | U2 | Assistant 级 Provider/Model/Effort，真实运行 Agent 展示 | — | TODO | |

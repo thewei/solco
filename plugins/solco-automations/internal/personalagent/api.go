@@ -128,7 +128,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|legacy-export>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|group|legacy-export>")
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
@@ -227,6 +227,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.task(rest, body)
 	case "coordinator":
 		return a.coordinator(rest, body)
+	case "group":
+		return a.group(rest, body)
 	case "run":
 		return a.run(rest, body)
 	}
@@ -382,6 +384,17 @@ type OverviewRow struct {
 	Approvals int    `json:"approvals"`
 }
 
+// OverviewGroup is one Group's light row for the sidebar and the phone: who is
+// in it, how far its log has run and how many @-mentions are still on their way.
+type OverviewGroup struct {
+	ID        string        `json:"id"`
+	Title     string        `json:"title"`
+	Members   []GroupMember `json:"members"`
+	LastSeq   int64         `json:"lastSeq"`
+	Open      int           `json:"open"`
+	UpdatedAt int64         `json:"updatedAt"`
+}
+
 func (a *API) overview() (any, error) {
 	asst, err := a.Store.ListAssistants()
 	if err != nil {
@@ -429,5 +442,17 @@ func (a *API) overview() (any, error) {
 		needs += row.NeedsYou + row.Approvals
 		rows = append(rows, row)
 	}
-	return ok("assistants", rows, "needsYou", needs), nil
+	groups, err := a.Store.ListGroups()
+	if err != nil {
+		return nil, err
+	}
+	grows := make([]OverviewGroup, 0, len(groups))
+	for _, g := range groups {
+		var open int
+		if err := a.Store.db.QueryRow(`SELECT COUNT(*) FROM group_deliveries WHERE group_id=? AND state IN (?,?)`, g.ID, DeliveryQueued, DeliveryDelivering).Scan(&open); err != nil {
+			return nil, wrapBusy(err)
+		}
+		grows = append(grows, OverviewGroup{ID: g.ID, Title: g.Title, Members: g.Members, LastSeq: g.LastSeq, Open: open, UpdatedAt: g.UpdatedAt})
+	}
+	return ok("assistants", rows, "needsYou", needs, "groups", grows), nil
 }

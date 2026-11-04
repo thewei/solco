@@ -3,6 +3,7 @@
     "chat": true,
     "personalAgent": true,
     "personalAgentApprove": true,
+    "personalAgentGroups": true,
     "personalAgentManage": true,
     "terminal": true
   },

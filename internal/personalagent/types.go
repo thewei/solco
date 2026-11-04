@@ -1,5 +1,7 @@
 package personalagent
 
+import "encoding/json"
+
 // Types mirror the plugin CLI's JSON (golden files in
 // plugins/solco-automations/internal/personalagent/testdata decode strictly
 // into them). The plugin stays the authority: Solco presents, it never
@@ -144,9 +146,21 @@ type OverviewRow struct {
 
 // Overview is the sidebar/phone summary.
 type Overview struct {
-	Schema     int           `json:"schema"`
-	Assistants []OverviewRow `json:"assistants"`
-	NeedsYou   int           `json:"needsYou"`
+	Schema     int             `json:"schema"`
+	Assistants []OverviewRow   `json:"assistants"`
+	NeedsYou   int             `json:"needsYou"`
+	Groups     []OverviewGroup `json:"groups"`
+}
+
+// OverviewGroup is one Group's light row: members, log length, @-mentions
+// still on their way.
+type OverviewGroup struct {
+	ID        string        `json:"id"`
+	Title     string        `json:"title"`
+	Members   []GroupMember `json:"members"`
+	LastSeq   int64         `json:"lastSeq"`
+	Open      int           `json:"open"`
+	UpdatedAt int64         `json:"updatedAt"`
 }
 
 // Error is a refusal with a stable code (request_conflict, stale_revision,
@@ -235,4 +249,94 @@ type Inbox struct {
 	Items    []InboxItem `json:"items"`
 	NeedsYou int         `json:"needsYou"`
 	Seq      int64       `json:"seq"`
+}
+
+// Message author and kind values of a Group's log.
+const (
+	AuthorUser      = "user"
+	AuthorAssistant = "assistant"
+	AuthorSystem    = "system"
+
+	MessageText = "text"
+	MessageFact = "fact"
+	MessageTask = "task"
+)
+
+// GroupMember is one Assistant in a Group.
+type GroupMember struct {
+	AssistantID string `json:"assistantId"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+}
+
+// Group is a conversation of the person with two or more Assistants.
+type Group struct {
+	ID        string        `json:"id"`
+	Title     string        `json:"title"`
+	Status    string        `json:"status"`
+	Members   []GroupMember `json:"members"`
+	LastSeq   int64         `json:"lastSeq"`
+	Revision  int           `json:"revision"`
+	CreatedAt int64         `json:"createdAt"`
+	UpdatedAt int64         `json:"updatedAt"`
+}
+
+// GroupMessage is one row of a Group's log. A `fact` is a receipt the core
+// wrote itself (Fact says which); a `task` row points at a live task.
+type GroupMessage struct {
+	Seq        int64           `json:"seq"`
+	ID         string          `json:"id"`
+	GroupID    string          `json:"groupId"`
+	AuthorKind string          `json:"authorKind"`
+	AuthorID   string          `json:"authorId,omitempty"`
+	Kind       string          `json:"kind"`
+	Body       string          `json:"body"`
+	Mentions   []string        `json:"mentions"`
+	ReplyTo    string          `json:"replyTo,omitempty"`
+	TaskID     string          `json:"taskId,omitempty"`
+	Fact       json.RawMessage `json:"fact,omitempty"`
+	CreatedAt  int64           `json:"createdAt"`
+}
+
+// GroupDelivery says whether a mentioned Assistant has been told of a message.
+type GroupDelivery struct {
+	ID          string `json:"id"`
+	MessageID   string `json:"messageId"`
+	AssistantID string `json:"assistantId"`
+	State       string `json:"state"`
+	Attempts    int    `json:"attempts"`
+}
+
+// GroupTaskCard is a task's live state for a card in a Group.
+type GroupTaskCard struct {
+	TaskID      string `json:"taskId"`
+	AssistantID string `json:"assistantId"`
+	Title       string `json:"title"`
+	State       string `json:"state"`
+	NeedsYou    bool   `json:"needsYou"`
+	UpdatedAt   int64  `json:"updatedAt"`
+}
+
+// GroupAgentState is the Agent an Assistant runs for a Group (none until the
+// first @-mention starts it).
+type GroupAgentState struct {
+	AssistantID string `json:"assistantId"`
+	State       string `json:"state"`
+	PaneID      string `json:"paneId,omitempty"`
+}
+
+// GroupFeed is what a client renders.
+type GroupFeed struct {
+	Group      Group             `json:"group"`
+	Messages   []GroupMessage    `json:"messages"`
+	Deliveries []GroupDelivery   `json:"deliveries"`
+	Tasks      []GroupTaskCard   `json:"tasks"`
+	Agents     []GroupAgentState `json:"agents"`
+	Seq        int64             `json:"seq"`
+}
+
+// PostResult is the stored message and the deliveries it queued.
+type PostResult struct {
+	Message    GroupMessage    `json:"message"`
+	Deliveries []GroupDelivery `json:"deliveries"`
 }

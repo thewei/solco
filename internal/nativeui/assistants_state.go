@@ -40,6 +40,9 @@ type assistantsState struct {
 	loading  bool
 	// selected is the Assistant the page is on (client-local navigation).
 	selected string
+	// selectedGroup is the Group the page is on ("" = an Assistant's chat);
+	// choosing either clears the other.
+	selectedGroup string
 	// intent is the sidebar's outstanding ask of the page (assistants_intent.go).
 	intent intentState
 	// webview is the page's embedded WebView; broken latches a failed creation.
@@ -124,6 +127,9 @@ func (s *Shell) applyAssistantsOverview(overview personalagent.Overview, err err
 	if st.selected != "" && st.overviewRow(st.selected) == nil {
 		st.selected = ""
 	}
+	if st.selectedGroup != "" && st.overviewGroup(st.selectedGroup) == nil {
+		st.selectedGroup = ""
+	}
 }
 
 // applyAssistantsOverviewFromBridge lets a page read (which already did the IO
@@ -146,6 +152,16 @@ func (st *assistantsState) overviewRow(id string) *personalagent.OverviewRow {
 	for i := range st.overview.Assistants {
 		if st.overview.Assistants[i].ID == id {
 			return &st.overview.Assistants[i]
+		}
+	}
+	return nil
+}
+
+// overviewGroup finds one Group's row.
+func (st *assistantsState) overviewGroup(id string) *personalagent.OverviewGroup {
+	for i := range st.overview.Groups {
+		if st.overview.Groups[i].ID == id {
+			return &st.overview.Groups[i]
 		}
 	}
 	return nil

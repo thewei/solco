@@ -121,6 +121,43 @@ func TestGoldenFixturesDecodeStrictly(t *testing.T) {
 		t.Fatalf("coordinator = %+v", co.Coordinator)
 	}
 
+	var gc struct {
+		Schema   int   `json:"schema"`
+		Group    Group `json:"group"`
+		Replayed bool  `json:"replayed"`
+	}
+	load(t, "group-created", &gc)
+	if gc.Group.Title != "Launch crew" || len(gc.Group.Members) != 2 || gc.Group.Members[1].Name != "Bo" {
+		t.Fatalf("group = %+v", gc.Group)
+	}
+	var gl struct {
+		Schema int     `json:"schema"`
+		Groups []Group `json:"groups"`
+	}
+	load(t, "group-list", &gl)
+	var gp struct {
+		Schema   int        `json:"schema"`
+		Result   PostResult `json:"result"`
+		Replayed bool       `json:"replayed"`
+	}
+	load(t, "group-posted", &gp)
+	if len(gp.Result.Deliveries) != 1 || gp.Result.Message.AuthorKind != AuthorUser || len(gp.Result.Message.Mentions) != 1 {
+		t.Fatalf("posted = %+v", gp.Result)
+	}
+	load(t, "group-said", &gp)
+	if gp.Result.Message.AuthorKind != AuthorAssistant || len(gp.Result.Deliveries) != 0 || gp.Result.Message.ReplyTo == "" {
+		t.Fatalf("said = %+v", gp.Result)
+	}
+	var gf struct {
+		Schema int       `json:"schema"`
+		Feed   GroupFeed `json:"feed"`
+	}
+	load(t, "group-feed", &gf)
+	if len(gf.Feed.Messages) != 3 || gf.Feed.Messages[2].Kind != MessageTask || len(gf.Feed.Tasks) != 1 || gf.Feed.Agents[1].State != "starting" {
+		t.Fatalf("feed = %+v", gf.Feed)
+	}
+	load(t, "group-task-created", &tc)
+
 	var e struct {
 		Schema int    `json:"schema"`
 		Error  *Error `json:"error"`

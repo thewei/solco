@@ -41,6 +41,10 @@ type AssistantsView struct {
 	// Selected is the Assistant the page is on ("" = none yet).
 	Selected string            `json:"selected"`
 	Detail   *AssistantsDetail `json:"detail,omitempty"`
+	// Groups are the Group rows; SelectedGroup, when set, is the Group the
+	// page is on instead of an Assistant's chat (no Detail is read then).
+	Groups        []personalagent.OverviewGroup `json:"groups"`
+	SelectedGroup string                        `json:"selectedGroup"`
 	// Agents are the Herdr agents a Coordinator may run on (Chat-capable and
 	// switched on in Settings → Agents, last used first); DefaultAgent is the
 	// first of them.
@@ -147,10 +151,10 @@ func assistantsCtx() (context.Context, context.CancelFunc) {
 // (else the first), its page.
 func (b *AssistantsBridge) Snapshot(ctx context.Context) (AssistantsView, error) {
 	s := b.shell
-	view := AssistantsView{Assistants: []personalagent.OverviewRow{}}
+	view := AssistantsView{Assistants: []personalagent.OverviewRow{}, Groups: []personalagent.OverviewGroup{}}
 	var panes map[string]bool
 	var client *personalagent.Client
-	var session, selected string
+	var session, selected, group string
 	view.Agents = []AssistantsAgent{}
 	s.callOnWindow(func() {
 		s.ensureLaunchKinds()
@@ -160,6 +164,7 @@ func (b *AssistantsBridge) Snapshot(ctx context.Context) (AssistantsView, error)
 			client = s.assistantsClientFor()
 			session = herdr.ParseRef(s.activeInstance).Session
 			selected = s.assistants.selected
+			group = s.assistants.selectedGroup
 			panes = map[string]bool{}
 			for _, p := range s.projection.Panes {
 				panes[p.ID] = true
@@ -180,6 +185,17 @@ func (b *AssistantsBridge) Snapshot(ctx context.Context) (AssistantsView, error)
 	view.Assistants, view.NeedsYou = overview.Assistants, overview.NeedsYou
 	if view.Assistants == nil {
 		view.Assistants = []personalagent.OverviewRow{}
+	}
+	if overview.Groups != nil {
+		view.Groups = overview.Groups
+	}
+	if group != "" {
+		for _, g := range view.Groups {
+			if g.ID == group {
+				view.SelectedGroup = group
+				return view, nil
+			}
+		}
 	}
 	if selected == "" && len(overview.Assistants) > 0 {
 		selected = overview.Assistants[0].ID
@@ -467,7 +483,15 @@ func (s *Shell) bindAssistantCoordinator(out CoordinatorChat, co personalagent.C
 
 // Select records the Assistant the page is on (the sidebar row follows).
 func (b *AssistantsBridge) Select(id string) {
-	b.shell.applyOnWindow(func() { b.shell.assistants.selected = id })
+	b.shell.applyOnWindow(func() {
+		b.shell.assistants.selected = id
+		b.shell.assistants.selectedGroup = ""
+	})
+}
+
+// SelectGroup records the Group the page is on (the sidebar row follows).
+func (b *AssistantsBridge) SelectGroup(id string) {
+	b.shell.applyOnWindow(func() { b.shell.assistants.selectedGroup = id })
 }
 
 // CreateAssistant adds an Assistant and selects it.

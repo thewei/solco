@@ -101,7 +101,7 @@ func emitTask(tx *sql.Tx, taskID, kind string, now int64) error {
 		return err
 	}
 	// A Coordinator coming up or settling is not news; only its failure is.
-	if taskKind == KindCoordinator && (kind == "task.added" || kind == "task.completed") {
+	if (taskKind == KindCoordinator || taskKind == KindGroupAgent) && (kind == "task.added" || kind == "task.completed") {
 		return nil
 	}
 	verb := strings.TrimPrefix(kind, "task.")

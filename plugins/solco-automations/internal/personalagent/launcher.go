@@ -53,6 +53,10 @@ func (l *HostLauncher) automation(spec LaunchSpec) config.Automation {
 			// Each Coordinator has a folder of its own.
 			repo = filepath.Join(repo, "coordinators", spec.AssistantID)
 		}
+		if spec.Kind == KindGroupAgent && spec.GroupID != "" && spec.AssistantID != "" {
+			// Each Group Agent has a folder of its own, apart from the Coordinator's.
+			repo = filepath.Join(repo, "groups", spec.GroupID, spec.AssistantID)
+		}
 		_ = os.MkdirAll(repo, 0o700)
 	}
 	mode := config.WorkspaceRoot

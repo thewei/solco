@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
 	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/host"
 	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
 	"github.com/thewei/solco/plugins/solco-automations/internal/personalagent"
 )
@@ -45,6 +47,7 @@ type personal struct {
 	rules    *personalagent.RuleScheduler
 	reviewer *personalagent.Reviewer
 	inbox    *personalagent.InboxWatcher
+	groups   *personalagent.GroupPump
 	lastLook time.Time
 	polling  atomic.Bool
 
@@ -88,6 +91,12 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
 	p.inbox = &personalagent.InboxWatcher{Store: store}
+	p.groups = &personalagent.GroupPump{Store: store, Submit: submitToAgent, Blocked: paneDialog}
+	if n, err := store.RecoverGroupDeliveries(); err != nil {
+		log.Printf("assistants: group delivery recovery failed: %v", err)
+	} else if n > 0 {
+		log.Printf("assistants: %d group message delivery(ies) left uncertain by the last shutdown", n)
+	}
 	p.reviewer = &personalagent.Reviewer{Store: store, Worktrees: p.disp.Worktrees}
 	if n, err := p.reviewer.Recover(); err != nil {
 		log.Printf("assistants: merge recovery failed: %v", err)
@@ -138,6 +147,36 @@ func (p *personal) tick() {
 	if n := p.disp.Pump(p.ctx); n > 0 {
 		log.Printf("assistants: started %d task(s)", n)
 	}
+	// @-mentions in Groups: a deterministic pass, no model call of its own.
+	if r, err := p.groups.Tick(); err != nil {
+		log.Printf("assistants: groups: %v", err)
+	} else if r.Started+r.Delivered+r.Failed > 0 {
+		log.Printf("assistants: groups: %d agent(s) started, %d delivered, %d failed", r.Started, r.Delivered, r.Failed)
+	}
+}
+
+// submitToAgent hands a Group message to the Agent in a pane through Herdr.
+// A refusal that typed nothing (the pane is busy or the agent is not ready) is
+// retryable; any other failure may have typed the text and is never retried.
+// paneDialog says whether the agent in a pane sits on a startup dialog.
+func paneDialog(session, paneID string) (string, bool) {
+	screen, err := herdr.Client{Session: session}.PaneRead(paneID, 60)
+	if err != nil {
+		log.Printf("assistants: groups: reading pane for a startup dialog failed: %v", err)
+		return "", false
+	}
+	return host.StartupDialog(screen)
+}
+
+func submitToAgent(session, paneID, text string) error {
+	err := herdr.Client{Session: session}.AgentSubmit(paneID, text)
+	switch {
+	case err == nil:
+		return nil
+	case herdr.HasCode(err, herdr.CodePaneBusy), herdr.HasCode(err, herdr.CodeNotReady), herdr.HasCode(err, herdr.CodeAgentGone):
+		return personalagent.ErrSubmitRefused
+	}
+	return err
 }
 
 // lookAtInbox toasts what newly needs a person. The words are fixed phrases and
