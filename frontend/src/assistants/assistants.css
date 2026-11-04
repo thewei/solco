@@ -1051,3 +1051,93 @@
 .as-mcp-state {
   padding-left: 24px;
 }
+
+/* Assistants 3.1 U3: the system's own progress record (never styled as a chat message). */
+.as-facts {
+  margin: 8px 16px 0;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 12px;
+  flex: none;
+}
+
+.as-facts-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  min-width: 0;
+}
+
+.as-facts-by {
+  flex: none;
+  min-width: 36px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted, var(--muted));
+}
+
+.as-facts-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.as-fact-kind {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-hover, rgba(127, 127, 127, 0.14));
+}
+
+.as-fact-kind.ok {
+  color: var(--success);
+}
+
+.as-fact-kind.bad {
+  color: var(--danger);
+}
+
+.as-fact-kind.warn {
+  color: var(--warning);
+}
+
+.as-fact-kind.work {
+  color: var(--accent);
+}
+
+.as-plan {
+  margin: 6px 0 2px;
+}
+
+.as-ms-list {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.as-ms {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.as-ms-title {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.as-ms-ev {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

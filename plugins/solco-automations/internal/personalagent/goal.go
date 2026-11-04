@@ -235,6 +235,12 @@ func (s *Store) moveGoal(requestID, kind, id string, expected int, to, evidence 
 			to, now, id, GoalCompleted, GoalCancelled); err != nil {
 			return Goal{}, err
 		}
+		if to == GoalActive && g.State == GoalDraft {
+			if _, err := addFactTx(tx, Fact{AssistantID: g.AssistantID, GoalID: id, Kind: FactAccepted,
+				Text: fmt.Sprintf("Accepted: %s", g.Title)}, "accepted:"+id, now); err != nil {
+				return Goal{}, err
+			}
+		}
 		return getGoalTx(tx, id)
 	})
 }

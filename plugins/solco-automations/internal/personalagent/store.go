@@ -443,6 +443,44 @@ var migrations = []string{
 		verified_at INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (assistant_id, surface)
 	);`,
+	// 16: Assistants 3.1 U3 — the plan behind a Goal (success criteria, verifiable
+	// milestones, next action), its revision trail, and the ledger of system
+	// facts the Goal supervisor derives from committed state. Facts are the
+	// store's own words, never an Agent's.
+	`CREATE TABLE goal_plans (
+		goal_id TEXT PRIMARY KEY REFERENCES goals(id),
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		success_criteria TEXT NOT NULL DEFAULT '',
+		milestones TEXT NOT NULL DEFAULT '[]',
+		next_action TEXT NOT NULL DEFAULT '',
+		plan_revision INTEGER NOT NULL DEFAULT 1,
+		replans INTEGER NOT NULL DEFAULT 0,
+		max_tasks INTEGER NOT NULL DEFAULT 12,
+		stale_after_ms INTEGER NOT NULL DEFAULT 2700000,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE TABLE goal_plan_revisions (
+		goal_id TEXT NOT NULL,
+		revision INTEGER NOT NULL,
+		success_criteria TEXT NOT NULL DEFAULT '',
+		milestones TEXT NOT NULL DEFAULT '[]',
+		reason TEXT NOT NULL DEFAULT '',
+		created_at INTEGER NOT NULL,
+		PRIMARY KEY (goal_id, revision)
+	);
+	CREATE TABLE goal_facts (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		goal_id TEXT NOT NULL DEFAULT '',
+		task_id TEXT NOT NULL DEFAULT '',
+		kind TEXT NOT NULL,
+		text TEXT NOT NULL,
+		evidence TEXT NOT NULL DEFAULT '',
+		dedupe_key TEXT NOT NULL UNIQUE,
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX goal_facts_by_assistant ON goal_facts(assistant_id);
+	CREATE INDEX goal_facts_by_goal ON goal_facts(goal_id);`,
 }
 
 func (s *Store) migrate() error {

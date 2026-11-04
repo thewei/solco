@@ -76,11 +76,23 @@ export interface AssistantsDetail {
    * on ("" = none chosen); read only while no Coordinator runs, for the chip.
    */
   profileAgent: string;
+  /**
+   * Facts are the newest ledger entries — sentences the core wrote about
+   * committed state (accepted, delegated, verified, blocked, done…). The page
+   * draws them as the system's own line, never as the Agent's words.
+   */
+  facts: Fact[];
 }
 
 /** AssistantsDrawer is the More drawer's content for one Assistant. */
 export interface AssistantsDrawer {
   goals: Goal[];
+  /**
+   * Plans are the plans of the Goals that have one, with each milestone's
+   * state derived by the core from its task; Facts the Assistant's ledger.
+   */
+  plans: GoalPlan[];
+  facts: Fact[];
   tasks: AssistantsTask[];
   memory: MemoryItem[];
 }
@@ -638,6 +650,23 @@ export interface CreateTaskInput {
 }
 
 /**
+ * Fact is one entry of the ledger: a sentence the core wrote about committed
+ * state (accepted, planned, delegated, verified, blocked, ready, done, stale,
+ * held), never an Agent's words.
+ */
+export interface Fact {
+  seq: number;
+  id: string;
+  assistantId: string;
+  goalId?: string;
+  taskId?: string;
+  kind: string;
+  text: string;
+  evidence?: string;
+  createdAt: number;
+}
+
+/**
  * FilesMenuInput is what the page knows about the right-click target. The
  * file itself is never sent: the bridge uses the selection it owns.
  */
@@ -685,6 +714,24 @@ export interface Goal {
   commitments: Commitment[];
   revision: number;
   createdAt: number;
+  updatedAt: number;
+}
+
+/** GoalPlan is a Goal's plan with every state derived from committed tasks. */
+export interface GoalPlan {
+  goalId: string;
+  assistantId: string;
+  successCriteria: string;
+  milestones: MilestoneView[];
+  nextAction: string;
+  planRevision: number;
+  replans: number;
+  maxTasks: number;
+  staleAfterMs: number;
+  verified: number;
+  total: number;
+  state: string;
+  revisions: PlanRevision[];
   updatedAt: number;
 }
 
@@ -858,6 +905,31 @@ export interface MemoryItem {
   updatedAt: number;
 }
 
+/** MilestoneTask is the work a plan milestone delegates. */
+export interface MilestoneTask {
+  kind: string;
+  title: string;
+  brief: string;
+  repoPath?: string;
+  agent?: string;
+  model?: string;
+}
+
+/**
+ * MilestoneView is a milestone with its derived state: pending, working,
+ * verifying, verified, blocked or needs_you.
+ */
+export interface MilestoneView {
+  id: string;
+  title: string;
+  dependsOn?: string[];
+  task?: MilestoneTask;
+  taskId?: string;
+  attempt?: number;
+  state: string;
+  evidence?: string;
+}
+
 /**
  * OverviewGroup is one Group's light row: members, log length, @-mentions
  * still on their way.
@@ -894,6 +966,14 @@ export interface PersonaView {
   instructions: Instructions;
   runtime: Runtime;
   mcp: MCPView;
+}
+
+/** PlanRevision is one entry of a plan's trail. */
+export interface PlanRevision {
+  revision: number;
+  reason: string;
+  milestones: number;
+  createdAt: number;
 }
 
 /** RunningAgent is an Agent the Assistant really has right now. */

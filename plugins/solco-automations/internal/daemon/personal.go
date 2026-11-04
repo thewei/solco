@@ -44,6 +44,7 @@ type personal struct {
 	ctx      context.Context
 	watch    *personalagent.Watcher
 	beat     *personalagent.Beater
+	sup      *personalagent.Supervisor
 	rules    *personalagent.RuleScheduler
 	reviewer *personalagent.Reviewer
 	inbox    *personalagent.InboxWatcher
@@ -90,6 +91,7 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.rules = &personalagent.RuleScheduler{Store: store, Load: config.Load}
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
+	p.sup = &personalagent.Supervisor{Store: store}
 	p.inbox = &personalagent.InboxWatcher{Store: store}
 	p.groups = &personalagent.GroupPump{Store: store, Submit: submitToAgent, Blocked: paneDialog}
 	if n, err := store.RecoverGroupDeliveries(); err != nil {
@@ -135,6 +137,13 @@ func (p *personal) tick() {
 		log.Printf("assistants: heartbeat: %v", err)
 	} else if r.Woke > 0 {
 		log.Printf("assistants: %d heartbeat wake(s) queued", r.Woke)
+	}
+	// The Goal supervisor: facts from the event log, milestones handed out and
+	// verified, completion earned — deterministic reads and a few inserts.
+	if r, err := p.sup.Tick(); err != nil {
+		log.Printf("assistants: goals: %v", err)
+	} else if r.Dispatched+r.Completed > 0 {
+		log.Printf("assistants: goals: %d milestone(s) delegated, %d goal(s) completed", r.Dispatched, r.Completed)
 	}
 	if time.Since(p.lastLook) >= inboxEvery {
 		p.lastLook = time.Now()

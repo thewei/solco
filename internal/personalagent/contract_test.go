@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -197,5 +198,39 @@ func TestGoldenFixturesDecodeStrictly(t *testing.T) {
 	load(t, "error-stale-revision", &e)
 	if e.Error == nil || e.Error.Code != "stale_revision" {
 		t.Fatalf("error = %+v", e)
+	}
+}
+
+func TestGoalPlanAndFactsGolden(t *testing.T) {
+	var pl struct {
+		Schema   int      `json:"schema"`
+		Plan     GoalPlan `json:"plan"`
+		Replayed bool     `json:"replayed"`
+	}
+	load(t, "goal-plan-set", &pl)
+	if pl.Plan.PlanRevision != 1 || pl.Plan.Total != 2 || pl.Plan.Milestones[0].Task == nil || pl.Plan.Milestones[1].Task != nil {
+		t.Fatalf("set plan = %+v", pl.Plan)
+	}
+	var got struct {
+		Schema int      `json:"schema"`
+		Plan   GoalPlan `json:"plan"`
+	}
+	load(t, "goal-plan", &got)
+	if got.Plan.State != "working" || got.Plan.Milestones[0].State != "working" || got.Plan.Milestones[0].TaskID == "" || got.Plan.Milestones[1].State != "pending" {
+		t.Fatalf("plan = %+v", got.Plan)
+	}
+	for _, name := range []string{"goal-facts", "assistant-facts"} {
+		var f struct {
+			Schema int    `json:"schema"`
+			Facts  []Fact `json:"facts"`
+		}
+		load(t, name, &f)
+		kinds := ""
+		for _, x := range f.Facts {
+			kinds += x.Kind + ","
+		}
+		if len(f.Facts) < 3 || f.Facts[0].Kind != "delegated" || !strings.Contains(kinds, "planned") || !strings.Contains(kinds, "accepted") {
+			t.Fatalf("%s kinds = %s", name, kinds)
+		}
 	}
 }

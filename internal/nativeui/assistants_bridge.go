@@ -76,11 +76,19 @@ type AssistantsDetail struct {
 	// ProfileAgent is the Agent the Assistant's own profile starts a Coordinator
 	// on ("" = none chosen); read only while no Coordinator runs, for the chip.
 	ProfileAgent string `json:"profileAgent"`
+	// Facts are the newest ledger entries — sentences the core wrote about
+	// committed state (accepted, delegated, verified, blocked, done…). The page
+	// draws them as the system's own line, never as the Agent's words.
+	Facts []personalagent.Fact `json:"facts"`
 }
 
 // AssistantsDrawer is the More drawer's content for one Assistant.
 type AssistantsDrawer struct {
-	Goals  []personalagent.Goal       `json:"goals"`
+	Goals []personalagent.Goal `json:"goals"`
+	// Plans are the plans of the Goals that have one, with each milestone's
+	// state derived by the core from its task; Facts the Assistant's ledger.
+	Plans  []personalagent.GoalPlan   `json:"plans"`
+	Facts  []personalagent.Fact       `json:"facts"`
 	Tasks  []AssistantsTask           `json:"tasks"`
 	Memory []personalagent.MemoryItem `json:"memory"`
 }
@@ -227,7 +235,7 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 	if err != nil {
 		return nil, err
 	}
-	d := &AssistantsDetail{Approvals: []personalagent.Approval{}}
+	d := &AssistantsDetail{Approvals: []personalagent.Approval{}, Facts: []personalagent.Fact{}}
 	found := false
 	for _, a := range list {
 		if a.ID == id {
@@ -241,6 +249,9 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 		return nil, err
 	} else if approvals != nil {
 		d.Approvals = approvals
+	}
+	if facts, err := client.Facts(ctx, id, 6); err == nil && facts != nil {
+		d.Facts = facts
 	}
 	d.Inbox = personalagent.Inbox{Items: []personalagent.InboxItem{}}
 	if in, err := client.Inbox(ctx, id); err == nil && in.Items != nil {
@@ -264,7 +275,7 @@ func assistantsDetail(ctx context.Context, client *personalagent.Client, id, ses
 // session and its pane is still in the tree) and approved Memory. The page
 // asks only while the drawer is open, so the chat's own polling stays light.
 func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDrawer, error) {
-	out := AssistantsDrawer{Goals: []personalagent.Goal{}, Tasks: []AssistantsTask{}, Memory: []personalagent.MemoryItem{}}
+	out := AssistantsDrawer{Goals: []personalagent.Goal{}, Plans: []personalagent.GoalPlan{}, Facts: []personalagent.Fact{}, Tasks: []AssistantsTask{}, Memory: []personalagent.MemoryItem{}}
 	c, err := b.client()
 	if err != nil {
 		return out, err
@@ -284,6 +295,18 @@ func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDra
 		return out, err
 	} else if goals != nil {
 		out.Goals = goals
+	}
+	for _, g := range out.Goals {
+		if g.State == "cancelled" {
+			continue
+		}
+		// A Goal with no plan answers not_found: that is "no plan yet", not an error.
+		if plan, err := c.GoalPlan(ctx, g.ID); err == nil {
+			out.Plans = append(out.Plans, plan)
+		}
+	}
+	if facts, err := c.Facts(ctx, id, 40); err == nil && facts != nil {
+		out.Facts = facts
 	}
 	if memory, err := c.VisibleMemory(ctx, id); err != nil {
 		return out, err

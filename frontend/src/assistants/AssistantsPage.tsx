@@ -12,11 +12,14 @@ import {
   type AssistantsView,
   type Approval,
   type CoordinatorChat,
+  type Fact,
   type Goal,
+  type GoalPlan,
   type InboxItem,
   type MemoryItem,
 } from "../mygo";
 import { GroupChat, NewGroup } from "./GroupChat";
+import { FactStrip, PlanCard } from "./Progress";
 import { WorkStyle } from "./WorkStyle";
 import "./assistants.css";
 
@@ -268,6 +271,7 @@ export function AssistantsPage() {
         </div>
       ) : null}
       {needsCount > 0 ? <Strip pending={pending} others={others} open={stripOpen} setOpen={setStripOpen} act={act} more={() => setTab("needs")} /> : null}
+      <FactStrip facts={detail.facts} />
       {a.status !== "active" ? (
         <div className="as-note warn">
           Paused — new tasks and watches are not started. The conversation keeps working.
@@ -384,7 +388,7 @@ function DrawerBody({ tab, detail, drawer, view, pending, act, pull }: { tab: Ta
     case "needs":
       return <NeedsYou approvals={pending} tasks={needTasks} reasons={reasons} act={act} pull={pull} />;
     case "watching":
-      return <Watching goals={live} act={act} />;
+      return <Watching goals={live} plans={drawer.plans} facts={drawer.facts} act={act} />;
     case "tasks":
       return <Tasks tasks={open} act={act} />;
     case "done":
@@ -645,7 +649,7 @@ function NeedsYou({ approvals, tasks, reasons, act }: { approvals: Approval[]; t
   );
 }
 
-function Watching({ goals, act }: { goals: Goal[]; act: Act }) {
+function Watching({ goals, plans, facts, act }: { goals: Goal[]; plans: GoalPlan[]; facts: Fact[]; act: Act }) {
   if (goals.length === 0) return <Empty>No goals yet. Start with “Watch a PR”.</Empty>;
   return (
     <>
@@ -656,6 +660,7 @@ function Watching({ goals, act }: { goals: Goal[]; act: Act }) {
             <span className={`as-chip ${g.state}`}>{g.state}</span>
           </div>
           {g.objective ? <p className="as-text">{g.objective}</p> : null}
+          {plans.find((p) => p.goalId === g.id) ? <PlanCard plan={plans.find((p) => p.goalId === g.id) as GoalPlan} facts={facts.filter((f) => f.goalId === g.id)} /> : null}
           {g.commitments.map((c) => (
             <p key={c.id} className="as-meta">
               {c.kind === "pr_watch" ? watchLabel(c.spec) : c.kind}

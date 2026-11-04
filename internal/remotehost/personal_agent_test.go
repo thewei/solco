@@ -74,6 +74,18 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 		return []byte(`{"schema":1,"coordinator":` + paCoordinator("ready") + `}`), nil
 	case strings.HasPrefix(key, "coordinator start"):
 		return []byte(`{"schema":1,"replayed":false,"coordinator":` + paCoordinator("starting") + `}`), nil
+	case strings.HasPrefix(key, "goal plan"), strings.HasPrefix(key, "goal facts"), strings.HasPrefix(key, "facts "):
+		name := "goal-plan"
+		if strings.HasPrefix(key, "goal facts") {
+			name = "goal-facts"
+		} else if strings.HasPrefix(key, "facts ") {
+			name = "assistant-facts"
+		}
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
 	case strings.HasPrefix(key, "goal list"):
 		return []byte(`{"schema":1,"goals":[` + paGoal + `]}`), nil
 	case strings.HasPrefix(key, "goal "):
@@ -569,6 +581,35 @@ func TestReconnectReplaysTheRequestIdAndARevokedPhoneIsRefused(t *testing.T) {
 	}
 	if ctx.Err() != nil {
 		t.Fatal("the revoked phone's events socket stayed open")
+	}
+}
+
+func TestPersonalAgentPlanRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	pbase := "/api/v3/personal-agent"
+	resp := h.get(pbase+"/goals/"+paGoalG+"/plan", h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("plan = %d", resp.StatusCode)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant goal facts "+paGoalG) {
+		t.Fatalf("plan call %q", call)
+	}
+	golden(t, "personal-agent-plan.json", bodyOf(t, h.get(pbase+"/goals/"+paGoalG+"/plan", h.token, nil)))
+	golden(t, "personal-agent-facts.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/facts?limit=20", h.token, nil)))
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant facts "+paAssistantA+" --limit 20") {
+		t.Fatalf("facts call %q", call)
+	}
+	for _, bad := range []string{pbase + "/assistants/" + paAssistantA + "/facts?limit=0", pbase + "/assistants/" + paAssistantA + "/facts?limit=101", pbase + "/assistants/" + paAssistantA + "/facts?limit=x", pbase + "/goals/not%20an%20id/plan"} {
+		if r := h.get(bad, h.token, nil); r.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s = %d", bad, r.StatusCode)
+		}
+	}
+	if r := h.get(pbase+"/goals/"+paGoalG+"/plan", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("plan without a token = %d", r.StatusCode)
+	}
+	h2, _ := paHarness(t, false)
+	if r := h2.get(pbase+"/goals/"+paGoalG+"/plan", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("plan served without the seam")
 	}
 }
 

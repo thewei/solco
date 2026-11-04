@@ -49,6 +49,8 @@ func codeFor(err error) *CodedError {
 		return coded("busy", "%v", err)
 	case errors.Is(err, ErrNotClaimable):
 		return coded("not_claimable", "%v", err)
+	case errors.Is(err, ErrReplanLimit):
+		return coded("replan_limit", "%v", err)
 	case errors.Is(err, ErrBadState):
 		return coded("bad_state", "%v", err)
 	case errors.Is(err, ErrInvalid):
@@ -206,6 +208,14 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return ok("assistant", x, "replayed", replayed), err
 	case "goal":
 		return a.goal(rest, body)
+	case "facts":
+		if len(rest) < 1 {
+			return nil, coded("invalid", "usage: assistant facts <assistantId> [--limit <n>]")
+		}
+		limitS, _ := flagValue(rest[1:], "--limit")
+		limit, _ := strconv.Atoi(limitS)
+		fs, err := a.Store.Facts(rest[0], "", limit)
+		return ok("facts", fs), err
 	case "memory":
 		if len(rest) > 0 && (rest[0] == "context" || rest[0] == "search") {
 			return a.memoryContext(rest[0], rest[1:])

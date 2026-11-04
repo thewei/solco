@@ -68,7 +68,7 @@ func TestInstructionsRevisionsStaleAndRestore(t *testing.T) {
 
 func TestAssistantFromBeforeU2MaterialisesItsInstructions(t *testing.T) {
 	s, _ := openTest(t)
-	_, err := s.db.Exec(`INSERT INTO assistants(`+assistantCols+`) VALUES('a_legacy','Old','', 'Legacy role','personal','[]','','review','active',1,1,1)`)
+	_, err := s.db.Exec(`INSERT INTO assistants(` + assistantCols + `) VALUES('a_legacy','Old','', 'Legacy role','personal','[]','','review','active',1,1,1)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestAssistantFromBeforeU2MaterialisesItsInstructions(t *testing.T) {
 	if err != nil || ins.Revision != 1 || ins.Body != "Legacy role" || ins.History[0].Source != SourceUser {
 		t.Fatalf("legacy = %+v err=%v", ins, err)
 	}
-	_, _ = s.db.Exec(`INSERT INTO assistants(`+assistantCols+`) VALUES('a_blank','Blank','Does X','','personal','[]','','review','active',1,1,1)`)
+	_, _ = s.db.Exec(`INSERT INTO assistants(` + assistantCols + `) VALUES('a_blank','Blank','Does X','','personal','[]','','review','active',1,1,1)`)
 	blank, _ := s.GetInstructions("a_blank")
 	if !strings.Contains(blank.Body, "Does X") || blank.History[0].Source != SourceDefault {
 		t.Fatalf("blank = %+v", blank)
@@ -377,7 +377,9 @@ func TestMCPVerifyRecordsTheAgentsOwnStatus(t *testing.T) {
 		t.Fatalf("gamma = %+v", sv)
 	}
 
-	MCPProber = func(ctx context.Context, args []string) ([]MCPProbeStatus, error) { return nil, errors.New("claude is not installed") }
+	MCPProber = func(ctx context.Context, args []string) ([]MCPProbeStatus, error) {
+		return nil, errors.New("claude is not installed")
+	}
 	if _, err := s.VerifyMCP(t.Context(), a.ID); err == nil || codeFor(err).Code != "mcp_probe_failed" {
 		t.Fatalf("probe failure = %v", err)
 	}

@@ -4,7 +4,7 @@ import "time"
 
 func (a *API) goal(args []string, body []byte) (any, error) {
 	if len(args) == 0 {
-		return nil, coded("invalid", "usage: assistant goal <create|list|show|approve|pause|resume|cancel|complete|progress>")
+		return nil, coded("invalid", "usage: assistant goal <create|list|show|plan|set-plan|facts|approve|pause|resume|cancel|complete|progress>")
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {
@@ -28,6 +28,32 @@ func (a *API) goal(args []string, body []byte) (any, error) {
 		}
 		g, err := a.Store.GetGoal(rest[0])
 		return ok("goal", g), err
+	case "plan":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant goal plan <id>")
+		}
+		p, err := a.Store.GetGoalPlan(rest[0])
+		return ok("plan", p), err
+	case "set-plan":
+		var in struct {
+			common
+			GoalPlanInput
+			Reason string `json:"reason"`
+		}
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant goal set-plan <id>")
+		}
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		p, replayed, err := a.Store.SetGoalPlan(in.RequestID, rest[0], in.GoalPlanInput, in.Reason, in.ExpectedRevision)
+		return ok("plan", p, "replayed", replayed), err
+	case "facts":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant goal facts <id>")
+		}
+		fs, err := a.Store.Facts("", rest[0], 100)
+		return ok("facts", fs), err
 	case "progress":
 		var in struct {
 			common

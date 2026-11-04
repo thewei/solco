@@ -71,6 +71,10 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 				return []byte(`{"schema":1,"coordinator":{"assistantId":"` + id + `","state":"none","revision":0}}`), nil
 			}
 			switch strings.Join(args, " ") {
+			case "goal plan g_1":
+				return []byte(`{"schema":1,"plan":{"goalId":"g_1","assistantId":"a_1","successCriteria":"Merged","milestones":[{"id":"m1","title":"Review","state":"working","task":{"kind":"research","title":"Review","brief":"b"},"taskId":"t_1"}],"nextAction":"","planRevision":1,"replans":0,"maxTasks":12,"staleAfterMs":2700000,"verified":0,"total":1,"state":"working","revisions":[],"updatedAt":1}}`), nil
+			case "facts a_1 --limit 6", "facts a_1 --limit 40":
+				return []byte(`{"schema":1,"facts":[{"seq":2,"id":"f_2","assistantId":"a_1","goalId":"g_1","kind":"delegated","text":"Delegated: Review","createdAt":2},{"seq":1,"id":"f_1","assistantId":"a_1","goalId":"g_1","kind":"accepted","text":"Accepted: Watch PR","createdAt":1}]}`), nil
 			case "overview":
 				if assistantsOverviewOverride != "" {
 					return []byte(assistantsOverviewOverride), nil
@@ -175,15 +179,22 @@ func TestAssistantsBridgeSnapshotReadsTheSelectedAssistant(t *testing.T) {
 	if view.Detail.Assistant.Name != "Ada" || len(view.Detail.Approvals) != 0 {
 		t.Fatalf("detail = %+v", view.Detail)
 	}
+	// The ledger rides the light poll: the newest sentence the core wrote.
+	if len(view.Detail.Facts) != 2 || view.Detail.Facts[0].Kind != "delegated" {
+		t.Fatalf("facts = %+v", view.Detail.Facts)
+	}
 	// The poll stays light: the long lists are the drawer's, read on demand.
 	for _, c := range *calls {
-		if strings.HasPrefix(c[0], "goal list") || strings.HasPrefix(c[0], "task") || strings.HasPrefix(c[0], "memory") {
+		if strings.HasPrefix(c[0], "goal list") || strings.HasPrefix(c[0], "goal plan") || strings.HasPrefix(c[0], "task") || strings.HasPrefix(c[0], "memory") {
 			t.Fatalf("the light snapshot ran %q", c[0])
 		}
 	}
 	d, err := b.Drawer(context.Background(), "a_1")
 	if err != nil || len(d.Goals) != 1 || len(d.Memory) != 1 || len(d.Tasks) != 1 {
 		t.Fatalf("drawer = %+v err=%v", d, err)
+	}
+	if len(d.Plans) != 1 || d.Plans[0].GoalID != "g_1" || d.Plans[0].Milestones[0].State != "working" || len(d.Facts) != 2 {
+		t.Fatalf("plans/facts = %+v / %+v", d.Plans, d.Facts)
 	}
 	runs := d.Tasks[0].Runs
 	if len(runs) != 2 || !runs[0].CanOpen || runs[1].CanOpen {

@@ -435,3 +435,79 @@ type MCPView struct {
 	Servers     []MCPServerState `json:"servers"`
 	Bindings    []MCPBinding     `json:"bindings"`
 }
+
+// MilestoneTask is the work a plan milestone delegates.
+type MilestoneTask struct {
+	Kind     string `json:"kind"`
+	Title    string `json:"title"`
+	Brief    string `json:"brief"`
+	RepoPath string `json:"repoPath,omitempty"`
+	Agent    string `json:"agent,omitempty"`
+	Model    string `json:"model,omitempty"`
+}
+
+// Milestone is one verifiable step of a Goal's plan.
+type Milestone struct {
+	ID        string         `json:"id"`
+	Title     string         `json:"title"`
+	DependsOn []string       `json:"dependsOn,omitempty"`
+	Task      *MilestoneTask `json:"task,omitempty"`
+	TaskID    string         `json:"taskId,omitempty"`
+	Attempt   int            `json:"attempt,omitempty"`
+}
+
+// MilestoneView is a milestone with its derived state: pending, working,
+// verifying, verified, blocked or needs_you.
+type MilestoneView struct {
+	Milestone
+	State    string `json:"state"`
+	Evidence string `json:"evidence,omitempty"`
+}
+
+// PlanRevision is one entry of a plan's trail.
+type PlanRevision struct {
+	Revision   int    `json:"revision"`
+	Reason     string `json:"reason"`
+	Milestones int    `json:"milestones"`
+	CreatedAt  int64  `json:"createdAt"`
+}
+
+// GoalPlan is a Goal's plan with every state derived from committed tasks.
+type GoalPlan struct {
+	GoalID          string          `json:"goalId"`
+	AssistantID     string          `json:"assistantId"`
+	SuccessCriteria string          `json:"successCriteria"`
+	Milestones      []MilestoneView `json:"milestones"`
+	NextAction      string          `json:"nextAction"`
+	PlanRevision    int             `json:"planRevision"`
+	Replans         int             `json:"replans"`
+	MaxTasks        int             `json:"maxTasks"`
+	StaleAfterMS    int64           `json:"staleAfterMs"`
+	Verified        int             `json:"verified"`
+	Total           int             `json:"total"`
+	State           string          `json:"state"`
+	Revisions       []PlanRevision  `json:"revisions"`
+	UpdatedAt       int64           `json:"updatedAt"`
+}
+
+// GoalPlanInput is what a person or Coordinator submits as a plan.
+type GoalPlanInput struct {
+	SuccessCriteria string      `json:"successCriteria,omitempty"`
+	Milestones      []Milestone `json:"milestones"`
+	NextAction      string      `json:"nextAction,omitempty"`
+}
+
+// Fact is one entry of the ledger: a sentence the core wrote about committed
+// state (accepted, planned, delegated, verified, blocked, ready, done, stale,
+// held), never an Agent's words.
+type Fact struct {
+	Seq         int64  `json:"seq"`
+	ID          string `json:"id"`
+	AssistantID string `json:"assistantId"`
+	GoalID      string `json:"goalId,omitempty"`
+	TaskID      string `json:"taskId,omitempty"`
+	Kind        string `json:"kind"`
+	Text        string `json:"text"`
+	Evidence    string `json:"evidence,omitempty"`
+	CreatedAt   int64  `json:"createdAt"`
+}

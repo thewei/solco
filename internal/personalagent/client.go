@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -488,4 +489,45 @@ func (c *Client) VerifyMCP(ctx context.Context, id string) (MCPView, error) {
 		MCP MCPView `json:"mcp"`
 	}
 	return out.MCP, c.do(ctx, nil, &out, "persona", "mcp-verify", id)
+}
+
+// GoalPlan reads a Goal's plan; a Goal with none answers ErrNotFound-coded `not_found`.
+func (c *Client) GoalPlan(ctx context.Context, goalID string) (GoalPlan, error) {
+	var out struct {
+		Plan GoalPlan `json:"plan"`
+	}
+	return out.Plan, c.do(ctx, nil, &out, "goal", "plan", goalID)
+}
+
+// SetGoalPlan stores (rev 0) or revises (current planRevision) a Goal's plan.
+func (c *Client) SetGoalPlan(ctx context.Context, requestID, goalID string, in GoalPlanInput, reason string, rev int) (GoalPlan, error) {
+	var out struct {
+		Plan GoalPlan `json:"plan"`
+	}
+	body := struct {
+		req
+		GoalPlanInput
+		Reason string `json:"reason,omitempty"`
+	}{req{requestID, rev}, in, reason}
+	return out.Plan, c.do(ctx, body, &out, "goal", "set-plan", goalID)
+}
+
+// GoalFacts lists a Goal's ledger, newest first.
+func (c *Client) GoalFacts(ctx context.Context, goalID string) ([]Fact, error) {
+	var out struct {
+		Facts []Fact `json:"facts"`
+	}
+	return out.Facts, c.do(ctx, nil, &out, "goal", "facts", goalID)
+}
+
+// Facts lists an Assistant's ledger across its Goals, newest first.
+func (c *Client) Facts(ctx context.Context, assistantID string, limit int) ([]Fact, error) {
+	var out struct {
+		Facts []Fact `json:"facts"`
+	}
+	args := []string{"facts", assistantID}
+	if limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+	return out.Facts, c.do(ctx, nil, &out, args...)
 }

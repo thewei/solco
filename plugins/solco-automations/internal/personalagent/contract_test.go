@@ -14,7 +14,7 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden fixtures in testdata/")
 
-var idRe = regexp.MustCompile(`\b[adgtrcmpe]_[0-9a-f]{16}\b`)
+var idRe = regexp.MustCompile(`\b[adgtrcmpef]_[0-9a-f]{16}\b`)
 
 // stable renames random ids to a_0000000000000001… in order of first sight so
 // a fixture is byte-identical between runs.
@@ -124,6 +124,15 @@ func TestGoldenFixtures(t *testing.T) {
 	run("persona-mcp", `{"requestId":"g-pg","serverId":"alpha","granted":true}`, "assistant", "persona", "mcp-grant", bid)
 	s.bindMCP(bid, "coordinator", "claude")
 	run("persona-mcp-verified", ``, "assistant", "persona", "mcp-verify", bid)
+
+	// Goal plan + ledger (Assistants 3.1 U3).
+	run("goal-plan-set", `{"requestId":"g-pl","expectedRevision":0,"reason":"first plan","successCriteria":"The report exists and was read.","nextAction":"Collect the numbers.","milestones":[{"id":"m1","title":"Collect the numbers","task":{"kind":"research","title":"Collect numbers","brief":"Find the Q3 numbers."}},{"id":"m2","title":"You read the report","dependsOn":["m1"]}]}`, "assistant", "goal", "set-plan", gid)
+	if _, err := (&Supervisor{Store: s}).Tick(); err != nil {
+		t.Fatal(err)
+	}
+	run("goal-plan", ``, "assistant", "goal", "plan", gid)
+	run("goal-facts", ``, "assistant", "goal", "facts", gid)
+	run("assistant-facts", ``, "assistant", "facts", aid)
 
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError

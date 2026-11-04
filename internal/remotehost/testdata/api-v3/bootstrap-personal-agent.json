@@ -6,6 +6,7 @@
     "personalAgentGroups": true,
     "personalAgentManage": true,
     "personalAgentPersona": true,
+    "personalAgentPlans": true,
     "terminal": true
   },
   "hostId": "",

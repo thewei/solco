@@ -39,10 +39,10 @@
 | U2-1 | U2 | Assistant 初始提示词版本化（instructions revisions）+ 默认模板 | — | VERIFIED | 迁移 15 `assistant_instructions`+`persona_applied`；Instructions 单一真相仍在 `assistants.role_prompt`，历史/恢复生成新 revision，stale 拒绝；默认模板、旧 Assistant 懒物化、启动记录所用 revision。`persona_test.go` 前 4 例 PASS；Host `instructions*` 路由+golden；桌面 Work style 与手机 `assistants/style/[id]`（视觉 NOT VERIFIED，类型/契约测试 PASS） |
 | U2-2 | U2 | Assistant 级 Provider/Model/Effort，真实运行 Agent 展示 | — | VERIFIED | `assistant_runtime`(agent/model/effort)；未显式选择的 Coordinator/Group/Task 回落到档案，显式选择优先；effort 仅 claude 传 `--effort`；`runtime` 同时列出 claimed/starting/running/blocked 的真实 Agent。实机（隔离 state、真实 claude）：Coordinator 进程 `claude --effort low …`，pane 显示 `low · /effort` |
 | U2-3 | U2 | MCP：Provider 配置发现（只读 Registry）+ per-Assistant grants + 绑定/生效校验 | U2-2 | VERIFIED | Registry 读 `~/.claude.json`/`~/.mcp.json`/`~/.codex/config.toml`（仅名称/传输/程序，不含 args/env/header）；grants per server；Claude 绑定 0600 的 per-Assistant `--strict-mcp-config --mcp-config`；configured/granted/bound/verified 四态分开。实机：12 个已配置、仅授权 `sequential-thinking`，运行中 claude 的 `/mcp` 恰列 1 个 server ✔ connected；probe 报 `sequential-thinking` connected、`figma-desktop` failed。Codex/其它 Agent 明确 `mcp_unsupported` |
-| U3-1 | U3 | GoalPlan（成功条件/里程碑/nextAction/nextCheckAt/planRevision）+ ProgressLedger | — | TODO | |
-| U3-2 | U3 | 系统事实卡（Accepted/Planned/Working/Blocked/Verifying/Done）≠ Agent 发言 | U1-1, U3-1 | TODO | |
-| U3-3 | U3 | GoalSupervisor（确定性推进 + 预算/最大轮数/重规划上限） | U3-1 | TODO | |
-| U3-4 | U3 | 核验后汇报 + 重启恢复 | U3-3 | TODO | |
+| U3-1 | U3 | GoalPlan（成功条件/里程碑/nextAction/nextCheckAt/planRevision）+ ProgressLedger | — | VERIFIED | 迁移 16 `goal_plans`/`goal_plan_revisions`/`goal_facts`；`goal_plan_test.go`（版本冲突、重规划上限 5、任务进行中的里程碑不可改）；CLI `goal plan/set-plan/facts`；Host `GET …/goals/{id}/plan`、`…/assistants/{id}/facts`（`personalAgentPlans`，golden 两端）；§3 U3 |
+| U3-2 | U3 | 系统事实卡（Accepted/Planned/Working/Blocked/Verifying/Done）≠ Agent 发言 | U1-1, U3-1 | VERIFIED | 事实只由核心写、去重键唯一；桌面抽屉/Header 与手机 `FactsStrip` 标注“Solco record”；`progress-model.test.ts`、合同测试；视觉 NOT VERIFIED |
+| U3-3 | U3 | GoalSupervisor（确定性推进 + 预算/最大轮数/重规划上限） | U3-1 | VERIFIED | `Supervisor.Tick` 接入 daemon；9 个单测（委派→核验→才完成、失败不编造进度、任务预算 held 一次、扇出上限、人工里程碑、陈旧退避、暂停/取消不动、coding 等发布者）；实机隔离 daemon：批准计划后 12 s 内出现 1 个草稿任务 + `delegated` 事实 |
+| U3-4 | U3 | 核验后汇报 + 重启恢复 | U3-3 | VERIFIED | Goal 仅在全部里程碑 verified 后才 `CompleteGoal`（证据 `sup-done-<goal>-<rev>`）；汇报为确定性的系统事实卡（不经 Agent 转述）；实机重启 daemon 15 s 后仍 1 个任务、事实不重复 |
 | U4-1 | U4 | Chat 生成 Routine Draft → 批准 → Go Automations 调度；无双触发 | U3 | TODO | |
 | U5-1 | U5 | Memory 目录/Markdown、版本冲突、候选/整理 | — | TODO | |
 | U5-2 | U5 | 主动等级 / Quiet Hours / 报告频率 / 预算 | U3-3 | TODO | |
@@ -74,3 +74,11 @@
 - NOT VERIFIED：Work style 桌面/手机 UI 的实机视觉；Host `mcp/verify` 经 relay 最长约 45 s 的超时体验；真机手机联测。
 - 进度：VERIFIED 14 / 总 22（不含 DEFERRED）= 64%。
 
+### U3（2026-11-04）
+- 插件：`cd plugins/solco-automations && GOTOOLCHAIN=auto go test ./...` PASS（含 `goal_plan_test.go` 10 例与 plan/facts goldens）。
+- 根/Host/桌面：`GOTOOLCHAIN=auto go test ./internal/personalagent ./internal/remotehost ./internal/hostd ./internal/nativeui` PASS（nativeui 142 s，含轻量 Snapshot 不调用 `goal plan`、抽屉读 plans/facts 的断言）；`go tool mygo vet .` PASS；`frontend: bun run build && bun run build:mobile` PASS。
+- 手机：`pnpm typecheck`、`lint`（0 error，1 个既有 tamagui.config 告警）、`test`（573 PASS）、`check:fixtures`（173 一致）、`check:chat-page`、`export:web` PASS；提交 `64390b7`。
+- 实机（隔离 `HERDR_PLUGIN_STATE_DIR` + 临时 git 仓库，真实 daemon）：CLI 创建 Assistant/Goal → `set-plan`（coding 里程碑 + 依赖里程碑）→ approve → 12 s 内 Supervisor 建出 1 个 Draft 任务，事实 `accepted/planned/delegated`，里程碑状态 `needs_you`（等批准）、计划 `waiting_user`；重启 daemon 后任务数仍为 1。
+- 边界：汇报是确定性系统事实卡，不唤醒 Agent 转述（有意，避免“Agent 自述完成”）；“核验后完成”的完整闭环（任务 done → verified → completed）由 `TestSupervisorDelegatesVerifiesAndOnlyThenCompletes` 在 Store 层覆盖，没有用真实 Agent 跑完整任务（避免费用/副作用）。
+- NOT VERIFIED：桌面抽屉 Progress 区与手机 GoalPlanBlock/FactsStrip 的实机视觉；真实 Coordinator 自己写出 plan 的行为；真机手机联测（手机锁屏，BLOCKED）。
+- 进度：VERIFIED 18 / 总 22（不含 DEFERRED）= 82%。

@@ -1,0 +1,47 @@
+{
+  "plan": {
+    "assistantId": "a_0000000000000001",
+    "goalId": "g_0000000000000002",
+    "maxTasks": 12,
+    "milestones": [
+      {
+        "evidence": "task \"Collect numbers\" is queued (t_0000000000000016)",
+        "id": "m1",
+        "state": "working",
+        "task": {
+          "brief": "Find the Q3 numbers.",
+          "kind": "research",
+          "title": "Collect numbers"
+        },
+        "taskId": "t_0000000000000016",
+        "title": "Collect the numbers"
+      },
+      {
+        "dependsOn": [
+          "m1"
+        ],
+        "id": "m2",
+        "state": "pending",
+        "title": "You read the report"
+      }
+    ],
+    "nextAction": "Collect the numbers.",
+    "planRevision": 1,
+    "replans": 0,
+    "revisions": [
+      {
+        "createdAt": 1800000000000,
+        "milestones": 2,
+        "reason": "first plan",
+        "revision": 1
+      }
+    ],
+    "staleAfterMs": 2700000,
+    "state": "working",
+    "successCriteria": "The report exists and was read.",
+    "total": 2,
+    "updatedAt": 1800000000000,
+    "verified": 0
+  },
+  "schema": 1
+}

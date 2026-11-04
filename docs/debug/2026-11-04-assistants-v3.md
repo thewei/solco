@@ -10,3 +10,11 @@ Progress and acceptance live in `docs/assistants-v3-implementation-tracker.md`; 
 - Pane `/mcp`: exactly one server, `sequential-thinking` connected, although 12 servers are configured on this Mac.
 - Finding: a Coordinator folder outside an already trusted folder stops Claude at the "trust this folder" dialog (pane `blocked`) even though the Coordinator row reads `ready`. The group delivery pump already refuses to type into a startup dialog (`paneDialog`); the desktop Chat shows its Open Terminal card. Not auto-answered (outside the 2026-11-03 trust decision's scope). Revisit if first-run Coordinators hit it.
 - Lesson: shell state persists between tool calls — an exported `HERDR_PLUGIN_STATE_DIR` silently points the CLI *and* a daemon started from that shell at the isolated directory; check `echo $HERDR_PLUGIN_STATE_DIR` before concluding which DB a test touched.
+
+## U3 live check (isolated `HERDR_PLUGIN_STATE_DIR`, rebuilt plugin binary, temp git repo `/tmp/u3repo`)
+
+- `go build -o bin/solco-automations .` (the plugin main package is at the module root, not `cmd/`), daemon restarted with `start_new_session`.
+- A coding milestone was used on purpose: the Supervisor creates its task as a **Draft** (publisher-gated), so no real Agent starts and nothing costs money.
+- Result after approve + 12 s: plan `waiting_user`, m1 `needs_you` with one task, m2 `pending`; facts `accepted`, `planned`, `delegated`. After a daemon restart and 15 s: still one task, same three facts (requestId `sup-<goal>-<ms>-<attempt>` + the `delegated` fact written in the same transaction).
+- Lesson: a milestone with `kind: coding` needs `repoPath`; research/other kinds would be picked up by the real runner and start an Agent — use a Draft path for live checks.
+
