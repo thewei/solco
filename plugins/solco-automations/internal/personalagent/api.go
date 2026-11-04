@@ -181,7 +181,7 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		}
 		switch cmd {
 		case "archive":
-			x, replayed, err := a.Store.ArchiveAssistant(in.RequestID, rest[0], in.ExpectedRevision)
+			x, replayed, err := a.Store.ArchiveAssistant(in.RequestID, rest[0], in.ExpectedRevision, a.PaneGone)
 			return ok("assistant", x, "replayed", replayed), err
 		case "restore":
 			x, replayed, err := a.Store.RestoreAssistant(in.RequestID, rest[0], in.ExpectedRevision)

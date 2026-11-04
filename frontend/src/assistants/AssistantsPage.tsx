@@ -343,6 +343,7 @@ export function AssistantsPage() {
               .then((failure) => { setArchiving(false); if (!failure) { setConfirmArchive(false); pull(); } });
           }}>
           <p>The Assistant will disappear from your active list. Conversations, goals, tasks and memories stay intact.</p>
+          <p>Finish or cancel pending work, close the Assistant's Herdr panes, then archive. Solco checks pane closure before hiding it.</p>
           <p>Restore it later from Settings → Archived Assistants.</p>
         </Sheet>
       ) : null}

@@ -76,7 +76,12 @@ func TestArchiveKeepsTasksAndRefusesRunningAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, _ := s.GetAssistant(a.ID)
-	archived, _, err := s.ArchiveAssistant("archive2", a.ID, current.Revision)
+	if _, _, err := s.ArchiveAssistant("archive2", a.ID, current.Revision); !errors.Is(err, ErrBadState) {
+		t.Fatalf("cannot hide a possibly live Herdr pane: %v", err)
+	}
+	archived, _, err := s.ArchiveAssistant("archive2", a.ID, current.Revision, func(sess, ws, pane string) (bool, error) {
+		return true, nil // Herdr has confirmed the pane closed.
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +163,7 @@ func TestArchivedDeleteRequiresPositivePaneClosure(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _ = s.GetAssistant(a.ID)
-	archived, _, err := s.ArchiveAssistant("archive", a.ID, a.Revision)
+	archived, _, err := s.ArchiveAssistant("archive", a.ID, a.Revision, func(string, string, string) (bool, error) { return true, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,5 +183,80 @@ func TestArchivedDeleteRequiresPositivePaneClosure(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("closure probe called %d times", calls)
+	}
+}
+
+// A Herdr closure check is not a permanent capability: the Run can change
+// between the external read and the SQLite transaction. Never archive if it
+// now points at a different pane.
+func TestArchiveRejectsPaneChangedDuringHerdrVerification(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "arch-race", "Ada")
+	co, _, err := s.StartCoordinator("start", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := s.ClaimTask(co.TaskID, "daemon")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkStarting(run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordLaunch(run.ID, Session{HerdrSession: "default", WorkspaceID: "w1", PaneID: "w1:p1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishRun(run.ID, RunDone, ""); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = s.ArchiveAssistant("archive", a.ID, a.Revision, func(sess, workspace, pane string) (bool, error) {
+		if _, err := s.db.Exec("UPDATE runs SET pane_id=? WHERE id=?", "w1:p2", run.ID); err != nil {
+			t.Fatal(err)
+		}
+		return true, nil // The old pane is closed, but a new one appeared.
+	})
+	if !errors.Is(err, ErrBadState) {
+		t.Fatalf("changed Pane must invalidate archival proof: %v", err)
+	}
+	if active, _ := s.GetAssistant(a.ID); active.Status != StatusActive {
+		t.Fatalf("failed archive hid the Assistant: %+v", active)
+	}
+}
+
+// Archiving a safely closed Coordinator must not leave a stale 'ready' state
+// that prevents the user starting it after Restore.
+func TestArchiveResetsSettledCoordinatorAfterHerdrClosure(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "arch-coordinator", "Ada")
+	co, _, err := s.StartCoordinator("start", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	launcher := &fakeLauncher{}
+	d := &Dispatcher{Store: s, Launcher: launcher, Claimant: "daemon"}
+	if _, err := d.RunTask(t.Context(), co.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	if current, _ := s.GetCoordinator(a.ID); current.State != CoordinatorReady {
+		t.Fatalf("expected live Coordinator: %+v", current)
+	}
+	closed := func(sess, workspace, pane string) (bool, error) { return true, nil }
+	archived, _, err := s.ArchiveAssistant("archive", a.ID, a.Revision, closed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current, _ := s.GetCoordinator(a.ID); current.State != CoordinatorStopped {
+		t.Fatalf("archive left a stale live Coordinator: %+v", current)
+	}
+	if prior, replayed, err := s.ArchiveAssistant("archive", a.ID, a.Revision); err != nil || !replayed || prior.Revision != archived.Revision {
+		t.Fatalf("archive receipt replay should not recheck Herdr: %+v %v %t", prior, err, replayed)
+	}
+	restored, _, err := s.RestoreAssistant("restore", a.ID, archived.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, _, err := s.StartCoordinatorAs("restart", restored.ID, "omp", "", closed)
+	if err != nil || next.TaskID == co.TaskID {
+		t.Fatalf("restored Coordinator could not restart after closure: %+v %v", next, err)
 	}
 }

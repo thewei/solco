@@ -62,3 +62,10 @@
 - **并发和幂等**：Herdr 读在 SQLite 写事务之外完成；写入前比较 Coordinator revision 与所有旧 Runs 的状态和 Pane 身份。验证后才把遗留 `running` Run 收敛成 `cancelled`，并创建下一次 Task。同一 `requestId` 优先返回已有收据，不需要再次触碰 Herdr。
 - **测试**：`TestStoppedCoordinatorCannotDuplicateLiveHerdrPane`、`TestAPICoordinatorRestartRefusesUnclosedPane`、`TestCoordinatorStopAndRestart`，插件全量测试 PASS；这不等于真实 OMP 进程停止的实机验证。
 - **仍待修复**：Stop 目前不是 Herdr 的真实 kill/close；后续要增加受控的运行时停止控制器，并处理关闭时与运行中 Dispatcher 的竞态，不能把“已停止”标签当作真实进程存活证明。
+
+## 继续优化：Archive → Restore 运行时安全（2026-11-04）
+
+- Archive 在 SQLite 写事务之前经 Herdr 验证该 Assistant 所有已记录 Pane 都已关闭；历史 Run 虽已 `done` 但 Pane 仍在，同样拒绝归档。Herdr 离线、不确定或 Session/Workspace 身份不完整均不可视为关闭。
+- 在确认外部 Pane 状态之后，写事务里再次对比所有 Run 的 Pane 身份，防止归档验证期间新增/切换 Pane；后续永久删除也采用同样的事务内核对。
+- 对已安全结束的 Coordinator，Archive 将旧协调者状态重置为 `stopped`；恢复 Assistant 后可重新启动，但再次启动仍要重新验证原 Pane 关闭，不能凭历史成功证明盲目创建。
+- 自动测试覆盖归档幂等、仍有 Pane 的拒绝、检查期间 Pane 变化的拒绝、归档-恢复-重启；`go test ./...`（plugin）PASS。没有实际 Herdr/OMP 进程级测试时，**不能宣称进程停止功能已实现**。

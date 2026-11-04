@@ -12,11 +12,56 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 // StatusArchived removes an identity from active surfaces without losing data.
 const StatusArchived = "archived"
+
+// herdrPaneRef captures the external identity the Assistant's Runs own.
+// Sort consistently so the preflight read and the write transaction can be
+// compared without holding the SQLite writer lock while reading Herdr.
+type herdrPaneRef struct {
+	Session, Workspace, Pane string
+}
+
+func assistantHerdrPanes(q queryer, id string) ([]herdrPaneRef, error) {
+	rows, err := q.Query("SELECT DISTINCT r.herdr_session,r.workspace_id,r.pane_id FROM runs r JOIN tasks t ON t.id=r.task_id "+
+		"WHERE t.assistant_id=? AND r.pane_id<>'' ORDER BY r.herdr_session,r.workspace_id,r.pane_id", id)
+	if err != nil {
+		return nil, wrapBusy(err)
+	}
+	defer rows.Close()
+	out := []herdrPaneRef{}
+	for rows.Next() {
+		var p herdrPaneRef
+		if err := rows.Scan(&p.Session, &p.Workspace, &p.Pane); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, wrapBusy(rows.Err())
+}
+
+func verifyAssistantHerdrPanes(panes []herdrPaneRef, paneGone ...func(string, string, string) (bool, error)) error {
+	for _, pane := range panes {
+		if pane.Session == "" || pane.Workspace == "" {
+			return fmt.Errorf("%w: Assistant Run has incomplete Herdr identity; cannot verify pane closure", ErrBadState)
+		}
+		if len(paneGone) == 0 || paneGone[0] == nil {
+			return fmt.Errorf("%w: close the Assistant's Herdr panes before archiving or deleting; cannot verify closure", ErrBadState)
+		}
+		gone, err := paneGone[0](pane.Session, pane.Workspace, pane.Pane)
+		if err != nil {
+			return fmt.Errorf("%w: cannot verify Herdr pane closure: %v", ErrBadState, err)
+		}
+		if !gone {
+			return fmt.Errorf("%w: close the Assistant's Herdr pane before archiving or deleting", ErrBadState)
+		}
+	}
+	return nil
+}
 
 func (s *Store) ListArchivedAssistants() ([]Assistant, error) {
 	rows, err := s.db.Query("SELECT "+assistantCols+" FROM assistants WHERE status=? ORDER BY updated_at DESC,id", StatusArchived)
@@ -55,10 +100,26 @@ func requireNoActiveRuns(tx *sql.Tx, id string) error {
 	return nil
 }
 
-// ArchiveAssistant preserves Goals, tasks, chats, memory and sessions. It is
-// refused while an Agent or an enabled routine might still be doing work.
-func (s *Store) ArchiveAssistant(requestID, id string, rev int) (Assistant, bool, error) {
-	return execute(s, requestID, "assistant.archive", map[string]any{"id": id, "rev": rev}, func(tx *sql.Tx) (Assistant, error) {
+// ArchiveAssistant preserves Goals, tasks, chats and memory. It refuses
+// unfinished work, active routines, or any recorded Herdr pane whose closure
+// cannot be positively verified. An archived Coordinator with settled work
+// is marked stopped so Restore cannot resume a stale live identity.
+func (s *Store) ArchiveAssistant(requestID, id string, rev int, paneGone ...func(string, string, string) (bool, error)) (Assistant, bool, error) {
+	payload := map[string]any{"id": id, "rev": rev}
+	// Replays cannot require an old Herdr pane that may have been removed
+	// since the first archive; the receipt already records the safe action.
+	if prior, replayed, err := peekReceipt[Assistant](s, requestID, "assistant.archive", payload); err != nil || replayed {
+		return prior, replayed, err
+	}
+	// Herdr reads can block: never perform them under SQLite's write lock.
+	verifiedPanes, err := assistantHerdrPanes(s.db, id)
+	if err != nil {
+		return Assistant{}, false, err
+	}
+	if err := verifyAssistantHerdrPanes(verifiedPanes, paneGone...); err != nil {
+		return Assistant{}, false, err
+	}
+	return execute(s, requestID, "assistant.archive", payload, func(tx *sql.Tx) (Assistant, error) {
 		a, err := getAssistantTx(tx, id)
 		if err != nil {
 			return Assistant{}, err
@@ -72,6 +133,15 @@ func (s *Store) ArchiveAssistant(requestID, id string, rev int) (Assistant, bool
 		if err := requireNoActiveRuns(tx, id); err != nil {
 			return Assistant{}, err
 		}
+		// A Run cannot gain a new pane after our external read without
+		// invalidating the authorization to hide this Assistant.
+		currentPanes, err := assistantHerdrPanes(tx, id)
+		if err != nil {
+			return Assistant{}, err
+		}
+		if !slices.Equal(verifiedPanes, currentPanes) {
+			return Assistant{}, fmt.Errorf("%w: Assistant panes changed while verifying closure", ErrBadState)
+		}
 		var n int
 		if err := tx.QueryRow("SELECT COUNT(*) FROM routines WHERE assistant_id=? AND state='active'", id).Scan(&n); err != nil {
 			return Assistant{}, err
@@ -79,7 +149,14 @@ func (s *Store) ArchiveAssistant(requestID, id string, rev int) (Assistant, bool
 		if n > 0 {
 			return Assistant{}, fmt.Errorf("%w: pause or cancel active routines before archiving", ErrBadState)
 		}
-		return updateAssistant(tx, s.nowMS(), id, rev, "status=?", StatusArchived)
+		now := s.nowMS()
+		// Herdr confirms all recorded panes are gone. Clear any stale
+		// ready/starting state so restoring can launch a fresh Coordinator.
+		if _, err := tx.Exec("UPDATE coordinators SET state=?, revision=revision+1, updated_at=? WHERE assistant_id=? AND state NOT IN (?,?)",
+			CoordinatorStopped, now, id, CoordinatorNone, CoordinatorStopped); err != nil {
+			return Assistant{}, err
+		}
+		return updateAssistant(tx, now, id, rev, "status=?", StatusArchived)
 	})
 }
 
@@ -108,35 +185,13 @@ func (s *Store) DeleteArchivedAssistant(id string, rev int, paneGone ...func(str
 	}
 	// Perform external checks outside SQLite's write transaction: Herdr
 	// reads can take seconds and must not hold the single-writer lock.
-	panes, err := s.db.Query("SELECT DISTINCT r.herdr_session,r.workspace_id,r.pane_id FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.assistant_id=? AND r.pane_id<>''", id)
+	verifiedPanes, err := assistantHerdrPanes(s.db, id)
 	if err != nil {
-		return wrapBusy(err)
+		return err
 	}
-	for panes.Next() {
-		var sess, workspace, pane string
-		if err := panes.Scan(&sess, &workspace, &pane); err != nil {
-			panes.Close()
-			return err
-		}
-		if len(paneGone) == 0 || paneGone[0] == nil {
-			panes.Close()
-			return fmt.Errorf("%w: close the Assistant's Herdr panes before deletion; cannot verify their state", ErrBadState)
-		}
-		gone, err := paneGone[0](sess, workspace, pane)
-		if err != nil {
-			panes.Close()
-			return fmt.Errorf("%w: cannot verify Herdr pane closure: %v", ErrBadState, err)
-		}
-		if !gone {
-			panes.Close()
-			return fmt.Errorf("%w: close the Assistant's Herdr pane before deletion", ErrBadState)
-		}
+	if err := verifyAssistantHerdrPanes(verifiedPanes, paneGone...); err != nil {
+		return err
 	}
-	if err := panes.Err(); err != nil {
-		panes.Close()
-		return wrapBusy(err)
-	}
-	panes.Close()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return wrapBusy(err)
@@ -154,6 +209,13 @@ func (s *Store) DeleteArchivedAssistant(id string, rev int, paneGone ...func(str
 	}
 	if err := requireNoActiveRuns(tx, id); err != nil {
 		return err
+	}
+	currentPanes, err := assistantHerdrPanes(tx, id)
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(verifiedPanes, currentPanes) {
+		return fmt.Errorf("%w: Assistant panes changed while verifying closure", ErrBadState)
 	}
 	for _, check := range []struct{ query, reason string }{
 		{"SELECT COUNT(*) FROM routines WHERE assistant_id=?", "cancel all routines and their YAML definitions first"},
