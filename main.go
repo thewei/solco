@@ -3,11 +3,14 @@
 // main is deliberately thin: it wires process-level services (bounded
 // logs, persisted settings, the read-only history catalog, the durable
 // follow-up ledger) into nativeui.NewShell, shows the single main window,
-// and binds the macOS tray and Dock surfaces. All presentation lives in
+// and binds the macOS tray and Dock surfaces. It also embeds the canonical
+// OMP stream companion so the Doctor works outside a developer checkout.
+// All presentation lives in
 // internal/nativeui; Herdr stays the runtime authority.
 package main
 
 import (
+	_ "embed"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -26,6 +29,9 @@ import (
 	"github.com/thewei/solco/internal/sessiontrash"
 	"github.com/thewei/solco/internal/settings"
 )
+
+//go:embed scripts/omp-chat-stream.ts
+var embeddedOMPStreamExtension []byte
 
 // followUpLedgerFileName mirrors app.LaunchService's durable ledger name.
 const followUpLedgerFileName = "follow-up-ledger.json"
@@ -109,6 +115,7 @@ func main() {
 	shell := nativeui.NewShell(append([]nativeui.ShellOption{
 		nativeui.WithSettings(settingsService),
 		nativeui.WithUserDataDir(userDataDir),
+		nativeui.WithOMPStreamExtension(embeddedOMPStreamExtension),
 	}, historyOpts...)...)
 	shell.Launch().AttachLedgerPath(filepath.Join(userDataDir, followUpLedgerFileName))
 

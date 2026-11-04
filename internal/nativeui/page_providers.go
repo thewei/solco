@@ -15,7 +15,7 @@ import (
 
 /**
  * [INPUT]: 依赖 agent 集成审计与 agenthooks 直连 hook 诊断（providers_ui 统一状态机）、mygo/ui、ds_components 状态件
- * [OUTPUT]: 对外提供 settingsProviders（Settings→Agents 开关页：可启动 Agent 每家一个开关行 + 状态/修复；开关首次开启即装 Solco 自己的 status hook）、agentToggleRow/agentEnabled/setAgentEnabled/installAgentWiring/providerRows/facetControls
+ * [OUTPUT]: 对外提供 settingsProviders（Settings→Agents 开关页：可启动 Agent 每家一个开关行 + 状态/修复；开关首次开启即装 Solco 自己的 status hook；OMP 附属独立直播文字 Doctor 行，只有点击 Install/Update 才装）、agentToggleRow/agentEnabled/setAgentEnabled/installAgentWiring/providerRows/facetControls
  * [POS]: 开关为主面（= New Tab "+" 菜单的同一份 kinds 清单，Terminal 除外），Hook Doctor 诊断降为行内状态与修复动作；不可启动的 Agent（与 Aider）保留无开关的健康行；审计只在路由进入/手动刷新/动作完成后发生，绝不随渲染轮询
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -31,7 +31,14 @@ func (s *Shell) settingsProviders(c *ui.Context) {
 	if !s.providers.loaded && !s.providers.loading && s.providers.errText == "" {
 		s.requestProvidersAudit()
 	}
+	if s.ompStream.manager != nil && !s.ompStream.loaded && !s.ompStream.loading {
+		s.requestOMPStreamDiagnosis()
+	}
 	s.consumeProvidersToast(c)
+	if s.ompStream.pendingToast != "" {
+		c.Toast(s.ompStream.pendingToast)
+		s.ompStream.pendingToast = ""
+	}
 
 	sp := Spacing()
 	t := c.Theme()
@@ -51,6 +58,7 @@ func (s *Shell) settingsProviders(c *ui.Context) {
 		ui.Box(c).Grow(1)
 		if gorexIconButton(c, gorexColorsOf(t.Dark), iconRefresh, "Refresh", "Refresh", false, gorexIconBtn, gorexIconGlyph).Clicked() {
 			s.requestProvidersAudit()
+			s.requestOMPStreamDiagnosis()
 		}
 	})
 
@@ -68,6 +76,9 @@ func (s *Shell) settingsProviders(c *ui.Context) {
 		id := history.AgentID(kind.ID)
 		launchable[id] = true
 		rows = append(rows, s.agentToggleRow(c, kind))
+		if id == history.AgentOMP && s.ompStream.manager != nil {
+			rows = append(rows, s.ompStreamRow(c))
+		}
 	}
 	if len(rows) > 0 {
 		settingsGroup(c, "Agents", rows...)

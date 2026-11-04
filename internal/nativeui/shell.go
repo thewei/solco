@@ -246,6 +246,7 @@ type Shell struct {
 	// card per provider joining the Herdr integration facet and the direct
 	// status hook facet (audit on entry/refresh/after-action only).
 	providers providersUIState
+	ompStream ompStreamUIState
 	// hookRepairChecked: the launch-time hook check ran (noticeHookRepair).
 	hookRepairChecked bool
 
