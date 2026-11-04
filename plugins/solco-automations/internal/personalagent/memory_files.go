@@ -88,48 +88,6 @@ func memoryBody(raw []byte) string {
 	return strings.TrimSpace(s)
 }
 
-func writeFileAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".tmp-*")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return os.Rename(name, path)
-}
-
-// readSmall reads a regular, non-symlink file no larger than limit.
-func readSmall(path string, limit int64) ([]byte, bool) {
-	fi, err := os.Lstat(path)
-	if err != nil || !fi.Mode().IsRegular() || fi.Size() > limit {
-		return nil, false
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, false
-	}
-	return b, true
-}
-
 func (f *MemoryFiles) records(assistantID string) (map[string]fileRec, error) {
 	rows, err := f.Store.db.Query(`SELECT rel,memory_id,revision,hash FROM memory_files WHERE assistant_id=?`, assistantID)
 	if err != nil {
@@ -193,14 +151,17 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 	if err := ensureMemoryDirs(f.Root, dir); err != nil {
 		return rep, err
 	}
-	// Refuse a symlink at the lock leaf as well; all cooperating Syncs use
-	// the same lock without following an attacker-chosen file.
-	lockPath := filepath.Join(filepath.Dir(dir), ".lock")
-	fd, err := syscall.Open(lockPath, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW, 0o600)
+	// Pin the Assistant and its category directories via file descriptors.
+	// Subsequent renames/symlink swaps cannot redirect any of this Sync's IO.
+	tree, err := openMemoryTree(f.Root, assistantID)
 	if err != nil {
 		return rep, err
 	}
-	lock := os.NewFile(uintptr(fd), lockPath)
+	defer tree.Close()
+	lock, err := tree.assistant.OpenFile(".lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return rep, err
+	}
 	defer lock.Close()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		return rep, err
@@ -228,9 +189,9 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 	sort.Strings(rels)
 	for _, rel := range rels {
 		rec := recs[rel]
-		raw, ok := readSmall(filepath.Join(dir, rel), memoryFileMax)
+		raw, ok := tree.readSmall(rel, memoryFileMax)
 		if !ok {
-			if _, err := os.Lstat(filepath.Join(dir, rel)); err == nil {
+			if tree.exists(rel) {
 				rep.Refused++ // a symlink, a directory or an oversized file: never read, rewritten below
 			}
 			continue
@@ -295,7 +256,10 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 
 	// 2. New files become candidates; nothing a person drops in is trusted blindly.
 	for _, sub := range []string{"facts", "inbox", "notes"} {
-		entries, _ := os.ReadDir(filepath.Join(dir, sub))
+		entries, err := tree.readDir(sub)
+		if err != nil {
+			return rep, err
+		}
 		for _, e := range entries {
 			rel := sub + "/" + e.Name()
 			if _, tracked := recs[rel]; tracked || !strings.HasSuffix(e.Name(), ".md") || strings.HasPrefix(e.Name(), ".") {
@@ -304,7 +268,7 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 			if rep.Imported >= memoryImportMax {
 				break
 			}
-			raw, ok := readSmall(filepath.Join(dir, rel), memoryFileMax)
+			raw, ok := tree.readSmall(rel, memoryFileMax)
 			body := memoryBody(raw)
 			if !ok || body == "" || len(body) > MaxMemoryText {
 				rep.Refused++
@@ -316,7 +280,7 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 				continue
 			}
 			rep.Imported++
-			_ = os.Remove(filepath.Join(dir, rel)) // its text is now a candidate; the canonical file is written below
+			_ = tree.remove(rel) // the text is now a candidate; the canonical file is written below
 		}
 	}
 
@@ -342,7 +306,7 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 			want = "inbox/" + m.ID + ".md"
 		}
 		if rel != want {
-			if err := os.Remove(filepath.Join(dir, rel)); err == nil {
+			if err := tree.remove(rel); err == nil {
 				rep.Removed++
 			}
 			if err := f.dropRecord(assistantID, rel); err != nil {
@@ -361,9 +325,8 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 			continue
 		}
 		data := renderMemory(m)
-		path := filepath.Join(dir, rel)
-		if cur, ok := readSmall(path, memoryFileMax); !ok || hashOf(cur) != hashOf(data) {
-			if err := writeFileAtomic(path, data); err != nil {
+		if cur, ok := tree.readSmall(rel, memoryFileMax); !ok || hashOf(cur) != hashOf(data) {
+			if err := tree.writeFileAtomic(rel, data); err != nil {
 				return rep, err
 			}
 			rep.Written++
@@ -376,7 +339,7 @@ func (f *MemoryFiles) Sync(assistantID string) (SyncReport, error) {
 			return rep, err
 		}
 	}
-	if err := f.writeIndex(dir, items); err != nil {
+	if err := f.writeIndex(tree, items); err != nil {
 		return rep, err
 	}
 	return rep, nil
@@ -400,7 +363,7 @@ These files are plain text. Do not put passwords or API keys here — Solco refu
 text that looks like a credential.
 `
 
-func (f *MemoryFiles) writeIndex(dir string, items []MemoryItem) error {
+func (f *MemoryFiles) writeIndex(tree *memoryTree, items []MemoryItem) error {
 	var b strings.Builder
 	b.WriteString("# Index\n\n")
 	n := 0
@@ -419,11 +382,10 @@ func (f *MemoryFiles) writeIndex(dir string, items []MemoryItem) error {
 		b.WriteString("Nothing remembered yet.\n")
 	}
 	for name, data := range map[string][]byte{"INDEX.md": []byte(b.String()), "README.md": []byte(memoryReadme)} {
-		path := filepath.Join(dir, name)
-		if cur, ok := readSmall(path, 1<<20); ok && string(cur) == string(data) {
+		if cur, ok := tree.readSmall(name, 1<<20); ok && string(cur) == string(data) {
 			continue
 		}
-		if err := writeFileAtomic(path, data); err != nil {
+		if err := tree.writeFileAtomic(name, data); err != nil {
 			return err
 		}
 	}
