@@ -279,17 +279,14 @@ func (p *personal) hasRegistrations() bool {
 	return len(assistants) > 0
 }
 
-// ownedRules is what the old scheduler must leave alone (nil without a store).
-func (p *personal) ownedRules() map[string]bool {
+// ownedRules is what the old scheduler must leave alone. A failed read is
+// NOT equivalent to no owned rules: dispatch must stop until the authority
+// can be read again, rather than risk sending an Assistant's rule twice.
+func (p *personal) ownedRules() (map[string]bool, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
-	owned, err := p.store.OwnedLegacy()
-	if err != nil {
-		log.Printf("assistants: rule ledger: %v", err)
-		return nil
-	}
-	return owned
+	return p.store.OwnedLegacy()
 }
 
 // handbacks returns the watermarks of rules just given back to the old

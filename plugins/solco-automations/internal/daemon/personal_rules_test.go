@@ -82,6 +82,26 @@ func waitFor(t *testing.T, what string, ok func() bool) {
 	}
 }
 
+// If the SQLite owner ledger disappears mid-flight, no YAML rule may run
+// through the legacy scheduler. Unknown ownership is not "unowned".
+func TestLegacySchedulerFailsClosedWhenAssistantLedgerIsUnavailable(t *testing.T) {
+	p, h, runs, state, cfg := personalFixture(t)
+	if _, _, err := p.store.AdoptLegacy("", "owned", cfg, map[string]time.Time{"owned": state.LastOccurrence["owned"]}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	last := state.LastOccurrence["plain"]
+	if err := p.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	evaluateWith(state, runs, nil, p)
+	if !state.LastOccurrence["plain"].Equal(last) {
+		t.Fatal("legacy watermarks advanced while Assistant ownership was unreadable")
+	}
+	if h.count("owned") != 0 || h.count("plain") != 0 {
+		t.Fatalf("legacy scheduler dispatched while core was unavailable: owned=%d plain=%d", h.count("owned"), h.count("plain"))
+	}
+}
+
 // D02/R05: a rule the ledger owns is invisible to the legacy scheduler, so an
 // occurrence is never dispatched twice; the rest of automations.yaml keeps
 // running through the old path untouched.

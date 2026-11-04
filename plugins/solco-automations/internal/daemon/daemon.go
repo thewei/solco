@@ -88,6 +88,11 @@ func Run(standby bool) error {
 	defer tick.Stop()
 
 	assistants := startPersonal(n)
+	if assistants == nil {
+		// A broken SQLite core cannot tell us which definitions belong to
+		// Assistants. Never hand those rules to the legacy runner by default.
+		return fmt.Errorf("assistant store unavailable: scheduler suspended rather than dispatching rules without ownership")
+	}
 	defer assistants.close()
 	pump := time.NewTicker(pumpInterval)
 	defer pump.Stop()
@@ -185,13 +190,21 @@ func evaluateWith(state *scheduleState, runs *runner.Runner, n *notify.Notifier,
 		log.Printf("config error, leaving the schedule untouched: %v", err)
 		return
 	}
+	// Ownership must be known before even advancing legacy watermarks.
+	// If the core fails, fail closed: an empty map would silently dispatch
+	// Assistant-owned YAML rules through the older scheduler.
+	owned, err := own.ownedRules()
+	if err != nil {
+		log.Printf("assistants: cannot read rule ownership; suppressing schedule: %v", err)
+		return
+	}
 	dirty := false
 	for name, at := range own.handbacks() {
 		state.LastOccurrence[name] = at
 		dirty = true
 		log.Printf("%s: handed back to the legacy scheduler", name)
 	}
-	if owned := own.ownedRules(); len(owned) > 0 {
+	if len(owned) > 0 {
 		cfg = personalagent.FilterOwned(cfg, owned)
 	}
 	changedInvalid, invalid := reportInvalid(cfg, state)
