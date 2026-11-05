@@ -1,7 +1,7 @@
 package hostd
 
 /**
- * [INPUT]: 依赖 syscall.Flock（darwin/linux）与 RemoteHost 目录里的两个小文件
+ * [INPUT]: 平台文件锁（lock_unix.go / lock_windows.go：flock 或 LockFileEx）与 RemoteHost 目录里的两个小文件
  * [OUTPUT]: 对外提供 Lease、TryAcquire、Claim（桌面端礼让协议）、RequestYield/YieldRequested/ClearYield
  * [POS]: Host v3 端口的唯一所有者租约（2026-11-03，E05）：桌面 App 与常驻 solco-hostd 共用同一份证书/设备库/令牌，永不同时监听同一端口；
  *        持有者就是 flock 的持有者，进程崩溃由系统释放，不存在陈旧锁；桌面要接管时写 host.yield，常驻服务看到后关闭监听并释放租约
@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -40,11 +39,8 @@ func TryAcquire(dir string) (*Lease, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := lockExclusive(f); err != nil {
 		_ = f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, ErrHeld
-		}
 		return nil, err
 	}
 	return &Lease{f: f}, nil
@@ -55,7 +51,7 @@ func (l *Lease) Release() {
 	if l == nil || l.f == nil {
 		return
 	}
-	_ = syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
+	unlockFile(l.f)
 	_ = l.f.Close()
 	l.f = nil
 }

@@ -17,7 +17,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/thewei/solco/internal/herdr"
 )
@@ -543,7 +542,7 @@ func daemonStarter(root, session string) func(logPath string) error {
 		}
 		cmd := exec.Command(filepath.Join(root, "bin", "solco-automations"), "daemon")
 		cmd.Env = cliEnv(session)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		detachProcess(cmd)
 		if logPath != "" {
 			if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err == nil {
 				if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
