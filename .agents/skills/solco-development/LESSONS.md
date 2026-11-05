@@ -97,3 +97,6 @@
 - 2026-11-05 首次定时运行会因 `skill_not_granted` 失败并出现 skill 审批卡（正确门禁）；批准后任务自动重启（attempt 2）并写 `routine_done`。验收脚本要预期这条两步路径，而不是把第一次 failed 当缺陷。
 - 2026-11-05 `routine_failed` fact 原先只写"failed"，原因只在 runs.error → 现在附稳定码 `(skill_not_granted)`（只取 `code: ` 前缀，不带自由文本）。教训：账本里的失败事实必须带可行动的稳定原因码。
 - 2026-11-05 查库前先 `.schema`/`select *` 看真实列名（goal_facts.text、events 无 seq、runs.error），别凭记忆写列。
+- 2026-11-05 并发/依赖类验收：用 Coordinator 自己的 CLI 动作（`goal create` + `goal set-plan`）写计划，证据取 `runs.started_at/finished_at`（同毫秒启动=并行；依赖项晚于前置完成=门禁）与 `goal_facts` 序列，别靠肉眼看 GUI 刷新。
+- 2026-11-05 每个新增的 `Solco-…` 系统前缀（Run-Id、automated status request、wake）都会进到 OMP 会话的首条用户行 → 同时检查三处：Chat 页折叠（assistantBrief）、history 标题清洗（cleanTitleCandidate）、Sessions 列表；漏一处就会在侧栏/列表里以乱码标题露出。
+- 2026-11-05 给 Go 结构体加线上字段一律 `omitempty`（如 `Assistant.System`），否则会动所有 golden；改完必须 `go tool mygo generate` 再 `bun run build`，并记得 solco-mobile 的 chat-page 需重新同步。

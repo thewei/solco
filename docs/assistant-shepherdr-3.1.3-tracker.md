@@ -87,3 +87,10 @@
 - U01 / U06 新发现：Coordinator 启动简报以用户消息出现在对话里（132 行），待产品决定；U09/C02：身份缺失时 Chat 只显示 Working、没有诊断，待 capability doctor。
 - AC-01 整体仍 **未通过**：能力清单的真实工具调用、回执可见性、ID 深链、Android 同一对话均未在 GUI 验到。
 
+
+## 2026-11-05 Mac.app 隔离实例 AC-02 / AC-03 批次
+
+- AC-02（定时 Routine）Mac 段 **PASS**：草案→审批卡→批准→到点触发（任务归属 Ada、系统助手无任务）→skill 关卡→批准后自动重启→`routine_done`；报告 `docs/debug/assistant-shepherdr-3.1.3-acceptance/2026-11-05-mac-app-ac02.md`。
+- 修复：`routine_failed` 带稳定原因码；手改已批准 Routine 后暂停+事实+新审批卡（R05/R08）；系统 Automations 助手无聊天框且 Coordinator 启动被拒；自动状态请求/唤醒折叠为 System instructions 芯片；Routine 结果进入 Coordinator 报告（实机验证）。
+- AC-03（两项并发 + 第三项依赖）Mac 段 **PASS**（A/B 同毫秒启动，C 在二者完成后 1.7 s 启动，D 等人确认）；修复 worker 标题被 `Solco-Run-Id` 占据；报告 `2026-11-05-mac-app-ac03.md`。
+- 开放：F4（有计划的草稿 Goal 不进 Needs you）；Coordinator 用自然语言自写计划未用真模型验证；Android 全部未做。
