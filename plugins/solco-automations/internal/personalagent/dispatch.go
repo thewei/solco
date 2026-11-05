@@ -216,6 +216,9 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		// fresh Coordinator with permission to schedule more work.
 		if owner, ok := routineOwnerTx(d.Store.db, name); ok && owner == task.AssistantID {
 			a.Prompt = BuildPrompt(asst, Task{Kind: KindManual, Title: task.Title, Brief: a.Prompt})
+			if len(required) > 0 {
+				a.Prompt = skillInstruction(required) + "\n\n" + a.Prompt
+			}
 			a.Prompt += "\n\nThis is one scheduled Solco Routine occurrence. Do not create cron/launchd jobs, other schedules, background loops, subagents or sibling Tasks. Perform only this brief once and return evidence. Solco owns the next occurrence and all follow-up.\n"
 		}
 		if d.requiresResult(task) {

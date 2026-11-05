@@ -301,8 +301,10 @@ var weekdayNames = [...]string{"Sundays", "Mondays", "Tuesdays", "Wednesdays", "
 // the app's detail view. Common patterns get a readable line; everything else
 // gets the expression back unchanged — a wrong paraphrase is worse than a
 // raw cron.
-func ScheduleText(a config.Automation) string {
-	expr := strings.TrimSpace(a.Cron)
+func ScheduleText(a config.Automation) string { return scheduleTextOf(a.Cron) }
+
+func scheduleTextPlain(expr string) string {
+	expr = strings.TrimSpace(expr)
 	fields := strings.Fields(expr)
 	switch expr {
 	case "@yearly", "@annually":

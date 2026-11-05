@@ -1,6 +1,7 @@
 package personalagent
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,20 +26,27 @@ var routineName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,47}$`)
 
 // RoutineDraftInput is the body of `assistant routine draft`.
 type RoutineDraftInput struct {
-	AssistantID    string `json:"assistantId"`
-	Name           string `json:"name"`
-	Cron           string `json:"cron"`
-	Repo           string `json:"repo"`
-	Agent          string `json:"agent"`
-	Model          string `json:"model"`
-	Prompt         string `json:"prompt"`
-	Rationale      string `json:"rationale"`
-	Headless       *bool  `json:"headless"`
-	OnOverlap      string `json:"onOverlap"`
-	TimeoutMinutes int    `json:"timeoutMinutes"`
-	Source         string `json:"source"`
-	RequestedBy    string `json:"requestedBy"`
-	CorrelationID  string `json:"correlationId"`
+	AssistantID string `json:"assistantId"`
+	Name        string `json:"name"`
+	Cron        string `json:"cron"`
+	// Schedule is the person's own words ("every weekday at 9:00", "每天早上9点");
+	// Timezone is the IANA zone they named, else this Mac's own. Exactly one of
+	// Cron and Schedule is given.
+	Schedule string `json:"schedule"`
+	// RequiredSkills are carried to every task this routine causes (Gap W04).
+	RequiredSkills []string `json:"requiredSkills"`
+	Timezone       string   `json:"timezone"`
+	Repo           string   `json:"repo"`
+	Agent          string   `json:"agent"`
+	Model          string   `json:"model"`
+	Prompt         string   `json:"prompt"`
+	Rationale      string   `json:"rationale"`
+	Headless       *bool    `json:"headless"`
+	OnOverlap      string   `json:"onOverlap"`
+	TimeoutMinutes int      `json:"timeoutMinutes"`
+	Source         string   `json:"source"`
+	RequestedBy    string   `json:"requestedBy"`
+	CorrelationID  string   `json:"correlationId"`
 }
 
 // RoutineView is a routine with the definition it points at and how it is doing.
@@ -266,6 +274,22 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 	if asst.Status != StatusActive {
 		return nil, ErrAssistantDisabled
 	}
+	skills, err := normalizeSkills(in.RequiredSkills)
+	if err != nil {
+		return nil, coded("invalid", "%v", err)
+	}
+	var parsedSchedule *schedule.Parsed
+	switch {
+	case strings.TrimSpace(in.Schedule) != "" && strings.TrimSpace(in.Cron) != "":
+		return nil, coded("invalid", "give either cron or schedule, not both")
+	case strings.TrimSpace(in.Schedule) != "":
+		p, err := a.parseSchedule(in.Schedule, in.Timezone)
+		if err != nil {
+			return nil, err
+		}
+		parsedSchedule = &p
+		in.Cron = p.Cron
+	}
 	// Non-repository scheduled work belongs to the Assistant's private
 	// controlled folder, not a made-up Git repository or an OS cron job.
 	workspace := config.WorkspaceWorktree
@@ -359,7 +383,11 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 	if intentID == "" {
 		intentID = newID("routine-request")
 	}
-	intent := routineIntent{RequestID: intentID, Input: routineInput, Action: RoutineAction(x.WithDefaults(), next), Next: nextMS}
+	action := RoutineAction(x.WithDefaults(), next)
+	if len(skills) > 0 {
+		action += " Each run must load and use the skill(s): " + strings.Join(skills, ", ") + "; a missing or ungranted skill stops the run instead of another tool taking over."
+	}
+	intent := routineIntent{RequestID: intentID, Input: routineInput, Action: action, Next: nextMS}
 	if preflightReplay {
 		// A successful replay may be days old; the approval receipt contains
 		// the exact frozen action, not today's reconstructed NextRun.
@@ -374,6 +402,9 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 	} else {
 		// This WAL transaction commits first. Every possible process death
 		// after it leaves a recoverable, dispatch-reserved intent.
+		if err := a.Store.setRoutineSkills(in.Name, skills); err != nil {
+			return nil, err
+		}
 		if err := a.Store.recordRoutineIntent(intent); err != nil {
 			return nil, err
 		}
@@ -401,7 +432,39 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 			return nil, err
 		}
 	}
+	if parsedSchedule != nil {
+		return ok("routine", a.routineView(r, cfg), "approval", ap, "next", nextMS, "replayed", replayed,
+			"timezone", parsedSchedule.Timezone, "schedule", parsedSchedule.Summary), nil
+	}
 	return ok("routine", a.routineView(r, cfg), "approval", ap, "next", nextMS, "replayed", replayed), nil
+}
+
+// parseSchedule turns the person's words into a cron in an explicit zone, or
+// a stable code the Coordinator turns into a question.
+func (a *API) parseSchedule(words, zone string) (schedule.Parsed, error) {
+	var loc *time.Location
+	zone = strings.TrimSpace(zone)
+	if zone == "" {
+		zone = schedule.LocalZoneName()
+	}
+	if zone != "" {
+		l, err := time.LoadLocation(zone)
+		if err != nil {
+			return schedule.Parsed{}, coded("needs_clarification", "I do not know the time zone %q. Ask the person which IANA zone (for example Asia/Shanghai) they mean.", zone)
+		}
+		loc = l
+	}
+	p, err := schedule.ParseText(words, loc, a.now())
+	var nc *schedule.NeedsClarification
+	switch {
+	case errors.As(err, &nc):
+		return schedule.Parsed{}, coded("needs_clarification", "%s Ask the person; do not guess.", nc.Question)
+	case errors.Is(err, schedule.ErrOneTime):
+		return schedule.Parsed{}, coded("unsupported_schedule", "%v", err)
+	case err != nil:
+		return schedule.Parsed{}, coded("invalid", "%v", err)
+	}
+	return p, nil
 }
 
 // afterApproval runs the keeper at once when the answer was a yes to a routine,

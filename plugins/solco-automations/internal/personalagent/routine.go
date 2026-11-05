@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -188,6 +189,8 @@ func DefinitionHash(a config.Automation) string {
 	return hex.EncodeToString(sum[:])
 }
 
+var cronZoneRe = regexp.MustCompile(`^(?:CRON_)?TZ=(\S+)\s`)
+
 // RoutineAction is the sentence of the approval card: exactly what enabling means.
 func RoutineAction(a config.Automation, next []time.Time) string {
 	how := "in a Herdr pane"
@@ -197,6 +200,16 @@ func RoutineAction(a config.Automation, next []time.Time) string {
 	when := ""
 	if len(next) > 0 {
 		when = " Next run " + next[0].Local().Format("2006-01-02 15:04 MST") + "."
+		// A schedule pinned to a zone is approved in that zone, three runs deep.
+		if m := cronZoneRe.FindStringSubmatch(a.Cron); m != nil {
+			if loc, err := time.LoadLocation(m[1]); err == nil {
+				var runs []string
+				for _, n := range next {
+					runs = append(runs, n.In(loc).Format("Mon 2006-01-02 15:04 MST"))
+				}
+				when = " Time zone " + m[1] + ". Next runs: " + strings.Join(runs, "; ") + "."
+			}
+		}
 	}
 	return fmt.Sprintf("Enable routine %q: run `%s` (cron) on %s with %s %s, unattended on this Mac.%s Prompt: %s",
 		a.Name, a.Cron, a.Repo, a.Agent, how, when, clip(strings.Join(strings.Fields(a.Prompt), " "), 240))

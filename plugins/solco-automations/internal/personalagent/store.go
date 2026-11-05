@@ -635,6 +635,12 @@ var migrations = []string{
 		granted_at INTEGER NOT NULL,
 		PRIMARY KEY (assistant_id, skill)
 	);`,
+	// v22: skills a routine's runs must use; copied onto every task it fires.
+	`CREATE TABLE routine_skills (
+		routine_name TEXT NOT NULL,
+		skill TEXT NOT NULL,
+		PRIMARY KEY (routine_name, skill)
+	);`,
 }
 
 func (s *Store) migrate() error {

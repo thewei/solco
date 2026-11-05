@@ -435,6 +435,9 @@ func (r *RuleScheduler) Tick() (RuleReport, error) {
 				TaskQueued, 0, "", 1, 1, nowMS, nowMS); err != nil {
 				return err
 			}
+			if _, err := tx.Exec(`INSERT INTO task_skills(task_id,skill) SELECT ?, skill FROM routine_skills WHERE routine_name=?`, tid, a.Name); err != nil {
+				return err
+			}
 			if _, err := tx.Exec(`UPDATE events SET task_id=? WHERE source='rule' AND resource=? AND revision=? AND kind='rule.fired'`, tid, a.Name, revision); err != nil {
 				return err
 			}

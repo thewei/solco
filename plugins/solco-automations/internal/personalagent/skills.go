@@ -171,3 +171,20 @@ func (s *Store) askSkillApproval(assistantID, skill string, attempt int) error {
 	})
 	return err
 }
+
+// setRoutineSkills replaces the skills a routine's runs must use. The routine's
+// approval card names them, so a person answers for exactly this list.
+func (s *Store) setRoutineSkills(name string, skills []string) error {
+	_, _, err := execute(s, "", "routine.skills", nil, func(tx *sql.Tx) (struct{}, error) {
+		if _, err := tx.Exec(`DELETE FROM routine_skills WHERE routine_name=?`, name); err != nil {
+			return struct{}{}, err
+		}
+		for _, sk := range skills {
+			if _, err := tx.Exec(`INSERT INTO routine_skills(routine_name,skill) VALUES(?,?)`, name, sk); err != nil {
+				return struct{}{}, err
+			}
+		}
+		return struct{}{}, nil
+	})
+	return err
+}
