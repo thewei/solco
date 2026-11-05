@@ -304,6 +304,25 @@ func (r *TriggerScheduler) Tick() (TriggerReport, error) {
 			if l.firesDay != day {
 				l.firesDay, l.firesToday = day, 0
 			}
+			// A task the system starts unasked is the Assistant's own rules'
+			// business, like a Supervisor dispatch: Respond and Suggest start
+			// nothing (and let the event go), quiet hours and a spent daily
+			// budget hold it for later (Gap A05).
+			pol, err := getProactivityTx(tx, l.AssistantID, now)
+			if err != nil {
+				return rep, err
+			}
+			if pol.Level != LevelFollowUp {
+				var top int64
+				_ = tx.QueryRow(`SELECT COALESCE(MAX(rowid),0) FROM events WHERE assistant_id=?`, l.AssistantID).Scan(&top)
+				if _, err := tx.Exec(`UPDATE event_triggers SET event_mark=? WHERE id=?`, top, l.ID); err != nil {
+					return rep, err
+				}
+				continue
+			}
+			if pol.QuietNow || pol.DispatchToday >= pol.DailyBudget {
+				continue
+			}
 			evRows, err := tx.Query(`SELECT `+eventCols+` FROM events WHERE assistant_id=? AND rowid>? AND source='task' AND kind=? ORDER BY rowid`, l.AssistantID, l.mark, l.On)
 			if err != nil {
 				return rep, err
@@ -321,7 +340,7 @@ func (r *TriggerScheduler) Tick() (TriggerReport, error) {
 			newMark := l.mark
 			capped := false
 			for _, e := range evs {
-				if l.firesToday >= TriggerDailyCap {
+				if l.firesToday >= TriggerDailyCap || pol.DispatchToday >= pol.DailyBudget {
 					// Held, not dropped: tomorrow picks up from here.
 					newMark, capped = e.Seq-1, true
 					break
@@ -367,6 +386,10 @@ func (r *TriggerScheduler) Tick() (TriggerReport, error) {
 					Revision: fmt.Sprintf("event#%d", e.Seq), TaskID: tid, Detail: fmt.Sprintf("%s: started a task", l.Name)}, nowMS); err != nil {
 					return rep, err
 				}
+				if err := countDispatchTx(tx, pol, 1, nowMS); err != nil {
+					return rep, err
+				}
+				pol.DispatchToday++
 				l.firesToday++
 				l.FiresTotal++
 				rep.Fired++

@@ -187,3 +187,16 @@ func (s *Store) countDispatch(assistantID string, n int) error {
 	_, err = s.db.Exec(`UPDATE proactivity SET dispatch_day=?, dispatch_today=? WHERE assistant_id=?`, p.day, p.DispatchToday+n, assistantID)
 	return wrapBusy(err)
 }
+
+// countDispatchTx is countDispatch inside the caller's transaction: it spends n
+// of the Assistant's daily budget of tasks the system started unasked.
+func countDispatchTx(tx *sql.Tx, p Proactivity, n int, nowMS int64) error {
+	if p.Revision == 0 {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO proactivity(assistant_id,level,daily_budget,revision,updated_at) VALUES(?,?,?,0,?)`,
+			p.AssistantID, LevelFollowUp, DefaultDailyBudget, nowMS); err != nil {
+			return wrapBusy(err)
+		}
+	}
+	_, err := tx.Exec(`UPDATE proactivity SET dispatch_day=?, dispatch_today=? WHERE assistant_id=?`, p.day, p.DispatchToday+n, p.AssistantID)
+	return wrapBusy(err)
+}

@@ -2,6 +2,7 @@ package personalagent
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -186,5 +187,48 @@ func TestTriggerDeniedOrWithdrawnDraftNeverFires(t *testing.T) {
 	e.sch.Tick()
 	if len(e.children(t)) != 0 {
 		t.Fatal("a denied trigger fired")
+	}
+}
+
+// A05: a trigger starts work the system chose, so the Assistant's own rules
+// govern it — Respond/Suggest start nothing, quiet hours and the daily budget hold.
+func TestTriggerObeysProactivityLevelQuietHoursAndBudget(t *testing.T) {
+	e := newTrigEnv(t)
+	_, ap := e.draft(t, "d1")
+	e.approve(t, ap)
+	set := func(mut func(*ProactivityInput)) {
+		t.Helper()
+		cur, _ := e.s.GetProactivity(e.a.ID)
+		in := ProactivityInput{AssistantID: e.a.ID, Level: cur.Level, QuietStart: cur.QuietStart, QuietEnd: cur.QuietEnd, TZ: cur.TZ, ReportEveryMin: cur.ReportEveryMin, DailyBudget: cur.DailyBudget}
+		mut(&in)
+		if _, _, err := e.s.SetProactivity(fmt.Sprintf("pol-%d", time.Now().UnixNano()), in, cur.Revision); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Respond: the event is let go, and stays gone when the level is raised.
+	set(func(in *ProactivityInput) { in.Level = LevelRespond })
+	e.fail(t, e.mon)
+	e.sch.Tick()
+	set(func(in *ProactivityInput) { in.Level = LevelFollowUp })
+	e.sch.Tick()
+	if len(e.children(t)) != 0 {
+		t.Fatalf("Respond started a task (or it was replayed later)")
+	}
+	// Budget of 1: the first starts, the second is held, not dropped.
+	set(func(in *ProactivityInput) { in.DailyBudget = 1 })
+	e.fail(t, e.mon)
+	e.sch.Tick()
+	e.fail(t, e.mon)
+	e.sch.Tick()
+	if got := len(e.children(t)); got != 1 {
+		t.Fatalf("children with a budget of 1 = %d", got)
+	}
+	if p, _ := e.s.GetProactivity(e.a.ID); p.DispatchToday != 1 {
+		t.Fatalf("the trigger did not spend the daily budget: %d", p.DispatchToday)
+	}
+	set(func(in *ProactivityInput) { in.DailyBudget = 5 })
+	e.sch.Tick()
+	if got := len(e.children(t)); got != 2 {
+		t.Fatalf("the held event should run once the budget allows: %d", got)
 	}
 }
