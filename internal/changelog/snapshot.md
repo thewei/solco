@@ -5,7 +5,7 @@ Internal from the release's commits (see `.agents/skills/solco-release`). The
 current release's section is snapshotted into `internal/changelog/snapshot.md`
 at release time and shown in Settings → About.
 
-## v0.13.0 — 2026-11-05
+## v0.13.1 — 2026-11-05
 
 ### New
 
