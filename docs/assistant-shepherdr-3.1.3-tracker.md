@@ -104,3 +104,9 @@
 Q02/Q04/Q05 的桌面路径（research proof、coding review→Resume→Accept→Approve→Merge，main 上出现 feature.txt）已在隔离 SolcoAcc.app + 真 Herdr + 真 OMP 上走通，证据见 `docs/debug/assistant-shepherdr-3.1.3-acceptance/2026-11-05-mac-app-ac04.md`；顺带修了 ProofBox 过期与合并后进度条不更新两个问题。手机、HOOK-06/07、Reject 的 GUI 路径、A10、A08 余项仍未做，行状态不变（均 PARTIAL/OPEN）。
 
 2026-11-05 AC-04 桌面补记 2：Reject 的 GUI 路径（任务 cancelled、review rejected、分支保留、main 不动）与 requireChecks 的 GUI 表现（新建任务表单有开关；无已批准检查时点 Review 出红色 checks_required 横幅且不产生 review）已实机验证，见 `…-ac04b.md`。表单提交本身因 Computer Use 无法可靠输入 WebView 文本，经 CLI 提交。
+
+2026-11-05 规格默认方案（用户选定）落地：
+- **A08**：`kind=sensitive` 的记忆只能由人保留——Agent 提议不会被 `memory.autosave` 授权自动批准（即使授权列出了 sensitive），不能被分享给别的 Assistant，`VisibleMemory` 对他人不可见。测试 `memory_sensitive_test.go`（RED→GREEN）。仍缺：桌面 Memory 页的 sensitive 选择入口、checkpoint→记忆晋升规则。
+- **A10**：跨 Assistant 默认全拒已由 scope 表与记忆隔离实现；新增 fail-closed 守卫 `TestEveryCoordinatorVerbNamesWhoseRecordItTouches`（每个 Coordinator 动词必须声明所属，且 share/approve 不在其 scope）。跨机器/跨身份默认访问仍是 L1 信任锚的范围，未动。
+- **Q06**：桌面通知正文带来源 `From <Assistant> · <detail>`（`attentionBody`）；同一卡一次推送沿用 `InboxWatcher`。手机与桌面之间的去重需要 solco-mobile 侧改动，未做。
+- **HOOK-06（真实睡眠唤醒）**：本轮按用户决定跳过，标 **NEEDS-HUMAN**——`pmset sleepnow` 会同时中断 Computer Use/Shell，且无 sudo 无法定时唤醒；确定性覆盖仍是 HOOK-05 的三个重启/重投测试。

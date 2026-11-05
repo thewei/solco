@@ -51,6 +51,11 @@ type ProposeMemoryInput struct {
 	Kind        string `json:"kind,omitempty"`
 }
 
+// KindSensitive marks memory a person wants kept private to its Assistant
+// (A08): never auto-saved by a grant, never shared, never visible to another
+// Assistant.
+const KindSensitive = "sensitive"
+
 const memoryCols = `id,assistant_id,scope,kind,content,source_ref,state,shared_with,revision,created_at,updated_at`
 
 func scanMemory(r rowScanner) (MemoryItem, error) {
@@ -110,6 +115,9 @@ func (s *Store) proposeAs(author, requestID string, in ProposeMemoryInput) (Memo
 // the grant, and the version history still says the Agent wrote it. Edits
 // from files, a person's writes and every other author never come here.
 func (s *Store) autosaveTx(tx *sql.Tx, requestID string, m MemoryItem) (MemoryItem, error) {
+	if m.Kind == KindSensitive {
+		return m, nil // only a person keeps sensitive memory
+	}
 	if requestID == "" {
 		requestID = newID("q") // a receipt's request id is unique; an unnamed call still needs one
 	}
@@ -274,6 +282,9 @@ func (s *Store) ShareMemory(requestID, id, withAssistant string, expectedRevisio
 			if m.State != MemoryApproved {
 				return fmt.Errorf("%w: only approved memory can be shared", ErrBadState)
 			}
+			if m.Kind == KindSensitive {
+				return fmt.Errorf("%w: sensitive memory stays with its Assistant", ErrInvalid)
+			}
 			if withAssistant == m.AssistantID {
 				return fmt.Errorf("%w: an assistant already owns its memory", ErrInvalid)
 			}
@@ -312,7 +323,7 @@ func (s *Store) VisibleMemory(assistantID string) ([]MemoryItem, error) {
 	}
 	out := []MemoryItem{}
 	for _, m := range all {
-		if m.AssistantID == assistantID || slices.Contains(m.SharedWith, assistantID) {
+		if m.AssistantID == assistantID || (m.Kind != KindSensitive && slices.Contains(m.SharedWith, assistantID)) {
 			out = append(out, m)
 		}
 	}

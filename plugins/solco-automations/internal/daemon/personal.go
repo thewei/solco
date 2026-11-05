@@ -317,13 +317,29 @@ func (p *personal) lookAtInbox() {
 	}
 	items := make([]notify.AttentionItem, 0, len(fresh))
 	for _, it := range fresh {
+		name := ""
+		if a, err := p.store.GetAssistant(it.AssistantID); err == nil {
+			name = a.Name
+		}
 		items = append(items, notify.AttentionItem{
 			Title:  attentionTitle(it) + " · " + it.Title,
-			Body:   it.Detail,
+			Body:   attentionBody(name, it.Detail),
 			Urgent: it.Priority >= 3,
 		})
 	}
 	p.notifier.Attention(items)
+}
+
+// attentionBody names where the card came from (Q06): the Assistant, in front
+// of the card's own detail. The toast never invents the source from content.
+func attentionBody(assistant, detail string) string {
+	if assistant == "" {
+		return detail
+	}
+	if detail == "" {
+		return "From " + assistant
+	}
+	return "From " + assistant + " · " + detail
 }
 
 func attentionTitle(it personalagent.InboxItem) string {

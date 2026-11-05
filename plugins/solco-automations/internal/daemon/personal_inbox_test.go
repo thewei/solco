@@ -25,3 +25,16 @@ func TestAttentionTitleNamesTheReasonBeforeTheKind(t *testing.T) {
 		}
 	}
 }
+
+// Q06: a toast says which Assistant it came from.
+func TestAttentionBodyNamesItsSource(t *testing.T) {
+	for _, c := range []struct{ name, detail, want string }{
+		{"Ada", "Ready for your review", "From Ada · Ready for your review"},
+		{"Ada", "", "From Ada"},
+		{"", "Ready for your review", "Ready for your review"},
+	} {
+		if got := attentionBody(c.name, c.detail); got != c.want {
+			t.Errorf("attentionBody(%q,%q) = %q, want %q", c.name, c.detail, got, c.want)
+		}
+	}
+}
