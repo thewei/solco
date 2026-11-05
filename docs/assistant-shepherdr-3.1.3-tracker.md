@@ -110,3 +110,5 @@ Q02/Q04/Q05 的桌面路径（research proof、coding review→Resume→Accept�
 - **A10**：跨 Assistant 默认全拒已由 scope 表与记忆隔离实现；新增 fail-closed 守卫 `TestEveryCoordinatorVerbNamesWhoseRecordItTouches`（每个 Coordinator 动词必须声明所属，且 share/approve 不在其 scope）。跨机器/跨身份默认访问仍是 L1 信任锚的范围，未动。
 - **Q06**：桌面通知正文带来源 `From <Assistant> · <detail>`（`attentionBody`）；同一卡一次推送沿用 `InboxWatcher`。手机与桌面之间的去重需要 solco-mobile 侧改动，未做。
 - **HOOK-06（真实睡眠唤醒）**：本轮按用户决定跳过，标 **NEEDS-HUMAN**——`pmset sleepnow` 会同时中断 Computer Use/Shell，且无 sudo 无法定时唤醒；确定性覆盖仍是 HOOK-05 的三个重启/重投测试。
+
+2026-11-05 Android 实机（AC-12 手机半）：vivo V2309A + release APK + 隔离 Host 配对，手机读到 Mac 核心里同一个 Assistant/任务/Solco record/Needs you，打开即进真实 Herdr pane 的共享 Chat；Mac 侧 review 被 reject 后手机约 6 秒内出现 “review … is rejected” 事实、Needs-you 卡消失。证据与未覆盖项（手机端审批、push 送达 U04、断线游标恢复）见 `…/2026-11-05-android-ac12.md`。U03 部分证实，U04 仍 OPEN。
