@@ -27,12 +27,12 @@ func TestAcceptanceHold(t *testing.T) {
 	sb.model.delay = time.Second
 	sb.model.mu.Lock()
 	sb.model.scripts["*"] = []fixtureStep{{text: "Ready. Tell me what you want done."}}
-	sb.model.scripts["last:能用哪些 Solco 能力"] = []fixtureStep{
+	sb.model.scripts["last:Solco capabilities"] = []fixtureStep{
 		{tool: "solco_assistant", args: map[string]any{"action": "goal.list"}},
 		{tool: "solco_assistant", args: map[string]any{"action": "task.list"}},
 		{text: "Solco actions I can use: task.create, task.list, task.show, task.graph, goal.create, goal.list, goal.show, goal.plan, goal.set-plan, routine.draft/list/show, memory.propose/list, checkpoint.get/set. I checked goals and tasks: none yet. Plan: 1) clarify the goal, 2) file a research task for a worker, 3) report."},
 	}
-	sb.model.scripts["last:每个工作日早上 9:00"] = []fixtureStep{
+	sb.model.scripts["last:every weekday at 9:00"] = []fixtureStep{
 		{tool: "solco_assistant", args: map[string]any{"action": "routine.draft", "payload": `{"requestId":"acc-routine-0001","name":"x-digest","schedule":"every weekday at 9:00","timezone":"Asia/Shanghai","agent":"omp","prompt":"SCENARIO:digest Use the fixture-browser skill to read the page and list the top posts with links.","rationale":"User asked for a weekday 9:00 digest.","requiredSkills":["fixture-browser"]}`}},
 		{text: "I drafted a routine for weekdays 09:00 (Asia/Shanghai). It does not run until you approve the card."},
 	}
