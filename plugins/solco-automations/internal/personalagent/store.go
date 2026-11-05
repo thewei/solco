@@ -641,6 +641,23 @@ var migrations = []string{
 		skill TEXT NOT NULL,
 		PRIMARY KEY (routine_name, skill)
 	);`,
+	// v23: the Assistant's Autopilot checkpoint (Gap A03) and the wake marker on
+	// the coordinator outbox (Gap A01): kind 'report' (opt-in cadence) or 'wake'
+	// (an autonomous inspect→act turn), with the reason a wake was raised.
+	`CREATE TABLE assistant_checkpoints (
+		assistant_id TEXT PRIMARY KEY,
+		last_seq INTEGER NOT NULL DEFAULT 0,
+		progress TEXT NOT NULL DEFAULT '',
+		next_action TEXT NOT NULL DEFAULT '',
+		blockers TEXT NOT NULL DEFAULT '',
+		stop_when TEXT NOT NULL DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 0,
+		updated_at INTEGER NOT NULL DEFAULT 0
+	);
+	ALTER TABLE coordinator_reports ADD COLUMN kind TEXT NOT NULL DEFAULT 'report';
+	ALTER TABLE coordinator_reports ADD COLUMN wake_reason TEXT NOT NULL DEFAULT '';
+	ALTER TABLE coordinator_reports ADD COLUMN wake_queued_at INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE heartbeats ADD COLUMN wake_pending INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func (s *Store) migrate() error {

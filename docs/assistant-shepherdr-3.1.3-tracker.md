@@ -42,9 +42,9 @@
 | R08 | P1 | P | OPEN | | | | 显示触发来源、下次运行时区、上次 Run 结果链接、Owner、停用原因、技能和预算；支持预览/编辑及变更重新审批，AC-02/10 |
 | R09 | P1 | P | OPEN | | | | 独立于 UI/原 Coordinator 生死，重启/并发请求只能一份调度器；长时设备启动/睡眠/窗口关闭/用户登出应定义真实保证和已知限制，AC-07/10 |
 | R10 | P1 | P | OPEN | | | | 任意一次 Routine 都带 owner/request/trigger/occurrence/worker/result/report 链；日报中的链接不是“Agent 说了就 |
-| A01 | P0 | B | OPEN | | | | **当前“模型心跳”≠原 Coordinator 主动承担目标**；要唤醒原 Assistant（或可追溯的受控等效回合）执行 inspect→choose→act→evaluat |
-| A02 | P0 | P | PARTIAL | `report_herdr.go` ReportReady/Dialog/SubmitReport 由 daemon 与 e2e 共用 | e2e `TestE2EFactReachesTheOriginalCoordinatorExactlyOnceAndTheReplyIsProven`（真实 OMP Coordinator：事实只投递 1 次，回复由 OMP transcript 证明） | (本批) | 唤醒事件去重、pending 合并、忙时排队、未投递过期、出站状态和最终回复收据关联；中断不得无限重放，AC-05/07 |
-| A03 | P0 | M | OPEN | | | | 独立的 Assistant Autopilot checkpoint：last observed event seq、进展、下一动作、阻塞、评估、终止条件；完成时必须证明事实，AC |
+| A01 | P0 | B | PARTIAL | `wake.go` queueCoordinatorWakeTx（Heartbeat→coordinator_reports kind=wake，投递到原 Coordinator pane/revision；预算/静默/Proactivity 由核心裁决） | `TestGapA01WakeGoesToTheOriginalCoordinatorWithItsCheckpoint`；e2e `TestE2EWakeTurnSavesACheckpointThroughTheRealExtension`（真实 Herdr+OMP：唤醒回合经扩展调用 checkpoint.set，回复由 transcript 证明） | (本批) | 仍缺：真实场景下 inspect→act 的多步行动证据（AC-05/07）、Mac.app 实机 |
+| A02 | P0 | P | PARTIAL | `report_herdr.go` ReportReady/Dialog/SubmitReport 由 daemon 与 e2e 共用 | e2e `TestE2EFactReachesTheOriginalCoordinatorExactlyOnceAndTheReplyIsProven`（真实 OMP Coordinator：事实只投递 1 次，回复由 OMP transcript 证明） | (本批) | 已做：pending 合并（wake_pending）、忙时排队、6h 未投递过期并留 fact、Quiet/Respond/Suggest 不唤醒；仍缺：、出站状态和最终回复收据关联；中断不得无限重放，AC-05/07 |
+| A03 | P0 | M | PARTIAL | `checkpoint.go`（v23 assistant_checkpoints，revision 栅栏、核心盖章 LastSeq）、API `assistant checkpoint get/set`、扩展 `checkpoint.get/set`，唤醒提示带上一份 checkpoint | `TestGapA03CheckpointIsDurableFencedAndCoreStampsTheObservedSeq`；扩展测试；e2e wake 回合 | (本批) | 仍缺：完成目标时的 checkpoint 证据校验、桌面/手机展示 |
 | A04 | P0 | P | OPEN | | | | 个人版继承模型：global defaults → Assistant override → Goal/Routine explicit grants；版本化、权限递减、真实 UI |
 | A05 | P0 | P | OPEN | | | | Budget 不能只计 Task：要覆盖唤醒、模型 token/cost、工具频率、并发、安静时段、没有授权时不自发外部动作；限额耗尽可观察而非偷跑，AC-05/09 |
 | A06 | P1 | P | OPEN | | | | 多 Goal、多 Routine、inbox、worker stuck、时间与事件汇成统一事件路由/水位；只在变化或合理到期时唤醒，保证不刷屏，AC-05/11 |

@@ -255,6 +255,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 			return a.memoryContext(rest[0], rest[1:])
 		}
 		return a.memory(rest, body)
+	case "checkpoint":
+		return a.checkpoint(rest, body)
 	case "heartbeat":
 		return a.heartbeat(rest, body)
 	case "event":
@@ -527,4 +529,30 @@ func (a *API) overview() (any, error) {
 		return nil, wrapBusy(err)
 	}
 	return ok("assistants", rows, "needsYou", needs, "groups", grows, "activitySeq", activitySeq), nil
+}
+
+// checkpoint: `assistant checkpoint get <assistantId>` and `assistant checkpoint set`.
+func (a *API) checkpoint(args []string, body []byte) (any, error) {
+	if len(args) == 0 {
+		return nil, coded("invalid", "usage: assistant checkpoint <get|set>")
+	}
+	switch args[0] {
+	case "get":
+		if len(args) != 2 {
+			return nil, coded("invalid", "usage: assistant checkpoint get <assistantId>")
+		}
+		cp, err := a.Store.GetCheckpoint(args[1])
+		return ok("checkpoint", cp), err
+	case "set":
+		var in struct {
+			common
+			CheckpointInput
+		}
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		cp, replayed, err := a.Store.SetCheckpoint(in.RequestID, in.CheckpointInput, in.ExpectedRevision)
+		return ok("checkpoint", cp, "replayed", replayed), err
+	}
+	return nil, coded("invalid", "unknown checkpoint command %q", args[0])
 }

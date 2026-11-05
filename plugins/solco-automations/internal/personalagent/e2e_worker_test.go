@@ -65,7 +65,28 @@ func (f *fixtureModel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.requests++
 	f.mu.Unlock()
 	scenario, tools := "", 0
+	// A "last:<text>" script answers a turn whose newest user message contains
+	// <text>; its tool calls are counted from that message on, so a wake turn
+	// does not inherit the tool history of the startup turn.
+	lastUser, afterLast := "", 0
 	for _, m := range req.Messages {
+		if m.Role == "user" {
+			raw, _ := json.Marshal(m.Content)
+			lastUser, afterLast = string(raw), 0
+		}
+		if m.Role == "tool" {
+			afterLast++
+		}
+	}
+	for name := range f.scripts {
+		if strings.HasPrefix(name, "last:") && strings.Contains(lastUser, strings.TrimPrefix(name, "last:")) {
+			scenario, tools = name, afterLast
+		}
+	}
+	for _, m := range req.Messages {
+		if scenario != "" && strings.HasPrefix(scenario, "last:") {
+			break
+		}
 		raw, _ := json.Marshal(m.Content)
 		if m.Role == "user" && scenario == "" {
 			for name := range f.scripts {
@@ -842,5 +863,75 @@ func TestE2EDaemonRestartMidRunReattachesAndRecoversTheResult(t *testing.T) {
 	all, _ := s.ListRuns(task.ID)
 	if len(all) != 1 {
 		t.Fatalf("a restart launched %d runs, want exactly the original", len(all))
+	}
+}
+
+// Gap A01/A03 on the real stack: a wake is typed into the ORIGINAL Coordinator's
+// OMP pane, that turn saves a checkpoint through the real extension and the CLI,
+// and the reply is proven from the transcript.
+func TestE2EWakeTurnSavesACheckpointThroughTheRealExtension(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go not installed")
+	}
+	goEnv := append(os.Environ(), "GOTOOLCHAIN=auto")
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	pluginLayout(t, sb, goBin, goEnv)
+	sb.model.delay = 2 * time.Second
+	sb.model.mu.Lock()
+	sb.model.scripts["*"] = []fixtureStep{{text: "Ready."}}
+	sb.model.scripts["last:Solco automated wake"] = []fixtureStep{
+		{tool: "solco_assistant", args: map[string]any{"action": "checkpoint.set", "payload": `{"requestId":"e2e-wake-cp-0001","progress":"digest verified","nextAction":"wait for tomorrow","blockers":"none","stopWhen":"person says stop"}`}},
+		{text: "Checked in: nothing needs you."},
+	}
+	sb.model.mu.Unlock()
+
+	s, err := Open(DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	a := mustAssistant(t, s, "e2e-wake-a", "Ada")
+	c, _, err := s.StartCoordinatorAs("e2e-wake-start", a.ID, "omp", "smoke/smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
+	if run, err := d.RunTask(t.Context(), c.TaskID); err != nil || run.Status != RunDone {
+		t.Fatalf("coordinator: %+v %v", run, err)
+	}
+	if _, _, err := s.SetProactivity("e2e-wake-pro", ProactivityInput{AssistantID: a.ID, Level: LevelFollowUp, DailyBudget: 5}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := execute(s, "", "e2e.wake", nil, func(tx *sql.Tx) (bool, error) {
+		if _, err := addFactTx(tx, Fact{AssistantID: a.ID, Kind: FactRunFinished, Text: "Worker finished the digest."}, "e2e:wake:fact", s.nowMS()); err != nil {
+			return false, err
+		}
+		_, _, err := queueCoordinatorWakeTx(tx, a.ID, "Heartbeat: the digest finished.", s.nowMS())
+		return true, err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	home := os.Getenv("HOME")
+	pump := &ReportPump{Store: s, Submit: SubmitReport, Ready: ReportReady, Blocked: ReportDialog,
+		Verify: func(marker string, at int64) (ReplyEvidence, error) { return FindOMPReportReplySince(home, marker, at) }}
+	deadline := time.Now().Add(120 * time.Second)
+	var r CoordinatorReport
+	for time.Now().Before(deadline) {
+		if _, err := pump.Tick(); err != nil {
+			t.Fatal(err)
+		}
+		r, _ = s.GetCoordinatorReport(a.ID)
+		if r.ReplyState == ReplyVerified {
+			break
+		}
+		time.Sleep(1500 * time.Millisecond)
+	}
+	if r.ReplyState != ReplyVerified {
+		t.Fatalf("the wake reply was never proven: %+v", r)
+	}
+	cp, err := s.GetCheckpoint(a.ID)
+	if err != nil || cp.Revision != 1 || cp.Progress != "digest verified" || cp.LastSeq == 0 {
+		t.Fatalf("the wake turn did not save its checkpoint through the extension: %+v %v", cp, err)
 	}
 }

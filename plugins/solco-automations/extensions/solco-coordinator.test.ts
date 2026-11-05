@@ -84,3 +84,12 @@ test("tool reads its working directory from OMP's fifth execute argument", async
   expect(res.isError).toBe(true);
   expect(res.content[0].text).toContain("not a Solco Coordinator workspace");
 });
+
+test("checkpoint actions are scoped to the owning Assistant", () => {
+  const g = route("checkpoint.get", "a_owner", "a_someone_else");
+  expect(g.args).toEqual(["assistant", "checkpoint", "get", "a_owner"]);
+  const set = route("checkpoint.set", "a_owner", "", JSON.stringify({ requestId: "cp-12345678", assistantId: "a_other", progress: "p" }));
+  expect(set.args).toEqual(["assistant", "checkpoint", "set"]);
+  expect(JSON.parse(set.input).assistantId).toBe("a_owner");
+  expect(() => route("checkpoint.set", "a_owner", "", JSON.stringify({ progress: "p" }))).toThrow(/requestId/);
+});

@@ -295,7 +295,8 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 			return BeatReport{}, err
 		}
 		var mark int64
-		if err := tx.QueryRow(`SELECT event_mark FROM heartbeats WHERE assistant_id=?`, assistantID).Scan(&mark); err != nil {
+		var pending int
+		if err := tx.QueryRow(`SELECT event_mark,wake_pending FROM heartbeats WHERE assistant_id=?`, assistantID).Scan(&mark, &pending); err != nil {
 			return BeatReport{}, err
 		}
 		if h.LastBeatAt == 0 {
@@ -379,10 +380,35 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 			}
 			canWake = inFlight == 0
 		}
-		wantWake := len(wakeLines) > 0 || (due && h.WakeBudget > 0)
+		// A wake that was merged into an open turn is still owed: it is raised
+		// as soon as the Coordinator is free again (Gap A02: pending merge).
+		wantWake := len(wakeLines) > 0 || (due && h.WakeBudget > 0) || pending == 1
+		wantWakeOriginal := wantWake
 		rep := BeatReport{}
 		if due {
 			rep.Beats = 1
+		}
+		if wantWake && canWake {
+			// A live Coordinator is woken for one bounded turn of the original
+			// Assistant (Gap A01); only without one does the wake fall back to
+			// the read-only side task below.
+			queued, live, err := queueCoordinatorWakeTx(tx, assistantID, wakeReason(h.Checklist, held, wakeLines), nowMS)
+			if err != nil {
+				return BeatReport{}, err
+			}
+			if live && !queued {
+				held = append(held, wakeLines...) // a turn is already open: merged, not lost, not charged
+				if len(wakeLines) > 0 || pending == 1 {
+					pending = 1
+				}
+				wantWake = false
+			} else if queued {
+				held = nil
+				wakes++
+				pending = 0
+				rep.Woke = 1
+				wantWake = false
+			}
 		}
 		if wantWake && canWake {
 			tid := newID("t")
@@ -397,7 +423,7 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 			held = nil
 			wakes++
 			rep.Woke = 1
-		} else {
+		} else if !(wantWakeOriginal && canWake) {
 			held = append(held, wakeLines...) // not lost, and no model call
 		}
 		if len(held) > MaxHeld {
@@ -408,8 +434,11 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 		if due {
 			last = nowMS
 		}
-		_, err = tx.Exec(`UPDATE heartbeats SET last_beat_at=?, event_mark=?, wakes_day=?, wakes_today=?, held=? WHERE assistant_id=?`,
-			last, newMark, today, wakes, string(rawHeld), assistantID)
+		if rep.Woke == 1 {
+			pending = 0
+		}
+		_, err = tx.Exec(`UPDATE heartbeats SET last_beat_at=?, event_mark=?, wakes_day=?, wakes_today=?, held=?, wake_pending=? WHERE assistant_id=?`,
+			last, newMark, today, wakes, string(rawHeld), pending, assistantID)
 		return rep, err
 	})
 	return r, err

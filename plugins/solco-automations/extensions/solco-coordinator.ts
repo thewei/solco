@@ -37,6 +37,7 @@ export const actions = [
   "goal.create", "goal.list", "goal.show", "goal.plan", "goal.set-plan",
   "routine.draft", "routine.list", "routine.show",
   "memory.propose", "memory.list",
+  "checkpoint.get", "checkpoint.set",
 ] as const;
 
 export function route(action: string, assistantId: string, target = "", json = ""): { args: string[]; input: string } {
@@ -46,7 +47,10 @@ export function route(action: string, assistantId: string, target = "", json = "
   if (payload === null || Array.isArray(payload) || typeof payload !== "object") {
     throw new Error("Payload must be a JSON object.");
   }
-  if (action === "task.create" || action === "goal.create" || action === "routine.draft" || action === "memory.propose") {
+  if (action === "checkpoint.get") {
+    return { args: ["assistant", "checkpoint", "get", assistantId], input: "" };
+  }
+  if (action === "task.create" || action === "goal.create" || action === "routine.draft" || action === "memory.propose" || action === "checkpoint.set") {
     payload.assistantId = assistantId;
     if (action === "task.create") {
       payload.agent = "omp";
@@ -61,7 +65,7 @@ export function route(action: string, assistantId: string, target = "", json = "
     const scoped = operation === "graph" || entity === "memory" ? [assistantId] : ["--assistant", assistantId];
     return { args: ["assistant", entity, operation, ...scoped], input: "" };
   }
-  if (operation !== "create" && operation !== "draft" && operation !== "propose") {
+  if (operation !== "create" && operation !== "draft" && operation !== "propose" && operation !== "set") {
     if (!/^[A-Za-z0-9_-]{2,120}$/.test(target)) throw new Error("A valid Solco record ID is required.");
     return { args: ["assistant", entity, operation, target], input: JSON.stringify(payload) };
   }
@@ -87,7 +91,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "solco_assistant",
     label: "Solco Assistant",
-    description: "Manage only this Assistant's durable Solco tasks, goal plans and routine drafts. A routine draft creates an approval card and NEVER schedules before its owner approves. Delegate browsing and research to workers through task.create. No system cron, launchd or async subagents.",
+    description: "Manage only this Assistant's durable Solco tasks, goal plans, routine drafts and its own checkpoint (read it first and save it last on every autonomous wake turn). A routine draft creates an approval card and NEVER schedules before its owner approves. Delegate browsing and research to workers through task.create. No system cron, launchd or async subagents.",
     parameters: z.object({
       action: z.enum(actions).describe("Solco operation."),
       target: z.string().optional().describe("A goal/task/routine ID for show, plan, or set-plan."),
