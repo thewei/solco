@@ -1366,6 +1366,12 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                         <span>Context compacted</span>
                       </div>
                     ) : null}
+                    {turn.noteBefore ? (
+                      <details className="note-chip">
+                        <summary>Standing instructions</summary>
+                        <pre>{turn.noteBefore}</pre>
+                      </details>
+                    ) : null}
                     <TurnBoundary>
                       <TurnRow
                         // Only Claude's streaming tail marks a turn live; the agent

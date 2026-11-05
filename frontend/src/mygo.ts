@@ -603,6 +603,11 @@ export interface ChatTurn {
   compacted?: boolean;
   /** CompactedBefore draws the "Context compacted" divider above this row. */
   compactedBefore?: boolean;
+  /**
+   * NoteBefore is a system note (the Coordinator's standing instructions)
+   * drawn as a collapsed chip above this row; it is never a person's message.
+   */
+  noteBefore?: string;
   live?: boolean;
   tsMs?: number;
   tools?: ChatTool[];

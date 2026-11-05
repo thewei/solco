@@ -508,6 +508,29 @@ func TestAssistantsChatHidesTheCoordinatorBrief(t *testing.T) {
 	}
 }
 
+// The daemon prefixes every prompt it types with a `Solco-Run-Id:` marker line
+// (2026-11-05 isolated Mac.app run: the 132-line brief showed up as the person's
+// own message). The brief still leaves the user rows, and its text rides on the
+// next row as a collapsed "standing instructions" note instead of vanishing.
+func TestAssistantsChatFoldsTheMarkedCoordinatorBrief(t *testing.T) {
+	shell := NewShell()
+	shell.chatPaneID = "p9"
+	shell.chatBriefPane = "p9"
+	brief := "Solco-Run-Id: r_5e69acd65e25cd40\n\n" + assistantBriefPrefix + ` "Ada" (id a_1). …`
+	shell.chatTurns = []conversation.TimelineTurn{
+		{UserRow: true, Text: brief},
+		{UserRow: false, Narration: "Ready."},
+		{UserRow: true, Text: "hi"},
+	}
+	turns := shell.chatBridgeState().Turns
+	if len(turns) != 2 || turns[0].User || turns[0].Narration != "Ready." || !turns[1].User {
+		t.Fatalf("turns = %+v, want the brief row folded away", turns)
+	}
+	if !strings.Contains(turns[0].NoteBefore, `Ada" (id a_1)`) || strings.Contains(turns[0].NoteBefore, "Solco-Run-Id") {
+		t.Fatalf("note = %q, want the brief without its run marker", turns[0].NoteBefore)
+	}
+}
+
 func TestAssistantsGroupRowOpensTheGroupConversation(t *testing.T) {
 	assistantsOverviewOverride = assistantsOverviewWithGroup
 	stubAssistants(t, false)

@@ -303,6 +303,28 @@ html[data-host="phone"] .turn:not(.open):not(.last) .foot {
   opacity: 0.35;
 }
 
+/* A system note folded into the transcript (the Coordinator's standing
+   instructions): one quiet line that opens into the text. */
+.note-chip {
+  margin: 14px 0 6px;
+  color: var(--i4);
+  font-size: 12px;
+}
+
+.note-chip summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.note-chip pre {
+  margin: 8px 0 0;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: inherit;
+  color: var(--i3);
+}
+
 /* ---- reading text ---- */
 
 .prose {

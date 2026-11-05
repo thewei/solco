@@ -17,6 +17,7 @@ import (
 
 	"github.com/thewei/solco/internal/agent"
 	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/personalagent"
@@ -740,6 +741,22 @@ func (s *Shell) bindChatToCard(card agent.AgentCardModel) bool {
 // (personalagent.CoordinatorPrompt); the Chat of an Assistants-bound pane
 // leaves that first row out.
 const assistantBriefPrefix = "You are the Coordinator of the Solco Assistant"
+
+// assistantBrief recognises that brief row. The daemon types every prompt behind
+// a `Solco-Run-Id: <id>` marker line, so the marker is dropped before the
+// prefix check and from the text the page shows.
+func assistantBrief(turn chatsession.ChatTurn) (string, bool) {
+	if !turn.User {
+		return "", false
+	}
+	text := strings.TrimSpace(turn.Text)
+	if strings.HasPrefix(text, "Solco-Run-Id: ") {
+		if _, rest, found := strings.Cut(text, "\n"); found {
+			text = strings.TrimSpace(rest)
+		}
+	}
+	return text, strings.HasPrefix(text, assistantBriefPrefix)
+}
 
 // openPane shows one pane of this session.
 func (s *Shell) openPane(id string) {

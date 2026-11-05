@@ -63,8 +63,11 @@ type ChatTurn struct {
 	Compacted bool    `json:"compacted,omitempty"`
 	// CompactedBefore draws the "Context compacted" divider above this row.
 	CompactedBefore bool       `json:"compactedBefore,omitempty"`
-	Live            bool       `json:"live,omitempty"`
-	TsMS            *int64     `json:"tsMs,omitempty"`
+	// NoteBefore is a system note (the Coordinator's standing instructions)
+	// drawn as a collapsed chip above this row; it is never a person's message.
+	NoteBefore string `json:"noteBefore,omitempty"`
+	Live       bool   `json:"live,omitempty"`
+	TsMS       *int64 `json:"tsMs,omitempty"`
 	Tools           []ChatTool `json:"tools,omitempty"`
 	Steps           []ChatStep `json:"steps,omitempty"`
 	// Changes lists the files this settled turn's edit tools touched (the

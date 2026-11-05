@@ -740,10 +740,16 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		// The brief is a user row, but not necessarily the first one: the
 		// person's own first message can be echoed ahead of it.
 		kept := state.Turns[:0:0]
+		note := ""
 		for _, turn := range state.Turns {
-			if !(turn.User && strings.HasPrefix(turn.Text, assistantBriefPrefix)) {
-				kept = append(kept, turn)
+			if brief, ok := assistantBrief(turn); ok {
+				note = brief
+				continue
 			}
+			if note != "" && !turn.User {
+				turn.NoteBefore, note = note, ""
+			}
+			kept = append(kept, turn)
 		}
 		state.Turns = kept
 	}
