@@ -128,6 +128,9 @@ type CreateTaskInput struct {
 	// card that follows the task's real state. Only a member with a running
 	// Group Agent may do it.
 	GroupID string `json:"groupId,omitempty"`
+	// RequiredSkills names skills the worker must load and use (Gap W04). They
+	// must be installed for OMP and granted to the Assistant by a person.
+	RequiredSkills []string `json:"requiredSkills,omitempty"`
 }
 
 const taskCols = `id,assistant_id,goal_id,rule_id,parent_task_id,kind,title,brief,repo_path,agent,model,state,needs_you,review_state,attempt,revision,created_at,updated_at`
@@ -185,6 +188,11 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 	if in.Kind == KindCoding && strings.TrimSpace(in.RepoPath) == "" {
 		return Task{}, false, fmt.Errorf("%w: a coding task needs a repoPath", ErrInvalid)
 	}
+	skills, err := normalizeSkills(in.RequiredSkills)
+	if err != nil {
+		return Task{}, false, err
+	}
+	in.RequiredSkills = skills
 	return execute(s, requestID, "task.create", in, func(tx *sql.Tx) (Task, error) {
 		a, err := getAssistantTx(tx, in.AssistantID)
 		if err != nil {
@@ -238,6 +246,11 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 		}
 		for _, d := range deps {
 			if _, err := tx.Exec(`INSERT INTO task_deps(task_id,depends_on) VALUES(?,?)`, id, d); err != nil {
+				return Task{}, err
+			}
+		}
+		for _, sk := range in.RequiredSkills {
+			if _, err := tx.Exec(`INSERT INTO task_skills(task_id,skill) VALUES(?,?)`, id, sk); err != nil {
 				return Task{}, err
 			}
 		}

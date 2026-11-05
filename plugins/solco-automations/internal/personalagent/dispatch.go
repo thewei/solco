@@ -60,6 +60,8 @@ type LaunchSpec struct {
 	// NeedResult is set when the run only counts as done once a readable
 	// result has been collected from its Worker (Gap W02).
 	NeedResult bool
+	// RequiredSkills must be shown loaded in the transcript before a result counts.
+	RequiredSkills []string
 }
 
 // Launcher is the Herdr seam. The production adapter drives the same
@@ -110,6 +112,8 @@ type Dispatcher struct {
 	// flushed after it went idle (default 4 tries, 2 s apart).
 	CollectTries int
 	CollectDelay time.Duration
+	// Skills lists the skills OMP can load; nil reads the user's own folders.
+	Skills func() map[string]SkillInfo
 
 	wg      sync.WaitGroup
 	active  atomic.Int32
@@ -160,6 +164,21 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 	prompt := policy(asst, task)
 	if task.Kind == KindCoordinator && d.Policy == nil {
 		prompt = CoordinatorPrompt(asst)
+	}
+	var required []string
+	if task.Kind != KindCoordinator && task.Kind != KindGroupAgent {
+		required, err = d.Store.TaskSkills(task.ID)
+		if err != nil {
+			return run, err
+		}
+		if stopped, why := d.skillGate(task, required); stopped {
+			_ = d.Store.FinishRun(run.ID, RunFailed, why)
+			d.settle(run.ID)
+			return d.reload(run.ID), nil
+		}
+		if len(required) > 0 {
+			prompt = skillInstruction(required) + "\n\n" + prompt
+		}
 	}
 	groupID := ""
 	if task.Kind == KindGroupAgent {
@@ -273,7 +292,8 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		WorkDir: workDir,
 		GroupID: groupID,
 
-		NeedResult: needResult,
+		NeedResult:     needResult,
+		RequiredSkills: required,
 	}
 	d.settle(run.ID)
 	// The label is stored before anything is created, so an uncertain run can
@@ -467,7 +487,8 @@ func (d *Dispatcher) ReconcilePending(ctx context.Context) (int, error) {
 
 func (d *Dispatcher) resumeRun(ctx context.Context, r Run, task Task) {
 	sess := Session{HerdrSession: r.HerdrSession, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, AgentSessionID: r.AgentSessionID}
-	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout(), NeedResult: d.requiresResult(task)}
+	required, _ := d.Store.TaskSkills(task.ID)
+	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout(), NeedResult: d.requiresResult(task), RequiredSkills: required}
 	d.active.Add(1)
 	d.wg.Add(1)
 	go func() {
@@ -640,10 +661,71 @@ func (d *Dispatcher) finishWithResult(ctx context.Context, runID string, sess Se
 		_, _ = d.Store.parkUncertain(runID, reason)
 		return d.reload(runID), nil
 	}
+	if missing := unusedSkills(spec.RequiredSkills, res.Skills); len(missing) > 0 {
+		// Naming a skill is not using it: the transcript never loaded it.
+		_ = d.Store.FinishRun(runID, RunFailed, SkillNotUsedPrefix+strings.Join(missing, ", ")+" — the worker's transcript never loaded the skill, so its answer is not accepted")
+		return d.reload(runID), nil
+	}
 	if err := d.Store.FinishRunWithResult(runID, res); err != nil {
 		return d.reload(runID), err
 	}
 	return d.reload(runID), nil
+}
+
+func (d *Dispatcher) skills() map[string]SkillInfo {
+	if d.Skills != nil {
+		return d.Skills()
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return DiscoverSkills(home)
+}
+
+// skillGate stops a task whose named skills are not all installed for OMP and
+// granted to its Assistant. Nothing is launched and no other tool stands in.
+func (d *Dispatcher) skillGate(task Task, required []string) (bool, string) {
+	if len(required) == 0 {
+		return false, ""
+	}
+	have := d.skills()
+	for _, name := range required {
+		if _, ok := have[name]; !ok {
+			return true, SkillMissingPrefix + name + " is not installed for OMP (looked in ~/.omp/agent/skills and ~/.agents/skills); install it, then retry the task"
+		}
+	}
+	for _, name := range required {
+		ok, err := d.Store.SkillGranted(task.AssistantID, name)
+		if err != nil {
+			return true, "skill check failed: " + err.Error()
+		}
+		if !ok {
+			if err := d.Store.askSkillApproval(task.AssistantID, name, task.Attempt); err != nil {
+				return true, "skill check failed: " + err.Error()
+			}
+			return true, SkillNotGrantedPrefix + name + " needs your approval for this Assistant; answer its card and the task restarts by itself"
+		}
+	}
+	return false, ""
+}
+
+func skillInstruction(skills []string) string {
+	return "Required skills: " + strings.Join(skills, ", ") + ". Load each one by reading its SKILL.md (skill://<name>) before you act and follow it. If a skill cannot be loaded, or its tool is unavailable or logged out, stop and report that you are blocked; never substitute another tool or invent the result."
+}
+
+func unusedSkills(required, used []string) []string {
+	have := map[string]bool{}
+	for _, u := range used {
+		have[u] = true
+	}
+	var missing []string
+	for _, r := range required {
+		if !have[r] {
+			missing = append(missing, r)
+		}
+	}
+	return missing
 }
 
 func (d *Dispatcher) collect(ctx context.Context, sess Session, spec LaunchSpec) (WorkerResult, error) {

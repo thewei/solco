@@ -622,6 +622,19 @@ var migrations = []string{
 		body TEXT NOT NULL,
 		collected_at INTEGER NOT NULL
 	);`,
+	// v21: skills a task must use, and the skills a person let an Assistant use
+	// (Gap W04/C10). A grant is only ever written by a person's approval.
+	`CREATE TABLE task_skills (
+		task_id TEXT NOT NULL REFERENCES tasks(id),
+		skill TEXT NOT NULL,
+		PRIMARY KEY (task_id, skill)
+	);
+	CREATE TABLE skill_grants (
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		skill TEXT NOT NULL,
+		granted_at INTEGER NOT NULL,
+		PRIMARY KEY (assistant_id, skill)
+	);`,
 }
 
 func (s *Store) migrate() error {

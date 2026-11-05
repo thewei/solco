@@ -14,16 +14,16 @@
 | C02 | P0 | B | PARTIAL | `--tools` 原生白名单 + tool_call 闸 + 5 参 ctx 取 cwd 身份 | e2e：坏扩展→不可用而非无闸 | (本批) | OMP extension 的“工具白名单”**不等于可信身份授权**：设计 scoped Broker 服务端校验 AssistantId/动作/Owner/能力/TTL/重放；；仍缺：服务端校验的 scoped token/裸 CLI 的 Owner 边界|
 | C03 | P0 | V | PARTIAL | `extensions/solco-coordinator.ts` `coordinator.go CoordinatorTools` `host/agent.go explainStart` | 真实 Herdr+OMP e2e：扩展被加载、bash 被拦截、solco_assistant 建出属主 Task；坏扩展→OMP 拒绝启动(inert)并带原因；`bun test` 7；Go 白名单一致性测试 | (本批) | **打包/安装/真实 Herdr Agent --extension 是否成功加载与可调用**未证实；安装前和运行时 doctor 必须反馈缺失，不得静默变通，AC-01；真机发现：①OMP 扩展加载失败仍继续运行(未设闸) ②execute 签名为 5 参(ctx 第 5 位)，Bun 单测未暴露 ③import.meta.dir 在 OMP 加载器中不可靠。安装包/doctor 与 Mac.app 实机待做|
 | C04 | P0 | P | OPEN | | | | 已有重复启动 fence，但停机后实体 Pane/Agent 未必结束；安全 stop/restart、trust/permission blocked/uncertain 单元与 |
-| C05 | P0 | P | OPEN | | | | 强制 schema：objective、scope、requiredSkills、inputs、deliverables、acceptance/evidence、constrain |
+| C05 | P0 | P | PARTIAL | `CreateTaskInput.RequiredSkills` | TestGapW04RequiredSkillsAreValidatedAndStored | (本批) | 强制 schema：objective、scope、requiredSkills、inputs、deliverables、acceptance/evidence、constrain；其余 schema 字段(deliverables/acceptance…)未强制|
 | C06 | P1 | M | OPEN | | | | 用户 Chat Turn→requestId→Goal/Task/Routine→Worker→Evidence→Report 需要**可追踪父子链**；同一问题不得凭模型记忆创建 |
 | C07 | P1 | P | OPEN | | | | 原 Coordinator 状态如何接续“下一步/完成条件”需可读写 durable progress、人工批准、可停止/恢复；不能把 ReportPump 当自主执行循环，AC- |
 | C08 | P1 | P | OPEN | | | | Coordinator 应能“这项先暂停/把第二项继续/告诉我为何卡住”，做 owner-scoped 状态读/写且必须有收据、语义一致的错误，AC-03/05 |
 | C09 | P1 | P | OPEN | | | | Restart/Context compact 后重新建立确切上下文（Active Goal、Task、Routine、Pending Approvals、上次报告游标）；不能无凭 |
-| C10 | P1 | E | OPEN | | | | **不复制每个 repo 一个 Assistant**：定义个人 Assistant 可授权哪些 Workspaces/Hosts/Apps/Skills，跨项目只能在显式 sco |
+| C10 | P1 | E | PARTIAL | `skill_grants` + 审批卡 subjectKind=skill | TestGapC10UngrantedSkillAsksOnceAndApprovalRequeues | (本批) | **不复制每个 repo 一个 Assistant**：定义个人 Assistant 可授权哪些 Workspaces/Hosts/Apps/Skills，跨项目只能在显式 sco；Skill 授权已做；Workspaces/Hosts/Apps 范围未做|
 | W01 | P0 | B | OPEN | | | | 定义唯一 `HerdrWorkerAdapter`（名称可调）：只通过现有 Herdr API/Skill 协议启动、读状态、等结束、恢复，返回 Herdr 身份与 Solco r |
 | W02 | P0 | B | PARTIAL | `result.go` `ompresult.go` `dispatch.go finishWithResult/Recollect` `task.go FinishRunWithResult` `store.go v20` | `result_test.go` TestGapW02* RED(done+空 Result)→GREEN；真机待；隔离真实 Herdr+OMP e2e PASS(skills=[fixture-browser], bash=1, 4 grounded sources)，Android/Mac.app 待 | 17cdd98 | **当前结果回收核心缺口**：必须读到真正的 Worker 输出/最终消息并携来源（agentSessionId、messageId、读到的 byte range/文件 hash/ |
 | W03 | P0 | B | PARTIAL | 同 W02：结束≠完成，读不到答案→uncertain `result_unknown` | `result_test.go`；blocked/vanished 细分待 M2.2 | 17cdd98 | 完成判定要区分“Agent idle / final turn / blocked / vanished / timed out / prompted but unaccepted |
-| W04 | P0 | P | OPEN | | | | Worker launch 必须显式协商 Skills；已安装的 `~/.agents/skills/herdr/SKILL.md` **要求 HERDR_ENV=1**；不能假定 |
+| W04 | P0 | P | PARTIAL | `skills.go` `dispatch.go skillGate/unusedSkills` schema v21 `task_skills` | `skills_test.go` TestGapW04*: 缺失→failed skill_missing 且 0 pane；未授权→审批卡→批准后自动重排；用了才算完成；真实 OMP 经 `skill://fixture-browser` 读取并被 transcript 证实 | (本批) | Worker launch 必须显式协商 Skills；已安装的 `~/.agents/skills/herdr/SKILL.md` **要求 HERDR_ENV=1**；不能假定；缺：能力 doctor 列出可用 skill、Routine 路径(规则 run)同样检查、真实 ego-browser/登录态|
 | W05 | P0 | M | OPEN | | | | X.com Worker 真正由 OMP 加载指定 `ego-browser` 执行，浏览器会话/登录态由用户授权且限任务；证明调用、URL、去重、失败；技能缺失或未授权不得偷换浏 |
 | W06 | P0 | M | PARTIAL | `WorkerResult` 含来源/工具/技能/grounded URL | `result_test.go`；Artifact/Proof 卡待 M5 | 17cdd98 | 定义 `WorkerResult/Proof`：摘要、结构化数据、引用/截图/文件、验证方法、失败/不确定项、需要人决策；事实与 Agent 自述分离；无证据就不自证成功，AC-0 |
 | W07 | P0 | P | OPEN | | | | 状态机应具备 queued/start/working/blocked/waiting_owner/awaiting_proof/ready/done/failed/uncerta |

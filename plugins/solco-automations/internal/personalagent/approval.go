@@ -110,6 +110,13 @@ func subjectRevision(tx queryer, assistantID, kind, id string) (int, error) {
 			return 0, fmt.Errorf("%w: routine belongs to another assistant", ErrInvalid)
 		}
 		return r.Revision, nil
+	case "skill":
+		// A skill grant has no mutable subject: the card's hash binds the
+		// Assistant, the skill and the text, so the revision is a constant.
+		if _, err := skillSubjectOf(assistantID, id); err != nil {
+			return 0, err
+		}
+		return 1, nil
 	case "heartbeat":
 		// The subject is the Assistant's heartbeat; its id is the Assistant's.
 		if id != assistantID {
@@ -197,6 +204,15 @@ func (s *Store) DecideApproval(requestID, id, hash string, approve bool) (Approv
 			// The answer is for this draft revision (just matched); the keeper enables it
 			// only while the definition still hashes to what was drafted.
 			if _, err := tx.Exec(`UPDATE routines SET approved=1, updated_at=? WHERE name=? AND revision=?`, s.nowMS(), a.SubjectID, a.ExpectedRevision); err != nil {
+				return a, err
+			}
+		}
+		if approve && a.SubjectKind == "skill" {
+			skill, err := skillSubjectOf(a.AssistantID, a.SubjectID)
+			if err != nil {
+				return a, err
+			}
+			if err := s.grantSkillTx(tx, a.AssistantID, skill); err != nil {
 				return a, err
 			}
 		}

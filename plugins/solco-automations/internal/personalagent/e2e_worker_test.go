@@ -249,7 +249,7 @@ func TestE2EWorkerResultIsReadBackFromTheRealTranscript(t *testing.T) {
 	_ = os.WriteFile(skill, []byte("---\nname: fixture-browser\ndescription: reads the controlled fixture page\n---\nUse curl on the page URL.\n"), 0o644)
 	sb.model.mu.Lock()
 	sb.model.scripts["digest"] = []fixtureStep{
-		{tool: "read", args: map[string]any{"path": skill}},
+		{tool: "read", args: map[string]any{"path": "skill://fixture-browser"}},
 		{tool: "bash", args: map[string]any{"command": fmt.Sprintf("curl -s http://127.0.0.1:%d/page", sb.port)}},
 		{text: "Top 3 posts:\n1. https://news.example/a1 — 5200 likes\n2. https://news.example/a2 — 4100 likes\n3. https://news.example/a3 — 3900 likes\nUnavailable: https://news.example/gone (404)."},
 	}
@@ -258,8 +258,11 @@ func TestE2EWorkerResultIsReadBackFromTheRealTranscript(t *testing.T) {
 	s, _ := openTest(t)
 	a := mustAssistant(t, s, "e2e-a", "Ada")
 	task, _, err := s.CreateTask("e2e-t1", CreateTaskInput{AssistantID: a.ID, Kind: KindResearch, Title: "Digest", Model: "smoke/smoke",
-		Brief: "SCENARIO:digest read the fixture page with the skill and list the posts with links"})
+		Brief: "SCENARIO:digest read the fixture page with the skill and list the posts with links", RequiredSkills: []string{"fixture-browser"}})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.GrantSkill(a.ID, "fixture-browser"); err != nil { // a person's yes (the card path is unit-tested)
 		t.Fatal(err)
 	}
 	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
