@@ -108,3 +108,5 @@
 - 2026-11-05 Shell 工具里 `GOROOT` 会被环境带成旧版本（报 `version go1.25.9 does not match go tool version go1.26.2`）：一律 `env -u GOROOT go test …`，不要用 `GOTOOLCHAIN=local`。
 - 2026-11-05 macOS 没有 GNU `sed -i`（`sed -i 's/…/…/' f` 会报 "command i expects \ followed by text"）：多行/带引号替换一律 `python3`；且别用 `a && b` 把"可能失败的 sed"和后面的测试串起来——失败会让测试悄悄没跑。`gofmt -l` 报出的文件先 `gofmt -d` 看是不是自己改的（`daemon/personal.go` 等有历史遗留），只格式化自己的文件。
 - 2026-11-05 新增"系统自发起任务"的入口（trigger、webhook→wake、routine 之外的任何东西）必须先问：它是否受 proactivity 等级 / Quiet Hours / 每日预算约束、是否会被自己产出的事件再次触发？否则就是绕过额度的后门（trigger 首版漏了前者，靠 `TestTriggerObeysProactivityLevelQuietHoursAndBudget` 补上）。外部输入（webhook reason）一律当数据：清洗后只给 owner 看，绝不进事件行/prompt/日志。
+- 2026-11-05 新增 CLI 子命令后，Store 级单测 + fakeCore 都会绿，却漏掉**参数个数/flag 解析**错误（`hook events <id> --limit N` 被写成 `len(args)!=2`）；只有"Host → 真插件二进制 → SQLite"的回归（`TestAutonomyManagementAgainstTheRealCore` 风格）才抓得到。每个新 CLI 命令至少让 golden 契约测试用**和客户端完全相同的参数**调一次。
+- 2026-11-05 管理面里"路径给的 Assistant 必须真拥有这个 key/trigger"要先列后核对（别人的 id 一律 404），并在 fakeCore 里让别人的 list 返回空，否则测试永远验不到越权。密钥 secret 只在 create 响应出现一次——列表/快照/日志/golden（除 created）里 grep 不到 `secret` 本身就是断言。
