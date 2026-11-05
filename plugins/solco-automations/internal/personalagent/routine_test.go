@@ -461,6 +461,35 @@ func TestSystemAutomationsAssistantIsMarkedAndHasNoCoordinator(t *testing.T) {
 	}
 }
 
+// Real-device AC-02 (F3): a finished (or failed) scheduled run reaches the
+// owner's Coordinator through the same opt-in report as any other work.
+func TestRoutineOutcomeReachesTheCoordinatorReport(t *testing.T) {
+	e := newRoutineEnv(t)
+	readyReportCoordinator(t, e.s, e.a)
+	setPolicy(t, e.s, e.a, func(p *ProactivityInput) { p.ReportEveryMin = 1 })
+	got, _ := e.draft(t, "r-report", nil)
+	ap := got["approval"].(map[string]any)
+	e.approve(t, ap["id"].(string), ap["actionHash"].(string))
+	rs := &RuleScheduler{Store: e.s, Load: config.Load, Now: func() time.Time { return at(9, 0).Add(24*time.Hour + 5*time.Second) }}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 1 {
+		t.Fatalf("tick = %+v %v", rep, err)
+	}
+	tasks, _ := e.s.ListTasks(e.a.ID)
+	finishTaskAs(t, e.s, tasks[0].ID, RunDone)
+	if _, err := (&Supervisor{Store: e.s}).Tick(); err != nil {
+		t.Fatal(err)
+	}
+	var prompts []string
+	pump := &ReportPump{Store: e.s, Ready: reportTestReady, Blocked: reportTestClear,
+		Submit: func(_, _, text string) error { prompts = append(prompts, text); return nil }}
+	if rep, err := pump.Tick(); err != nil || rep.Submitted != 1 {
+		t.Fatalf("report = %+v %v", rep, err)
+	}
+	if len(prompts) != 1 || !strings.Contains(prompts[0], "routine_done") || !strings.Contains(prompts[0], "morning-check") {
+		t.Fatalf("the report does not carry the routine outcome:\n%v", prompts)
+	}
+}
+
 func TestRoutineCancelPauseAndDenial(t *testing.T) {
 	e := newRoutineEnv(t)
 	got, _ := e.draft(t, "r1", nil)

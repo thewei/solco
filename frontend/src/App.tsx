@@ -1368,7 +1368,7 @@ export function App({ dockAbove }: { dockAbove?: React.ReactNode } = {}) {
                     ) : null}
                     {turn.noteBefore ? (
                       <details className="note-chip">
-                        <summary>Standing instructions</summary>
+                        <summary>System instructions</summary>
                         <pre>{turn.noteBefore}</pre>
                       </details>
                     ) : null}

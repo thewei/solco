@@ -742,7 +742,7 @@ func (s *Shell) bindChatToCard(card agent.AgentCardModel) bool {
 // leaves that first row out.
 const assistantBriefPrefix = "You are the Coordinator of the Solco Assistant"
 
-// assistantBrief recognises that brief row. The daemon types every prompt behind
+// assistantBrief recognises that brief row (and Solco's automated prompts). The daemon types every prompt behind
 // a `Solco-Run-Id: <id>` marker line, so the marker is dropped before the
 // prefix check and from the text the page shows.
 func assistantBrief(turn chatsession.ChatTurn) (string, bool) {
@@ -755,8 +755,13 @@ func assistantBrief(turn chatsession.ChatTurn) (string, bool) {
 			text = strings.TrimSpace(rest)
 		}
 	}
-	return text, strings.HasPrefix(text, assistantBriefPrefix)
+	return text, strings.HasPrefix(text, assistantBriefPrefix) || strings.HasPrefix(text, assistantAutomatedPrefix)
 }
+
+// assistantAutomatedPrefix opens Solco's own typed prompts to the Coordinator
+// (the opt-in status request and the heartbeat wake): system messages, never
+// something the person said.
+const assistantAutomatedPrefix = "[Solco automated "
 
 // openPane shows one pane of this session.
 func (s *Shell) openPane(id string) {

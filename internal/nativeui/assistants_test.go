@@ -531,6 +531,32 @@ func TestAssistantsChatFoldsTheMarkedCoordinatorBrief(t *testing.T) {
 	}
 }
 
+// Real-device AC-02 (F3): Solco's own automated status request / wake is typed
+// into the Coordinator like the brief and showed up as the person's message.
+func TestAssistantsChatFoldsAutomatedStatusRequests(t *testing.T) {
+	shell := NewShell()
+	shell.chatPaneID = "p9"
+	shell.chatBriefPane = "p9"
+	shell.chatTurns = []conversation.TimelineTurn{
+		{UserRow: true, Text: "hi"},
+		{UserRow: false, Narration: "Hello."},
+		{UserRow: true, Text: "Solco-Run-Id: r_1\n\n[Solco automated status request — NOT a message from the human]\nSolco-Report-Id: x"},
+		{UserRow: false, Narration: "Progress: routine finished."},
+		{UserRow: true, Text: "[Solco automated wake — NOT a message from the human]\nreason"},
+		{UserRow: false, Narration: "Noted."},
+	}
+	turns := shell.chatBridgeState().Turns
+	if len(turns) != 4 || !turns[0].User || turns[0].Text != "hi" {
+		t.Fatalf("turns = %+v", turns)
+	}
+	if !strings.Contains(turns[2].NoteBefore, "automated status request") || strings.Contains(turns[2].NoteBefore, "Solco-Run-Id") {
+		t.Fatalf("status request note = %q", turns[2].NoteBefore)
+	}
+	if !strings.Contains(turns[3].NoteBefore, "automated wake") {
+		t.Fatalf("wake note = %q", turns[3].NoteBefore)
+	}
+}
+
 func TestAssistantsGroupRowOpensTheGroupConversation(t *testing.T) {
 	assistantsOverviewOverride = assistantsOverviewWithGroup
 	stubAssistants(t, false)
