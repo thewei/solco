@@ -3,6 +3,7 @@ package host
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/thewei/solco/plugins/solco-automations/internal/config"
@@ -61,8 +62,11 @@ func (w agentWork) start(s Session) error {
 		if err != nil && (w.ops.HasCode(err, herdr.CodeKindMismatch) || w.ops.HasCode(err, herdr.CodeNotReady)) {
 			return w.settle(s, err)
 		}
-		if err == nil || !w.ops.HasCode(err, herdr.CodePaneBusy) {
-			return err
+		if err == nil {
+			return nil
+		}
+		if !w.ops.HasCode(err, herdr.CodePaneBusy) {
+			return w.explainStart(s, err)
 		}
 		if !time.Now().Before(deadline) {
 			return err
@@ -70,6 +74,26 @@ func (w agentWork) start(s Session) error {
 		log.Printf("pane has no shell yet, retrying agent start in %s", w.knobs.paneReadyPoll)
 		time.Sleep(w.knobs.paneReadyPoll)
 	}
+}
+
+// explainStart adds the agent's own refusal to a start failure. An executable
+// that rejects its flags or a broken extension leaves a shell prompt behind and
+// herdr only reports a startup timeout; the pane has the real reason.
+func (w agentWork) explainStart(s Session, err error) error {
+	screen, rerr := w.ops.PaneRead(s.PaneID, 40)
+	if rerr != nil {
+		return err
+	}
+	for _, line := range strings.Split(screen, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Error:") || strings.HasPrefix(line, "Failed to load extension") {
+			if len(line) > 240 {
+				line = line[:240]
+			}
+			return fmt.Errorf("%w (the agent said: %s)", err, line)
+		}
+	}
+	return err
 }
 
 // settle is what a kind mismatch (or a not-ready answer) at start is given instead of being a verdict:

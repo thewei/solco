@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +35,7 @@ type fixtureModel struct {
 	scripts  map[string][]fixtureStep
 	requests int
 	page     string
+	delay    time.Duration // a real model is never instant; herdr needs to see "working"
 }
 
 func (f *fixtureModel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -72,11 +74,15 @@ func (f *fixtureModel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			tools++
 		}
 	}
+	if scenario == "" {
+		scenario = "*"
+	}
 	script := f.scripts[scenario]
 	step := fixtureStep{text: "no scenario matched"}
 	if tools < len(script) {
 		step = script[tools]
 	}
+	time.Sleep(f.delay)
 	w.Header().Set("Content-Type", "text/event-stream")
 	chunk := func(delta map[string]any, finish any) {
 		b, _ := json.Marshal(map[string]any{"id": "c", "object": "chat.completion.chunk", "created": 1, "model": "m",
@@ -190,6 +196,17 @@ func newSandbox(t *testing.T, scripts map[string][]fixtureStep, page string) *sa
 				out, _ := c.CombinedOutput()
 				t.Logf("herdr %v:\n%s", args, out)
 			}
+			_ = filepath.WalkDir(root, func(path string, e os.DirEntry, err error) error {
+				if err == nil && e.Type().IsRegular() && strings.HasSuffix(path, ".jsonl") {
+					raw, _ := os.ReadFile(path)
+					for _, line := range strings.Split(string(raw), "\n") {
+						if strings.Contains(line, `"toolResult"`) {
+							t.Logf("transcript %s: %s", filepath.Base(path), tailString(line, 700))
+						}
+					}
+				}
+				return nil
+			})
 			log, _ := os.ReadFile(filepath.Join(root, "herdr.log"))
 			t.Logf("herdr.log tail:\n%s", tailString(string(log), 1500))
 		}
@@ -281,4 +298,142 @@ func tailString(s string, n int) string {
 		return s[len(s)-n:]
 	}
 	return s
+}
+
+// pluginLayout builds <root>/plugin/{bin,extensions} the way an installed
+// plugin looks, and points CLI at its binary so the Coordinator extension finds
+// both.
+func pluginLayout(t *testing.T, sb *sandbox, goBin string, goEnv []string) string {
+	t.Helper()
+	_, thisFile, _, _ := runtime.Caller(0)
+	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
+	plugin := filepath.Join(sb.root, "plugin")
+	for _, d := range []string{"bin", "extensions"} {
+		if err := os.MkdirAll(filepath.Join(plugin, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	build := exec.Command(goBin, "build", "-o", filepath.Join(plugin, "bin", "solco-automations"), ".")
+	build.Dir = moduleRoot
+	build.Env = goEnv
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build plugin: %v\n%s", err, out)
+	}
+	src, err := os.ReadFile(filepath.Join(moduleRoot, "extensions", "solco-coordinator.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(plugin, "extensions", "solco-coordinator.ts"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := CLI
+	CLI = filepath.Join(plugin, "bin", "solco-automations")
+	t.Cleanup(func() { CLI = old })
+	return plugin
+}
+
+// C01/C02/C03: a real OMP Coordinator in a real Herdr pane loads the broker
+// extension, is refused a shell, and files work only through solco_assistant,
+// owned by its own Assistant.
+func TestE2ECoordinatorLoadsTheBrokerAndCannotUseAShell(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go not installed")
+	}
+	goEnv := append(os.Environ(), "GOTOOLCHAIN=auto") // before the sandbox rewrites HOME/PATH
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	pluginLayout(t, sb, goBin, goEnv)
+	sb.model.delay = 2 * time.Second
+	marker := filepath.Join(sb.root, "shell-ran")
+	payload, _ := json.Marshal(map[string]any{"requestId": "e2e-coord-task-1", "kind": "research", "title": "From chat", "brief": "Find the top posts and cite sources."})
+	sb.model.mu.Lock()
+	sb.model.scripts["*"] = []fixtureStep{
+		{tool: "bash", args: map[string]any{"command": "touch " + marker}},
+		{tool: "solco_assistant", args: map[string]any{"action": "task.create", "payload": string(payload)}},
+		{text: "Delegated."},
+	}
+	sb.model.mu.Unlock()
+
+	s, err := Open(DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	a := mustAssistant(t, s, "e2e-coord-a", "Ada")
+	c, _, err := s.StartCoordinatorAs("e2e-coord-start", a.ID, "omp", "smoke/smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
+	run, err := d.RunTask(t.Context(), c.TaskID)
+	t.Logf("run=%+v err=%v", run, err)
+	if err != nil || run.Status != RunDone {
+		t.Fatalf("Coordinator launch: status=%s err=%v (a delivered prompt must never read as a failed launch)", run.Status, err)
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("the Coordinator ran a shell command; the tool gate did not hold")
+	}
+	tasks, err := s.ListTasks(a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var filed []Task
+	for _, tk := range tasks {
+		if tk.Kind == KindResearch {
+			filed = append(filed, tk)
+		}
+	}
+	if len(filed) != 1 || filed[0].Title != "From chat" || filed[0].Agent != AssistantAgentKind {
+		t.Fatalf("tasks = %+v", tasks)
+	}
+}
+
+// C02/C03 negative: OMP keeps running when the broker extension throws on load.
+// The Coordinator must then be inert (no shell, no broker), not ungated.
+func TestE2ECoordinatorWithABrokenExtensionIsInertNotUngated(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go not installed")
+	}
+	goEnv := append(os.Environ(), "GOTOOLCHAIN=auto")
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	plugin := pluginLayout(t, sb, goBin, goEnv)
+	broken := filepath.Join(plugin, "extensions", "solco-coordinator.ts")
+	if err := os.WriteFile(broken, []byte("export default function () { throw new Error(\"boom\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sb.model.delay = 2 * time.Second
+	marker := filepath.Join(sb.root, "shell-ran")
+	payload, _ := json.Marshal(map[string]any{"requestId": "e2e-broken-1", "kind": "research", "title": "Must not exist", "brief": "x"})
+	sb.model.mu.Lock()
+	sb.model.scripts["*"] = []fixtureStep{
+		{tool: "bash", args: map[string]any{"command": "touch " + marker}},
+		{tool: "solco_assistant", args: map[string]any{"action": "task.create", "payload": string(payload)}},
+		{text: "done"},
+	}
+	sb.model.mu.Unlock()
+	s, err := Open(DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	a := mustAssistant(t, s, "e2e-broken-a", "Ada")
+	c, _, err := s.StartCoordinatorAs("e2e-broken-start", a.ID, "omp", "smoke/smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
+	run, err := d.RunTask(t.Context(), c.TaskID)
+	t.Logf("run=%+v err=%v", run, err)
+	pane, _ := exec.Command("herdr", "pane", "read", run.PaneID, "--lines", "30").CombinedOutput()
+	t.Logf("pane after a broken broker:\n%s", pane)
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("a Coordinator whose extension failed to load ran a shell command")
+	}
+	tasks, _ := s.ListTasks(a.ID)
+	for _, tk := range tasks {
+		if tk.Kind == KindResearch {
+			t.Fatalf("a task was filed without the broker: %+v", tk)
+		}
+	}
 }

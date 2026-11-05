@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
@@ -31,7 +33,16 @@ func promptDelivered(a config.Automation) bool {
 		}
 	}
 	if dir == "" {
-		return false
+		// A Coordinator keeps OMP's own session folder (Chat finds it there):
+		// look only at the newest few transcripts that are still being written.
+		if a.Agent != "omp" {
+			return false
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		return newestHold(filepath.Join(home, ".omp", "agent", "sessions"), first)
 	}
 	info, err := os.Lstat(dir)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
@@ -53,6 +64,35 @@ func promptDelivered(a config.Automation) bool {
 		return nil
 	})
 	return found
+}
+
+// newestHold checks the most recently written transcripts under root (at most
+// 12, none older than ten minutes) for the marker line.
+func newestHold(root, line string) bool {
+	type entry struct {
+		path string
+		mod  time.Time
+	}
+	var all []entry
+	_ = filepath.WalkDir(root, func(path string, e os.DirEntry, err error) error {
+		if err != nil || !e.Type().IsRegular() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			return nil
+		}
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) < 10*time.Minute {
+			all = append(all, entry{path, info.ModTime()})
+		}
+		return nil
+	})
+	sort.Slice(all, func(i, j int) bool { return all[i].mod.After(all[j].mod) })
+	for i, f := range all {
+		if i >= 12 {
+			break
+		}
+		if transcriptHolds(f.path, line) {
+			return true
+		}
+	}
+	return false
 }
 
 func transcriptHolds(path, line string) bool {

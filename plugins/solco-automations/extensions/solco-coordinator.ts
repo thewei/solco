@@ -7,8 +7,19 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { spawnSync } from "node:child_process";
 import { resolve, dirname, basename } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const allowedTools = new Set(["solco_assistant", "read", "ls", "grep", "find"]);
+// OMP loads extensions through its own loader, where `import.meta.dir` is not
+// always set (a real Herdr pane showed it undefined while Bun's own test runner
+// had it). Derive the folder from whichever form the loader gives.
+export function extensionDir(meta: { dir?: string; dirname?: string; url?: string } = import.meta): string {
+  if (meta.dir) return meta.dir;
+  if (meta.dirname) return meta.dirname;
+  if (meta.url) return dirname(fileURLToPath(meta.url));
+  throw new Error("Cannot locate the Solco plugin folder.");
+}
+
+export const allowedTools = new Set(["solco_assistant", "read", "grep", "glob"]);
 
 // Cwd is fixed by the Herdr workspace Solco provisions for this Coordinator.
 // Never accept an assistantId invented by a tool call or inferred from chat.
@@ -82,11 +93,11 @@ export default function (pi: ExtensionAPI) {
       target: z.string().optional().describe("A goal/task/routine ID for show, plan, or set-plan."),
       payload: z.string().optional().describe("JSON object for mutations, with a stable requestId, task brief, schedule or goal plan. assistantId and agent are always taken from the owning Assistant."),
     }),
-    async execute(_call, params, _onUpdate, ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       try {
         const assistantId = scopedAssistant(ctx.cwd);
         const { args, input } = route(params.action, assistantId, params.target ?? "", params.payload ?? "");
-        const cli = resolve(import.meta.dir, "../bin/solco-automations");
+        const cli = resolve(extensionDir(), "../bin/solco-automations");
         // ID-based actions can otherwise inspect or alter another Assistant's
         // Goal/Task. Validate its owner through the read-only CLI before use.
         if (params.target && (params.action.startsWith("goal.") || params.action === "task.show")) {

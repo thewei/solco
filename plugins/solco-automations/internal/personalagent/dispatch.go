@@ -237,6 +237,12 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		agentArgs = append(agentArgs, "--session-dir", WorkerSessionDir(run.ID))
 		_ = os.MkdirAll(WorkerSessionDir(run.ID), 0o700)
 	}
+	if auto == nil && !needResult && (task.Kind == KindCoordinator || task.Kind == KindGroupAgent) {
+		// No pinned transcript here (Chat finds OMP's own session folder), but
+		// the marker still lets the host prove the prompt landed instead of
+		// typing the standing brief a second time.
+		prompt = RunMarkerLine(run.ID) + "\n" + prompt
+	}
 	if auto == nil {
 		// The Assistant's own effort and MCP grants, and the instructions
 		// revision this surface starts with (what was edited later is for the
@@ -253,7 +259,7 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		if task.Kind == KindCoordinator {
 			// Do not let the standing OMP turn into an ordinary coding
 			// agent: its broker is the sole writable orchestration tool.
-			agentArgs = append(agentArgs, "--extension", CoordinatorExtensionPath())
+			agentArgs = append(agentArgs, "--extension", CoordinatorExtensionPath(), "--tools", CoordinatorTools)
 		}
 		d.Store.markInstructionsApplied(asst.ID, surface)
 	}
@@ -336,7 +342,7 @@ func (d *Dispatcher) work(ctx context.Context, runID string, sess Session, spec 
 		// A failed post-provision call cannot prove that Herdr did not
 		// start this Agent. Preserve its identity; never launch blindly.
 		if spec.Kind == KindCoordinator || spec.Kind == KindGroupAgent {
-			_, _ = d.Store.parkUncertain(runID, "Herdr Agent outcome needs reconciliation")
+			_, _ = d.Store.parkUncertain(runID, "Herdr Agent outcome needs reconciliation: "+truncateReason(err.Error()))
 			return d.reload(runID), fmt.Errorf("%w: %v", ErrUncertain, err)
 		}
 		_ = d.Store.FinishRun(runID, RunFailed, err.Error())
@@ -697,4 +703,13 @@ func (d *Dispatcher) Recollect(ctx context.Context, runID string) (Run, error) {
 	}
 	d.settle(run.ID)
 	return d.reload(run.ID), nil
+}
+
+// truncateReason keeps a launch error short enough for a run's one-line error.
+func truncateReason(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 300 {
+		return s[:300] + "…"
+	}
+	return s
 }

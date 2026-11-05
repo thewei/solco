@@ -3,6 +3,9 @@ package personalagent
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -565,5 +568,36 @@ func TestAPICoordinatorRestartRefusesUnclosedPane(t *testing.T) {
 	restarted, err := call(t, api, "{\"requestId\":\"restart\"}", "assistant", "coordinator", "start", a.ID)
 	if err != nil || restarted["coordinator"].(map[string]any)["state"] != CoordinatorStarting {
 		t.Fatalf("verified restart: %v %v", restarted, err)
+	}
+}
+
+// C02/C03: OMP's own --tools allowlist and the extension's tool_call gate must
+// name the same tools, or one of them is dead weight. OMP rejects an unknown
+// name at startup (measured: "Unknown tool in --tools: ls"), so a drift also
+// stops the Coordinator from launching at all.
+func TestCoordinatorToolAllowlistMatchesTheExtensionGate(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "extensions", "solco-coordinator.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`allowedTools = new Set\(\[([^\]]*)\]`).FindSubmatch(raw)
+	if m == nil {
+		t.Fatal("allowedTools not found in the extension")
+	}
+	gate := map[string]bool{}
+	for _, n := range regexp.MustCompile(`"([a-z_]+)"`).FindAllSubmatch(m[1], -1) {
+		gate[string(n[1])] = true
+	}
+	native := map[string]bool{}
+	for _, n := range strings.Split(CoordinatorTools, ",") {
+		native[n] = true
+	}
+	if len(gate) != len(native) {
+		t.Fatalf("gate %v != --tools %v", gate, native)
+	}
+	for n := range native {
+		if !gate[n] {
+			t.Errorf("--tools lists %q but the extension gate does not", n)
+		}
 	}
 }

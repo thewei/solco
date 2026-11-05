@@ -310,6 +310,13 @@ func (s *Store) syncCoordinator(t Task, r Run) {
 // Herdr pane has no reason to find `solco-automations` on its PATH.
 var CLI = "solco-automations"
 
+// CoordinatorTools is OMP's own tool allowlist for a Coordinator. OMP keeps
+// running when an extension fails to load (measured: a missing or throwing
+// --extension only prints "Failed to load extension"), so the extension's
+// tool_call gate alone would leave a shell open exactly when it is broken.
+// With the allowlist a Coordinator that lost its broker is inert, never ungated.
+const CoordinatorTools = "read,grep,glob,solco_assistant"
+
 // CoordinatorExtensionPath is the trusted OMP broker shipped beside the
 // plugin's own binary. The daemon sets CLI to an absolute path before
 // launching an Assistant; the fallback is only for isolated Go tests.

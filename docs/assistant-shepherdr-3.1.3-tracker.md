@@ -10,9 +10,9 @@
 
 | ID | 优先级 | 标记 | 状态 | 源码位置 | 测试 / RED→GREEN | commit | 闭环条件摘要 |
 |---|---|---|---|---|---|---|---|
-| C01 | P0 | B | OPEN | | | | **自然语言请求不能退化为普通 OMP 自行执行**；必须实际观察 Prompt→受控 ToolCall→Solco receipt→Task/Goal/Routine ID；拦截 |
-| C02 | P0 | B | OPEN | | | | OMP extension 的“工具白名单”**不等于可信身份授权**：设计 scoped Broker 服务端校验 AssistantId/动作/Owner/能力/TTL/重放； |
-| C03 | P0 | V | OPEN | | | | **打包/安装/真实 Herdr Agent --extension 是否成功加载与可调用**未证实；安装前和运行时 doctor 必须反馈缺失，不得静默变通，AC-01 |
+| C01 | P0 | B | PARTIAL | 同 C03 | e2e 证实 Prompt→受控 ToolCall→Task(owner)；外部 shell 被拒 | (本批) | **自然语言请求不能退化为普通 OMP 自行执行**；必须实际观察 Prompt→受控 ToolCall→Solco receipt→Task/Goal/Routine ID；拦截；缺：真实自然语言(非脚本模型)与 Routine/Goal 路径的真机观察|
+| C02 | P0 | B | PARTIAL | `--tools` 原生白名单 + tool_call 闸 + 5 参 ctx 取 cwd 身份 | e2e：坏扩展→不可用而非无闸 | (本批) | OMP extension 的“工具白名单”**不等于可信身份授权**：设计 scoped Broker 服务端校验 AssistantId/动作/Owner/能力/TTL/重放；；仍缺：服务端校验的 scoped token/裸 CLI 的 Owner 边界|
+| C03 | P0 | V | PARTIAL | `extensions/solco-coordinator.ts` `coordinator.go CoordinatorTools` `host/agent.go explainStart` | 真实 Herdr+OMP e2e：扩展被加载、bash 被拦截、solco_assistant 建出属主 Task；坏扩展→OMP 拒绝启动(inert)并带原因；`bun test` 7；Go 白名单一致性测试 | (本批) | **打包/安装/真实 Herdr Agent --extension 是否成功加载与可调用**未证实；安装前和运行时 doctor 必须反馈缺失，不得静默变通，AC-01；真机发现：①OMP 扩展加载失败仍继续运行(未设闸) ②execute 签名为 5 参(ctx 第 5 位)，Bun 单测未暴露 ③import.meta.dir 在 OMP 加载器中不可靠。安装包/doctor 与 Mac.app 实机待做|
 | C04 | P0 | P | OPEN | | | | 已有重复启动 fence，但停机后实体 Pane/Agent 未必结束；安全 stop/restart、trust/permission blocked/uncertain 单元与 |
 | C05 | P0 | P | OPEN | | | | 强制 schema：objective、scope、requiredSkills、inputs、deliverables、acceptance/evidence、constrain |
 | C06 | P1 | M | OPEN | | | | 用户 Chat Turn→requestId→Goal/Task/Routine→Worker→Evidence→Report 需要**可追踪父子链**；同一问题不得凭模型记忆创建 |
@@ -29,7 +29,7 @@
 | W07 | P0 | P | OPEN | | | | 状态机应具备 queued/start/working/blocked/waiting_owner/awaiting_proof/ready/done/failed/uncerta |
 | W08 | P1 | P | OPEN | | | | 验证 Assistant/Host/全局并发和资源预算，重启不超过配额；优先级、取消、依赖链和非 Git 工作目录需公平调度，AC-05/07 |
 | W09 | P1 | P | OPEN | | | | OMP-first 显式化 Model、thinking、tool grants、skill grants、超时、可更改范围；继承 Assistant Policy 但任务权限只可 |
-| W10 | P1 | P | PARTIAL | `host/receipt.go` `host/agent.go submit` | `host/receipt_test.go` RED(双发/误失败)→GREEN；真机 e2e `TestE2EWorkerResult…`(真实 OMP，30s，done+结果)通过；Herdr 失联/重启演练待 M6 | (本批) | Herdr launch 不确定要查询 existing Pane/Agent、receipt，单次 submit 不重发；故障恢复演练“旧 Agent 仍在/丢帧/重启”不得双  |
+| W10 | P1 | P | PARTIAL | `host/receipt.go`(Worker=pinned dir; Coordinator=OMP 会话目录+run marker) | Coordinator e2e 未再重发 | (本批) | Herdr launch 不确定要查询 existing Pane/Agent、receipt，单次 submit 不重发；故障恢复演练“旧 Agent 仍在/丢帧/重启”不得双|
 | W11 | P1 | E | OPEN | | | | 编码隔离分支保持、非代码用 Assistant 私有工作目录；按产品任务 scope 执行、不污染 repo 的工作树；不能把个人浏览器 Routine 强行当 Git 工程，AC |
 | W12 | P2 | P | OPEN | | | | 先保证 OMP 本身恢复，不偷偷 fallback 到别的 provider；以后才在明确授权和同一 taskId 下增加换代理/续跑，AC-07 |
 | R01 | P0 | B | OPEN | | | | 自然语言“每天/每周/定时/周期”**强制路由至 Solco Routine draft**，系统 launchd/cron/外部 task/匿名后台 loop 数量增量为 0，A |

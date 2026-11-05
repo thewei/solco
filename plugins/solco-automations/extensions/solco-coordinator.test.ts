@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import { test, expect } from "bun:test";
-import extension, { route, scopedAssistant, allowedTools } from "./solco-coordinator";
+import extension, { route, scopedAssistant, allowedTools, extensionDir } from "./solco-coordinator";
 
 const owner = "a_1234567890abcdef";
 const req = "stable-request-123";
@@ -66,4 +66,21 @@ test("coordinator cannot use tools to launch a system timer or an untracked work
   for (const name of ["solco_assistant", "read", "grep"]) {
     expect(block.tool_call({ toolName: name })).toBeUndefined();
   }
+});
+
+test("extension folder survives loaders that lack import.meta.dir", () => {
+  expect(extensionDir({ dir: "/a/ext" })).toBe("/a/ext");
+  expect(extensionDir({ dirname: "/b/ext" })).toBe("/b/ext");
+  expect(extensionDir({ url: "file:///c/ext/solco-coordinator.ts" })).toBe("/c/ext");
+  expect(() => extensionDir({})).toThrow();
+});
+
+test("tool reads its working directory from OMP's fifth execute argument", async () => {
+  // OMP calls execute(toolCallId, params, signal, onUpdate, ctx). A real Herdr
+  // pane showed the earlier 4-argument shape leaving ctx undefined.
+  let tool: any;
+  extension({ zod: { object: (x: unknown) => x, enum: () => ({ describe: () => ({}) }), string: () => ({ optional: () => ({ describe: () => ({}) }), describe: () => ({}) }) }, on() {}, registerTool: (t: unknown) => { tool = t; } } as any);
+  const res = await tool.execute("call_1", { action: "task.list" }, undefined, undefined, { cwd: "/tmp/not-a-coordinator" });
+  expect(res.isError).toBe(true);
+  expect(res.content[0].text).toContain("not a Solco Coordinator workspace");
 });

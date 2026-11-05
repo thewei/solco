@@ -1,8 +1,10 @@
 package host
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/thewei/solco/plugins/solco-automations/internal/config"
@@ -86,5 +88,43 @@ func TestPromptReceiptNeedsAMarkerAndAPinnedDir(t *testing.T) {
 	}
 	if !promptDelivered(config.Automation{Prompt: "Solco-Run-Id: r_9\nx", AgentArgs: []string{"--session-dir", dir}}) {
 		t.Error("marker + pinned dir + matching user turn is a receipt")
+	}
+}
+
+func TestPromptReceiptFindsAnUnpinnedOMPTranscriptByMarker(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	prompt := "Solco-Run-Id: r_7\n\nStanding brief."
+	a := config.Automation{Agent: "omp", Prompt: prompt}
+	if promptDelivered(a) {
+		t.Fatal("no transcript yet: not delivered")
+	}
+	writeTranscript(t, filepath.Join(home, ".omp", "agent", "sessions", "--w--"), prompt)
+	if !promptDelivered(a) {
+		t.Fatal("the Coordinator transcript holds the marker: delivered")
+	}
+	if promptDelivered(config.Automation{Agent: "claude", Prompt: prompt}) {
+		t.Fatal("only OMP's own session folder is read")
+	}
+}
+
+// C03: OMP refuses to start (or prints "Failed to load extension" and goes on)
+// when the Coordinator broker is broken. The start error must say what the
+// agent printed, not just "timed out waiting for agent startup".
+func TestStartErrorCarriesWhatTheAgentPrintedWhenItRefusedToStart(t *testing.T) {
+	ops := &fakeOps{
+		agentStart: func(string, string, string, []string) error {
+			return errors.New("agent start: timeout: timed out waiting for agent startup")
+		},
+		paneRead: func(string, int) (string, error) {
+			return "$ omp --extension /x.ts --tools read,solco_assistant\nError: Unknown tool in --tools: solco_assistant.\nRun `omp --help`\n$ \n", nil
+		},
+	}
+	err := agentWorkWith(ops, config.Automation{Agent: "omp"}).start(Session{PaneID: "p"})
+	if err == nil || !strings.Contains(err.Error(), "Unknown tool in --tools: solco_assistant") {
+		t.Fatalf("err = %v, want the agent's own refusal", err)
+	}
+	if !strings.Contains(err.Error(), "timed out waiting for agent startup") {
+		t.Fatalf("err = %v, the original error must stay", err)
 	}
 }
