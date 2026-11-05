@@ -356,3 +356,15 @@ func TestBudgetFixtureDecodesStrictly(t *testing.T) {
 		t.Fatalf("budget = %+v", b.Budget)
 	}
 }
+
+// Q02: a review decodes strictly, with its checks and the Owner's words.
+func TestReviewShapeDecodesStrictly(t *testing.T) {
+	var out struct {
+		Schema int    `json:"schema"`
+		Review Review `json:"review"`
+	}
+	load(t, "review-shape", &out)
+	if out.Review.State != "changes_requested" || len(out.Review.Checks) != 1 || !out.Review.Checks[0].OK || !strings.Contains(out.Review.Error, "add a test") {
+		t.Fatalf("review = %+v", out.Review)
+	}
+}

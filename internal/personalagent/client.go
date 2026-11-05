@@ -272,6 +272,73 @@ func (c *Client) RetryTask(ctx context.Context, requestID, id string, rev int) (
 	return out.Task, c.do(ctx, req{requestID, rev}, &out, "task", "retry", id)
 }
 
+// TaskReview reads a coding task's newest review; (nil, nil) when it has none.
+func (c *Client) TaskReview(ctx context.Context, taskID string) (*Review, error) {
+	var out struct {
+		Review Review `json:"review"`
+	}
+	if err := c.do(ctx, nil, &out, "review", "show", taskID); err != nil {
+		var e *Error
+		if errors.As(err, &e) && e.Code == "not_found" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &out.Review, nil
+}
+
+// StartReview collects the evidence of a finished coding task and runs the
+// approved checks (it can take a while).
+func (c *Client) StartReview(ctx context.Context, requestID, taskID string) (Review, error) {
+	var out struct {
+		Review Review `json:"review"`
+	}
+	return out.Review, c.do(ctx, req{RequestID: requestID}, &out, "review", "start", taskID)
+}
+
+// RequestMerge asks for the approval card of merging exactly this review.
+func (c *Client) RequestMerge(ctx context.Context, requestID, reviewID string) (Review, Approval, error) {
+	var out struct {
+		Review   Review   `json:"review"`
+		Approval Approval `json:"approval"`
+	}
+	err := c.do(ctx, req{RequestID: requestID}, &out, "review", "request-merge", reviewID)
+	return out.Review, out.Approval, err
+}
+
+// MergeReview merges a review whose approval was answered yes and which still
+// describes the branch; anything else is refused by the core.
+func (c *Client) MergeReview(ctx context.Context, reviewID string) (Review, error) {
+	var out struct {
+		Review Review `json:"review"`
+	}
+	return out.Review, c.do(ctx, nil, &out, "review", "merge", reviewID)
+}
+
+// ResumeReview sends the task back to its own worktree with the Owner's words.
+func (c *Client) ResumeReview(ctx context.Context, requestID, reviewID, feedback string) (Review, error) {
+	var out struct {
+		Review Review `json:"review"`
+	}
+	body := struct {
+		req
+		Feedback string `json:"feedback"`
+	}{req{RequestID: requestID}, feedback}
+	return out.Review, c.do(ctx, body, &out, "review", "resume", reviewID)
+}
+
+// RejectReview closes the task; nothing merges and the work is kept.
+func (c *Client) RejectReview(ctx context.Context, requestID, reviewID, reason string) (Review, error) {
+	var out struct {
+		Review Review `json:"review"`
+	}
+	body := struct {
+		req
+		Reason string `json:"reason"`
+	}{req{RequestID: requestID}, reason}
+	return out.Review, c.do(ctx, body, &out, "review", "reject", reviewID)
+}
+
 // Inbox reads one Assistant's inbox snapshot ("" = every Assistant's).
 func (c *Client) Inbox(ctx context.Context, assistantID string) (Inbox, error) {
 	var out struct {

@@ -1,0 +1,36 @@
+{
+  "review": {
+    "agentReviewTaskId": "",
+    "approvalId": "",
+    "assistantId": "a_0000000000000001",
+    "baseHead": "0000000",
+    "branch": "solco/t-1",
+    "checks": [
+      {
+        "command": "go test ./...",
+        "durationMs": 12,
+        "exitCode": 0,
+        "ok": true,
+        "output": ""
+      }
+    ],
+    "createdAt": 1,
+    "deletions": 1,
+    "diffHash": "d1",
+    "error": "Changes requested: add a test",
+    "files": 1,
+    "head": "1111111",
+    "id": "v_0000000000000001",
+    "insertions": 3,
+    "paths": [
+      "a.txt"
+    ],
+    "revision": 2,
+    "state": "changes_requested",
+    "targetBranch": "main",
+    "targetHead": "0000000",
+    "taskId": "t_0000000000000027",
+    "updatedAt": 2
+  },
+  "schema": 1
+}

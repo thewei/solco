@@ -123,6 +123,9 @@ type CoordinatorChat struct {
 type AssistantsTask struct {
 	personalagent.Task
 	Runs []AssistantsRun `json:"runs"`
+	// Review is a coding task's newest evidence (nil when it has none yet);
+	// the Accept / Request changes / Reject buttons act on it.
+	Review *AssistantsReview `json:"review"`
 }
 
 // AssistantsRun is one Run plus whether its pane can be opened from here.
@@ -332,8 +335,10 @@ func (b *AssistantsBridge) Drawer(ctx context.Context, id string) (AssistantsDra
 	if err != nil {
 		return out, err
 	}
+	var approvals []personalagent.Approval
 	for _, t := range tasks {
 		item := AssistantsTask{Task: t, Runs: []AssistantsRun{}}
+		item.Review = b.reviewOf(ctx, c, t, &approvals)
 		if _, runs, err := c.TaskDetail(ctx, t.ID); err == nil {
 			for _, r := range runs {
 				same := r.HerdrSession == "" || herdr.ParseRef(r.HerdrSession).Session == session || r.HerdrSession == session
@@ -712,11 +717,17 @@ func (b *AssistantsBridge) OpenPane(paneID string) bool {
 // write runs one command with the gate check and a bounded context, then asks
 // the sidebar to re-read its counters.
 func (b *AssistantsBridge) write(ctx context.Context, run func(context.Context, *personalagent.Client) error) error {
+	return b.writeWithin(ctx, assistantsCallTimeout, run)
+}
+
+// writeWithin is write with its own time limit, for the few commands that run
+// real work (a review's checks, a merge).
+func (b *AssistantsBridge) writeWithin(ctx context.Context, limit time.Duration, run func(context.Context, *personalagent.Client) error) error {
 	c, err := b.client()
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, assistantsCallTimeout)
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	if err := run(ctx, c); err != nil {
 		return err

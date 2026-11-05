@@ -697,3 +697,41 @@ type Budget struct {
 	Recent      []BudgetEvent  `json:"recent"`
 	Unmeasured  []string       `json:"unmeasured"`
 }
+
+// CheckResult is one approved check command's outcome (the tail of its output).
+type CheckResult struct {
+	Command    string `json:"command"`
+	OK         bool   `json:"ok"`
+	ExitCode   int    `json:"exitCode"`
+	Output     string `json:"output"`
+	DurationMS int64  `json:"durationMs"`
+}
+
+// Review is the evidence for one head of one coding task: the branch, the
+// literal diff numbers, the approved checks' results and the Owner's answer
+// (ready / checks_failed / awaiting_approval / merged / changes_requested /
+// rejected / stale / merge_failed). Error carries the Owner's words after a
+// Resume or Reject, or why a merge failed.
+type Review struct {
+	ID                string        `json:"id"`
+	TaskID            string        `json:"taskId"`
+	AssistantID       string        `json:"assistantId"`
+	State             string        `json:"state"`
+	Branch            string        `json:"branch"`
+	Head              string        `json:"head"`
+	BaseHead          string        `json:"baseHead"`
+	TargetBranch      string        `json:"targetBranch"`
+	TargetHead        string        `json:"targetHead"`
+	Files             int           `json:"files"`
+	Insertions        int           `json:"insertions"`
+	Deletions         int           `json:"deletions"`
+	Paths             []string      `json:"paths"`
+	DiffHash          string        `json:"diffHash"`
+	Checks            []CheckResult `json:"checks"`
+	AgentReviewTaskID string        `json:"agentReviewTaskId"`
+	ApprovalID        string        `json:"approvalId"`
+	Error             string        `json:"error"`
+	Revision          int           `json:"revision"`
+	CreatedAt         int64         `json:"createdAt"`
+	UpdatedAt         int64         `json:"updatedAt"`
+}

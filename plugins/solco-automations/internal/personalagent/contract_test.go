@@ -213,6 +213,16 @@ func TestGoldenFixtures(t *testing.T) {
 	// The budget ledger (Gap A05): what the Supervisor spent and held today.
 	run("budget-show", ``, "assistant", "budget", "show", aid, "--limit", "20")
 
+	// A review's wire shape (Gap Q02). Its evidence comes from a real git
+	// worktree (random hashes), so the fixture pins the shape of one with every
+	// field present rather than a recorded run.
+	fixtures["review-shape"] = pretty(t, map[string]any{"schema": 1, "review": Review{
+		ID: "v_0000000000000001", TaskID: "t_0000000000000001", AssistantID: aid, State: ReviewChangesRequested,
+		Branch: "solco/t-1", Head: "1111111", BaseHead: "0000000", TargetBranch: "main", TargetHead: "0000000",
+		Files: 1, Insertions: 3, Deletions: 1, Paths: []string{"a.txt"}, DiffHash: "d1",
+		Checks: []CheckResult{{Command: "go test ./...", OK: true, DurationMS: 12}},
+		Error:  "Changes requested: add a test", Revision: 2, CreatedAt: 1, UpdatedAt: 2}}, seen)
+
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError
 	if !asCodedErr(err, &ce) {

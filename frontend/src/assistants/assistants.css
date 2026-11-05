@@ -1105,3 +1105,16 @@
 .as-workpulse-title { font-weight: 600; color: var(--text); }
 .as-workpulse-stats { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .as-workpulse .as-link { flex: none; }
+
+.as-review {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.as-path {
+  font-family: var(--mono, ui-monospace, monospace);
+}

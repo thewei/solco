@@ -103,3 +103,29 @@ func TestGateNeedsTheAssistantsCommand(t *testing.T) {
 		t.Fatal("nil client open")
 	}
 }
+
+// Q02: the Owner's words travel on stdin, a task with no review is (nil, nil),
+// and the review commands name the right verbs.
+func TestReviewClientVerbsAndBodies(t *testing.T) {
+	var calls []call
+	c := NewClientWithExec(fake(readFixture(t, "review-shape"), nil, &calls))
+	if _, err := c.ResumeReview(t.Context(), "r-1", "v_1", "SECRET FEEDBACK"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.RejectReview(t.Context(), "r-2", "v_1", "wrong approach"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(calls[0].args, " "); got != "assistant review resume v_1" || strings.Contains(got, "SECRET") {
+		t.Fatalf("resume args = %q", got)
+	}
+	if !strings.Contains(calls[0].stdin, `"feedback":"SECRET FEEDBACK"`) || !strings.Contains(calls[0].stdin, `"requestId":"r-1"`) {
+		t.Fatalf("resume stdin = %s", calls[0].stdin)
+	}
+	if got := strings.Join(calls[1].args, " "); got != "assistant review reject v_1" || !strings.Contains(calls[1].stdin, `"reason":"wrong approach"`) {
+		t.Fatalf("reject = %q %s", got, calls[1].stdin)
+	}
+	none := NewClientWithExec(fake(`{"schema":1,"error":{"code":"not_found","message":"no review"}}`, errors.New("exit 1"), &calls))
+	if rv, err := none.TaskReview(t.Context(), "t_1"); rv != nil || err != nil {
+		t.Fatalf("no review = %+v %v", rv, err)
+	}
+}

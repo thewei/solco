@@ -166,6 +166,36 @@ export interface AssistantsIntent {
   kind: string;
 }
 
+/**
+ * AssistantsReview is a coding task's review plus the state of its merge card,
+ * so the page can offer Merge once the person has said yes.
+ */
+export interface AssistantsReview {
+  id: string;
+  taskId: string;
+  assistantId: string;
+  state: string;
+  branch: string;
+  head: string;
+  baseHead: string;
+  targetBranch: string;
+  targetHead: string;
+  files: number;
+  insertions: number;
+  deletions: number;
+  paths: string[];
+  diffHash: string;
+  checks: CheckResult[];
+  agentReviewTaskId: string;
+  approvalId: string;
+  error: string;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+  /** ApprovalState is the merge card's state ("" = no card yet). */
+  approvalState: string;
+}
+
 /** AssistantsRun is one Run plus whether its pane can be opened from here. */
 export interface AssistantsRun {
   id: string;
@@ -218,6 +248,11 @@ export interface AssistantsTask {
   createdAt: number;
   updatedAt: number;
   runs: AssistantsRun[];
+  /**
+   * Review is a coding task's newest evidence (nil when it has none yet);
+   * the Accept / Request changes / Reject buttons act on it.
+   */
+  review: AssistantsReview | null;
 }
 
 /** AssistantsView is everything the page draws, one value per read. */
@@ -704,6 +739,15 @@ export interface ChatTurn {
    * changes card); see chatTurnChanges for the data-source contract.
    */
   changes?: ChatChange[];
+}
+
+/** CheckResult is one approved check command's outcome (the tail of its output). */
+export interface CheckResult {
+  command: string;
+  ok: boolean;
+  exitCode: number;
+  output: string;
+  durationMs: number;
 }
 
 /** Commitment is one thing a Goal keeps doing. */
@@ -1604,6 +1648,13 @@ export const filesPreview = {
 
 /** AssistantsBridge is the page's bound service. */
 export const assistants = {
+  /**
+   * AcceptReview asks for the approval card of merging exactly this evidence;
+   * nothing merges until the person answers it.
+   */
+  acceptReview(requestID: string, reviewID: string): Promise<void> {
+    return call("assistants.AcceptReview", requestID, reviewID);
+  },
   /** AckIntent is the page telling the shell it opened what seq asked for. */
   ackIntent(seq: number): Promise<void> {
     return call("assistants.AckIntent", seq);
@@ -1741,6 +1792,10 @@ export const assistants = {
   memoryHistory(memoryID: string): Promise<MemoryVersion[]> {
     return call("assistants.MemoryHistory", memoryID);
   },
+  /** MergeReview merges a review whose card was approved and still describes the branch. */
+  mergeReview(reviewID: string): Promise<void> {
+    return call("assistants.MergeReview", reviewID);
+  },
   /** OpenMemoryFolder brings the Assistant's memory folder up to date and opens it in Finder. */
   openMemoryFolder(id: string): Promise<void> {
     return call("assistants.OpenMemoryFolder", id);
@@ -1775,6 +1830,10 @@ export const assistants = {
   publishTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.PublishTask", requestID, id, revision);
   },
+  /** RejectReview closes the task without merging; the work stays for inspection. */
+  rejectReview(requestID: string, reviewID: string, reason: string): Promise<void> {
+    return call("assistants.RejectReview", requestID, reviewID, reason);
+  },
   /** RenameAssistant renames one Assistant. */
   renameAssistant(requestID: string, id: string, name: string, revision: number): Promise<void> {
     return call("assistants.RenameAssistant", requestID, id, name, revision);
@@ -1794,6 +1853,10 @@ export const assistants = {
   /** RestoreInstructions makes an earlier revision's text current as a new revision. */
   restoreInstructions(requestID: string, id: string, revision: number, expected: number): Promise<void> {
     return call("assistants.RestoreInstructions", requestID, id, revision, expected);
+  },
+  /** ResumeReview sends the task back to its own worktree with the person's words. */
+  resumeReview(requestID: string, reviewID: string, feedback: string): Promise<void> {
+    return call("assistants.ResumeReview", requestID, reviewID, feedback);
   },
   /** RetryTask re-queues a failed or cancelled task. */
   retryTask(requestID: string, id: string, revision: number): Promise<void> {
@@ -1857,6 +1920,13 @@ export const assistants = {
    */
   startCoordinator(requestID: string, id: string, agentKind: string): Promise<void> {
     return call("assistants.StartCoordinator", requestID, id, agentKind);
+  },
+  /**
+   * StartReview collects a finished coding task's evidence and runs the
+   * Assistant's approved checks.
+   */
+  startReview(requestID: string, taskID: string): Promise<void> {
+    return call("assistants.StartReview", requestID, taskID);
   },
   /** StopCoordinator marks the Coordinator stopped. */
   stopCoordinator(requestID: string, id: string): Promise<void> {
