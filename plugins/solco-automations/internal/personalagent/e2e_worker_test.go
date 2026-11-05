@@ -19,6 +19,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
 )
 
 type fixtureStep struct {
@@ -180,6 +182,8 @@ func newSandbox(t *testing.T, scripts map[string][]fixtureStep, page string) *sa
 		}
 	}
 	run(omp, "config", "set", "startup.setupWizard", "false")
+	// A routine's omp takes no --model flag (Gap R: it uses the user's default), so the sandbox's default is the fixture.
+	run(omp, "config", "set", "modelRoles", `{"default":"smoke/smoke"}`)
 	run("git", "init", "-q", sb.work)
 	sb.herdr = exec.Command(herdr, "server")
 	sb.herdr.Env, sb.herdr.Dir = env, sb.work
@@ -210,6 +214,8 @@ func newSandbox(t *testing.T, scripts map[string][]fixtureStep, page string) *sa
 			log, _ := os.ReadFile(filepath.Join(root, "herdr.log"))
 			t.Logf("herdr.log tail:\n%s", tailString(string(log), 1500))
 		}
+		// The assistant CLI starts its own standby daemon; it must not outlive the sandbox.
+		_ = exec.Command("pkill", "-f", root).Run()
 		stop := exec.Command(herdr, "server", "stop")
 		stop.Env = env
 		_ = stop.Run()
@@ -348,8 +354,9 @@ func TestE2ECoordinatorLoadsTheBrokerAndCannotUseAShell(t *testing.T) {
 	pluginLayout(t, sb, goBin, goEnv)
 	sb.model.delay = 2 * time.Second
 	marker := filepath.Join(sb.root, "shell-ran")
-	payload, _ := json.Marshal(map[string]any{"requestId": "e2e-coord-task-1", "kind": "research", "title": "From chat", "brief": "Find the top posts and cite sources."})
+	payload, _ := json.Marshal(map[string]any{"requestId": "e2e-coord-task-1", "kind": "research", "title": "From chat", "brief": "SCENARIO:idle Find the top posts and cite sources."})
 	sb.model.mu.Lock()
+	sb.model.scripts["idle"] = []fixtureStep{{text: "Nothing to do in this fixture."}} // the worker the CLI's own daemon starts for the filed task
 	sb.model.scripts["*"] = []fixtureStep{
 		{tool: "bash", args: map[string]any{"command": "touch " + marker}},
 		{tool: "solco_assistant", args: map[string]any{"action": "task.create", "payload": string(payload)}},
@@ -373,7 +380,8 @@ func TestE2ECoordinatorLoadsTheBrokerAndCannotUseAShell(t *testing.T) {
 	if err != nil || run.Status != RunDone {
 		t.Fatalf("Coordinator launch: status=%s err=%v (a delivered prompt must never read as a failed launch)", run.Status, err)
 	}
-	if _, statErr := os.Stat(marker); statErr == nil {
+	if fi, statErr := os.Stat(marker); statErr == nil {
+		t.Logf("marker: %v %v", fi.Name(), fi.ModTime())
 		t.Fatal("the Coordinator ran a shell command; the tool gate did not hold")
 	}
 	tasks, err := s.ListTasks(a.ID)
@@ -439,4 +447,154 @@ func TestE2ECoordinatorWithABrokenExtensionIsInertNotUngated(t *testing.T) {
 			t.Fatalf("a task was filed without the broker: %+v", tk)
 		}
 	}
+}
+
+// AC-02 (controlled page): a real OMP Coordinator turns a request in words into
+// a Routine DRAFT with a named skill, nothing runs or schedules before the
+// person's yes, then one occurrence becomes one task that a real OMP Worker
+// completes with the skill and the evidence read back from its transcript.
+// The real X.com account is never touched: the "browser" is a fixture skill
+// over a loopback page.
+func TestE2EScenarioOneRoutineFromChatToVerifiedDigest(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go not installed")
+	}
+	goEnv := append(os.Environ(), "GOTOOLCHAIN=auto")
+	cronBefore, _ := exec.Command("crontab", "-l").CombinedOutput()
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	pluginLayout(t, sb, goBin, goEnv)
+	sb.model.delay = 2 * time.Second
+	skillDir := filepath.Join(sb.home, ".agents/skills/fixture-browser")
+	_ = os.MkdirAll(skillDir, 0o755)
+	_ = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: fixture-browser\ndescription: reads the controlled fixture page\n---\nUse curl on the page URL.\n"), 0o644)
+	draft, _ := json.Marshal(map[string]any{
+		"requestId": "e2e-routine-1", "name": "x-digest", "schedule": "every weekday at 9:00", "timezone": "Asia/Shanghai",
+		"agent": "omp", "requiredSkills": []string{"fixture-browser"},
+		"prompt":    "SCENARIO:digest Use the fixture-browser skill to read the page and list the top posts with links.",
+		"rationale": "The person asked for a weekday morning digest.",
+	})
+	sb.model.mu.Lock()
+	sb.model.scripts["*"] = []fixtureStep{
+		{tool: "solco_assistant", args: map[string]any{"action": "routine.draft", "payload": string(draft)}},
+		{text: "Drafted a weekday 9:00 digest; it starts only after you approve the card."},
+	}
+	sb.model.scripts["digest"] = []fixtureStep{
+		{tool: "read", args: map[string]any{"path": "skill://fixture-browser"}},
+		{tool: "bash", args: map[string]any{"command": fmt.Sprintf("curl -s http://127.0.0.1:%d/page", sb.port)}},
+		{text: "Top posts:\n1. https://news.example/a1 — 5200 likes\n2. https://news.example/a2 — 4100 likes\n3. https://news.example/a3 — 3900 likes\nUnavailable: https://news.example/gone (404)."},
+	}
+	sb.model.mu.Unlock()
+
+	s, err := Open(DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	a := mustAssistant(t, s, "e2e-r-a", "Ada")
+	c, _, err := s.StartCoordinatorAs("e2e-r-start", a.ID, "omp", "smoke/smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
+	if run, err := d.RunTask(t.Context(), c.TaskID); err != nil || run.Status != RunDone {
+		t.Fatalf("coordinator: %+v %v", run, err)
+	}
+
+	// Drafted, not running: one routine, one pending card, no work.
+	api := &API{Store: s}
+	got, err := call(t, api, `{"assistantId":"`+a.ID+`"}`, "assistant", "routine", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("routines=%v", got)
+	cards, _ := s.ListApprovals(a.ID)
+	var card Approval
+	for _, ap := range cards {
+		if ap.SubjectKind == "routine" {
+			card = ap
+		}
+	}
+	if card.ID == "" || !strings.Contains(card.Action, "fixture-browser") || !strings.Contains(card.Action, "Asia/Shanghai") {
+		t.Fatalf("the routine card must name schedule zone and skill: %+v", cards)
+	}
+	if tasks, _ := s.ListTasks(a.ID); len(tasks) != 0 {
+		t.Fatalf("a draft must not create tasks: %+v", tasks)
+	}
+	cfg, err := config.Load()
+	if err != nil || cfg.Find("x-digest") == nil {
+		t.Fatalf("draft not in automations.yaml: %v", err)
+	}
+	sched, err := config.CronParser.Parse(cfg.Find("x-digest").Cron)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fireAt := sched.Next(time.Now()).Add(5 * time.Second) // the next 09:00 Shanghai weekday, five seconds late
+	rs := &RuleScheduler{Store: s, Load: config.Load, Now: func() time.Time { return fireAt }}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 0 {
+		t.Fatalf("a draft fired before approval: %+v %v", rep, err)
+	}
+
+	// The person's yes enables it; the one scheduler fires one occurrence once.
+	body := fmt.Sprintf(`{"requestId":"yes-1","actionHash":%q,"approve":true}`, card.ActionHash)
+	if _, err := call(t, api, body, "assistant", "approval", "decide", card.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := api.keeper().Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 1 {
+		t.Fatalf("approved routine should fire exactly once: %+v %v", rep, err)
+	}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 0 {
+		t.Fatalf("the same occurrence fired twice: %+v %v", rep, err)
+	}
+	var occ Task
+	for _, tk := range mustTasks(t, s, a.ID) {
+		if tk.Kind == KindManual {
+			occ = tk
+		}
+	}
+	if occ.ID == "" {
+		t.Fatal("no occurrence task")
+	}
+
+	// No grant yet: the Worker must not start and a skill card is raised.
+	d.Rules = func(name string) (config.Automation, bool) {
+		cfg, _ := config.Load()
+		if x := cfg.Find(name); x != nil {
+			return *x, true
+		}
+		return config.Automation{}, false
+	}
+	run, _ := d.RunTask(t.Context(), occ.ID)
+	if run.Status != RunFailed || !strings.HasPrefix(run.Error, SkillNotGrantedPrefix) {
+		t.Fatalf("an ungranted skill must stop the run: %+v", run)
+	}
+	if err := s.GrantSkill(a.ID, "fixture-browser"); err != nil {
+		t.Fatal(err)
+	}
+	run, err = d.RunTask(t.Context(), occ.ID)
+	if err != nil || run.Status != RunDone {
+		t.Fatalf("worker run: %+v %v", run, err)
+	}
+	res, ok, err := s.RunResult(run.ID)
+	if err != nil || !ok || !strings.Contains(res.Summary, "https://news.example/a1") {
+		t.Fatalf("result = %+v %v %v", res, ok, err)
+	}
+	if len(res.Skills) != 1 || res.Skills[0] != "fixture-browser" || res.Tools["bash"] != 1 {
+		t.Fatalf("skills/tools = %+v %+v", res.Skills, res.Tools)
+	}
+	if after, _ := exec.Command("crontab", "-l").CombinedOutput(); string(after) != string(cronBefore) {
+		t.Fatal("the user's crontab changed: nothing may schedule outside Solco's core")
+	}
+}
+
+func mustTasks(t *testing.T, s *Store, id string) []Task {
+	t.Helper()
+	ts, err := s.ListTasks(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ts
 }

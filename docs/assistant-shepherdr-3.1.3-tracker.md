@@ -32,12 +32,12 @@
 | W10 | P1 | P | PARTIAL | `host/receipt.go`(Worker=pinned dir; Coordinator=OMP 会话目录+run marker) | Coordinator e2e 未再重发 | (本批) | Herdr launch 不确定要查询 existing Pane/Agent、receipt，单次 submit 不重发；故障恢复演练“旧 Agent 仍在/丢帧/重启”不得双|
 | W11 | P1 | E | OPEN | | | | 编码隔离分支保持、非代码用 Assistant 私有工作目录；按产品任务 scope 执行、不污染 repo 的工作树；不能把个人浏览器 Routine 强行当 Git 工程，AC |
 | W12 | P2 | P | OPEN | | | | 先保证 OMP 本身恢复，不偷偷 fallback 到别的 provider；以后才在明确授权和同一 taskId 下增加换代理/续跑，AC-07 |
-| R01 | P0 | B | OPEN | | | | 自然语言“每天/每周/定时/周期”**强制路由至 Solco Routine draft**，系统 launchd/cron/外部 task/匿名后台 loop 数量增量为 0，A |
-| R02 | P0 | P | OPEN | | | | Go 内建立单一“文字时间表达式→时区→机器可验规则→下次 3 次预览”解析器；不确定时让 Assistant 问；涵盖 once/DST/sleep/wake，AC-02/10 |
+| R01 | P0 | B | PARTIAL | Coordinator 工具白名单(无 bash) + `solco_assistant routine.draft` | 同上 e2e：crontab 无变化、草稿不触发、批准后仅触发一次；launchd 增量未量化；Coordinator 自然语言路由未实测 | c82a8632 | 自然语言“每天/每周/定时/周期”**强制路由至 Solco Routine draft**，系统 launchd/cron/外部 task/匿名后台 loop 数量增量为 0，A |
+| R02 | P0 | P | PARTIAL | `internal/schedule/text.go` `ParseText`; `api_routine.go` schedule/timezone | `text_test.go`, `routine_schedule_test.go` (DST/周/中英文/一次性→unsupported/歧义→needs_clarification) | c82a8632 | Go 内建立单一“文字时间表达式→时区→机器可验规则→下次 3 次预览”解析器；不确定时让 Assistant 问；涵盖 once/DST/sleep/wake，AC-02/10 |
 | R03 | P0 | M | OPEN | | | | Routine 需支持按事件运行/联合时间条件、去重、过滤、循环抑制和 Owner；单个事件不重复执行，AC-11 |
 | R04 | P0 | P | OPEN | | | | Scheduler 是唯一启动权限；occurrenceKey 唯一、跨进程锁、sleep catch-up/错过、overlap skip/queue、水位不重置；关闭页面仍运行 |
 | R05 | P0 | P | OPEN | | | | Solco 的**审批机制比上游更严格，应保留**；草稿/批准/被改失效/撤销/暂停/恢复必须 GUI 和 Android 同源收据，AC-02/10 |
-| R06 | P0 | B | OPEN | | | | Repo-less 个人情报 Routine 必须从 Chat 创建成功、使用 OMP headless；不能因为路径校验失败而改用 OS scheduler，AC-02 |
+| R06 | P0 | B | PARTIAL | `api_routine.go` 个人 Routine 默认 OMP headless + 私有目录 | `TestE2EScenarioOneRoutineFromChatToVerifiedDigest`（真实 Herdr+OMP，受控页） | c82a8632 | Repo-less 个人情报 Routine 必须从 Chat 创建成功、使用 OMP headless；不能因为路径校验失败而改用 OS scheduler，AC-02 |
 | R07 | P0 | P | DONE(软件) | `heartbeat.go`/`watch.go`/`supervisor.go` 锁 `AssistantAgentKind` | `gap_agent_lock_test.go` RED(claude)→GREEN + 静态扫描 | 17cdd98 | **不止 Task 和 Routine，Heartbeat/自发 Worker 的 Agent 都必须锁 OMP**；全路径查找隐形 Provider 漂移，AC-09 |
 | R08 | P1 | P | OPEN | | | | 显示触发来源、下次运行时区、上次 Run 结果链接、Owner、停用原因、技能和预算；支持预览/编辑及变更重新审批，AC-02/10 |
 | R09 | P1 | P | OPEN | | | | 独立于 UI/原 Coordinator 生死，重启/并发请求只能一份调度器；长时设备启动/睡眠/窗口关闭/用户登出应定义真实保证和已知限制，AC-07/10 |
