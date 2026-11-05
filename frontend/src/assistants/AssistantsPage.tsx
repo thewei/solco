@@ -466,6 +466,11 @@ function Strip({ pending, others, open, setOpen, act, more }: { pending: Approva
                 <strong>{i.title}</strong>
                 <p className="as-meta">{i.detail}</p>
               </div>
+              {i.paneId && i.actions?.includes("open_pane") ? (
+                <button type="button" className="as-btn" onClick={() => void assistants.openPane(i.paneId as string)}>
+                  Open Pane
+                </button>
+              ) : null}
               <button type="button" className="as-btn" onClick={() => more(i.goalId ? "watching" : undefined)}>
                 Open
               </button>

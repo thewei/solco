@@ -251,6 +251,14 @@ type InboxItem struct {
 	Detail      string `json:"detail"`
 	Priority    int    `json:"priority"`
 	At          int64  `json:"at"`
+	// Reason is the core's stable code for the card (start_failed, task_failed,
+	// permission_prompt, review_checks_failed, approval_<subject>, …); RunID and
+	// PaneID name the task's newest run and Actions what the card can do there
+	// (open_pane, retry, ack, review, decide, open_goal).
+	Reason  string   `json:"reason,omitempty"`
+	RunID   string   `json:"runId,omitempty"`
+	PaneID  string   `json:"paneId,omitempty"`
+	Actions []string `json:"actions,omitempty"`
 }
 
 // Inbox is the snapshot: items by priority, the count that needs a person and

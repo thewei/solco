@@ -2,6 +2,9 @@
   "inbox": {
     "items": [
       {
+        "actions": [
+          "decide"
+        ],
         "approvalId": "p_0000000000000007",
         "assistantId": "a_0000000000000001",
         "at": 1800000000000,
@@ -9,6 +12,7 @@
         "id": "approval:p_0000000000000007",
         "kind": "approval",
         "priority": 4,
+        "reason": "approval_task",
         "taskId": "t_0000000000000004",
         "title": "merge work/x"
       }

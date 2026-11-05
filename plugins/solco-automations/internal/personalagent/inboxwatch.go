@@ -21,8 +21,10 @@ func (w *InboxWatcher) Tick() ([]InboxItem, error) {
 		if it.Kind == InboxNews {
 			continue
 		}
-		now[it.ID+"|"+it.Kind] = true
-		if w.seen != nil && !w.seen[it.ID+"|"+it.Kind] {
+		// One card, one push: a card that changes kind while it stays in the
+		// inbox (stalled, then failed) is the same item, not a second news.
+		now[it.ID] = true
+		if w.seen != nil && !w.seen[it.ID] {
 			fresh = append(fresh, it)
 		}
 	}

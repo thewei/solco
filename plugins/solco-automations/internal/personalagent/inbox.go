@@ -74,6 +74,17 @@ type InboxItem struct {
 	Detail      string `json:"detail"`
 	Priority    int    `json:"priority"`
 	At          int64  `json:"at"`
+	// Reason is the stable code behind the card (start_failed, task_failed,
+	// permission_prompt, review_checks_failed, approval_<subject>, …): clients
+	// branch on it, never on Detail's words.
+	Reason string `json:"reason,omitempty"`
+	// RunID and PaneID name the task's newest run, so the card can go straight
+	// back to where the work happened; Actions are what the card can do there
+	// (open_pane, retry, ack, review, decide, open_goal). Opening the task
+	// itself is always possible and is not listed.
+	RunID   string   `json:"runId,omitempty"`
+	PaneID  string   `json:"paneId,omitempty"`
+	Actions []string `json:"actions,omitempty"`
 }
 
 // Inbox is one snapshot. NeedsYou counts everything except news; Seq is the
@@ -96,7 +107,9 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 	now := s.nowMS()
 	out := Inbox{Items: []InboxItem{}}
 	add := func(it InboxItem) {
-		it.Priority = inboxPriority[it.Kind]
+		if it.Priority == 0 {
+			it.Priority = inboxPriority[it.Kind]
+		}
 		out.Items = append(out.Items, it)
 	}
 
@@ -122,13 +135,15 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 		if kind == "task" {
 			pendingFor[subject] = true
 		}
-		add(InboxItem{ID: "approval:" + id, Kind: InboxApproval, AssistantID: asst, TaskID: taskIfTask(kind, subject), ApprovalID: id, Title: clip(action, 120), Detail: "Waiting for your decision", At: at})
+		add(InboxItem{ID: "approval:" + id, Kind: InboxApproval, AssistantID: asst, TaskID: taskIfTask(kind, subject), ApprovalID: id, Title: clip(action, 120), Detail: "Waiting for your decision", At: at,
+			Reason: "approval_" + kind, Actions: []string{"decide"}})
 	}
 	_ = rows.Close()
 
 	// Tasks, with the facts of their latest run.
 	tq := `SELECT ` + prefixed("t", taskCols) + `,
-		COALESCE((SELECT r.pane_id FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),'')
+		COALESCE((SELECT r.pane_id FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),''),
+		COALESCE((SELECT r.id FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),'')
 		FROM tasks t WHERE t.kind NOT IN (?,?)`
 	targs := []any{KindCoordinator, KindGroupAgent}
 	if assistantID != "" {
@@ -140,13 +155,13 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 		return Inbox{}, wrapBusy(err)
 	}
 	type scanned struct {
-		t    Task
-		pane string
+		t         Task
+		pane, run string
 	}
 	var tasks []scanned
 	for trows.Next() {
 		var sc scanned
-		t, err := scanTask(withExtra{trows, []any{&sc.pane}})
+		t, err := scanTask(withExtra{trows, []any{&sc.pane, &sc.run}})
 		if err != nil {
 			_ = trows.Close()
 			return Inbox{}, err
@@ -158,30 +173,64 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 	for _, sc := range tasks {
 		t := sc.t
 		age := time.Duration(now-t.UpdatedAt) * time.Millisecond
-		item := InboxItem{ID: "task:" + t.ID, AssistantID: t.AssistantID, TaskID: t.ID, Title: clip(t.Title, 120), At: t.UpdatedAt}
+		item := InboxItem{ID: "task:" + t.ID, AssistantID: t.AssistantID, TaskID: t.ID, Title: clip(t.Title, 120), At: t.UpdatedAt, RunID: sc.run, PaneID: sc.pane}
+		var actions []string
 		switch {
 		case t.State == TaskFailed && sc.pane == "":
-			item.Kind, item.Detail = InboxFailedStart, "Could not start — nothing was created"
+			item.Kind, item.Reason, item.Detail = InboxFailedStart, "start_failed", "Could not start — nothing was created"
+			actions = []string{"retry"}
 		case t.State == TaskUncertain:
-			item.Kind, item.Detail = InboxFailedStart, "Start outcome unknown — check before retrying"
+			item.Kind, item.Reason, item.Detail = InboxFailedStart, "start_unknown", "Start outcome unknown — check before retrying"
+			actions = []string{"open_pane"}
 		case (t.State == TaskClaimed || t.State == TaskStarting) && age >= opt.StartStall:
-			item.Kind, item.Detail = InboxStalled, "Has not started"
+			item.Kind, item.Reason, item.Detail = InboxStalled, "not_started", "Has not started"
+			actions = []string{"open_pane"}
 		case t.State == TaskBlocked && age >= opt.BlockStall:
-			item.Kind, item.Detail = InboxStalled, "Waiting on a prompt nobody has answered"
+			item.Kind, item.Reason, item.Detail = InboxStalled, "permission_prompt", "Waiting on a prompt nobody has answered"
+			actions = []string{"open_pane"}
 		case t.State == TaskRunning && age >= opt.RunStall:
-			item.Kind, item.Detail = InboxStalled, "Running for a long time"
+			item.Kind, item.Reason, item.Detail = InboxStalled, "long_running", "Running for a long time"
+			actions = []string{"open_pane"}
 		case t.State == TaskReviewRequired:
 			if pendingFor[t.ID] {
 				continue // the approval card already carries it
 			}
-			item.Kind, item.Detail = InboxReview, "Ready for your review"
+			item.Kind, item.Reason, item.Detail = InboxReview, "review_ready", "Ready for your review"
+			switch t.ReviewState {
+			case ReviewChecksFailed:
+				item.Reason, item.Detail, item.Priority = "review_checks_failed", "Checks failed — read them before you decide", 3
+			case ReviewStale:
+				item.Reason, item.Detail = "review_stale", "Changed since it was reviewed — review again"
+			case ReviewMergeFailed:
+				item.Reason, item.Detail, item.Priority = "merge_failed", "The merge did not go through — the work is kept", 3
+			case ReviewAwaiting:
+				item.Reason, item.Detail = "merge_answered", "Merge answered — open it to finish"
+			}
+			actions = []string{"review"}
 		case t.NeedsYou:
 			if pendingFor[t.ID] {
 				continue
 			}
 			item.Kind, item.Detail = InboxNeedsYou, needsYouPhrase(t)
+			switch t.State {
+			case TaskFailed:
+				item.Reason, actions = "task_failed", []string{"open_pane", "retry"}
+			case TaskBlocked:
+				item.Reason, actions = "permission_prompt", []string{"open_pane"}
+			case TaskWaiting:
+				item.Reason = "dependency_unfinished"
+			case TaskDone:
+				item.Reason, actions = "task_done", []string{"ack"}
+			default:
+				item.Reason = "needs_you"
+			}
 		default:
 			continue
+		}
+		for _, a := range actions {
+			if a != "open_pane" || sc.pane != "" {
+				item.Actions = append(item.Actions, a)
+			}
 		}
 		add(item)
 	}
@@ -207,7 +256,8 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 			_ = grows.Close()
 			return Inbox{}, err
 		}
-		add(InboxItem{ID: "goal:" + id, Kind: InboxNeedsYou, AssistantID: asst, GoalID: id, Title: clip(title, 120), Detail: "Plan ready — start it or cancel it", At: at})
+		add(InboxItem{ID: "goal:" + id, Kind: InboxNeedsYou, AssistantID: asst, GoalID: id, Title: clip(title, 120), Detail: "Plan ready — start it or cancel it", At: at,
+			Reason: "plan_ready", Actions: []string{"open_goal"}})
 	}
 	_ = grows.Close()
 

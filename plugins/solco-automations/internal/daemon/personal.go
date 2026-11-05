@@ -318,7 +318,7 @@ func (p *personal) lookAtInbox() {
 	items := make([]notify.AttentionItem, 0, len(fresh))
 	for _, it := range fresh {
 		items = append(items, notify.AttentionItem{
-			Title:  attentionTitle(it.Kind) + " · " + it.Title,
+			Title:  attentionTitle(it) + " · " + it.Title,
 			Body:   it.Detail,
 			Urgent: it.Priority >= 3,
 		})
@@ -326,8 +326,20 @@ func (p *personal) lookAtInbox() {
 	p.notifier.Attention(items)
 }
 
-func attentionTitle(kind string) string {
-	switch kind {
+func attentionTitle(it personalagent.InboxItem) string {
+	// The card's own reason says more than its kind (Q05); an unknown reason
+	// falls back to the kind's fixed phrase.
+	switch it.Reason {
+	case "permission_prompt":
+		return "Waiting for your answer"
+	case "review_checks_failed":
+		return "Checks failed"
+	case "merge_failed":
+		return "Merge failed"
+	case "task_failed":
+		return "Task failed"
+	}
+	switch it.Kind {
 	case personalagent.InboxApproval:
 		return "Approval needed"
 	case personalagent.InboxFailedStart:

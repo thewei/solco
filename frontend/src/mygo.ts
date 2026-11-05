@@ -1086,6 +1086,16 @@ export interface InboxItem {
   detail: string;
   priority: number;
   at: number;
+  /**
+   * Reason is the core's stable code for the card (start_failed, task_failed,
+   * permission_prompt, review_checks_failed, approval_<subject>, …); RunID and
+   * PaneID name the task's newest run and Actions what the card can do there
+   * (open_pane, retry, ack, review, decide, open_goal).
+   */
+  reason?: string;
+  runId?: string;
+  paneId?: string;
+  actions?: string[];
 }
 
 /** InstructionRevision is one stored version of the working style. */
