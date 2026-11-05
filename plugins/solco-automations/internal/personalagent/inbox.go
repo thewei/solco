@@ -143,7 +143,8 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 	// Tasks, with the facts of their latest run.
 	tq := `SELECT ` + prefixed("t", taskCols) + `,
 		COALESCE((SELECT r.pane_id FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),''),
-		COALESCE((SELECT r.id FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),'')
+		COALESCE((SELECT r.id FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),''),
+		COALESCE((SELECT r.fail_code FROM runs r WHERE r.task_id=t.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1),'')
 		FROM tasks t WHERE t.kind NOT IN (?,?)`
 	targs := []any{KindCoordinator, KindGroupAgent}
 	if assistantID != "" {
@@ -155,13 +156,13 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 		return Inbox{}, wrapBusy(err)
 	}
 	type scanned struct {
-		t         Task
-		pane, run string
+		t                   Task
+		pane, run, failCode string
 	}
 	var tasks []scanned
 	for trows.Next() {
 		var sc scanned
-		t, err := scanTask(withExtra{trows, []any{&sc.pane, &sc.run}})
+		t, err := scanTask(withExtra{trows, []any{&sc.pane, &sc.run, &sc.failCode}})
 		if err != nil {
 			_ = trows.Close()
 			return Inbox{}, err
@@ -179,6 +180,9 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 		case t.State == TaskFailed && sc.pane == "":
 			item.Kind, item.Reason, item.Detail = InboxFailedStart, "start_failed", "Could not start — nothing was created"
 			actions = []string{"retry"}
+			if sc.failCode == FailCodeHerdrUnreachable {
+				item.Reason, item.Detail = FailCodeHerdrUnreachable, "Herdr could not be reached — start it, then retry"
+			}
 		case t.State == TaskUncertain:
 			item.Kind, item.Reason, item.Detail = InboxFailedStart, "start_unknown", "Start outcome unknown — check before retrying"
 			actions = []string{"open_pane"}

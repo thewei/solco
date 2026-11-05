@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
 )
 
 // ErrUncertain means a launch's outcome is unknown. The run is parked as
@@ -330,6 +331,10 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 			sess = found
 		default:
 			_ = d.Store.FinishRun(run.ID, RunFailed, "could not start: "+perr.Error())
+			var api *herdr.APIError
+			if errors.As(perr, &api) && api.Code == "" {
+				_ = d.Store.SetRunFailCode(run.ID, FailCodeHerdrUnreachable)
+			}
 			d.settle(run.ID)
 			return d.reload(run.ID), perr
 		}

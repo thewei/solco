@@ -482,6 +482,18 @@ func (s *Store) FinishRun(runID, status, note string) error {
 	return s.finishRun(runID, status, note, nil)
 }
 
+// FailCodeHerdrUnreachable marks a run whose launch failed because Herdr never
+// gave a structured answer (no error code at all: the socket is gone, the
+// binary is missing or it was killed). It is the one start failure the
+// dispatcher can prove; why an Agent failed inside its pane is not classified.
+const FailCodeHerdrUnreachable = "herdr_unreachable"
+
+// SetRunFailCode records a failed run's provable cause.
+func (s *Store) SetRunFailCode(runID, code string) error {
+	_, err := s.db.Exec(`UPDATE runs SET fail_code=? WHERE id=? AND status=?`, code, runID, RunFailed)
+	return wrapBusy(err)
+}
+
 // FinishRunWithResult ends a run as done with a result Solco read back: the
 // summary becomes the run's result and the whole record is stored with it.
 func (s *Store) FinishRunWithResult(runID string, res WorkerResult) error {

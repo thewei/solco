@@ -1,9 +1,12 @@
 package personalagent
 
 import (
+	"errors"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
 )
 
 func byTask(in Inbox, id string) (InboxItem, bool) {
@@ -133,4 +136,45 @@ func mustInbox(t *testing.T, s *Store, id string) Inbox {
 		t.Fatal(err)
 	}
 	return in
+}
+
+// Q05 (user decision 2026-11-05): the one failure the dispatcher can prove is
+// "Herdr gave no structured answer" — the CLI failed without an error code
+// (socket gone, binary missing, killed). That gets its own reason; whatever an
+// Agent printed inside its pane (token, network) is never classified.
+func TestADispatcherFailureHerdrNeverAnsweredIsHerdrUnreachable(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		err  error
+		code string
+	}{
+		{"no envelope", &herdr.APIError{Command: "agent start", Message: "failed to connect to socket"}, "herdr_unreachable"},
+		{"refused with a code", &herdr.APIError{Command: "agent start", Code: "workspace_not_found", Message: "x"}, ""},
+		{"plain error", errors.New("worktree failed"), ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			clock := &tickClock{t: time.Unix(1_800_000_000, 0)}
+			s, _ := openTest(t, WithClock(clock.now))
+			_, task := newQueuedTask(t, s, KindResearch)
+			d := &Dispatcher{Store: s, Launcher: &fakeLauncher{provisionErr: c.err}, Claimant: "daemon"}
+			if _, err := d.RunTask(t.Context(), task.ID); err == nil {
+				t.Fatal("expected the failure to be reported")
+			}
+			in := mustInbox(t, s, task.AssistantID)
+			it, ok := byTask(in, task.ID)
+			if !ok || it.Kind != InboxFailedStart {
+				t.Fatalf("card = %+v", it)
+			}
+			want := c.code
+			if want == "" {
+				want = "start_failed"
+			}
+			if it.Reason != want {
+				t.Fatalf("reason = %q, want %q", it.Reason, want)
+			}
+			if c.code != "" && (it.Detail == "Could not start — nothing was created" || !slices.Equal(it.Actions, []string{"retry"})) {
+				t.Fatalf("the unreachable card must say what to do: %+v", it)
+			}
+		})
+	}
 }

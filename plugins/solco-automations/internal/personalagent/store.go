@@ -768,6 +768,10 @@ var migrations = []string{
 		dedupe TEXT NOT NULL UNIQUE
 	);
 	CREATE INDEX budget_events_assistant ON budget_events(assistant_id, at);`,
+	// v29: a failed run's cause when the dispatcher itself can prove it (Gap
+	// Q05): Herdr gave no structured answer. Never text, never what an Agent
+	// printed in its pane.
+	`ALTER TABLE runs ADD COLUMN fail_code TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate() error {
