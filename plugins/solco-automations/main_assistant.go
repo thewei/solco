@@ -42,7 +42,7 @@ func assistantCmd(args []string) error {
 		body, _ = io.ReadAll(io.LimitReader(os.Stdin, 4<<20))
 	}
 	wt := &personalagent.Worktrees{Store: store, Root: personalagent.DefaultWorktreeRoot()}
-	api := &personalagent.API{Store: store, Reviewer: &personalagent.Reviewer{Store: store, Worktrees: wt}, PaneGone: personalagent.HerdrPaneGone}
+	api := &personalagent.API{Store: store, Reviewer: &personalagent.Reviewer{Store: store, Worktrees: wt}, PaneGone: personalagent.HerdrPaneGone, PaneClose: personalagent.HerdrPaneClose}
 	out, err := api.Handle(append([]string{"assistant"}, args...), body)
 	if err != nil {
 		return printAssistantError(err)

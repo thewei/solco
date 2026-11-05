@@ -239,6 +239,40 @@ func HerdrPaneGone(session, workspace, pane string) (bool, error) {
 	return true, nil
 }
 
+// HerdrPaneClose closes a Coordinator's own recorded pane. It refuses a pane
+// that Herdr does not list under the recorded workspace (a recycled id must
+// never close someone else's terminal) and confirms the pane is gone after.
+func HerdrPaneClose(session, workspace, pane string) error {
+	if workspace == "" || pane == "" {
+		return fmt.Errorf("missing recorded Herdr identity")
+	}
+	client := herdr.Client{Session: session}
+	ids, err := client.PaneIDs(workspace)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, id := range ids {
+		if id == pane {
+			found = true
+		}
+	}
+	if !found {
+		return nil // already gone
+	}
+	if err := client.PaneClose(pane); err != nil {
+		return err
+	}
+	gone, err := HerdrPaneGone(session, workspace, pane)
+	if err != nil {
+		return err
+	}
+	if !gone {
+		return fmt.Errorf("pane is still present after close")
+	}
+	return nil
+}
+
 // Collect reads a finished Worker's answer from the OMP session directory Solco
 // pinned for the run. Only OMP has a transcript Solco reads; another Agent
 // kind (which the rollout does not launch) has no result and so no success.

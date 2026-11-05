@@ -71,6 +71,9 @@ type API struct {
 	// PaneGone is a read-only Herdr check for irreversible Assistant deletion.
 	// Without it a recorded pane must block deletion, not be assumed gone.
 	PaneGone func(session, workspace, pane string) (bool, error)
+	// PaneClose ends one Herdr pane Solco launched (a stopped Coordinator's).
+	// Nil leaves the pane to the person; Stop then says `not_attempted`.
+	PaneClose func(session, workspace, pane string) error
 	// Config reads the legacy definitions (default config.Load); LegacyLast
 	// reads the old scheduler's watermarks (default: its schedule.json).
 	Config     func() (*config.Config, error)
@@ -415,10 +418,15 @@ func (a *API) coordinator(args []string, body []byte) (any, error) {
 		var err error
 		if cmd == "start" {
 			c, replayed, err = a.Store.StartCoordinatorAs(in.RequestID, id, in.Agent, in.Model, a.PaneGone)
-		} else {
-			c, replayed, err = a.Store.StopCoordinator(in.RequestID, id)
+			return ok("coordinator", c, "replayed", replayed), err
 		}
-		return ok("coordinator", c, "replayed", replayed), err
+		before, _ := a.Store.GetCoordinator(id)
+		c, replayed, err = a.Store.StopCoordinator(in.RequestID, id)
+		pane := ""
+		if err == nil && !replayed && before.State != CoordinatorNone && before.State != CoordinatorStopped && before.PaneID != "" {
+			pane = a.closeCoordinatorPane(before)
+		}
+		return ok("coordinator", c, "replayed", replayed, "pane", pane), err
 	}
 	return nil, coded("invalid", "unknown coordinator command %q", cmd)
 }
@@ -573,4 +581,18 @@ func (a *API) checkpoint(args []string, body []byte) (any, error) {
 		return ok("checkpoint", cp, "replayed", replayed), err
 	}
 	return nil, coded("invalid", "unknown checkpoint command %q", args[0])
+}
+
+// closeCoordinatorPane ends the pane Herdr reported for a Coordinator that was
+// just stopped, and checks it is gone. The answer is a fixed word: closed,
+// close_failed (the person closes it; restart stays refused until Herdr shows
+// it gone) or not_attempted (no closer wired).
+func (a *API) closeCoordinatorPane(c Coordinator) string {
+	if a.PaneClose == nil {
+		return "not_attempted"
+	}
+	if err := a.PaneClose(c.HerdrSession, c.WorkspaceID, c.PaneID); err != nil {
+		return "close_failed"
+	}
+	return "closed"
 }

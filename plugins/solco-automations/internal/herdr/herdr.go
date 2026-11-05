@@ -442,6 +442,11 @@ func (c Client) NotificationShow(title, body string, sound Sound) error {
 	return c.runCtx(ctx, nil, notificationArgs(title, body, sound)...)
 }
 
+// PaneClose closes one pane (herdr pane close <pane_id>).
+func (c Client) PaneClose(paneID string) error {
+	return c.run(nil, "pane", "close", paneID)
+}
+
 // PaneRun executes a shell command in a pane (used to delegate to hwf).
 func (c Client) PaneRun(paneID string, command ...string) error {
 	return c.run(nil, append([]string{"pane", "run", paneID}, command...)...)

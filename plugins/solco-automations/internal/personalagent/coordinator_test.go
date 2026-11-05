@@ -3,6 +3,7 @@ package personalagent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -599,5 +600,47 @@ func TestCoordinatorToolAllowlistMatchesTheExtensionGate(t *testing.T) {
 		if !gate[n] {
 			t.Errorf("--tools lists %q but the extension gate does not", n)
 		}
+	}
+}
+
+// C04: Stop ends the real Herdr pane (only the one Herdr reported for this
+// Coordinator), says whether it did, and never turns a refusal into a silent
+// success. The logical stop is not undone by a failed close.
+func TestStoppingACoordinatorClosesItsRecordedPaneOnce(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a1", "Ada")
+	co, _, _ := s.StartCoordinator("start", a.ID)
+	d := &Dispatcher{Store: s, Launcher: &fakeLauncher{}, Claimant: "daemon"}
+	if _, err := d.RunTask(t.Context(), co.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	ready, _ := s.GetCoordinator(a.ID)
+	var closed []string
+	failClose := false
+	api := &API{Store: s, PaneClose: func(sess, workspace, pane string) error {
+		closed = append(closed, sess+"/"+workspace+"/"+pane)
+		if failClose {
+			return fmt.Errorf("herdr refused")
+		}
+		return nil
+	}}
+	failClose = true
+	out, err := call(t, api, `{"requestId":"stop-aaaa1"}`, "assistant", "coordinator", "stop", a.ID)
+	if err != nil || field(out, "coordinator", "state") != CoordinatorStopped || out["pane"] != "close_failed" {
+		t.Fatalf("a refused close still stops, and says so: %v %v", out, err)
+	}
+	// A replay is the same receipt and closes nothing more.
+	if _, err := call(t, api, `{"requestId":"stop-aaaa1"}`, "assistant", "coordinator", "stop", a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 1 || closed[0] != ready.HerdrSession+"/"+ready.WorkspaceID+"/"+ready.PaneID {
+		t.Fatalf("exactly the recorded pane, once: %v", closed)
+	}
+	// A second, new stop of an already-stopped Coordinator touches nothing.
+	if out, err = call(t, api, `{"requestId":"stop-bbbb2"}`, "assistant", "coordinator", "stop", a.ID); err != nil || out["pane"] != "" && out["pane"] != nil {
+		t.Fatalf("already stopped: %v %v", out, err)
+	}
+	if len(closed) != 1 {
+		t.Fatalf("an already-stopped Coordinator has nothing to close: %v", closed)
 	}
 }
