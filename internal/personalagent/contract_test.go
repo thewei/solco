@@ -345,3 +345,14 @@ func TestGrantAndOwnerFixturesAndSealingVector(t *testing.T) {
 		t.Fatalf("seal drifted from the plugin's: %q", got)
 	}
 }
+
+func TestBudgetFixtureDecodesStrictly(t *testing.T) {
+	var b struct {
+		Schema int    `json:"schema"`
+		Budget Budget `json:"budget"`
+	}
+	load(t, "budget-show", &b)
+	if b.Budget.DailyBudget != 10 || b.Budget.Spent["supervisor"] != 1 || len(b.Budget.Recent) != 1 || len(b.Budget.Unmeasured) != 2 {
+		t.Fatalf("budget = %+v", b.Budget)
+	}
+}

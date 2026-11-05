@@ -261,6 +261,51 @@ export interface AssistantsWatch {
   repoPath: string;
 }
 
+/**
+ * Budget is today's picture for one Assistant. Unmeasured names what the core
+ * cannot know (model tokens, money): it is shown as unmeasured, never guessed.
+ */
+export interface Budget {
+  assistantId: string;
+  day: string;
+  level: string;
+  quietNow: boolean;
+  dailyBudget: number;
+  spentToday: number;
+  remaining: number;
+  spent: Record<string, number>;
+  held: BudgetHold[];
+  wake: BudgetWake;
+  recent: BudgetEvent[];
+  unmeasured: string[];
+}
+
+/**
+ * BudgetEvent is one row of the budget ledger (Gap A05): a task the system
+ * started on its own (spent) or a time it held back (held, with the reason).
+ */
+export interface BudgetEvent {
+  kind: string;
+  ref: string;
+  outcome: string;
+  reason?: string;
+  at: number;
+}
+
+/** BudgetHold counts today's holds of one kind for one reason. */
+export interface BudgetHold {
+  kind: string;
+  reason: string;
+  count: number;
+}
+
+/** BudgetWake is the heartbeat's own approved allowance. */
+export interface BudgetWake {
+  approved: boolean;
+  budget: number;
+  usedToday: number;
+}
+
 /** ChatBridgeInteraction is one pending interaction card. */
 export interface ChatBridgeInteraction {
   id: string;
@@ -1600,6 +1645,13 @@ export const assistants = {
    */
   bindCoordinator(assistantID: string): Promise<CoordinatorChat> {
     return call("assistants.BindCoordinator", assistantID);
+  },
+  /**
+   * Budget reads today's budget ledger: what the system started on its own, what
+   * it held back and why (Gap A05). Tokens and money are reported as unmeasured.
+   */
+  budget(id: string): Promise<Budget> {
+    return call("assistants.Budget", id);
   },
   /** CreateAssistant adds an Assistant and selects it. */
   createAssistant(requestID: string, name: string, description: string): Promise<string> {

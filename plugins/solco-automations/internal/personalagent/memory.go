@@ -103,6 +103,9 @@ func (s *Store) proposeAs(author, requestID string, in ProposeMemoryInput) (Memo
 // the grant, and the version history still says the Agent wrote it. Edits
 // from files, a person's writes and every other author never come here.
 func (s *Store) autosaveTx(tx *sql.Tx, requestID string, m MemoryItem) (MemoryItem, error) {
+	if requestID == "" {
+		requestID = newID("q") // a receipt's request id is unique; an unnamed call still needs one
+	}
 	res, err := s.authorizeTx(tx, AuthorizeInput{
 		RequestID: requestID, AssistantID: m.AssistantID, Capability: CapMemoryAutosave,
 		Params: map[string]string{"kind": m.Kind}, ActionHash: hashOf([]byte(m.ID + "\x00" + m.Content)),

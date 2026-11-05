@@ -362,15 +362,25 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 			wakes = 0
 		}
 		canWake := h.WakeApproved && h.WakeBudget > 0 && wakes < h.WakeBudget
-		if canWake {
+		pol, err := getProactivityTx(tx, assistantID, now)
+		if err != nil {
+			return BeatReport{}, err
+		}
+		// Why a wake that is wanted may not happen, for the ledger (Gap A05).
+		whyNoWake := ""
+		switch {
+		case h.WakeApproved && h.WakeBudget > 0 && wakes >= h.WakeBudget:
+			whyNoWake = BudgetReasonWakeBudget
+		case canWake:
 			// The Assistant's own rules: a model wake is the system starting
 			// something unasked, so Respond/Suggest and quiet hours hold it
 			// (the news waits in `held`, nothing is lost).
-			pol, err := getProactivityTx(tx, assistantID, now)
-			if err != nil {
-				return BeatReport{}, err
+			if pol.Level != LevelFollowUp {
+				whyNoWake = BudgetReasonLevel
+			} else if pol.QuietNow {
+				whyNoWake = BudgetReasonQuiet
 			}
-			canWake = pol.Level == LevelFollowUp && !pol.QuietNow
+			canWake = whyNoWake == ""
 		}
 		if canWake {
 			var inFlight int
@@ -388,6 +398,11 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 		if due {
 			rep.Beats = 1
 		}
+		if wantWake && !canWake && whyNoWake != "" {
+			if err := b.Store.recordBudget(tx, assistantID, pol.day, BudgetWake, "heartbeat", BudgetHeld, whyNoWake); err != nil {
+				return BeatReport{}, err
+			}
+		}
 		if wantWake && canWake {
 			// A live Coordinator is woken for one bounded turn of the original
 			// Assistant (Gap A01); only without one does the wake fall back to
@@ -403,6 +418,9 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 				}
 				wantWake = false
 			} else if queued {
+				if err := b.Store.recordBudget(tx, assistantID, pol.day, BudgetWake, fmt.Sprintf("coordinator@%d", nowMS), BudgetSpent, ""); err != nil {
+					return BeatReport{}, err
+				}
 				held = nil
 				wakes++
 				pending = 0
@@ -418,6 +436,9 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 				return BeatReport{}, err
 			}
 			if err := emitTask(tx, tid, "task.added", nowMS); err != nil {
+				return BeatReport{}, err
+			}
+			if err := b.Store.recordBudget(tx, assistantID, pol.day, BudgetWake, tid, BudgetSpent, ""); err != nil {
 				return BeatReport{}, err
 			}
 			held = nil

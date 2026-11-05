@@ -139,3 +139,15 @@ func TestAutosaveRefusesWhatItCannotSealOrWhatIsOutOfBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestBudgetBridgeReadsTheLedgerAndKeepsTokensUnmeasured(t *testing.T) {
+	stubAssistants(t, false)
+	b := NewAssistantsBridge(openAssistantsShell(t))
+	got, err := b.Budget(context.Background(), "a_1")
+	if err != nil || got.Remaining != 0 || got.Spent["trigger"] != 1 || len(got.Held) != 1 || got.Held[0].Reason != "budget" {
+		t.Fatalf("budget = %+v err=%v", got, err)
+	}
+	if len(got.Unmeasured) != 2 {
+		t.Fatalf("tokens and cost must be reported as unmeasured: %v", got.Unmeasured)
+	}
+}

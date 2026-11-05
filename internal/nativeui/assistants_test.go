@@ -101,6 +101,8 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 				return []byte(`{"schema":1,"path":"/tmp/solco-memory/a_1/memory","sync":{}}`), nil
 			case "proactivity show a_1":
 				return []byte(`{"schema":1,"proactivity":{"assistantId":"a_1","level":"follow_up","quietStart":"","quietEnd":"","tz":"","reportEveryMin":0,"dailyBudget":20,"dispatchToday":0,"quietNow":false,"revision":0,"updatedAt":0}}`), nil
+			case "budget show a_1 --limit 12":
+				return []byte(`{"schema":1,"budget":{"assistantId":"a_1","day":"2026-11-05","level":"follow_up","quietNow":false,"dailyBudget":3,"spentToday":3,"remaining":0,"spent":{"supervisor":2,"trigger":1},"held":[{"kind":"supervisor","reason":"budget","count":1}],"wake":{"approved":false,"budget":0,"usedToday":0},"recent":[{"kind":"supervisor","ref":"g_1","outcome":"held","reason":"budget","at":5}],"unmeasured":["tokens","cost"]}}`), nil
 			case "memory add", "memory correct m_1", "memory approve m_2", "memory forget m_1":
 				return []byte(`{"schema":1,"replayed":false,"memory":{"id":"m_1","assistantId":"a_1","content":"x","state":"approved","revision":3}}`), nil
 			case "proactivity set a_1":

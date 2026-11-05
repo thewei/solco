@@ -1,5 +1,7 @@
 package personalagent
 
+import "fmt"
+
 // assistant grant create|list|show|revoke|decide (Gap A04). Every one is the
 // owner's or the system's: none is in the Coordinator scope, so `--as` answers
 // forbidden. `create` stores what the owner's client signed (the seal is
@@ -106,4 +108,21 @@ func (a *API) owner(args []string, body []byte) (any, error) {
 		return ok("owner", st), nil
 	}
 	return nil, coded("invalid", "unknown owner command %q", args[0])
+}
+
+// assistant budget show <assistantId> [--limit N] — what the system started on
+// its own today and why it held back (A05). Read-only, owner/system surface.
+func (a *API) budget(args []string) (any, error) {
+	if len(args) < 2 || args[0] != "show" {
+		return nil, coded("invalid", "usage: assistant budget show <assistantId> [--limit N]")
+	}
+	limit := 20
+	if v, _ := flagValue(args[2:], "--limit"); v != "" {
+		fmt.Sscanf(v, "%d", &limit)
+	}
+	sum, err := a.Store.BudgetSummary(args[1], limit)
+	if err != nil {
+		return nil, err
+	}
+	return ok("budget", sum), nil
 }

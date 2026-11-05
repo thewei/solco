@@ -416,6 +416,9 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 		case pol.Level == LevelRespond:
 			return nil
 		case pol.Level == LevelSuggest:
+			if err := s.recordBudget(s.db, g.AssistantID, pol.day, BudgetSupervisor, g.ID+":"+m.ID, BudgetHeld, BudgetReasonLevel); err != nil {
+				return err
+			}
 			if added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: g.ID, Kind: FactHeld,
 				Text: fmt.Sprintf("Next up for %q: %s. Nothing starts on its own while this Assistant is set to Suggest; raise it to Follow up to let it go", g.Title, m.Title)},
 				fmt.Sprintf("policy:%s:%d:%s", g.ID, plan.PlanRevision, m.ID)); err != nil {
@@ -425,8 +428,13 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 			}
 			continue
 		case pol.QuietNow:
-			return nil // quiet hours: resumes by itself afterwards, nothing to say
+			// Quiet hours: resumes by itself afterwards, nothing to say — but the
+			// ledger notes it once, so "why did nothing start" has an answer.
+			return s.recordBudget(s.db, g.AssistantID, pol.day, BudgetSupervisor, g.ID, BudgetHeld, BudgetReasonQuiet)
 		case pol.DispatchToday >= pol.DailyBudget:
+			if err := s.recordBudget(s.db, g.AssistantID, pol.day, BudgetSupervisor, g.ID, BudgetHeld, BudgetReasonBudget); err != nil {
+				return err
+			}
 			if added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: g.ID, Kind: FactHeld,
 				Text: fmt.Sprintf("Held: today's budget of %d task(s) started on their own is used up; %q continues tomorrow or when you raise it", pol.DailyBudget, g.Title)},
 				fmt.Sprintf("held:%s:day:%s", g.ID, pol.day)); err != nil {
@@ -437,6 +445,9 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 			return nil
 		}
 		if total >= plan.MaxTasks {
+			if err := s.recordBudget(s.db, g.AssistantID, pol.day, BudgetSupervisor, g.ID, BudgetHeld, BudgetReasonPlanTasks); err != nil {
+				return err
+			}
 			if added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: g.ID, Kind: FactHeld,
 				Text: fmt.Sprintf("Held: %q reached its budget of %d task(s); a person must raise it or revise the plan", g.Title, plan.MaxTasks)},
 				fmt.Sprintf("held:%s:tasks:%d", g.ID, plan.PlanRevision)); err != nil {
@@ -464,6 +475,9 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 			return err
 		}
 		if err := s.countDispatch(g.AssistantID, 1); err != nil {
+			return err
+		}
+		if err := s.recordBudget(s.db, g.AssistantID, pol.day, BudgetSupervisor, task.ID, BudgetSpent, ""); err != nil {
 			return err
 		}
 		pol.DispatchToday++

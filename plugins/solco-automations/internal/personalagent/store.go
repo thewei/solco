@@ -753,6 +753,21 @@ var migrations = []string{
 		created_at INTEGER NOT NULL
 	);
 	CREATE INDEX authorization_receipts_grant ON authorization_receipts(grant_id, created_at);`,
+	// v28: the budget ledger (Gap A05) — one row for each task the system
+	// started on its own and each time it held back, with the reason. A side
+	// record: the counters in proactivity stay authoritative.
+	`CREATE TABLE budget_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		day TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		ref TEXT NOT NULL,
+		outcome TEXT NOT NULL,
+		reason TEXT NOT NULL,
+		at INTEGER NOT NULL,
+		dedupe TEXT NOT NULL UNIQUE
+	);
+	CREATE INDEX budget_events_assistant ON budget_events(assistant_id, at);`,
 }
 
 func (s *Store) migrate() error {

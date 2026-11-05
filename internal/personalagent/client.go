@@ -878,3 +878,11 @@ func (c *Client) RevokeGrant(ctx context.Context, requestID, id string) (Grant, 
 	}
 	return out.Grant, c.do(ctx, req{RequestID: requestID}, &out, "grant", "revoke", id)
 }
+
+// Budget reads today's budget ledger for an Assistant.
+func (c *Client) Budget(ctx context.Context, assistantID string, limit int) (Budget, error) {
+	var out struct {
+		Budget Budget `json:"budget"`
+	}
+	return out.Budget, c.do(ctx, nil, &out, "budget", "show", assistantID, "--limit", strconv.Itoa(limit))
+}

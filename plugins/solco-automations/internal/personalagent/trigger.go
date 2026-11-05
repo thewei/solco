@@ -321,6 +321,13 @@ func (r *TriggerScheduler) Tick() (TriggerReport, error) {
 				continue
 			}
 			if pol.QuietNow || pol.DispatchToday >= pol.DailyBudget {
+				why := BudgetReasonBudget
+				if pol.QuietNow {
+					why = BudgetReasonQuiet
+				}
+				if err := r.Store.recordBudget(tx, l.AssistantID, pol.day, BudgetTrigger, l.ID, BudgetHeld, why); err != nil {
+					return rep, err
+				}
 				continue
 			}
 			evRows, err := tx.Query(`SELECT `+eventCols+` FROM events WHERE assistant_id=? AND rowid>? AND source='task' AND kind=? ORDER BY rowid`, l.AssistantID, l.mark, l.On)
@@ -342,6 +349,13 @@ func (r *TriggerScheduler) Tick() (TriggerReport, error) {
 			for _, e := range evs {
 				if l.firesToday >= TriggerDailyCap || pol.DispatchToday >= pol.DailyBudget {
 					// Held, not dropped: tomorrow picks up from here.
+					why := BudgetReasonBudget
+					if l.firesToday >= TriggerDailyCap {
+						why = "trigger_cap"
+					}
+					if err := r.Store.recordBudget(tx, l.AssistantID, pol.day, BudgetTrigger, l.ID, BudgetHeld, why); err != nil {
+						return rep, err
+					}
 					newMark, capped = e.Seq-1, true
 					break
 				}
@@ -387,6 +401,9 @@ func (r *TriggerScheduler) Tick() (TriggerReport, error) {
 					return rep, err
 				}
 				if err := countDispatchTx(tx, pol, 1, nowMS); err != nil {
+					return rep, err
+				}
+				if err := r.Store.recordBudget(tx, l.AssistantID, pol.day, BudgetTrigger, tid, BudgetSpent, ""); err != nil {
 					return rep, err
 				}
 				pol.DispatchToday++

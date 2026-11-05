@@ -132,3 +132,16 @@ func (b *AssistantsBridge) SaveBehavior(ctx context.Context, requestID, id strin
 		return err
 	})
 }
+
+// Budget reads today's budget ledger: what the system started on its own, what
+// it held back and why (Gap A05). Tokens and money are reported as unmeasured.
+func (b *AssistantsBridge) Budget(ctx context.Context, id string) (personalagent.Budget, error) {
+	out := personalagent.Budget{Spent: map[string]int{}, Held: []personalagent.BudgetHold{}, Recent: []personalagent.BudgetEvent{}, Unmeasured: []string{}}
+	c, err := b.client()
+	if err != nil {
+		return out, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, assistantsCallTimeout)
+	defer cancel()
+	return c.Budget(ctx, id, 12)
+}

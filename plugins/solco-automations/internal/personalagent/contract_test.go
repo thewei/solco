@@ -210,6 +210,9 @@ func TestGoldenFixtures(t *testing.T) {
 	run("memory-autosaved", fmt.Sprintf(`{"requestId":"g-mauto","assistantId":%q,"kind":"preference","content":"Likes the weekly digest on Monday","sourceRef":"run:r_1"}`, aid), "assistant", "memory", "propose")
 	run("grant-revoked", `{"requestId":"g-grv"}`, "assistant", "grant", "revoke", grantIn.ID)
 
+	// The budget ledger (Gap A05): what the Supervisor spent and held today.
+	run("budget-show", ``, "assistant", "budget", "show", aid, "--limit", "20")
+
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError
 	if !asCodedErr(err, &ce) {

@@ -656,3 +656,44 @@ type Trigger struct {
 	CreatedAt     int64  `json:"createdAt"`
 	UpdatedAt     int64  `json:"updatedAt"`
 }
+
+// BudgetEvent is one row of the budget ledger (Gap A05): a task the system
+// started on its own (spent) or a time it held back (held, with the reason).
+type BudgetEvent struct {
+	Kind    string `json:"kind"`
+	Ref     string `json:"ref"`
+	Outcome string `json:"outcome"`
+	Reason  string `json:"reason,omitempty"`
+	At      int64  `json:"at"`
+}
+
+// BudgetHold counts today's holds of one kind for one reason.
+type BudgetHold struct {
+	Kind   string `json:"kind"`
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
+}
+
+// BudgetWake is the heartbeat's own approved allowance.
+type BudgetWake struct {
+	Approved  bool `json:"approved"`
+	Budget    int  `json:"budget"`
+	UsedToday int  `json:"usedToday"`
+}
+
+// Budget is today's picture for one Assistant. Unmeasured names what the core
+// cannot know (model tokens, money): it is shown as unmeasured, never guessed.
+type Budget struct {
+	AssistantID string         `json:"assistantId"`
+	Day         string         `json:"day"`
+	Level       string         `json:"level"`
+	QuietNow    bool           `json:"quietNow"`
+	DailyBudget int            `json:"dailyBudget"`
+	SpentToday  int            `json:"spentToday"`
+	Remaining   int            `json:"remaining"`
+	Spent       map[string]int `json:"spent"`
+	Held        []BudgetHold   `json:"held"`
+	Wake        BudgetWake     `json:"wake"`
+	Recent      []BudgetEvent  `json:"recent"`
+	Unmeasured  []string       `json:"unmeasured"`
+}
