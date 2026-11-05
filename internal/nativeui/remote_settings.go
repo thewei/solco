@@ -154,6 +154,7 @@ func (s *Shell) syncRemoteHost() {
 		return
 	}
 	if remoteConfigFrom(s.settings.Remote).Mode == remotehost.ModeOff {
+		s.remoteChatHost.Store(nil)
 		s.remote.err = ""
 		_ = srv.Reconfigure(remoteConfigFrom(s.settings.Remote), remoteRelayFrom(s.settings.Remote))
 		s.releaseHostLease()
@@ -169,6 +170,9 @@ func (s *Shell) syncRemoteHost() {
 		slog.Warn("remote host reconfigure failed", "error", err)
 		s.remote.err = err.Error()
 	}
+	// Relay may still serve the phone even when the selected LAN interface
+	// could not bind. OMP events remain safe to ingest on that fallback path.
+	s.remoteChatHost.Store(srv)
 }
 
 // startRemoteHostAtLaunch brings the Host up only when the user left it on.
@@ -199,6 +203,7 @@ func (s *Shell) remoteAddressLost() {
 }
 
 func (s *Shell) stopRemoteHost() {
+	s.remoteChatHost.Store(nil)
 	if s.remote.srv != nil {
 		s.remote.srv.Close()
 	}
@@ -229,6 +234,12 @@ func (s *Shell) claimHostLease() {
 				return
 			}
 			s.remote.lease = lease
+			// The resident Host releases the same apphook socket when it yields.
+			// The GUI's first attach may have lost that race at startup; retry
+			// just the direct listener now, without spawning duplicate spool readers.
+			if s.hookServer == nil {
+				s.ensureAppHookServer()
+			}
 			s.syncRemoteHost()
 		})
 	})

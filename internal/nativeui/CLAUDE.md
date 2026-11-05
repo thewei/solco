@@ -268,7 +268,7 @@ chat_plan.go 已迁至 internal/chatsession（plan.go；2026-10-31，桌面桥�
 chat_link.go: 无 source 窗格的自愈——邀请态列出同 provider、同 cwd、24h 内、未归档的历史会话（≤3，`LinkCandidates`），用户点选后经共享 `bindLiveFile` 跟随该文件（指纹前缀 `linked:`）；Agent 之后上报了实测身份即让位（`rebindWorkspaceChat`）。只读 History，不新增 Herdr 方法。2026-10-31 起 `rebindWorkspaceChat` 在绑定窗格的占用者更换时同样让位：provider 变化（claude 退出、omp 接管同一窗格）或同一 agent 重启进新会话（实测指纹不再相等）都换绑，不再停留上一个 Agent 的转录；占用者缺席或身份未上报时保持绑定（防抖），指纹相同的 steady-state 早退（回归在 chat_rebind_test.go）
 chat_live.go: Live 尾部流增量绑定与会话生命周期调度——`openChat` / `bindLiveAgent`（实测会话身份解析至物理文件）/ `bindLiveFile`（挂载 `LivePump`，泵新行经 `applyLiveSync` 折叠投递到 Chat 窗口）；会话切换、窗格切换或 `stopLiveTail` 必定重置 `chatModel` 与 `chatContextTokens`，防止上一 Agent 残留模型污染 Composer 初始展示
 chat_live_test.go: Live tail 生命周期、断开与清理、尾部增量回折与重绑回归
-chat_stream.go: OMP 原生 Extension 增量接入：先将已有 AppHook 事件扇出给同进程 Remote Host 的独立有界流投影（含未选中的 Pane，仍由 Host 精确 Provider/Pane/Session 身份闸把关）；桌面严格匹配已绑定 Pane/Provider/SessionPath 后仅写可丢弃 overlay；转录仍是权威
+chat_stream.go: OMP 原生 Extension 增量接入；移动端扇出已经前移至 chat_hooks.go 的 AppHook Socket lane（绕开 MyGo UI 线程），此处仅对桌面可见 Chat 使用严格 Pane/Provider/SessionPath 围栏下的可丢弃 overlay，JSONL 仍是权威
 chat_stream_test.go: OMP stream 跨 Pane/Session/Provider 拒绝、事件去重与切换即清 overlay 的回归；隔离 Unix Socket→Go ChatBridgeState 的真线协议/缺帧 fail-closed 测试
 chat_delta.go: SC-04 只针对 OMP stream 发布 50ms 合并的 chat:delta 尾三回合 patch；强制比对最后交付给页面的 baseline（含未改动历史前缀与非回合元数据），窗口滑动/状态改变时回退 chat:updated 完整快照
 chat_delta_test.go: suffix patch 的边界、序号和最多三个回合、窗口滑动/前缀变化/元数据变化全量回退测试

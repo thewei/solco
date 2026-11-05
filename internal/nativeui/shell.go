@@ -30,6 +30,7 @@ import (
 	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/personalagent"
 	"github.com/thewei/solco/internal/preview"
+	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/scripts"
 	"github.com/thewei/solco/internal/services"
 	"github.com/thewei/solco/internal/settings"
@@ -222,6 +223,9 @@ type Shell struct {
 	// remote backs Settings → Remote Access: the optional phone-client Host,
 	// its listener choice feedback and the pairing sheet.
 	remote remoteState
+	// Published atomically so AppHook's socket goroutine can push bounded
+	// mobile streaming events without waiting for the MyGo UI thread.
+	remoteChatHost atomic.Pointer[remotehost.Server]
 	// rdesk is the Remote Desktop page and approval state (remote_desktop.go).
 	rdesk remoteDesktopState
 	// remoteFacts is the desktop's resolved agent titles/last-worked times, published for the Host's goroutines.
@@ -1001,6 +1005,7 @@ func (s *Shell) OpenCommandCenterFromMenu() {
 
 func (s *Shell) Close() {
 	slog.Info("native shell closing", "instance", s.activeInstance)
+	s.remoteChatHost.Store(nil)
 	// Persist the session while the state is still intact: this is the menu
 	// Quit path (the close button hides the window without closing it).
 	s.SaveSession()

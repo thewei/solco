@@ -40,6 +40,11 @@ func TestChatSuffixDeltaAndCanonicalFallback(t *testing.T) {
 		t.Fatal("rolled window accepted")
 	}
 	changed = next
+	changed.State.Turns = []chatsession.ChatTurn{{Narration: "new short conversation"}}
+	if _, ok := chatSuffixDelta(base, changed); ok {
+		t.Fatal("40-turn window replaced by short result as a suffix")
+	}
+	changed = next
 	changed.State.Model = "new model"
 	if _, ok := chatSuffixDelta(base, changed); ok {
 		t.Fatal("metadata changed without full frame")

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/thewei/solco/internal/chatstream"
@@ -77,10 +78,13 @@ type Server struct {
 	handler     Handler
 
 	listener net.Listener
-	quit     chan struct{}
-	wg       sync.WaitGroup
-	mu       sync.Mutex
-	closed   bool
+	// socketInfo records the exact inode we own. A failed Start or a later
+	// owner must never have its socket removed by this Server's Close.
+	socketInfo os.FileInfo
+	quit       chan struct{}
+	wg         sync.WaitGroup
+	mu         sync.Mutex
+	closed     bool
 }
 
 // NewServer creates a new in-app hook server instance.
@@ -121,17 +125,31 @@ func (s *Server) Start() error {
 		return fmt.Errorf("create socket directory %s: %w", dir, err)
 	}
 
-	// Stale socket detection: attempt connecting first.
-	if _, err := os.Stat(s.socketPath); err == nil {
-		conn, dialErr := net.DialTimeout("unix", s.socketPath, 100*time.Millisecond)
-		if dialErr == nil {
-			conn.Close()
-			return fmt.Errorf("socket %s is already in use by an active process", s.socketPath)
+	// In a desktop/resident ownership handoff, fail closed on a socket
+	// whose health is uncertain. Only ECONNREFUSED proves a Unix socket is
+	// stale; a timeout or permission denial must NEVER evict a live owner.
+	// Symlink ownership is not inferred from its target, either.
+	if info, err := os.Lstat(s.socketPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("apphook socket path is a symbolic link: %s", s.socketPath)
 		}
-		// Connection failed, stale socket file left behind: remove it.
+		if info.Mode()&os.ModeSocket != 0 {
+			conn, dialErr := net.DialTimeout("unix", s.socketPath, 100*time.Millisecond)
+			if dialErr == nil {
+				_ = conn.Close()
+				return fmt.Errorf("socket %s is already in use by an active process", s.socketPath)
+			}
+			if !errors.Is(dialErr, syscall.ECONNREFUSED) {
+				return fmt.Errorf("socket %s has uncertain ownership: %w", s.socketPath, dialErr)
+			}
+		} else if !info.Mode().IsRegular() {
+			return fmt.Errorf("apphook socket path is not a regular file or socket: %s", s.socketPath)
+		}
 		if removeErr := os.Remove(s.socketPath); removeErr != nil {
 			return fmt.Errorf("remove stale socket %s: %w", s.socketPath, removeErr)
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect socket %s: %w", s.socketPath, err)
 	}
 
 	ln, err := net.Listen("unix", s.socketPath)
@@ -140,6 +158,7 @@ func (s *Server) Start() error {
 	}
 	_ = os.Chmod(s.socketPath, 0o600)
 	s.listener = ln
+	s.socketInfo, _ = os.Lstat(s.socketPath)
 
 	// Create symlink if requested and different from socketPath
 	if s.symlinkPath != "" && s.symlinkPath != s.socketPath {
@@ -192,18 +211,31 @@ func (s *Server) Close() error {
 	close(s.quit)
 
 	var closeErr error
-	if s.listener != nil {
+	owned := s.listener != nil
+	inode := s.socketInfo
+	if owned {
 		closeErr = s.listener.Close()
 	}
 	s.mu.Unlock()
 
 	s.wg.Wait()
 
-	_ = os.Remove(s.socketPath)
-	if s.symlinkPath != "" {
-		_ = os.Remove(s.symlinkPath)
+	// Ownership is important when hostd yields the port to the GUI (or
+	// when Start failed because the GUI already owns the status socket).
+	// An unsuccessful Start must never remove another process's socket.
+	if owned && inode != nil {
+		if current, err := os.Lstat(s.socketPath); err == nil && os.SameFile(current, inode) {
+			_ = os.Remove(s.socketPath)
+		}
 	}
-	slog.Info("apphook server stopped", "socket", s.socketPath)
+	if owned && s.symlinkPath != "" {
+		if target, err := os.Readlink(s.symlinkPath); err == nil && target == s.socketPath {
+			_ = os.Remove(s.symlinkPath)
+		}
+	}
+	if owned {
+		slog.Info("apphook server stopped", "socket", s.socketPath)
+	}
 	return closeErr
 }
 

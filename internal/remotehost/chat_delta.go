@@ -137,6 +137,12 @@ type chatWireDelta struct {
 // prefix changed. A rolling-window removal is *not* safe to patch as a suffix.
 func chatSuffixDelta(base, next chatWireFrame) (chatWireDelta, bool) {
 	start := max(0, len(next.State.Turns)-chatPatchTailLimit)
+	// A sudden shrink cannot be represented as an ordinary tail update.
+	// In particular, replacing an entire 40-turn window with two turns
+	// must send a full transcript frame, not a misleading start=0 patch.
+	if start < max(0, len(base.State.Turns)-chatPatchTailLimit) {
+		return chatWireDelta{}, false
+	}
 	if base.PaneID != next.PaneID || base.AgentStatus != next.AgentStatus ||
 		!reflect.DeepEqual(base.Interaction, next.Interaction) ||
 		!reflect.DeepEqual(base.Queued, next.Queued) ||

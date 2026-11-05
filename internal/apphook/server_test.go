@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 /**
@@ -249,6 +250,36 @@ func TestServerStaleSocketRecovery(t *testing.T) {
 	if _, err := os.Stat(sockPath); os.IsNotExist(err) {
 		t.Fatal("socket file should exist after start")
 	}
+}
+
+func TestFailedHookStartCannotDeleteAnotherOwnerSocket(t *testing.T) {
+	// Go test's nested macOS t.TempDir path can exceed sockaddr_un limits.
+	dir, err := os.MkdirTemp("/tmp", "sh-hook-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, "shared.sock")
+	owner := NewServer(path, Handler{})
+	if err := owner.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer owner.Close()
+	other := NewServer(path, Handler{})
+	if err := other.Start(); err == nil {
+		t.Fatal("second owner claimed an active socket")
+	}
+	if err := other.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(path); err != nil {
+		t.Fatalf("failed Start removed another owner's path: %v", err)
+	}
+	conn, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatalf("other owner became unreachable: %v", err)
+	}
+	_ = conn.Close()
 }
 
 func TestServerCleanShutdown(t *testing.T) {

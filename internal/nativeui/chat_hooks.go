@@ -26,9 +26,17 @@ import (
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-// AttachHookServer starts our in-app Unix domain socket server for zero-overhead
-// direct hook state ingestion, and attaches the legacy spool tailer if present.
+// AttachHookServer starts direct hook ingestion and its legacy spool fallback.
+// A resident Host may still be surrendering the primary socket when the GUI
+// starts; we retry *only* the direct listener after the Host lease is claimed.
 func (s *Shell) AttachHookServer() {
+	s.ensureAppHookServer()
+	s.AttachHookSpool()
+}
+
+// ensureAppHookServer is safe to call after a resident Host yields its lease.
+// Never attach the legacy spool twice: its lifecycle is independent.
+func (s *Shell) ensureAppHookServer() {
 	if s.hookServer == nil {
 		server := apphook.NewServer(apphook.DefaultSocketPath(), apphook.Handler{
 			OnStatus: func(evt apphook.StatusEvent) {
@@ -38,6 +46,12 @@ func (s *Shell) AttachHookServer() {
 				s.applyOnWindow(func() { s.handleAppHookSession(evt) })
 			},
 			OnChatStream: func(evt chatstream.Event) {
+				// Remote Host owns a concurrency-safe, bounded stream projection.
+				// Fan out from the IPC lane, not the MyGo UI lane: a busy
+				// window must not delay the phone's Token updates.
+				if host := s.remoteChatHost.Load(); host != nil {
+					host.IngestOMPChatStream(evt)
+				}
 				s.applyOnWindow(func() { s.handleAppChatStream(evt) })
 			},
 		})
@@ -50,7 +64,6 @@ func (s *Shell) AttachHookServer() {
 			s.hookServer = server
 		}
 	}
-	s.AttachHookSpool()
 }
 
 // AttachHookSpool starts the hook spool tailer (production only: the spool

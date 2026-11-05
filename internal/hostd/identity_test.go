@@ -31,7 +31,8 @@ func TestBothOwnersShareOneCertificateAndOneDeviceStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resident := h.(*remotehost.Server)
+	resident := h.(*residentServer)
+	defer resident.Close()
 	_, fpResident, err := remotehost.LoadOrCreateCert(dir, time.Now())
 	if err != nil {
 		t.Fatal(err)
