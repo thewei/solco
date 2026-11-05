@@ -127,6 +127,16 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.reports = &personalagent.ReportPump{
 		Store: store, Submit: submitCoordinatorReport, Ready: coordinatorReportReady,
 		Blocked: coordinatorReportDialog,
+		Verify: func(marker string, acceptedAtMS int64) (personalagent.ReplyEvidence, error) {
+			// Read only OMP's provider-owned JSONL. The unique marker links a
+			// Herdr-accepted input to an actual final OMP message; if OMP's
+			// home or transcript is missing, keep awaiting rather than guessing.
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return personalagent.ReplyEvidence{}, err
+			}
+			return personalagent.FindOMPReportReplySince(home, marker, acceptedAtMS)
+		},
 	}
 	p.routines = &personalagent.RoutineKeeper{Store: store, Load: config.Load, ApproveChecked: personalagent.ApproveRoutineDefinition}
 	p.inbox = &personalagent.InboxWatcher{Store: store}
@@ -198,8 +208,8 @@ func (p *personal) tick() {
 				if p.ctx.Err() == nil {
 					log.Printf("assistants: coordinator reports: %v", err)
 				}
-			} else if r.Submitted+r.Uncertain > 0 {
-				log.Printf("assistants: coordinator reports: %d accepted by Herdr, %d uncertain", r.Submitted, r.Uncertain)
+			} else if r.Submitted+r.Uncertain+r.Verified > 0 {
+				log.Printf("assistants: coordinator reports: %d accepted by Herdr, %d verified OMP replies, %d need review", r.Submitted, r.Verified, r.Uncertain)
 			}
 		}()
 	}

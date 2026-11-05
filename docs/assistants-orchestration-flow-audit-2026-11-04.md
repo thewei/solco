@@ -89,7 +89,7 @@
 
 ## 继续优化：真实 OMP Coordinator 自然语言阶段汇报（2026-11-05）
 
-- 新增 `coordinator_reports` SQLite v21 outbox 与 `ReportPump`：用户在 Behavior 中 opt-in `reportEveryMin>0`、非 `respond` 且不在 quiet hours 时，只有原 Herdr OMP Coordinator `ready` 并有完整 session/workspace/pane 才可投递。沿已提交 `goal_facts.seq` 做批次窗口，引用真实任务/Run 状态，限制每批至多 12 条 Fact/12 个 Task，并限制文本长度；不启动新 Agent、不绕开审批、不拼接假回复。
+- 新增 `coordinator_reports` SQLite v18 outbox 与 `ReportPump`：用户在 Behavior 中 opt-in `reportEveryMin>0`、非 `respond` 且不在 quiet hours 时，只有原 Herdr OMP Coordinator `ready` 并有完整 session/workspace/pane 才可投递。沿已提交 `goal_facts.seq` 做批次窗口，引用真实任务/Run 状态，限制每批至多 12 条 Fact/12 个 Task，并限制文本长度；不启动新 Agent、不绕开审批、不拼接假回复。
 - 使用现有 Herdr `AgentSubmit` 把明确标为“Solco 自动汇报请求、不是用户消息”的输入交给**同一个原 OMP Chat**，由 OMP 生成自然语言总结。Herdr 收到仅记为 `submitted`，不声称 OMP 已回复；FactId/TaskId/GoalId 是其可验证的来源。新事实 + 用户配置的时间间隔到来后才再次投递。
 - 先持久化 `claimed` 再触碰 Herdr；明确 pre-send 拒绝可延期重试，超时/崩溃/不明结果 → `uncertain` 永不自动重发，并写明示的 Solco FactBlocked 告警（不进入后续报告源，防止自循环）；人工检查原 Chat 后，通过 CLI `assistant report show/resolve` 幂等地 Skip 或确认风险后 Retry。
 - daemon 单独 goroutine + atomic fence，Herdr 阻塞不拖住 Task/Goal dispatcher；Archive/Restore 维持不确定状态，永久删除清理 outbox。完整架构、恢复说明与仍未验收事项见 `docs/assistants-coordinator-report-delivery-2026-11-05.md`。
@@ -99,7 +99,7 @@
 
 - **真实对话而非伪造消息**：`ReportPump` 只向 `CoordinatorReady` 且具备完整 Herdr session/workspace/pane 身份的原协调者发送受控 `agent.prompt`；不创建第二个 Agent、不会把 Solco Fact 插入 OMP 转录。提示词明确声明是自动状态请求、不是人的消息，要求按事实序号/任务/Run/证据说明进度、阻塞和下一步，不执行任务或猜测完成比例。
 - **唯一事实源**：摘要请求读取当前 Assistant 的持久化 `goal_facts`（有界最新 12 条，携带 seq/Task/Goal）和真实 Task/最近 Run（有界 12 条）；不能证明 OMP 回复完成，`submitted` 只代表 Herdr 确认接收。默认 `reportEveryMin=0` 不提交；启用后尊重 cadence、level、静默期，原会话未就绪时不投递。
-- **crash-safe outbox**：`coordinator_reports`（DB v21）先持久化 `claimed` 再发送 Herdr。明确未输入的拒绝才有限次数退避重试；Herdr 提交结果不确定及崩溃后 claim 一律停为 `uncertain`，并向事实账本写一条需要人确认的警示，不自行重发。用户必须检查原对话，再在 desktop/phone 选择 `skip`（不重发）或 `retry`（可能重复），通过 requestId + throughSeq + confirmed 的 CAS/幂等门禁恢复。
+- **crash-safe outbox**：`coordinator_reports`（DB v18）先持久化 `claimed` 再发送 Herdr。明确未输入的拒绝才有限次数退避重试；Herdr 提交结果不确定及崩溃后 claim 一律停为 `uncertain`，并向事实账本写一条需要人确认的警示，不自行重发。用户必须检查原对话，再在 desktop/phone 选择 `skip`（不重发）或 `retry`（可能重复），通过 requestId + throughSeq + confirmed 的 CAS/幂等门禁恢复。
 - **跨端可操作**：桌面 Assistants 的对话上方显示独立报告状态条与二次确认 Sheet；MyGo `assistants.ResolveCoordinatorReport` 通过 `internal/personalagent.Client` 仍调用同一插件。手机 Host `GET /assistants/{id}/report`（ScopeView）、`POST .../report/resolve`（ScopeManage）从插件获取/更新状态，手机 Activity history 上显示相同告警并用原生二次确认。`personalAgentNarrativeReports` 需要插件实际 `assistant report probe` 成功，旧版插件不误展示。手机响应和恢复命令通过 Zod+Host 金样验证。
 - **变更竞态**：Herdr pane 检查可能耗时，发送前再读个人 Proactivity，并在 SQL claim 中检查 Coordinator 的 revision/Herdr 身份、Assistant Active、reportEveryMin 和 level。若静默规则中途变化，不能仅靠旧时间点状态接受后续投递。提交后任何情况不会宣称 OMP 已输出回复。
 - **自动验证**：插件多项 ReportPump 功能/崩溃/幂等/清理/竞态测试；Go NativeUI 桥、Host Scope + 请求体拒绝测试；WebView TypeScript 构建及移动 Zod/端测试。真实 OMP/Herdr/手机 UI 端到端仍待实机验收。
@@ -113,3 +113,10 @@
 - 测试先见失败（新增 Busy 场景不具备 Ready gate 的编译错误），随后单测包含 Hero/Herdr 状态不明/不同 Agent/Pane、Pane 读取失败、缺任一回调、被占用后解阻塞、返回收据不匹配。真实沙箱 `python3 scripts/check-herdr-omp-chat-stream.py` **PASS**：Herdr 0.9.5 + OMP 18.16.0 一个真实 Pane/Agent，两次真实 `agent.get idle/interactive_ready` 和无等待 `agent.prompted` 凭据，OMP TUI 输出与 14 帧/6 delta 一致；全程本地 SSE 模型、隔离 HOME；证据见 `docs/debug/2026-11-05-assistant-report-herdr-idle.md`。
 - 仍待：**SQLite Assistant report batch 到模型回复 ID 的强制关联**、完整 Assistant→Herdr+OMP→Chat UI E2E、Herdr API 的原子 `if_idle` 请求前置条件及用户发送竞态、实际 Android 应用验收。以上无法由“已收到 Herdr 凭据”替代。
 - 有界 Herdr IO：Report 的实时 `agent.get` (5s)、`pane.read` (5s)、无等待 `agent.prompt` CLI (30s) 均有 deadline；探测失败留在 queued，提交不确定仍按原 Outbox uncertain。其他 Worker/Group 的原 API 不变。
+
+## 补齐闭环：自动汇报与 OMP 真实回复关联（2026-11-05）
+
+- 新增 SQLite v19 报告 nonce、replyState、Provider Session/Message ID 与 verified timestamp。Herdr `submitted` 不能冒充完成；读取 OMP 自有 JSONL 的唯一 nonce user turn 及 `assistant stopReason=stop` 最终文本后才证明完成。阻塞下一批直到验证，或人工审阅中断/超时状态；不能仅据空闲、流式 delta 或一个工具调用就断言完成。老版本已提交收据 untracked 并转入 uncertain 由人核对，不伪称验证。
+- 回复验证成功会事务性写入 `report:reply-verified` Activity Fact，供现有桌面/手机事件提示与 Android 本地通知消费，但主动汇报源明确排除这些系统自身事件防循环。PC/Phone 均显示 awaiting/verified，不会对真实 OMP Chat 写假消息。独立沙箱真实 OMP JSONL 路径已验收；发现真实 OMP 第一行是 title 而不是 session，并修复前 32 行元数据搜索。
+- 完整通过矩阵、边界、未完成的原子 Herdr if_idle、批次对真实 Session 文件的来源认证限制、结构化多 Worker evidence 质量与全业务 E2E：`docs/debug/2026-11-05-assistant-report-reply-correlation.md`。
+- 真实回复核验的最后安全门禁：候选文件按本次 Herdr 接收时间（向前容错 10m）筛选，旧历史不占预算；候选数/读取预算溢出、损坏/无法读取、同 JSONL 重复标记均不宣称唯一验证；核验 callback/marker 不存在超过 30m 后交人工处理。真实隔离 OMP + 实际 Go 核验器已再次 PASS。

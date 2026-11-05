@@ -59,6 +59,12 @@ func TestReportPumpUsesRealCoordinatorAndFactWatermark(t *testing.T) {
 		t.Fatal(err)
 	}
 	var prompts []string
+	p.Verify = func(marker string, _ int64) (ReplyEvidence, error) {
+		if len(prompts) == 0 || !strings.Contains(prompts[len(prompts)-1], reportReplyPrefix+marker) {
+			t.Fatalf("report nonce not bound to accepted OMP user turn")
+		}
+		return ReplyEvidence{State: ReplyVerified, SessionID: "session-test", MessageID: "assistant-final"}, nil
+	}
 	p.Submit = func(session, paneID, text string) error {
 		if session != "default" || paneID != "w1:p1" {
 			t.Fatalf("wrong live coordinator %s %s", session, paneID)

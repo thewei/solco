@@ -333,7 +333,7 @@ var migrations = []string{
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
 	);`,
-	// v-next: Groups (Assistants 3.1 U1): one ordered message log, members,
+	// v10: Groups (Assistants 3.1 U1): one ordered message log, members,
 	// per-mention deliveries, and the Agent an Assistant runs for a Group.
 	`CREATE TABLE chat_groups (
 		id TEXT PRIMARY KEY,
@@ -394,10 +394,10 @@ var migrations = []string{
 		PRIMARY KEY (group_id, assistant_id)
 	);
 	CREATE INDEX group_agents_by_task ON group_agents(task_id);`,
-	// 14: the newest message a launching Group Agent's brief carried. It only
+	// v11: the newest message a launching Group Agent's brief carried. It only
 	// becomes last_seq once the Agent really finished that turn.
 	`ALTER TABLE group_agents ADD COLUMN launch_seq INTEGER NOT NULL DEFAULT 0;`,
-	// 15: Assistants 3.1 U2 — a versioned "how you work" text per Assistant (the
+	// v12: Assistants 3.1 U2 — a versioned "how you work" text per Assistant (the
 	// active text stays assistants.role_prompt; this table is the history), the
 	// revision each running surface actually launched with, the Assistant's own
 	// Agent/Model/Effort, per-Assistant MCP grants and what each launch bound.
@@ -443,7 +443,7 @@ var migrations = []string{
 		verified_at INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (assistant_id, surface)
 	);`,
-	// 16: Assistants 3.1 U3 — the plan behind a Goal (success criteria, verifiable
+	// v13: Assistants 3.1 U3 — the plan behind a Goal (success criteria, verifiable
 	// milestones, next action), its revision trail, and the ledger of system
 	// facts the Goal supervisor derives from committed state. Facts are the
 	// store's own words, never an Agent's.
@@ -481,7 +481,7 @@ var migrations = []string{
 	);
 	CREATE INDEX goal_facts_by_assistant ON goal_facts(assistant_id);
 	CREATE INDEX goal_facts_by_goal ON goal_facts(goal_id);`,
-	// 17: routines — the owner binding of a scheduled automation. The definition
+	// v14: routines — the owner binding of a scheduled automation. The definition
 	// stays in automations.yaml (one scheduler, one file); this row says whose it
 	// is, who asked, which exact definition a person approved, and whether it was enabled.
 	`CREATE TABLE routines (
@@ -498,7 +498,7 @@ var migrations = []string{
 		updated_at INTEGER NOT NULL
 	);
 	CREATE INDEX routines_by_assistant ON routines(assistant_id);`,
-	// 18: Memory workspace and proactivity (U5). memory_versions keeps every
+	// v15: Memory workspace and proactivity (U5). memory_versions keeps every
 	// revision (a forgotten item's versions keep no content); memory_files is
 	// what the folder projection last wrote, so a person's edit is the file
 	// that no longer matches it; proactivity is one Assistant's rules for what
@@ -534,14 +534,14 @@ var migrations = []string{
 		revision INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
 	);`,
-	// 19: SQLite intent survives YAML -> SQLite crash windows of routine drafts.
+	// v16: SQLite intent survives YAML -> SQLite crash windows of routine drafts.
 	// It only authorizes finishing an approval *request*, never executing one.
 	`CREATE TABLE routine_intents (
 		name TEXT PRIMARY KEY,
 		payload TEXT NOT NULL,
 		created_at INTEGER NOT NULL
 	);`,
-	// 20: the existing Fact ledger becomes a stable, non-reusable sequence
+	// v17: the existing Fact ledger becomes a stable, non-reusable sequence
 	// for cursor-based Activity replay. An ordinary SQLite rowid can be reused
 	// after the newest row is purged; AUTOINCREMENT cannot. Keep all old seq
 	// values so existing desktop/mobile receipts and cursors stay valid.
@@ -572,7 +572,7 @@ var migrations = []string{
 		updated_at INTEGER NOT NULL,
 		PRIMARY KEY (assistant_id,consumer)
 	);`,
-	// v21: one durable, non-replaying progress-prompt outbox per Assistant.
+	// v18: one durable, non-replaying progress-prompt outbox per Assistant.
 	// A crash after claiming but before confirming the Herdr submit is never
 	// automatically replayed. The submitted watermark is only advanced by a
 	// positively confirmed Herdr AgentSubmit, not by a model completion guess.
@@ -592,6 +592,23 @@ var migrations = []string{
 		coordinator_revision INTEGER NOT NULL DEFAULT 0,
 		updated_at INTEGER NOT NULL DEFAULT 0
 	);`,
+	// v19: A Herdr-accepted prompt is not an OMP response. An opaque nonce
+	// binds the sent batch to a real OMP user message and a subsequent final
+	// assistant record in the provider's read-only JSONL. Pre-v19 receipts are
+	// explicitly untracked rather than falsely marked as verified.
+	`ALTER TABLE coordinator_reports ADD COLUMN report_marker TEXT NOT NULL DEFAULT '';
+	ALTER TABLE coordinator_reports ADD COLUMN reply_state TEXT NOT NULL DEFAULT 'untracked';
+	ALTER TABLE coordinator_reports ADD COLUMN reply_session_id TEXT NOT NULL DEFAULT '';
+	ALTER TABLE coordinator_reports ADD COLUMN reply_message_id TEXT NOT NULL DEFAULT '';
+	ALTER TABLE coordinator_reports ADD COLUMN reply_verified_at INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE coordinator_reports ADD COLUMN reply_checked_at INTEGER NOT NULL DEFAULT 0;
+	-- Pre-v19 submitted receipts only prove Herdr accepted the prompt.
+	-- They have no correlation marker; do not send a new report as though
+	-- the last OMP answer had been verified. Existing owners can explicitly
+	-- skip/retry the untracked batch through the normal review UI.
+	UPDATE coordinator_reports SET state='uncertain',
+	last_error='Legacy Herdr-accepted report has no verified OMP reply; check the original Chat'
+	WHERE state='submitted' AND reply_state='untracked';`,
 }
 
 func (s *Store) migrate() error {

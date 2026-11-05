@@ -286,7 +286,11 @@ def main() -> None:
                                        + json.dumps(receipt)[:450])
 
             wait_idle_omp()
-            accepted_prompt("Read the test file, then say hello.")
+            # This is an explicit sandbox marker. The plugin's read-only
+            # observer must correlate it with the *real* OMP final JSONL row,
+            # not with Herdr acceptance or an incremental stream chunk.
+            report_marker = "0123456789abcdef0123456789abcdef"
+            accepted_prompt(f"Solco-Report-Id: {report_marker}\nRead the test file, then say hello.")
 
             def await_turns(message_ends: int, text_chunks: int) -> None:
                 deadline = time.monotonic() + TIMEOUT
@@ -310,6 +314,35 @@ def main() -> None:
             with lock:
                 recorded = list(frames)
             check_events(recorded, pane, home)
+            session_file = Path(next(e["params"]["session_path"] for e in recorded
+                                     if e.get("params", {}).get("session_path")))
+            with session_file.open("r", encoding="utf-8") as source:
+                rows = [json.loads(line) for line in source if line.strip()]
+            if not any(
+                row.get("type") == "message"
+                and (row.get("message") or {}).get("role") == "user"
+                and any(report_marker in str(block.get("text", ""))
+                        for block in (row.get("message", {}).get("content") or [])
+                        if isinstance(block, dict))
+                for row in rows
+            ):
+                raise RuntimeError("real OMP transcript missing the submitted report marker")
+            # Invoke the very same read-only Go validator used by the daemon.
+            # Keep this Go subprocess under the developer's normal Go cache;
+            # its ONLY OMP input is the ephemeral private sandbox path.
+            go_env = os.environ.copy()
+            go_env.update({
+                "SOLCO_OMP_REPORT_E2E_HOME": str(home),
+                "SOLCO_OMP_REPORT_E2E_MARKER": report_marker,
+            })
+            verify = subprocess.run([
+                "go", "test", "./internal/personalagent", "-run",
+                "^TestRealOMPReportScannerFixture$", "-count=1",
+            ], env=go_env, cwd=HERE.parent / "plugins/solco-automations",
+                capture_output=True, text=True, timeout=90)
+            if verify.returncode != 0:
+                raise RuntimeError("real OMP batch-to-final-message check failed: "
+                                   + (verify.stdout + verify.stderr)[-600:])
 
             # Verify the same process is still the *only* Herdr-recognized
             # agent, not a separately started RPC helper.
@@ -323,7 +356,7 @@ def main() -> None:
             if provider.request_count < 2:
                 raise RuntimeError("the real OMP process did not complete the tool round-trip")
 
-            print(f"Herdr OMP Chat stream: PASS (1 Pane/1 Agent, 2 idle guards + 2 pane-fenced prompt receipts; {len(recorded)} IPC frames; "
+            print(f"Herdr OMP Chat stream: PASS (1 Pane/1 Agent, 2 idle guards + 2 pane-fenced prompt receipts; real JSONL batch to final-message verification; {len(recorded)} IPC frames; "
                   f"{len(CHUNKS) * 2} deltas; read tool + TUI answer)")
         finally:
             if daemon is not None and daemon.poll() is None:

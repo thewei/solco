@@ -54,3 +54,12 @@ printf '%s' '{"requestId":"unique-human-action-id","throughSeq":42,"action":"ski
 ### Herdr 状态查询与提交 deadline（2026-11-05 补充）
 
 报告专用 `agent.get` / `pane.read` 分别 5 秒上限；状态未知立即 defer，**不 claim**。若已经进入 `claimed`，`agent.prompt` 接收请求有 30 秒上限；超时没有可信凭据，转 `uncertain`，不自动重发。普通 Worker/Group 的 `AgentSubmit` / `PaneRead` 契约未修改。
+
+## v19：原 OMP 完成回复的可验证关联（2026-11-05）
+
+- 不再把 `submitted` 当作可继续发下一批：该状态仅证明 Herdr 接收。`replyState=awaiting` 会挡住新报告；只有带加密随机 batch marker 的真正 OMP user turn 后面、同一个 Provider JSONL 内有 `stopReason=stop` + 非空文本 + 真实消息 ID，才变成 `replyState=verified`，存储 `replySessionId/replyMessageId/replyVerifiedAt`；原 OMP 文件全程只读。
+- plugin v19 migration 新增 marker、回复状态及观察时间；旧 v18 已提交收据标记 `untracked` 并转入 `uncertain` 待人工核对，绝不冒充完成。扫描限制 `~/.omp/agent/sessions`，最多 3000 个目录节点、24 个最近文件、64 MiB 总读、每文件 8 MiB 尾部；遇到异常、未完成、重复 marker、工具调用中间态和子代理不予验证。Herdr 尚未给出原子会话路径，因此此处是唯一随机标记的强相关，而不是运行时提供的无条件证明。
+- 每 10 秒至多检查一次；30 分钟未拿到可核对结果、或 Provider 明确 aborted/error → `uncertain`，进入原有人工 skip/retry 流程，**绝不自动重复发送**。成功验证时在同一 SQLite 事务写验证状态 + 一条不含模型正文的 `FactPulse`，让桌面/手机 Activity 和 Android 已有通知感知回复完成。该系统 Fact 排除在后续汇报来源之外，避免自循环。
+- 桌面和手机独立展示“Herdr 已接收、等待 OMP 回复”与“OMP 回复已验证”，并能看到准确源消息 ID。真实隔离 Herdr 0.9.5 + OMP 18.16.0 下，`scripts/check-herdr-omp-chat-stream.py` 传入沙箱 nonce、经真实 OMP read tool/最终消息，再调用插件 Go 的原始 JSONL 验证器，**PASS**。真实 OMP 先写 `title` 再写 `session` 的变体由失败前证据确认并修复。详情：`docs/debug/2026-11-05-assistant-report-reply-correlation.md`。
+
+- **2026-11-05 再加固**：核验按 `lastSubmittedAt` 过滤 10 分钟以前未更新的旧会话文件；最近候选若超过 24 个或 64 MiB 预算则保持未验证、需要人核对，而不是把不完整覆盖当作唯一事实。相同 nonce 在同一 JSONL 出现两次也拒绝。核验 callback 丢失/marker 失效时 30 分钟后自动进入 `uncertain` 而非永久等待。证据同 `docs/debug/2026-11-05-assistant-report-reply-correlation.md`。
