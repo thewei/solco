@@ -76,3 +76,14 @@
 - 2026-11-04 cua-driver desktop 像素坐标 = 主屏点数×2（÷2 映射），负 x 可达左侧屏，超出域即钳 0 → 右侧/第三屏点不可达，只能 move_cursor+AXPress 组合
 - 2026-11-04 两个同名 Solco 进程并存时 System Events AX 按名字解析会串进程（window 1 取错）→ 用 unix id 过滤并注意其内部仍可能按名缓存；托盘图标位置每轮点击前重读（状态项动态位移）
 - 2026-11-04 单实例锁键 = bundle id+name，改签 .app 副本会在 hardened-runtime 校验处 SIGTRAP；并实例隔离用 unpackaged go build（名字 Solco-dev）或 worktree 改 mygo.config.ts identifier 官方构建
+
+## 第 N 轮（2026-11-05 Assistants Mac.app 隔离实机验收）
+
+- 2026-11-05 沙箱 Chat 页永远 "Working…" 却不渲染 → 根因是沙箱 HOME 没装 Herdr omp 集成与 `solco-chat-stream.ts`（无 `agent_session` 身份），补装即正常；沙箱必须复刻用户环境的扩展集，别先怀疑产品（落点 acceptance_hold_test.go、SKILL 第 0 步附）。
+- 2026-11-05 `computer_resolve_app(bundle_id)` 会经 LaunchServices 以真实 HOME 另起一个实例（污染真实数据目录）→ 一律用 `computer_apps` 取 pid/target_id；误起后杀掉并清 `~/Library/Application Support/<Name>`。
+- 2026-11-05 WebView 内坐标点击/`computer_key` 静默无效、AX `press`/`set_value` 有效；AX `set_value` 不写入中文 → 验收用 AX + 英文文案，旁证用 sqlite/会话文件。
+- 2026-11-05 工具 shell 里 `source env.sh` 永久改 HOME/PATH，随后的 `rm -rf "$HOME/…"` 删到了沙箱目录、`rg`/`gofmt` 找不到 → 只在子 shell source；清理用绝对路径。
+- 2026-11-05 `git add -N .` 把并行会话的未跟踪文件也标成已加入（已用 `git reset -- <path>` 还原）→ 永不 `-N .`/`add .`，只对自己的文件 `git add <path>`。
+- 2026-11-05 e2e 夹具的脚本键对 CJK 消息可能落空 → 用 `last:<substr>` 脚本键或 `*` 兜底；GUI 里能输入的文案要与脚本键同语种。
+- 2026-11-05 skill 升级原因：加入「Assistants/插件类 Mac.app 隔离实机验收配方」，因为本轮反复踩到沙箱缺口、启动方式、WebView 输入、shell 环境污染。
+

@@ -169,6 +169,22 @@ Solco 自己会 EnsureRunning 拉起 `herdr server`（internal/herdr/herdr.go）
 UI 里用侧栏 Workspace 区「New Workspace from Folder…」把 scratch 目录开成 workspace。
 收工清理：`kill <pid>`；沙箱目录可留作下轮复用（进度文件里记路径）。
 
+### 第 0 步附：Assistants/插件类 Mac.app 隔离实机验收配方（2026-11-05 定型）
+
+适用：要在真 Solco.app + 真 Herdr + 真 OMP 上验 Assistants/Automations 链路，又不能碰用户的数据。
+
+1. **沙箱后端**：`go test -tags e2e -run TestAcceptanceHold`（`plugins/solco-automations/internal/personalagent/acceptance_hold_test.go`）起隔离 HOME + Herdr + OMP（本地 fixture 模型）+ 插件守护进程，写出 `env.sh`，保持到 stop 文件出现。沙箱 HOME 必须装齐用户环境里会有的东西：`herdr integration install omp` 和 `solco-chat-stream.ts`，否则 Herdr 报不出 `agent_session`，Chat 页会永远停在 "Working…"（那是沙箱缺口，不是产品缺口）。
+2. **隔离 App**：用 git worktree，改 `mygo.config.ts` 的 name/identifier（例 SolcoAcc / com.whstudio.solco.acc）后 `go tool mygo build`——单实例锁键 = identifier+name，对副本重签会 SIGTRAP，必须重建。
+3. **启动**：`launchctl submit -l <label> -o out -e err -- up.sh`（脚本里 `unset GOROOT`、显式 PATH、source env.sh、exec 二进制）。后台任务绝不依赖工具 shell 存活；停止用 `launchctl remove` + stop 文件。
+4. **驱动**：Computer Use 以 `pid + target_id` 取目标（`computer_apps` 列出）。**不要用 bundle_id 解析**——会走 LaunchServices 以真实 HOME 启动一个新实例。
+   - 原生控件（侧栏、菜单）：坐标点击可用。
+   - WebView 内控件：坐标点击和 `computer_key` 都不可靠（窗口被遮挡/未成为 key 时静默丢事件）→ 用 AX：`computer_app_action press` 点按钮，`computer_set_value` 填输入框（先 `computer_app_state` 取 `snapshot_id`）。AX `set_value` 对中文文本不回写，验收文案用英文，或把 fixture 脚本键改成 `*` 兜底。
+   - 每次改动后用 `sqlite3`/OMP 会话文件/CLI 取旁证，不要只信截图。
+   - `computer_start_control` 报 "busy" 时先 `computer_release_control` 再重试；会话会自行失效，每段操作前先确认。
+5. **持久 shell 陷阱**：在工具 shell 里 `source env.sh` 会把 `HOME`/`PATH` 永久改成沙箱的，之后的 `rm -rf "$HOME/..."`、`rg`/`ps` 都会错位。只在子 shell `( . env.sh; … )` 里用，收尾前 `export HOME=/Users/<user>` 并用绝对路径清理。
+6. **清理清单**：`launchctl remove`、杀 App、删 `~/Library/Application Support/<Name>` 与 `~/Library/Logs/<Name>`（数据目录不随 HOME 走）、`/tmp/sw-*`、`git worktree remove --force`、`computer_release_control`。
+7. **git**：别用 `git add -N .`（会改动索引）。新文件要提交时只 `git add <明确路径>` 再 `git commit -- <路径>`。
+
 ### 第 1 步：取证（failing-before）
 
 在沙箱实例上按用户原话的路径复现，每类问题先加**定向 trace**再复现（hunt：行为/异步问题必须边取证边形成假设）：
