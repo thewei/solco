@@ -2,6 +2,7 @@ package personalagent
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -450,6 +451,36 @@ func (s *Store) BlockRun(runID, reason string) error {
 // FinishRun ends a run. done → the task is done, except a coding task, which
 // waits for a person's review; failed/cancelled map straight over.
 func (s *Store) FinishRun(runID, status, note string) error {
+	return s.finishRun(runID, status, note, nil)
+}
+
+// FinishRunWithResult ends a run as done with a result Solco read back: the
+// summary becomes the run's result and the whole record is stored with it.
+func (s *Store) FinishRunWithResult(runID string, res WorkerResult) error {
+	if strings.TrimSpace(res.Summary) == "" || res.Evidence == "" || res.SHA256 == "" {
+		return fmt.Errorf("%w: a result needs a summary and its evidence", ErrInvalid)
+	}
+	return s.finishRun(runID, RunDone, res.Summary, &res)
+}
+
+// RunResult returns the stored result of a run, if it has one.
+func (s *Store) RunResult(runID string) (WorkerResult, bool, error) {
+	var body string
+	err := s.db.QueryRow(`SELECT body FROM run_results WHERE run_id=?`, runID).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return WorkerResult{}, false, nil
+	}
+	if err != nil {
+		return WorkerResult{}, false, wrapBusy(err)
+	}
+	var res WorkerResult
+	if err := json.Unmarshal([]byte(body), &res); err != nil {
+		return WorkerResult{}, false, err
+	}
+	return res, true, nil
+}
+
+func (s *Store) finishRun(runID, status, note string, res *WorkerResult) error {
 	var state string
 	switch status {
 	case RunDone:
@@ -468,6 +499,20 @@ func (s *Store) FinishRun(runID, status, note string) error {
 		}
 		if _, err := tx.Exec(`UPDATE runs SET `+col+`=? WHERE id=?`, redactForRun(tx, runID, note), runID); err != nil {
 			return err
+		}
+		if res != nil {
+			// The stored summary is redacted exactly like the run's own note;
+			// SHA256 stays the digest of the message as it was read.
+			stored := *res
+			stored.Summary = redactForRun(tx, runID, stored.Summary)
+			body, err := json.Marshal(stored)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(`INSERT INTO run_results(run_id,evidence,agent_session_id,message_id,sha256,body,collected_at) VALUES(?,?,?,?,?,?,?)
+				ON CONFLICT(run_id) DO NOTHING`, runID, res.Evidence, res.AgentSessionID, res.MessageID, res.SHA256, string(body), now); err != nil {
+				return err
+			}
 		}
 		if status == RunDone {
 			if _, err := tx.Exec(`UPDATE tasks SET state=CASE WHEN kind=? THEN ? ELSE state END,

@@ -84,6 +84,16 @@ func (s LaunchSpec) titleHint() string {
 
 // Provision opens the workspace for a run.
 func (l *HostLauncher) Provision(spec LaunchSpec) (Session, error) {
+	if spec.Kind == KindCoordinator {
+		if spec.Agent != AssistantAgentKind {
+			return Session{}, fmt.Errorf("Coordinator requires %s, got %q", AssistantAgentKind, spec.Agent)
+		}
+		// A missing policy must fail before creating a Herdr workspace.
+		// Otherwise OMP would launch with unrestricted tools.
+		if st, err := os.Stat(CoordinatorExtensionPath()); err != nil || !st.Mode().IsRegular() {
+			return Session{}, fmt.Errorf("Solco Coordinator OMP tool policy unavailable: %v", err)
+		}
+	}
 	hs, err := l.Host.Provision(l.automation(spec))
 	return Session{HerdrSession: hs.HerdrSession, WorkspaceID: hs.WorkspaceID, PaneID: hs.PaneID, Branch: hs.Branch}, err
 }
@@ -227,4 +237,14 @@ func HerdrPaneGone(session, workspace, pane string) (bool, error) {
 		return true, nil
 	}
 	return true, nil
+}
+
+// Collect reads a finished Worker's answer from the OMP session directory Solco
+// pinned for the run. Only OMP has a transcript Solco reads; another Agent
+// kind (which the rollout does not launch) has no result and so no success.
+func (l *HostLauncher) Collect(_ context.Context, _ Session, spec LaunchSpec) (WorkerResult, error) {
+	if spec.Agent != AssistantAgentKind {
+		return WorkerResult{}, ErrNoResult
+	}
+	return ReadOMPWorkerResult(WorkerSessionDir(spec.RunID), spec.RunID)
 }

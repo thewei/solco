@@ -1,6 +1,6 @@
 {
   "approval": {
-    "action": "Enable routine \"morning-check\": run `*/30 * * * *` (cron) on /tmp with claude headless (no terminal prompts), unattended on this Mac. Next run 2027-01-15 08:30 UTC. Prompt: Check the repository for risky changes.",
+    "action": "Enable routine \"morning-check\": run `*/30 * * * *` (cron) on /tmp with omp headless (no terminal prompts), unattended on this Mac. Next run 2027-01-15 08:30 UTC. Prompt: Check the repository for risky changes.",
     "actionHash": "0000000000000000000000000000000000000000000000000000000000000000",
     "assistantId": "a_0000000000000001",
     "createdAt": 1800000000000,
@@ -19,7 +19,7 @@
   ],
   "replayed": false,
   "routine": {
-    "agent": "claude",
+    "agent": "omp",
     "approvalId": "p_0000000000000020",
     "approvalState": "pending",
     "approved": false,

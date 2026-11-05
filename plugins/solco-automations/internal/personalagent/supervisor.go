@@ -449,7 +449,7 @@ func (sv *Supervisor) dispatch(g Goal, plan GoalPlan, rep *SupervisorReport) err
 		t := m.Task
 		task, _, err := s.CreateTask(fmt.Sprintf("sup-%s-%s-%d", g.ID, m.ID, m.Attempt), CreateTaskInput{
 			AssistantID: g.AssistantID, GoalID: g.ID, Kind: t.Kind, Title: t.Title, Brief: t.Brief,
-			RepoPath: t.RepoPath, Agent: t.Agent, Model: t.Model,
+			RepoPath: t.RepoPath, Agent: AssistantAgentKind, Model: t.Model,
 			// A coding task waits for a person to publish it, like every other
 			// coding task (the Coordinator's own rule); research and manual run.
 			Draft: t.Kind == KindCoding,

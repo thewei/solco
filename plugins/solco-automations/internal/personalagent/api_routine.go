@@ -239,6 +239,7 @@ func (a *API) routineDraft(requestID string, in RoutineDraftInput) (any, error) 
 func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Repo = strings.TrimSpace(in.Repo)
+	personalRoutine := in.Repo == ""
 	in.Prompt = strings.TrimSpace(in.Prompt)
 	in.Rationale = strings.TrimSpace(in.Rationale)
 	switch {
@@ -250,11 +251,13 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 		return nil, coded("invalid", "prompt is required (at most 4000 characters)")
 	case in.Rationale == "":
 		return nil, coded("invalid", "rationale is required: say why this should run on a schedule")
-	case !filepath.IsAbs(in.Repo):
+	case !personalRoutine && !filepath.IsAbs(in.Repo):
 		return nil, coded("invalid", "repo must be an absolute path")
 	}
-	if st, err := os.Stat(in.Repo); err != nil || !st.IsDir() {
-		return nil, coded("invalid", "repo %q is not a folder on this Mac", in.Repo)
+	if !personalRoutine {
+		if st, err := os.Stat(in.Repo); err != nil || !st.IsDir() {
+			return nil, coded("invalid", "repo %q is not a folder on this Mac", in.Repo)
+		}
 	}
 	asst, err := a.Store.GetAssistant(in.AssistantID)
 	if err != nil {
@@ -262,6 +265,16 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 	}
 	if asst.Status != StatusActive {
 		return nil, ErrAssistantDisabled
+	}
+	// Non-repository scheduled work belongs to the Assistant's private
+	// controlled folder, not a made-up Git repository or an OS cron job.
+	workspace := config.WorkspaceWorktree
+	if personalRoutine {
+		in.Repo = filepath.Join(WorkDirRoot(), "personal", "routines", asst.ID)
+		if err := os.MkdirAll(in.Repo, 0o700); err != nil {
+			return nil, coded("internal", "create Assistant routine directory: %v", err)
+		}
+		workspace = config.WorkspaceRoot
 	}
 	cfg, err := a.loadConfig()
 	if err != nil {
@@ -284,7 +297,10 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 	headless := false
 	agent := in.Agent
 	if agent == "" {
-		agent = "claude"
+		agent = AssistantAgentKind
+	}
+	if agent != AssistantAgentKind {
+		return nil, coded("invalid", "Assistant routines can only use %s during the OMP rollout", AssistantAgentKind)
 	}
 	if in.Headless != nil {
 		headless = *in.Headless
@@ -293,7 +309,7 @@ func (a *API) routineDraftLocked(requestID string, in RoutineDraftInput) (any, e
 		headless = config.KindRunsHeadless(agent)
 	}
 	x := config.Automation{
-		Name: in.Name, Cron: strings.TrimSpace(in.Cron), Repo: in.Repo, Agent: agent, Model: in.Model, Prompt: in.Prompt,
+		Name: in.Name, Cron: strings.TrimSpace(in.Cron), Repo: in.Repo, Workspace: workspace, Agent: agent, Model: in.Model, Prompt: in.Prompt,
 		Headless: headless, Draft: true, Rationale: in.Rationale, OnOverlap: in.OnOverlap, TimeoutMinutes: in.TimeoutMinutes,
 	}
 	if ok, why := migratable(x, cfg.Backend); !ok {

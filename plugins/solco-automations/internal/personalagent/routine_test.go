@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,48 @@ func (e *routineEnv) approve(t *testing.T, approvalID, hash string) {
 	body := fmt.Sprintf(`{"requestId":"d-%s","actionHash":%q,"approve":true}`, approvalID, hash)
 	if _, err := call(t, e.api, body, "assistant", "approval", "decide", approvalID); err != nil {
 		t.Fatalf("decide: %v", err)
+	}
+}
+
+// A personal, non-repository scheduled request must not force the Coordinator
+// to invent an OS scheduler or choose a non-OMP agent to get past validation.
+func TestRoutineDraftForPersonalResearchUsesOwnedFolderAndOMP(t *testing.T) {
+	e := newRoutineEnv(t)
+	owned := t.TempDir()
+	t.Setenv("SOLCO_ASSISTANTS_WORKDIR", owned)
+	got, err := e.draft(t, "personal-x-digest", func(m map[string]any) {
+		delete(m, "repo")
+		m["prompt"] = "Use the ego-browser skill to read X.com and summarise high-engagement posts with links."
+		m["rationale"] = "The person requested a recurring X.com digest."
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := got["routine"].(map[string]any)
+	if rt["agent"] != AssistantAgentKind || rt["headless"] != true {
+		t.Fatalf("expected unattended OMP, got %v", rt)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	auto := cfg.Find("morning-check")
+	if auto == nil || auto.Agent != AssistantAgentKind || auto.Workspace != config.WorkspaceRoot ||
+		auto.Repo != filepath.Join(owned, "personal", "routines", e.a.ID) || !auto.Draft {
+		t.Fatalf("wrong personal routine definition: %+v", auto)
+	}
+	if st, err := os.Stat(auto.Repo); err != nil || !st.IsDir() {
+		t.Fatalf("personal routine work directory absent: %v", err)
+	}
+	if tasks, err := e.s.ListTasks(e.a.ID); err != nil || len(tasks) != 0 {
+		t.Fatalf("unapproved personal routine emitted tasks: %d, %v", len(tasks), err)
+	}
+	// A provider named explicitly cannot bypass the rollout's OMP gate.
+	if _, err := e.draft(t, "personal-claude", func(m map[string]any) {
+		m["name"] = "wrong-provider"
+		m["agent"] = "claude"
+	}); err == nil {
+		t.Fatal("a non-OMP scheduled worker was accepted")
 	}
 }
 
@@ -197,6 +240,54 @@ func TestApprovedRoutineFiresOnceUnderItsOwnerAndReportsBack(t *testing.T) {
 	}
 	if again, _ := e.s.Facts(e.a.ID, "", 50); len(again) != len(fs) {
 		t.Fatalf("facts grew to %d", len(again))
+	}
+}
+
+func TestAssistantRoutineRunsOnlyAsScopedWorker(t *testing.T) {
+	e := newRoutineEnv(t)
+	got, err := e.draft(t, "scoped-run", func(m map[string]any) {
+		m["prompt"] = "Use ego-browser to read X.com posts and cite sources."
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ap := got["approval"].(map[string]any)
+	e.approve(t, ap["id"].(string), ap["actionHash"].(string))
+	rs := &RuleScheduler{Store: e.s, Load: config.Load, Now: func() time.Time { return at(9, 0).Add(24*time.Hour + 5*time.Second) }}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 1 {
+		t.Fatalf("scheduled task = %+v %v", rep, err)
+	}
+	tasks, err := e.s.ListTasks(e.a.ID)
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("scheduled tasks = %+v %v", tasks, err)
+	}
+	f := &fakeLauncher{}
+	d := &Dispatcher{Store: e.s, Launcher: f, Claimant: "test", Rules: func(name string) (config.Automation, bool) {
+		cfg, err := config.Load()
+		if err != nil {
+			return config.Automation{}, false
+		}
+		a := cfg.Find(name)
+		if a == nil {
+			return config.Automation{}, false
+		}
+		return *a, true
+	}}
+	if _, err := d.RunTask(t.Context(), tasks[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.specs) != 1 || f.specs[0].Auto == nil {
+		t.Fatalf("expected one managed Routine worker, got %+v", f.specs)
+	}
+	prompt := f.specs[0].Auto.Prompt
+	for _, needed := range []string{"ego-browser", "Do not create cron/launchd jobs", "do not create sibling tasks", "Solco owns the next occurrence"} {
+		if !strings.Contains(prompt, needed) {
+			t.Fatalf("scheduled worker missed %q: %s", needed, prompt)
+		}
+	}
+	original, _ := config.Load()
+	if strings.Contains(original.Find("morning-check").Prompt, "Do not create cron") {
+		t.Fatal("runtime guard polluted the approved YAML definition")
 	}
 }
 

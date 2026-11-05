@@ -190,10 +190,8 @@ func (s *Store) RecordWatch(commitmentID string, o WatchOutcome, now time.Time) 
 			}
 			if created {
 				tid := newID("t")
-				agent := spec.Agent
-				if agent == "" {
-					agent = "claude"
-				}
+				// OMP rollout: a watch never picks another provider.
+				agent := AssistantAgentKind
 				if _, err := tx.Exec(`INSERT INTO tasks(`+taskCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 					tid, c.AssistantID, c.GoalID, c.ID, "", KindResearch, "PR "+resource+" changed", watchBrief(spec, *o.State, g),
 					spec.RepoPath, agent, spec.Model, TaskQueued, 0, "", 1, 1, nowMS, nowMS); err != nil {

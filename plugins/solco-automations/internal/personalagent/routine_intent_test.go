@@ -78,7 +78,7 @@ func TestRoutineSIGKILLChild(t *testing.T) {
 	}}
 	_, _ = api.routineDraft("sigkill-request", RoutineDraftInput{
 		AssistantID: os.Getenv("AUDIT_ROUTINE_ASSISTANT"), Name: "morning-check",
-		Cron: "0 9 * * *", Repo: os.Getenv("AUDIT_ROUTINE_REPO"), Agent: "claude",
+		Cron: "0 9 * * *", Repo: os.Getenv("AUDIT_ROUTINE_REPO"), Agent: "omp",
 		Prompt:    "Check the repository for risky changes and summarise.",
 		Rationale: "The user asked for a daily check.",
 	})

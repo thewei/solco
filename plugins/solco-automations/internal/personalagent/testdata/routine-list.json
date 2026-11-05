@@ -1,7 +1,7 @@
 {
   "routines": [
     {
-      "agent": "claude",
+      "agent": "omp",
       "approvalId": "p_0000000000000020",
       "approvalState": "pending",
       "approved": false,

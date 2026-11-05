@@ -247,7 +247,16 @@ func TestReportPumpMissingVerifierBecomesOwnerReviewAfterDeadline(t *testing.T) 
 // human review before another automatic progress prompt can be submitted.
 func TestLegacyHerdrReportMigrationRequiresManualReview(t *testing.T) {
 	original := migrations
-	migrations = original[:len(original)-1]
+	cut := -1
+	for i, m := range original {
+		if strings.Contains(m, "ADD COLUMN report_marker") {
+			cut = i
+		}
+	}
+	if cut < 0 {
+		t.Fatal("report marker migration not found")
+	}
+	migrations = original[:cut]
 	defer func() { migrations = original }()
 	path := filepath.Join(t.TempDir(), "legacy-reports.db")
 	legacy, err := Open(path)

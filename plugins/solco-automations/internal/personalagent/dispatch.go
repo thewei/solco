@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,6 +57,9 @@ type LaunchSpec struct {
 	// AgentArgs are extra launch arguments for the Agent: the Assistant's
 	// thinking effort and its MCP binding (3.1 U2). Never set for a legacy rule.
 	AgentArgs []string
+	// NeedResult is set when the run only counts as done once a readable
+	// result has been collected from its Worker (Gap W02).
+	NeedResult bool
 }
 
 // Launcher is the Herdr seam. The production adapter drives the same
@@ -98,6 +102,14 @@ type Dispatcher struct {
 	// Worktrees gives each coding task its own branch and folder (E02). Nil
 	// keeps the older behaviour of letting the launcher make one.
 	Worktrees *Worktrees
+	// Results reads a finished Worker's result. Nil falls back to the
+	// Launcher when it implements ResultReader; with neither, a finished Agent
+	// still ends the run as before (only test doubles run that way).
+	Results ResultReader
+	// CollectTries/CollectDelay bound the wait for an Agent's transcript to be
+	// flushed after it went idle (default 4 tries, 2 s apart).
+	CollectTries int
+	CollectDelay time.Duration
 
 	wg      sync.WaitGroup
 	active  atomic.Int32
@@ -180,8 +192,18 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 			d.settle(run.ID)
 			return d.reload(run.ID), fmt.Errorf("automation %q is gone", name)
 		}
-		// A rule is the person's own prompt: it goes out verbatim, with no
-		// Solco fences or memory added.
+		// Legacy, ownerless automations retain their original prompt.
+		// An Assistant-owned Routine runs as a bounded Worker, NOT a
+		// fresh Coordinator with permission to schedule more work.
+		if owner, ok := routineOwnerTx(d.Store.db, name); ok && owner == task.AssistantID {
+			a.Prompt = BuildPrompt(asst, Task{Kind: KindManual, Title: task.Title, Brief: a.Prompt})
+			a.Prompt += "\n\nThis is one scheduled Solco Routine occurrence. Do not create cron/launchd jobs, other schedules, background loops, subagents or sibling Tasks. Perform only this brief once and return evidence. Solco owns the next occurrence and all follow-up.\n"
+		}
+		if d.requiresResult(task) {
+			a.Prompt = RunMarkerLine(run.ID) + "\n" + a.Prompt
+			a.AgentArgs = append(append([]string{}, a.AgentArgs...), "--session-dir", WorkerSessionDir(run.ID))
+			_ = os.MkdirAll(WorkerSessionDir(run.ID), 0o700)
+		}
 		auto, prompt = &a, a.Prompt
 		if a.TimeoutMinutes > 0 {
 			timeout = time.Duration(a.TimeoutMinutes) * time.Minute
@@ -207,6 +229,14 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		prompt += fmt.Sprintf("\n\nYou are working in an isolated git worktree on branch %s (baseline %s). Commit your work on this branch; do not switch branches, merge, push or touch any other checkout.", info.Branch, shortHash(info.BaseHead))
 	}
 	var agentArgs []string
+	needResult := d.requiresResult(task)
+	if auto == nil && needResult {
+		// Pin this run's OMP transcript so its answer is attributable to
+		// exactly this run, and mark the prompt so the transcript proves it.
+		prompt = RunMarkerLine(run.ID) + "\n" + prompt
+		agentArgs = append(agentArgs, "--session-dir", WorkerSessionDir(run.ID))
+		_ = os.MkdirAll(WorkerSessionDir(run.ID), 0o700)
+	}
 	if auto == nil {
 		// The Assistant's own effort and MCP grants, and the instructions
 		// revision this surface starts with (what was edited later is for the
@@ -220,6 +250,11 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		}
 		agentArgs = append(agentArgs, effortArgs(task.Agent, d.Store.profileOf(d.Store.db, asst.ID).Effort)...)
 		agentArgs = append(agentArgs, d.Store.bindMCP(asst.ID, surface, task.Agent)...)
+		if task.Kind == KindCoordinator {
+			// Do not let the standing OMP turn into an ordinary coding
+			// agent: its broker is the sole writable orchestration tool.
+			agentArgs = append(agentArgs, "--extension", CoordinatorExtensionPath())
+		}
 		d.Store.markInstructionsApplied(asst.ID, surface)
 	}
 	spec := LaunchSpec{
@@ -231,6 +266,8 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		Auto:    auto,
 		WorkDir: workDir,
 		GroupID: groupID,
+
+		NeedResult: needResult,
 	}
 	d.settle(run.ID)
 	// The label is stored before anything is created, so an uncertain run can
@@ -279,6 +316,9 @@ func (d *Dispatcher) work(ctx context.Context, runID string, sess Session, spec 
 	var blocked *BlockedError
 	switch {
 	case err == nil:
+		if spec.NeedResult {
+			return d.finishWithResult(ctx, runID, sess, spec)
+		}
 		_ = d.Store.FinishRun(runID, RunDone, "")
 	case errors.As(err, &blocked):
 		_ = d.Store.BlockRun(runID, blocked.Reason)
@@ -389,6 +429,14 @@ func (d *Dispatcher) ReconcilePending(ctx context.Context) (int, error) {
 		if err != nil {
 			continue
 		}
+		if strings.HasPrefix(r.Error, ResultUnknownPrefix) {
+			// The Agent already ended: only its answer is missing. Read again;
+			// never look for an Agent to reattach.
+			if _, err := d.Recollect(ctx, r.ID); err == nil {
+				confirmed++
+			}
+			continue
+		}
 		sess, found, err := d.Launcher.Find(r.ID)
 		if err != nil || !found {
 			continue
@@ -413,7 +461,7 @@ func (d *Dispatcher) ReconcilePending(ctx context.Context) (int, error) {
 
 func (d *Dispatcher) resumeRun(ctx context.Context, r Run, task Task) {
 	sess := Session{HerdrSession: r.HerdrSession, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, AgentSessionID: r.AgentSessionID}
-	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout()}
+	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout(), NeedResult: d.requiresResult(task)}
 	d.active.Add(1)
 	d.wg.Add(1)
 	go func() {
@@ -542,4 +590,111 @@ func shortHash(h string) string {
 		return h[:12]
 	}
 	return h
+}
+
+func (d *Dispatcher) reader() ResultReader {
+	if d.Results != nil {
+		return d.Results
+	}
+	if rr, ok := d.Launcher.(ResultReader); ok {
+		return rr
+	}
+	return nil
+}
+
+// requiresResult says whether a run of this task is done only with a readable
+// result. Chat agents (Coordinator, Group Agent) and ownerless legacy rules
+// are not Workers; everything else Solco hands to an Agent is.
+func (d *Dispatcher) requiresResult(task Task) bool {
+	if d.reader() == nil {
+		return false
+	}
+	switch task.Kind {
+	case KindResearch, KindCoding, KindManual:
+	default:
+		return false
+	}
+	if name, isRule := LegacyRuleName(task.RuleID); isRule {
+		owner, ok := routineOwnerTx(d.Store.db, name)
+		return ok && owner == task.AssistantID
+	}
+	return true
+}
+
+// finishWithResult ends a Worker run whose Agent went quiet. Done needs a
+// readable, attributable result; without one the run is parked `uncertain`
+// (never done, never retried by itself) and asks a person.
+func (d *Dispatcher) finishWithResult(ctx context.Context, runID string, sess Session, spec LaunchSpec) (Run, error) {
+	res, err := d.collect(ctx, sess, spec)
+	if err != nil {
+		reason := ResultUnknownPrefix + "the Agent ended but its final answer could not be read; open its pane and decide"
+		if !errors.Is(err, ErrNoResult) {
+			reason = ResultUnknownPrefix + "reading the Agent's answer failed: " + err.Error()
+		}
+		_, _ = d.Store.parkUncertain(runID, reason)
+		return d.reload(runID), nil
+	}
+	if err := d.Store.FinishRunWithResult(runID, res); err != nil {
+		return d.reload(runID), err
+	}
+	return d.reload(runID), nil
+}
+
+func (d *Dispatcher) collect(ctx context.Context, sess Session, spec LaunchSpec) (WorkerResult, error) {
+	tries, delay := d.CollectTries, d.CollectDelay
+	if tries <= 0 {
+		tries = 4
+	}
+	if d.CollectDelay == 0 && d.CollectTries == 0 {
+		delay = 2 * time.Second
+	}
+	rr := d.reader()
+	var err error
+	for i := 0; i < tries; i++ {
+		var res WorkerResult
+		res, err = rr.Collect(ctx, sess, spec)
+		if err == nil || !errors.Is(err, ErrNoResult) {
+			return res, err
+		}
+		if i == tries-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return WorkerResult{}, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	return WorkerResult{}, err
+}
+
+// Recollect gives a `result_unknown` run another chance to produce its result:
+// the transcript may have been flushed late, or the person may have nudged the
+// Agent to finish. It never starts anything; it only reads.
+func (d *Dispatcher) Recollect(ctx context.Context, runID string) (Run, error) {
+	run, err := d.Store.GetRun(runID)
+	if err != nil {
+		return run, err
+	}
+	if run.Status != RunUncertain || !strings.HasPrefix(run.Error, ResultUnknownPrefix) {
+		return run, fmt.Errorf("%w: run is %s", ErrBadState, run.Status)
+	}
+	if d.reader() == nil {
+		return run, ErrNoResult
+	}
+	task, err := d.Store.GetTask(run.TaskID)
+	if err != nil {
+		return run, err
+	}
+	sess := Session{HerdrSession: run.HerdrSession, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID, AgentSessionID: run.AgentSessionID}
+	spec := LaunchSpec{RunID: run.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Label: run.Label, NeedResult: true}
+	res, err := d.reader().Collect(ctx, sess, spec)
+	if err != nil {
+		return run, err
+	}
+	if err := d.Store.FinishRunWithResult(run.ID, res); err != nil {
+		return d.reload(run.ID), err
+	}
+	d.settle(run.ID)
+	return d.reload(run.ID), nil
 }

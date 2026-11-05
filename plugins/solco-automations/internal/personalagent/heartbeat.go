@@ -388,7 +388,7 @@ func (b *Beater) tickOne(assistantID string) (BeatReport, error) {
 			tid := newID("t")
 			if _, err := tx.Exec(`INSERT INTO tasks(`+taskCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 				tid, assistantID, "", HeartbeatRule, "", KindResearch, "Heartbeat", heartbeatBrief(a, h.Checklist, held, wakeLines),
-				"", "claude", "", TaskQueued, 0, "", 1, 1, nowMS, nowMS); err != nil {
+				"", AssistantAgentKind, "", TaskQueued, 0, "", 1, 1, nowMS, nowMS); err != nil {
 				return BeatReport{}, err
 			}
 			if err := emitTask(tx, tid, "task.added", nowMS); err != nil {

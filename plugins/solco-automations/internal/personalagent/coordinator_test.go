@@ -448,6 +448,27 @@ func TestCoordinatorWorkErrorAfterProvisionCannotDuplicate(t *testing.T) {
 	}
 }
 
+func TestCoordinatorLaunchInjectsScopedOMPBroker(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "broker", "Ada")
+	coordinator, _, err := s.StartCoordinator("broker-start", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeLauncher{}
+	d := &Dispatcher{Store: s, Launcher: f, Claimant: "test"}
+	if _, err := d.RunTask(t.Context(), coordinator.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.specs) != 1 {
+		t.Fatalf("expected one Coordinator launch, got %d", len(f.specs))
+	}
+	args := strings.Join(f.specs[0].AgentArgs, " ")
+	if !strings.Contains(args, "--extension ") || !strings.Contains(args, "/extensions/solco-coordinator.ts") {
+		t.Fatalf("Coordinator lacks its Solco-only tool policy: %q", args)
+	}
+}
+
 func TestCoordinatorPromptNamesTheConfiguredCLI(t *testing.T) {
 	old := CLI
 	CLI = "/opt/solco/bin/solco-automations"

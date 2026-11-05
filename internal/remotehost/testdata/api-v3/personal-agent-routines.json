@@ -12,7 +12,7 @@
       "updatedAt": 1800000000000,
       "cron": "*/30 * * * *",
       "repo": "/tmp",
-      "agent": "claude",
+      "agent": "omp",
       "headless": true,
       "paused": false,
       "rationale": "A recurring check the user asked for in chat.",

@@ -609,6 +609,19 @@ var migrations = []string{
 	UPDATE coordinator_reports SET state='uncertain',
 	last_error='Legacy Herdr-accepted report has no verified OMP reply; check the original Chat'
 	WHERE state='submitted' AND reply_state='untracked';`,
+	// v20: a Worker's result is a readable, attributable record (Gap W02):
+	// what the Agent finally said, where Solco read it from, and which tools,
+	// skills and grounded URLs the transcript shows. An Agent that merely went
+	// idle leaves no row here and its run is not done.
+	`CREATE TABLE run_results (
+		run_id TEXT PRIMARY KEY REFERENCES runs(id),
+		evidence TEXT NOT NULL,
+		agent_session_id TEXT NOT NULL DEFAULT '',
+		message_id TEXT NOT NULL DEFAULT '',
+		sha256 TEXT NOT NULL,
+		body TEXT NOT NULL,
+		collected_at INTEGER NOT NULL
+	);`,
 }
 
 func (s *Store) migrate() error {
