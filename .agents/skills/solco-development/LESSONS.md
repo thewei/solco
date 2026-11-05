@@ -87,3 +87,13 @@
 - 2026-11-05 e2e 夹具的脚本键对 CJK 消息可能落空 → 用 `last:<substr>` 脚本键或 `*` 兜底；GUI 里能输入的文案要与脚本键同语种。
 - 2026-11-05 skill 升级原因：加入「Assistants/插件类 Mac.app 隔离实机验收配方」，因为本轮反复踩到沙箱缺口、启动方式、WebView 输入、shell 环境污染。
 
+
+## 第 N+1 轮（2026-11-05 AC-02 定时 Routine 实机验收）
+
+- 2026-11-05 点了 GUI 却没反应、红绿灯是灰色 → 目标 App 不是 active/key window，输入被静默丢弃；先点它的 Dock 图标（或窗口标题栏）再操作；`computer_start_control` 会因超时失效，报 "Start remote control first" 就重新 start，且**不要与点击并行**调用（竞态）。
+- 2026-11-05 想验证"到点触发"别去改 yaml 的 cron：approved Routine 的定义哈希一变就被规则调度器静默排除（这是正确的安全行为，不是 bug，也不会再有 fact）；正确做法是 `assistant routine draft` 用自然语言 `every day at HH:MM`（当前时间+3 分钟）建一个新草案 → GUI 批准 → 等整点。草案接口拒绝原始 cron（`needs_clarification`）。
+- 2026-11-05 夹具 `last:<substr>` 键也会匹配 Coordinator 简报文本本身 → Coordinator 可能自己起草例行任务；夹具子串要选只出现在用户真实消息里的词。
+- 2026-11-05 手动 "Run Now" 走旧 Automations 路径，不经 Assistants 的 skill/批准关卡也不产生 routine fact，**不能当作"定时触发"的证据**；定时触发验收必须看 `tasks.rule_id<>''` + `goal_facts` 的 `routine_done|routine_failed`。
+- 2026-11-05 首次定时运行会因 `skill_not_granted` 失败并出现 skill 审批卡（正确门禁）；批准后任务自动重启（attempt 2）并写 `routine_done`。验收脚本要预期这条两步路径，而不是把第一次 failed 当缺陷。
+- 2026-11-05 `routine_failed` fact 原先只写"failed"，原因只在 runs.error → 现在附稳定码 `(skill_not_granted)`（只取 `code: ` 前缀，不带自由文本）。教训：账本里的失败事实必须带可行动的稳定原因码。
+- 2026-11-05 查库前先 `.schema`/`select *` 看真实列名（goal_facts.text、events 无 seq、runs.error），别凭记忆写列。

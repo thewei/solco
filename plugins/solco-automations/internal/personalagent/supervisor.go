@@ -217,6 +217,9 @@ func (sv *Supervisor) eventFacts() (int, error) {
 				// A scheduled run of an enabled Routine: say what happened to its owner.
 				if owner, owned := routineOwnerTx(tx, name); owned && owner == e.assistant {
 					if fk, text, ok := routineEventFact(e.kind, name); ok {
+						if fk == FactRoutineFailed {
+							text += routineStopCode(tx, e.task)
+						}
 						isNew, err := addFactTx(tx, Fact{AssistantID: e.assistant, TaskID: e.task, Kind: fk, Text: text}, "ev:"+e.id, s.nowMS())
 						if err != nil {
 							return struct{}{}, err

@@ -243,6 +243,42 @@ func TestApprovedRoutineFiresOnceUnderItsOwnerAndReportsBack(t *testing.T) {
 	}
 }
 
+// A scheduled run that stopped on a gate says which one, so the person reading
+// the ledger knows an approval card is waiting (real-device AC-02: the fact used
+// to read "failed" while the reason sat only in the run row).
+func TestFailedRoutineFactNamesTheStableReason(t *testing.T) {
+	e := newRoutineEnv(t)
+	got, err := e.draft(t, "r-why", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ap := got["approval"].(map[string]any)
+	e.approve(t, ap["id"].(string), ap["actionHash"].(string))
+	rs := &RuleScheduler{Store: e.s, Load: config.Load, Now: func() time.Time { return at(9, 0).Add(24*time.Hour + 5*time.Second) }}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 1 {
+		t.Fatalf("tick = %+v %v", rep, err)
+	}
+	tasks, _ := e.s.ListTasks(e.a.ID)
+	r, _, err := e.s.ClaimTask(tasks[0].ID, "d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = e.s.MarkStarting(r.ID)
+	if err := e.s.FinishRun(r.ID, RunFailed, SkillNotGrantedPrefix+"fixture-browser needs your approval for this Assistant; secret-detail"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&Supervisor{Store: e.s}).Tick(); err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := e.s.Facts(e.a.ID, "", 50)
+	if fs[0].Kind != FactRoutineFailed || !strings.Contains(fs[0].Text, "skill_not_granted") {
+		t.Fatalf("fact = %+v", fs[0])
+	}
+	if strings.Contains(fs[0].Text, "secret-detail") {
+		t.Fatalf("the fact carries free text: %q", fs[0].Text)
+	}
+}
+
 func TestAssistantRoutineRunsOnlyAsScopedWorker(t *testing.T) {
 	e := newRoutineEnv(t)
 	got, err := e.draft(t, "scoped-run", func(m map[string]any) {

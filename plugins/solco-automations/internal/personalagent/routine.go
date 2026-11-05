@@ -353,6 +353,25 @@ func (s *Store) newFactFor(assistantID, text, key string) error {
 	return err
 }
 
+// routineStopCode returns " (code)" when the task's newest run stopped on a
+// stable gate code ("skill_not_granted: …"), never the free text after it.
+func routineStopCode(tx *sql.Tx, taskID string) string {
+	var msg string
+	if err := tx.QueryRow(`SELECT error FROM runs WHERE task_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1`, taskID).Scan(&msg); err != nil {
+		return ""
+	}
+	code, _, found := strings.Cut(msg, ": ")
+	if !found || code == "" {
+		return ""
+	}
+	for _, c := range code {
+		if (c < 'a' || c > 'z') && c != '_' {
+			return ""
+		}
+	}
+	return " (" + code + ")"
+}
+
 // routineEventFact words a rule task's event for its owner's ledger. Only the
 // events that say something happened to a scheduled run speak.
 func routineEventFact(kind, name string) (factKind, text string, ok bool) {
