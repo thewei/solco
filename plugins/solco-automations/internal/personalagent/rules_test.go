@@ -2,6 +2,8 @@ package personalagent
 
 import (
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -479,5 +481,38 @@ func TestARemovedRuleStaysDormantUntilItIsAddedBack(t *testing.T) {
 	rep, err := back.Tick()
 	if err != nil || rep.Fired < 1 {
 		t.Fatalf("a re-added rule did not come back: %+v %v", rep, err)
+	}
+}
+
+// R04: two schedulers over the same database (two daemons, or a daemon and a
+// keeper racing one another) turn one occurrence into exactly one task.
+func TestTwoSchedulersRacingFireAnOccurrenceOnce(t *testing.T) {
+	s1, path := openTest(t)
+	cfg := &config.Config{Automations: []config.Automation{rule("daily", "0 9 * * *")}}
+	clk := &clockT{at(8, 0)}
+	last := map[string]time.Time{"daily": at(9, 0).Add(-24 * time.Hour)}
+	adopt(t, s1, cfg, "daily", last, clk.t)
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	clk.t = at(9, 0).Add(10 * time.Second)
+	var wg sync.WaitGroup
+	var fired int32
+	for _, s := range []*Store{s1, s2, s1, s2} {
+		wg.Add(1)
+		go func(s *Store) {
+			defer wg.Done()
+			for i := 0; i < 3; i++ {
+				if r, err := ruleSched(s, cfg, clk).Tick(); err == nil {
+					atomic.AddInt32(&fired, int32(r.Fired))
+				}
+			}
+		}(s)
+	}
+	wg.Wait()
+	if fired != 1 || len(ruleTasks(t, s1, "daily")) != 1 {
+		t.Fatalf("fired %d, tasks %d: want exactly one", fired, len(ruleTasks(t, s1, "daily")))
 	}
 }

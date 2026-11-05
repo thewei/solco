@@ -664,6 +664,34 @@ var migrations = []string{
 		task_id TEXT PRIMARY KEY REFERENCES tasks(id),
 		timeout_min INTEGER NOT NULL
 	);`,
+	// v25: event triggers (Gap R03) — an approved rule that turns one of an
+	// Assistant's own task events into one new task, deduped per event.
+	`CREATE TABLE event_triggers (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		name TEXT NOT NULL,
+		on_kind TEXT NOT NULL,
+		on_task_id TEXT NOT NULL DEFAULT '',
+		title_contains TEXT NOT NULL DEFAULT '',
+		task_title TEXT NOT NULL,
+		task_brief TEXT NOT NULL,
+		task_kind TEXT NOT NULL,
+		state TEXT NOT NULL,
+		event_mark INTEGER NOT NULL DEFAULT 0,
+		fires_day TEXT NOT NULL DEFAULT '',
+		fires_today INTEGER NOT NULL DEFAULT 0,
+		fires_total INTEGER NOT NULL DEFAULT 0,
+		revision INTEGER NOT NULL,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		UNIQUE(assistant_id, name)
+	);
+	CREATE TABLE event_trigger_fires (
+		trigger_id TEXT NOT NULL,
+		event_seq INTEGER NOT NULL,
+		task_id TEXT NOT NULL,
+		PRIMARY KEY (trigger_id, event_seq)
+	);`,
 }
 
 func (s *Store) migrate() error {

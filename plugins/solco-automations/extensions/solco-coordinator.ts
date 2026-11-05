@@ -36,13 +36,14 @@ export const actions = [
   "task.create", "task.list", "task.show", "task.graph", "task.why", "task.retry",
   "goal.create", "goal.list", "goal.show", "goal.plan", "goal.set-plan", "goal.pause", "goal.resume",
   "routine.draft", "routine.list", "routine.show",
+  "trigger.draft", "trigger.list",
   "memory.propose", "memory.list",
   "checkpoint.get", "checkpoint.set",
   "recovery.show", "trace.show",
 ] as const;
 
 // Actions that change state need a stable requestId (a retry replays, never repeats).
-const mutating = new Set(["task.create", "task.retry", "goal.create", "goal.set-plan", "goal.pause", "goal.resume", "routine.draft", "memory.propose", "checkpoint.set"]);
+const mutating = new Set(["task.create", "task.retry", "goal.create", "goal.set-plan", "goal.pause", "goal.resume", "routine.draft", "trigger.draft", "memory.propose", "checkpoint.set"]);
 
 // The extension only shapes the call. Who the caller is, what it may touch and
 // whether a record is its own are decided by the Solco core (`assistant --as`),
@@ -58,7 +59,7 @@ export function route(action: string, assistantId: string, target = "", json = "
   if (action === "checkpoint.get" || action === "recovery.show") {
     return { args: [...as, entity, operation === "show" ? "show" : "get", assistantId], input: "" };
   }
-  if (action === "task.create" || action === "goal.create" || action === "routine.draft" || action === "memory.propose" || action === "checkpoint.set") {
+  if (action === "task.create" || action === "goal.create" || action === "routine.draft" || action === "trigger.draft" || action === "memory.propose" || action === "checkpoint.set") {
     payload.assistantId = assistantId;
     if (action === "task.create") {
       payload.agent = "omp";
@@ -100,7 +101,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "solco_assistant",
     label: "Solco Assistant",
-    description: "Manage only this Assistant's durable Solco tasks, goal plans, routine drafts and its own checkpoint (read it first and save it last on every autonomous wake turn). task.why explains why a task is not moving; goal.pause / goal.resume and task.retry act on one named record; recovery.show restates the recorded state after a restart or context compaction (read it before acting, instead of trusting memory); trace.show follows a task or goal id back to its goal, milestone, runs and records. task.create refuses an unfinished duplicate (pass allowDuplicate true only when you truly need another). A routine draft creates an approval card and NEVER schedules before its owner approves. Delegate browsing and research to workers through task.create. No system cron, launchd or async subagents.",
+    description: "Manage only this Assistant's durable Solco tasks, goal plans, routine and event-trigger drafts and its own checkpoint (read it first and save it last on every autonomous wake turn). task.why explains why a task is not moving; goal.pause / goal.resume and task.retry act on one named record; recovery.show restates the recorded state after a restart or context compaction (read it before acting, instead of trusting memory); trace.show follows a task or goal id back to its goal, milestone, runs and records. task.create refuses an unfinished duplicate (pass allowDuplicate true only when you truly need another). A routine or trigger draft (trigger.draft: on task.failed/blocked/uncertain/completed + a taskId or titleContains filter, then the one task to start) creates an approval card and NEVER runs before its owner approves. Delegate browsing and research to workers through task.create. No system cron, launchd or async subagents.",
     parameters: z.object({
       action: z.enum(actions).describe("Solco operation."),
       target: z.string().optional().describe("A goal/task/routine ID for show, why, retry, plan, set-plan, pause or resume."),

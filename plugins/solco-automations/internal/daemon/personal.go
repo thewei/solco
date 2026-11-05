@@ -51,6 +51,7 @@ type personal struct {
 	ctx           context.Context
 	watch         *personalagent.Watcher
 	beat          *personalagent.Beater
+	triggers      *personalagent.TriggerScheduler
 	sup           *personalagent.Supervisor
 	reports       *personalagent.ReportPump
 	routines      *personalagent.RoutineKeeper
@@ -119,6 +120,7 @@ func startPersonal(n *notify.Notifier) *personal {
 	p.rules = &personalagent.RuleScheduler{Store: store, Load: config.Load}
 	p.watch = &personalagent.Watcher{Store: store, Fetcher: &personalagent.GitHubFetcher{BaseURL: os.Getenv("SOLCO_ASSISTANTS_GITHUB_API")}}
 	p.beat = &personalagent.Beater{Store: store}
+	p.triggers = &personalagent.TriggerScheduler{Store: store}
 	p.sup = &personalagent.Supervisor{Store: store}
 	// One durable reporting outbox into the existing original OMP pane,
 	// through Herdr's normal agent.prompt. Unlike Group/Worker delivery,
@@ -190,6 +192,12 @@ func (p *personal) tick() {
 		log.Printf("assistants: heartbeat: %v", err)
 	} else if r.Woke > 0 {
 		log.Printf("assistants: %d heartbeat wake(s) queued", r.Woke)
+	}
+	// Approved event triggers: each new matching event becomes one task.
+	if r, err := p.triggers.Tick(); err != nil {
+		log.Printf("assistants: triggers: %v", err)
+	} else if r.Fired > 0 {
+		log.Printf("assistants: %d trigger task(s) queued", r.Fired)
 	}
 	// The Goal supervisor: facts from the event log, milestones handed out and
 	// verified, completion earned — deterministic reads and a few inserts.

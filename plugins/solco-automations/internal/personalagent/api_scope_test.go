@@ -53,9 +53,11 @@ func TestScopedCallerOnlyReachesTheCoordinatorsActions(t *testing.T) {
 	api, ada, _, _, _ := scopedPair(t)
 	for _, args := range [][]string{
 		{"assistant", "--as", ada, "approval", "decide", "x"},
-		{"assistant", "--as", ada, "goal", "approve", "g"},     // a person starts goals
-		{"assistant", "--as", ada, "goal", "complete", "g"},    // completion needs evidence the core verifies
-		{"assistant", "--as", ada, "routine", "resume", "r"},   // a person enables routines
+		{"assistant", "--as", ada, "goal", "approve", "g"},   // a person starts goals
+		{"assistant", "--as", ada, "goal", "complete", "g"},  // completion needs evidence the core verifies
+		{"assistant", "--as", ada, "routine", "resume", "r"}, // a person enables routines
+		{"assistant", "--as", ada, "trigger", "pause", "g"},  // so are triggers
+		{"assistant", "--as", ada, "trigger", "cancel", "g"},
 		{"assistant", "--as", ada, "task", "publish", "t"},     // publishing coding work is the person's
 		{"assistant", "--as", ada, "coordinator", "stop", ada}, // not its own lifecycle
 		{"assistant", "--as", ada, "delete-forever", ada},
@@ -210,5 +212,21 @@ func TestTraceFollowsGoalToTaskToRuns(t *testing.T) {
 	}
 	if g2, _ := call(t, api, "", "assistant", "--as", ada.ID, "trace", "show", g.ID); g2["trace"].(map[string]any)["goalId"] != g.ID {
 		t.Fatalf("a goal id traces to itself: %v", g2)
+	}
+}
+
+func TestScopedCallerDraftsATriggerForItselfOnly(t *testing.T) {
+	api, ada, bob, bobTask, _ := scopedPair(t)
+	mon := mkTask(t, api.Store, "mon-0001", ada, "Monitor")
+	ok, err := call(t, api, fmt.Sprintf(`{"requestId":"trg-own-01","name":"diagnose","on":"task.failed","taskId":%q,"title":"Diagnose","brief":"why"}`, mon.ID), "assistant", "--as", ada, "trigger", "draft")
+	if err != nil || field(ok, "trigger", "state") != "draft" || field(ok, "approval", "state") != "pending" {
+		t.Fatalf("own draft: %v %v", ok, err)
+	}
+	_, err = call(t, api, fmt.Sprintf(`{"requestId":"trg-bob-01","assistantId":%q,"name":"x1","on":"task.failed","taskId":%q,"title":"t","brief":"b"}`, bob, bobTask), "assistant", "--as", ada, "trigger", "draft")
+	if codeOf(err) != "forbidden" {
+		t.Fatalf("a trigger for another Assistant: %q", codeOf(err))
+	}
+	if _, err := call(t, api, "", "assistant", "--as", ada, "trigger", "list", "--assistant", bob); codeOf(err) != "forbidden" {
+		t.Fatalf("listing another Assistant's triggers: %q", codeOf(err))
 	}
 }

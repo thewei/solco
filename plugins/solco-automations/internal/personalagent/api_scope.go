@@ -49,6 +49,8 @@ var coordinatorScope = map[string]scopeRule{
 	"routine draft":  {own: "body"},
 	"routine list":   {own: "flag"},
 	"routine show":   {target: "routine"},
+	"trigger draft":  {own: "body"},
+	"trigger list":   {own: "flag"},
 	"memory propose": {own: "body"},
 	"memory list":    {own: "pos"},
 	"checkpoint get": {own: "pos"},

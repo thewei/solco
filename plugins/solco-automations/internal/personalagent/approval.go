@@ -110,6 +110,15 @@ func subjectRevision(tx queryer, assistantID, kind, id string) (int, error) {
 			return 0, fmt.Errorf("%w: routine belongs to another assistant", ErrInvalid)
 		}
 		return r.Revision, nil
+	case "trigger":
+		t, err := getTriggerTx(tx, id)
+		if err != nil {
+			return 0, err
+		}
+		if t.AssistantID != assistantID {
+			return 0, fmt.Errorf("%w: trigger belongs to another assistant", ErrInvalid)
+		}
+		return t.Revision, nil
 	case "skill":
 		// A skill grant has no mutable subject: the card's hash binds the
 		// Assistant, the skill and the text, so the revision is a constant.
@@ -204,6 +213,13 @@ func (s *Store) DecideApproval(requestID, id, hash string, approve bool) (Approv
 			// The answer is for this draft revision (just matched); the keeper enables it
 			// only while the definition still hashes to what was drafted.
 			if _, err := tx.Exec(`UPDATE routines SET approved=1, updated_at=? WHERE name=? AND revision=?`, s.nowMS(), a.SubjectID, a.ExpectedRevision); err != nil {
+				return a, err
+			}
+		}
+		if approve && a.SubjectKind == "trigger" {
+			// The answer is for this exact trigger (the revision just matched).
+			// It only looks forward: events already in the log are not replayed.
+			if err := activateTriggerTx(tx, a.SubjectID, s.nowMS()); err != nil {
 				return a, err
 			}
 		}

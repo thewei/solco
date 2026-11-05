@@ -302,6 +302,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.routine(rest, body)
 	case "proactivity":
 		return a.proactivity(rest, body)
+	case "trigger":
+		return a.trigger(rest, body)
 	case "run":
 		return a.run(rest, body)
 	}
