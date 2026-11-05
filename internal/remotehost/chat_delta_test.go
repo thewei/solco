@@ -69,6 +69,46 @@ func TestChatSuffixDeltaAndCanonicalFallback(t *testing.T) {
 	}
 }
 
+func TestAgentEndOverridesStaleWorkingOnlyForExactProviderPaneSession(t *testing.T) {
+	var s Server
+	path := filepath.Join(t.TempDir(), "final.jsonl")
+	e := chatstream.Event{Agent: "pi", PaneID: "p", SessionPath: path, Epoch: "0001", Seq: 1, Kind: "message_start", MessageID: "m1"}
+	s.IngestOMPChatStream(e)
+	e.Seq, e.Kind, e.Delta = 2, "text_delta", "Finished"
+	s.IngestOMPChatStream(e)
+	e.Seq, e.Kind, e.Delta = 3, "message_end", ""
+	s.IngestOMPChatStream(e)
+	target := chatTarget{Provider: history.AgentPi, Path: path}
+	if got := s.chatStreamStatus("p", target, "working"); got != "working" {
+		t.Fatalf("message_end is only a message boundary: %s", got)
+	}
+	e.Seq, e.Kind = 4, "agent_end"
+	s.IngestOMPChatStream(e)
+	if got := s.chatStreamStatus("p", target, "working"); got != "idle" {
+		t.Fatalf("final turn still shows Stop: %s", got)
+	}
+	for _, bad := range []struct {
+		pane   string
+		target chatTarget
+	}{
+		{"other", target}, {"p", chatTarget{Provider: history.AgentOMP, Path: path}},
+		{"p", chatTarget{Provider: history.AgentPi, Path: path + "-other"}},
+	} {
+		if got := s.chatStreamStatus(bad.pane, bad.target, "working"); got != "working" {
+			t.Fatalf("cross identity yielded idle: %+v", bad)
+		}
+	}
+	s.resetChatStreamCompletion("p", target)
+	if got := s.chatStreamStatus("p", target, "working"); got != "working" {
+		t.Fatalf("accepted next prompt kept stale completion: %s", got)
+	}
+	e.Seq, e.Kind, e.MessageID = 5, "message_start", "m2"
+	s.IngestOMPChatStream(e)
+	if got := s.chatStreamStatus("p", target, "working"); got != "working" {
+		t.Fatalf("next turn should show Stop again: %s", got)
+	}
+}
+
 func TestPiChatStreamReachesAuthenticatedWebSocket(t *testing.T) {
 	h := newHarness(t)
 	path := filepath.Join(t.TempDir(), "pi.jsonl")
@@ -111,6 +151,24 @@ func TestPiChatStreamReachesAuthenticatedWebSocket(t *testing.T) {
 	if tail["narration"] != "Hi from Pi" {
 		raw, _ := json.Marshal(tail)
 		t.Fatalf("Pi live text not delivered: %s", raw)
+	}
+	// A whole-turn completion changes non-turn metadata (the composer
+	// disposition). The Host MUST send a full frame, not only a delta.
+	for seq, kind := range []string{"message_end", "agent_end"} {
+		h.srv.IngestOMPChatStream(chatstream.Event{
+			Agent: "pi", PaneID: "w1:p1", SessionPath: path, Epoch: "00001-pi",
+			Seq: uint64(seq + 3), Kind: kind, MessageID: "pi-1",
+		})
+	}
+	settled := readJSON(t, conn)
+	if settled["t"] != "chat" || settled["agentStatus"] != "idle" {
+		t.Fatalf("completed Pi turn did not retire Stop via full status frame: %+v", settled)
+	}
+	state, _ := settled["state"].(map[string]any)
+	turns, _ := state["turns"].([]any)
+	last, _ := turns[len(turns)-1].(map[string]any)
+	if last["live"] == true {
+		t.Fatalf("finished Pi turn retained flashing dot: %+v", last)
 	}
 }
 

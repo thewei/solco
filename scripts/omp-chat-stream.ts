@@ -116,6 +116,12 @@ export default function (pi: any) {
     if (event?.message?.role === "assistant") publish("message_end", ctx);
   });
 
+  // One assistant message can end before tool calls. Only agent_end is the
+  // provider-owned boundary after the entire tool chain has settled.
+  pi.on("agent_end", (_event: any, ctx: any) => {
+    publish("agent_end", ctx);
+  });
+
   pi.on("tool_execution_start", (event: any, ctx: any) => {
     if (typeof event?.toolCallId !== "string" || typeof event?.toolName !== "string") return;
     publish("tool_start", ctx, { tool_call_id: event.toolCallId, tool_name: event.toolName });

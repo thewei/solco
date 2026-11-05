@@ -123,6 +123,25 @@ func (s *Store) ApplySolcoHookStatus(paneID, status string, _ time.Time) (string
 	return status, true
 }
 
+// ApplyVerifiedAgentEnd retires only transient native OSC run records after
+// the *same provider's* complete agent_end was identity-fenced by the caller.
+// It is a stronger lifecycle fact than a prior OSC working frame, but
+// completed done/error records remain visible. It must never be invoked for
+// a single assistant message_end or a generic Herdr/spool observation.
+func (s *Store) ApplyVerifiedAgentEnd(paneID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := s.pane(paneID)
+	p.solco = "idle"
+	p.records.DropTransient()
+	if p.hasProgramStatus() {
+		p.source = sourceProgram
+	} else {
+		p.source = sourceSolco
+	}
+	return p.display()
+}
+
 // ApplyHerdrHookStatus is ONLY the fallback when no native report or active
 // Solco direct-hook source is authoritative. It never injects a Solco event
 // or overwrites a native record. It remains available for hook-less agents.

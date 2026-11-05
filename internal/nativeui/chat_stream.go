@@ -7,19 +7,108 @@
 package nativeui
 
 import (
+	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/thewei/solco/internal/herdr"
 
 	"github.com/thewei/solco/internal/chatstream"
 	"github.com/thewei/solco/internal/history"
 )
 
-// handleAppChatStream runs only on the UI lane. The extension can claim an
-// arbitrary session identity; it never creates a Chat bind or changes Herdr
-// lifecycle. Only the *already bound*, exact Agent/pane/session may see it.
+// chatRunFence tracks only the last assistant message identity and run-end
+// sequence. It intentionally does not retain token text or an Agent runtime.
+type chatRunFence struct {
+	epoch, messageID string
+	seq              uint64
+	completed        bool
+	seen             time.Time
+}
+
+const maxChatRunFences = 48
+
+func (s *Shell) streamRunMatchesPane(e chatstream.Event) bool {
+	agent := s.paneAgent(e.PaneID)
+	if agent == nil {
+		return false
+	}
+	provider, ok := history.ParseAgentID(agent.Kind)
+	if !ok || string(provider) != e.Agent {
+		return false
+	}
+	if identity := agent.AgentSession; identity != nil {
+		declared, known := history.ParseAgentID(identity.Agent)
+		if known && declared == provider {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				path, err := history.ResolveLiveSource(home, provider, identity.Kind, identity.Source, identity.Value)
+				if err == nil && filepath.Clean(path) == filepath.Clean(e.SessionPath) {
+					return true
+				}
+			}
+		}
+	}
+	// A visible live Chat has already been identity-bound by the exact
+	// transcript resolver. This also covers the brief moment when the
+	// native Herdr agent_session projection has not been refreshed yet.
+	return !s.chatReadOnly && e.PaneID == s.chatPaneID &&
+		string(s.chatLiveProvider) == e.Agent && s.chatLivePath != "" &&
+		filepath.Clean(s.chatLivePath) == filepath.Clean(e.SessionPath)
+}
+
+func (s *Shell) observeChatRunStatus(e chatstream.Event) {
+	if (e.Kind != "message_start" && e.Kind != "agent_end") || s.statusStore == nil || !s.streamRunMatchesPane(e) {
+		return
+	}
+	key := e.Agent + "\x00" + e.PaneID + "\x00" + filepath.Clean(e.SessionPath)
+	if s.chatRunFences == nil {
+		s.chatRunFences = make(map[string]chatRunFence)
+	}
+	old, exists := s.chatRunFences[key]
+	if exists && (e.Epoch < old.epoch || (e.Epoch == old.epoch && e.Seq <= old.seq)) {
+		return
+	}
+	if e.Kind == "message_start" {
+		s.chatRunFences[key] = chatRunFence{epoch: e.Epoch, messageID: e.MessageID, seq: e.Seq, seen: time.Now()}
+		if len(s.chatRunFences) > maxChatRunFences {
+			var earliest string
+			for k, v := range s.chatRunFences {
+				if earliest == "" || v.seen.Before(s.chatRunFences[earliest].seen) {
+					earliest = k
+				}
+			}
+			delete(s.chatRunFences, earliest)
+		}
+		if effective, applied := s.statusStore.ApplySolcoHookStatus(e.PaneID, "working", time.Now()); applied {
+			s.upsertProjectionAgent(e.PaneID, func(agent *herdr.Agent) { agent.Status = effective })
+			s.applyPaneStatus(e.PaneID, effective)
+		}
+		return
+	}
+	// No guessed end on message_end, no end without this process's prior
+	// message_start, no duplicate or delayed completion for another run.
+	if !exists || old.completed || e.Epoch != old.epoch || e.MessageID != old.messageID {
+		return
+	}
+	old.completed, old.seq, old.seen = true, e.Seq, time.Now()
+	s.chatRunFences[key] = old
+	effective := s.statusStore.ApplyVerifiedAgentEnd(e.PaneID)
+	s.upsertProjectionAgent(e.PaneID, func(agent *herdr.Agent) { agent.Status = effective })
+	s.applyPaneStatus(e.PaneID, effective)
+}
+
+// handleAppChatStream runs on the UI lane. Agent lifecycle events are
+// observed for every identity-verified Pane; text overlays only the one
+// exact currently bound Chat conversation.
 func (s *Shell) handleAppChatStream(event chatstream.Event) {
+	if event.Validate() != nil {
+		return
+	}
+	s.observeChatRunStatus(event)
 	// Mobile streaming is dispatched from AppHook's own socket lane, not
-	// here: this UI callback only updates the visible desktop Chat bridge.
-	if event.Validate() != nil || s.chatReadOnly || (s.chatLiveProvider != history.AgentOMP && s.chatLiveProvider != history.AgentPi) ||
+	// here: this callback only overlays text in the visible desktop Chat.
+	if s.chatReadOnly || (s.chatLiveProvider != history.AgentOMP && s.chatLiveProvider != history.AgentPi) ||
 		event.Agent != string(s.chatLiveProvider) ||
 		s.chatPaneID == "" || event.PaneID != s.chatPaneID || s.chatLivePath == "" ||
 		filepath.Clean(event.SessionPath) != filepath.Clean(s.chatLivePath) {
@@ -39,7 +128,7 @@ func (s *Shell) handleAppChatStream(event chatstream.Event) {
 	}
 	// The provider JSONL is still the authority: after message_end, nudge
 	// the live file pump for early convergence, never force a full rescan.
-	if event.Kind == "message_end" {
+	if event.Kind == "message_end" || event.Kind == "agent_end" {
 		s.wakeLiveTail()
 	}
 }

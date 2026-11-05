@@ -46,9 +46,10 @@ test("OMP events stream bounded assistant deltas to Solco socket", async () => {
     call("tool_execution_start", { toolCallId: "call-1", toolName: "read" });
     call("tool_execution_end", { toolCallId: "call-1", toolName: "read", isError: false });
     call("message_end", { message: { role: "assistant" } });
+    call("agent_end", { messages: [] });
     await new Promise((resolve) => setTimeout(resolve, 180));
     expect(received.map((f) => f.params.kind)).toEqual([
-      "message_start", "text_delta", "text_delta", "text_delta", "text_delta", "text_delta", "tool_start", "tool_end", "message_end",
+      "message_start", "text_delta", "text_delta", "text_delta", "text_delta", "text_delta", "tool_start", "tool_end", "message_end", "agent_end",
     ]);
     expect(received[1].params.delta).toBe("Hi ");
     expect(received[2].params.delta).toBe("there");

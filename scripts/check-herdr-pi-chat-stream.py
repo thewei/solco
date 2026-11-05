@@ -144,27 +144,28 @@ def main() -> None:
                 if receipt.get("type") != "agent_prompted" or receipt.get("agent", {}).get("pane_id") != pane:
                     raise RuntimeError("Herdr did not accept the Pi prompt for the current Pane")
 
-            def wait_frames(ended: int, chunks: int) -> None:
+            def wait_frames(ended: int, chunks: int, complete_runs: int) -> None:
                 end = time.monotonic() + 27
                 while time.monotonic() < end:
                     with lock:
                         ks = [f.get("params", {}).get("kind") for f in events if f.get("method") == "chat.stream"]
-                    if ks.count("message_end") >= ended and ks.count("text_delta") >= chunks:
+                    if (ks.count("message_end") >= ended and ks.count("text_delta") >= chunks
+                            and ks.count("agent_end") >= complete_runs):
                         return
                     time.sleep(.04)
                 raise RuntimeError(f"Pi stream incomplete: got {ks}")
 
             prompt("Read the test file, then say hello.")
-            wait_frames(2, len(CHUNKS))
+            wait_frames(2, len(CHUNKS), 1)
             prompt("Say hello again.")
-            wait_frames(3, len(CHUNKS) * 2)
+            wait_frames(3, len(CHUNKS) * 2, 2)
 
             with lock:
                 frames = [f["params"] for f in events if f.get("method") == "chat.stream"]
             kinds = [f["kind"] for f in frames]
             expected = (["message_start", "message_end", "tool_start", "tool_end", "message_start"]
-                        + ["text_delta"] * 3 + ["message_end", "message_start"]
-                        + ["text_delta"] * 3 + ["message_end"])
+                        + ["text_delta"] * 3 + ["message_end", "agent_end", "message_start"]
+                        + ["text_delta"] * 3 + ["message_end", "agent_end"])
             if kinds != expected:
                 raise RuntimeError(f"Pi event lifecycle mismatch: {kinds}")
             if [f["delta"] for f in frames if f["kind"] == "text_delta"] != list(CHUNKS) * 2:

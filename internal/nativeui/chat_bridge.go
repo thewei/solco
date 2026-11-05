@@ -748,8 +748,12 @@ func (s *Shell) chatBridgeState() ChatBridgeState {
 		state.Turns = kept
 	}
 	state.attachSubagents(s.chatSubagents, s.chatTurns, s.chatLiveProvider, time.Now())
-	if s.chatStream != nil && !state.ReadOnly && s.chatLiveProvider == history.AgentOMP {
+	if s.chatStream != nil && !state.ReadOnly && (s.chatLiveProvider == history.AgentOMP || s.chatLiveProvider == history.AgentPi) {
 		state.Turns = s.chatStream.Overlay(state.Turns)
+		if s.chatStream.Completed && len(state.Turns) > 0 && !state.Turns[len(state.Turns)-1].User {
+			state.Turns = append([]chatsession.ChatTurn(nil), state.Turns...)
+			state.Turns[len(state.Turns)-1].Live = false
+		}
 	}
 	state.Plan = chatsession.PlanOf(s.chatTurns)
 	return state

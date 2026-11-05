@@ -18,6 +18,7 @@ import (
 
 	"github.com/thewei/solco/internal/apphook"
 	"github.com/thewei/solco/internal/chatstream"
+	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 )
 
@@ -76,6 +77,132 @@ func TestChatStreamSocketToChatBridgeProjection(t *testing.T) {
 	send(4, "text_delta", "invalid suffix") // missing seq=3
 	if view := shell.chatBridgeState().Turns; len(view) != 0 || !shell.chatStream.Desynced {
 		t.Fatalf("lost token rendered as complete message: %+v", view)
+	}
+}
+
+// A run may finish while its Pane is not the visible Chat. The extension
+// still runs in Herdr, so a later visit must not inherit stale Solco/OSC
+// working just because the Chat bridge was bound somewhere else.
+func TestBackgroundAgentCompletionRetiresStaleWorkingBeforeChatOpens(t *testing.T) {
+	s := NewShell()
+	path := filepath.Join(t.TempDir(), "background.jsonl")
+	s.projection = herdr.Projection{
+		Panes: []herdr.Pane{
+			{ID: "visible", TerminalID: "term-visible"},
+			{ID: "background", TerminalID: "term-bg", AgentStatus: "working"},
+		},
+		Agents: []herdr.Agent{{
+			PaneID: "background", TerminalID: "term-bg", Kind: "omp", Status: "working",
+			AgentSession: &herdr.AgentSessionIdentity{Agent: "omp", Kind: "path", Value: path},
+		}},
+	}
+	s.chatPaneID = "visible" // User is inspecting another Chat or Terminal.
+	s.chatLiveProvider = history.AgentPi
+	s.chatLivePath = "/tmp/visible-pi.jsonl"
+	s.statusStore.ApplySolcoHookStatus("background", "working", time.Now())
+	event := chatstream.Event{Agent: "omp", PaneID: "background", SessionPath: path, Epoch: "0001", MessageID: "bg-message", Seq: 1, Kind: "message_start"}
+	s.handleAppChatStream(event)
+	event.Seq, event.Kind = 2, "message_end"
+	s.handleAppChatStream(event)
+	if s.projection.Agents[0].Status != "working" {
+		t.Fatal("message_end incorrectly retired a live background agent")
+	}
+	event.Seq, event.Kind = 3, "agent_end"
+	for _, tamper := range []func(*chatstream.Event){
+		func(e *chatstream.Event) { e.Agent = "pi" },
+		func(e *chatstream.Event) { e.PaneID = "visible" },
+		func(e *chatstream.Event) { e.SessionPath += "-other" },
+		func(e *chatstream.Event) { e.Epoch = "0000" },
+		func(e *chatstream.Event) { e.MessageID = "previous-run" },
+	} {
+		wrong := event
+		tamper(&wrong)
+		s.handleAppChatStream(wrong)
+		if got := s.projection.Agents[0].Status; got != "working" {
+			t.Fatalf("foreign/delayed agent_end completed background Pane: %s", got)
+		}
+	}
+	s.handleAppChatStream(event)
+	if got := s.projection.Agents[0].Status; got != "idle" {
+		t.Fatalf("background agent remains stale after its real run ended: %s", got)
+	}
+	if got := s.statusStore.Display("background"); got != "idle" {
+		t.Fatalf("status store remained working after background completion: %s", got)
+	}
+	// A genuinely new message transitions back to working; replayed old
+	// agent_end must not retire this newer turn.
+	event.Seq, event.Kind, event.MessageID = 4, "message_start", "next-run"
+	s.handleAppChatStream(event)
+	if got := s.projection.Agents[0].Status; got != "working" {
+		t.Fatalf("new background prompt did not enter working: %s", got)
+	}
+	delayed := event
+	delayed.Seq, delayed.Kind, delayed.MessageID = 5, "agent_end", "bg-message"
+	s.handleAppChatStream(delayed)
+	if got := s.projection.Agents[0].Status; got != "working" {
+		t.Fatalf("late completion of an old run retired newer turn: %s", got)
+	}
+}
+
+func TestFinalAgentTurnRetiresStaleSolcoWorkingStatus(t *testing.T) {
+	s := NewShell()
+	s.projection = herdr.Projection{
+		Panes:  []herdr.Pane{{ID: "p1", TerminalID: "term-1", AgentStatus: "working"}},
+		Agents: []herdr.Agent{{PaneID: "p1", TerminalID: "term-1", Kind: "omp", Status: "working"}},
+	}
+	s.chatPaneID = "p1"
+	s.chatLiveProvider = history.AgentOMP
+	s.chatLivePath = "/tmp/test-omp-completed.jsonl"
+	s.chatConversationID = "live:omp:term-1"
+	s.statusStore.ApplySolcoHookStatus("p1", "working", time.Now())
+	e := chatstream.Event{Agent: "omp", PaneID: "p1", SessionPath: s.chatLivePath, Epoch: "0001", MessageID: "m1", Seq: 1, Kind: "message_start"}
+	s.handleAppChatStream(e)
+	e.Seq, e.Kind, e.Delta = 2, "text_delta", "The answer is done."
+	s.handleAppChatStream(e)
+	e.Seq, e.Kind, e.Delta = 3, "message_end", ""
+	s.handleAppChatStream(e)
+	if s.projection.Agents[0].Status != "working" {
+		t.Fatal("message_end alone is NOT the end of an agent turn")
+	}
+	if before := s.chatBridgeState(); before.Disposition != "queue" || len(before.Turns) == 0 || !before.Turns[len(before.Turns)-1].Live {
+		t.Fatalf("pre-completion UI should still show Stop and live caret: %+v", before)
+	}
+	e.Seq, e.Kind = 4, "agent_end"
+	s.handleAppChatStream(e)
+	if s.projection.Agents[0].Status != "idle" || s.statusStore.Display("p1") != "idle" {
+		t.Fatalf("stale working/Stop persisted after agent_end: status=%q hook=%q", s.projection.Agents[0].Status, s.statusStore.Display("p1"))
+	}
+	if after := s.chatBridgeState(); after.Disposition != "ready" || len(after.Turns) == 0 || after.Turns[len(after.Turns)-1].Live {
+		t.Fatalf("finished UI kept Stop or the blinking caret: %+v", after)
+	}
+	e.Seq, e.Kind, e.MessageID = 5, "message_start", "m2"
+	s.handleAppChatStream(e)
+	if s.projection.Agents[0].Status != "working" {
+		t.Fatal("next turn must restore working")
+	}
+}
+
+func TestFinalAgentTurnRetiresStaleOSCProgramWorking(t *testing.T) {
+	s := NewShell()
+	s.projection = herdr.Projection{
+		Panes:  []herdr.Pane{{ID: "p1", TerminalID: "term-1", AgentStatus: "working"}},
+		Agents: []herdr.Agent{{PaneID: "p1", TerminalID: "term-1", Kind: "omp", Status: "working"}},
+	}
+	s.chatPaneID = "p1"
+	s.chatLiveProvider = history.AgentOMP
+	s.chatLivePath = "/tmp/test-osc-ended.jsonl"
+	s.chatConversationID = "live:omp:term-1"
+	s.applyProgramStatus("p1", []byte("state=working:app=omp"))
+	evt := chatstream.Event{Agent: "omp", PaneID: "p1", SessionPath: s.chatLivePath, Epoch: "0001", MessageID: "m1", Seq: 1, Kind: "message_start"}
+	s.handleAppChatStream(evt)
+	evt.Seq, evt.Kind, evt.Delta = 2, "text_delta", "finished"
+	s.handleAppChatStream(evt)
+	evt.Seq, evt.Kind, evt.Delta = 3, "message_end", ""
+	s.handleAppChatStream(evt)
+	evt.Seq, evt.Kind = 4, "agent_end"
+	s.handleAppChatStream(evt)
+	if state := s.chatBridgeState(); state.Disposition != "ready" || state.Turns[len(state.Turns)-1].Live {
+		t.Fatalf("OSC outlived actual provider run: status=%q hook=%q projection=%+v", state.Disposition, s.statusStore.Display("p1"), state.Turns)
 	}
 }
 

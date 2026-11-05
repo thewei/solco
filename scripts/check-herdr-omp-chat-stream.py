@@ -112,8 +112,8 @@ def check_events(frames: list[dict[str, Any]], pane: str, home: Path) -> None:
     kinds = [e.get("kind") for e in events]
     expected = [
         "message_start", "message_end", "tool_start", "tool_end",
-        "message_start", *("text_delta" for _ in CHUNKS), "message_end",
-        "message_start", *("text_delta" for _ in CHUNKS), "message_end",
+        "message_start", *("text_delta" for _ in CHUNKS), "message_end", "agent_end",
+        "message_start", *("text_delta" for _ in CHUNKS), "message_end", "agent_end",
     ]
     if kinds != expected:
         raise RuntimeError(f"Herdr TUI event lifecycle mismatch: {kinds}")
@@ -135,7 +135,7 @@ def check_events(frames: list[dict[str, Any]], pane: str, home: Path) -> None:
             or events[3].get("tool_name") != "read"
             or events[3].get("tool_error") is True):
         raise RuntimeError("OMP tool lifecycle lost its call identity")
-    if len({events[i].get("message_id") for i in (0, 4, 9)}) != 3:
+    if len({events[i].get("message_id") for i in (0, 4, 10)}) != 3:
         raise RuntimeError("OMP did not separate the tool, reply and next-turn messages")
 
 
@@ -292,25 +292,26 @@ def main() -> None:
             report_marker = "0123456789abcdef0123456789abcdef"
             accepted_prompt(f"Solco-Report-Id: {report_marker}\nRead the test file, then say hello.")
 
-            def await_turns(message_ends: int, text_chunks: int) -> None:
+            def await_turns(message_ends: int, text_chunks: int, complete_runs: int) -> None:
                 deadline = time.monotonic() + TIMEOUT
                 while time.monotonic() < deadline:
                     with lock:
                         kinds = [f.get("params", {}).get("kind") for f in frames]
                         complete = (kinds.count("message_end") >= message_ends
-                                    and kinds.count("text_delta") >= text_chunks)
+                                    and kinds.count("text_delta") >= text_chunks
+                                    and kinds.count("agent_end") >= complete_runs)
                     if complete:
                         return
                     time.sleep(.04)
                 raise RuntimeError(f"timed out waiting for {message_ends} assistant completions")
 
-            await_turns(2, len(CHUNKS))
+            await_turns(2, len(CHUNKS), 1)
             # Reuse the same real Herdr Pane/OMP process for another prompt.
             # The extension sequence must remain contiguous and identity
             # cannot jump to a second runtime or new session file.
             wait_idle_omp()
             accepted_prompt("Please answer one more time.")
-            await_turns(3, len(CHUNKS) * 2)
+            await_turns(3, len(CHUNKS) * 2, 2)
             with lock:
                 recorded = list(frames)
             check_events(recorded, pane, home)

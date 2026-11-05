@@ -111,6 +111,47 @@ func TestLinkSessionBindsOnlyAnOfferedCandidate(t *testing.T) {
 // say "loading", not invite a new conversation over an existing one — and the
 // invitation returns once the runtime has described the pane and it truly has
 // no session.
+// A freshly launched Agent can have a provisional/old directory card while
+// the authoritative Herdr pane already reports idle, and the reverse can
+// happen after it completes. The Composer must not use the cached card's
+// runtime phase: otherwise first Send stays disabled and an old Stop lingers.
+func TestComposerDispositionFollowsExactLivePaneNotCachedDirectory(t *testing.T) {
+	s, _ := sourcelessLinkShell(t)
+	if s.chatPaneID != "p1" || s.chatConversationID != "" {
+		t.Fatalf("test must be a fresh, bound, sourceless Agent: pane=%q conv=%q", s.chatPaneID, s.chatConversationID)
+	}
+	// The directory intentionally has a provisional card with no
+	// RuntimePhase; the real Pane is already idle and ready for first Send.
+	first := s.chatBridgeState()
+	if first.Loading || !first.Waiting || first.Disposition != "ready" {
+		t.Fatalf("first prompt locked behind a provisional card: loading=%v waiting=%v disposition=%s", first.Loading, first.Waiting, first.Disposition)
+	}
+
+	// A stale working card must not outlive the provider's confirmed idle.
+	s.workbench.directory.Replace([]agent.AgentCardModel{{
+		PaneID: "p1", Key: agent.AgentKey{InstanceID: "inst", TerminalID: "term-1"},
+		Provider: history.AgentClaudeCode, RuntimePhase: agent.PhaseWorking,
+	}})
+	if got := s.chatBridgeState().Disposition; got != "ready" {
+		t.Fatalf("old cached working status kept the Stop button: %s", got)
+	}
+	// Similarly a cached idle card must not enable a second prompt into
+	// a run Herdr currently confirms as busy.
+	s.projection.Agents[0].Status = "working"
+	s.workbench.directory.Replace([]agent.AgentCardModel{{
+		PaneID: "p1", Key: agent.AgentKey{InstanceID: "inst", TerminalID: "term-1"},
+		Provider: history.AgentClaudeCode, RuntimePhase: agent.PhaseIdle,
+	}})
+	if got := s.chatBridgeState().Disposition; got != "queue" {
+		t.Fatalf("stale cached idle exposed Send while Agent was working: %s", got)
+	}
+	// No Agent in that pane: even a cached card cannot authorize sending.
+	s.projection.Agents = nil
+	if got := s.chatBridgeState().Disposition; got != "unknown" {
+		t.Fatalf("old card authorized an unbound Pane: %s", got)
+	}
+}
+
 func TestChatLoadsInsteadOfInvitingBeforeTheFirstProjection(t *testing.T) {
 	shell := NewShell()
 	shell.selectedPaneID = "p1"

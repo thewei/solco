@@ -327,7 +327,7 @@ func (s *Shell) applyLiveSync(decoder *history.LiveDecoder) {
 	s.chatWindowStart = window.Start
 	s.chatHasOlder = window.HasOlder
 	s.chatTurns = window.Turns
-	if s.chatStream != nil && s.chatStream.Reconciled(chatsession.Turns(s.chatTurns, "", nil)) {
+	if s.chatStream != nil && s.chatStream.Completed && s.chatStream.Reconciled(chatsession.Turns(s.chatTurns, "", nil)) {
 		s.chatStream = nil
 	}
 	s.chatModel = window.Model

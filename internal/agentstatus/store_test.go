@@ -87,6 +87,32 @@ func TestStoreInvalidBodyNoop(t *testing.T) {
 	}
 }
 
+func TestVerifiedAgentEndRetiresOnlyInFlightOSCAndKeepsCompletedRecords(t *testing.T) {
+	s := NewStore()
+	s.ApplyProgramReport("p1", []byte("state=working:id=active:app=omp"), base)
+	s.ApplyProgramReport("p1", []byte("state=done:id=finished:app=omp"), base)
+	s.ApplyProgramReport("p1", []byte("state=blocked:id=child:app=omp"), base)
+	if got := s.Display("p1"); got != "blocked" {
+		t.Fatalf("setup status=%q", got)
+	}
+	// A simple Herdr/spool idle or Solco hook idle must not defeat OSC
+	// until the provider itself emits an identity-verified agent_end.
+	if _, applied := s.ApplySolcoHookStatus("p1", "idle", base); applied {
+		t.Fatal("unverified hook overrode OSC status")
+	}
+	if got := s.ApplyVerifiedAgentEnd("p1"); got != "done" {
+		t.Fatalf("run completion did not keep finished native record: %q", got)
+	}
+	if s.HasTransient("p1") {
+		t.Fatal("finished run retained in-flight OSC")
+	}
+	// The next run legitimately reenters working.
+	s.ApplyProgramReport("p1", []byte("state=working:id=active:app=omp"), base.Add(time.Second))
+	if got := s.Display("p1"); got != "working" {
+		t.Fatalf("new run status=%q", got)
+	}
+}
+
 func TestStorePaneClosed(t *testing.T) {
 	s := NewStore()
 	s.ApplyProgramReport("p1", []byte("state=working"), base)

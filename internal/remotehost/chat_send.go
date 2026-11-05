@@ -57,7 +57,11 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request, dev Devi
 	ctx, cancel := context.WithTimeout(r.Context(), chatSendTimeout)
 	defer cancel()
 	backend := s.opts.Backend
-	switch agent.ClassifySendability(agent.ParseRuntimePhase(target.Status, false)) {
+	// A verified provider agent_end can finish before a stale Herdr working
+	// projection is refreshed. The actual Herdr PromptAgent RPC still decides
+	// whether delivery is legal; never bypass its refusal.
+	effectiveStatus := s.chatStreamStatus(paneID, target, target.Status)
+	switch agent.ClassifySendability(agent.ParseRuntimePhase(effectiveStatus, false)) {
 	case agent.Sendable:
 	case agent.MidTurn:
 		if req.Queue && !req.Interrupt {
@@ -95,6 +99,7 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request, dev Devi
 		s.sendFailed(w, dev, paneID, "prompt", err)
 		return
 	}
+	s.resetChatStreamCompletion(paneID, target)
 	if target.Provider != "" && agentcatalog.Classify(target.Provider, text) == agentcatalog.KindPicker {
 		cur := s.askFor(instance, paneID)
 		cur.mu.Lock()

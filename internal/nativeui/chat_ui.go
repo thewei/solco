@@ -511,21 +511,26 @@ func (s *Shell) releaseHistoryChat() {
 	s.publishChatBridge()
 }
 
-// chatDispositionNow derives the composer disposition live from the
-// selected pane's projection card (0.6 §10): the sendability classifier is
-// the SSOT and the service decides again at commit time. The stored fields
-// this replaces were never assigned, which disabled the native Send.
+// chatDispositionNow derives sendability from the current exact Herdr-owned
+// Pane, not from an AgentCardModel in the Workbench directory. Cards are an
+// asynchronous display cache: a fresh card may not yet have RuntimePhase,
+// and an old working card can linger after a completed turn. Either error
+// leaves the shared Composer stuck with a disabled Send or a stale Stop.
+// The semantic prompt transaction still checks the runtime at commit time.
 func (s *Shell) chatDispositionNow() conversation.PromptDisposition {
-	// The composer disposition belongs to the bound chat pane, which usually
-	// follows the selection but is its own coordinate (the pane the prompt
-	// would go to).
 	if s.terminalDialogHeld() {
 		return conversation.DispositionNeedsTerminal
 	}
-	if card, ok := s.agentCardForPane(s.chatPaneID); ok {
-		// Classify from the phase, not the card's own Sendability: the
-		// projection-fallback card builder leaves it unset.
-		return conversation.DispositionFor(agent.ClassifySendability(card.RuntimePhase))
+	// This must be the Chat's bound Pane. A cached card for another Pane
+	// (or a removed Agent) can never authorize a prompt.
+	if s.chatPaneID == "" {
+		return conversation.DispositionUnknown
+	}
+	for _, runtimeAgent := range s.projection.Agents {
+		if runtimeAgent.PaneID == s.chatPaneID {
+			return conversation.DispositionFor(agent.ClassifySendability(
+				agent.ParseRuntimePhase(runtimeAgent.Status, false)))
+		}
 	}
 	return conversation.DispositionUnknown
 }

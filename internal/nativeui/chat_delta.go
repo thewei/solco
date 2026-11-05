@@ -60,7 +60,7 @@ func chatDeltaPatch(base, next ChatBridgeState) (ChatDelta, bool) {
 // publishChatStreamDelta is only called on the UI lane after an accepted OMP
 // extension event. It does not suppress full chat:updated notifications.
 func (s *Shell) publishChatStreamDelta() {
-	if s.win == nil || s.chatLiveProvider != history.AgentOMP || s.chatStream == nil {
+	if s.win == nil || (s.chatLiveProvider != history.AgentOMP && s.chatLiveProvider != history.AgentPi) || s.chatStream == nil {
 		return
 	}
 	if s.chatDeltaTimer != nil {
@@ -77,7 +77,7 @@ func (s *Shell) publishChatStreamDelta() {
 // emitChatDelta falls back to a full snapshot when the prior delivered
 // projection cannot be patched safely (first bind, rolling window, metadata).
 func (s *Shell) emitChatDelta() {
-	if s.win == nil || s.chatLiveProvider != history.AgentOMP || s.chatStream == nil {
+	if s.win == nil || (s.chatLiveProvider != history.AgentOMP && s.chatLiveProvider != history.AgentPi) || s.chatStream == nil {
 		return
 	}
 	state := s.chatBridgeState()

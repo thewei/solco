@@ -113,7 +113,50 @@ func (s *Server) chatStreamOverlay(pane string, target chatTarget, canonical cha
 		return canonical
 	}
 	canonical.Turns = slot.buffer.Overlay(canonical.Turns)
+	if slot.buffer.Completed && len(canonical.Turns) > 0 && !canonical.Turns[len(canonical.Turns)-1].User {
+		// The canonical decoder might still hold a provisional tail. The
+		// provider has confirmed the entire run ended; don't keep its caret.
+		canonical.Turns = append([]chatsession.ChatTurn(nil), canonical.Turns...)
+		canonical.Turns[len(canonical.Turns)-1].Live = false
+	}
 	return canonical
+}
+
+// chatStreamStatus retires a stale Herdr working status only after the
+// exact Provider/Pane/session's agent_end, never after message_end.
+// This remains a presentation/sendability hint: Herdr PromptAgent is the
+// final arbiter and can still reject any new prompt.
+func (s *Server) chatStreamStatus(pane string, target chatTarget, status string) string {
+	if status != "working" || (target.Provider != history.AgentOMP && target.Provider != history.AgentPi) {
+		return status
+	}
+	feed := &s.chatStreamFeed
+	feed.mu.Lock()
+	defer feed.mu.Unlock()
+	slot := feed.streams[streamKey(string(target.Provider), pane, target.Path)]
+	if slot != nil && slot.buffer.Completed && time.Since(slot.seen) <= chatStreamTTL {
+		return "idle"
+	}
+	return status
+}
+
+// A newly accepted prompt must immediately retire the preceding run's
+// completed flag, even if the next message_start has not reached the Socket.
+func (s *Server) resetChatStreamCompletion(pane string, target chatTarget) {
+	feed := &s.chatStreamFeed
+	feed.mu.Lock()
+	defer feed.mu.Unlock()
+	key := streamKey(string(target.Provider), pane, target.Path)
+	slot := feed.streams[key]
+	if slot == nil || !slot.buffer.Completed {
+		return
+	}
+	slot.buffer.Reset()
+	if feed.wake == nil {
+		feed.wake = make(chan struct{})
+	}
+	close(feed.wake)
+	feed.wake = make(chan struct{})
 }
 
 type chatWireFrame struct {

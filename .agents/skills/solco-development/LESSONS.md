@@ -10,6 +10,8 @@
 
 ## 环境与运行时
 
+- 2026-11-05 Herdr 沙箱 OMP TUI 的原生流式联调先被旧 Bun 1.4.0、首次设置向导和极快模型工作状态漏采样误导 → 短 /tmp HOME 避免 Unix Socket 超长；隔离 `.zshenv/.zprofile/.zshrc` 先用 OMP 同目录 Bun，沙箱 `omp config set startup.setupWizard false`；以 `agent list`、`pane.read` 与同一 Socket 的 epoch/seq/Pane/session 身份验证成功，不单信 `agent.prompt --wait`（`scripts/check-herdr-omp-chat-stream.py`）。
+
 - 2026-11-02 隔离沙箱配方已验证可行：临时 HOME + `HERDR_SOCKET_PATH`/`HERDR_CONFIG_PATH`/`HERDR_BIN_PATH`，Solco 自行 EnsureRunning 拉起 `herdr server`（internal/herdr/herdr.go:146），本机 herdr 0.9.5（~/.local/bin/herdr）；不需要手工起 daemon。
 - 2026-11-02 用户活实例日志在 `~/Library/Logs/Solco/solco.log`（rotate 3×2MiB）；可用 msg：`attach native terminal`、`native terminals synced`（spawned/closed 计数）、`hook session event` 等；**没有 surface 切换日志**——查表面行为必须先加 trace 再复现。
 - 2026-11-02 「native terminals synced」的 `spawned:1, closed:0` 连续两次（间隔几百 ms）= surface 两次离开又回到 Terminal 的指纹；这是诊断 surface 闪烁的可复用信号，不用加日志也能从活实例日志粗判。

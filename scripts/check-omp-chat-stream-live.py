@@ -278,7 +278,8 @@ def run(agent: str = "omp") -> None:
             while time.monotonic() < deadline:
                 with frames_lock:
                     if sum(f.get("params", {}).get("kind") == "message_end" for f in frames) >= 2 and \
-                        sum(f.get("params", {}).get("kind") == "text_delta" for f in frames) >= len(CHUNKS):
+                        sum(f.get("params", {}).get("kind") == "text_delta" for f in frames) >= len(CHUNKS) and \
+                        sum(f.get("params", {}).get("kind") == "agent_end" for f in frames) >= 1:
                         break
                 time.sleep(0.02)
             with frames_lock:
@@ -287,7 +288,7 @@ def run(agent: str = "omp") -> None:
             kinds = [e.get("kind") for e in events]
             expected_kinds = [
                 "message_start", "message_end", "tool_start", "tool_end",
-                "message_start", "text_delta", "text_delta", "text_delta", "message_end",
+                "message_start", "text_delta", "text_delta", "text_delta", "message_end", "agent_end",
             ]
             if kinds != expected_kinds:
                 raise RuntimeError(f"unexpected real OMP event lifecycle: {kinds} (want {expected_kinds})")

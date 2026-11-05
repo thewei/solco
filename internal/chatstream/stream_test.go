@@ -61,6 +61,67 @@ func TestBufferDeltaSequenceAndCanonicalReconcile(t *testing.T) {
 		t.Fatal("failed to settle")
 	}
 }
+func TestAgentEndMeansWholeTurnCompleteNotOneMessage(t *testing.T) {
+	var b Buffer
+	if !b.Apply(frame(1, "message_start", "m1", "")) {
+		t.Fatal("start")
+	}
+	if b.Completed {
+		t.Fatal("a message_start is never a terminal status")
+	}
+	if !b.Apply(frame(2, "message_end", "m1", "")) {
+		t.Fatal("message end")
+	}
+	start := frame(3, "tool_start", "m1", "")
+	start.ToolCallID, start.ToolName = "call-1", "read"
+	if !b.Apply(start) {
+		t.Fatal("tool start")
+	}
+	if b.Completed {
+		t.Fatal("unfinished tool should not look complete until agent_end")
+	}
+	end := frame(4, "tool_end", "m1", "")
+	end.ToolCallID, end.ToolName = "call-1", "read"
+	if !b.Apply(end) || !b.Apply(frame(5, "agent_end", "m1", "")) || !b.Completed {
+		t.Fatalf("agent_end did not settle completed assistant + tool: %+v", b)
+	}
+	if b.Apply(frame(6, "agent_end", "m1", "")) {
+		t.Fatal("duplicated agent_end")
+	}
+	if !b.Apply(frame(6, "message_start", "m2", "")) || b.Completed {
+		t.Fatal("a new message must restart the working state")
+	}
+}
+
+func TestAgentEndRecoversLostMessageBoundaryWithoutLyingAboutText(t *testing.T) {
+	t.Run("provider ended without message_end", func(t *testing.T) {
+		var b Buffer
+		b.Apply(frame(1, "message_start", "m1", ""))
+		b.Apply(frame(2, "text_delta", "m1", "last answer"))
+		if !b.Apply(frame(3, "agent_end", "m1", "")) || !b.Completed {
+			t.Fatalf("explicit provider run end rejected: %+v", b)
+		}
+		if b.Apply(frame(4, "agent_end", "m1", "")) {
+			t.Fatal("duplicated end")
+		}
+	})
+	t.Run("dropped text still permits completion but never provisional text", func(t *testing.T) {
+		var b Buffer
+		b.Apply(frame(1, "message_start", "m1", ""))
+		b.Apply(frame(2, "text_delta", "m1", "partial"))
+		b.Apply(frame(4, "text_delta", "m1", " unsafe")) // lost seq 3
+		if !b.Desynced || b.Text != "" {
+			t.Fatal("lost delta was still shown")
+		}
+		if !b.Apply(frame(6, "agent_end", "m1", "")) || !b.Completed {
+			t.Fatalf("completion did not survive dropped content: %+v", b)
+		}
+		if got := b.Overlay([]chatsession.ChatTurn{{User: true, Text: "prompt"}}); len(got) != 1 {
+			t.Fatalf("desynced text leaked despite end: %+v", got)
+		}
+	})
+}
+
 func TestPiStreamUsesSameBoundedProtocol(t *testing.T) {
 	var b Buffer
 	start := frame(1, "message_start", "m1", "")

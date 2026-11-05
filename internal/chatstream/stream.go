@@ -46,7 +46,7 @@ func (e Event) Validate() error {
 		return ErrInvalidEvent
 	}
 	switch e.Kind {
-	case "message_start", "text_delta", "thinking_delta", "message_end":
+	case "message_start", "text_delta", "thinking_delta", "message_end", "agent_end":
 		if e.MessageID == "" || e.ToolCallID != "" || e.ToolName != "" {
 			return ErrInvalidEvent
 		}
@@ -80,6 +80,12 @@ type Buffer struct {
 	Thinking  string
 	Tools     []tool
 	Ended     bool
+	// Completed is set only by agent_end (whole run), not message_end.
+	Completed bool
+	// lostMessageID preserves only the identity after a dropped delta. The
+	// provisional contents remain invalid, but the provider's final run-end
+	// event can still retire a stale working UI for this exact message.
+	lostMessageID string
 	// Desynced disables provisional rendering after a missing event. The
 	// provider transcript is the recovery source until a new message starts.
 	Desynced bool
@@ -90,7 +96,10 @@ func (b *Buffer) Reset() { *b = Buffer{} }
 // invalidate retires an untrustworthy provisional turn, without pretending
 // it completed. The provider transcript is always the recovery authority.
 func (b *Buffer) invalidate(seq uint64) {
-	b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended = "", "", "", nil, false
+	if b.MessageID != "" {
+		b.lostMessageID = b.MessageID
+	}
+	b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended, b.Completed = "", "", "", nil, false, false
 	b.Desynced = true
 	b.Seq = seq
 }
@@ -112,6 +121,25 @@ func (b *Buffer) Apply(e Event) bool {
 	}
 	if b.Epoch == e.Epoch && e.Seq <= b.Seq {
 		return false
+	}
+	// agent_end is a *run* boundary, not an assistant-message boundary. Even
+	// if the final message_end or a tool result packet was dropped, the
+	// provider itself knows the run is over. Accept that status fact only
+	// when the epoch and original message identity still match. Do not
+	// reconstruct any dropped text or tool result from it.
+	if e.Kind == "agent_end" {
+		identity := b.MessageID
+		if b.Desynced {
+			identity = b.lostMessageID
+		}
+		if identity == "" || e.MessageID != identity || b.Completed || b.Epoch != e.Epoch {
+			return false
+		}
+		if b.Seq != 0 && e.Seq != b.Seq+1 {
+			b.invalidate(e.Seq)
+		}
+		b.Completed, b.Ended, b.Seq = true, true, e.Seq
+		return true
 	}
 	// Never concatenate tokens across a dropped frame. Losing one delta is
 	// inevitable under backpressure; until the next message_start we show
@@ -140,7 +168,7 @@ func (b *Buffer) Apply(e Event) bool {
 	}
 	switch e.Kind {
 	case "message_start":
-		b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended, b.Desynced = e.MessageID, "", "", nil, false, false
+		b.MessageID, b.Text, b.Thinking, b.Tools, b.Ended, b.Completed, b.Desynced, b.lostMessageID = e.MessageID, "", "", nil, false, false, false, ""
 	case "text_delta":
 		if len(b.Text)+len(e.Delta) > MaxTextBytes {
 			b.invalidate(e.Seq)
@@ -274,12 +302,12 @@ func (b *Buffer) Overlay(base []chatsession.ChatTurn) []chatsession.ChatTurn {
 					row.Steps = append(row.Steps, chatsession.ChatStep{Kind: "tool", ToolName: item.name, ToolDone: item.done, ToolError: item.failed})
 				}
 			}
-			row.Live = !b.Ended || !allToolsDone(b.Tools)
+			row.Live = !b.Completed && (!b.Ended || !allToolsDone(b.Tools))
 			out[i] = row
 			return out
 		}
 	}
-	row := chatsession.ChatTurn{Live: true, Narration: b.Text}
+	row := chatsession.ChatTurn{Live: !b.Completed, Narration: b.Text}
 	if b.Thinking != "" {
 		thinking := b.Thinking
 		row.Thinking = &thinking

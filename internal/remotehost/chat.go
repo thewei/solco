@@ -146,7 +146,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request, _ Device) {
 		return
 	}
 	writeJSON(w, http.StatusOK, chatBody{
-		PaneID: paneID, AgentStatus: target.Status,
+		PaneID: paneID, AgentStatus: s.chatStreamStatus(paneID, target, target.Status),
 		Interaction: s.interactionFrame(r.Context(), instance, paneID, target.Status, reader),
 		Queued:      s.queuedFor(target),
 		State:       s.chatState(r.Context(), target, reader),
@@ -220,7 +220,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 	sent := false
 	push := func(force bool) bool {
 		frame := chatWireFrame{
-			T: "chat", PaneID: paneID, AgentStatus: status,
+			T: "chat", PaneID: paneID, AgentStatus: s.chatStreamStatus(paneID, target, status),
 			Interaction: interaction, Queued: queued,
 			State: s.chatStreamOverlay(paneID, target, canonical),
 			Seq:   last.Seq + 1,

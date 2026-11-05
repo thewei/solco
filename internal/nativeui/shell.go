@@ -629,7 +629,10 @@ type Shell struct {
 	chatLiveProvider history.AgentID
 	// chatStream overlays OMP's in-process token events until JSONL catches up;
 	// the live transcript remains authoritative and this is never persisted.
-	chatStream          *chatstream.Buffer
+	chatStream *chatstream.Buffer
+	// Identity-fenced run boundaries for OMP/Pi in every Herdr Pane (not
+	// only the currently open Chat); bounded, transient, never persisted.
+	chatRunFences       map[string]chatRunFence
 	chatSubagents       []chatsession.View
 	chatSubagentsTimer  *time.Timer
 	chatSubagentsBusy   bool
