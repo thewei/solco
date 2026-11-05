@@ -5,6 +5,71 @@ Internal from the release's commits (see `.agents/skills/solco-release`). The
 current release's section is snapshotted into `internal/changelog/snapshot.md`
 at release time and shown in Settings → About.
 
+## v0.13.0 — 2026-11-05
+
+### New
+
+- Assistants: each Assistant is now one ongoing chat with its Coordinator, plus a Needs-you inbox on Mac and phone
+- Assistants replace the old Projects work board; its data stays reachable through a read-only export
+- Assistants: real group chats bring several Assistants into one conversation, on desktop and phone
+- Assistants: per-Assistant work style — versioned instructions, a chosen Agent/Model/effort and MCP grants
+- Goals: the Coordinator plans milestones, Solco runs and verifies the tasks, and the goal closes only on evidence
+- Task runs: isolated worktrees, required checks, reviewable proof — nothing merges until you Accept it
+- Routines: proposed by an Assistant from chat, fired only after your approval; a hand edit pauses until re-approved
+- Memory: each Assistant keeps an editable Markdown memory folder with versions, conflict safety and review
+- Proactivity: choose respond / suggest / follow-up per Assistant, with quiet hours and a daily start budget
+- Autonomy: webhook and event triggers with per-Assistant keys and receipts; a ledger of system-started work
+- Skills: an Assistant can use named skills — you authorise each one and the report shows which were used
+- PR watch: an Assistant can watch a GitHub pull request and surface deduped events in the inbox
+- Reports: a run's report is delivered back into the original omp conversation and marked accepted or verified
+- Activity: a replayable Activity history of each Assistant's durable work, on desktop and phone
+- Automations: the plugin's binary and Go module are now Solco's own (`solco-automations`); rebuild the plugin after updating (MIT credit to the upstream project stays)
+- Automations: run headless so no trust dialog can stop an unattended run
+- Automations: unread failed/finished runs count in the Header and show in a new Automations tab of its popover
+- Automations: a Mac notification and a phone notification for each step — a draft waiting for approval, a run starting, finishing or failing
+- Phone: an Automations screen (what runs when, last result, drafts waiting), opened from Home or by tapping an automation notification
+- Phone: manage automations like on the Mac — approve drafts, run now, pause/resume, edit, delete, start the scheduler, see a run's history and jump to its pane, create one, or ask an Agent to draft it
+- Remote Access: "Keep Running When Solco Quits" — a background service keeps phones working while the app is closed
+- Phone: each Assistant's conversation, inbox and Coordinator start — the full Assistants experience on Android
+- Phone: optional Android system notifications for Assistant and automation steps, with tap-to-open routing
+- Phone: Assistant replies stream live into Chat and missed frames recover after a drop
+
+### Fixed
+
+- Stability: fixed a crash after the app ran for hours — bridge messages no longer enter the WebView's JavaScript heap
+- Assistants: streaming survives drops and transcript shifts; uncertain reports are reconciled, not guessed
+- Assistants: a retried run never repeats a prompt the Agent transcript already holds
+- Assistants: a review merge never touches files in the main checkout
+- Assistants: a run that cannot start says so instead of hanging
+- Assistants: stopping a Coordinator closes its pane; a run finishing while the daemon stops stays resumable
+- Assistants: a closed workspace ends the run as cancelled, with the reason in the inbox
+- Chat: the stale Stop button retires when the Agent finishes and the first Send goes through
+- Automations: an empty page no longer flashes a "Loading…" spinner every few seconds — only the first read shows one
+- Automations: the scheduler's login service no longer shares its name with the upstream plugin's
+- Automations: turning on Claude Code in Settings → Agents also records Claude's trust for the worktree folder, so runs no longer stop on "trust this folder"; a run that still meets that question (Claude or Codex) answers it for its own worktree or repository only — project MCP approvals are still yours to give
+- Automations: an Agent picked in the form is saved under the kind Herdr accepts
+- Automations: a Routine edited by hand pauses and asks for a fresh approval instead of firing the old definition
+- Automations: a failed routine names the stable gate reason
+- Automations: the scheduler keeps Assistants alive without Herdr sessions and wakes for queued work without duplicates
+- Dialogs: the remote, New Task and New Automation forms label every field above them
+- Sessions: an Assistant run no longer leaves its marker in the session title
+- Terminal: apps reporting program status (OSC 7501) update the tab again; Solco's own agent hooks win
+- Tray: the popover follows the tray icon's space and display, fixing flicker on fullscreen displays
+- Phone Chat: reconnects are fenced and WebView updates publish after render, ending ghost updates
+- Config: settings writes are serialised and fsynced — stale full-file saves can no longer clobber newer ones
+
+### Improved
+
+- Onboarding: the first-run guide is centred with more breathing room
+- Assistants: typed @ mentions, bounded group delivery and chat-first polish from the 2026-11-04 audit
+- Phone: Home lists agents as calm borderless rows with per-row actions under ⋯
+
+### Internal
+
+- Wire contracts: Host golden fixtures and the mobile Zod schemas stay in sync (automated check)
+- Assistants: closed the 3.1 parity ledger (1,193 cases) and wired the checker to named tests; Mac.app and phone acceptance rigs
+- Automations: one dispatcher owns scheduling, with a legacy-rule ledger and history bridge
+
 ## v0.12.2 — 2026-11-03
 
 ### New
