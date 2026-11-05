@@ -372,6 +372,9 @@ func (r *Reviewer) Start(requestID, taskID string) (Review, bool, error) {
 	if err != nil {
 		return Review{}, false, err
 	}
+	if len(cmds) == 0 && r.Store.TaskRequiresChecks(task.ID) {
+		return Review{}, false, fmt.Errorf("%w: this task requires checks and its Assistant has none approved", ErrChecksRequired)
+	}
 	results := []CheckResult{}
 	state := ReviewReady
 	for _, c := range cmds {

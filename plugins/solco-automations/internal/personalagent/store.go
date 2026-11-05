@@ -39,6 +39,7 @@ var (
 	ErrNotClaimable      = errors.New("task is not claimable")
 	ErrBadState          = errors.New("state does not allow this")
 	ErrInvalid           = errors.New("invalid input")
+	ErrChecksRequired    = errors.New("the task requires approved checks")
 	ErrHookRejected      = errors.New("webhook not authenticated")
 	ErrRateLimited       = errors.New("too many requests")
 )
@@ -772,6 +773,9 @@ var migrations = []string{
 	// Q05): Herdr gave no structured answer. Never text, never what an Agent
 	// printed in its pane.
 	`ALTER TABLE runs ADD COLUMN fail_code TEXT NOT NULL DEFAULT '';`,
+	// v30: a task may require checks (Gap Q03) — only ever stricter than its
+	// Assistant's policy, so it lives beside the task's other narrowing limit.
+	`ALTER TABLE task_limits ADD COLUMN require_checks INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func (s *Store) migrate() error {

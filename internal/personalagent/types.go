@@ -765,9 +765,20 @@ type Artifact struct {
 	RunID     string      `json:"runId,omitempty"`
 }
 
+// TaskPolicy is the review policy a task runs under and where it came from:
+// the checks are the Assistant's approved ones, a task may only add
+// RequireChecks, and a merge always needs a person.
+type TaskPolicy struct {
+	RequireChecks    bool     `json:"requireChecks"`
+	ChecksFrom       string   `json:"checksFrom"`
+	Checks           []string `json:"checks"`
+	MergeNeedsPerson bool     `json:"mergeNeedsPerson"`
+}
+
 // TaskProof is what backs a task's "done" and what is missing from it
 // (result_evidence, diff).
 type TaskProof struct {
+	Policy    TaskPolicy `json:"policy"`
 	TaskID    string     `json:"taskId"`
 	State     string     `json:"state"`
 	Artifacts []Artifact `json:"artifacts"`

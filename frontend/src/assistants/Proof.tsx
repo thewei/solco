@@ -34,6 +34,11 @@ export function ProofBox({ taskId }: { taskId: string }) {
       {open && err ? <p className="as-meta">{err}</p> : null}
       {open && proof ? (
         <>
+          <p className="as-meta">
+            {proof.policy.checks.length > 0 ? `Checks from the Assistant: ${proof.policy.checks.join(" ; ")}` : "No checks are approved for this Assistant"}
+            {proof.policy.requireChecks ? " · this task requires them" : ""}
+            {proof.policy.mergeNeedsPerson ? " · merging needs you" : ""}
+          </p>
           {proof.artifacts.length === 0 && proof.missing.length === 0 ? <p className="as-meta">Nothing to show yet.</p> : null}
           {proof.artifacts.map((a, i) => (
             <div className="as-artifact" key={`${a.kind}-${i}`}>

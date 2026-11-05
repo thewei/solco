@@ -377,7 +377,7 @@ func TestTaskProofDecodesStrictly(t *testing.T) {
 	}
 	load(t, "task-proof", &out)
 	p := out.Proof
-	if p.State != "done" || len(p.Artifacts) != 3 || p.Artifacts[0].Kind != "result" || p.Artifacts[0].SourceRef != "omp_transcript:sess-1#msg-9" || len(p.Missing) != 0 {
+	if p.State != "done" || len(p.Artifacts) != 3 || p.Artifacts[0].Kind != "result" || p.Artifacts[0].SourceRef != "omp_transcript:sess-1#msg-9" || len(p.Missing) != 0 || p.Policy.ChecksFrom != "assistant" || !p.Policy.MergeNeedsPerson || p.Policy.RequireChecks {
 		t.Fatalf("proof = %+v", p)
 	}
 	if it := p.Artifacts[1].Items; len(it) != 2 || it[0].State != "grounded" || it[1].State != "ungrounded" {

@@ -1405,10 +1405,23 @@ export interface SubagentCard {
 }
 
 /**
+ * TaskPolicy is the review policy a task runs under and where it came from:
+ * the checks are the Assistant's approved ones, a task may only add
+ * RequireChecks, and a merge always needs a person.
+ */
+export interface TaskPolicy {
+  requireChecks: boolean;
+  checksFrom: string;
+  checks: string[];
+  mergeNeedsPerson: boolean;
+}
+
+/**
  * TaskProof is what backs a task's "done" and what is missing from it
  * (result_evidence, diff).
  */
 export interface TaskProof {
+  policy: TaskPolicy;
   taskId: string;
   state: string;
   artifacts: Artifact[];

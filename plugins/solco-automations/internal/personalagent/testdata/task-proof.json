@@ -42,6 +42,12 @@
       }
     ],
     "missing": [],
+    "policy": {
+      "checks": [],
+      "checksFrom": "assistant",
+      "mergeNeedsPerson": true,
+      "requireChecks": false
+    },
     "state": "done",
     "taskId": "t_0000000000000028"
   },

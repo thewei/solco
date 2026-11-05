@@ -135,6 +135,11 @@ type CreateTaskInput struct {
 	// TimeoutMin narrows how long this task's Agent may work (1–45 minutes;
 	// 0 = the dispatcher's limit). It can only shorten the limit (Gap W09).
 	TimeoutMin int `json:"timeoutMin,omitempty"`
+	// RequireChecks (coding tasks only) refuses to review this task until its
+	// Assistant has approved checks, and so never lets it reach "ready"
+	// unchecked (Gap Q03). Like TimeoutMin it can only be stricter: there is no
+	// per-task way to waive the Assistant's own checks or the person's merge.
+	RequireChecks bool `json:"requireChecks,omitempty"`
 }
 
 // MaxTaskTimeoutMin is the longest an Agent may work, the dispatcher's default.
@@ -197,6 +202,9 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 	}
 	if in.TimeoutMin < 0 || in.TimeoutMin > MaxTaskTimeoutMin {
 		return Task{}, false, fmt.Errorf("%w: timeoutMin is 1–%d minutes (a task can only shorten the limit)", ErrInvalid, MaxTaskTimeoutMin)
+	}
+	if in.RequireChecks && in.Kind != KindCoding {
+		return Task{}, false, fmt.Errorf("%w: only a coding task has checks to require", ErrInvalid)
 	}
 	skills, err := normalizeSkills(in.RequiredSkills)
 	if err != nil {
@@ -264,8 +272,8 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 				return Task{}, err
 			}
 		}
-		if in.TimeoutMin > 0 {
-			if _, err := tx.Exec(`INSERT INTO task_limits(task_id,timeout_min) VALUES(?,?)`, id, in.TimeoutMin); err != nil {
+		if in.TimeoutMin > 0 || in.RequireChecks {
+			if _, err := tx.Exec(`INSERT INTO task_limits(task_id,timeout_min,require_checks) VALUES(?,?,?)`, id, in.TimeoutMin, in.RequireChecks); err != nil {
 				return Task{}, err
 			}
 		}
@@ -748,4 +756,10 @@ func (s *Store) TaskTimeout(taskID string) time.Duration {
 		return 0
 	}
 	return time.Duration(m) * time.Minute
+}
+
+// TaskRequiresChecks says whether the task asked for approved checks.
+func (s *Store) TaskRequiresChecks(taskID string) bool {
+	var n int
+	return s.db.QueryRow(`SELECT require_checks FROM task_limits WHERE task_id=?`, taskID).Scan(&n) == nil && n != 0
 }

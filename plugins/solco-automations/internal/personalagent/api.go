@@ -51,6 +51,8 @@ func codeFor(err error) *CodedError {
 		return coded("not_claimable", "%v", err)
 	case errors.Is(err, ErrReplanLimit):
 		return coded("replan_limit", "%v", err)
+	case errors.Is(err, ErrChecksRequired):
+		return coded("checks_required", "%v", err)
 	case errors.Is(err, ErrBadState):
 		return coded("bad_state", "%v", err)
 	case errors.Is(err, ErrHookRejected):

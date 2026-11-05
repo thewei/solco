@@ -46,8 +46,19 @@ type Artifact struct {
 	RunID     string      `json:"runId,omitempty"`
 }
 
+// TaskPolicy is the review policy this task runs under and where it came from
+// (Gap Q03): the checks are always the Assistant's approved ones, a task may
+// only add RequireChecks, and a merge always needs a person.
+type TaskPolicy struct {
+	RequireChecks    bool     `json:"requireChecks"`
+	ChecksFrom       string   `json:"checksFrom"`
+	Checks           []string `json:"checks"`
+	MergeNeedsPerson bool     `json:"mergeNeedsPerson"`
+}
+
 // TaskProof is a task's evidence and what is missing from it.
 type TaskProof struct {
+	Policy    TaskPolicy `json:"policy"`
 	TaskID    string     `json:"taskId"`
 	State     string     `json:"state"`
 	Artifacts []Artifact `json:"artifacts"`
@@ -64,6 +75,11 @@ func (s *Store) TaskProof(taskID string) (TaskProof, error) {
 		return TaskProof{}, err
 	}
 	p := TaskProof{TaskID: t.ID, State: t.State, Artifacts: []Artifact{}, Missing: []string{}}
+	checks, err := s.Checks(t.AssistantID)
+	if err != nil {
+		return p, err
+	}
+	p.Policy = TaskPolicy{RequireChecks: s.TaskRequiresChecks(t.ID), ChecksFrom: "assistant", Checks: checks, MergeNeedsPerson: true}
 	runs, err := s.ListRuns(t.ID) // newest first
 	if err != nil {
 		return p, err
