@@ -100,3 +100,6 @@
 - 2026-11-05 并发/依赖类验收：用 Coordinator 自己的 CLI 动作（`goal create` + `goal set-plan`）写计划，证据取 `runs.started_at/finished_at`（同毫秒启动=并行；依赖项晚于前置完成=门禁）与 `goal_facts` 序列，别靠肉眼看 GUI 刷新。
 - 2026-11-05 每个新增的 `Solco-…` 系统前缀（Run-Id、automated status request、wake）都会进到 OMP 会话的首条用户行 → 同时检查三处：Chat 页折叠（assistantBrief）、history 标题清洗（cleanTitleCandidate）、Sessions 列表；漏一处就会在侧栏/列表里以乱码标题露出。
 - 2026-11-05 给 Go 结构体加线上字段一律 `omitempty`（如 `Assistant.System`），否则会动所有 golden；改完必须 `go tool mygo generate` 再 `bun run build`，并记得 solco-mobile 的 chat-page 需重新同步。
+- 2026-11-05 重建隔离实例的固定配方：写 `stop` 文件 → `launchctl remove` → worktree 移到 HEAD → 重打 `mygo.config.ts` 补丁 → 重建插件二进制 + `go tool mygo build` → 重新 `launchctl submit`；沙箱全新所以会再出现 onboarding，CLI 建的 Assistant 要等一次轮询才进侧栏。
+- 2026-11-05 WebView 输入：`computer_set_value` 对 Chat 输入框读回为空且不触发 React 状态 → 先 `computer_click` 输入框拿到 caret，再 `computer_type`（必须带 app target）+ `computer_key Return`；已验证 Coordinator 启动并回复。
+- 2026-11-05 **别在持久 Shell 里 `source env.sh`**：它改了 HOME/PATH/XDG，后续 `touch ~/.cache/…`、清理命令全落到沙箱路径（实际踩到）；一律用 `( . env.sh; cmd )` 子 shell。CLI 的 `goal create` 把 `assistantId` 放进 JSON body，不是位置参数。

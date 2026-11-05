@@ -94,3 +94,4 @@
 - 修复：`routine_failed` 带稳定原因码；手改已批准 Routine 后暂停+事实+新审批卡（R05/R08）；系统 Automations 助手无聊天框且 Coordinator 启动被拒；自动状态请求/唤醒折叠为 System instructions 芯片；Routine 结果进入 Coordinator 报告（实机验证）。
 - AC-03（两项并发 + 第三项依赖）Mac 段 **PASS**（A/B 同毫秒启动，C 在二者完成后 1.7 s 启动，D 等人确认）；修复 worker 标题被 `Solco-Run-Id` 占据；报告 `2026-11-05-mac-app-ac03.md`。
 - 开放：F4（有计划的草稿 Goal 不进 Needs you）；Coordinator 用自然语言自写计划未用真模型验证；Android 全部未做。
+- 重建实例复验：F1（手改 Routine → 暂停 + 事实 + 新审批卡）、F2（系统助手无聊天框）、自动状态请求折叠为 “System instructions” 芯片均在实机通过；隔离实例已清理。
