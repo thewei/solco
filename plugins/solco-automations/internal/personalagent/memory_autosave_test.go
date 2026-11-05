@@ -108,3 +108,37 @@ func TestAutosaveNeverAppliesToFileEditsOrCredentialsOrAForgedGrant(t *testing.T
 		t.Fatalf("no owner key must mean no auto-approval: %+v", m)
 	}
 }
+
+// A08: an Agent that proposes what is already remembered (same words up to
+// case and spacing) gets the existing item back — no second row, no second
+// candidate for the person to answer, no second receipt. Forgotten items do
+// not count, and files/people are not deduped here (their own paths decide).
+func TestAgentProposalOfAnExistingMemoryReturnsTheExistingItem(t *testing.T) {
+	e := newGrantEnv(t, true)
+	e.create(t, "g1", e.grant(gid1, e.ada.ID, CapMemoryAutosave, map[string][]string{"kind": {"preference"}}))
+	first := e.propose(t, "p1", "preference", "Likes short answers")
+	again := e.propose(t, "p2", "preference", "  likes   SHORT answers ")
+	if again.ID != first.ID || again.Revision != first.Revision {
+		t.Fatalf("a duplicate must return the existing item: first=%+v again=%+v", first, again)
+	}
+	var n int
+	_ = e.s.db.QueryRow(`SELECT COUNT(*) FROM memory_items WHERE assistant_id=?`, e.ada.ID).Scan(&n)
+	if n != 1 {
+		t.Fatalf("memory rows = %d", n)
+	}
+	if c := receiptCount(t, e, "decision='allow'"); c != 1 {
+		t.Fatalf("a duplicate must not spend the grant again: %d receipts", c)
+	}
+	// Forgotten items are gone: the same words are a fresh proposal.
+	if _, _, err := e.s.ForgetMemory("f1", first.ID, first.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if third := e.propose(t, "p3", "preference", "Likes short answers"); third.ID == first.ID {
+		t.Fatalf("a forgotten memory must not be resurrected: %+v", third)
+	}
+	// Another Assistant's identical memory is its own.
+	b, _, err := e.s.ProposeMemory("pb", ProposeMemoryInput{AssistantID: e.bob.ID, Kind: "preference", Content: "Likes short answers", SourceRef: "run:r_2"})
+	if err != nil || b.AssistantID != e.bob.ID {
+		t.Fatalf("bob = %+v %v", b, err)
+	}
+}

@@ -89,6 +89,13 @@ func (s *Store) proposeAs(author, requestID string, in ProposeMemoryInput) (Memo
 		return MemoryItem{}, false, fmt.Errorf("%w: that looks like a credential; memory never keeps credentials", ErrInvalid)
 	}
 	return execute(s, requestID, "memory.propose", in, func(tx *sql.Tx) (MemoryItem, error) {
+		if author == MemByAgent {
+			// An Agent may not queue what is already remembered (Gap A08): the
+			// same words, up to case and spacing, are the existing item.
+			if dup, found, err := existingMemoryTx(tx, in.AssistantID, in.Content); err != nil || found {
+				return dup, err
+			}
+		}
 		m, err := s.insertMemoryTx(tx, in, MemoryCandidate, author)
 		if err != nil || author != MemByAgent || s.verifier == nil {
 			return m, err
@@ -327,4 +334,25 @@ func (s *Store) queryMemory(q string, args ...any) ([]MemoryItem, error) {
 		out = append(out, m)
 	}
 	return out, wrapBusy(rows.Err())
+}
+
+// existingMemoryTx finds a kept (not forgotten) item of the Assistant whose
+// words equal content up to case and spacing.
+func existingMemoryTx(tx *sql.Tx, assistantID, content string) (MemoryItem, bool, error) {
+	rows, err := tx.Query(`SELECT `+memoryCols+` FROM memory_items WHERE assistant_id=? AND state<>? ORDER BY created_at, id`, assistantID, MemoryForgotten)
+	if err != nil {
+		return MemoryItem{}, false, err
+	}
+	defer rows.Close()
+	want := normalMemory(content)
+	for rows.Next() {
+		m, err := scanMemory(rows)
+		if err != nil {
+			return MemoryItem{}, false, err
+		}
+		if normalMemory(m.Content) == want {
+			return m, true, nil
+		}
+	}
+	return MemoryItem{}, false, rows.Err()
 }

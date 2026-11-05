@@ -2,6 +2,7 @@ package personalagent
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"strings"
 	"testing"
@@ -95,7 +96,7 @@ func TestContextBudgetIsBounded(t *testing.T) {
 	s, _ := openTest(t)
 	a := mustAssistant(t, s, "a1", "Ada")
 	for i := 0; i < 60; i++ {
-		approvedMem(t, s, "m"+string(rune('A'+i/26))+string(rune('a'+i%26)), a.ID, strings.Repeat("filler words go here ", 20))
+		approvedMem(t, s, "m"+string(rune('A'+i/26))+string(rune('a'+i%26)), a.ID, fmt.Sprintf("note %d ", i)+strings.Repeat("filler words go here ", 20))
 	}
 	approvedMem(t, s, "needle", a.ID, "The deploy key rotation happens on Fridays")
 	approvedMem(t, s, "huge", a.ID, strings.Repeat("blah ", 1600))
