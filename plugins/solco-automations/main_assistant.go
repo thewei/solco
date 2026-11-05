@@ -20,7 +20,16 @@ import (
 // brief never lands in argv or `ps`), one JSON object out. Failures are JSON
 // too, with a stable code, and exit 1.
 func assistantCmd(args []string) error {
-	store, err := personalagent.Open(personalagent.DBPath())
+	// The owner's public key (if one is configured) is what makes a grant
+	// count; without it no grant ever authorises anything.
+	ownerKey, err := personalagent.OwnerKeyOption(personalagent.OwnerKeyPath())
+	if err != nil {
+		// An unreadable key never widens anything: grants stay inert, the
+		// rest of the core keeps working.
+		fmt.Fprintf(os.Stderr, "assistants: %v; grants will not authorise anything\n", err)
+		ownerKey = func(*personalagent.Store) {}
+	}
+	store, err := personalagent.Open(personalagent.DBPath(), ownerKey)
 	if err != nil {
 		return printAssistantError(err)
 	}

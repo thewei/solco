@@ -74,7 +74,14 @@ type personal struct {
 }
 
 func startPersonal(n *notify.Notifier) *personal {
-	store, err := personalagent.Open(personalagent.DBPath())
+	ownerKey, err := personalagent.OwnerKeyOption(personalagent.OwnerKeyPath())
+	if err != nil {
+		// An unreadable key never widens anything: grants stay inert, the
+		// rest of the core keeps working.
+		log.Printf("assistants: %v; grants will not authorise anything", err)
+		ownerKey = func(*personalagent.Store) {}
+	}
+	store, err := personalagent.Open(personalagent.DBPath(), ownerKey)
 	if err != nil {
 		log.Printf("assistants: store unavailable, Assistants are paused: %v", err)
 		return nil

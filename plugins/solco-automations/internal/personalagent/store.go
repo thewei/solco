@@ -62,6 +62,9 @@ type Store struct {
 	path string
 	busy time.Duration
 	now  func() time.Time
+	// verifier checks owner seals on grants; nil = no owner key = no grant
+	// ever authorises anything.
+	verifier GrantVerifier
 }
 
 // Open creates (0600) or opens the database and migrates it forward.
@@ -720,6 +723,36 @@ var migrations = []string{
 		received_at INTEGER NOT NULL,
 		UNIQUE(key_id, delivery_id)
 	);`,
+	// v27: capability grants and the receipts of their decisions (Gap A04).
+	// A grant is immutable and sealed by the owner's key; the core verifies the
+	// seal at use time, so a row inserted by hand authorises nothing.
+	`CREATE TABLE capability_grants (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		capability TEXT NOT NULL,
+		effect TEXT NOT NULL,
+		scope TEXT NOT NULL DEFAULT '{}',
+		max_per_day INTEGER NOT NULL DEFAULT 0,
+		issued_at INTEGER NOT NULL,
+		expires_at INTEGER NOT NULL,
+		revoked_at INTEGER NOT NULL DEFAULT 0,
+		issued_by TEXT NOT NULL DEFAULT 'owner',
+		seal TEXT NOT NULL DEFAULT '',
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX capability_grants_assistant ON capability_grants(assistant_id, capability);
+	CREATE TABLE authorization_receipts (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL,
+		grant_id TEXT NOT NULL DEFAULT '',
+		capability TEXT NOT NULL,
+		action_hash TEXT NOT NULL DEFAULT '',
+		request_id TEXT NOT NULL UNIQUE,
+		decision TEXT NOT NULL,
+		reason TEXT NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX authorization_receipts_grant ON authorization_receipts(grant_id, created_at);`,
 }
 
 func (s *Store) migrate() error {

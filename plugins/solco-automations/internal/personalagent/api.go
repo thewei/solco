@@ -145,7 +145,7 @@ func flagValue(args []string, name string) (string, []string) {
 
 func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
-		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|activity|report|group|persona|routine|proactivity|legacy-export>")
+		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|activity|report|group|persona|routine|proactivity|hook|grant|legacy-export>")
 	}
 	for _, x := range args {
 		if x == "--as" {
@@ -310,6 +310,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.trigger(rest, body)
 	case "hook":
 		return a.hook(rest, body)
+	case "grant":
+		return a.grant(rest, body)
 	case "run":
 		return a.run(rest, body)
 	}
