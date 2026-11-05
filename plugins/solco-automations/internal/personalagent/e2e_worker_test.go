@@ -935,3 +935,75 @@ func TestE2EWakeTurnSavesACheckpointThroughTheRealExtension(t *testing.T) {
 		t.Fatalf("the wake turn did not save its checkpoint through the extension: %+v %v", cp, err)
 	}
 }
+
+// C02/C08 on a real Herdr + OMP: the extension only shapes the call; the core
+// decides. A Coordinator that pauses its own goal succeeds, and the same call
+// aimed at another Assistant's goal changes nothing.
+func TestE2ECoordinatorScopeIsEnforcedByTheCoreThroughTheRealExtension(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go not installed")
+	}
+	goEnv := append(os.Environ(), "GOTOOLCHAIN=auto")
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	pluginLayout(t, sb, goBin, goEnv)
+	sb.model.delay = 2 * time.Second
+
+	s, err := Open(DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ada := mustAssistant(t, s, "e2e-scope-a", "Ada")
+	bob := mustAssistant(t, s, "e2e-scope-b", "Bob")
+	mine := activeGoalWithPlan(t, s, ada, twoStepPlan())
+	theirs := activeGoalWithPlan(t, s, bob, twoStepPlan())
+
+	sb.model.mu.Lock()
+	sb.model.scripts["*"] = []fixtureStep{{text: "Ready."}}
+	sb.model.scripts["last:Solco automated wake"] = []fixtureStep{
+		{tool: "solco_assistant", args: map[string]any{"action": "goal.pause", "target": mine.ID, "payload": `{"requestId":"e2e-scope-own-0001"}`}},
+		{tool: "solco_assistant", args: map[string]any{"action": "goal.pause", "target": theirs.ID, "payload": `{"requestId":"e2e-scope-other-0001"}`}},
+		{text: "Paused my own goal; the other one is not mine."},
+	}
+	sb.model.mu.Unlock()
+
+	c, _, err := s.StartCoordinatorAs("e2e-scope-start", ada.ID, "omp", "smoke/smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
+	if run, err := d.RunTask(t.Context(), c.TaskID); err != nil || run.Status != RunDone {
+		t.Fatalf("coordinator: %+v %v", run, err)
+	}
+	if _, _, err := s.SetProactivity("e2e-scope-pro", ProactivityInput{AssistantID: ada.ID, Level: LevelFollowUp, DailyBudget: 5}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := execute(s, "", "e2e.wake", nil, func(tx *sql.Tx) (bool, error) {
+		_, _, err := queueCoordinatorWakeTx(tx, ada.ID, "Heartbeat: pause the first goal.", s.nowMS())
+		return true, err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	home := os.Getenv("HOME")
+	pump := &ReportPump{Store: s, Submit: SubmitReport, Ready: ReportReady, Blocked: ReportDialog,
+		Verify: func(marker string, at int64) (ReplyEvidence, error) { return FindOMPReportReplySince(home, marker, at) }}
+	deadline := time.Now().Add(120 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := pump.Tick(); err != nil {
+			t.Fatal(err)
+		}
+		if r, _ := s.GetCoordinatorReport(ada.ID); r.ReplyState == ReplyVerified {
+			break
+		}
+		time.Sleep(1500 * time.Millisecond)
+	}
+	g1, _ := s.GetGoal(mine.ID)
+	g2, _ := s.GetGoal(theirs.ID)
+	if g1.State != GoalPaused {
+		t.Fatalf("the Coordinator's own goal should be paused through the core, got %q", g1.State)
+	}
+	if g2.State != GoalActive {
+		t.Fatalf("another Assistant's goal must be untouched, got %q", g2.State)
+	}
+}

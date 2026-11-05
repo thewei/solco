@@ -103,3 +103,6 @@
 - 2026-11-05 重建隔离实例的固定配方：写 `stop` 文件 → `launchctl remove` → worktree 移到 HEAD → 重打 `mygo.config.ts` 补丁 → 重建插件二进制 + `go tool mygo build` → 重新 `launchctl submit`；沙箱全新所以会再出现 onboarding，CLI 建的 Assistant 要等一次轮询才进侧栏。
 - 2026-11-05 WebView 输入：`computer_set_value` 对 Chat 输入框读回为空且不触发 React 状态 → 先 `computer_click` 输入框拿到 caret，再 `computer_type`（必须带 app target）+ `computer_key Return`；已验证 Coordinator 启动并回复。
 - 2026-11-05 **别在持久 Shell 里 `source env.sh`**：它改了 HOME/PATH/XDG，后续 `touch ~/.cache/…`、清理命令全落到沙箱路径（实际踩到）；一律用 `( . env.sh; cmd )` 子 shell。CLI 的 `goal create` 把 `assistantId` 放进 JSON body，不是位置参数。
+- 2026-11-05 `git commit -m … -- <paths>` 不会带上**未跟踪**的新文件（会得到一个缺文件、无法编译的提交）：新增文件先 `git add -N <file>`，再 pathspec 提交，提交后 `git status --short` 确认没有遗留 `??` 属于自己的文件。
+- 2026-11-05 权限边界放核心不放扩展：TS 扩展只整形调用，身份/动作 allowlist/属主校验在 Go（`assistant --as`），并用一个 Go 测试对比扩展 `actions` 与核心 `coordinatorScope`，防两边漂移；改完用真实 Herdr+OMP e2e（`-tags e2e`）验证，不要只信 bun 单测。
+- 2026-11-05 Shell 工具里 `GOROOT` 会被环境带成旧版本（报 `version go1.25.9 does not match go tool version go1.26.2`）：一律 `env -u GOROOT go test …`，不要用 `GOTOOLCHAIN=local`。
