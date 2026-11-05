@@ -814,3 +814,67 @@ func (c *Client) TriggerAction(ctx context.Context, requestID, action, id string
 	}
 	return out.Trigger, c.do(ctx, req{requestID, rev}, &out, "trigger", action, id)
 }
+
+// OwnerStatus says whether the core has an owner public key (A04).
+func (c *Client) OwnerStatus(ctx context.Context) (OwnerStatus, error) {
+	var out struct {
+		Owner OwnerStatus `json:"owner"`
+	}
+	return out.Owner, c.do(ctx, nil, &out, "owner", "status")
+}
+
+// RegisterOwner stores the first owner public key; another one is refused
+// (`owner_key_exists`) until a sealed rotation.
+func (c *Client) RegisterOwner(ctx context.Context, requestID, publicKeyB64 string) (OwnerStatus, error) {
+	var out struct {
+		Owner OwnerStatus `json:"owner"`
+	}
+	in := struct {
+		RequestID string `json:"requestId"`
+		PublicKey string `json:"publicKey"`
+	}{requestID, publicKeyB64}
+	return out.Owner, c.do(ctx, in, &out, "owner", "register")
+}
+
+// RotateOwner hands the owner key to a new public key with the current key's seal.
+func (c *Client) RotateOwner(ctx context.Context, requestID, publicKeyB64, seal string) (OwnerStatus, error) {
+	var out struct {
+		Owner OwnerStatus `json:"owner"`
+	}
+	in := struct {
+		RequestID string `json:"requestId"`
+		PublicKey string `json:"publicKey"`
+		Seal      string `json:"seal"`
+	}{requestID, publicKeyB64, seal}
+	return out.Owner, c.do(ctx, in, &out, "owner", "rotate")
+}
+
+// Grants lists an Assistant's grants (no seals) and the grantable capabilities.
+func (c *Client) Grants(ctx context.Context, assistantID string) ([]Grant, []string, error) {
+	var out struct {
+		Grants       []Grant  `json:"grants"`
+		Capabilities []string `json:"capabilities"`
+	}
+	err := c.do(ctx, nil, &out, "grant", "list", "--assistant", assistantID)
+	return out.Grants, out.Capabilities, err
+}
+
+// CreateGrant sends a grant the owner's client already sealed.
+func (c *Client) CreateGrant(ctx context.Context, requestID string, in GrantInput) (Grant, error) {
+	var out struct {
+		Grant Grant `json:"grant"`
+	}
+	body := struct {
+		RequestID string `json:"requestId"`
+		GrantInput
+	}{requestID, in}
+	return out.Grant, c.do(ctx, body, &out, "grant", "create")
+}
+
+// RevokeGrant ends a grant at once.
+func (c *Client) RevokeGrant(ctx context.Context, requestID, id string) (Grant, error) {
+	var out struct {
+		Grant Grant `json:"grant"`
+	}
+	return out.Grant, c.do(ctx, req{RequestID: requestID}, &out, "grant", "revoke", id)
+}

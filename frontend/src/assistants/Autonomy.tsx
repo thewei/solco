@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { assistants, type AssistantsAutonomy, type AssistantsHookKey } from "../mygo";
+import { assistants, type AssistantsAutonomy, type AssistantsAutosave, type AssistantsHookKey } from "../mygo";
 
 /**
  * Autonomy (Gaps A05/A06/A09): what can wake this Assistant from outside and
@@ -52,6 +52,7 @@ export function Autonomy({ id, act }: { id: string; act: Act }) {
   const live = view.keys.filter((k) => k.status === "active");
   return (
     <>
+      <Autosave id={id} act={act} />
       <Webhook id={id} view={view} live={live.length} made={made} setMade={setMade} run={run} />
       <Triggers id={id} view={view} run={run} />
     </>
@@ -197,6 +198,116 @@ function Triggers({ id, view, run }: { id: string; view: AssistantsAutonomy; run
           <span className="as-meta">
             {t.kind} · fired {t.firesTotal} time{t.firesTotal === 1 ? "" : "s"}
             {t.state === "draft" ? " · waiting for your approval in Needs you" : ""}
+          </span>
+        </section>
+      ))}
+    </>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = { fact: "Facts", preference: "Preferences" };
+
+/**
+ * Memory autosave (Gap A04): a standing permission, sealed by Solco's own owner
+ * key, to keep this Assistant's proposed memories of chosen kinds without
+ * asking each time. It is the only thing a grant does today. Everything the
+ * Assistant could say is still screened for credentials, edits that come from
+ * files and every other kind still wait for your yes, and each use leaves a
+ * receipt. A grant expires and can be revoked at once.
+ */
+function Autosave({ id, act }: { id: string; act: Act }) {
+  const [view, setView] = useState<AssistantsAutosave | null>(null);
+  const [failed, setFailed] = useState("");
+  const [kinds, setKinds] = useState<string[]>(["preference"]);
+  const [perDay, setPerDay] = useState(5);
+  const [days, setDays] = useState(30);
+  const [note, setNote] = useState("");
+  const load = useCallback(() => {
+    assistants
+      .autosave(id)
+      .then((v) => {
+        setView(v);
+        setFailed("");
+      })
+      .catch((e) => setFailed(e instanceof Error ? e.message.replace(/^[a-z_]+: /, "") : String(e)));
+  }, [id]);
+  useEffect(() => {
+    setView(null);
+    load();
+    const timer = window.setInterval(() => !document.hidden && load(), 5000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+  if (!view) return failed ? <p className="as-meta">{failed}</p> : null;
+  const live = view.grants.filter((g) => g.status === "active");
+  const toggle = (k: string) => setKinds((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
+  return (
+    <>
+      <section className="as-card">
+        <div className="as-row">
+          <strong>Keep memories without asking</strong>
+          <span className="as-chip">{live.length} active</span>
+          <span className="as-grow" />
+          <span className="as-meta">Owner key {view.ownerKey === "ready" ? `…${view.fingerprint.slice(-6)}` : view.ownerKey === "none" ? "made on first use" : "not Solco's"}</span>
+        </div>
+        <p className="as-meta">
+          A standing permission signed by Solco: memories this Assistant proposes in the kinds you choose are kept at once. Credentials are still refused, memory edited from files and any other kind still wait for you, every use leaves a receipt, and the permission expires.
+        </p>
+        {view.ownerKey === "foreign" ? (
+          <p className="as-meta">Another owner key is registered for these Assistants, so Solco cannot sign a permission for them.</p>
+        ) : (
+          <div className="as-row">
+            {view.kinds.map((k) => (
+              <label key={k} className="as-row">
+                <input type="checkbox" checked={kinds.includes(k)} onChange={() => toggle(k)} />
+                <span>{KIND_LABEL[k] ?? k}</span>
+              </label>
+            ))}
+            <select className="as-input" value={perDay} onChange={(e) => setPerDay(Number(e.target.value))} aria-label="Daily limit">
+              {[1, 5, 20, 0].map((n) => (
+                <option key={n} value={n}>
+                  {n === 0 ? "No daily limit" : `${n} a day`}
+                </option>
+              ))}
+            </select>
+            <select className="as-input" value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Lasts">
+              {[7, 30, 90].map((n) => (
+                <option key={n} value={n}>
+                  {n} days
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="as-btn primary"
+              disabled={kinds.length === 0}
+              onClick={() =>
+                act(() => assistants.enableAutosave(rid(), id, kinds, perDay, days)).then((refusal) => {
+                  setNote(refusal);
+                  load();
+                })
+              }
+            >
+              Allow
+            </button>
+          </div>
+        )}
+        {note ? <p className="as-meta">{note}</p> : null}
+      </section>
+      {view.grants.map((g) => (
+        <section key={g.id} className="as-card quiet">
+          <div className="as-row">
+            <strong>{(g.scope.kind ?? []).map((k) => KIND_LABEL[k] ?? k).join(", ")}</strong>
+            <span className={`as-chip ${g.status === "active" ? "active" : ""}`}>{g.status}</span>
+            <span className="as-grow" />
+            {g.status === "active" ? (
+              <button type="button" className="as-link" onClick={() => act(() => assistants.revokeAutosave(rid(), id, g.id)).then(() => load())}>
+                Revoke
+              </button>
+            ) : null}
+          </div>
+          <span className="as-meta">
+            {g.maxPerDay ? `${g.maxPerDay} a day` : "no daily limit"} · until {when(g.expiresAt)}
+            {g.status === "active" && !g.verified ? " · not verified by the core — nothing is saved automatically" : ""}
           </span>
         </section>
       ))}

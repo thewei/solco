@@ -1,0 +1,17 @@
+{
+  "memory": {
+    "assistantId": "a_0000000000000001",
+    "content": "Likes the weekly digest on Monday",
+    "createdAt": 1800000003000,
+    "id": "m_0000000000000026",
+    "kind": "preference",
+    "revision": 2,
+    "scope": "assistant",
+    "sharedWith": [],
+    "sourceRef": "run:r_1",
+    "state": "approved",
+    "updatedAt": 1800000003000
+  },
+  "replayed": false,
+  "schema": 1
+}

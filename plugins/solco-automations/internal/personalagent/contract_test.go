@@ -2,6 +2,8 @@ package personalagent
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -182,6 +184,31 @@ func TestGoldenFixtures(t *testing.T) {
 	run("trigger-list", ``, "assistant", "trigger", "list", "--assistant", aid)
 	run("trigger-withdrawn", `{"requestId":"g-tw"}`, "assistant", "trigger", "cancel", trgID)
 	run("hook-key-revoked", `{"requestId":"g-hr"}`, "assistant", "hook", "key", "revoke", hkID)
+
+	// Owner key and grants (Gap A04): the owner's client registers a public key,
+	// seals a memory.autosave grant, and an Agent's proposal is then kept at once.
+	t.Setenv("SOLCO_OWNER_PUBKEY_FILE", filepath.Join(t.TempDir(), "owner.pub"))
+	ownerSeed := make([]byte, ed25519.SeedSize)
+	for i := range ownerSeed {
+		ownerSeed[i] = 7
+	}
+	ownerPriv := ed25519.NewKeyFromSeed(ownerSeed)
+	ownerPub := base64.StdEncoding.EncodeToString(ownerPriv.Public().(ed25519.PublicKey))
+	run("owner-status-none", ``, "assistant", "owner", "status")
+	run("owner-registered", fmt.Sprintf(`{"requestId":"g-or","publicKey":%q}`, ownerPub), "assistant", "owner", "register")
+	WithGrantVerifier(Ed25519Verifier(ownerPriv.Public().(ed25519.PublicKey)))(s)
+	now = now.Add(time.Second)
+	grantIn := GrantInput{ID: "gr_00000000000000a1", AssistantID: aid, Capability: CapMemoryAutosave, Effect: "allow",
+		Scope: map[string][]string{"kind": {"preference"}}, MaxPerDay: 5, IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(30 * 24 * time.Hour).UnixMilli()}
+	grantIn.Seal = base64.StdEncoding.EncodeToString(ed25519.Sign(ownerPriv, GrantPayload(grantIn)))
+	grantBody, _ := json.Marshal(struct {
+		RequestID string `json:"requestId"`
+		GrantInput
+	}{"g-gr", grantIn})
+	run("grant-created", string(grantBody), "assistant", "grant", "create")
+	run("grant-list", ``, "assistant", "grant", "list", "--assistant", aid)
+	run("memory-autosaved", fmt.Sprintf(`{"requestId":"g-mauto","assistantId":%q,"kind":"preference","content":"Likes the weekly digest on Monday","sourceRef":"run:r_1"}`, aid), "assistant", "memory", "propose")
+	run("grant-revoked", `{"requestId":"g-grv"}`, "assistant", "grant", "revoke", grantIn.ID)
 
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError

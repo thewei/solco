@@ -1,0 +1,22 @@
+{
+  "grant": {
+    "assistantId": "a_0000000000000001",
+    "capability": "memory.autosave",
+    "effect": "allow",
+    "expiresAt": 1802592003000,
+    "id": "gr_00000000000000a1",
+    "issuedAt": 1800000003000,
+    "issuedBy": "owner",
+    "maxPerDay": 5,
+    "scope": {
+      "kind": [
+        "preference"
+      ]
+    },
+    "sealed": true,
+    "status": "active",
+    "verified": true
+  },
+  "replayed": false,
+  "schema": 1
+}

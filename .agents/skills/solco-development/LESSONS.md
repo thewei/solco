@@ -111,3 +111,5 @@
 - 2026-11-05 新增 CLI 子命令后，Store 级单测 + fakeCore 都会绿，却漏掉**参数个数/flag 解析**错误（`hook events <id> --limit N` 被写成 `len(args)!=2`）；只有"Host → 真插件二进制 → SQLite"的回归（`TestAutonomyManagementAgainstTheRealCore` 风格）才抓得到。每个新 CLI 命令至少让 golden 契约测试用**和客户端完全相同的参数**调一次。
 - 2026-11-05 管理面里"路径给的 Assistant 必须真拥有这个 key/trigger"要先列后核对（别人的 id 一律 404），并在 fakeCore 里让别人的 list 返回空，否则测试永远验不到越权。密钥 secret 只在 create 响应出现一次——列表/快照/日志/golden（除 created）里 grep 不到 `secret` 本身就是断言。
 - 2026-11-05 做"身份/授权"类功能先用真二进制做越权实验再设计（隔离 `HERDR_PLUGIN_STATE_DIR`）：本次实测 `--as` 只是约定——裸 CLI 与直接写 SQLite 同用户都能做 Owner 的事。因此授权证据必须是 Agent 拿不到的东西（Owner 私钥签名），而不是"来自哪个入口"；并且每个"伪造/篡改"测试都做变异验证（把校验改成恒真，测试必须变红）。已知做不到的部分写成 tripwire 测试（`TestKnownResidual…`）+ 威胁模型残余风险，别假装解决。手改库的坏行要当惰性处理，不要让整个决策 `internal` 报错。
+- 2026-11-05 Shell 工具里 `cmd &`/`nohup … &` 在该次调用结束时会被一起杀掉（输出文件 0 字节、进程不在）：长时间门禁一律把脚本放 `/tmp/x.sh`，用 `bash /tmp/x.sh` + `block_until_ms: 0` 起后台，再 `AwaitShell`。root `go test ./...` 全量约 3 分钟（nativeui 130s）。
+- 2026-11-05 root 与插件各自实现同一份"签名字节"（`GrantPayload`）时，两边都钉同一个金向量（固定 seed→固定 payload+seal），再加一个"root 签→真二进制核心验"的 e2e（`TestRealPluginBinaryOwnerGrantAutosave`）；只做单侧单测抓不到 JSON 规范化漂移。

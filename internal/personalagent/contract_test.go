@@ -2,6 +2,7 @@ package personalagent
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -295,5 +296,52 @@ func TestMemoryAndProactivityGolden(t *testing.T) {
 	load(t, "proactivity-set", &set)
 	if def.Proactivity.Level != "follow_up" || def.Proactivity.Revision != 0 || set.Proactivity.Level != "suggest" || set.Proactivity.Revision != 1 || set.Proactivity.TZ != "Asia/Shanghai" {
 		t.Fatalf("proactivity = %+v / %+v", def.Proactivity, set.Proactivity)
+	}
+}
+
+// A04: the grant wire decodes strictly, and the owner-side sealing here
+// reproduces the plugin's golden vector byte for byte.
+func TestGrantAndOwnerFixturesAndSealingVector(t *testing.T) {
+	var list struct {
+		Schema       int      `json:"schema"`
+		Grants       []Grant  `json:"grants"`
+		Capabilities []string `json:"capabilities"`
+	}
+	load(t, "grant-list", &list)
+	if len(list.Grants) != 1 || !list.Grants[0].Verified || list.Grants[0].Capability != "memory.autosave" || len(list.Capabilities) == 0 {
+		t.Fatalf("grants = %+v", list)
+	}
+	var one struct {
+		Schema   int   `json:"schema"`
+		Grant    Grant `json:"grant"`
+		Replayed bool  `json:"replayed"`
+	}
+	load(t, "grant-created", &one)
+	load(t, "grant-revoked", &one)
+	if one.Grant.Status != "revoked" {
+		t.Fatalf("revoked = %+v", one.Grant)
+	}
+	var owner struct {
+		Schema int         `json:"schema"`
+		Owner  OwnerStatus `json:"owner"`
+	}
+	load(t, "owner-status-none", &owner)
+	load(t, "owner-registered", &owner)
+	if !owner.Owner.Configured || owner.Owner.Fingerprint == "" {
+		t.Fatalf("owner = %+v", owner)
+	}
+
+	seed := make([]byte, ed25519.SeedSize)
+	for i := range seed {
+		seed[i] = 7
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	in := GrantInput{ID: "gr_00000000000000aa", AssistantID: "a_0000000000000001", Capability: "memory.autosave", Effect: "allow",
+		Scope: map[string][]string{"kind": {"preference", "fact"}}, MaxPerDay: 5, IssuedAt: 1800000000000, ExpiresAt: 1800086400000}
+	if got := string(GrantPayload(in)); got != "solco-grant-v1\n{\"id\":\"gr_00000000000000aa\",\"assistantId\":\"a_0000000000000001\",\"capability\":\"memory.autosave\",\"effect\":\"allow\",\"scope\":{\"kind\":[\"fact\",\"preference\"]},\"maxPerDay\":5,\"issuedAt\":1800000000000,\"expiresAt\":1800086400000}" {
+		t.Fatalf("payload drifted from the plugin's: %q", got)
+	}
+	if got := SealGrant(priv, in).Seal; got != "j7x5VuKXUtOepb0z2POGe9AH1E2ofJlnU9Sq6mnJ+TYcpmeA8EYzzPThOYYfRcxU3QFWwt7ns8y72T+8gnL7BA==" {
+		t.Fatalf("seal drifted from the plugin's: %q", got)
 	}
 }

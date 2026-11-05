@@ -66,3 +66,44 @@ func (a *API) grant(args []string, body []byte) (any, error) {
 	}
 	return nil, coded("invalid", "unknown grant command %q", cmd)
 }
+
+// assistant owner status|register|rotate — the owner's public key (A04). Like
+// grants, none of it is in the Coordinator scope.
+func (a *API) owner(args []string, body []byte) (any, error) {
+	if len(args) == 0 {
+		return nil, coded("invalid", "usage: assistant owner <status|register|rotate>")
+	}
+	path := OwnerKeyPath()
+	var in struct {
+		common
+		PublicKey string `json:"publicKey"`
+		Seal      string `json:"seal"`
+	}
+	switch args[0] {
+	case "status":
+		st, err := OwnerKeyStatus(path)
+		if err != nil {
+			return nil, err
+		}
+		return ok("owner", st), nil
+	case "register":
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		st, err := RegisterOwnerKey(path, in.PublicKey)
+		if err != nil {
+			return nil, err
+		}
+		return ok("owner", st), nil
+	case "rotate":
+		if err := decode(body, &in); err != nil {
+			return nil, err
+		}
+		st, err := RotateOwnerKey(path, in.PublicKey, in.Seal)
+		if err != nil {
+			return nil, err
+		}
+		return ok("owner", st), nil
+	}
+	return nil, coded("invalid", "unknown owner command %q", args[0])
+}

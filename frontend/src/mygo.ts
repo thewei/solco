@@ -70,6 +70,19 @@ export interface AssistantsAutonomy {
   triggers: Trigger[];
 }
 
+/** AssistantsAutosave is the Memory autosave section of the Autonomy tab. */
+export interface AssistantsAutosave {
+  /**
+   * OwnerKey: "none" (no key yet — the first Enable makes and registers
+   * one), "ready" (Solco holds the registered key), or "foreign" (the core
+   * has another key: Solco cannot seal grants for it).
+   */
+  ownerKey: string;
+  fingerprint: string;
+  kinds: string[];
+  grants: Grant[];
+}
+
 /**
  * AssistantsDetail is the selected Assistant's light page: what the
  * conversation header, the Needs-You strip and the Chat need. The long lists
@@ -838,6 +851,23 @@ export interface GoalPlan {
   updatedAt: number;
 }
 
+/** Grant is one standing, owner-sealed permission as the core lists it. */
+export interface Grant {
+  id: string;
+  assistantId: string;
+  capability: string;
+  effect: string;
+  scope: Record<string, string[]>;
+  maxPerDay: number;
+  issuedAt: number;
+  expiresAt: number;
+  revokedAt?: number;
+  issuedBy: string;
+  sealed: boolean;
+  verified: boolean;
+  status: string;
+}
+
 /** Group is a conversation of the person with two or more Assistants. */
 export interface Group {
   id: string;
@@ -1553,6 +1583,10 @@ export const assistants = {
   autonomy(id: string): Promise<AssistantsAutonomy> {
     return call("assistants.Autonomy", id);
   },
+  /** Autosave reads the owner-key state and this Assistant's memory.autosave grants. */
+  autosave(id: string): Promise<AssistantsAutosave> {
+    return call("assistants.Autosave", id);
+  },
   /** Behavior reads the proactivity rules (defaults when never set). */
   behavior(id: string): Promise<Proactivity> {
     return call("assistants.Behavior", id);
@@ -1606,6 +1640,13 @@ export const assistants = {
   /** EditMemory rewrites an item; what the Assistant may use changes at once. */
   editMemory(requestID: string, memoryID: string, revision: number, content: string): Promise<void> {
     return call("assistants.EditMemory", requestID, memoryID, revision, content);
+  },
+  /**
+   * EnableAutosave seals and stores a memory.autosave grant for the chosen kinds.
+   * The owner's key is made and registered on first use.
+   */
+  enableAutosave(requestID: string, id: string, kinds: string[], maxPerDay: number, days: number): Promise<void> {
+    return call("assistants.EnableAutosave", requestID, id, kinds, maxPerDay, days);
   },
   /**
    * EnsureChat is the conversation's first-Send entry (2026-11-04): it starts the
@@ -1705,6 +1746,13 @@ export const assistants = {
   /** RetryTask re-queues a failed or cancelled task. */
   retryTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.RetryTask", requestID, id, revision);
+  },
+  /**
+   * RevokeAutosave ends one of this Assistant's grants at once. Revoking needs no
+   * seal: taking a permission away never needs the owner key.
+   */
+  revokeAutosave(requestID: string, id: string, grantID: string): Promise<void> {
+    return call("assistants.RevokeAutosave", requestID, id, grantID);
   },
   /** RevokeHookKey stops a key at once; deliveries already received stay listed. */
   revokeHookKey(requestID: string, id: string, keyID: string): Promise<void> {

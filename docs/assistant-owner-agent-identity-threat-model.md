@@ -52,7 +52,12 @@
 - **CLI**:`assistant grant create|list|show|revoke|decide`,全部不在 `coordinatorScope`;`list` 输出不含封印。
 - 测试:`grants_test.go`(含变异验证:把 `Verified` 恒置 true 后 `TestForgedGrantRowsAreInert` 立即红)。
 
-**尚未做**:没有任何现有动作调用 `Authorize`(骨架,未接线到审批/发布/记忆自动保存);没有 Owner 端签名 UI;所以本轮不改变任何现有行为。
+**接线(2026-11-05,用户决定"信任锚先留在 L1")**:
+- 第一个调用方是 `memory.autosave`:Agent 自己的 `memory propose`(`--as`,作者 `agent`)在同一事务里问 `authorizeTx`;仅当存在**已验证、在 scope(kind)内、未过限额/未撤销/未过期**的授权才直接转为 approved,并写 allow receipt(`authorizedBy grant:<id>`)。文件来源、人写入、其它作者永不走这条;凭据类内容仍先被拒;无 owner 公钥时整段跳过;普通"没有授权"的提议**不写收据**(噪声),只有 allow/deny 写。
+- Owner 端入口:`assistant owner status|register|rotate` + Solco 桌面 More ▸ Autonomy 顶部"Keep memories without asking"。私钥只在 Solco 的 `secrets.enc`(`assistants.owner.key`,与 Solco 其它自有凭据同级保护),首次 Allow 生成并注册公钥;**核心此后拒绝任何别的公钥**(`owner_key_exists`),换钥只能由当前私钥签封的 `rotate`(换钥后旧授权全部失效、需重新签)——所以裸 CLI 调用换不掉锚;文件层面仍可写(R1 不变)。
+- 验证:`TestRealPluginBinaryOwnerGrantAutosave` 用真插件二进制跑通 root 签名→核心验证→Agent 提议自动保存/越 kind 等待/撤销即停/陌生人签名的授权惰性;双端 `TestGrantSealGoldenVector` 钉住同一字节。
+
+**尚未做**:发布/花钱/对外动作(`repo.*`、`task.delegate`、`automation.manage`)没有接线,也不应在信任锚升级前接线;手机端无 Autonomy/Grant 页面。
 
 ## 5. 加固阶梯(从便宜到彻底)
 
