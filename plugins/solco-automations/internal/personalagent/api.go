@@ -140,8 +140,20 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 	if len(args) < 2 || args[0] != "assistant" {
 		return nil, coded("invalid", "usage: assistant <create|list|show|rename|disable|enable|goal|memory|approval|task|run|heartbeat|event|rule|review|checks|inbox|overview|activity|report|group|persona|routine|proactivity|legacy-export>")
 	}
+	for _, x := range args {
+		if x == "--as" {
+			who, scopedArgs := flagValue(args, "--as")
+			return a.scoped(who, scopedArgs, body)
+		}
+	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
+	case "recovery":
+		if len(rest) != 2 || rest[0] != "show" {
+			return nil, coded("invalid", "usage: assistant recovery show <assistantId>")
+		}
+		d, err := a.Store.RecoveryDigest(rest[1])
+		return ok("recovery", d), err
 	case "inbox":
 		who, rest := flagValue(rest, "--assistant")
 		opt := InboxOptions{}
@@ -321,6 +333,12 @@ func (a *API) task(args []string, body []byte) (any, error) {
 		}
 		runs, err := a.Store.ListRuns(t.ID)
 		return ok("task", t, "runs", runs), err
+	case "why":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant task why <id>")
+		}
+		w, err := a.Store.TaskWhy(rest[0])
+		return ok("why", w), err
 	case "ack":
 		var in common
 		if len(rest) != 1 {

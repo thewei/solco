@@ -11,14 +11,14 @@
 | ID | 优先级 | 标记 | 状态 | 源码位置 | 测试 / RED→GREEN | commit | 闭环条件摘要 |
 |---|---|---|---|---|---|---|---|
 | C01 | P0 | B | PARTIAL | 同 C03 | e2e 证实 Prompt→受控 ToolCall→Task(owner)；外部 shell 被拒 | (本批) | **自然语言请求不能退化为普通 OMP 自行执行**；必须实际观察 Prompt→受控 ToolCall→Solco receipt→Task/Goal/Routine ID；拦截；缺：真实自然语言(非脚本模型)与 Routine/Goal 路径的真机观察|
-| C02 | P0 | B | PARTIAL | `--tools` 原生白名单 + tool_call 闸 + 5 参 ctx 取 cwd 身份 | e2e：坏扩展→不可用而非无闸 | (本批) | OMP extension 的“工具白名单”**不等于可信身份授权**：设计 scoped Broker 服务端校验 AssistantId/动作/Owner/能力/TTL/重放；；仍缺：服务端校验的 scoped token/裸 CLI 的 Owner 边界|
+| C02 | P0 | B | PARTIAL | `assistant --as` 核心侧作用域（allowlist + 属主校验 + 修订自动填充，`api_scope.go`）；TS 仅整形 | TestScopedCaller* ×3、TestExtensionActionsMatchTheCoreScope；越权一律 `forbidden`（不暴露他人 id 是否存在） | (本批) | OMP extension 的“工具白名单”**不等于可信身份授权**：设计 scoped Broker 服务端校验 AssistantId/动作/Owner/能力/TTL/重放；；仍缺：服务端校验的 scoped token/裸 CLI 的 Owner 边界|
 | C03 | P0 | V | PARTIAL | `extensions/solco-coordinator.ts` `coordinator.go CoordinatorTools` `host/agent.go explainStart` | 真实 Herdr+OMP e2e：扩展被加载、bash 被拦截、solco_assistant 建出属主 Task；坏扩展→OMP 拒绝启动(inert)并带原因；`bun test` 7；Go 白名单一致性测试 | (本批) | **打包/安装/真实 Herdr Agent --extension 是否成功加载与可调用**未证实；安装前和运行时 doctor 必须反馈缺失，不得静默变通，AC-01；真机发现：①OMP 扩展加载失败仍继续运行(未设闸) ②execute 签名为 5 参(ctx 第 5 位)，Bun 单测未暴露 ③import.meta.dir 在 OMP 加载器中不可靠。安装包/doctor 与 Mac.app 实机待做|
 | C04 | P0 | P | OPEN | | | | 已有重复启动 fence，但停机后实体 Pane/Agent 未必结束；安全 stop/restart、trust/permission blocked/uncertain 单元与 |
 | C05 | P0 | P | PARTIAL | `CreateTaskInput.RequiredSkills` | TestGapW04RequiredSkillsAreValidatedAndStored | (本批) | 强制 schema：objective、scope、requiredSkills、inputs、deliverables、acceptance/evidence、constrain；其余 schema 字段(deliverables/acceptance…)未强制|
 | C06 | P1 | M | OPEN | | | | 用户 Chat Turn→requestId→Goal/Task/Routine→Worker→Evidence→Report 需要**可追踪父子链**；同一问题不得凭模型记忆创建 |
 | C07 | P1 | P | OPEN | | | | 原 Coordinator 状态如何接续“下一步/完成条件”需可读写 durable progress、人工批准、可停止/恢复；不能把 ReportPump 当自主执行循环，AC- |
-| C08 | P1 | P | OPEN | | | | Coordinator 应能“这项先暂停/把第二项继续/告诉我为何卡住”，做 owner-scoped 状态读/写且必须有收据、语义一致的错误，AC-03/05 |
-| C09 | P1 | P | OPEN | | | | Restart/Context compact 后重新建立确切上下文（Active Goal、Task、Routine、Pending Approvals、上次报告游标）；不能无凭 |
+| C08 | P1 | P | PARTIAL | `task why`（固定语句 + 稳定码）、Coordinator 可 `goal.pause/resume`、`task.retry`；人决定的动作（approve/complete/publish/enable）被核心拒绝 | TestTaskWhyExplainsWhyItIsNotMoving、TestScopedCallerOnlyReachesTheCoordinatorsActions；Mac.app 实机待验 | | Coordinator 应能“这项先暂停/把第二项继续/告诉我为何卡住”，做 owner-scoped 状态读/写且必须有收据、语义一致的错误，AC-03/05 |
+| C09 | P1 | P | PARTIAL | `RecoveryDigest` 在 Coordinator 启动时并入 brief；`recovery show` 供压缩后重读 | TestRecoveryDigestRestatesTheRecordedState、TestCoordinatorLaunchPromptCarriesTheDigest；重启后实机待验 | | Restart/Context compact 后重新建立确切上下文（Active Goal、Task、Routine、Pending Approvals、上次报告游标）；不能无凭 |
 | C10 | P1 | E | PARTIAL | `skill_grants` + 审批卡 subjectKind=skill | TestGapC10UngrantedSkillAsksOnceAndApprovalRequeues | (本批) | **不复制每个 repo 一个 Assistant**：定义个人 Assistant 可授权哪些 Workspaces/Hosts/Apps/Skills，跨项目只能在显式 sco；Skill 授权已做；Workspaces/Hosts/Apps 范围未做|
 | W01 | P0 | B | OPEN | | | | 定义唯一 `HerdrWorkerAdapter`（名称可调）：只通过现有 Herdr API/Skill 协议启动、读状态、等结束、恢复，返回 Herdr 身份与 Solco r |
 | W02 | P0 | B | PARTIAL | `result.go` `ompresult.go` `dispatch.go finishWithResult/Recollect` `task.go FinishRunWithResult` `store.go v20` | `result_test.go` TestGapW02* RED(done+空 Result)→GREEN；真机待；隔离真实 Herdr+OMP e2e PASS(skills=[fixture-browser], bash=1, 4 grounded sources)，Android/Mac.app 待 | 17cdd98 | **当前结果回收核心缺口**：必须读到真正的 Worker 输出/最终消息并携来源（agentSessionId、messageId、读到的 byte range/文件 hash/ |
@@ -95,3 +95,5 @@
 - AC-03（两项并发 + 第三项依赖）Mac 段 **PASS**（A/B 同毫秒启动，C 在二者完成后 1.7 s 启动，D 等人确认）；修复 worker 标题被 `Solco-Run-Id` 占据；报告 `2026-11-05-mac-app-ac03.md`。
 - 开放：F4（有计划的草稿 Goal 不进 Needs you）；Coordinator 用自然语言自写计划未用真模型验证；Android 全部未做。
 - 重建实例复验：F1（手改 Routine → 暂停 + 事实 + 新审批卡）、F2（系统助手无聊天框）、自动状态请求折叠为 “System instructions” 芯片均在实机通过；隔离实例已清理。
+
+- F4：有计划的草稿 Goal 现在进 Needs you（`InboxItem.GoalID`，Open → Watching）；系统 Automations 助手头部不再显示 Coordinator 状态。

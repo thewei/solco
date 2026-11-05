@@ -33,13 +33,20 @@ export function scopedAssistant(cwd: string): string {
 }
 
 export const actions = [
-  "task.create", "task.list", "task.show", "task.graph",
-  "goal.create", "goal.list", "goal.show", "goal.plan", "goal.set-plan",
+  "task.create", "task.list", "task.show", "task.graph", "task.why", "task.retry",
+  "goal.create", "goal.list", "goal.show", "goal.plan", "goal.set-plan", "goal.pause", "goal.resume",
   "routine.draft", "routine.list", "routine.show",
   "memory.propose", "memory.list",
   "checkpoint.get", "checkpoint.set",
+  "recovery.show",
 ] as const;
 
+// Actions that change state need a stable requestId (a retry replays, never repeats).
+const mutating = new Set(["task.create", "task.retry", "goal.create", "goal.set-plan", "goal.pause", "goal.resume", "routine.draft", "memory.propose", "checkpoint.set"]);
+
+// The extension only shapes the call. Who the caller is, what it may touch and
+// whether a record is its own are decided by the Solco core (`assistant --as`),
+// so nothing here is the security boundary.
 export function route(action: string, assistantId: string, target = "", json = ""): { args: string[]; input: string } {
   if (!(actions as readonly string[]).includes(action)) throw new Error("Unsupported Solco Assistant action.");
   const [entity, operation] = action.split(".");
@@ -47,8 +54,9 @@ export function route(action: string, assistantId: string, target = "", json = "
   if (payload === null || Array.isArray(payload) || typeof payload !== "object") {
     throw new Error("Payload must be a JSON object.");
   }
-  if (action === "checkpoint.get") {
-    return { args: ["assistant", "checkpoint", "get", assistantId], input: "" };
+  const as = ["assistant", "--as", assistantId];
+  if (action === "checkpoint.get" || action === "recovery.show") {
+    return { args: [...as, entity, operation === "show" ? "show" : "get", assistantId], input: "" };
   }
   if (action === "task.create" || action === "goal.create" || action === "routine.draft" || action === "memory.propose" || action === "checkpoint.set") {
     payload.assistantId = assistantId;
@@ -63,16 +71,17 @@ export function route(action: string, assistantId: string, target = "", json = "
   }
   if (operation === "list" || operation === "graph") {
     const scoped = operation === "graph" || entity === "memory" ? [assistantId] : ["--assistant", assistantId];
-    return { args: ["assistant", entity, operation, ...scoped], input: "" };
+    return { args: [...as, entity, operation, ...scoped], input: "" };
   }
-  if (operation !== "create" && operation !== "draft" && operation !== "propose" && operation !== "set") {
+  const creates = operation === "create" || operation === "draft" || operation === "propose" || action === "checkpoint.set";
+  if (!creates) {
     if (!/^[A-Za-z0-9_-]{2,120}$/.test(target)) throw new Error("A valid Solco record ID is required.");
-    return { args: ["assistant", entity, operation, target], input: JSON.stringify(payload) };
   }
-  if (typeof payload.requestId !== "string" || !/^[A-Za-z0-9_-]{8,120}$/.test(payload.requestId)) {
+  if (mutating.has(action) && (typeof payload.requestId !== "string" || !/^[A-Za-z0-9_-]{8,120}$/.test(payload.requestId))) {
     throw new Error("Mutations need a stable unique requestId (8–120 characters; reuse it on retries).");
   }
-  return { args: ["assistant", entity, operation], input: JSON.stringify(payload) };
+  if (!creates) return { args: [...as, entity, operation, target], input: JSON.stringify(payload) };
+  return { args: [...as, entity, operation], input: JSON.stringify(payload) };
 }
 
 export default function (pi: ExtensionAPI) {
@@ -91,10 +100,10 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "solco_assistant",
     label: "Solco Assistant",
-    description: "Manage only this Assistant's durable Solco tasks, goal plans, routine drafts and its own checkpoint (read it first and save it last on every autonomous wake turn). A routine draft creates an approval card and NEVER schedules before its owner approves. Delegate browsing and research to workers through task.create. No system cron, launchd or async subagents.",
+    description: "Manage only this Assistant's durable Solco tasks, goal plans, routine drafts and its own checkpoint (read it first and save it last on every autonomous wake turn). task.why explains why a task is not moving; goal.pause / goal.resume and task.retry act on one named record; recovery.show restates the recorded state after a restart or context compaction (read it before acting, instead of trusting memory). A routine draft creates an approval card and NEVER schedules before its owner approves. Delegate browsing and research to workers through task.create. No system cron, launchd or async subagents.",
     parameters: z.object({
       action: z.enum(actions).describe("Solco operation."),
-      target: z.string().optional().describe("A goal/task/routine ID for show, plan, or set-plan."),
+      target: z.string().optional().describe("A goal/task/routine ID for show, why, retry, plan, set-plan, pause or resume."),
       payload: z.string().optional().describe("JSON object for mutations, with a stable requestId, task brief, schedule or goal plan. assistantId and agent are always taken from the owning Assistant."),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -102,15 +111,6 @@ export default function (pi: ExtensionAPI) {
         const assistantId = scopedAssistant(ctx.cwd);
         const { args, input } = route(params.action, assistantId, params.target ?? "", params.payload ?? "");
         const cli = resolve(extensionDir(), "../bin/solco-automations");
-        // ID-based actions can otherwise inspect or alter another Assistant's
-        // Goal/Task. Validate its owner through the read-only CLI before use.
-        if (params.target && (params.action.startsWith("goal.") || params.action === "task.show")) {
-          const type = params.action.split(".")[0];
-          const check = spawnSync(cli, ["assistant", type, "show", params.target], { encoding: "utf8", timeout: 10000, maxBuffer: 1 << 20 });
-          if (check.status !== 0 || JSON.parse(check.stdout)[type]?.assistantId !== assistantId) {
-            throw new Error("This record is not owned by the current Assistant.");
-          }
-        }
         const result = spawnSync(cli, args, { encoding: "utf8", input, timeout: 15000, maxBuffer: 2 << 20 });
         if (result.error) throw result.error;
         const output = result.stdout.trim();

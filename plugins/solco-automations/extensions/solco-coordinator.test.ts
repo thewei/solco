@@ -21,7 +21,7 @@ test("all repeat requests remain Solco draft routines under their owner and OMP"
     requestId: req, assistantId: "a_other", agent: "claude", headless: false,
     name: "x-digest", cron: "0 9 * * *", prompt: "Use ego-browser to summarise X.com", rationale: "Requested",
   }));
-  expect(x.args).toEqual(["assistant", "routine", "draft"]);
+  expect(x.args).toEqual(["assistant", "--as", owner, "routine", "draft"]);
   const body = JSON.parse(x.input);
   expect(body.assistantId).toBe(owner);
   expect(body.agent).toBe("omp");
@@ -37,8 +37,8 @@ test("worker creation never self-starts coding or another agent kind", () => {
   }));
   const body = JSON.parse(x.input);
   expect(body).toMatchObject({ assistantId: owner, agent: "omp", draft: true });
-  expect(route("task.graph", owner)).toEqual({ args: ["assistant", "task", "graph", owner], input: "" });
-  expect(route("task.list", owner)).toEqual({ args: ["assistant", "task", "list", "--assistant", owner], input: "" });
+  expect(route("task.graph", owner)).toEqual({ args: ["assistant", "--as", owner, "task", "graph", owner], input: "" });
+  expect(route("task.list", owner)).toEqual({ args: ["assistant", "--as", owner, "task", "list", "--assistant", owner], input: "" });
 });
 
 test("unapproved mutation requires stable idempotency receipt", () => {
@@ -87,9 +87,23 @@ test("tool reads its working directory from OMP's fifth execute argument", async
 
 test("checkpoint actions are scoped to the owning Assistant", () => {
   const g = route("checkpoint.get", "a_owner", "a_someone_else");
-  expect(g.args).toEqual(["assistant", "checkpoint", "get", "a_owner"]);
+  expect(g.args).toEqual(["assistant", "--as", "a_owner", "checkpoint", "get", "a_owner"]);
   const set = route("checkpoint.set", "a_owner", "", JSON.stringify({ requestId: "cp-12345678", assistantId: "a_other", progress: "p" }));
-  expect(set.args).toEqual(["assistant", "checkpoint", "set"]);
+  expect(set.args).toEqual(["assistant", "--as", "a_owner", "checkpoint", "set"]);
   expect(JSON.parse(set.input).assistantId).toBe("a_owner");
   expect(() => route("checkpoint.set", "a_owner", "", JSON.stringify({ progress: "p" }))).toThrow(/requestId/);
+});
+
+test("pause, resume, retry and why are single-record actions the core scopes", () => {
+  const pause = route("goal.pause", owner, "g_abc123", JSON.stringify({ requestId: req }));
+  expect(pause.args).toEqual(["assistant", "--as", owner, "goal", "pause", "g_abc123"]);
+  expect(JSON.parse(pause.input).requestId).toBe(req);
+  expect(() => route("goal.resume", owner, "g_abc123", "{}")).toThrow(/requestId/);
+  expect(() => route("task.retry", owner, "", JSON.stringify({ requestId: req }))).toThrow(/record ID/);
+  expect(route("task.why", owner, "t_abc123").args).toEqual(["assistant", "--as", owner, "task", "why", "t_abc123"]);
+  expect(route("recovery.show", owner).args).toEqual(["assistant", "--as", owner, "recovery", "show", owner]);
+  // A person's decisions are not actions at all.
+  for (const a of ["goal.approve", "goal.complete", "routine.resume", "task.publish", "approval.decide", "coordinator.stop"]) {
+    expect(() => route(a, owner, "x_1234", "{}")).toThrow(/Unsupported/);
+  }
 });

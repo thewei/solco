@@ -163,7 +163,7 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 	}
 	prompt := policy(asst, task)
 	if task.Kind == KindCoordinator && d.Policy == nil {
-		prompt = CoordinatorPrompt(asst)
+		prompt = d.Store.CoordinatorLaunchPrompt(asst)
 	}
 	var required []string
 	if task.Kind != KindCoordinator && task.Kind != KindGroupAgent {
