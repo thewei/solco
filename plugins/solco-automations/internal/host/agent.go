@@ -119,8 +119,10 @@ func (w agentWork) submit(s Session) error {
 	// The text is probably in the composer, just not submitted. Give the agent
 	// a moment, then press Enter for it, then fall back to typing it again.
 	// Each nudge re-checks the screen: a dialog that came up late would take
-	// the Enter as its answer.
-	if w.working(s, w.knobs.promptSettle) {
+	// the Enter as its answer. A transcript that already holds the prompt is a
+	// stronger answer than any screen: the Agent got it (and may even have
+	// finished inside herdr's window), so nothing is typed again.
+	if w.working(s, w.knobs.promptSettle) || promptDelivered(w.a) {
 		return nil
 	}
 	if err := w.blockedBy(s); err != nil {
@@ -130,7 +132,7 @@ func (w agentWork) submit(s Session) error {
 	if err := w.ops.AgentSubmitPending(s.PaneID); err != nil {
 		return fmt.Errorf("prompt: %w", err)
 	}
-	if w.working(s, w.knobs.promptSettle) {
+	if w.working(s, w.knobs.promptSettle) || promptDelivered(w.a) {
 		return nil
 	}
 
@@ -141,7 +143,7 @@ func (w agentWork) submit(s Session) error {
 	if err := w.ops.AgentSubmit(s.PaneID, w.a.Prompt); err != nil && !w.ops.HasCode(err, herdr.CodeStalled) {
 		return fmt.Errorf("prompt: %w", err)
 	}
-	if w.working(s, w.knobs.promptSettleLast) {
+	if w.working(s, w.knobs.promptSettleLast) || promptDelivered(w.a) {
 		return nil
 	}
 	return fmt.Errorf("prompt: the agent never started working; it may still be initialising")

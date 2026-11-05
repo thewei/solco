@@ -21,15 +21,15 @@
 | C09 | P1 | P | OPEN | | | | Restart/Context compact 后重新建立确切上下文（Active Goal、Task、Routine、Pending Approvals、上次报告游标）；不能无凭 |
 | C10 | P1 | E | OPEN | | | | **不复制每个 repo 一个 Assistant**：定义个人 Assistant 可授权哪些 Workspaces/Hosts/Apps/Skills，跨项目只能在显式 sco |
 | W01 | P0 | B | OPEN | | | | 定义唯一 `HerdrWorkerAdapter`（名称可调）：只通过现有 Herdr API/Skill 协议启动、读状态、等结束、恢复，返回 Herdr 身份与 Solco r |
-| W02 | P0 | B | PARTIAL | `result.go` `ompresult.go` `dispatch.go finishWithResult/Recollect` `task.go FinishRunWithResult` `store.go v20` | `result_test.go` TestGapW02* RED(done+空 Result)→GREEN；真机待 | COMMIT | **当前结果回收核心缺口**：必须读到真正的 Worker 输出/最终消息并携来源（agentSessionId、messageId、读到的 byte range/文件 hash/ |
-| W03 | P0 | B | PARTIAL | 同 W02：结束≠完成，读不到答案→uncertain `result_unknown` | `result_test.go`；blocked/vanished 细分待 M2.2 | COMMIT | 完成判定要区分“Agent idle / final turn / blocked / vanished / timed out / prompted but unaccepted |
+| W02 | P0 | B | PARTIAL | `result.go` `ompresult.go` `dispatch.go finishWithResult/Recollect` `task.go FinishRunWithResult` `store.go v20` | `result_test.go` TestGapW02* RED(done+空 Result)→GREEN；真机待；隔离真实 Herdr+OMP e2e PASS(skills=[fixture-browser], bash=1, 4 grounded sources)，Android/Mac.app 待 | 17cdd98 | **当前结果回收核心缺口**：必须读到真正的 Worker 输出/最终消息并携来源（agentSessionId、messageId、读到的 byte range/文件 hash/ |
+| W03 | P0 | B | PARTIAL | 同 W02：结束≠完成，读不到答案→uncertain `result_unknown` | `result_test.go`；blocked/vanished 细分待 M2.2 | 17cdd98 | 完成判定要区分“Agent idle / final turn / blocked / vanished / timed out / prompted but unaccepted |
 | W04 | P0 | P | OPEN | | | | Worker launch 必须显式协商 Skills；已安装的 `~/.agents/skills/herdr/SKILL.md` **要求 HERDR_ENV=1**；不能假定 |
 | W05 | P0 | M | OPEN | | | | X.com Worker 真正由 OMP 加载指定 `ego-browser` 执行，浏览器会话/登录态由用户授权且限任务；证明调用、URL、去重、失败；技能缺失或未授权不得偷换浏 |
-| W06 | P0 | M | PARTIAL | `WorkerResult` 含来源/工具/技能/grounded URL | `result_test.go`；Artifact/Proof 卡待 M5 | COMMIT | 定义 `WorkerResult/Proof`：摘要、结构化数据、引用/截图/文件、验证方法、失败/不确定项、需要人决策；事实与 Agent 自述分离；无证据就不自证成功，AC-0 |
+| W06 | P0 | M | PARTIAL | `WorkerResult` 含来源/工具/技能/grounded URL | `result_test.go`；Artifact/Proof 卡待 M5 | 17cdd98 | 定义 `WorkerResult/Proof`：摘要、结构化数据、引用/截图/文件、验证方法、失败/不确定项、需要人决策；事实与 Agent 自述分离；无证据就不自证成功，AC-0 |
 | W07 | P0 | P | OPEN | | | | 状态机应具备 queued/start/working/blocked/waiting_owner/awaiting_proof/ready/done/failed/uncerta |
 | W08 | P1 | P | OPEN | | | | 验证 Assistant/Host/全局并发和资源预算，重启不超过配额；优先级、取消、依赖链和非 Git 工作目录需公平调度，AC-05/07 |
 | W09 | P1 | P | OPEN | | | | OMP-first 显式化 Model、thinking、tool grants、skill grants、超时、可更改范围；继承 Assistant Policy 但任务权限只可 |
-| W10 | P1 | P | OPEN | | | | Herdr launch 不确定要查询 existing Pane/Agent、receipt，单次 submit 不重发；故障恢复演练“旧 Agent 仍在/丢帧/重启”不得双  |
+| W10 | P1 | P | PARTIAL | `host/receipt.go` `host/agent.go submit` | `host/receipt_test.go` RED(双发/误失败)→GREEN；真机 e2e `TestE2EWorkerResult…`(真实 OMP，30s，done+结果)通过；Herdr 失联/重启演练待 M6 | (本批) | Herdr launch 不确定要查询 existing Pane/Agent、receipt，单次 submit 不重发；故障恢复演练“旧 Agent 仍在/丢帧/重启”不得双  |
 | W11 | P1 | E | OPEN | | | | 编码隔离分支保持、非代码用 Assistant 私有工作目录；按产品任务 scope 执行、不污染 repo 的工作树；不能把个人浏览器 Routine 强行当 Git 工程，AC |
 | W12 | P2 | P | OPEN | | | | 先保证 OMP 本身恢复，不偷偷 fallback 到别的 provider；以后才在明确授权和同一 taskId 下增加换代理/续跑，AC-07 |
 | R01 | P0 | B | OPEN | | | | 自然语言“每天/每周/定时/周期”**强制路由至 Solco Routine draft**，系统 launchd/cron/外部 task/匿名后台 loop 数量增量为 0，A |
@@ -38,7 +38,7 @@
 | R04 | P0 | P | OPEN | | | | Scheduler 是唯一启动权限；occurrenceKey 唯一、跨进程锁、sleep catch-up/错过、overlap skip/queue、水位不重置；关闭页面仍运行 |
 | R05 | P0 | P | OPEN | | | | Solco 的**审批机制比上游更严格，应保留**；草稿/批准/被改失效/撤销/暂停/恢复必须 GUI 和 Android 同源收据，AC-02/10 |
 | R06 | P0 | B | OPEN | | | | Repo-less 个人情报 Routine 必须从 Chat 创建成功、使用 OMP headless；不能因为路径校验失败而改用 OS scheduler，AC-02 |
-| R07 | P0 | P | DONE(软件) | `heartbeat.go`/`watch.go`/`supervisor.go` 锁 `AssistantAgentKind` | `gap_agent_lock_test.go` RED(claude)→GREEN + 静态扫描 | COMMIT | **不止 Task 和 Routine，Heartbeat/自发 Worker 的 Agent 都必须锁 OMP**；全路径查找隐形 Provider 漂移，AC-09 |
+| R07 | P0 | P | DONE(软件) | `heartbeat.go`/`watch.go`/`supervisor.go` 锁 `AssistantAgentKind` | `gap_agent_lock_test.go` RED(claude)→GREEN + 静态扫描 | 17cdd98 | **不止 Task 和 Routine，Heartbeat/自发 Worker 的 Agent 都必须锁 OMP**；全路径查找隐形 Provider 漂移，AC-09 |
 | R08 | P1 | P | OPEN | | | | 显示触发来源、下次运行时区、上次 Run 结果链接、Owner、停用原因、技能和预算；支持预览/编辑及变更重新审批，AC-02/10 |
 | R09 | P1 | P | OPEN | | | | 独立于 UI/原 Coordinator 生死，重启/并发请求只能一份调度器；长时设备启动/睡眠/窗口关闭/用户登出应定义真实保证和已知限制，AC-07/10 |
 | R10 | P1 | P | OPEN | | | | 任意一次 Routine 都带 owner/request/trigger/occurrence/worker/result/report 链；日报中的链接不是“Agent 说了就 |
@@ -52,7 +52,7 @@
 | A08 | P1 | P | OPEN | | | | 长期记忆/commitment 与短期 checkpoint 分层；只写用户授权事实，去重/纠错/来源引用/敏感数据隔离，AC-05/09 |
 | A09 | P1 | M | OPEN | | | | 计划执行唤醒、结果汇报与聊天消息必须分别关联真实回合；真实回复没找到→unknown，不得冒称已反馈，AC-06 |
 | A10 | P2 | E | OPEN | | | | 不照搬一 Space 一 Agent 的 UI；允许跨空间 Personal Assistant 目标，但必须限制跨机器、跨身份和跨技能默认访问，AC-09 |
-| Q01 | P0 | B | PARTIAL | 无证据不 done（Worker 类 run） | `result_test.go`；Task 类型谓词待 | COMMIT | 不允许把 Agent “已完成”文本、无结果的 RunDone 或原聊天闲置作为成功标准；根据 Task 类型定义可验谓词，AC-04/08 |
+| Q01 | P0 | B | PARTIAL | 无证据不 done（Worker 类 run） | `result_test.go`；Task 类型谓词待 | 17cdd98 | 不允许把 Agent “已完成”文本、无结果的 RunDone 或原聊天闲置作为成功标准；根据 Task 类型定义可验谓词，AC-04/08 |
 | Q02 | P0 | P | OPEN | | | | 编码 Worker 必须留分支/差异/测试/Proof，Owner 选择 Accept/Reject/Resume；审核状态不和普通 research 结果共用无证据的 Done， |
 | Q03 | P1 | P | OPEN | | | | 任务继承审批/检查政策；仅明确授权才自动执行可逆操作，外部发布/删除/推送/合并默认需要人，AC-08/09 |
 | Q04 | P1 | M | OPEN | | | | 研究报告、浏览器快照、日志摘录、Git diff、验证步骤统一 Artifact/SourceRef，前后端能打开并检查；不可只展示一句“完成”，AC-04/08 |
