@@ -4,6 +4,19 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/**
+ * Acceptance is how a research task is judged: delivered, how authentic the
+ * delivery is (transcript, agent_note, none), how many sources the transcript
+ * grounds, and when it finished. Coding tasks have none (their review is it).
+ */
+export interface Acceptance {
+  delivered: boolean;
+  authenticity: string;
+  sourcesTotal: number;
+  sourcesGrounded: number;
+  finishedAt: number;
+}
+
 /** AppliedRevision is the revision a running surface was launched with. */
 export interface AppliedRevision {
   surface: string;
@@ -1422,6 +1435,7 @@ export interface TaskPolicy {
  */
 export interface TaskProof {
   policy: TaskPolicy;
+  acceptance?: Acceptance;
   taskId: string;
   state: string;
   artifacts: Artifact[];

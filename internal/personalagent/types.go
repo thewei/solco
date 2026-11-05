@@ -775,10 +775,22 @@ type TaskPolicy struct {
 	MergeNeedsPerson bool     `json:"mergeNeedsPerson"`
 }
 
+// Acceptance is how a research task is judged: delivered, how authentic the
+// delivery is (transcript, agent_note, none), how many sources the transcript
+// grounds, and when it finished. Coding tasks have none (their review is it).
+type Acceptance struct {
+	Delivered       bool   `json:"delivered"`
+	Authenticity    string `json:"authenticity"`
+	SourcesTotal    int    `json:"sourcesTotal"`
+	SourcesGrounded int    `json:"sourcesGrounded"`
+	FinishedAt      int64  `json:"finishedAt"`
+}
+
 // TaskProof is what backs a task's "done" and what is missing from it
 // (result_evidence, diff).
 type TaskProof struct {
-	Policy    TaskPolicy `json:"policy"`
+	Policy     TaskPolicy  `json:"policy"`
+	Acceptance *Acceptance `json:"acceptance,omitempty"`
 	TaskID    string     `json:"taskId"`
 	State     string     `json:"state"`
 	Artifacts []Artifact `json:"artifacts"`

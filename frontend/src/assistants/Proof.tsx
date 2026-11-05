@@ -6,6 +6,12 @@ const MISSING: Record<string, string> = {
   diff: "No evidence has been collected yet.",
 };
 
+const AUTH: Record<string, string> = {
+  transcript: "read back from the agent's transcript",
+  agent_note: "only the agent's own closing note",
+  none: "nothing to check",
+};
+
 /**
  * What backs a task (Gap Q04): the answer with where it was read from, its
  * sources (grounded or not), what the run did, a coding task's diff and checks
@@ -39,6 +45,15 @@ export function ProofBox({ taskId }: { taskId: string }) {
             {proof.policy.requireChecks ? " · this task requires them" : ""}
             {proof.policy.mergeNeedsPerson ? " · merging needs you" : ""}
           </p>
+          {proof.acceptance ? (
+            <p className="as-meta">
+              {proof.acceptance.delivered ? "Delivered" : "Not delivered"}
+              {" · "}
+              {AUTH[proof.acceptance.authenticity] ?? proof.acceptance.authenticity}
+              {proof.acceptance.sourcesTotal > 0 ? ` · ${proof.acceptance.sourcesGrounded}/${proof.acceptance.sourcesTotal} sources grounded` : ""}
+              {proof.acceptance.finishedAt > 0 ? ` · finished ${new Date(proof.acceptance.finishedAt).toLocaleString()}` : ""}
+            </p>
+          ) : null}
           {proof.artifacts.length === 0 && proof.missing.length === 0 ? <p className="as-meta">Nothing to show yet.</p> : null}
           {proof.artifacts.map((a, i) => (
             <div className="as-artifact" key={`${a.kind}-${i}`}>

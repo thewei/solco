@@ -56,12 +56,28 @@ type TaskPolicy struct {
 	MergeNeedsPerson bool     `json:"mergeNeedsPerson"`
 }
 
+// Acceptance is how a research task is judged (Gap Q07): delivered, how
+// authentic the delivery is, how many of its sources the transcript grounds,
+// and when it was finished (the freshness a person can weigh). It never asks
+// for a review or a merge — those belong to coding tasks.
+type Acceptance struct {
+	Delivered bool `json:"delivered"`
+	// Authenticity: transcript (read back from the Agent's own session),
+	// agent_note (only its closing line) or none.
+	Authenticity    string `json:"authenticity"`
+	SourcesTotal    int    `json:"sourcesTotal"`
+	SourcesGrounded int    `json:"sourcesGrounded"`
+	FinishedAt      int64  `json:"finishedAt"`
+}
+
 // TaskProof is a task's evidence and what is missing from it.
 type TaskProof struct {
-	Policy    TaskPolicy `json:"policy"`
-	TaskID    string     `json:"taskId"`
-	State     string     `json:"state"`
-	Artifacts []Artifact `json:"artifacts"`
+	Policy TaskPolicy `json:"policy"`
+	// Acceptance is set for research tasks only.
+	Acceptance *Acceptance `json:"acceptance,omitempty"`
+	TaskID     string      `json:"taskId"`
+	State      string      `json:"state"`
+	Artifacts  []Artifact  `json:"artifacts"`
 	// Missing names evidence a task in this state should have and lacks:
 	// result_evidence (a done task whose answer has no transcript behind it)
 	// or diff (a coding task waiting for review with no evidence collected).
@@ -85,6 +101,7 @@ func (s *Store) TaskProof(taskID string) (TaskProof, error) {
 		return p, err
 	}
 	var result *Artifact
+	acc := Acceptance{Authenticity: "none"}
 	for _, r := range runs {
 		res, found, err := s.RunResult(r.ID)
 		if err != nil {
@@ -93,12 +110,22 @@ func (s *Store) TaskProof(taskID string) (TaskProof, error) {
 		if found {
 			p.Artifacts = append(p.Artifacts, resultArtifacts(r.ID, res)...)
 			result = &p.Artifacts[0]
+			acc = Acceptance{Delivered: true, Authenticity: "transcript", SourcesTotal: len(res.Sources), FinishedAt: r.FinishedAt}
+			for _, src := range res.Sources {
+				if src.Grounded {
+					acc.SourcesGrounded++
+				}
+			}
 			break
 		}
 		if r.Status == RunDone && r.Result != "" {
 			p.Artifacts = append(p.Artifacts, Artifact{Kind: ArtifactNote, Title: "The agent's closing note (nothing verifies it)", Text: r.Result, RunID: r.ID})
+			acc = Acceptance{Delivered: true, Authenticity: "agent_note", FinishedAt: r.FinishedAt}
 			break
 		}
+	}
+	if t.Kind == KindResearch {
+		p.Acceptance = &acc
 	}
 	if t.Kind == KindCoding {
 		rv, err := scanReview(s.db.QueryRow(`SELECT `+reviewCols+` FROM reviews WHERE task_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1`, t.ID))
