@@ -66,6 +66,17 @@ func TestTaskPreambleIsSkippedInTitle(t *testing.T) {
 	}
 }
 
+// Real-device AC-03: every Assistants worker's first prompt opens with the
+// daemon's `Solco-Run-Id:` marker line, which headed all of their titles alike.
+func TestRunMarkerLineIsSkippedInTitle(t *testing.T) {
+	if got := cleanTitleCandidate("Solco-Run-Id: r_5df4119927120060\n\nResearch option A. Read the page."); got != "Research option A. Read the page." {
+		t.Fatalf("title = %q", got)
+	}
+	if got := cleanTitleCandidate("Solco-Run-Id: r_1"); got != "Solco-Run-Id: r_1" {
+		t.Fatalf("a marker alone has nothing to show instead: %q", got)
+	}
+}
+
 func TestTitleDropsHeadingMarks(t *testing.T) {
 	if got := cleanTitleCandidate("fix C# parser\n\n# Change\n## 1. x"); got != "fix C# parser Change 1. x" {
 		t.Fatalf("title = %q", got)

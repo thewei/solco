@@ -67,6 +67,20 @@ func projectName(cwd string) string {
 // path, so left in, every sub-agent session shares one title head.
 const taskPreamble = "Complete assignment thoroughly:"
 
+// stripRunMarker drops the `Solco-Run-Id: <id>` line the Assistants daemon puts
+// in front of every prompt it types, when something follows it.
+func stripRunMarker(text string) string {
+	trimmed := strings.TrimLeft(text, " \t\r\n")
+	if !strings.HasPrefix(trimmed, "Solco-Run-Id: ") {
+		return text
+	}
+	_, rest, found := strings.Cut(trimmed, "\n")
+	if !found || strings.TrimSpace(rest) == "" {
+		return text
+	}
+	return rest
+}
+
 // stripTaskPreamble drops the task tool's lead-in, its "# Target" header and
 // the "仓库 /path" / "Repo /path" token after it, so the title starts at what
 // tells assignments apart. Anything else comes back untouched.
@@ -115,7 +129,7 @@ func CleanTitleCandidate(raw string) string {
 }
 
 func cleanTitleCandidate(raw string) string {
-	text := stripTagBlock(stripTaskPreamble(raw), "system-reminder")
+	text := stripTagBlock(stripTaskPreamble(stripRunMarker(raw)), "system-reminder")
 	text = stripTagBlock(text, "local-command-caveat")
 	text = stripTagBlock(text, "local-command-stdout")
 	// Skill invocations are injected directives, not user prose; their
