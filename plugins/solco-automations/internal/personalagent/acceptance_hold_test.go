@@ -41,6 +41,11 @@ func TestAcceptanceHold(t *testing.T) {
 		{tool: "bash", args: map[string]any{"command": fmt.Sprintf("curl -s http://127.0.0.1:%d/page", sb.port)}},
 		{text: "Top posts:\n1. https://news.example/a1 — 5200 likes\n2. https://news.example/a2 — 4100 likes\n3. https://news.example/a3 — 3900 likes\nUnavailable: https://news.example/gone (404)."},
 	}
+	// A coding worker: commits one file in its own worktree (Q02 review rig).
+	sb.model.scripts["last:SCENARIO:code"] = []fixtureStep{
+		{tool: "bash", args: map[string]any{"command": "echo 'a new feature' > feature.txt && git add -A && git -c user.name=acc -c user.email=acc@example.com commit -qm 'add feature' && git log --oneline | head -1"}},
+		{text: "Committed feature.txt on the task branch."},
+	}
 	sb.model.mu.Unlock()
 
 	run := func(dir, name string, args ...string) string {

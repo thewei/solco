@@ -904,7 +904,7 @@ function TaskCard({ task: t, act, reason }: { task: AssistantsTask; act: Act; re
         <RunLine key={r.id} run={r} />
       ))}
       <ReviewBox task={t} act={act} />
-      {t.state === "done" || t.state === "review_required" ? <ProofBox taskId={t.id} /> : null}
+      {t.state === "done" || t.state === "review_required" ? <ProofBox taskId={t.id} stamp={`${t.revision}:${t.state}:${t.reviewState}`} /> : null}
       <div className="as-row">
         {t.needsYou && t.state !== "review_required" ? (
           <button type="button" className="as-btn primary" onClick={() => act(() => assistants.ackTask(rid(), t.id, t.revision))}>

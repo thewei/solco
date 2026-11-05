@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { assistants, type TaskProof } from "../mygo";
 
 const MISSING: Record<string, string> = {
@@ -17,24 +17,33 @@ const AUTH: Record<string, string> = {
  * sources (grounded or not), what the run did, a coding task's diff and checks
  * — or, plainly, what is missing. Read only when the person opens it.
  */
-export function ProofBox({ taskId }: { taskId: string }) {
+export function ProofBox({ taskId, stamp }: { taskId: string; stamp: string }) {
   const [proof, setProof] = useState<TaskProof | null>(null);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState("");
-  const toggle = async () => {
-    const next = !open;
-    setOpen(next);
-    if (!next) return;
-    try {
-      setProof(await assistants.proof(taskId));
-      setErr("");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    }
-  };
+  // Re-read while open whenever the task moved (review started, merged, …).
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    assistants
+      .proof(taskId)
+      .then((p) => {
+        if (live) {
+          setProof(p);
+          setErr("");
+        }
+      })
+      .catch((e) => {
+        if (live) setErr(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, taskId, stamp]);
+  const toggle = () => setOpen(!open);
   return (
     <div className="as-proof">
-      <button type="button" className="as-link" onClick={() => void toggle()}>
+      <button type="button" className="as-link" onClick={toggle}>
         {open ? "Hide proof" : "Show proof"}
       </button>
       {open && err ? <p className="as-meta">{err}</p> : null}

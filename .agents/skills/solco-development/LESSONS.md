@@ -116,3 +116,7 @@
 
 - **加“去重/幂等返回既有条目”会让造数据的旧测试变红**（2026-11-05，A08）：批量造 60 条同文案记忆的测试在 Agent 提议去重后只得到 1 条。改被测数据（给每条加序号），不要放松新规则；加新规则前先 `rg` 一遍用同一文本反复 propose 的测试。
 - **“Owner 回答证据”类动作先查哪层真有 UI**（2026-11-05，Q02）：E03 的 review/merge 只有插件 CLI，根端没有 bridge/页面。补核心语义（Resume/Reject）时同步在 tracker 写明 UI 缺口，别把 CLI 当成“桌面已可用”。
+
+- **隔离实机验收的演示仓库必须先有一个初始提交**，且插件二进制要在 rig 的 worktree 里 `sh scripts/install.sh` 构建（2026-11-05，AC-04）：否则 coding 任务报 "repository has no commit to start from" / 找不到 `bin/solco-automations`。
+- **“读一次”的 WebView 详情块会过期**（2026-11-05，ProofBox）：展开时拉一次、之后任务变了仍显示旧结论（"No evidence…"）。展开态的拉取要以任务 revision/state 为依赖重取；这类问题只有真机走完整个状态机才看得到。
+- **每个“人的回答”事件都要有自己的事实**（2026-11-05，review.merged）：事件表有 `review.merged/rejected`，账本映射却只收 ready/failed，于是合并后进度条仍写“Verifying”。新增事件种类时同步检查 event→fact 映射表。

@@ -177,6 +177,10 @@ var standaloneFactKind = map[string]string{
 	"task.failed":    FactBlocked,
 	"review.ready":   FactVerifying,
 	"review.failed":  FactBlocked,
+	// A person's answers close the step "Verifying" described; without them the
+	// newest fact stayed "ready for review" after the merge (AC-04 finding).
+	"review.merged":   FactVerified,
+	"review.rejected": FactRunFinished,
 }
 
 // eventFacts turns committed standalone/Goal task transitions into progress

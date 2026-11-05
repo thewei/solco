@@ -99,3 +99,6 @@
 - F4：有计划的草稿 Goal 现在进 Needs you（`InboxItem.GoalID`，Open → Watching）；系统 Automations 助手头部不再显示 Coordinator 状态。
 
 - 2026-11-05 e2e：`--as` 路径经真实 OMP 扩展通过（checkpoint.set、goal.pause 自有/越权）；Coordinator 启动、坏扩展惰性、事实回报各 e2e 仍通过。
+
+## 2026-11-05 AC-04 桌面实机补记
+Q02/Q04/Q05 的桌面路径（research proof、coding review→Resume→Accept→Approve→Merge，main 上出现 feature.txt）已在隔离 SolcoAcc.app + 真 Herdr + 真 OMP 上走通，证据见 `docs/debug/assistant-shepherdr-3.1.3-acceptance/2026-11-05-mac-app-ac04.md`；顺带修了 ProofBox 过期与合并后进度条不更新两个问题。手机、HOOK-06/07、Reject 的 GUI 路径、A10、A08 余项仍未做，行状态不变（均 PARTIAL/OPEN）。
