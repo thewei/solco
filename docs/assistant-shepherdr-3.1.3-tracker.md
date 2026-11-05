@@ -78,3 +78,12 @@
 | L06 | P1 | V | OPEN | | | | CLI/Host/手机的 timeout、断连、写入收据、不可重试错误类别统一；防无限后台 goroutine/未完成 HTTP 持有，AC-07/12 |
 | L07 | P1 | P | OPEN | | | | 任务停止/结束后按 retention 规则清理临时浏览器/文件/Herdr Pane；默认留可检查结果，不能删未提交工作，AC-08/13 |
 | L08 | P2 | E | OPEN | | | | 不追求逐像素复刻 Shepherdr；对 UX/功能对齐，独立审核移动可达性、深浅主题、无障碍、慢网、中文任务名和高频通知，AC-12 |
+
+## 2026-11-05 Mac.app 隔离实例 AC-01 批次
+
+证据：`docs/debug/assistant-shepherdr-3.1.3-acceptance/2026-11-05-mac-app-ac01.md`。
+
+- U06 / AC-01 Mac 段：创建 Assistant、首条消息只送达一次、恰好一个 Coordinator、Chat 页渲染对话 — **PASS**（沙箱补装 Herdr omp 集成与 chat-stream 之后；先前"Working…"判为沙箱缺口）。
+- U01 / U06 新发现：Coordinator 启动简报以用户消息出现在对话里（132 行），待产品决定；U09/C02：身份缺失时 Chat 只显示 Working、没有诊断，待 capability doctor。
+- AC-01 整体仍 **未通过**：能力清单的真实工具调用、回执可见性、ID 深链、Android 同一对话均未在 GUI 验到。
+
