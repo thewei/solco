@@ -313,6 +313,7 @@ func (s *Store) DeleteArchivedAssistant(id string, rev int, paneGone ...func(str
 	for _, p := range []string{
 		filepath.Join(MemoryRoot(), id),
 		filepath.Join(WorkDirRoot(), "personal", "coordinators", id),
+		filepath.Join(WorkDirRoot(), "personal", "tasks", id),
 		filepath.Join(filepath.Dir(s.path), "assistants-mcp", id+".json"),
 	} {
 		if err := os.RemoveAll(p); err != nil {

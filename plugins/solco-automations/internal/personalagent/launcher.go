@@ -57,6 +57,11 @@ func (l *HostLauncher) automation(spec LaunchSpec) config.Automation {
 			// Each Group Agent has a folder of its own, apart from the Coordinator's.
 			repo = filepath.Join(repo, "groups", spec.GroupID, spec.AssistantID)
 		}
+		if spec.Kind != KindCoordinator && spec.Kind != KindGroupAgent && spec.AssistantID != "" {
+			// A repo-less task works in its Assistant's own folder, not one
+			// shared with every other Assistant (Gap W11).
+			repo = filepath.Join(repo, "tasks", spec.AssistantID)
+		}
 		_ = os.MkdirAll(repo, 0o700)
 	}
 	mode := config.WorkspaceRoot
