@@ -39,6 +39,8 @@ var (
 	ErrNotClaimable      = errors.New("task is not claimable")
 	ErrBadState          = errors.New("state does not allow this")
 	ErrInvalid           = errors.New("invalid input")
+	ErrHookRejected      = errors.New("webhook not authenticated")
+	ErrRateLimited       = errors.New("too many requests")
 )
 
 // DefaultBusyTimeout is how long one statement waits out another process's
@@ -691,6 +693,32 @@ var migrations = []string{
 		event_seq INTEGER NOT NULL,
 		task_id TEXT NOT NULL,
 		PRIMARY KEY (trigger_id, event_seq)
+	);`,
+	// v26: webhook ingress (Gaps A06/A09) — per-Assistant revocable keys and the
+	// durable receipt of every accepted delivery.
+	`CREATE TABLE hook_keys (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL REFERENCES assistants(id),
+		secret TEXT NOT NULL,
+		sources TEXT NOT NULL,
+		status TEXT NOT NULL,
+		created_at INTEGER NOT NULL,
+		revoked_at INTEGER NOT NULL DEFAULT 0,
+		last_used_at INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE TABLE hook_events (
+		id TEXT PRIMARY KEY,
+		assistant_id TEXT NOT NULL,
+		key_id TEXT NOT NULL,
+		source TEXT NOT NULL,
+		delivery_id TEXT NOT NULL,
+		payload_hash TEXT NOT NULL,
+		resource_kind TEXT NOT NULL DEFAULT '',
+		resource_id TEXT NOT NULL DEFAULT '',
+		reason TEXT NOT NULL DEFAULT '',
+		routing TEXT NOT NULL,
+		received_at INTEGER NOT NULL,
+		UNIQUE(key_id, delivery_id)
 	);`,
 }
 

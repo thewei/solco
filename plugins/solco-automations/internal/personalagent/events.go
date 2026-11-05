@@ -32,6 +32,7 @@ var eventPriority = map[string]int{
 	"rule.missed":    2,
 	"rule.skipped":   0,
 	"rule.queued":    0,
+	"hook.check":     2,
 }
 
 // EventKinds lists the kinds a heartbeat rule may name.

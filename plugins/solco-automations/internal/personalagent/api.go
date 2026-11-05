@@ -53,6 +53,10 @@ func codeFor(err error) *CodedError {
 		return coded("replan_limit", "%v", err)
 	case errors.Is(err, ErrBadState):
 		return coded("bad_state", "%v", err)
+	case errors.Is(err, ErrHookRejected):
+		return coded("unauthorized", "%v", err)
+	case errors.Is(err, ErrRateLimited):
+		return coded("rate_limited", "%v", err)
 	case errors.Is(err, ErrInvalid):
 		return coded("invalid", "%v", err)
 	case errors.Is(err, ErrUncertain):
@@ -304,6 +308,8 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 		return a.proactivity(rest, body)
 	case "trigger":
 		return a.trigger(rest, body)
+	case "hook":
+		return a.hook(rest, body)
 	case "run":
 		return a.run(rest, body)
 	}
