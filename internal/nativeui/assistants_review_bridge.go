@@ -96,3 +96,16 @@ func (b *AssistantsBridge) RejectReview(ctx context.Context, requestID, reviewID
 		return err
 	})
 }
+
+// Proof reads what backs one task: its answer with where it was read from, the
+// sources, the diff and checks — and what is missing. The page asks only when
+// the person opens a card's proof.
+func (b *AssistantsBridge) Proof(ctx context.Context, taskID string) (personalagent.TaskProof, error) {
+	c, err := b.client()
+	if err != nil {
+		return personalagent.TaskProof{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, assistantsCallTimeout)
+	defer cancel()
+	return c.TaskProof(ctx, taskID)
+}

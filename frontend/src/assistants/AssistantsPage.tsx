@@ -26,6 +26,7 @@ import { WorkStyle } from "./WorkStyle";
 import { MemoryTab } from "./MemoryTab";
 import { Behavior } from "./Behavior";
 import { Autonomy } from "./Autonomy";
+import { ProofBox } from "./Proof";
 import { ReviewBox } from "./Review";
 import "./assistants.css";
 
@@ -903,6 +904,7 @@ function TaskCard({ task: t, act, reason }: { task: AssistantsTask; act: Act; re
         <RunLine key={r.id} run={r} />
       ))}
       <ReviewBox task={t} act={act} />
+      {t.state === "done" || t.state === "review_required" ? <ProofBox taskId={t.id} /> : null}
       <div className="as-row">
         {t.needsYou && t.state !== "review_required" ? (
           <button type="button" className="as-btn primary" onClick={() => act(() => assistants.ackTask(rid(), t.id, t.revision))}>

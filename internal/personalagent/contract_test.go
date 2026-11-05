@@ -368,3 +368,19 @@ func TestReviewShapeDecodesStrictly(t *testing.T) {
 		t.Fatalf("review = %+v", out.Review)
 	}
 }
+
+// Q04: a task's proof decodes strictly, with provenance and the missing list.
+func TestTaskProofDecodesStrictly(t *testing.T) {
+	var out struct {
+		Schema int       `json:"schema"`
+		Proof  TaskProof `json:"proof"`
+	}
+	load(t, "task-proof", &out)
+	p := out.Proof
+	if p.State != "done" || len(p.Artifacts) != 3 || p.Artifacts[0].Kind != "result" || p.Artifacts[0].SourceRef != "omp_transcript:sess-1#msg-9" || len(p.Missing) != 0 {
+		t.Fatalf("proof = %+v", p)
+	}
+	if it := p.Artifacts[1].Items; len(it) != 2 || it[0].State != "grounded" || it[1].State != "ungrounded" {
+		t.Fatalf("sources = %+v", it)
+	}
+}

@@ -1118,3 +1118,16 @@
 .as-path {
   font-family: var(--mono, ui-monospace, monospace);
 }
+
+.as-proof {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.as-artifact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

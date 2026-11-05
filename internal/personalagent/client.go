@@ -244,6 +244,14 @@ func (c *Client) TaskDetail(ctx context.Context, id string) (Task, []Run, error)
 	return out.Task, out.Runs, err
 }
 
+// TaskProof reads the evidence behind one task.
+func (c *Client) TaskProof(ctx context.Context, id string) (TaskProof, error) {
+	var out struct {
+		Proof TaskProof `json:"proof"`
+	}
+	return out.Proof, c.do(ctx, nil, &out, "task", "proof", id)
+}
+
 // CreateTask delegates one unit of work.
 func (c *Client) CreateTask(ctx context.Context, requestID string, in CreateTaskInput) (Task, error) {
 	var out struct {

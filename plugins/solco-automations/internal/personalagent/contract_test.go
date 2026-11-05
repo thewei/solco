@@ -213,6 +213,17 @@ func TestGoldenFixtures(t *testing.T) {
 	// The budget ledger (Gap A05): what the Supervisor spent and held today.
 	run("budget-show", ``, "assistant", "budget", "show", aid, "--limit", "20")
 
+	// A finished research task's proof (Gap Q04): the answer with where it was
+	// read from, its sources and what the run did.
+	proofTask, _, err := s.CreateTask("g-proof-task", CreateTaskInput{AssistantID: aid, Title: "Find the pricing page", Brief: "Look it up.", Kind: KindResearch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finishWithResult(t, s, proofTask.ID, WorkerResult{Summary: "Pricing starts at $10.", Evidence: EvidenceOMPTranscript, AgentSessionID: "sess-1", MessageID: "msg-9",
+		SHA256: "a1", Tools: map[string]int{"web_fetch": 2}, ToolErrors: 1, Skills: []string{"web-research"},
+		Sources: []SourceRef{{URL: "https://example.com/pricing", Grounded: true}, {URL: "https://example.com/guess"}}})
+	run("task-proof", ``, "assistant", "task", "proof", proofTask.ID)
+
 	// A review's wire shape (Gap Q02). Its evidence comes from a real git
 	// worktree (random hashes), so the fixture pins the shape of one with every
 	// field present rather than a recorded run.
@@ -223,7 +234,7 @@ func TestGoldenFixtures(t *testing.T) {
 		Checks: []CheckResult{{Command: "go test ./...", OK: true, DurationMS: 12}},
 		Error:  "Changes requested: add a test", Revision: 2, CreatedAt: 1, UpdatedAt: 2}}, seen)
 
-	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
+	_, err = call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError
 	if !asCodedErr(err, &ce) {
 		t.Fatalf("want a coded error, got %v", err)

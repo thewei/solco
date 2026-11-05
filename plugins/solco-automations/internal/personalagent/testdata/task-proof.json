@@ -1,0 +1,49 @@
+{
+  "proof": {
+    "artifacts": [
+      {
+        "hash": "a1",
+        "kind": "result",
+        "runId": "r_0000000000000027",
+        "sourceRef": "omp_transcript:sess-1#msg-9",
+        "text": "Pricing starts at $10.",
+        "title": "Result"
+      },
+      {
+        "items": [
+          {
+            "label": "https://example.com/pricing",
+            "state": "grounded"
+          },
+          {
+            "label": "https://example.com/guess",
+            "state": "ungrounded"
+          }
+        ],
+        "kind": "sources",
+        "runId": "r_0000000000000027",
+        "title": "Sources"
+      },
+      {
+        "items": [
+          {
+            "label": "web_fetch × 2"
+          },
+          {
+            "label": "skill: web-research"
+          },
+          {
+            "label": "1 tool error"
+          }
+        ],
+        "kind": "work",
+        "runId": "r_0000000000000027",
+        "title": "What the run did"
+      }
+    ],
+    "missing": [],
+    "state": "done",
+    "taskId": "t_0000000000000028"
+  },
+  "schema": 1
+}

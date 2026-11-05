@@ -743,3 +743,33 @@ type Review struct {
 	CreatedAt         int64         `json:"createdAt"`
 	UpdatedAt         int64         `json:"updatedAt"`
 }
+
+// ProofItem is one line inside an Artifact (State: grounded/ungrounded for a
+// source, passed/failed for a check, empty otherwise).
+type ProofItem struct {
+	Label string `json:"label"`
+	State string `json:"state,omitempty"`
+}
+
+// Artifact is one piece of a task's evidence: Kind is result, note, sources,
+// work, diff or checks; SourceRef says where the core read it (an OMP
+// transcript message, a git commit) and Hash is its digest when it has one.
+type Artifact struct {
+	Kind      string      `json:"kind"`
+	Title     string      `json:"title"`
+	SourceRef string      `json:"sourceRef,omitempty"`
+	Hash      string      `json:"hash,omitempty"`
+	State     string      `json:"state,omitempty"`
+	Text      string      `json:"text,omitempty"`
+	Items     []ProofItem `json:"items,omitempty"`
+	RunID     string      `json:"runId,omitempty"`
+}
+
+// TaskProof is what backs a task's "done" and what is missing from it
+// (result_evidence, diff).
+type TaskProof struct {
+	TaskID    string     `json:"taskId"`
+	State     string     `json:"state"`
+	Artifacts []Artifact `json:"artifacts"`
+	Missing   []string   `json:"missing"`
+}

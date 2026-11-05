@@ -26,6 +26,22 @@ export interface Approval {
   createdAt: number;
 }
 
+/**
+ * Artifact is one piece of a task's evidence: Kind is result, note, sources,
+ * work, diff or checks; SourceRef says where the core read it (an OMP
+ * transcript message, a git commit) and Hash is its digest when it has one.
+ */
+export interface Artifact {
+  kind: string;
+  title: string;
+  sourceRef?: string;
+  hash?: string;
+  state?: string;
+  text?: string;
+  items?: ProofItem[];
+  runId?: string;
+}
+
 /** Assistant is one persistent identity. */
 export interface Assistant {
   id: string;
@@ -1294,6 +1310,15 @@ export interface ProactivityInput {
 }
 
 /**
+ * ProofItem is one line inside an Artifact (State: grounded/ungrounded for a
+ * source, passed/failed for a check, empty otherwise).
+ */
+export interface ProofItem {
+  label: string;
+  state?: string;
+}
+
+/**
  * Routine is a scheduled automation that belongs to an Assistant, with the
  * definition it points at and how it is doing. The definition itself lives in
  * the Automations plugin's own file; prompt and rationale are clipped.
@@ -1377,6 +1402,17 @@ export interface SubagentCard {
   tail?: string;
   result?: string;
   prompt?: string;
+}
+
+/**
+ * TaskProof is what backs a task's "done" and what is missing from it
+ * (result_evidence, diff).
+ */
+export interface TaskProof {
+  taskId: string;
+  state: string;
+  artifacts: Artifact[];
+  missing: string[];
 }
 
 /**
@@ -1835,6 +1871,14 @@ export const assistants = {
    */
   postGroupMessage(requestID: string, groupID: string, text: string, mentions: string[], replyTo: string): Promise<void> {
     return call("assistants.PostGroupMessage", requestID, groupID, text, mentions, replyTo);
+  },
+  /**
+   * Proof reads what backs one task: its answer with where it was read from, the
+   * sources, the diff and checks — and what is missing. The page asks only when
+   * the person opens a card's proof.
+   */
+  proof(taskID: string): Promise<TaskProof> {
+    return call("assistants.Proof", taskID);
   },
   /** PublishTask releases a draft the Coordinator (or the person) filed. */
   publishTask(requestID: string, id: string, revision: number): Promise<void> {

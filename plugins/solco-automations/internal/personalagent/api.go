@@ -324,7 +324,7 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 
 func (a *API) task(args []string, body []byte) (any, error) {
 	if len(args) == 0 {
-		return nil, coded("invalid", "usage: assistant task <create|list|show|ack|retry|publish|deps|graph>")
+		return nil, coded("invalid", "usage: assistant task <create|list|show|proof|why|ack|retry|publish|deps|graph>")
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {
@@ -356,6 +356,12 @@ func (a *API) task(args []string, body []byte) (any, error) {
 		}
 		runs, err := a.Store.ListRuns(t.ID)
 		return ok("task", t, "runs", runs), err
+	case "proof":
+		if len(rest) != 1 {
+			return nil, coded("invalid", "usage: assistant task proof <id>")
+		}
+		pr, err := a.Store.TaskProof(rest[0])
+		return ok("proof", pr), err
 	case "why":
 		if len(rest) != 1 {
 			return nil, coded("invalid", "usage: assistant task why <id>")

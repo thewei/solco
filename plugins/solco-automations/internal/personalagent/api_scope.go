@@ -37,6 +37,7 @@ var coordinatorScope = map[string]scopeRule{
 	"task graph":     {own: "pos"},
 	"task show":      {target: "task"},
 	"task why":       {target: "task"},
+	"task proof":     {target: "task"},
 	"trace show":     {target: "any"},
 	"task retry":     {target: "task", fillRev: true},
 	"goal create":    {own: "body"},
