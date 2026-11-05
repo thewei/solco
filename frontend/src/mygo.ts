@@ -910,6 +910,7 @@ export interface InboxItem {
   kind: string;
   assistantId: string;
   taskId?: string;
+  goalId?: string;
   approvalId?: string;
   title: string;
   detail: string;

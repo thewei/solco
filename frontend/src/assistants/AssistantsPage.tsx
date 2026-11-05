@@ -234,10 +234,12 @@ export function AssistantsPage() {
     <div className="as">
       <header className="as-head">
         <h1>{a.name}</h1>
-        <span className={`as-state ${status.tone}`}>
-          <span className={`as-dot ${status.tone}`} />
-          {status.label}
-        </span>
+        {a.system ? null : (
+          <span className={`as-state ${status.tone}`}>
+            <span className={`as-dot ${status.tone}`} />
+            {status.label}
+          </span>
+        )}
         {needsCount > 0 ? (
           <button type="button" className="as-needs" onClick={() => setStripOpen((v) => !v)}>
             {needsCount} {needsCount === 1 ? "needs" : "need"} you
@@ -301,7 +303,7 @@ export function AssistantsPage() {
           </button>
         </div>
       ) : null}
-      {needsCount > 0 ? <Strip pending={pending} others={others} open={stripOpen} setOpen={setStripOpen} act={act} more={() => setTab("needs")} /> : null}
+      {needsCount > 0 ? <Strip pending={pending} others={others} open={stripOpen} setOpen={setStripOpen} act={act} more={(to) => setTab(to ?? "needs")} /> : null}
       <WorkPulse row={view.assistants.find((row) => row.id === a.id)} onTasks={() => setTab("tasks")} />
       <FactStrip facts={detail.facts} onOpenTask={() => setTab("tasks")} onOpenGoal={() => setTab("watching")} />
       {report?.state === "uncertain" ? (
@@ -426,7 +428,7 @@ function coordinatorStatus(assistant: string, state: string, open: boolean): { l
 }
 
 /** What needs the person, above the chat: approvals decide here, anything else points at the drawer. */
-function Strip({ pending, others, open, setOpen, act, more }: { pending: Approval[]; others: InboxItem[]; open: boolean; setOpen: (v: boolean) => void; act: Act; more: () => void }) {
+function Strip({ pending, others, open, setOpen, act, more }: { pending: Approval[]; others: InboxItem[]; open: boolean; setOpen: (v: boolean) => void; act: Act; more: (to?: Tab) => void }) {
   const first = pending[0]?.action ?? others[0]?.title ?? "";
   return (
     <section className="as-strip" aria-label="Needs you">
@@ -461,7 +463,7 @@ function Strip({ pending, others, open, setOpen, act, more }: { pending: Approva
                 <strong>{i.title}</strong>
                 <p className="as-meta">{i.detail}</p>
               </div>
-              <button type="button" className="as-btn" onClick={more}>
+              <button type="button" className="as-btn" onClick={() => more(i.goalId ? "watching" : undefined)}>
                 Open
               </button>
             </div>

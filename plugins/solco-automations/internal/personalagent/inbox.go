@@ -68,6 +68,7 @@ type InboxItem struct {
 	Kind        string `json:"kind"`
 	AssistantID string `json:"assistantId"`
 	TaskID      string `json:"taskId,omitempty"`
+	GoalID      string `json:"goalId,omitempty"`
 	ApprovalID  string `json:"approvalId,omitempty"`
 	Title       string `json:"title"`
 	Detail      string `json:"detail"`
@@ -184,6 +185,31 @@ func (s *Store) Inbox(assistantID string, opt InboxOptions) (Inbox, error) {
 		}
 		add(item)
 	}
+
+	// A Goal whose plan is written but that nobody has started: the Coordinator
+	// is done, the next move is the person's (start or cancel). An unplanned
+	// draft is still being written, so it is not listed.
+	gq := `SELECT g.id,g.assistant_id,g.title,g.updated_at FROM goals g
+		JOIN goal_plans p ON p.goal_id=g.id WHERE g.state=?`
+	gargs := []any{GoalDraft}
+	if assistantID != "" {
+		gq += ` AND g.assistant_id=?`
+		gargs = append(gargs, assistantID)
+	}
+	grows, err := tx.Query(gq+` ORDER BY g.updated_at DESC, g.id`, gargs...)
+	if err != nil {
+		return Inbox{}, wrapBusy(err)
+	}
+	for grows.Next() {
+		var id, asst, title string
+		var at int64
+		if err := grows.Scan(&id, &asst, &title, &at); err != nil {
+			_ = grows.Close()
+			return Inbox{}, err
+		}
+		add(InboxItem{ID: "goal:" + id, Kind: InboxNeedsYou, AssistantID: asst, GoalID: id, Title: clip(title, 120), Detail: "Plan ready — start it or cancel it", At: at})
+	}
+	_ = grows.Close()
 
 	// The watermark, and optionally what happened since a reader last looked.
 	eq := `SELECT COALESCE(MAX(rowid),0) FROM events`

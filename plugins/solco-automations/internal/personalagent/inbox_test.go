@@ -253,3 +253,32 @@ func TestInboxWatcherSaysOnlyWhatIsNewAndNothingOnFirstLook(t *testing.T) {
 		t.Fatalf("an item is announced once: %+v", again)
 	}
 }
+
+// F4: a Goal the Coordinator planned but nobody started is waiting for a
+// person, so it is in the inbox until they start or cancel it; an unplanned
+// draft is still being written and an active goal is not waiting.
+func TestInboxCarriesAPlannedDraftGoalUntilItIsStarted(t *testing.T) {
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "a1", "Ada")
+	if _, _, err := s.CreateGoal("g-bare", CreateGoalInput{AssistantID: a.ID, Title: "Still being written"}); err != nil {
+		t.Fatal(err)
+	}
+	planned, _, _ := s.CreateGoal("g-plan", CreateGoalInput{AssistantID: a.ID, Title: "Ship the report"})
+	if _, _, err := s.SetGoalPlan("p1", planned.ID, twoStepPlan(), "first", 0); err != nil {
+		t.Fatal(err)
+	}
+	in, err := s.Inbox(a.ID, InboxOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := inboxKinds(in)[InboxNeedsYou]
+	if len(items) != 1 || items[0].GoalID != planned.ID || !strings.Contains(items[0].Detail, "start") || in.NeedsYou != 1 {
+		t.Fatalf("a planned draft goal should be the one needs-you item: %+v", in)
+	}
+	if _, _, err := s.ApproveGoal("ap", planned.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ = s.Inbox(a.ID, InboxOptions{}); in.NeedsYou != 0 {
+		t.Fatalf("a started goal is not waiting for anyone: %+v", in)
+	}
+}

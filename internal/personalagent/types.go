@@ -245,6 +245,7 @@ type InboxItem struct {
 	Kind        string `json:"kind"`
 	AssistantID string `json:"assistantId"`
 	TaskID      string `json:"taskId,omitempty"`
+	GoalID      string `json:"goalId,omitempty"`
 	ApprovalID  string `json:"approvalId,omitempty"`
 	Title       string `json:"title"`
 	Detail      string `json:"detail"`
