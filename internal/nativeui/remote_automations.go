@@ -37,7 +37,15 @@ func (s *Shell) syncRemoteAutomations() {
 	s.automations.remoteState.Store(&state)
 	out := remoteAutomationsOf(s.automations.list.result, s.remoteAutomationAgents())
 	s.automations.remote.Store(&out)
+	s.automations.remoteAt.Store(timeNow().UnixNano())
 }
+
+// remoteAutomationsMaxAge is how old the phone's snapshot may get before a
+// phone read asks the window for a fresh list. The desktop re-reads on its own
+// only on a Herdr projection event or when its page opens, so a routine
+// approved from an Assistants card on an idle desktop would otherwise stay
+// missing from the phone until one of those happened.
+const remoteAutomationsMaxAge = 15 * time.Second
 
 // hostAutomations serves GET /automations from the snapshot; ok is false while
 // the plugin gate is closed or the first read has not landed.
@@ -45,6 +53,12 @@ func (s *Shell) hostAutomations(context.Context) (remotehost.Automations, bool) 
 	snapshot := s.automations.remote.Load()
 	if snapshot == nil {
 		return remotehost.Automations{}, false
+	}
+	if timeNow().Sub(time.Unix(0, s.automations.remoteAt.Load())) > remoteAutomationsMaxAge && s.automations.remoteRefreshing.CompareAndSwap(false, true) {
+		s.applyOnWindow(func() {
+			s.automations.remoteRefreshing.Store(false)
+			s.refreshAutomations(true)
+		})
 	}
 	return *snapshot, true
 }

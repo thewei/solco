@@ -114,3 +114,5 @@ Q02/Q04/Q05 的桌面路径（research proof、coding review→Resume→Accept�
 2026-11-05 Android 实机（AC-12 手机半）：vivo V2309A + release APK + 隔离 Host 配对，手机读到 Mac 核心里同一个 Assistant/任务/Solco record/Needs you，打开即进真实 Herdr pane 的共享 Chat；Mac 侧 review 被 reject 后手机约 6 秒内出现 “review … is rejected” 事实、Needs-you 卡消失。证据与未覆盖项（手机端审批、push 送达 U04、断线游标恢复）见 `…/2026-11-05-android-ac12.md`。U03 部分证实，U04 仍 OPEN。
 
 2026-11-05 Android 实机二轮（AC-12b）：手机对隔离 Host 做了 路由卡 Approve、记忆候选 Approve、Behavior Save、从手机发第一条消息启动 Coordinator（`coordinator.start`），每步以核心 show/list + Host 日志为准，桌面（Computer Use）看到同一状态；桌面批准第二条路由后手机“needs you”消失。无新缺陷。未覆盖：手机端审批 review、路由到点触发、Goals/plan 屏、手机 Automations 屏、U04 push、断线游标、sleep/wake。证据 `…/2026-11-05-android-ac12b.md`。
+
+2026-11-05 AC-12b 发现并修复：手机 Automations 列表在桌面空闲时不跟随（桌面 Assistants 卡批准路由后，手机列表缺 `x-digest` 约 6 分钟，桌面只在 Herdr 投影事件/打开页面时重读）。修：手机每次读快照时若快照超过 15 s 就让窗口线程后台重读一次（`remoteAutomationsMaxAge`，`TestPhoneReadRefreshesAStaleSnapshot`）；手机下一次读即得新列表。注：`TestReviewingACommitKeepsTheSidebarVibrancy` 在 HEAD 上就失败（git review 未加载，环境相关），与本改动无关。

@@ -2,7 +2,9 @@ package nativeui
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/automations"
@@ -76,5 +78,26 @@ func TestPhoneAgentChoicesUseThePluginsKindIds(t *testing.T) {
 	s.syncRemoteAutomations()
 	if list, _ := s.hostAutomations(context.Background()); len(list.Agents) != 1 {
 		t.Fatalf("the list carries %+v", list.Agents)
+	}
+}
+
+// A routine can be approved from an Assistants card while the desktop sits
+// idle (no projection event to trigger a re-read), so the phone's own read is
+// what notices a stale snapshot and asks the window for a fresh list.
+func TestPhoneReadRefreshesAStaleSnapshot(t *testing.T) {
+	calls, s := stubInbox(t)
+	if _, ok := s.hostAutomations(context.Background()); !ok || len(*calls) != 0 {
+		t.Fatalf("a fresh snapshot must not trigger a read; calls = %v", *calls)
+	}
+
+	real := timeNow
+	t.Cleanup(func() { timeNow = real })
+	timeNow = func() time.Time { return real().Add(remoteAutomationsMaxAge + time.Second) }
+
+	if _, ok := s.hostAutomations(context.Background()); !ok {
+		t.Fatal("a stale snapshot is still served while the refresh runs")
+	}
+	if len(*calls) == 0 || !strings.Contains((*calls)[0], "list") {
+		t.Errorf("a stale snapshot did not ask the plugin for the list; calls = %v", *calls)
 	}
 }

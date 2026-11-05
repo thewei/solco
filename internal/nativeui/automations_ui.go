@@ -44,6 +44,10 @@ type automationsState struct {
 	// remote is the read-only snapshot the Host's goroutines serve the phone
 	// from (remote_automations.go); the window thread is its only writer.
 	remote atomic.Pointer[remotehost.Automations]
+	// remoteAt is when remote was last built (unix nanoseconds) and
+	// remoteRefreshing keeps a phone read from queueing more than one re-read.
+	remoteAt         atomic.Int64
+	remoteRefreshing atomic.Bool
 	// target is where the phone's management calls reach the plugin: the folder
 	// and Herdr session the window last used. Written by the window thread,
 	// nil while the gate is closed (remote_automations_admin.go).
