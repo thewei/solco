@@ -56,6 +56,20 @@ export interface AssistantsAgent {
   label: string;
 }
 
+/** AssistantsAutonomy is the Autonomy tab's content for one Assistant. */
+export interface AssistantsAutonomy {
+  /**
+   * Endpoint is the Host's base address ("" while Remote Access is not
+   * listening: nobody outside can deliver anything then). HookPath is the one
+   * path this Assistant is reached on.
+   */
+  endpoint: string;
+  hookPath: string;
+  keys: HookKey[];
+  events: HookRecord[];
+  triggers: Trigger[];
+}
+
 /**
  * AssistantsDetail is the selected Assistant's light page: what the
  * conversation header, the Needs-You strip and the Chat need. The long lists
@@ -118,6 +132,16 @@ export interface AssistantsGoalInput {
   objective: string;
   /** Watch, when set, adds one pr_watch commitment. */
   watch?: AssistantsWatch;
+}
+
+/**
+ * AssistantsHookKey is a freshly made key: Secret is shown once, here, and is
+ * never listed again (a replayed request answers with no secret).
+ */
+export interface AssistantsHookKey {
+  key: HookKey;
+  secret: string;
+  path: string;
 }
 
 /**
@@ -891,6 +915,33 @@ export interface GroupTaskCard {
   updatedAt: number;
 }
 
+/** HookKey is one webhook key of an Assistant, never with its secret. */
+export interface HookKey {
+  id: string;
+  assistantId: string;
+  sources: string[];
+  status: string;
+  createdAt: number;
+  revokedAt?: number;
+  lastUsedAt?: number;
+}
+
+/**
+ * HookRecord is one accepted webhook delivery as its owner reads it: the
+ * sender's body is never listed, the reason is the core's sanitised sentence.
+ */
+export interface HookRecord {
+  id: string;
+  assistantId: string;
+  keyId: string;
+  source: string;
+  resourceKind?: string;
+  resourceId?: string;
+  reason?: string;
+  routing: string;
+  receivedAt: number;
+}
+
 /**
  * Inbox is the snapshot: items by priority, the count that needs a person and
  * the event watermark it was read at.
@@ -1199,6 +1250,27 @@ export interface SubagentCard {
   prompt?: string;
 }
 
+/**
+ * Trigger is one event trigger: it turns one of its Assistant's own task
+ * events into one new task, only after a person approved it.
+ */
+export interface Trigger {
+  id: string;
+  assistantId: string;
+  name: string;
+  on: string;
+  taskId?: string;
+  titleContains?: string;
+  title: string;
+  brief: string;
+  kind: string;
+  state: string;
+  firesTotal: number;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // ---- Services ----
 
 /**
@@ -1477,6 +1549,10 @@ export const assistants = {
   archiveAssistant(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.ArchiveAssistant", requestID, id, revision);
   },
+  /** Autonomy reads one Assistant's webhook keys, receipts and triggers. */
+  autonomy(id: string): Promise<AssistantsAutonomy> {
+    return call("assistants.Autonomy", id);
+  },
   /** Behavior reads the proactivity rules (defaults when never set). */
   behavior(id: string): Promise<Proactivity> {
     return call("assistants.Behavior", id);
@@ -1502,6 +1578,10 @@ export const assistants = {
   /** CreateGroup records a Group of at least two Assistants and opens it. */
   createGroup(requestID: string, title: string, members: string[]): Promise<string> {
     return call("assistants.CreateGroup", requestID, title, members);
+  },
+  /** CreateHookKey makes a key for the named sources. Its secret comes back once. */
+  createHookKey(requestID: string, id: string, sources: string[]): Promise<AssistantsHookKey> {
+    return call("assistants.CreateHookKey", requestID, id, sources);
   },
   /** CreateTask queues a task for an Assistant. */
   createTask(requestID: string, in_: CreateTaskInput): Promise<void> {
@@ -1626,6 +1706,10 @@ export const assistants = {
   retryTask(requestID: string, id: string, revision: number): Promise<void> {
     return call("assistants.RetryTask", requestID, id, revision);
   },
+  /** RevokeHookKey stops a key at once; deliveries already received stay listed. */
+  revokeHookKey(requestID: string, id: string, keyID: string): Promise<void> {
+    return call("assistants.RevokeHookKey", requestID, id, keyID);
+  },
   /**
    * RoutineAction withdraws a draft routine or pauses/resumes an enabled one
    * (action cancel | pause | resume). Enabling is the approval card's answer.
@@ -1677,6 +1761,13 @@ export const assistants = {
   /** StopCoordinator marks the Coordinator stopped. */
   stopCoordinator(requestID: string, id: string): Promise<void> {
     return call("assistants.StopCoordinator", requestID, id);
+  },
+  /**
+   * TriggerAction pauses, resumes or withdraws a trigger (approving one is the
+   * approval card's answer, never this).
+   */
+  triggerAction(requestID: string, action: string, id: string, triggerID: string, revision: number): Promise<void> {
+    return call("assistants.TriggerAction", requestID, action, id, triggerID, revision);
   },
   /** VerifyMCP asks a headless Agent which of the granted servers it connects to. */
   verifyMCP(id: string): Promise<void> {

@@ -612,3 +612,47 @@ type ProactivityInput struct {
 	ReportEveryMin int    `json:"reportEveryMin"`
 	DailyBudget    int    `json:"dailyBudget"`
 }
+
+// HookKey is one webhook key of an Assistant, never with its secret.
+type HookKey struct {
+	ID          string   `json:"id"`
+	AssistantID string   `json:"assistantId"`
+	Sources     []string `json:"sources"`
+	Status      string   `json:"status"`
+	CreatedAt   int64    `json:"createdAt"`
+	RevokedAt   int64    `json:"revokedAt,omitempty"`
+	LastUsedAt  int64    `json:"lastUsedAt,omitempty"`
+}
+
+// HookRecord is one accepted webhook delivery as its owner reads it: the
+// sender's body is never listed, the reason is the core's sanitised sentence.
+type HookRecord struct {
+	ID           string `json:"id"`
+	AssistantID  string `json:"assistantId"`
+	KeyID        string `json:"keyId"`
+	Source       string `json:"source"`
+	ResourceKind string `json:"resourceKind,omitempty"`
+	ResourceID   string `json:"resourceId,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	Routing      string `json:"routing"`
+	ReceivedAt   int64  `json:"receivedAt"`
+}
+
+// Trigger is one event trigger: it turns one of its Assistant's own task
+// events into one new task, only after a person approved it.
+type Trigger struct {
+	ID            string `json:"id"`
+	AssistantID   string `json:"assistantId"`
+	Name          string `json:"name"`
+	On            string `json:"on"`
+	TaskID        string `json:"taskId,omitempty"`
+	TitleContains string `json:"titleContains,omitempty"`
+	Title         string `json:"title"`
+	Brief         string `json:"brief"`
+	Kind          string `json:"kind"`
+	State         string `json:"state"`
+	FiresTotal    int    `json:"firesTotal"`
+	Revision      int    `json:"revision"`
+	CreatedAt     int64  `json:"createdAt"`
+	UpdatedAt     int64  `json:"updatedAt"`
+}

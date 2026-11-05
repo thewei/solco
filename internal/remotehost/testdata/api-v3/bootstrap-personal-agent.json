@@ -5,6 +5,7 @@
     "personalAgent": true,
     "personalAgentActivityNotices": true,
     "personalAgentApprove": true,
+    "personalAgentAutonomy": true,
     "personalAgentGroups": true,
     "personalAgentManage": true,
     "personalAgentMemory": true,

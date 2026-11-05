@@ -14,7 +14,8 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden fixtures in testdata/")
 
-var idRe = regexp.MustCompile(`\b[adgtrcmpef]_[0-9a-f]{16}\b`)
+var idRe = regexp.MustCompile(`\b[adgtrcmpefh]_[0-9a-f]{16}\b`)
+var hookKeyRe = regexp.MustCompile(`\bhk_[0-9a-f]{16}\b`)
 
 // stable renames random ids to a_0000000000000001… in order of first sight so
 // a fixture is byte-identical between runs.
@@ -22,6 +23,14 @@ var hashRe = regexp.MustCompile(`\b[0-9a-f]{64}\b`)
 
 func stable(raw []byte, seen map[string]string) []byte {
 	raw = hashRe.ReplaceAll(raw, []byte("0000000000000000000000000000000000000000000000000000000000000000"))
+	raw = hookKeyRe.ReplaceAllFunc(raw, func(m []byte) []byte {
+		if v, ok := seen[string(m)]; ok {
+			return []byte(v)
+		}
+		v := fmt.Sprintf("hk_%016d", len(seen)+1)
+		seen[string(m)] = v
+		return []byte(v)
+	})
 	return idRe.ReplaceAllFunc(raw, func(m []byte) []byte {
 		if v, ok := seen[string(m)]; ok {
 			return []byte(v)
@@ -154,6 +163,25 @@ func TestGoldenFixtures(t *testing.T) {
 	run("memory-review", ``, "assistant", "memory", "review", aid)
 	run("proactivity-default", ``, "assistant", "proactivity", "show", aid)
 	run("proactivity-set", `{"requestId":"g-pa","expectedRevision":0,"level":"suggest","quietStart":"22:00","quietEnd":"08:00","tz":"Asia/Shanghai","reportEveryMin":120,"dailyBudget":10}`, "assistant", "proactivity", "set", aid)
+
+	// Autonomy surface (Gaps A05/A06/A09): webhook keys, their receipts and event triggers.
+	now = now.Add(time.Second)
+	hk := run("hook-key-created", fmt.Sprintf(`{"requestId":"g-hk","assistantId":%q,"sources":["github","ci"]}`, aid), "assistant", "hook", "key", "create")
+	hkID, secret := field(hk, "key", "id").(string), field(hk, "secret").(string)
+	run("hook-key-list", ``, "assistant", "hook", "key", "list", "--assistant", aid)
+	hookBody := fmt.Sprintf(`{"source":"github","event":"check.requested","resource":{"type":"task","id":%q},"reason":"CI build failed"}`, tid)
+	ts, hp := fmt.Sprint(now.Unix()), HookPath(aid)
+	delivery, _ := json.Marshal(HookDelivery{KeyID: hkID, Method: "POST", Path: hp, Timestamp: ts, Delivery: "gh-1001", Body: hookBody,
+		Signature: HookSign(secret, "POST", hp, ts, "gh-1001", []byte(hookBody))})
+	if _, err := call(t, api, string(delivery), "assistant", "hook", "ingest"); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	run("hook-events", ``, "assistant", "hook", "events", aid, "--limit", "20")
+	trg := run("trigger-draft", fmt.Sprintf(`{"requestId":"g-tg","assistantId":%q,"name":"diagnose","on":"task.failed","taskId":%q,"title":"Diagnose the failure","brief":"Find out why it failed."}`, aid, tid), "assistant", "trigger", "draft")
+	trgID := field(trg, "trigger", "id").(string)
+	run("trigger-list", ``, "assistant", "trigger", "list", "--assistant", aid)
+	run("trigger-withdrawn", `{"requestId":"g-tw"}`, "assistant", "trigger", "cancel", trgID)
+	run("hook-key-revoked", `{"requestId":"g-hr"}`, "assistant", "hook", "key", "revoke", hkID)
 
 	_, err := call(t, api, `{"requestId":"g-x","expectedRevision":1}`, "assistant", "goal", "pause", gid)
 	var ce *CodedError

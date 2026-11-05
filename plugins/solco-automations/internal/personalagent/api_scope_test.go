@@ -58,6 +58,9 @@ func TestScopedCallerOnlyReachesTheCoordinatorsActions(t *testing.T) {
 		{"assistant", "--as", ada, "routine", "resume", "r"}, // a person enables routines
 		{"assistant", "--as", ada, "trigger", "pause", "g"},  // so are triggers
 		{"assistant", "--as", ada, "trigger", "cancel", "g"},
+		{"assistant", "--as", ada, "hook", "events", "g"}, // webhook keys and receipts are the person's
+		{"assistant", "--as", ada, "hook", "key", "create"},
+		{"assistant", "--as", ada, "hook", "key", "revoke", "g"},
 		{"assistant", "--as", ada, "task", "publish", "t"},     // publishing coding work is the person's
 		{"assistant", "--as", ada, "coordinator", "stop", ada}, // not its own lifecycle
 		{"assistant", "--as", ada, "delete-forever", ada},

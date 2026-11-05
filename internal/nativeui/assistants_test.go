@@ -81,6 +81,18 @@ func stubAssistants(t *testing.T, fail bool) *[][2]string {
 				return []byte(`{"schema":1,"report":{"assistantId":"a_1","state":"idle"}}`), nil
 			case "routine list --assistant a_1":
 				return []byte(`{"schema":1,"routines":[{"name":"morning-check","assistantId":"a_1","requestedBy":"assistant","source":"chat","state":"draft","revision":1,"approved":false,"createdAt":1,"updatedAt":1,"cron":"0 9 * * *","repo":"/tmp","agent":"claude","headless":true,"paused":false}]}`), nil
+			case "hook key list --assistant a_1":
+				return []byte(`{"schema":1,"keys":[{"id":"hk_1111111111111111","assistantId":"a_1","sources":["github"],"status":"active","createdAt":1}]}`), nil
+			case "hook events a_1 --limit 20":
+				return []byte(`{"schema":1,"events":[{"id":"h_1","assistantId":"a_1","keyId":"hk_1111111111111111","source":"github","reason":"CI red","routing":"recorded","receivedAt":2}]}`), nil
+			case "trigger list --assistant a_1":
+				return []byte(`{"schema":1,"triggers":[{"id":"g_9","assistantId":"a_1","name":"diagnose","on":"task.failed","taskId":"t_1","title":"Diagnose","brief":"why","kind":"research","state":"active","firesTotal":0,"revision":3,"createdAt":1,"updatedAt":1}]}`), nil
+			case "hook key create":
+				return []byte(`{"schema":1,"replayed":false,"key":{"id":"hk_2222222222222222","assistantId":"a_1","sources":["ci"],"status":"active","createdAt":3},"secret":"s3cr3t","path":"/api/v3/hooks/assistants/a_1/wake"}`), nil
+			case "hook key revoke hk_1111111111111111":
+				return []byte(`{"schema":1,"replayed":false,"key":{"id":"hk_1111111111111111","assistantId":"a_1","sources":["github"],"status":"revoked","createdAt":1}}`), nil
+			case "trigger pause g_9", "trigger resume g_9", "trigger cancel g_9":
+				return []byte(`{"schema":1,"replayed":false,"trigger":{"id":"g_9","assistantId":"a_1","name":"diagnose","on":"task.failed","title":"Diagnose","brief":"why","kind":"research","state":"paused","firesTotal":0,"revision":4,"createdAt":1,"updatedAt":2}}`), nil
 			case "memory review a_1":
 				return []byte(`{"schema":1,"review":{"assistantId":"a_1","approved":1,"candidates":1,"max":500,"duplicates":[],"staleCandidates":[],"conflicts":[],"items":[{"id":"m_1","assistantId":"a_1","content":"short reports","state":"approved","kind":"fact","revision":2},{"id":"m_2","assistantId":"a_1","content":"maybe tea","state":"candidate","kind":"fact","revision":1}]}}`), nil
 			case "memory history m_1":

@@ -287,3 +287,25 @@ func TestHookEventsAreJudgedByTheHeartbeat(t *testing.T) {
 		t.Fatalf("woke past the budget: %+v", rep)
 	}
 }
+
+func TestListHookRecordsShowsOwnerFactsNeverTheBody(t *testing.T) {
+	e := newHookEnv(t)
+	body := `{"source":"github","event":"check.requested","reason":"CI red on main <script>"}`
+	if _, err := e.s.IngestHook(e.delivery("del-0001", body)); err != nil {
+		t.Fatal(err)
+	}
+	other := mustAssistant(t, e.s, "a2", "Bob")
+	recs, err := e.s.ListHookRecords(e.a.ID, 20)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("records = %+v, %v", recs, err)
+	}
+	if recs[0].Source != "github" || recs[0].KeyID != e.key.ID || recs[0].Routing == "" || recs[0].ReceivedAt == 0 {
+		t.Fatalf("record = %+v", recs[0])
+	}
+	if strings.Contains(recs[0].Reason, "<") {
+		t.Fatalf("reason not sanitised: %q", recs[0].Reason)
+	}
+	if got, _ := e.s.ListHookRecords(other.ID, 20); len(got) != 0 {
+		t.Fatalf("another Assistant sees %+v", got)
+	}
+}

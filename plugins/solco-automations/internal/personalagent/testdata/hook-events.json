@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "assistantId": "a_0000000000000001",
+      "id": "h_0000000000000023",
+      "keyId": "hk_0000000000000022",
+      "reason": "CI build failed",
+      "receivedAt": 1800000002000,
+      "resourceId": "t_0000000000000004",
+      "resourceKind": "task",
+      "routing": "recorded",
+      "source": "github"
+    }
+  ],
+  "schema": 1
+}

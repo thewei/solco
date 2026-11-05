@@ -587,6 +587,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+pa+"/assistants/{id}/report", s.guard(ScopeView, s.handlePAReport))
 	mux.Handle("POST "+pa+"/assistants/{id}/report/resolve", s.guard(ScopeManage, s.handlePAReportResolve))
 	mux.Handle("GET "+pa+"/assistants/{id}/routines", s.guard(ScopeView, s.handlePARoutines))
+	mux.Handle("GET "+pa+"/assistants/{id}/autonomy", s.guard(ScopeView, s.handlePAAutonomy))
+	mux.Handle("POST "+pa+"/assistants/{id}/hooks/keys", s.guard(ScopeManage, s.handlePACreateHookKey))
+	mux.Handle("POST "+pa+"/assistants/{id}/hooks/keys/{keyId}/revoke", s.guard(ScopeManage, s.handlePARevokeHookKey))
+	for _, action := range []string{"pause", "resume", "cancel"} {
+		mux.Handle("POST "+pa+"/assistants/{id}/triggers/{triggerId}/"+action, s.guard(ScopeManage, s.handlePATriggerAction(action)))
+	}
 	mux.Handle("GET "+pa+"/assistants/{id}/memory", s.guard(ScopeView, s.handlePAMemory))
 	mux.Handle("GET "+pa+"/memory/{id}/history", s.guard(ScopeView, s.handlePAMemoryHistory))
 	mux.Handle("POST "+pa+"/assistants/{id}/memory/add", s.guard(ScopeManage, s.handlePAMemoryAdd))
@@ -816,6 +822,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["personalAgentPersona"] = true
 			capabilities["personalAgentPlans"] = true
 			capabilities["personalAgentRoutines"] = true
+			capabilities["personalAgentAutonomy"] = true
 			capabilities["personalAgentMemory"] = true
 			capabilities["personalAgentProactivity"] = true
 			capabilities["personalAgentActivityNotices"] = true

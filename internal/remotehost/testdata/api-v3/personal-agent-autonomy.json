@@ -1,0 +1,48 @@
+{
+  "autonomy": {
+    "events": [
+      {
+        "id": "h_0000000000000023",
+        "assistantId": "a_0000000000000001",
+        "keyId": "hk_0000000000000022",
+        "source": "github",
+        "resourceKind": "task",
+        "resourceId": "t_0000000000000004",
+        "reason": "CI build failed",
+        "routing": "recorded",
+        "receivedAt": 1800000002000
+      }
+    ],
+    "hookPath": "/api/v3/hooks/assistants/a_0000000000000001/wake",
+    "keys": [
+      {
+        "id": "hk_0000000000000022",
+        "assistantId": "a_0000000000000001",
+        "sources": [
+          "github",
+          "ci"
+        ],
+        "status": "active",
+        "createdAt": 1800000002000
+      }
+    ],
+    "triggers": [
+      {
+        "id": "g_0000000000000025",
+        "assistantId": "a_0000000000000001",
+        "name": "diagnose",
+        "on": "task.failed",
+        "taskId": "t_0000000000000004",
+        "title": "Diagnose the failure",
+        "brief": "Find out why it failed.",
+        "kind": "research",
+        "state": "draft",
+        "firesTotal": 0,
+        "revision": 1,
+        "createdAt": 1800000002000,
+        "updatedAt": 1800000002000
+      }
+    ]
+  },
+  "schema": 1
+}

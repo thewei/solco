@@ -96,6 +96,23 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 			return nil, err
 		}
 		return raw, nil
+	case strings.HasPrefix(key, "hook key "), strings.HasPrefix(key, "hook events "), strings.HasPrefix(key, "trigger "):
+		name := map[string]string{"hook key create": "hook-key-created", "hook key list": "hook-key-list", "hook key revoke": "hook-key-revoked",
+			"trigger list": "trigger-list", "trigger pause": "trigger-withdrawn", "trigger resume": "trigger-withdrawn", "trigger cancel": "trigger-withdrawn"}[strings.Join(strings.Fields(key)[:3], " ")]
+		if strings.HasPrefix(key, "hook events ") {
+			name = "hook-events"
+		} else if strings.HasPrefix(key, "trigger ") {
+			name = map[string]string{"list": "trigger-list", "pause": "trigger-withdrawn", "resume": "trigger-withdrawn", "cancel": "trigger-withdrawn"}[strings.Fields(key)[1]]
+		}
+		if f := strings.Fields(key); len(f) > 2 && f[len(f)-2] == "--assistant" && f[len(f)-1] != paAssistantA {
+			// Only Ada owns these records; anyone else's list is empty.
+			return []byte(`{"schema":1,"keys":[],"triggers":[]}`), nil
+		}
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
 	case strings.HasPrefix(key, "routine list"):
 		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/routine-list.json")
 		if err != nil {
@@ -131,6 +148,12 @@ func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte
 		return []byte(`{"schema":1,"memory":[` + paMemory + `]}`), nil
 	}
 	return []byte(`{"schema":1,"error":{"code":"invalid","message":"unknown command"}}`), nil
+}
+
+func (f *fakeCore) snapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.calls...)
 }
 
 func (f *fakeCore) lastCall() string {
@@ -993,5 +1016,62 @@ func TestPersonalAgentReportStatusAndOwnerResolveAreScoped(t *testing.T) {
 	}
 	if core2.callCount() != 0 {
 		t.Fatal("closed gate invoked the plugin")
+	}
+}
+
+func TestPersonalAgentAutonomyRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA
+	keyID, trigID := "hk_0000000000000022", "g_0000000000000025"
+
+	golden(t, "personal-agent-autonomy.json", bodyOf(t, h.get(base+"/autonomy", h.token, nil)))
+	_, created := h.send("POST", base+"/hooks/keys", h.token, `{"requestId":"hk1","sources":["github","ci"]}`)
+	golden(t, "personal-agent-hook-key-created.json", created)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant hook key create|") || !strings.Contains(call, `"assistantId":"`+paAssistantA+`"`) || !strings.Contains(call, `"requestId":"hk1"`) {
+		t.Fatalf("create call %q", call)
+	}
+	_, revoked := h.send("POST", base+"/hooks/keys/"+keyID+"/revoke", h.token, `{"requestId":"hk2"}`)
+	golden(t, "personal-agent-hook-key-revoked.json", revoked)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant hook key revoke "+keyID) {
+		t.Fatalf("revoke call %q", call)
+	}
+	for _, action := range []string{"pause", "resume", "cancel"} {
+		status, body := h.send("POST", base+"/triggers/"+trigID+"/"+action, h.token, `{"requestId":"tg-`+action+`","expectedRevision":1}`)
+		if status != http.StatusOK {
+			t.Fatalf("%s = %d %s", action, status, body)
+		}
+		if call := core.lastCall(); !strings.HasPrefix(call, "assistant trigger "+action+" "+trigID) || !strings.Contains(call, `"expectedRevision":1`) {
+			t.Fatalf("%s call %q", action, call)
+		}
+	}
+
+	// Another Assistant's key or trigger is never reachable through this path.
+	other := "/api/v3/personal-agent/assistants/a_00000000000000ff"
+	core.mu.Lock()
+	core.calls = nil
+	core.mu.Unlock()
+	if status, _ := h.send("POST", other+"/hooks/keys/"+keyID+"/revoke", h.token, `{"requestId":"hk3"}`); status == http.StatusOK {
+		t.Fatal("revoked a key through a path that does not name its Assistant")
+	}
+	if strings.Contains(strings.Join(core.snapshot(), "\n"), "hook key revoke") {
+		t.Fatal("a key outside the path's Assistant reached the core")
+	}
+	for _, bad := range []struct{ path, body string }{
+		{base + "/hooks/keys", `{"requestId":"x1","sources":[]}`},
+		{base + "/hooks/keys", `{"requestId":"x2","sources":["a b"]}`},
+		{base + "/hooks/keys/hk_nothex/revoke", `{"requestId":"x3"}`},
+		{base + "/triggers/" + trigID + "/pause", `{"requestId":"x4","expectedRevision":0}`},
+		{base + "/triggers/" + trigID + "/pause", `{"expectedRevision":1}`},
+	} {
+		if status, _ := h.send("POST", bad.path, h.token, bad.body); status != http.StatusBadRequest {
+			t.Errorf("%s %s = %d", bad.path, bad.body, status)
+		}
+	}
+	if r := h.get(base+"/autonomy", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without a token = %d", r.StatusCode)
+	}
+	h2, _ := paHarness(t, false)
+	if r := h2.get(base+"/autonomy", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("autonomy served without the seam")
 	}
 }

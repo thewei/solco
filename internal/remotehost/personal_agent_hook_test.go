@@ -147,3 +147,108 @@ func TestWebhookAgainstTheRealCore(t *testing.T) {
 		t.Fatalf("hook events = %d, want exactly 1 (%v)", n, evs)
 	}
 }
+
+// The management surface and the ingress share one core: a key made through
+// the authenticated route delivers, shows up (without its secret) in the
+// Autonomy read next to the receipt, and stops the moment it is revoked.
+func TestAutonomyManagementAgainstTheRealCore(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the plugin")
+	}
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command("go", "build", "-o", filepath.Join(root, "bin", "solco-automations"), ".")
+	build.Dir = "../../plugins/solco-automations"
+	build.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	db := filepath.Join(t.TempDir(), "a.sqlite")
+	client := personalagent.NewClient(root, []string{"SOLCO_ASSISTANTS_DB=" + db})
+	h := newHarness(t)
+	h.srv.opts.PersonalAgent = func(context.Context) (*personalagent.Client, bool) { return client, true }
+	run := func(body string, args ...string) map[string]any {
+		t.Helper()
+		cmd := exec.Command(filepath.Join(root, "bin", "solco-automations"), append([]string{"assistant"}, args...)...)
+		cmd.Env = append(os.Environ(), "SOLCO_ASSISTANTS_DB="+db)
+		cmd.Stdin = strings.NewReader(body)
+		out, _ := cmd.Output()
+		var m map[string]any
+		if err := json.Unmarshal(out, &m); err != nil || m["error"] != nil {
+			t.Fatalf("%v: %s", args, out)
+		}
+		return m
+	}
+	asst := run(`{"requestId":"mg-asst-1","name":"Ada"}`, "create")["assistant"].(map[string]any)["id"].(string)
+	other := run(`{"requestId":"mg-asst-2","name":"Bob"}`, "create")["assistant"].(map[string]any)["id"].(string)
+	task := run(fmt.Sprintf(`{"requestId":"mg-task-1","assistantId":%q,"title":"Watch CI","brief":"b","kind":"research"}`, asst), "task", "create")["task"].(map[string]any)["id"].(string)
+	base := "/api/v3/personal-agent/assistants/" + asst
+
+	status, raw := h.send("POST", base+"/hooks/keys", h.token, `{"requestId":"mg-key-0001","sources":["github"]}`)
+	if status != http.StatusOK {
+		t.Fatalf("create key = %d %s", status, raw)
+	}
+	var made struct {
+		Key    struct{ ID string }
+		Secret string
+		Path   string
+	}
+	_ = json.Unmarshal(raw, &made)
+	if len(made.Secret) != 64 || made.Path != "/api/v3/hooks/assistants/"+asst+"/wake" {
+		t.Fatalf("created = %s", raw)
+	}
+
+	deliver := func(delivery string) int {
+		t.Helper()
+		ts := strconv.FormatInt(time.Now().Unix(), 10)
+		body := fmt.Sprintf(`{"source":"github","event":"check.requested","resource":{"type":"task","id":%q},"reason":"CI failed"}`, task)
+		req, _ := http.NewRequest("POST", h.http.URL+made.Path, strings.NewReader(body))
+		req.Header.Set("X-Solco-Hook-Key", made.Key.ID)
+		req.Header.Set("X-Solco-Timestamp", ts)
+		req.Header.Set("X-Solco-Delivery", delivery)
+		req.Header.Set("X-Solco-Signature", hookSig(made.Secret, made.Path, ts, delivery, body))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	if got := deliver("mg-delivery-1"); got != http.StatusAccepted {
+		t.Fatalf("delivery with the new key = %d", got)
+	}
+
+	read := string(bodyOf(t, h.get(base+"/autonomy", h.token, nil)))
+	if !strings.Contains(read, made.Key.ID) || !strings.Contains(read, `"routing"`) || !strings.Contains(read, "CI failed") {
+		t.Fatalf("autonomy = %s", read)
+	}
+	if strings.Contains(read, made.Secret) || strings.Contains(strings.ToLower(read), "secret") {
+		t.Fatalf("the secret is listed: %s", read)
+	}
+
+	// Bob's path cannot revoke Ada's key; Ada's can, and then deliveries stop.
+	if status, _ = h.send("POST", "/api/v3/personal-agent/assistants/"+other+"/hooks/keys/"+made.Key.ID+"/revoke", h.token, `{"requestId":"mg-rev-0001"}`); status != http.StatusNotFound {
+		t.Fatalf("revoke through another Assistant = %d", status)
+	}
+	if got := deliver("mg-delivery-2"); got != http.StatusAccepted {
+		t.Fatalf("delivery after a refused revoke = %d", got)
+	}
+	if status, raw = h.send("POST", base+"/hooks/keys/"+made.Key.ID+"/revoke", h.token, `{"requestId":"mg-rev-0002"}`); status != http.StatusOK || !strings.Contains(string(raw), `"revoked"`) {
+		t.Fatalf("revoke = %d %s", status, raw)
+	}
+	if got := deliver("mg-delivery-3"); got != http.StatusUnauthorized {
+		t.Fatalf("delivery with a revoked key = %d", got)
+	}
+
+	// A draft trigger cannot be paused (it never fired); it can be withdrawn.
+	trg := run(fmt.Sprintf(`{"requestId":"mg-trg-0001","assistantId":%q,"name":"diagnose","on":"task.failed","taskId":%q,"title":"Diagnose","brief":"why"}`, asst, task), "trigger", "draft")["trigger"].(map[string]any)
+	tid := trg["id"].(string)
+	if status, _ = h.send("POST", base+"/triggers/"+tid+"/pause", h.token, `{"requestId":"mg-tp-0001","expectedRevision":1}`); status != http.StatusConflict {
+		t.Fatalf("pausing a draft = %d", status)
+	}
+	if status, raw = h.send("POST", base+"/triggers/"+tid+"/cancel", h.token, `{"requestId":"mg-tp-0002","expectedRevision":1}`); status != http.StatusOK || !strings.Contains(string(raw), `"withdrawn"`) {
+		t.Fatalf("withdraw = %d %s", status, raw)
+	}
+}

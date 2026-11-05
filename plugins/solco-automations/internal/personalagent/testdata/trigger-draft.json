@@ -1,0 +1,32 @@
+{
+  "approval": {
+    "action": "When task t_0000000000000004 failed, queue one research task \"Diagnose the failure\" for this Assistant — at most 5 a day, never because of a task this trigger created itself. Nothing already in the record is replayed. Read-only and review-first limits are instructions to the Agent, not an enforced sandbox.",
+    "actionHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "assistantId": "a_0000000000000001",
+    "createdAt": 1800000002000,
+    "decidedAt": 0,
+    "expectedRevision": 1,
+    "expiresAt": 1800604802000,
+    "id": "p_0000000000000024",
+    "state": "pending",
+    "subjectId": "g_0000000000000025",
+    "subjectKind": "trigger"
+  },
+  "replayed": false,
+  "schema": 1,
+  "trigger": {
+    "assistantId": "a_0000000000000001",
+    "brief": "Find out why it failed.",
+    "createdAt": 1800000002000,
+    "firesTotal": 0,
+    "id": "g_0000000000000025",
+    "kind": "research",
+    "name": "diagnose",
+    "on": "task.failed",
+    "revision": 1,
+    "state": "draft",
+    "taskId": "t_0000000000000004",
+    "title": "Diagnose the failure",
+    "updatedAt": 1800000002000
+  }
+}

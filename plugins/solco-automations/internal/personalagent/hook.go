@@ -159,6 +159,42 @@ func (s *Store) RevokeHookKey(requestID, keyID string) (HookKey, bool, error) {
 	})
 }
 
+// HookRecord is one accepted delivery as the owner reads it: where it came from,
+// what it pointed at, the sanitised reason and where the heartbeat routed it.
+// The sender's body and the payload hash are never listed.
+type HookRecord struct {
+	ID           string `json:"id"`
+	AssistantID  string `json:"assistantId"`
+	KeyID        string `json:"keyId"`
+	Source       string `json:"source"`
+	ResourceKind string `json:"resourceKind,omitempty"`
+	ResourceID   string `json:"resourceId,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	Routing      string `json:"routing"`
+	ReceivedAt   int64  `json:"receivedAt"`
+}
+
+// ListHookRecords lists an Assistant's newest accepted deliveries.
+func (s *Store) ListHookRecords(assistantID string, limit int) ([]HookRecord, error) {
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.db.Query(`SELECT id,assistant_id,key_id,source,resource_kind,resource_id,reason,routing,received_at FROM hook_events WHERE assistant_id=? ORDER BY received_at DESC, id LIMIT ?`, assistantID, limit)
+	if err != nil {
+		return nil, wrapBusy(err)
+	}
+	defer rows.Close()
+	out := []HookRecord{}
+	for rows.Next() {
+		var h HookRecord
+		if err := rows.Scan(&h.ID, &h.AssistantID, &h.KeyID, &h.Source, &h.ResourceKind, &h.ResourceID, &h.Reason, &h.Routing, &h.ReceivedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
 // HookDelivery is one request as the Host saw it.
 type HookDelivery struct {
 	KeyID     string `json:"keyId"`

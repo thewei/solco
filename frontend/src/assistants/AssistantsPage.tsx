@@ -25,6 +25,7 @@ import { ChatComposerBox, ChatComposerTextarea, ChatComposerToolbar, useComposer
 import { WorkStyle } from "./WorkStyle";
 import { MemoryTab } from "./MemoryTab";
 import { Behavior } from "./Behavior";
+import { Autonomy } from "./Autonomy";
 import "./assistants.css";
 
 /**
@@ -38,7 +39,7 @@ import "./assistants.css";
  * duplicating, and a refusal shows the plugin's own sentence.
  */
 
-type Tab = "needs" | "watching" | "routines" | "tasks" | "done" | "memory" | "behavior" | "style" | "about";
+type Tab = "needs" | "watching" | "routines" | "tasks" | "done" | "memory" | "behavior" | "autonomy" | "style" | "about";
 type Form = "assistant" | "group" | "watch" | "task" | "rename" | null;
 
 const rid = () => crypto.randomUUID();
@@ -223,6 +224,7 @@ export function AssistantsPage() {
     ["done", "Done", 0],
     ["memory", "Memory", 0],
     ["behavior", "Behavior", 0],
+    ["autonomy", "Autonomy", 0],
     ["style", "Work style", 0],
     ["about", "About", 0],
   ];
@@ -479,6 +481,7 @@ function DrawerBody({ tab, detail, drawer, view, pending, act, pull }: { tab: Ta
   if (tab === "about") return <About detail={detail} view={view} act={act} />;
   if (tab === "memory") return <MemoryTab id={detail.assistant.id} act={act} />;
   if (tab === "behavior") return <Behavior id={detail.assistant.id} act={act} />;
+  if (tab === "autonomy") return <Autonomy id={detail.assistant.id} act={act} />;
   if (tab === "style") return <WorkStyle id={detail.assistant.id} agents={view.agents} act={act} />;
   if (!drawer) return <Empty>Loading…</Empty>;
   const needTasks = drawer.tasks.filter((t) => reasons.has(t.id) || t.needsYou);

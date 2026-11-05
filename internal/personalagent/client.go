@@ -752,3 +752,65 @@ func (c *Client) HookIngest(ctx context.Context, d HookDelivery) (HookReceipt, e
 	}
 	return out.Receipt, c.do(ctx, d, &out, "hook", "ingest")
 }
+
+// HookKeys lists an Assistant's webhook keys (no secrets), newest first.
+func (c *Client) HookKeys(ctx context.Context, assistantID string) ([]HookKey, error) {
+	var out struct {
+		Keys []HookKey `json:"keys"`
+	}
+	return out.Keys, c.do(ctx, nil, &out, "hook", "key", "list", "--assistant", assistantID)
+}
+
+// HookRecords lists an Assistant's newest accepted webhook deliveries.
+func (c *Client) HookRecords(ctx context.Context, assistantID string, limit int) ([]HookRecord, error) {
+	var out struct {
+		Events []HookRecord `json:"events"`
+	}
+	args := []string{"hook", "events", assistantID}
+	if limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+	return out.Events, c.do(ctx, nil, &out, args...)
+}
+
+// CreateHookKey makes a key. The secret is returned once (empty on a replay)
+// and is never listed again; path is where the sender must post.
+func (c *Client) CreateHookKey(ctx context.Context, requestID, assistantID string, sources []string) (key HookKey, secret, path string, err error) {
+	var out struct {
+		Key    HookKey `json:"key"`
+		Secret string  `json:"secret"`
+		Path   string  `json:"path"`
+	}
+	in := struct {
+		RequestID   string   `json:"requestId"`
+		AssistantID string   `json:"assistantId"`
+		Sources     []string `json:"sources"`
+	}{requestID, assistantID, sources}
+	err = c.do(ctx, in, &out, "hook", "key", "create")
+	return out.Key, out.Secret, out.Path, err
+}
+
+// RevokeHookKey stops a key at once.
+func (c *Client) RevokeHookKey(ctx context.Context, requestID, keyID string) (HookKey, error) {
+	var out struct {
+		Key HookKey `json:"key"`
+	}
+	return out.Key, c.do(ctx, req{RequestID: requestID}, &out, "hook", "key", "revoke", keyID)
+}
+
+// Triggers lists an Assistant's event triggers, newest first.
+func (c *Client) Triggers(ctx context.Context, assistantID string) ([]Trigger, error) {
+	var out struct {
+		Triggers []Trigger `json:"triggers"`
+	}
+	return out.Triggers, c.do(ctx, nil, &out, "trigger", "list", "--assistant", assistantID)
+}
+
+// TriggerAction runs cancel | pause | resume on a trigger (approving is the
+// approval card's answer, never this).
+func (c *Client) TriggerAction(ctx context.Context, requestID, action, id string, rev int) (Trigger, error) {
+	var out struct {
+		Trigger Trigger `json:"trigger"`
+	}
+	return out.Trigger, c.do(ctx, req{requestID, rev}, &out, "trigger", action, id)
+}

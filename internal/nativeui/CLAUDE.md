@@ -43,6 +43,7 @@ settings_assistants_archive.go: Settings → Archived Assistants 的异步归档
 assistants_section.go: 侧栏 Assistants 区（门开时取代 Projects 区）——每行一个 Assistant，状态点（需要你>运行中）+ 待处理数，“+” = New Assistant；渲染零 IO
 assistants_page.go: /assistants 路由体——惰性创建的 WebView + 失败锁存；页面自己轮询桥
 assistants_bridge.go: AssistantsBridge（`mygo.BindAs("assistants", …)`）——Snapshot（轻：概览 + 选中 Assistant 的 Approval/Inbox/Coordinator + 可选 agent）、Drawer（Goal/Task/Run/Memory，Run 的窗格仍在树里才可打开，抽屉开着才读）、EnsureChat（首条消息拉起 Coordinator）、BindCoordinator（静默绑定，不移动 Mac 选中项）与全部命令（建/改名/启停 Assistant、Goal 与 PR Watch、Goal 动作、Task、Approval 带 actionHash）；每个命令带 requestId，拒绝原文透传
+assistants_autonomy_bridge.go: 桥的 Autonomy / CreateHookKey（secret 只此处一次性返回）/ RevokeHookKey / TriggerAction（pause|resume|cancel；批准只走审批卡）——权威是插件核心，入口地址只在 Remote Access 真监听时给出；页面 More ▸ Autonomy（frontend/src/assistants/Autonomy.tsx）
 remote_personal_agent.go: 手机 Assistants 的桌面缝——`assistantsRemote`（原子客户端指针，门开且概览落地后由窗口线程发布、门关即撤）、`hostPersonalAgent`（Host goroutine 只读指针）、`notifyAssistantsChanged`（概览计数摘要变了才发 `personal-agent.changed`，首读静默）
 assistants_test.go: 门/探测接线、门关零痕迹与 Projects 回退、侧栏区取代 Projects 并点击进页、桥 Snapshot、PR Watch 请求体、门关拒绝（fake exec，不跑真插件）
 automations_ui.go: com.whstudio.solco.automations 插件门——automationsState、detectAutomations（30s 焦点去抖、in-flight 不重复）、automationsAvailable（Supported ∧ 本机实例，唯一显示门）、refreshAutomations/loadAutomationHistory（automationsGo/newAutomationsClient 测试缝）；门关即零痕迹
