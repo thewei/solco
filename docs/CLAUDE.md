@@ -17,6 +17,7 @@ Members:
 - `shepherdr-2.1-parity-decisions.jsonl` — manual source-case ledger (46 priority cases planned, none verified) and `solco-assistants-required-cases.jsonl` — 31 **mandatory Solco-only** Assistant/Memory/Watch/mobile/migration cases (all planned). Checker: `scripts/check-shepherdr-2.1-parity.mjs`, final gate checks both.
 - `github-release-updates.md` — signed GitHub Releases updater publishing runbook and first-install migration limit.
 - `terminal-interaction-spec.md` — terminal interaction-quality contract and manual acceptance for the hosted Herdr TUI surface.
+- `herdr-pane-history-api-validation-2026-11-05.md` — Herdr v0.9.5 / Protocol 22 实机 API 与源码验证：pane.read 硬限制 1000 屏幕行、pane.selection.read 可只读提取全部保留文本（修订号门禁，视口不变），精确区分 ANSI、Alternate Screen 与长期归档的缺口。
 - `performance-engineering.md` — measured performance contract, budgets, methodology, and known lessons.
 - `macos-packaging-and-development.md` — macOS `.app` packaging/install, Mobile Web composition, and the cross-repo debug loop.
 - `remote-client-architecture.md` — Host Remote API and remote/mobile client architecture.

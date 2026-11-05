@@ -28,6 +28,8 @@ machines.go: 远程机管理及状态入口，启动 machine list 读取 6 秒 d
 machines_test.go: 机器配置与状态回归；CLI 退出 1 仍保留全部判定（`TestMachineStatusKeepsTheVerdictsOfAnExitingCLI`，无判定时错误带 CLI 的 stderr）；桥 socket 路径、API/client 双转发（`TestBridgeForwardsCarryTheClientSocketBesideTheAPISocket`）、CloseBridge 只收被点名机器的桥（进程、两个 socket、登记项，不动别的机器）
 search_gate.go: 搜索、复制等 Herdr 搜索协议适配
 search_gate_test.go: 搜索消息边界回归
+retained_history.go: 使用 pane.copy_motion 内容修订号 + pane.get 历史行边界 + pane.selection.read 绝对行选区，只读提取 Herdr/Ghostty 保留的完整纯文本历史；不调用 pane.scroll，不占用 Terminal controller，也不接管持久化
+retained_history_test.go: Schema-shaped 协议契约、修订变化拒绝与 opt-in 真机读取验收（只报告字节数和行数，不输出终端正文）
 scroll_contract_test.go: Herdr scroll 消息与状态协定
 herdr_test.go: Manager/协议基础回归（含 ErrProtocolTooOld 哨兵与 EnsureRunning 对旧存活服务器只 ping 一次、绝不二次拉起的回归）
 run_cli_test.go: RunCLI 经解析出的二进制执行、失败时带上 stderr 的回归；UpgradeRuntime 决策表（兼容交接不动 stop、旧服务器存活则 stop、命名 session 定域、无服务器不 stop、更新失败浮出 stderr）
