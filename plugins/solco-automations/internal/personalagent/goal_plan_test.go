@@ -366,6 +366,13 @@ func TestStaleGoalSpeaksUpWithBackoff(t *testing.T) {
 	if n := count(); n != MaxStaleReminders {
 		t.Fatalf("stale reminders = %d, want %d", n, MaxStaleReminders)
 	}
+	// A07: every reminder names one next step, not just the absence of progress.
+	facts, _ := s.Facts(a.ID, g.ID, 50)
+	for _, f := range facts {
+		if f.Kind == FactStale && !strings.Contains(f.Text, "Next: ") {
+			t.Errorf("a stale reminder must say what to do next: %q", f.Text)
+		}
+	}
 }
 
 func TestSupervisorLeavesPausedAndCancelledGoalsAlone(t *testing.T) {

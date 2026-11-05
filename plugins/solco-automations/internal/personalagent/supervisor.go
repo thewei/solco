@@ -555,7 +555,7 @@ func (sv *Supervisor) stale(g Goal, plan GoalPlan, rep *SupervisorReport) error 
 			break
 		}
 		added, err := s.newFact(Fact{AssistantID: g.AssistantID, GoalID: g.ID, Kind: FactStale,
-			Text: fmt.Sprintf("No progress on %q for %d min — %d of %d milestone(s) verified, plan is %s", g.Title, elapsed/60000, plan.Verified, plan.Total, plan.State)},
+			Text: fmt.Sprintf("No progress on %q for %d min — %d of %d milestone(s) verified, plan is %s. Next: %s", g.Title, elapsed/60000, plan.Verified, plan.Total, plan.State, nextWhy(plan))},
 			fmt.Sprintf("stale:%s:%d:%d", g.ID, last, k))
 		if err != nil {
 			return err
@@ -568,4 +568,9 @@ func (sv *Supervisor) stale(g Goal, plan GoalPlan, rep *SupervisorReport) error 
 		}
 	}
 	return nil
+}
+
+func nextWhy(p GoalPlan) string {
+	_, why := nextStep(p)
+	return why
 }
