@@ -37,6 +37,10 @@ const (
 	ReviewMerged       = "merged"
 	ReviewMergeFailed  = "merge_failed"
 	ReviewStale        = "stale"
+	// The Owner's two other answers to the evidence (Gap Q02): send the work
+	// back with words, or close the task. Neither merges anything.
+	ReviewChangesRequested = "changes_requested"
+	ReviewRejected         = "rejected"
 )
 
 // MaxChecks bounds the approved check list.

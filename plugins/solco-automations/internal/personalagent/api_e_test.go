@@ -49,3 +49,41 @@ func TestAPIReviewAndMergeThroughTheCLI(t *testing.T) {
 		t.Fatalf("no reviewer = %q", codeOf(err))
 	}
 }
+
+// Q02 through the CLI: the Owner sends work back or closes it; unknown fields are refused.
+func TestAPIReviewResumeAndRejectThroughTheCLI(t *testing.T) {
+	f := newReview(t)
+	api := &API{Store: f.s, Reviewer: f.r}
+	f.agentWork(map[string]string{"x.txt": "1\n"}, "work")
+	f.finish()
+	started, err := call(t, api, `{"requestId":"s1"}`, "assistant", "review", "start", f.task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := started["review"].(map[string]any)["id"].(string)
+	if _, err := call(t, api, `{"requestId":"r0","feedback":""}`, "assistant", "review", "resume", id); codeOf(err) != "invalid" {
+		t.Fatalf("empty feedback = %q", codeOf(err))
+	}
+	if _, err := call(t, api, `{"requestId":"r1","feedbak":"typo"}`, "assistant", "review", "resume", id); codeOf(err) != "invalid" {
+		t.Fatalf("typo'd field = %q", codeOf(err))
+	}
+	got, err := call(t, api, `{"requestId":"r2","feedback":"add a test"}`, "assistant", "review", "resume", id)
+	if err != nil || got["review"].(map[string]any)["state"] != ReviewChangesRequested {
+		t.Fatalf("resume = %v %v", got, err)
+	}
+	if _, err := call(t, api, `{"requestId":"r3","reason":"no"}`, "assistant", "review", "reject", id); codeOf(err) != "bad_state" {
+		t.Fatalf("reject after resume = %q", codeOf(err))
+	}
+	// Second round: reject.
+	f.agentWork(map[string]string{"y.txt": "2\n"}, "again")
+	f.finish()
+	s2, err := call(t, api, `{"requestId":"s2"}`, "assistant", "review", "start", f.task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id2 := s2["review"].(map[string]any)["id"].(string)
+	rj, err := call(t, api, `{"requestId":"rj","reason":"wrong approach"}`, "assistant", "review", "reject", id2)
+	if err != nil || rj["review"].(map[string]any)["state"] != ReviewRejected {
+		t.Fatalf("reject = %v %v", rj, err)
+	}
+}

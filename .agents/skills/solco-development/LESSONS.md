@@ -113,3 +113,6 @@
 - 2026-11-05 做"身份/授权"类功能先用真二进制做越权实验再设计（隔离 `HERDR_PLUGIN_STATE_DIR`）：本次实测 `--as` 只是约定——裸 CLI 与直接写 SQLite 同用户都能做 Owner 的事。因此授权证据必须是 Agent 拿不到的东西（Owner 私钥签名），而不是"来自哪个入口"；并且每个"伪造/篡改"测试都做变异验证（把校验改成恒真，测试必须变红）。已知做不到的部分写成 tripwire 测试（`TestKnownResidual…`）+ 威胁模型残余风险，别假装解决。手改库的坏行要当惰性处理，不要让整个决策 `internal` 报错。
 - 2026-11-05 Shell 工具里 `cmd &`/`nohup … &` 在该次调用结束时会被一起杀掉（输出文件 0 字节、进程不在）：长时间门禁一律把脚本放 `/tmp/x.sh`，用 `bash /tmp/x.sh` + `block_until_ms: 0` 起后台，再 `AwaitShell`。root `go test ./...` 全量约 3 分钟（nativeui 130s）。
 - 2026-11-05 root 与插件各自实现同一份"签名字节"（`GrantPayload`）时，两边都钉同一个金向量（固定 seed→固定 payload+seal），再加一个"root 签→真二进制核心验"的 e2e（`TestRealPluginBinaryOwnerGrantAutosave`）；只做单侧单测抓不到 JSON 规范化漂移。
+
+- **加“去重/幂等返回既有条目”会让造数据的旧测试变红**（2026-11-05，A08）：批量造 60 条同文案记忆的测试在 Agent 提议去重后只得到 1 条。改被测数据（给每条加序号），不要放松新规则；加新规则前先 `rg` 一遍用同一文本反复 propose 的测试。
+- **“Owner 回答证据”类动作先查哪层真有 UI**（2026-11-05，Q02）：E03 的 review/merge 只有插件 CLI，根端没有 bridge/页面。补核心语义（Resume/Reject）时同步在 tracker 写明 UI 缺口，别把 CLI 当成“桌面已可用”。

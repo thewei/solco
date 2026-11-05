@@ -8,6 +8,8 @@ package personalagent
 //	assistant review agent <reviewId>        optional second-Agent review task
 //	assistant review request-merge <reviewId>  an approval card, never a merge
 //	assistant review merge <reviewId>        merges only an approved, still-fresh review
+//	assistant review resume <reviewId>       {requestId, feedback}: back to the same worktree as a new attempt
+//	assistant review reject <reviewId>       {requestId, reason}: close the task, merge nothing, keep the work
 //	assistant checks show|set <assistantId>  check commands run only once approved
 
 func (a *API) review(args []string, body []byte) (any, error) {
@@ -15,11 +17,15 @@ func (a *API) review(args []string, body []byte) (any, error) {
 		return nil, coded("unavailable", "review is not available here")
 	}
 	if len(args) != 2 {
-		return nil, coded("invalid", "usage: assistant review <start|show|get|agent|request-merge|merge> <id>")
+		return nil, coded("invalid", "usage: assistant review <start|show|get|agent|request-merge|merge|resume|reject> <id>")
 	}
 	cmd, id := args[0], args[1]
-	var in common
-	if cmd == "start" || cmd == "agent" || cmd == "request-merge" {
+	var in struct {
+		common
+		Feedback string `json:"feedback"`
+		Reason   string `json:"reason"`
+	}
+	if cmd == "start" || cmd == "agent" || cmd == "request-merge" || cmd == "resume" || cmd == "reject" {
 		if err := decode(body, &in); err != nil {
 			return nil, err
 		}
@@ -45,6 +51,12 @@ func (a *API) review(args []string, body []byte) (any, error) {
 		return ok("review", rv, "approval", ap, "replayed", replayed), err
 	case "merge":
 		rv, err := a.Reviewer.Merge(id)
+		return ok("review", rv), err
+	case "resume":
+		rv, replayed, err := a.Reviewer.Resume(in.RequestID, id, in.Feedback)
+		return ok("review", rv, "replayed", replayed), err
+	case "reject":
+		rv, err := a.Reviewer.Reject(in.RequestID, id, in.Reason)
 		return ok("review", rv), err
 	}
 	return nil, coded("invalid", "unknown review command %q", cmd)

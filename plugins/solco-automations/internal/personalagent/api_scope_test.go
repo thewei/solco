@@ -66,6 +66,8 @@ func TestScopedCallerOnlyReachesTheCoordinatorsActions(t *testing.T) {
 		{"assistant", "--as", ada, "coordinator", "stop", ada}, // not its own lifecycle
 		{"assistant", "--as", ada, "delete-forever", ada},
 		{"assistant", "--as", ada, "persona", "restore", ada},
+		{"assistant", "--as", ada, "review", "reject", "v"}, // answering evidence is the person's
+		{"assistant", "--as", ada, "review", "resume", "v"},
 	} {
 		_, err := call(t, api, `{"requestId":"r-12345678"}`, args...)
 		if codeOf(err) != "forbidden" {
