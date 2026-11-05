@@ -35,6 +35,9 @@ type Assistant struct {
 	Revision           int      `json:"revision"`
 	CreatedAt          int64    `json:"createdAt"`
 	UpdatedAt          int64    `json:"updatedAt"`
+	// System marks the Assistant the Automations plugin owns scheduled runs
+	// with. It has no Coordinator and nothing to chat with.
+	System bool `json:"system,omitempty"`
 }
 
 // CreateAssistantInput is the body of `assistant create`.
@@ -71,6 +74,10 @@ func getAssistantTx(q interface {
 	a, err := scanAssistant(q.QueryRow(`SELECT `+assistantCols+` FROM assistants WHERE id=?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
+	}
+	if err == nil {
+		var one int
+		a.System = q.QueryRow(`SELECT 1 FROM meta WHERE key='automations_assistant' AND value=?`, id).Scan(&one) == nil
 	}
 	return a, wrapBusy(err)
 }
@@ -183,5 +190,14 @@ func (s *Store) ListAssistants() ([]Assistant, error) {
 		}
 		out = append(out, a)
 	}
-	return out, wrapBusy(rows.Err())
+	if err := rows.Err(); err != nil {
+		return nil, wrapBusy(err)
+	}
+	var sysID string
+	if s.db.QueryRow(`SELECT value FROM meta WHERE key='automations_assistant'`).Scan(&sysID) == nil {
+		for i := range out {
+			out[i].System = out[i].ID == sysID
+		}
+	}
+	return out, nil
 }

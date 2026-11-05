@@ -2,6 +2,7 @@ package personalagent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -426,6 +427,37 @@ func TestEditedActiveRoutineAsksAgainInsteadOfGoingQuiet(t *testing.T) {
 	}
 	if rep, err := rs.Tick(); err != nil || rep.Fired != 1 {
 		t.Fatalf("did not run after the new yes: %+v %v", rep, err)
+	}
+}
+
+// Real-device AC-02 (F2): the system "Automations" assistant owns scheduled
+// runs; it is marked as such on the wire and never gets a Coordinator to chat
+// with (enforced here, not only hidden in the page).
+func TestSystemAutomationsAssistantIsMarkedAndHasNoCoordinator(t *testing.T) {
+	e := newRoutineEnv(t)
+	sys, err := e.s.AutomationsAssistant()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.s.GetAssistant(sys.ID)
+	if err != nil || !got.System {
+		t.Fatalf("system assistant = %+v %v", got, err)
+	}
+	if ada, _ := e.s.GetAssistant(e.a.ID); ada.System {
+		t.Fatal("an ordinary assistant is marked as the system one")
+	}
+	list, _ := e.s.ListAssistants()
+	marked := 0
+	for _, a := range list {
+		if a.System {
+			marked++
+		}
+	}
+	if marked != 1 {
+		t.Fatalf("%d assistants marked system in the list", marked)
+	}
+	if _, _, err := e.s.StartCoordinatorAs("sys-start", sys.ID, "omp", ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a Coordinator for the system assistant: %v", err)
 	}
 }
 

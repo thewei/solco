@@ -118,6 +118,9 @@ func (s *Store) StartCoordinatorAs(requestID, assistantID, agentKind, model stri
 	if len(model) > 120 || strings.ContainsAny(model, "\n\r\x00") {
 		return Coordinator{}, false, fmt.Errorf("%w: invalid model", ErrInvalid)
 	}
+	if a, err := s.GetAssistant(assistantID); err == nil && a.System {
+		return Coordinator{}, false, fmt.Errorf("%w: this assistant runs your scheduled Automations and has no conversation", ErrInvalid)
+	}
 	payload := map[string]string{"assistant": assistantID, "agent": agentKind, "model": model}
 	// A replay is not a new launch; return the exact previous receipt even if
 	// the original session was stopped later.

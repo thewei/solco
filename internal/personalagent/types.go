@@ -21,6 +21,9 @@ type Assistant struct {
 	Revision           int      `json:"revision"`
 	CreatedAt          int64    `json:"createdAt"`
 	UpdatedAt          int64    `json:"updatedAt"`
+	// System marks the Assistant the Automations plugin owns scheduled runs
+	// with: no Coordinator, nothing to chat with.
+	System bool `json:"system,omitempty"`
 }
 
 // Commitment is one thing a Goal keeps doing.

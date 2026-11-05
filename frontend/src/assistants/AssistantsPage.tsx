@@ -646,6 +646,19 @@ function Conversation({ view, detail, setError, refresh }: { view: AssistantsVie
       .finally(refresh);
   };
 
+  if (a.system) {
+    // The plugin's own owner of scheduled runs: there is no one to talk to.
+    return (
+      <div className="as-shell">
+        <div className="as-shell-body">
+          <div className="as-hello">
+            <h2>{a.name}</h2>
+            <p>Runs your scheduled Automations. There is nothing to chat with here — see its runs under More, and manage the schedules in Automations.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (bound) return <div className="as-chatwrap"><App key={`${a.id}|${co.paneId}`} /></div>;
   const starting = held !== null || co.state === "starting" || (live && !bind?.bound);
   const stranded = co.state === "ready" && !detail.coordinatorOpen;

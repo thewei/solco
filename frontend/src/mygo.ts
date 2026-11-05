@@ -40,6 +40,11 @@ export interface Assistant {
   revision: number;
   createdAt: number;
   updatedAt: number;
+  /**
+   * System marks the Assistant the Automations plugin owns scheduled runs
+   * with: no Coordinator, nothing to chat with.
+   */
+  system?: boolean;
 }
 
 /**
