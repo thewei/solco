@@ -364,6 +364,71 @@ func TestRoutineChangedAfterApprovalIsNeverEnabled(t *testing.T) {
 	}
 }
 
+// Real-device AC-02 (F1): an enabled Routine whose definition was edited by
+// hand used to stop firing in silence. It now says so, asks for a new yes bound
+// to the edited definition, and runs again only after that yes.
+func TestEditedActiveRoutineAsksAgainInsteadOfGoingQuiet(t *testing.T) {
+	e := newRoutineEnv(t)
+	got, _ := e.draft(t, "r1", nil)
+	ap := got["approval"].(map[string]any)
+	e.approve(t, ap["id"].(string), ap["actionHash"].(string))
+	if r, _ := e.s.GetRoutine("morning-check"); r.State != RoutineActive {
+		t.Fatalf("routine = %+v", r)
+	}
+	cfg, _ := config.Load()
+	x := *cfg.Find("morning-check")
+	x.Prompt = "Something the person never saw."
+	if res, err := config.Put("morning-check", x, false); err != nil || res.Problem != "" {
+		t.Fatalf("edit: %+v %v", res, err)
+	}
+	rep, err := e.api.keeper().Tick()
+	if err != nil || rep.Stale != 1 {
+		t.Fatalf("keeper = %+v %v", rep, err)
+	}
+	r, _ := e.s.GetRoutine("morning-check")
+	if r.State != RoutineDraft || r.Approved || r.Revision != 2 {
+		t.Fatalf("routine after the edit = %+v", r)
+	}
+	var card *Approval
+	aps, _ := e.s.ListApprovals(e.a.ID)
+	for i := range aps {
+		if aps[i].SubjectKind == "routine" && aps[i].State == ApprovalPending {
+			card = &aps[i]
+		}
+	}
+	if card == nil || !strings.Contains(card.Action, "Something the person never saw") {
+		t.Fatalf("no card for the edited definition: %+v", aps)
+	}
+	fs, _ := e.s.Facts(e.a.ID, "", 50)
+	joined := ""
+	for _, f := range fs {
+		joined += f.Text + "\n"
+	}
+	if !strings.Contains(joined, "changed after you approved it") {
+		t.Fatalf("no fact says the routine changed:\n%s", joined)
+	}
+	// Nothing fires while the new yes is outstanding.
+	day2 := at(9, 0).Add(24*time.Hour + 5*time.Second)
+	rs := &RuleScheduler{Store: e.s, Load: config.Load, Now: func() time.Time { return day2 }}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 0 {
+		t.Fatalf("fired before the new yes: %+v %v", rep, err)
+	}
+	// Ticking again does not pile up cards or facts.
+	if _, err := e.api.keeper().Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := e.s.ListApprovals(e.a.ID); len(again) != len(aps) {
+		t.Fatalf("approvals grew from %d to %d", len(aps), len(again))
+	}
+	e.approve(t, card.ID, card.ActionHash)
+	if r, _ := e.s.GetRoutine("morning-check"); r.State != RoutineActive {
+		t.Fatalf("not re-enabled after the yes: %+v", r)
+	}
+	if rep, err := rs.Tick(); err != nil || rep.Fired != 1 {
+		t.Fatalf("did not run after the new yes: %+v %v", rep, err)
+	}
+}
+
 func TestRoutineCancelPauseAndDenial(t *testing.T) {
 	e := newRoutineEnv(t)
 	got, _ := e.draft(t, "r1", nil)

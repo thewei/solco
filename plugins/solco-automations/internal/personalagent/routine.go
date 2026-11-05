@@ -256,8 +256,81 @@ func (k *RoutineKeeper) Tick() (RoutineReport, error) {
 	return rep, err
 }
 
+// reviewActive is the other half of the hash gate: the rule scheduler already
+// skips an enabled Routine whose definition no longer matches what was approved,
+// and this says so. The routine goes back to a draft of the edited definition
+// with one new card; it runs again only after that yes. Every step is keyed by
+// the new hash, so a repeated pass adds nothing.
+func (k *RoutineKeeper) reviewActive(rep *RoutineReport) error {
+	rows, err := k.Store.db.Query(`SELECT `+routineCols+` FROM routines WHERE state=? ORDER BY name`, RoutineActive)
+	if err != nil {
+		return wrapBusy(err)
+	}
+	var active []Routine
+	for rows.Next() {
+		x, err := scanRoutine(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		active = append(active, x)
+	}
+	rows.Close()
+	for _, r := range active {
+		cfg, err := k.Load()
+		if err != nil {
+			return err
+		}
+		a := cfg.Find(r.Name)
+		if a == nil {
+			if err := k.Store.setRoutineState(r.Name, RoutineCancelled); err != nil {
+				return err
+			}
+			rep.Withdrawn++
+			if err := k.Store.newFactFor(r.AssistantID, fmt.Sprintf("Routine %s was removed from Automations", r.Name), fmt.Sprintf("routine-gone:%s:%d", r.Name, r.Revision)); err != nil {
+				return err
+			}
+			continue
+		}
+		hash := DefinitionHash(*a)
+		if hash == r.DefHash {
+			continue
+		}
+		if err := k.Store.setRoutineState(r.Name, RoutineStale); err != nil {
+			return err
+		}
+		rep.Stale++
+		if err := k.Store.newFactFor(r.AssistantID, fmt.Sprintf("Routine %s changed after you approved it — paused; approve the new version to run it again", r.Name), fmt.Sprintf("routine-edited:%s:%s", r.Name, hash)); err != nil {
+			return err
+		}
+		next := []time.Time{}
+		if sched, err := config.CronParser.Parse(a.WithDefaults().Cron); err == nil {
+			t := k.now()
+			for range 3 {
+				t = sched.Next(t)
+				next = append(next, t)
+			}
+		}
+		reqID := fmt.Sprintf("routine-edit:%s:%s", r.Name, hash)
+		if _, _, err := k.Store.UpsertRoutine(reqID+":r", RoutineInput{AssistantID: r.AssistantID, Name: r.Name,
+			RequestedBy: "user", Source: "edit", DefHash: hash}); err != nil {
+			return err
+		}
+		if _, _, err := k.Store.RequestApproval(reqID+":a", RequestApprovalInput{
+			AssistantID: r.AssistantID, SubjectKind: "routine", SubjectID: r.Name,
+			Action: RoutineAction(a.WithDefaults(), next), TTL: 7 * 24 * time.Hour,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (k *RoutineKeeper) tickLocked() (RoutineReport, error) {
 	var rep RoutineReport
+	if err := k.reviewActive(&rep); err != nil {
+		return rep, err
+	}
 	rows, err := k.Store.db.Query(`SELECT `+routineCols+` FROM routines WHERE state=? AND approved=1 ORDER BY name`, RoutineDraft)
 	if err != nil {
 		return rep, wrapBusy(err)
