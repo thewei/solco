@@ -127,10 +127,15 @@ type Options struct {
 	// RemoteDesktop lets the phone watch and control the Mac's whole desktop (GET /remote-desktop, POST /remote-desktop/session,
 	// scope remote-desktop); nil or switched off in Settings = no entry on the phone and bootstrap says so.
 	RemoteDesktop RemoteDesktop
-	Home          string // user home for provider transcript roots ("" = os.UserHomeDir)
-	HostName      string
-	Version       string
-	Now           func() time.Time
+	// Optional Expo Push access token when the Expo project has enhanced
+	// push security enabled. Never write it to the device store or logs.
+	PushAccessToken string
+	// Tests may inject an HTTP client; production always uses HTTPS Expo API.
+	PushHTTPClient *http.Client
+	Home           string // user home for provider transcript roots ("" = os.UserHomeDir)
+	HostName       string
+	Version        string
+	Now            func() time.Time
 }
 
 // PairingOffer is what Settings shows as a QR code.
@@ -144,9 +149,12 @@ type PairingOffer struct {
 // Server is the optional phone-client Host. The zero Config mode is off: New
 // succeeds, Start does nothing, no port is opened.
 type Server struct {
-	opts    Options
-	devices *DeviceStore
-	pairing *Pairing
+	opts       Options
+	devices    *DeviceStore
+	pairing    *Pairing
+	push       *pushBridge
+	pushCancel context.CancelFunc
+	pushDone   chan struct{}
 
 	mu             sync.Mutex
 	httpServer     *http.Server
@@ -190,8 +198,25 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	pushRegistry, err := openPushRegistry(opts.Dir)
+	// System push is optional. A malformed push-only file must disable
+	// remote push, not take the authenticated Host/Terminal/Remote Desktop
+	// offline or silently reset its token table.
+	if err != nil {
+		slog.Warn("remote host system push disabled: invalid registry")
+		pushRegistry = nil
+	}
+	var push *pushBridge
+	if pushRegistry != nil {
+		pushClient := opts.PushHTTPClient
+		if pushClient == nil {
+			pushClient = &http.Client{Timeout: 12 * time.Second}
+		}
+		push = &pushBridge{registry: pushRegistry, client: pushClient, sendURL: pushSendURL, receiptURL: pushReceiptsURL, accessToken: opts.PushAccessToken}
+	}
 	s := &Server{
 		opts: opts, devices: devices, pairing: NewPairing(opts.Now),
+		push:  push,
 		conns: map[string]map[*liveConn]struct{}{}, terminals: map[string]int{}, trees: map[string]*treeState{},
 		poke: make(chan struct{}),
 	}
@@ -310,6 +335,7 @@ func (s *Server) serve(ln net.Listener, cfg Config) error {
 	}()
 	slog.Info("remote host listening", "mode", cfg.Mode, "port", port)
 	s.startRelay() // tunnels through its own loopback bridge; needs a running Host
+	s.startPush()  // optional OS push while the Mac Host process is serving
 	return nil
 }
 
@@ -394,6 +420,7 @@ func (s *Server) relaySecret() (string, error) {
 // Close stops listening and drops every live socket. The relay tunnel goes
 // first: it dials home and bridges into the handler that is about to die.
 func (s *Server) Close() {
+	s.stopPush()
 	s.stopRelay()
 	s.closeP2P()
 	s.mu.Lock()
@@ -547,6 +574,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+pa+"/assistants/{id}/activity/ack", s.guard(ScopeManage, s.handlePAActivityAck))
 	mux.Handle("GET "+pa+"/assistants/{id}/activity/notifications", s.guard(ScopeView, s.handlePAActivityNotices))
 	mux.Handle("POST "+pa+"/assistants/{id}/activity/notifications/ack", s.guard(ScopeManage, s.handlePAActivityNoticesAck))
+	mux.Handle("GET "+apiPrefix+"/notifications/push", s.guard(ScopeView, s.handlePushRegistration))
+	// POST is intentional: the pinned native and P2P transports expose the
+	// existing authenticated GET/POST protocol, not arbitrary HTTP verbs.
+	mux.Handle("POST "+apiPrefix+"/notifications/push/register", s.guard(ScopeManage, s.handlePushRegistration))
+	mux.Handle("POST "+apiPrefix+"/notifications/push/refresh", s.guard(ScopeManage, s.handlePushRegistration))
+	mux.Handle("POST "+apiPrefix+"/notifications/push/disable", s.guard(ScopeManage, s.handlePushRegistration))
+	mux.Handle("POST "+apiPrefix+"/notifications/push/test", s.guard(ScopeManage, s.handlePushTest))
 	mux.Handle("GET "+pa+"/assistants/{id}/report", s.guard(ScopeView, s.handlePAReport))
 	mux.Handle("POST "+pa+"/assistants/{id}/report/resolve", s.guard(ScopeManage, s.handlePAReportResolve))
 	mux.Handle("GET "+pa+"/assistants/{id}/routines", s.guard(ScopeView, s.handlePARoutines))
@@ -664,6 +698,10 @@ func (s *Server) DeviceOnline(deviceID string) bool {
 // closeDevice ends every socket of a revoked device without blocking the
 // caller (Settings' Revoke) on a phone's close handshake.
 func (s *Server) closeDevice(deviceID string) {
+	// Revoke must also stop further third-party push to the old device.
+	if s.push != nil {
+		_ = s.push.registry.remove(deviceID)
+	}
 	s.mu.Lock()
 	var handles []*liveConn
 	for h := range s.conns[deviceID] {
@@ -778,6 +816,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["personalAgentMemory"] = true
 			capabilities["personalAgentProactivity"] = true
 			capabilities["personalAgentActivityNotices"] = true
+			if s.push != nil {
+				capabilities["assistantSystemPush"] = true
+			}
 			// An older plugin can answer Overview while lacking the report
 			// outbox. Probe the actual subcommand instead of guessing by the
 			// presence of the Assistants gate.

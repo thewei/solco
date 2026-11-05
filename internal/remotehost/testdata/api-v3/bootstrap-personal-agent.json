@@ -1,5 +1,6 @@
 {
   "capabilities": {
+    "assistantSystemPush": true,
     "chat": true,
     "personalAgent": true,
     "personalAgentActivityNotices": true,
