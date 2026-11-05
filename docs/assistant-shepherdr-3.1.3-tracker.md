@@ -70,7 +70,7 @@
 | U09 | P1 | P | OPEN | | | | 运行中/堵塞/未启动、真实 Pane、所属 Agent、能力版本与 skill 缺失 UI 区分；不能给“已运行”假状态，AC-01/07 |
 | U10 | P2 | E | OPEN | | | | Multi-Machine 先定义可见性/离线/Owner/Host 选择策略，保留 Herdr 原生多机机制；先不跨主机写任务，直到 API 与授权真实可测，AC-09 |
 | U11 | P2 | P | OPEN | | | | 账号令牌与浏览器登录态由授予的本机能力使用，Prompt/CLI/Push/Fact 不存 secret；任务需授权时发批准卡，AC-09 |
-| L01 | P0 | B | OPEN | | | | 必须验证多进程/重复请求/杀进程断点：一份 Go daemon、一个 occurrence→一个 Task，无双派发，AC-07/10 |
+| L01 | P0 | B | PARTIAL | `dispatch.go work`: 守护进程停止时 Agent 恰好完成，不用已取消 ctx 读结果（不再误 park 为 uncertain），留 running 由下一 daemon Resume | e2e `TestE2EDaemonRestartMidRunReattachesAndRecoversTheResult`（真实 Herdr+OMP：重启后重连、读回同一结果、仅 1 次 run；修复前 uncertain）| (本批) | 必须验证多进程/重复请求/杀进程断点：一份 Go daemon、一个 occurrence→一个 Task，无双派发，AC-07/10 |
 | L02 | P0 | P | OPEN | | | | Herdr 临时失联/Agent 中断/信任目录都应有可诊断状态、重连和人工修复指引，无法确认时绝不自动重发，AC-07 |
 | L03 | P0 | P | OPEN | | | | 定义 DB/automations.yaml/私密记忆的一致性备份恢复与迁移/回滚；版本升级不得清空任务/审批/收据，AC-13 |
 | L04 | P0 | B | OPEN | | | | 关闭 Solco 窗口后调度仍运行的承诺必须由真实后台服务支撑；登出/机器睡眠期间不得声称会执行；醒来按 catch-up 策略追踪，AC-10 |

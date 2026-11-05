@@ -344,6 +344,11 @@ func (d *Dispatcher) work(ctx context.Context, runID string, sess Session, spec 
 	}
 	var blocked *BlockedError
 	switch {
+	case err == nil && ctx.Err() != nil:
+		// The daemon is stopping and the Agent finished just as it did: do not
+		// read the answer with a dead context (that would park a finished run
+		// as uncertain). Left running, the next daemon's Resume reads it.
+		return d.reload(runID), ctx.Err()
 	case err == nil:
 		if spec.NeedResult {
 			return d.finishWithResult(ctx, runID, sess, spec)

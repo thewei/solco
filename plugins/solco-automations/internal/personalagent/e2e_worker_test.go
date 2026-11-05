@@ -7,6 +7,7 @@
 package personalagent
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -754,4 +755,92 @@ func TestE2EWorkerVanishingMidRunIsNeverReportedAsDone(t *testing.T) {
 		t.Fatalf("task state = %s", got.State)
 	}
 	t.Logf("task state=%s error=%q", got.State, res.run.Error)
+}
+
+// L: the daemon stops while a Worker is mid-run, and a fresh daemon starts. The
+// Agent keeps working in Herdr; the new daemon must re-attach, wait for it and
+// read the same real result, with no second launch.
+func TestE2EDaemonRestartMidRunReattachesAndRecoversTheResult(t *testing.T) {
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	sb.model.delay = 2 * time.Second
+	sb.model.mu.Lock()
+	sb.model.scripts["restart"] = []fixtureStep{
+		{tool: "bash", args: map[string]any{"command": "sleep 25"}},
+		{text: "Recovered after the restart. https://news.example/a1 — 5200 likes"},
+	}
+	sb.model.mu.Unlock()
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "e2e-rst-a", "Ada")
+	task, _, err := s.CreateTask("e2e-rst-t", CreateTaskInput{AssistantID: a.ID, Kind: KindResearch, Title: "Restart", Model: "smoke/smoke",
+		Brief: "SCENARIO:restart survive a daemon restart"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx1, stop := context.WithCancel(t.Context())
+	d1 := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "daemon-1", Timeout: 3 * time.Minute}
+	type out struct {
+		run Run
+		err error
+	}
+	first := make(chan out, 1)
+	go func() {
+		r, err := d1.RunTask(ctx1, task.ID)
+		first <- out{r, err}
+	}()
+	herdr, _ := exec.LookPath("herdr")
+	var seen time.Time
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(time.Second) {
+		c := exec.Command(herdr, "agent", "list")
+		c.Env = sb.env
+		raw, _ := c.CombinedOutput()
+		if strings.Contains(string(raw), `"pane_id"`) && seen.IsZero() {
+			seen = time.Now()
+		}
+		if !seen.IsZero() && time.Since(seen) > 6*time.Second {
+			break
+		}
+	}
+	if seen.IsZero() {
+		t.Fatal("the worker never appeared")
+	}
+	stop() // the daemon dies
+	var r1 out
+	select {
+	case r1 = <-first:
+	case <-time.After(60 * time.Second):
+		t.Fatal("the stopped daemon's dispatcher did not return")
+	}
+	runs, _ := s.RunsWithStatus(RunRunning)
+	if len(runs) != 1 {
+		t.Fatalf("after the stop the run must stay running for the next daemon: first=%+v err=%v runs=%+v", r1.run, r1.err, runs)
+	}
+	runID := runs[0].ID
+
+	// A new daemon: recover, then resume.
+	if _, err := s.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	d2 := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "daemon-2", Timeout: 3 * time.Minute}
+	if n := d2.Resume(t.Context()); n != 1 {
+		t.Fatalf("resumed %d runs, want 1", n)
+	}
+	waited := make(chan struct{})
+	go func() { d2.Wait(); close(waited) }()
+	select {
+	case <-waited:
+	case <-time.After(120 * time.Second):
+		t.Fatal("the resumed run never settled")
+	}
+	run, _ := s.GetRun(runID)
+	if run.Status != RunDone {
+		t.Fatalf("resumed run = %s error=%q", run.Status, run.Error)
+	}
+	res, ok, err := s.RunResult(runID)
+	if err != nil || !ok || !strings.Contains(res.Summary, "Recovered after the restart") {
+		t.Fatalf("result = %+v %v %v", res, ok, err)
+	}
+	all, _ := s.ListRuns(task.ID)
+	if len(all) != 1 {
+		t.Fatalf("a restart launched %d runs, want exactly the original", len(all))
+	}
 }
