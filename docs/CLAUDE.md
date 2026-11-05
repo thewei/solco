@@ -18,6 +18,9 @@ Members:
 - `github-release-updates.md` — signed GitHub Releases updater publishing runbook and first-install migration limit.
 - `terminal-interaction-spec.md` — terminal interaction-quality contract and manual acceptance for the hosted Herdr TUI surface.
 - `herdr-pane-history-api-validation-2026-11-05.md` — Herdr v0.9.5 / Protocol 22 实机 API 与源码验证：pane.read 硬限制 1000 屏幕行、pane.selection.read 可只读提取全部保留文本（修订号门禁，视口不变），精确区分 ANSI、Alternate Screen 与长期归档的缺口。
+- `native-terminal-herdr-tui-parity-plan-2026-11-05.md` — **Approved Next / 待实施**：原生 MyGo Terminal + Herdr daemon 的功能对等与验证计划，P0–P7 阶段、V00–V79 验收、协议/源码/官方文档、隔离实机和 Android ADB 门禁。
+- `osc7501-conformance-audit-2026-11-04.md` — rev 0.4 官方规范逐项审计、OSC-01…13 缺陷与真实测试/临时红灯探针证据；**NOT COMPLIANT**，不可当作已验收实现。
+- `osc7501-compliance-implementation-plan.md` — rev 0.4 T01–T03 / F01–F09 / G01–G04 整改任务、最小 Herdr/MyGo 权属边界及全量互通验收门槛；**待实施**。
 - `performance-engineering.md` — measured performance contract, budgets, methodology, and known lessons.
 - `macos-packaging-and-development.md` — macOS `.app` packaging/install, Mobile Web composition, and the cross-repo debug loop.
 - `remote-client-architecture.md` — Host Remote API and remote/mobile client architecture.
