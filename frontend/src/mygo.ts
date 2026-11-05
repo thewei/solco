@@ -692,6 +692,14 @@ export interface CoordinatorReport {
   paneId?: string;
   coordinatorRevision: number;
   updatedAt: number;
+  /**
+   * Herdr accepting a report != a final OMP answer. Only a unique marker
+   * in OMP's original JSONL with a finished assistant record is verified.
+   */
+  replyState?: string;
+  replySessionId?: string;
+  replyMessageId?: string;
+  replyVerifiedAt?: number;
 }
 
 /** CreateTaskInput is the body of a task creation. */

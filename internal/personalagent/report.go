@@ -20,4 +20,10 @@ type CoordinatorReport struct {
 	PaneID              string `json:"paneId,omitempty"`
 	CoordinatorRevision int    `json:"coordinatorRevision"`
 	UpdatedAt           int64  `json:"updatedAt"`
+	// Herdr accepting a report != a final OMP answer. Only a unique marker
+	// in OMP's original JSONL with a finished assistant record is verified.
+	ReplyState      string `json:"replyState,omitempty"`
+	ReplySessionID  string `json:"replySessionId,omitempty"`
+	ReplyMessageID  string `json:"replyMessageId,omitempty"`
+	ReplyVerifiedAt int64  `json:"replyVerifiedAt,omitempty"`
 }

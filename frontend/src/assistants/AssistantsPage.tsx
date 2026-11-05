@@ -306,9 +306,10 @@ export function AssistantsPage() {
       <FactStrip facts={detail.facts} onOpenTask={() => setTab("tasks")} onOpenGoal={() => setTab("watching")} />
       {report?.state === "uncertain" ? (
         <section className="as-note warn as-report" aria-label="Coordinator progress report needs review">
-          <strong>Progress report delivery uncertain</strong>
-          <p>Herdr might have received the automatic update. Check the original OMP conversation first; Solco will not send it again without your decision.</p>
-          <p className="as-meta">Activity through fact #{report.throughSeq}. This is delivery status, not an OMP reply.</p>
+          <strong>Progress report needs review</strong>
+          <p>Solco could not confirm a completed OMP reply. Check the original conversation first; Solco will not send this batch again without your decision.</p>
+          {report.lastError ? <p className="as-meta">{report.lastError}</p> : null}
+          <p className="as-meta">Activity through fact #{report.throughSeq}. No completed OMP reply has been verified.</p>
           <div className="as-report-actions">
             {report.paneId ? <button type="button" className="as-btn" onClick={() => { if (report.paneId) void assistants.openPane(report.paneId).catch((e) => setError(msg(e))); }}>Open original Terminal</button> : null}
             <button type="button" className="as-btn" disabled={report.throughSeq <= 0} onClick={() => setReportDecision({ assistantId: a.id, throughSeq: report.throughSeq, action: "skip", requestId: rid() })}>Already delivered · Skip</button>
@@ -318,6 +319,17 @@ export function AssistantsPage() {
       ) : report?.state === "queued" || report?.state === "claimed" ? (
         <div className="as-note as-report" role="status">
           Solco is {report.state === "claimed" ? "submitting" : "waiting to submit"} a progress update to the existing Coordinator. This is not a completed reply.
+        </div>
+      ) : report?.state === "submitted" && report.replyState === "awaiting" ? (
+        <div className="as-note as-report" role="status">
+          <strong>Report delivered · Waiting for OMP reply</strong>
+          <span className="as-meta">Herdr accepted activity through fact #{report.throughSeq}; Solco is checking the original OMP transcript for a completed answer.</span>
+        </div>
+      ) : report?.state === "submitted" && report.replyState === "verified" ? (
+        <div className="as-note as-report" role="status">
+          <strong>OMP reply verified</strong>
+          <span className="as-meta">Activity through fact #{report.throughSeq} · original OMP message {report.replyMessageId || "verified"}.</span>
+          {report.paneId ? <button type="button" className="as-btn" onClick={() => { if (report.paneId) void assistants.openPane(report.paneId).catch((e) => setError(msg(e))); }}>Open original Terminal</button> : null}
         </div>
       ) : null}
       {a.status !== "active" ? (
@@ -369,7 +381,7 @@ export function AssistantsPage() {
               if (!failure) { setReportDecision(null); pull(); }
             });
           }}>
-          <p>Check the original OMP conversation before proceeding. Solco cannot prove whether Herdr accepted the report at the last attempt.</p>
+          <p>Check the original OMP conversation before proceeding. Herdr may have accepted the request, but Solco cannot verify a completed OMP answer for this batch.</p>
           <p>{reportDecision.action === "skip"
             ? "Choose this only if the report already arrived, or if you intentionally want to discard this pending update. The activity facts remain available."
             : "Retrying can add the same progress message twice. Only proceed after checking the original conversation and accepting that risk."}</p>
