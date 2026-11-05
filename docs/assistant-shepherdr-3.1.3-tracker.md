@@ -112,3 +112,5 @@ Q02/Q04/Q05 的桌面路径（research proof、coding review→Resume→Accept�
 - **HOOK-06（真实睡眠唤醒）**：本轮按用户决定跳过，标 **NEEDS-HUMAN**——`pmset sleepnow` 会同时中断 Computer Use/Shell，且无 sudo 无法定时唤醒；确定性覆盖仍是 HOOK-05 的三个重启/重投测试。
 
 2026-11-05 Android 实机（AC-12 手机半）：vivo V2309A + release APK + 隔离 Host 配对，手机读到 Mac 核心里同一个 Assistant/任务/Solco record/Needs you，打开即进真实 Herdr pane 的共享 Chat；Mac 侧 review 被 reject 后手机约 6 秒内出现 “review … is rejected” 事实、Needs-you 卡消失。证据与未覆盖项（手机端审批、push 送达 U04、断线游标恢复）见 `…/2026-11-05-android-ac12.md`。U03 部分证实，U04 仍 OPEN。
+
+2026-11-05 Android 实机二轮（AC-12b）：手机对隔离 Host 做了 路由卡 Approve、记忆候选 Approve、Behavior Save、从手机发第一条消息启动 Coordinator（`coordinator.start`），每步以核心 show/list + Host 日志为准，桌面（Computer Use）看到同一状态；桌面批准第二条路由后手机“needs you”消失。无新缺陷。未覆盖：手机端审批 review、路由到点触发、Goals/plan 屏、手机 Automations 屏、U04 push、断线游标、sleep/wake。证据 `…/2026-11-05-android-ac12b.md`。
