@@ -607,10 +607,15 @@ func (s *Store) parkUncertain(runID, reason string) (struct{}, error) {
 // QueuedTasks lists tasks ready to be claimed, oldest first, for Assistants
 // that are active.
 func (s *Store) QueuedTasks() ([]Task, error) {
-	rows, err := s.db.Query(`SELECT `+prefixed("t", taskCols)+` FROM tasks t JOIN assistants a ON a.id=t.assistant_id
+	// Fair across Assistants (W08): each Assistant's oldest task is first in
+	// line, then each one's second, and so on, so one with a long backlog
+	// cannot hold the whole quota while another waits.
+	rows, err := s.db.Query(`SELECT `+prefixed("q", taskCols)+` FROM (
+		SELECT `+prefixed("t", taskCols)+`, ROW_NUMBER() OVER (PARTITION BY t.assistant_id ORDER BY t.created_at, t.id) AS rn
+		FROM tasks t JOIN assistants a ON a.id=t.assistant_id
 		WHERE t.state=? AND a.status=?
 		AND (t.goal_id='' OR EXISTS(SELECT 1 FROM goals g WHERE g.id=t.goal_id AND g.state='active'))
-		ORDER BY t.created_at, t.id`, TaskQueued, StatusActive)
+	) q ORDER BY q.rn, q.created_at, q.id`, TaskQueued, StatusActive)
 	if err != nil {
 		return nil, wrapBusy(err)
 	}

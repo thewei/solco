@@ -497,10 +497,20 @@ func (d *Dispatcher) resumeRun(ctx context.Context, r Run, task Task) {
 	sess := Session{HerdrSession: r.HerdrSession, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, AgentSessionID: r.AgentSessionID}
 	required, _ := d.Store.TaskSkills(task.ID)
 	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout(), NeedResult: d.requiresResult(task), RequiredSkills: required}
+	// A re-attached run holds a slot like any other, or a restart would hand
+	// out a second full quota on top of the runs that never stopped.
+	d.mu.Lock()
+	d.running++
+	d.mu.Unlock()
 	d.active.Add(1)
 	d.wg.Add(1)
 	go func() {
 		defer d.finish()
+		defer func() {
+			d.mu.Lock()
+			d.running--
+			d.mu.Unlock()
+		}()
 		_, _ = d.work(ctx, r.ID, sess, spec, true)
 	}()
 }
