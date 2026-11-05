@@ -7,6 +7,7 @@
 package personalagent
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -597,4 +598,160 @@ func mustTasks(t *testing.T, s *Store, id string) []Task {
 		t.Fatal(err)
 	}
 	return ts
+}
+
+// AC-05/Scenario four (delivery half): a fact the Solco core recorded is
+// handed ONCE to the original, live OMP Coordinator through Herdr, and the
+// reply is proven from OMP's own transcript, not from Herdr's idle status.
+func TestE2EFactReachesTheOriginalCoordinatorExactlyOnceAndTheReplyIsProven(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go not installed")
+	}
+	goEnv := append(os.Environ(), "GOTOOLCHAIN=auto")
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	pluginLayout(t, sb, goBin, goEnv)
+	sb.model.delay = 2 * time.Second
+	sb.model.mu.Lock()
+	sb.model.scripts["*"] = []fixtureStep{{text: "Noted. The digest is ready and I will tell you what needs you."}}
+	sb.model.mu.Unlock()
+
+	s, err := Open(DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	a := mustAssistant(t, s, "e2e-rep-a", "Ada")
+	c, _, err := s.StartCoordinatorAs("e2e-rep-start", a.ID, "omp", "smoke/smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
+	if run, err := d.RunTask(t.Context(), c.TaskID); err != nil || run.Status != RunDone {
+		t.Fatalf("coordinator: %+v %v", run, err)
+	}
+	if _, _, err := s.SetProactivity("e2e-rep-pro", ProactivityInput{AssistantID: a.ID, Level: LevelFollowUp, ReportEveryMin: 1, DailyBudget: 5}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := execute(s, "", "e2e.fact", nil, func(tx *sql.Tx) (bool, error) {
+		return addFactTx(tx, Fact{AssistantID: a.ID, Kind: FactRunFinished, Text: "Worker finished the X digest: 3 posts, 1 unavailable."}, "e2e:fact:1", s.nowMS())
+	}); err != nil {
+		t.Fatal(err)
+	}
+	home := os.Getenv("HOME")
+	pump := &ReportPump{Store: s, Submit: SubmitReport, Ready: ReportReady, Blocked: ReportDialog,
+		Verify: func(marker string, at int64) (ReplyEvidence, error) { return FindOMPReportReplySince(home, marker, at) }}
+	deadline := time.Now().Add(90 * time.Second)
+	var r CoordinatorReport
+	for time.Now().Before(deadline) {
+		if _, err := pump.Tick(); err != nil {
+			t.Fatal(err)
+		}
+		r, _ = s.GetCoordinatorReport(a.ID)
+		if r.ReplyState == ReplyVerified {
+			break
+		}
+		time.Sleep(1500 * time.Millisecond)
+	}
+	if r.ReplyState != ReplyVerified || r.ReplyMessageID == "" || r.ReplySessionID == "" {
+		t.Fatalf("the reply was never proven from OMP's transcript: %+v", r)
+	}
+	// Idempotence: more ticks must not type the same facts again.
+	for i := 0; i < 4; i++ {
+		_, _ = pump.Tick()
+		time.Sleep(500 * time.Millisecond)
+	}
+	prompts := 0
+	_ = filepath.WalkDir(filepath.Join(home, ".omp/agent/sessions"), func(p string, e os.DirEntry, err error) error {
+		if err == nil && strings.HasSuffix(p, ".jsonl") {
+			raw, _ := os.ReadFile(p)
+			prompts += strings.Count(string(raw), "X digest: 3 posts")
+		}
+		return nil
+	})
+	// Once in the user turn; the reply text does not repeat the fact.
+	if prompts != 1 {
+		t.Fatalf("the fact was typed into the Coordinator %d times, want exactly 1", prompts)
+	}
+}
+
+// AC-07 / W07 / L: the Worker's workspace disappears mid-run (a person closed
+// it, or Herdr lost it). The run must end as failed or uncertain with a reason,
+// the task must not read as done, and no result may be invented.
+func TestE2EWorkerVanishingMidRunIsNeverReportedAsDone(t *testing.T) {
+	sb := newSandbox(t, map[string][]fixtureStep{}, e2ePage)
+	sb.model.delay = 2 * time.Second
+	sb.model.mu.Lock()
+	sb.model.scripts["slowwork"] = []fixtureStep{
+		{tool: "bash", args: map[string]any{"command": "sleep 90"}},
+		{text: "Finished everything. https://news.example/a1"},
+	}
+	sb.model.mu.Unlock()
+	s, _ := openTest(t)
+	a := mustAssistant(t, s, "e2e-van-a", "Ada")
+	task, _, err := s.CreateTask("e2e-van-t", CreateTaskInput{AssistantID: a.ID, Kind: KindResearch, Title: "Slow", Model: "smoke/smoke",
+		Brief: "SCENARIO:slowwork do the slow thing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Dispatcher{Store: s, Launcher: NewHostLauncher("", WorkDirRoot()), Claimant: "e2e", Timeout: 3 * time.Minute}
+	type out struct {
+		run Run
+		err error
+	}
+	done := make(chan out, 1)
+	go func() {
+		r, err := d.RunTask(t.Context(), task.ID)
+		done <- out{r, err}
+	}()
+	herdr, _ := exec.LookPath("herdr")
+	deadline := time.Now().Add(60 * time.Second)
+	closed := false
+	var seen time.Time
+	for time.Now().Before(deadline) && !closed {
+		time.Sleep(time.Second)
+		c := exec.Command(herdr, "agent", "list")
+		c.Env = sb.env
+		raw, _ := c.CombinedOutput()
+		// Herdr reports "unknown" while a long bash tool runs, so: once the agent
+		// exists and has had time to start the tool, pull its workspace away.
+		if strings.Contains(string(raw), `"pane_id"`) && seen.IsZero() {
+			seen = time.Now()
+		}
+		if !seen.IsZero() && time.Since(seen) > 12*time.Second {
+			c := exec.Command(herdr, "workspace", "close", "w1")
+			c.Env = sb.env
+			if o, err := c.CombinedOutput(); err != nil {
+				t.Fatalf("close: %v %s", err, o)
+			}
+			closed = true
+		}
+	}
+	if !closed {
+		t.Fatal("the worker never appeared")
+	}
+	var res out
+	select {
+	case res = <-done:
+	case <-time.After(60 * time.Second):
+		t.Fatal("RunTask did not notice the vanished worker")
+	}
+	t.Logf("run=%+v err=%v", res.run, res.err)
+	if res.run.Status == RunDone {
+		t.Fatalf("a vanished worker was reported done: %+v", res.run)
+	}
+	if res.run.Status != RunFailed && res.run.Status != RunUncertain && res.run.Status != RunCancelled {
+		t.Fatalf("status = %s, want failed, uncertain or cancelled", res.run.Status)
+	}
+	if strings.TrimSpace(res.run.Error) == "" {
+		t.Fatal("a failed run must say why")
+	}
+	if _, ok, _ := s.RunResult(res.run.ID); ok {
+		t.Fatal("a result was invented for a worker that never finished")
+	}
+	got, _ := s.GetTask(task.ID)
+	if got.State == TaskDone {
+		t.Fatalf("task state = %s", got.State)
+	}
+	t.Logf("task state=%s error=%q", got.State, res.run.Error)
 }

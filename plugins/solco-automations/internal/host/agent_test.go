@@ -353,6 +353,23 @@ func TestAwaitGivesUpAsSoonAsTheWorkspaceIsClosed(t *testing.T) {
 	}
 }
 
+func TestAwaitGivesUpWhenHerdrAnswersAgentNotFoundForAClosedPane(t *testing.T) {
+	// Measured on herdr 0.9.5: after `workspace close`, `agent wait` and
+	// `agent get` answer agent_not_found, not agent_not_running. The run must
+	// end at once as cancelled instead of timing out minutes later.
+	ops := &fakeOps{
+		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentNotFound) },
+		agentStatus: func(string) (string, error) { return "", apiErr("agent get", herdr.CodeAgentNotFound) },
+	}
+	err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour)
+	if !errors.Is(err, ErrCancelled) {
+		t.Fatalf("got %v, want ErrCancelled", err)
+	}
+	if ops.waits != 1 {
+		t.Errorf("waited %d times, want 1", ops.waits)
+	}
+}
+
 func TestAwaitCallsAnAgentThatDiedInALiveWorkspaceAFailure(t *testing.T) {
 	ops := &fakeOps{
 		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentGone) },

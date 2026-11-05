@@ -212,7 +212,7 @@ func (w agentWork) await(s Session, timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
-		if w.ops.HasCode(err, herdr.CodeAgentGone) {
+		if w.ops.HasCode(err, herdr.CodeAgentGone) || w.ops.HasCode(err, herdr.CodeAgentNotFound) {
 			return w.agentGoneOutcome(s)
 		}
 		// The slice expired with the agent still working, which is the normal
@@ -235,7 +235,8 @@ func (w agentWork) agentGoneOutcome(s Session) error {
 		// The pane is alive and answered, so nothing closed the workspace —
 		// the agent itself is what is missing.
 		return fmt.Errorf("the agent exited before finishing")
-	case w.ops.HasCode(err, herdr.CodeWorkspaceGone):
+	case w.ops.HasCode(err, herdr.CodeWorkspaceGone), w.ops.HasCode(err, herdr.CodeAgentNotFound):
+		// agent_not_found is herdr 0.9.5's word for a pane whose workspace is gone.
 		return ErrCancelled
 	case w.ops.HasCode(err, herdr.CodeAgentGone):
 		// AgentStatus is itself agent-scoped, so a dead agent in a live

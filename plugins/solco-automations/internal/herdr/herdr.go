@@ -242,6 +242,12 @@ const CodePaneBusy = "agent_pane_busy"
 // sits on a dead pane for that long before saying so.
 const CodeAgentGone = "agent_not_running"
 
+// CodeAgentNotFound is what herdr 0.9.5 answers for any call about a pane whose
+// workspace was closed (measured 2026-11-05: `agent wait|get` -> agent_not_found,
+// `pane get` -> pane_not_found), never agent_not_running. Treated as gone, a
+// wait on such a pane no longer burns the run's whole timeout.
+const CodeAgentNotFound = "agent_not_found"
+
 // CodeWorkspaceGone is herdr's answer when the workspace ID no longer names
 // anything — the expected result of asking about a run somebody has reviewed
 // and closed.

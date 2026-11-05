@@ -353,7 +353,7 @@ func (d *Dispatcher) work(ctx context.Context, runID string, sess Session, spec 
 		_ = d.Store.BlockRun(runID, blocked.Reason)
 		return d.reload(runID), nil
 	case errors.Is(err, ErrWorkCancelled):
-		_ = d.Store.FinishRun(runID, RunCancelled, "")
+		_ = d.Store.FinishRun(runID, RunCancelled, "the workspace was closed before the agent finished; nothing was reported as done")
 	case errors.Is(err, ErrAgentMissing):
 		_, _ = d.Store.parkUncertain(runID, "the workspace is open but holds no agent; check it and retry on purpose")
 		return d.reload(runID), nil

@@ -115,7 +115,7 @@ func (l *HostLauncher) Await(ctx context.Context, sess Session, spec LaunchSpec)
 		if err == nil {
 			return nil
 		}
-		if herdr.HasCode(err, herdr.CodeWorkspaceGone) {
+		if herdr.HasCode(err, herdr.CodeWorkspaceGone) || herdr.HasCode(err, herdr.CodeAgentNotFound) {
 			return ErrWorkCancelled
 		}
 		if herdr.HasCode(err, herdr.CodeAgentGone) {

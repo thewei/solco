@@ -26,7 +26,7 @@
 | W04 | P0 | P | PARTIAL | `skills.go` `dispatch.go skillGate/unusedSkills` schema v21 `task_skills` | `skills_test.go` TestGapW04*: 缺失→failed skill_missing 且 0 pane；未授权→审批卡→批准后自动重排；用了才算完成；真实 OMP 经 `skill://fixture-browser` 读取并被 transcript 证实 | (本批) | Worker launch 必须显式协商 Skills；已安装的 `~/.agents/skills/herdr/SKILL.md` **要求 HERDR_ENV=1**；不能假定；缺：能力 doctor 列出可用 skill、Routine 路径(规则 run)同样检查、真实 ego-browser/登录态|
 | W05 | P0 | M | OPEN | | | | X.com Worker 真正由 OMP 加载指定 `ego-browser` 执行，浏览器会话/登录态由用户授权且限任务；证明调用、URL、去重、失败；技能缺失或未授权不得偷换浏 |
 | W06 | P0 | M | PARTIAL | `WorkerResult` 含来源/工具/技能/grounded URL | `result_test.go`；Artifact/Proof 卡待 M5 | 17cdd98 | 定义 `WorkerResult/Proof`：摘要、结构化数据、引用/截图/文件、验证方法、失败/不确定项、需要人决策；事实与 Agent 自述分离；无证据就不自证成功，AC-0 |
-| W07 | P0 | P | OPEN | | | | 状态机应具备 queued/start/working/blocked/waiting_owner/awaiting_proof/ready/done/failed/uncerta |
+| W07 | P0 | P | PARTIAL | `host/agent.go await`/`launcher.go Await`: `agent_not_found`(herdr 0.9.5 关闭工作区后的真实回码)按 gone 处理；cancelled 带原因 | `TestAwaitGivesUpWhenHerdrAnswersAgentNotFoundForAClosedPane`；e2e `TestE2EWorkerVanishingMidRunIsNeverReportedAsDone`（修复前 150s 仍悬挂，修复后 ~13s 结束且不伪造 done/result） | (本批) | 状态机应具备 queued/start/working/blocked/waiting_owner/awaiting_proof/ready/done/failed/uncerta |
 | W08 | P1 | P | OPEN | | | | 验证 Assistant/Host/全局并发和资源预算，重启不超过配额；优先级、取消、依赖链和非 Git 工作目录需公平调度，AC-05/07 |
 | W09 | P1 | P | OPEN | | | | OMP-first 显式化 Model、thinking、tool grants、skill grants、超时、可更改范围；继承 Assistant Policy 但任务权限只可 |
 | W10 | P1 | P | PARTIAL | `host/receipt.go`(Worker=pinned dir; Coordinator=OMP 会话目录+run marker) | Coordinator e2e 未再重发 | (本批) | Herdr launch 不确定要查询 existing Pane/Agent、receipt，单次 submit 不重发；故障恢复演练“旧 Agent 仍在/丢帧/重启”不得双|
@@ -43,7 +43,7 @@
 | R09 | P1 | P | OPEN | | | | 独立于 UI/原 Coordinator 生死，重启/并发请求只能一份调度器；长时设备启动/睡眠/窗口关闭/用户登出应定义真实保证和已知限制，AC-07/10 |
 | R10 | P1 | P | OPEN | | | | 任意一次 Routine 都带 owner/request/trigger/occurrence/worker/result/report 链；日报中的链接不是“Agent 说了就 |
 | A01 | P0 | B | OPEN | | | | **当前“模型心跳”≠原 Coordinator 主动承担目标**；要唤醒原 Assistant（或可追溯的受控等效回合）执行 inspect→choose→act→evaluat |
-| A02 | P0 | P | OPEN | | | | 唤醒事件去重、pending 合并、忙时排队、未投递过期、出站状态和最终回复收据关联；中断不得无限重放，AC-05/07 |
+| A02 | P0 | P | PARTIAL | `report_herdr.go` ReportReady/Dialog/SubmitReport 由 daemon 与 e2e 共用 | e2e `TestE2EFactReachesTheOriginalCoordinatorExactlyOnceAndTheReplyIsProven`（真实 OMP Coordinator：事实只投递 1 次，回复由 OMP transcript 证明） | (本批) | 唤醒事件去重、pending 合并、忙时排队、未投递过期、出站状态和最终回复收据关联；中断不得无限重放，AC-05/07 |
 | A03 | P0 | M | OPEN | | | | 独立的 Assistant Autopilot checkpoint：last observed event seq、进展、下一动作、阻塞、评估、终止条件；完成时必须证明事实，AC |
 | A04 | P0 | P | OPEN | | | | 个人版继承模型：global defaults → Assistant override → Goal/Routine explicit grants；版本化、权限递减、真实 UI |
 | A05 | P0 | P | OPEN | | | | Budget 不能只计 Task：要覆盖唤醒、模型 token/cost、工具频率、并发、安静时段、没有授权时不自发外部动作；限额耗尽可观察而非偷跑，AC-05/09 |

@@ -258,43 +258,14 @@ func (p *personal) tick() {
 	}
 }
 
-// coordinatorReportReady is deliberately stricter than the SQLite ready
-// state: it is a read of Herdr's current Agent on the original exact Pane.
-// Working, blocked, launch_pending, missing/unknown identity and failures all
-// defer without claiming or typing an automated report.
-func coordinatorReportReady(session, paneID string) bool {
-	state, err := (herdr.Client{Session: session}).AgentState(paneID)
-	return err == nil && state.PaneID == paneID && state.Kind == "omp" &&
-		state.Status == "idle" && state.InteractiveReady
-}
+func coordinatorReportReady(session, paneID string) bool { return personalagent.ReportReady(session, paneID) }
 
-// A pane screen read failure is not permission to type into an unknown
-// first-run trust / authentication dialog. Group delivery continues to use
-// its existing dialog classifier; automated reports fail closed.
 func coordinatorReportDialog(session, paneID string) (string, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	screen, err := (herdr.Client{Session: session}).PaneReadContext(ctx, paneID, 60)
-	if err != nil {
-		return "unavailable", true
-	}
-	return host.StartupDialog(screen)
+	return personalagent.ReportDialog(session, paneID)
 }
 
-// submitCoordinatorReport takes only Herdr's prompt acceptance as its receipt.
-// Unlike a worker Run, it must not await the brief 'working' status: a very
-// fast OMP reply may complete before Herdr samples working and falsely stall.
-// A successful return is not evidence of a human-facing model answer.
 func submitCoordinatorReport(session, paneID, text string) error {
-	err := (herdr.Client{Session: session}).AgentPromptAccepted(paneID, text)
-	switch {
-	case err == nil:
-		return nil
-	case herdr.HasCode(err, herdr.CodePaneBusy), herdr.HasCode(err, herdr.CodeNotReady), herdr.HasCode(err, herdr.CodeAgentGone):
-		return personalagent.ErrSubmitRefused
-	default:
-		return err
-	}
+	return personalagent.SubmitReport(session, paneID, text)
 }
 
 // submitToAgent hands a Group message to the Agent in a pane through Herdr.
