@@ -658,6 +658,12 @@ var migrations = []string{
 	ALTER TABLE coordinator_reports ADD COLUMN wake_reason TEXT NOT NULL DEFAULT '';
 	ALTER TABLE coordinator_reports ADD COLUMN wake_queued_at INTEGER NOT NULL DEFAULT 0;
 	ALTER TABLE heartbeats ADD COLUMN wake_pending INTEGER NOT NULL DEFAULT 0;`,
+	// v24: a task's own, narrower time limit in minutes (Gap W09). Absent = the
+	// dispatcher's limit; it can never be longer than that.
+	`CREATE TABLE task_limits (
+		task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+		timeout_min INTEGER NOT NULL
+	);`,
 }
 
 func (s *Store) migrate() error {

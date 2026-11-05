@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Task kinds.
@@ -131,7 +132,13 @@ type CreateTaskInput struct {
 	// RequiredSkills names skills the worker must load and use (Gap W04). They
 	// must be installed for OMP and granted to the Assistant by a person.
 	RequiredSkills []string `json:"requiredSkills,omitempty"`
+	// TimeoutMin narrows how long this task's Agent may work (1–45 minutes;
+	// 0 = the dispatcher's limit). It can only shorten the limit (Gap W09).
+	TimeoutMin int `json:"timeoutMin,omitempty"`
 }
+
+// MaxTaskTimeoutMin is the longest an Agent may work, the dispatcher's default.
+const MaxTaskTimeoutMin = 45
 
 const taskCols = `id,assistant_id,goal_id,rule_id,parent_task_id,kind,title,brief,repo_path,agent,model,state,needs_you,review_state,attempt,revision,created_at,updated_at`
 
@@ -187,6 +194,9 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 	}
 	if in.Kind == KindCoding && strings.TrimSpace(in.RepoPath) == "" {
 		return Task{}, false, fmt.Errorf("%w: a coding task needs a repoPath", ErrInvalid)
+	}
+	if in.TimeoutMin < 0 || in.TimeoutMin > MaxTaskTimeoutMin {
+		return Task{}, false, fmt.Errorf("%w: timeoutMin is 1–%d minutes (a task can only shorten the limit)", ErrInvalid, MaxTaskTimeoutMin)
 	}
 	skills, err := normalizeSkills(in.RequiredSkills)
 	if err != nil {
@@ -251,6 +261,11 @@ func (s *Store) CreateTask(requestID string, in CreateTaskInput) (Task, bool, er
 		}
 		for _, sk := range in.RequiredSkills {
 			if _, err := tx.Exec(`INSERT INTO task_skills(task_id,skill) VALUES(?,?)`, id, sk); err != nil {
+				return Task{}, err
+			}
+		}
+		if in.TimeoutMin > 0 {
+			if _, err := tx.Exec(`INSERT INTO task_limits(task_id,timeout_min) VALUES(?,?)`, id, in.TimeoutMin); err != nil {
 				return Task{}, err
 			}
 		}
@@ -712,4 +727,13 @@ func redactForRun(tx queryer, runID, text string) string {
 	var brief string
 	_ = tx.QueryRow(`SELECT t.brief FROM tasks t JOIN runs r ON r.task_id=t.id WHERE r.id=?`, runID).Scan(&brief)
 	return Redact(text, brief)
+}
+
+// TaskTimeout is the task's own time limit, 0 when it has none.
+func (s *Store) TaskTimeout(taskID string) time.Duration {
+	var m int
+	if err := s.db.QueryRow(`SELECT timeout_min FROM task_limits WHERE task_id=?`, taskID).Scan(&m); err != nil || m <= 0 {
+		return 0
+	}
+	return time.Duration(m) * time.Minute
 }

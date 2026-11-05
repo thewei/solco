@@ -128,6 +128,15 @@ func (d *Dispatcher) timeout() time.Duration {
 	return 45 * time.Minute
 }
 
+// timeoutFor is the dispatcher's limit, shortened by the task's own.
+func (d *Dispatcher) timeoutFor(taskID string) time.Duration {
+	limit := d.timeout()
+	if own := d.Store.TaskTimeout(taskID); own > 0 && own < limit {
+		return own
+	}
+	return limit
+}
+
 func (d *Dispatcher) maxParallel() int {
 	if d.MaxParallel > 0 {
 		return d.MaxParallel
@@ -200,7 +209,7 @@ func (d *Dispatcher) launch(ctx context.Context, run Run) (Run, error) {
 		}
 	}
 	var auto *config.Automation
-	timeout := d.timeout()
+	timeout := d.timeoutFor(task.ID)
 	if name, isRule := LegacyRuleName(task.RuleID); isRule {
 		a, ok := config.Automation{}, false
 		if d.Rules != nil {
@@ -496,7 +505,7 @@ func (d *Dispatcher) ReconcilePending(ctx context.Context) (int, error) {
 func (d *Dispatcher) resumeRun(ctx context.Context, r Run, task Task) {
 	sess := Session{HerdrSession: r.HerdrSession, WorkspaceID: r.WorkspaceID, PaneID: r.PaneID, AgentSessionID: r.AgentSessionID}
 	required, _ := d.Store.TaskSkills(task.ID)
-	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeout(), NeedResult: d.requiresResult(task), RequiredSkills: required}
+	spec := LaunchSpec{RunID: r.ID, TaskID: task.ID, Kind: task.Kind, Agent: task.Agent, Model: task.Model, RepoPath: task.RepoPath, Label: r.Label, Timeout: d.timeoutFor(task.ID), NeedResult: d.requiresResult(task), RequiredSkills: required}
 	// A re-attached run holds a slot like any other, or a restart would hand
 	// out a second full quota on top of the runs that never stopped.
 	d.mu.Lock()
