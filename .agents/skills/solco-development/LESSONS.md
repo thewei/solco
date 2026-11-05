@@ -106,3 +106,5 @@
 - 2026-11-05 `git commit -m … -- <paths>` 不会带上**未跟踪**的新文件（会得到一个缺文件、无法编译的提交）：新增文件先 `git add -N <file>`，再 pathspec 提交，提交后 `git status --short` 确认没有遗留 `??` 属于自己的文件。
 - 2026-11-05 权限边界放核心不放扩展：TS 扩展只整形调用，身份/动作 allowlist/属主校验在 Go（`assistant --as`），并用一个 Go 测试对比扩展 `actions` 与核心 `coordinatorScope`，防两边漂移；改完用真实 Herdr+OMP e2e（`-tags e2e`）验证，不要只信 bun 单测。
 - 2026-11-05 Shell 工具里 `GOROOT` 会被环境带成旧版本（报 `version go1.25.9 does not match go tool version go1.26.2`）：一律 `env -u GOROOT go test …`，不要用 `GOTOOLCHAIN=local`。
+- 2026-11-05 macOS 没有 GNU `sed -i`（`sed -i 's/…/…/' f` 会报 "command i expects \ followed by text"）：多行/带引号替换一律 `python3`；且别用 `a && b` 把"可能失败的 sed"和后面的测试串起来——失败会让测试悄悄没跑。`gofmt -l` 报出的文件先 `gofmt -d` 看是不是自己改的（`daemon/personal.go` 等有历史遗留），只格式化自己的文件。
+- 2026-11-05 新增"系统自发起任务"的入口（trigger、webhook→wake、routine 之外的任何东西）必须先问：它是否受 proactivity 等级 / Quiet Hours / 每日预算约束、是否会被自己产出的事件再次触发？否则就是绕过额度的后门（trigger 首版漏了前者，靠 `TestTriggerObeysProactivityLevelQuietHoursAndBudget` 补上）。外部输入（webhook reason）一律当数据：清洗后只给 owner 看，绝不进事件行/prompt/日志。
