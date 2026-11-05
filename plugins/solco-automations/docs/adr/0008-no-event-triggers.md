@@ -79,3 +79,22 @@ Run has and this plugin doesn't is the same line drawn again:
 - If Herdr ever adds a genuine repo-level event (a push, a PR opened), this
   ADR is the place to revisit — the event list above is what would have
   changed.
+
+## Amendment (2026-11-05) — scope, not reversal
+
+This ADR is about the **legacy Automations**: a cron-scheduled prompt that never
+listens to anything, and still does not. Two newer, separate things read events
+and are not Automations:
+
+- **Assistant event triggers** (`personalagent/trigger.go`, Gap R03): a person
+  approves one rule that turns one of an Assistant's *own task events* into one
+  new task, deduped per event, capped per day, and never fired by a task a
+  trigger created.
+- **Webhook check requests** (`personalagent/hook.go`, Gaps A06/A09): an outside
+  service, holding that Assistant's own revocable HMAC key, asks it to look at
+  one of its own tasks or goals. The delivery is a durable receipt and an
+  ordinary `hook.check` event that the Assistant's heartbeat judges (approval,
+  wake budget, Quiet Hours); it never creates a task, a routine or a prompt.
+
+Neither uses Herdr lifecycle events, a queue file or a `SIGUSR1`, and neither
+adds a second scheduler.

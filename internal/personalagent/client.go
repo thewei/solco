@@ -723,3 +723,32 @@ func (c *Client) SetProactivity(ctx context.Context, requestID, assistantID stri
 	}{req{requestID, rev}, in}
 	return out.Proactivity, c.do(ctx, body, &out, "proactivity", "set", assistantID)
 }
+
+// HookDelivery is one webhook request as the Host saw it; the core verifies the
+// signature itself, so the Host forwards, never trusts.
+type HookDelivery struct {
+	KeyID     string `json:"keyId"`
+	Method    string `json:"method"`
+	Path      string `json:"path"`
+	Timestamp string `json:"timestamp"`
+	Delivery  string `json:"delivery"`
+	Signature string `json:"signature"`
+	Body      string `json:"body"`
+}
+
+// HookReceipt is the core's durable answer: accepted = recorded, never "looked at".
+type HookReceipt struct {
+	EventID     string `json:"eventId"`
+	AssistantID string `json:"assistantId"`
+	Receipt     string `json:"receipt"`
+	Routing     string `json:"routing"`
+	Replayed    bool   `json:"replayed"`
+}
+
+// HookIngest hands one delivery to the core (`assistant hook ingest`).
+func (c *Client) HookIngest(ctx context.Context, d HookDelivery) (HookReceipt, error) {
+	var out struct {
+		Receipt HookReceipt `json:"receipt"`
+	}
+	return out.Receipt, c.do(ctx, d, &out, "hook", "ingest")
+}

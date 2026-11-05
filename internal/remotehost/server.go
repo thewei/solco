@@ -536,6 +536,9 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("POST "+apiPrefix+"/automations/scheduler/start", s.guard(ScopeManage, s.handleAutomationScheduler))
 	mux.Handle("POST "+apiPrefix+"/automations/seen", s.guard(ScopeManage, s.handleAutomationSeen))
+	// The one route that is not a paired device's: an outside service reaches ONE
+	// Assistant with that Assistant's own revocable HMAC key (verified by the core).
+	mux.HandleFunc("POST "+apiPrefix+"/hooks/assistants/{id}/wake", s.handleHookWake)
 	pa := apiPrefix + "/personal-agent"
 	mux.Handle("GET "+pa+"/overview", s.guard(ScopeView, s.handlePAOverview))
 	mux.Handle("GET "+pa+"/assistants", s.guard(ScopeView, s.handlePAAssistants))
