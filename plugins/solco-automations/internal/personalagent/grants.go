@@ -439,97 +439,115 @@ func (s *Store) Authorize(in AuthorizeInput) (AuthorizationResult, bool, error) 
 	if in.RequestID == "" || len(in.RequestID) > 128 {
 		return AuthorizationResult{}, false, fmt.Errorf("%w: a requestId is required", ErrInvalid)
 	}
-	spec, known := capabilities[in.Capability]
-	if !known {
+	if _, known := capabilities[in.Capability]; !known {
 		return AuthorizationResult{}, false, fmt.Errorf("%w: unknown capability %q", ErrInvalid, in.Capability)
 	}
 	return execute(s, in.RequestID, "grant.authorize", in, func(tx *sql.Tx) (AuthorizationResult, error) {
-		a, err := getAssistantTx(tx, in.AssistantID)
+		return s.authorizeTx(tx, in, true)
+	})
+}
+
+// authorizeTx is the decision itself, inside the caller's transaction so a
+// protected action and its receipt commit or roll back together. A caller that
+// asks only to find out whether a standing grant covers a routine action
+// passes recordNoGrant=false: "a person must answer" is the ordinary case and
+// then leaves no receipt, while every allow and deny does.
+func (s *Store) authorizeTx(tx *sql.Tx, in AuthorizeInput, recordNoGrant bool) (AuthorizationResult, error) {
+	spec, known := capabilities[in.Capability]
+	if !known {
+		return AuthorizationResult{}, fmt.Errorf("%w: unknown capability %q", ErrInvalid, in.Capability)
+	}
+	a, err := getAssistantTx(tx, in.AssistantID)
+	if err != nil {
+		return AuthorizationResult{}, err
+	}
+	if a.Status != StatusActive {
+		return AuthorizationResult{}, ErrAssistantDisabled
+	}
+	now := s.nowMS()
+	res := AuthorizationResult{Decision: DecisionNeedApproval, Reason: "no_grant"}
+	finish := func() (AuthorizationResult, error) {
+		if res.Decision == DecisionAllow {
+			res.AuthorizedBy = "grant:" + res.GrantID
+		}
+		if !recordNoGrant && res.Decision == DecisionNeedApproval {
+			// A routine check that no standing grant covers (none, wrong
+			// scope, spent, unsealed): the person's card is the answer, and
+			// every such proposal writing a row would only be noise.
+			return res, nil
+		}
+		res.ReceiptID = newID("z")
+		_, err := tx.Exec(`INSERT INTO authorization_receipts(id,assistant_id,grant_id,capability,action_hash,request_id,decision,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+			res.ReceiptID, in.AssistantID, res.GrantID, in.Capability, in.ActionHash, in.RequestID, res.Decision, res.Reason, now)
+		return res, err
+	}
+	if spec.ownerOnly {
+		res.Decision, res.Reason = DecisionDeny, "owner_only"
+		return finish()
+	}
+	rows, err := tx.Query(`SELECT `+grantCols+` FROM capability_grants WHERE assistant_id=? AND capability=? AND revoked_at=0 AND expires_at>? ORDER BY issued_at, id`, in.AssistantID, in.Capability, now)
+	if err != nil {
+		return res, err
+	}
+	var allows []Grant
+	var unreadable bool
+	for rows.Next() {
+		g, _, err := s.scanGrant(rows, now)
 		if err != nil {
-			return AuthorizationResult{}, err
+			// A row that cannot be read (hand-edited, corrupt) is inert,
+			// never a reason to fail the whole decision either way.
+			unreadable = true
+			continue
 		}
-		if a.Status != StatusActive {
-			return AuthorizationResult{}, ErrAssistantDisabled
-		}
-		now := s.nowMS()
-		res := AuthorizationResult{Decision: DecisionNeedApproval, Reason: "no_grant"}
-		finish := func() (AuthorizationResult, error) {
-			res.ReceiptID = newID("z")
-			if res.Decision == DecisionAllow {
-				res.AuthorizedBy = "grant:" + res.GrantID
+		if g.Effect == "deny" {
+			if scopeAllows(g.Scope, in.Params) {
+				rows.Close()
+				res.Decision, res.Reason, res.GrantID = DecisionDeny, "denied_by_grant", g.ID
+				return finish()
 			}
-			_, err := tx.Exec(`INSERT INTO authorization_receipts(id,assistant_id,grant_id,capability,action_hash,request_id,decision,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-				res.ReceiptID, in.AssistantID, res.GrantID, in.Capability, in.ActionHash, in.RequestID, res.Decision, res.Reason, now)
-			return res, err
+			continue
 		}
-		if spec.ownerOnly {
-			res.Decision, res.Reason = DecisionDeny, "owner_only"
-			return finish()
-		}
-		rows, err := tx.Query(`SELECT `+grantCols+` FROM capability_grants WHERE assistant_id=? AND capability=? AND revoked_at=0 AND expires_at>? ORDER BY issued_at, id`, in.AssistantID, in.Capability, now)
-		if err != nil {
-			return res, err
-		}
-		var allows []Grant
-		var unreadable bool
-		for rows.Next() {
-			g, _, err := s.scanGrant(rows, now)
-			if err != nil {
-				// A row that cannot be read (hand-edited, corrupt) is inert,
-				// never a reason to fail the whole decision either way.
-				unreadable = true
-				continue
-			}
-			if g.Effect == "deny" {
-				if scopeAllows(g.Scope, in.Params) {
-					rows.Close()
-					res.Decision, res.Reason, res.GrantID = DecisionDeny, "denied_by_grant", g.ID
-					return finish()
-				}
-				continue
-			}
-			allows = append(allows, g)
-		}
-		rows.Close()
-		if len(allows) == 0 {
-			if unreadable {
-				res.Reason = "bad_seal"
-			}
-			return finish()
-		}
-		if s.verifier == nil {
-			res.Reason = "no_owner_key"
-			return finish()
-		}
-		var sawBadSeal, sawScope, sawLimit bool
-		for _, g := range allows {
-			if !g.Verified {
-				sawBadSeal = true
-				continue
-			}
-			if !scopeAllows(g.Scope, in.Params) {
-				sawScope = true
-				continue
-			}
-			if g.MaxPerDay > 0 {
-				var used int
-				_ = tx.QueryRow(`SELECT COUNT(*) FROM authorization_receipts WHERE grant_id=? AND decision='allow' AND created_at>?`, g.ID, now-24*60*60*1000).Scan(&used)
-				if used >= g.MaxPerDay {
-					sawLimit = true
-					continue
-				}
-			}
-			res.Decision, res.Reason, res.GrantID = DecisionAllow, "allowed", g.ID
-			return finish()
-		}
-		switch {
-		case sawLimit:
-			res.Reason = "limit_reached"
-		case sawScope:
-			res.Reason = "scope_mismatch"
-		case sawBadSeal:
+		allows = append(allows, g)
+	}
+	rows.Close()
+	if len(allows) == 0 {
+		if unreadable {
 			res.Reason = "bad_seal"
 		}
 		return finish()
-	})
+	}
+	if s.verifier == nil {
+		res.Reason = "no_owner_key"
+		return finish()
+	}
+	var sawBadSeal, sawScope, sawLimit bool
+	for _, g := range allows {
+		if !g.Verified {
+			sawBadSeal = true
+			continue
+		}
+		if !scopeAllows(g.Scope, in.Params) {
+			sawScope = true
+			continue
+		}
+		if g.MaxPerDay > 0 {
+			var used int
+			_ = tx.QueryRow(`SELECT COUNT(*) FROM authorization_receipts WHERE grant_id=? AND decision='allow' AND created_at>?`, g.ID, now-24*60*60*1000).Scan(&used)
+			if used >= g.MaxPerDay {
+				sawLimit = true
+				continue
+			}
+		}
+		res.Decision, res.Reason, res.GrantID = DecisionAllow, "allowed", g.ID
+		return finish()
+	}
+	switch {
+	case sawLimit:
+		res.Reason = "limit_reached"
+	case sawScope:
+		res.Reason = "scope_mismatch"
+	case sawBadSeal:
+		res.Reason = "bad_seal"
+	}
+	return finish()
 }

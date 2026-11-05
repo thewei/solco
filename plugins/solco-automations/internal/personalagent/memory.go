@@ -89,8 +89,36 @@ func (s *Store) proposeAs(author, requestID string, in ProposeMemoryInput) (Memo
 		return MemoryItem{}, false, fmt.Errorf("%w: that looks like a credential; memory never keeps credentials", ErrInvalid)
 	}
 	return execute(s, requestID, "memory.propose", in, func(tx *sql.Tx) (MemoryItem, error) {
-		return s.insertMemoryTx(tx, in, MemoryCandidate, author)
+		m, err := s.insertMemoryTx(tx, in, MemoryCandidate, author)
+		if err != nil || author != MemByAgent || s.verifier == nil {
+			return m, err
+		}
+		return s.autosaveTx(tx, requestID, m)
 	})
+}
+
+// autosaveTx is the first caller of the grant engine (A04): an Agent's own
+// proposal is kept as an approved fact at once only when the owner sealed a
+// memory.autosave grant that covers this kind of memory — the receipt names
+// the grant, and the version history still says the Agent wrote it. Edits
+// from files, a person's writes and every other author never come here.
+func (s *Store) autosaveTx(tx *sql.Tx, requestID string, m MemoryItem) (MemoryItem, error) {
+	res, err := s.authorizeTx(tx, AuthorizeInput{
+		RequestID: requestID, AssistantID: m.AssistantID, Capability: CapMemoryAutosave,
+		Params: map[string]string{"kind": m.Kind}, ActionHash: hashOf([]byte(m.ID + "\x00" + m.Content)),
+	}, false)
+	if err != nil || res.Decision != DecisionAllow {
+		return m, err
+	}
+	now := s.nowMS()
+	if err := bump(tx, now, m.ID, `state=?`, MemoryApproved); err != nil {
+		return m, err
+	}
+	kept, err := getMemoryTx(tx, m.ID)
+	if err != nil {
+		return m, err
+	}
+	return kept, recordVersionTx(tx, kept, MemByAgent, now)
 }
 
 // insertMemoryTx is the one place a memory row is born: it checks the bounds,
