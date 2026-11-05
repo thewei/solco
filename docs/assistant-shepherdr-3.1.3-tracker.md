@@ -102,3 +102,5 @@
 
 ## 2026-11-05 AC-04 桌面实机补记
 Q02/Q04/Q05 的桌面路径（research proof、coding review→Resume→Accept→Approve→Merge，main 上出现 feature.txt）已在隔离 SolcoAcc.app + 真 Herdr + 真 OMP 上走通，证据见 `docs/debug/assistant-shepherdr-3.1.3-acceptance/2026-11-05-mac-app-ac04.md`；顺带修了 ProofBox 过期与合并后进度条不更新两个问题。手机、HOOK-06/07、Reject 的 GUI 路径、A10、A08 余项仍未做，行状态不变（均 PARTIAL/OPEN）。
+
+2026-11-05 AC-04 桌面补记 2：Reject 的 GUI 路径（任务 cancelled、review rejected、分支保留、main 不动）与 requireChecks 的 GUI 表现（新建任务表单有开关；无已批准检查时点 Review 出红色 checks_required 横幅且不产生 review）已实机验证，见 `…-ac04b.md`。表单提交本身因 Computer Use 无法可靠输入 WebView 文本，经 CLI 提交。
