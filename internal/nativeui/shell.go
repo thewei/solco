@@ -251,6 +251,7 @@ type Shell struct {
 	// status hook facet (audit on entry/refresh/after-action only).
 	providers providersUIState
 	ompStream ompStreamUIState
+	piStream  ompStreamUIState
 	// hookRepairChecked: the launch-time hook check ran (noticeHookRepair).
 	hookRepairChecked bool
 

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: apphook.ChatStreamEvent, Shell's live OMP transcript binding and chatstream.Buffer
+ * [INPUT]: apphook.ChatStreamEvent, Shell's live OMP/Pi transcript binding and chatstream.Buffer
  * [OUTPUT]: handleAppChatStream：先将 OMP 原生事件送给同进程 Remote Host 的独立有界流投影，再对桌面 Chat Bridge 做精确 Pane/Provider/Session 围栏与临时更新
- * [POS]: nativeui OMP live event projection; original Provider JSONL remains the only committed history
+ * [POS]: nativeui OMP/Pi live event projection; original Provider JSONL remains the only committed history
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 package nativeui
@@ -15,11 +15,12 @@ import (
 
 // handleAppChatStream runs only on the UI lane. The extension can claim an
 // arbitrary session identity; it never creates a Chat bind or changes Herdr
-// lifecycle. Only the *already bound*, exact OMP pane/session may see it.
+// lifecycle. Only the *already bound*, exact Agent/pane/session may see it.
 func (s *Shell) handleAppChatStream(event chatstream.Event) {
 	// Mobile streaming is dispatched from AppHook's own socket lane, not
 	// here: this UI callback only updates the visible desktop Chat bridge.
-	if event.Validate() != nil || s.chatReadOnly || s.chatLiveProvider != history.AgentOMP ||
+	if event.Validate() != nil || s.chatReadOnly || (s.chatLiveProvider != history.AgentOMP && s.chatLiveProvider != history.AgentPi) ||
+		event.Agent != string(s.chatLiveProvider) ||
 		s.chatPaneID == "" || event.PaneID != s.chatPaneID || s.chatLivePath == "" ||
 		filepath.Clean(event.SessionPath) != filepath.Clean(s.chatLivePath) {
 		return

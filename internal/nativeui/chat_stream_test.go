@@ -79,6 +79,23 @@ func TestChatStreamSocketToChatBridgeProjection(t *testing.T) {
 	}
 }
 
+func TestPiChatStreamOnlyAffectsBoundPiConversation(t *testing.T) {
+	s := &Shell{chatPaneID: "p1", chatLiveProvider: history.AgentPi, chatLivePath: "/tmp/pi-session.jsonl"}
+	start := chatstream.Event{Agent: "pi", PaneID: "p1", SessionPath: "/tmp/pi-session.jsonl", Epoch: "000001-pi", Seq: 1, Kind: "message_start", MessageID: "m1"}
+	other := start
+	other.Agent = "omp"
+	s.handleAppChatStream(other)
+	if s.chatStream != nil {
+		t.Fatal("OMP event was rendered in Pi Chat")
+	}
+	s.handleAppChatStream(start)
+	start.Seq, start.Kind, start.Delta = 2, "text_delta", "streaming pi"
+	s.handleAppChatStream(start)
+	if s.chatStream == nil || s.chatStream.Text != "streaming pi" {
+		t.Fatalf("Pi Chat lost delta: %+v", s.chatStream)
+	}
+}
+
 func TestChatStreamOnlyAffectsBoundOMPConversation(t *testing.T) {
 	s := &Shell{chatPaneID: "p1", chatLiveProvider: history.AgentOMP, chatLivePath: "/tmp/session.jsonl"}
 	makeEvent := func(seq uint64, kind, delta string) chatstream.Event {

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 OMP Extension 上报的 typed delta 与 chatsession.ChatTurn（唯一 UI 线格式）
+ * [INPUT]: 依赖 OMP/Pi Extension 上报的 typed delta 与 chatsession.ChatTurn（唯一 UI 线格式）
  * [OUTPUT]: Event.Validate、Buffer.Apply/Overlay/Reconciled/Reset，提供有界、去重、可丢弃的 Chat 临时投影
  * [POS]: internal/chatstream 不持久化、不拥有 Agent 生命周期/提示词/会话；在 Provider JSONL 真值到来前临时补齐增量
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,7 +20,7 @@ const (
 	MaxTools      = 64
 )
 
-// Event is one bounded, same-session OMP extension notification.
+// Event is one bounded, same-session OMP or Pi extension notification.
 type Event struct {
 	Agent       string `json:"agent"`
 	PaneID      string `json:"pane_id"`
@@ -38,7 +38,7 @@ type Event struct {
 var ErrInvalidEvent = errors.New("invalid chat stream event")
 
 func (e Event) Validate() error {
-	if e.Agent != "omp" || len(e.PaneID) == 0 || len(e.PaneID) > 128 ||
+	if (e.Agent != "omp" && e.Agent != "pi") || len(e.PaneID) == 0 || len(e.PaneID) > 128 ||
 		len(e.SessionPath) == 0 || len(e.SessionPath) > 4096 || !filepath.IsAbs(e.SessionPath) ||
 		len(e.Epoch) == 0 || len(e.Epoch) > 128 || e.Seq == 0 ||
 		len(e.MessageID) > 128 || len(e.ToolCallID) > 128 || len(e.ToolName) > 128 ||

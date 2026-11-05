@@ -1,6 +1,7 @@
 package remotehost
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/chatstream"
+	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 )
 
@@ -64,6 +66,69 @@ func TestChatSuffixDeltaAndCanonicalFallback(t *testing.T) {
 	changed.State.Turns[5].Narration = "prior turn changed"
 	if _, ok := chatSuffixDelta(base, changed); ok {
 		t.Fatal("early turn changed without full frame")
+	}
+}
+
+func TestPiChatStreamReachesAuthenticatedWebSocket(t *testing.T) {
+	h := newHarness(t)
+	path := filepath.Join(t.TempDir(), "pi.jsonl")
+	var content string
+	content += `{"type":"session","version":3,"id":"pi-smoke","timestamp":"2026-11-05T08:00:00Z","cwd":"/tmp"}` + "\n"
+	for i := range 16 {
+		content += fmt.Sprintf(`{"type":"message","timestamp":"2026-11-05T08:00:01Z","message":{"role":"user","content":[{"type":"text","text":"before %d"}]}}`, i) + "\n"
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	proj := fixtureProjection()
+	proj.Agents = []herdr.Agent{{TerminalID: "term_a", PaneID: "w1:p1", Kind: "pi", Status: "working",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "pi", Kind: "path", Value: path}}}
+	h.back.set(proj)
+	conn, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream?instance=default", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := readJSON(t, conn)
+	if baseline["t"] != "chat" {
+		t.Fatalf("missing baseline: %+v", baseline)
+	}
+	for seq, kind := range []string{"message_start", "text_delta"} {
+		e := chatstream.Event{Agent: "pi", PaneID: "w1:p1", SessionPath: path, Epoch: "00001-pi", Seq: uint64(seq + 1), Kind: kind, MessageID: "pi-1"}
+		if kind == "text_delta" {
+			e.Delta = "Hi from Pi"
+		}
+		h.srv.IngestOMPChatStream(e)
+	}
+	patch := readJSON(t, conn)
+	if patch["t"] != "chat_delta" || patch["baseSeq"] != baseline["seq"] {
+		t.Fatalf("Pi did not get suffix frame: %+v", patch)
+	}
+	list, _ := patch["turns"].([]any)
+	if len(list) != 3 {
+		t.Fatalf("Pi suffix size = %d", len(list))
+	}
+	tail, _ := list[len(list)-1].(map[string]any)
+	if tail["narration"] != "Hi from Pi" {
+		raw, _ := json.Marshal(tail)
+		t.Fatalf("Pi live text not delivered: %s", raw)
+	}
+}
+
+func TestPiAndOMPStreamCannotCrossProviderFence(t *testing.T) {
+	var server Server
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	canonical := chatsession.State{Provider: "pi", Turns: []chatsession.ChatTurn{{User: true, Text: "one"}}}
+	for _, agent := range []history.AgentID{history.AgentPi, history.AgentOMP} {
+		start := chatstream.Event{Agent: string(agent), PaneID: "p1", SessionPath: path, Epoch: "000001-probe", Seq: 1, Kind: "message_start", MessageID: "m1"}
+		server.IngestOMPChatStream(start)
+		start.Seq, start.Kind, start.Delta = 2, "text_delta", string(agent)
+		server.IngestOMPChatStream(start)
+	}
+	for _, agent := range []history.AgentID{history.AgentPi, history.AgentOMP} {
+		got := server.chatStreamOverlay("p1", chatTarget{Provider: agent, Path: path}, canonical)
+		if len(got.Turns) != 2 || got.Turns[1].Narration != string(agent) {
+			t.Fatalf("cross provider stream: %s %+v", agent, got.Turns)
+		}
 	}
 }
 

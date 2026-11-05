@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# [INPUT]: the locally installed OMP CLI, repo-owned extension, local fake OpenAI SSE provider.
-# [OUTPUT]: assert real OMP assistant text deltas + real read tool events reach a Solco-format Unix socket.
-# [POS]: repeatable SC-05 isolated agent runtime acceptance; no Herdr pane, live user session or paid API.
+# [INPUT]: the locally installed OMP/Pi CLI, repo-owned extension, local fake OpenAI SSE provider.
+# [OUTPUT]: assert real OMP/Pi assistant text deltas + real read tool events reach a Solco-format Unix socket.
+# [POS]: repeatable SC-05/SC-06 isolated agent runtime acceptance; no Herdr pane, live user session or paid API.
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
 """Run with `python3 scripts/check-omp-chat-stream-live.py`.
@@ -102,12 +102,23 @@ class FixtureModel(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def run() -> None:
-    omp = shutil.which("omp")
-    if not omp:
-        raise RuntimeError("OMP binary is missing")
+def run(agent: str = "omp") -> None:
+    if agent not in ("omp", "pi"):
+        raise RuntimeError("unsupported stream smoke agent")
+    executable = shutil.which(agent)
+    if not executable:
+        raise RuntimeError(f"{agent} binary is missing")
     extension = Path(__file__).with_name("omp-chat-stream.ts").resolve()
-    with tempfile.TemporaryDirectory(prefix="sc-omp-") as root:
+    with tempfile.TemporaryDirectory(prefix=f"sc-{agent}-") as root:
+        if agent == "pi":
+            # The same audited source: only the explicit agent identifier is
+            # compiled for Pi. Neither user extensions folder is touched.
+            source = extension.read_text(encoding="utf-8")
+            anchor = 'const streamAgent = "omp";'
+            if source.count(anchor) != 1:
+                raise RuntimeError("canonical extension source identifier drifted")
+            extension = Path(root) / "solco-pi-chat-stream.ts"
+            extension.write_text(source.replace(anchor, 'const streamAgent = "pi";'), encoding="utf-8")
         home = Path(root)
         scratch = home / "fixture.txt"
         scratch.write_text("The read tool worked.\n", encoding="utf-8")
@@ -118,7 +129,7 @@ def run() -> None:
         model_thread = threading.Thread(target=model.serve_forever, daemon=True)
         model_thread.start()
 
-        agent_dir = home / ".omp" / "agent"
+        agent_dir = home / f".{agent}" / "agent"
         agent_dir.mkdir(parents=True)
         (agent_dir / "models.json").write_text(json.dumps({
             "providers": {
@@ -192,12 +203,20 @@ def run() -> None:
         env["NO_PROXY"] = "127.0.0.1,localhost"
         env["OPENAI_API_KEY"] = "fake-local-only"
 
-        command = [
-            omp, "--mode=rpc", "--no-ui", "--no-skills", "--no-rules",
-            "--no-context-files", "--no-pty", "--no-title",
-            "--tools=read", "--no-extensions", "--model=smoke/stream-smoke",
-            "-e", str(extension), "--cwd", str(home),
-        ]
+        if agent == "omp":
+            command = [
+                executable, "--mode=rpc", "--no-ui", "--no-skills", "--no-rules",
+                "--no-context-files", "--no-pty", "--no-title", "--tools=read",
+                "--no-extensions", "--model=smoke/stream-smoke",
+                "-e", str(extension), "--cwd", str(home),
+            ]
+        else:
+            # Pi's CLI rejects --mode=x; Pi RPC also sends no 'ready' record.
+            command = [
+                executable, "--mode", "rpc", "--no-skills", "--no-context-files",
+                "--tools", "read", "--no-extensions", "--model", "smoke/stream-smoke",
+                "-e", str(extension),
+            ]
         output: queue.Queue[dict[str, Any]] = queue.Queue()
         process: subprocess.Popen[str] | None = None
         errors: list[str] = []
@@ -238,9 +257,10 @@ def run() -> None:
                 except queue.Empty as exc:
                     raise RuntimeError("OMP fixture timed out waiting for events") from exc
 
-            while next_event().get("type") != "ready":
-                if process.poll() is not None:
-                    raise RuntimeError(f"OMP exited before ready: {stderr_output[:2]}")
+            if agent == "omp":
+                while next_event().get("type") != "ready":
+                    if process.poll() is not None:
+                        raise RuntimeError(f"OMP exited before ready: {stderr_output[:2]}")
             process.stdin.write(json.dumps({"id": "smoke", "type": "prompt", "message": PROMPT}) + "\n")
             process.stdin.flush()
 
@@ -290,7 +310,7 @@ def run() -> None:
                 raise RuntimeError("OMP tool and reply events crossed assistant message boundaries")
             if len({e.get("epoch") for e in events}) != 1:
                 raise RuntimeError("OMP stream epoch changed within one process")
-            if any(e.get("pane_id") != PANE or e.get("agent") != "omp" for e in events):
+            if any(e.get("pane_id") != PANE or e.get("agent") != agent for e in events):
                 raise RuntimeError("OMP extension leaked frames into a different Pane/Agent")
             if [e.get("seq") for e in events] != list(range(1, len(events) + 1)):
                 raise RuntimeError("OMP extension dropped or reordered its own frames")
@@ -300,7 +320,7 @@ def run() -> None:
                 raise RuntimeError("OMP session path does not point to a real source file")
             if any(not str(e["session_path"]).startswith(str(home)) for e in events):
                 raise RuntimeError("OMP test accessed a session outside isolated HOME")
-            print(f"OMP live extension smoke: PASS ({len(events)} frames, read tool + {len(text_deltas)} text deltas)")
+            print(f"{agent.upper()} live extension smoke: PASS ({len(events)} frames, read tool + {len(text_deltas)} text deltas)")
         except Exception as exc:
             errors.append(str(exc))
         finally:

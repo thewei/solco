@@ -1,17 +1,20 @@
 /**
- * [INPUT]: OMP ExtensionAPI event observer, Herdr pane identity from process.env and the existing Solco Unix socket.
- * [OUTPUT]: Non-blocking, bounded chat.stream JSON-RPC notifications for the same OMP TUI process.
+ * [INPUT]: OMP/Pi ExtensionAPI event observer, Herdr pane identity from process.env and the existing Solco Unix socket.
+ * [OUTPUT]: Non-blocking, bounded chat.stream JSON-RPC notifications for the same OMP or Pi TUI process.
  * [POS]: Read-only companion extension; never edits Herdr's own extension, transcript, prompts, or lifecycle.
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 // @ts-nocheck
 // Install independently: cp scripts/omp-chat-stream.ts ~/.omp/agent/extensions/solco-chat-stream.ts
-// Managed by Solco, NOT by Herdr. Reload/restart omp after installation.
+// Managed by Solco, NOT by Herdr. Reload/restart agent after installation.
+// This is the sole canonical source. The Pi installer replaces only the
+// following constant in its separately owned ~/.pi extension copy.
 
 import net from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
+const streamAgent = "omp";
 const paneID = process.env.HERDR_PANE_ID;
 const enabled = process.env.HERDR_ENV === "1" && !!paneID && process.env.OMPCODE !== "1";
 const socketPath = process.env.SOLCO_SOCKET_PATH
@@ -48,7 +51,7 @@ function publish(kind: string, ctx: any, fields: Record<string, unknown> = {}) {
   }
   const wire = JSON.stringify({
     method: "chat.stream",
-    params: { agent: "omp", pane_id: paneID, session_path: file, epoch,
+    params: { agent: streamAgent, pane_id: paneID, session_path: file, epoch,
       seq: ++seq, kind, message_id: currentMessage, ...fields },
   }) + "\n";
   // A burst that outpaces the UI is disposable; JSONL remains authoritative.

@@ -31,13 +31,18 @@ func (s *Shell) settingsProviders(c *ui.Context) {
 	if !s.providers.loaded && !s.providers.loading && s.providers.errText == "" {
 		s.requestProvidersAudit()
 	}
-	if s.ompStream.manager != nil && !s.ompStream.loaded && !s.ompStream.loading {
-		s.requestOMPStreamDiagnosis()
+	for _, provider := range []history.AgentID{history.AgentOMP, history.AgentPi} {
+		state := s.streamState(provider)
+		if state != nil && state.manager != nil && !state.loaded && !state.loading {
+			s.requestAgentStreamDiagnosis(provider)
+		}
 	}
 	s.consumeProvidersToast(c)
-	if s.ompStream.pendingToast != "" {
-		c.Toast(s.ompStream.pendingToast)
-		s.ompStream.pendingToast = ""
+	for _, state := range []*ompStreamUIState{&s.ompStream, &s.piStream} {
+		if state.pendingToast != "" {
+			c.Toast(state.pendingToast)
+			state.pendingToast = ""
+		}
 	}
 
 	sp := Spacing()
@@ -58,7 +63,8 @@ func (s *Shell) settingsProviders(c *ui.Context) {
 		ui.Box(c).Grow(1)
 		if gorexIconButton(c, gorexColorsOf(t.Dark), iconRefresh, "Refresh", "Refresh", false, gorexIconBtn, gorexIconGlyph).Clicked() {
 			s.requestProvidersAudit()
-			s.requestOMPStreamDiagnosis()
+			s.requestAgentStreamDiagnosis(history.AgentOMP)
+			s.requestAgentStreamDiagnosis(history.AgentPi)
 		}
 	})
 
@@ -76,8 +82,8 @@ func (s *Shell) settingsProviders(c *ui.Context) {
 		id := history.AgentID(kind.ID)
 		launchable[id] = true
 		rows = append(rows, s.agentToggleRow(c, kind))
-		if id == history.AgentOMP && s.ompStream.manager != nil {
-			rows = append(rows, s.ompStreamRow(c))
+		if (id == history.AgentOMP || id == history.AgentPi) && s.streamState(id).manager != nil {
+			rows = append(rows, s.ompStreamRow(c, id))
 		}
 	}
 	if len(rows) > 0 {

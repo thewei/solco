@@ -60,8 +60,8 @@ chat.go: P2/SC-06 只读 Chat——GET /panes/{paneId}/chat 与 WS /panes/{paneI
 chat_send.go: P3 子集——POST /panes/{paneId}/chat/send（Sendable 才发；working 须 interrupt 才 Esc→Ctrl-C→发；blocked/failed needs_terminal；Herdr 拒绝原样 refused；DeliveryUncertain 504 不重发；正文不进日志）与 /chat/stop（一次 Esc）；Backend.PromptAgent/SendAgentKeys 即 Herdr 既有 agent.prompt/agent.send_keys
 chat_send_test.go: 门禁表驱动（拒绝从不触达 Herdr）、interrupt 顺序、Herdr 拒绝/不确定投递、Stop
 contract_chat_test.go: 可选真机契约（SOLCO_REMOTEHOST_CONTRACT_CHAT=1）：真 Herdr + 真 omp，经 Host 发 prompt、经共享投影读回答案
-chat_delta.go: SC-06 OMP apphook → Remote Host 专用有界 32 Pane/转录 Buffer（2min TTL）、全局 wake、精确 Provider/Pane/Session 投影围栏、纯 chatWireFrame/chatWireDelta suffix patch；窗口滑动/元数据变化退回全帧，绝不持久化临时文本
-chat_delta_test.go: 40 回合 suffix 与窗口滑动/会话身份/状态变化回退；额外拒绝 40→1 回合大缩窗伪装为尾部 patch；不匹配 Pane/Provider/Session、缺失 seq 不展示临时文本
+chat_delta.go: SC-06 OMP/Pi apphook → Remote Host 专用有界 32 Pane/转录 Buffer（2min TTL）、全局 wake、精确 Provider/Pane/Session 投影围栏、纯 chatWireFrame/chatWireDelta suffix patch；窗口滑动/元数据变化退回全帧，绝不持久化临时文本
+chat_delta_test.go: Pi 和 OMP 的 Agent 身份隔离/Pi 认证 WS 真实 delta + 40 回合 suffix 与窗口滑动/会话身份/状态变化回退；额外拒绝 40→1 回合大缩窗伪装为尾部 patch；不匹配 Pane/Provider/Session、缺失 seq 不展示临时文本
 chat_stream_ipc_test.go: 真实隔离 AppHook Unix Socket → 认证 Host Chat WebSocket；一批 64 Token 同一 OMP 消息输出，有界 3 Turn 尾 Patch、严格串行与低于轮询周期的实时更新
 chat_test.go: 投影形状、三类拒绝（401/404/409）、文件增长推新帧、真实 OMP WebSocket 80ms 推送有界增量/缺帧真值恢复/手机请求完整 snapshot，以及 Herdr 会话路径切换强制全帧
 peek_test.go: PeekLine 表驱动（空屏/边框行/控制字符/多字节截断）、端点节流与失效、未知 pane 不触达 Herdr、失败不泄路径

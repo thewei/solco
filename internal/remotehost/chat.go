@@ -17,8 +17,8 @@ import (
 
 /**
  * [INPUT]: 依赖 Backend.Projection（agent_session 身份）、internal/chatsession（Reader/State）、history.ResolveLiveSource、server.go 的 currentTree/trackConn/guard
- * [OUTPUT]: 对外提供 GET /api/v3/panes/{paneID}/chat（一次性只读 State）与 GET /api/v3/panes/{paneID}/chat/stream（WebSocket：初次/会话切换/状态差异用 `chat` 全帧，OMP Token 优先 `chat_delta` 尾 3 回合/80ms 合并；手机发 `{t:snapshot}` 精确全量复位）
- * [POS]: 手机 Chat 只读（P2/SC-06）：窗格 → Herdr 的 agent_session 身份 → Provider 转录文件；OMP 额外使用同进程 Solco apphook 的只读临时叠加，不启动第二 Agent；原始 JSONL 仍是真值，跨 Pane/路径拒绝；会话换了流里重绑并发全量帧；没有可读会话 = 409 no_conversation
+ * [OUTPUT]: 对外提供 GET /api/v3/panes/{paneID}/chat（一次性只读 State）与 GET /api/v3/panes/{paneID}/chat/stream（WebSocket：初次/会话切换/状态差异用 `chat` 全帧，OMP/Pi Token 优先 `chat_delta` 尾 3 回合/80ms 合并；手机发 `{t:snapshot}` 精确全量复位）
+ * [POS]: 手机 Chat 只读（P2/SC-06）：窗格 → Herdr 的 agent_session 身份 → Provider 转录文件；OMP/Pi 额外使用同进程 Solco apphook 的只读临时叠加，不启动第二 Agent；原始 JSONL 仍是真值，跨 Pane/路径拒绝；会话换了流里重绑并发全量帧；没有可读会话 = 409 no_conversation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -235,7 +235,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 			return false
 		}
 		raw := full
-		if sent && !force && target.Provider == history.AgentOMP {
+		if sent && !force && (target.Provider == history.AgentOMP || target.Provider == history.AgentPi) {
 			if delta, ok := chatSuffixDelta(last, frame); ok {
 				if compact, err := json.Marshal(delta); err == nil && len(compact) < len(full) {
 					raw = compact
@@ -327,7 +327,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 		}
 		// Periodic canonical refresh retires reconciled overlays, refreshes
 		// queue/interaction metadata, and remains the non-OMP fallback.
-		if changed || n%chatRebindEvery == 0 || watching || target.Provider == history.AgentOMP {
+		if changed || n%chatRebindEvery == 0 || watching || (target.Provider == history.AgentOMP || target.Provider == history.AgentPi) {
 			canonical = s.chatState(ctx, target, reader)
 			interaction = s.interactionFrame(ctx, instance, paneID, status, reader)
 			queued = s.queuedFor(target)

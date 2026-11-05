@@ -12,8 +12,8 @@ import (
 )
 
 /**
- * [INPUT]: read-only OMP chat.stream events, Host's Herdr-resolved Pane/Session target and canonical chatsession.State.
- * [OUTPUT]: bounded in-memory companion overlay + wake signal; seq-fenced Chat suffix wire patches.
+ * [INPUT]: read-only OMP/Pi chat.stream events, Host's Herdr-resolved Pane/Session target and canonical chatsession.State.
+ * [OUTPUT]: bounded, agent-keyed in-memory companion overlay + wake signal; seq-fenced Chat suffix wire patches.
  * [POS]: SC-06 phone Chat transport; no new OMP/Herdr process and no alternate transcript authority.
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -36,7 +36,9 @@ type companionStreamFeed struct {
 	wake    chan struct{}
 }
 
-func streamKey(pane, path string) string { return pane + "\x00" + filepath.Clean(path) }
+func streamKey(agent, pane, path string) string {
+	return agent + "\x00" + pane + "\x00" + filepath.Clean(path)
+}
 
 // IngestOMPChatStream receives the *existing* apphook event on the desktop's
 // UI lane. It never creates/replaces an agent or trusts a remote path: the WS
@@ -51,7 +53,7 @@ func (s *Server) IngestOMPChatStream(e chatstream.Event) {
 	if feed.streams == nil {
 		feed.streams = make(map[string]*streamSlot)
 	}
-	key := streamKey(e.PaneID, e.SessionPath)
+	key := streamKey(e.Agent, e.PaneID, e.SessionPath)
 	slot := feed.streams[key]
 	// No durable subscription is assumed: after the first event, a new
 	// process's first assistant message is the next safe bootstrap.
@@ -100,13 +102,13 @@ func (s *Server) chatStreamWake() <-chan struct{} {
 }
 
 func (s *Server) chatStreamOverlay(pane string, target chatTarget, canonical chatsession.State) chatsession.State {
-	if target.Provider != history.AgentOMP {
+	if target.Provider != history.AgentOMP && target.Provider != history.AgentPi {
 		return canonical
 	}
 	feed := &s.chatStreamFeed
 	feed.mu.Lock()
 	defer feed.mu.Unlock()
-	slot := feed.streams[streamKey(pane, target.Path)]
+	slot := feed.streams[streamKey(string(target.Provider), pane, target.Path)]
 	if slot == nil || time.Since(slot.seen) > chatStreamTTL {
 		return canonical
 	}

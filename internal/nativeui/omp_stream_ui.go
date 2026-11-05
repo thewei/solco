@@ -4,13 +4,14 @@ import (
 	"os"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/ompstream"
 )
 
 /**
- * [INPUT]: Application-embedded OMP Extension, temp HOME-injectable Manager, Settings→Agents user interaction.
- * [OUTPUT]: OMP live text diagnosis and explicit Install/Update action with stateful UI feedback.
- * [POS]: SC-05 Doctor presentation; no automatic installation, Herdr lifecycle or active OMP restart.
+ * [INPUT]: Application-embedded OMP/Pi Extension, temp HOME-injectable Manager, Settings→Agents user interaction.
+ * [OUTPUT]: OMP/Pi live text diagnosis and explicit Install/Update action with stateful UI feedback.
+ * [POS]: SC-05/SC-06 Doctor presentation; no automatic installation, Herdr lifecycle or active OMP restart.
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -32,11 +33,28 @@ func WithOMPStreamExtension(source []byte) ShellOption {
 			return
 		}
 		s.ompStream.manager = ompstream.NewManager(home, source)
+		s.piStream.manager = ompstream.NewPiManagerWithDir(home, os.Getenv("PI_CODING_AGENT_DIR"), source)
 	}
 }
 
-func (s *Shell) requestOMPStreamDiagnosis() {
-	state := &s.ompStream
+func (s *Shell) streamState(provider history.AgentID) *ompStreamUIState {
+	switch provider {
+	case history.AgentOMP:
+		return &s.ompStream
+	case history.AgentPi:
+		return &s.piStream
+	default:
+		return nil
+	}
+}
+
+func (s *Shell) requestOMPStreamDiagnosis() { s.requestAgentStreamDiagnosis(history.AgentOMP) }
+
+func (s *Shell) requestAgentStreamDiagnosis(provider history.AgentID) {
+	state := s.streamState(provider)
+	if state == nil {
+		return
+	}
 	if state.manager == nil || state.loading || state.installing {
 		return
 	}
@@ -51,8 +69,13 @@ func (s *Shell) requestOMPStreamDiagnosis() {
 	})
 }
 
-func (s *Shell) installOMPStreamExtension() {
-	state := &s.ompStream
+func (s *Shell) installOMPStreamExtension() { s.installAgentStreamExtension(history.AgentOMP) }
+
+func (s *Shell) installAgentStreamExtension(provider history.AgentID) {
+	state := s.streamState(provider)
+	if state == nil {
+		return
+	}
 	if state.manager == nil || state.installing || state.loading || !state.loaded {
 		return
 	}
@@ -67,9 +90,9 @@ func (s *Shell) installOMPStreamExtension() {
 			state.loaded = true
 			state.diagnosis = fresh
 			if err != nil {
-				state.pendingToast = "Couldn't install OMP live text. Check the extensions folder."
+				state.pendingToast = "Couldn't install " + string(provider) + " live text. Check the extensions folder."
 			} else {
-				state.pendingToast = "OMP live text is ready for new sessions"
+				state.pendingToast = string(provider) + " live text is ready for new sessions"
 			}
 		})
 	})
@@ -120,12 +143,16 @@ func ompStreamStatus(state ompstream.State) string {
 
 // ompStreamRow is an attached facet under OMP's existing toggle row.
 // It cannot be triggered merely by switching OMP on: it needs a direct click.
-func (s *Shell) ompStreamRow(c *ui.Context) settingsRow {
-	state := &s.ompStream
+func (s *Shell) ompStreamRow(c *ui.Context, provider history.AgentID) settingsRow {
+	state := s.streamState(provider)
+	label := "Pi live text"
+	if provider == history.AgentOMP {
+		label = "OMP live text"
+	}
 	return settingsRow{
 		attached: true,
 		lead:     func() { ui.Box(c).Width(24).Shrink(0) },
-		label:    "OMP live text",
+		label:    label,
 		note: func() string {
 			if !state.loaded {
 				return "Checks an independent read-only extension"
@@ -142,7 +169,7 @@ func (s *Shell) ompStreamRow(c *ui.Context) settingsRow {
 				}
 				if label := ompStreamAction(state.diagnosis.State); label != "" {
 					if regularButton(c, label).Label(label).Disabled(state.loading || state.installing).Clicked() {
-						s.installOMPStreamExtension()
+						s.installAgentStreamExtension(provider)
 					}
 				}
 			})

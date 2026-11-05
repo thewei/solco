@@ -61,10 +61,24 @@ func TestBufferDeltaSequenceAndCanonicalReconcile(t *testing.T) {
 		t.Fatal("failed to settle")
 	}
 }
+func TestPiStreamUsesSameBoundedProtocol(t *testing.T) {
+	var b Buffer
+	start := frame(1, "message_start", "m1", "")
+	start.Agent = "pi"
+	if !b.Apply(start) {
+		t.Fatal("Pi start rejected")
+	}
+	text := frame(2, "text_delta", "m1", "Hello Pi")
+	text.Agent = "pi"
+	if !b.Apply(text) || b.Text != "Hello Pi" {
+		t.Fatalf("Pi token stream lost: %+v", b)
+	}
+}
+
 func TestBufferIdentityAndBounds(t *testing.T) {
 	var b Buffer
 	invalid := []Event{
-		{Agent: "pi", PaneID: "p", SessionPath: "/tmp/f", Epoch: "e", Seq: 1, Kind: "message_start", MessageID: "m"},
+		{Agent: "unmanaged", PaneID: "p", SessionPath: "/tmp/f", Epoch: "e", Seq: 1, Kind: "message_start", MessageID: "m"},
 		{Agent: "omp", PaneID: "p", SessionPath: "relative/f", Epoch: "e", Seq: 1, Kind: "message_start", MessageID: "m"},
 		frame(1, "unexpected", "m", ""),
 		frame(1, "text_delta", "m", strings.Repeat("x", MaxDeltaBytes+1)),

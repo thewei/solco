@@ -2,7 +2,7 @@
 > L2 | 父级: ../CLAUDE.md
 
 成员清单
-- `ompstream.go`：OMP Chat Companion Extension 的安全本地 Doctor（missing/current/outdated/foreign/error）与显式安装/卸载；安装内容来自 App 内嵌的唯一 `scripts/omp-chat-stream.ts`，不读取仓库路径、不修改 Herdr 扩展或会话，拒绝 symlink/foreign，原子替换
-- `ompstream_test.go`：temp HOME 测试完整生命周期、与 Herdr 文件共存、外来目标与符号链接保护、坏嵌入源拒绝
+- `ompstream.go`：OMP + Pi 共用只读 Companion Doctor（missing/current/outdated/foreign/error）；从 App 内嵌的唯一 `scripts/omp-chat-stream.ts` 生成 Pi 源码（仅唯一 `const streamAgent` 标记替换），分别原子安装到 `.omp/agent/extensions` 和 `.pi/agent/extensions`（Pi 按官方 `PI_CODING_AGENT_DIR` 绝对路径覆盖），相对路径 fail-closed，拒绝 symlink/foreign、不修改 Herdr 文件、不启动任何 Agent
+- `ompstream_test.go`：temp HOME 测试 Pi/OMP 不同路径/不同 Agent 标记、独立生命周期与 Herdr 文件共存、外来目标/符号链接保护、坏/漂移嵌入源拒绝
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

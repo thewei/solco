@@ -16,6 +16,62 @@ import (
 
 const exampleExtension = "// Managed by Solco, NOT by Herdr.\nexport default function register() {}\n"
 
+func TestPiManagerSharesOneCanonicalSourceAndKeepsExtensionsSeparate(t *testing.T) {
+	home := t.TempDir()
+	canonical := []byte(exampleExtension + ompAnchor + "\nexport default function pi() {}\n")
+	omp := NewManager(home, canonical)
+	pi := NewPiManager(home, canonical)
+	if !bytes.Contains(pi.source, []byte(piAnchor)) || bytes.Contains(pi.source, []byte(ompAnchor)) {
+		t.Fatalf("Pi compiled with wrong agent label: %s", pi.source)
+	}
+	if pi.path() == omp.path() || pi.dir() == omp.dir() {
+		t.Fatal("Pi and OMP accidentally share the extensions folder")
+	}
+	for _, manager := range []*Manager{pi, omp} {
+		if _, err := manager.Install(); err != nil {
+			t.Fatal(err)
+		}
+		if manager.Diagnose().State != Current {
+			t.Fatalf("not current: %s", manager.path())
+		}
+	}
+	if bytes.Equal(read(t, pi.path()), read(t, omp.path())) {
+		t.Fatal("same Agent identity sent to both runtimes")
+	}
+	if _, err := pi.Uninstall(); err != nil {
+		t.Fatal(err)
+	}
+	if omp.Diagnose().State != Current {
+		t.Fatal("Pi uninstall touched OMP")
+	}
+	if got := NewPiManager(home, []byte(exampleExtension)).Diagnose().State; got != Error {
+		t.Fatalf("missing canonical Pi anchor installed as OMP: %s", got)
+	}
+}
+
+func TestPiManagerHonorsCustomAgentDirectoryAndRejectsRelativePaths(t *testing.T) {
+	home := t.TempDir()
+	canonical := []byte(exampleExtension + ompAnchor)
+	custom := filepath.Join(home, "isolated-pi-agent")
+	m := NewPiManagerWithDir(home, custom, canonical)
+	if _, err := m.Install(); err != nil {
+		t.Fatal(err)
+	}
+	if m.path() != filepath.Join(custom, "extensions", fileName) {
+		t.Fatalf("Pi ignored custom agent dir: %s", m.path())
+	}
+	if _, err := os.Stat(filepath.Join(home, ".pi", "agent", "extensions", fileName)); !os.IsNotExist(err) {
+		t.Fatalf("custom Pi installation accidentally used default directory: %v", err)
+	}
+	bad := NewPiManagerWithDir(home, "relative/agent", canonical)
+	if bad.Diagnose().State != Error {
+		t.Fatal("relative Pi agent dir accepted")
+	}
+	if _, err := bad.Install(); err == nil {
+		t.Fatal("installed to a relative directory")
+	}
+}
+
 func TestManagerLifecycleAndHerdrCoexistence(t *testing.T) {
 	home := t.TempDir()
 	m := NewManager(home, []byte(exampleExtension))

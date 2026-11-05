@@ -9,15 +9,17 @@ import (
 )
 
 /**
- * [INPUT]: Embedded Solco-owned OMP extension bytes (provided by the application), user HOME.
- * [OUTPUT]: Read-only Diagnose and explicitly invoked Install/Uninstall of one standalone OMP extension.
- * [POS]: SC-05 extension Doctor; no Herdr integration file, provider config, session or process mutation.
+ * [INPUT]: Embedded Solco-owned OMP/Pi extension bytes (provided by the application), user HOME.
+ * [OUTPUT]: Read-only Diagnose and explicitly invoked Install/Uninstall of one standalone OMP or Pi extension.
+ * [POS]: SC-05/SC-06 extension Doctor; no Herdr integration file, provider config, session or process mutation.
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 const (
 	fileName    = "solco-chat-stream.ts"
 	ownedMarker = "// Managed by Solco, NOT by Herdr."
+	ompAnchor   = `const streamAgent = "omp";`
+	piAnchor    = `const streamAgent = "pi";`
 )
 
 type State string
@@ -36,26 +38,56 @@ type Diagnosis struct {
 }
 
 type Manager struct {
-	home   string
-	source []byte
+	home     string
+	agent    string
+	agentDir string // optional Pi agent directory from PI_CODING_AGENT_DIR
+	source   []byte
 }
 
 // NewManager requires the exact extension source embedded in the app binary.
 // The supplied path is an injectable HOME, not an arbitrary install location.
 func NewManager(home string, source []byte) *Manager {
-	return &Manager{home: home, source: bytes.Clone(source)}
+	return &Manager{home: home, agent: "omp", source: bytes.Clone(source)}
 }
 
-func (m *Manager) dir() string  { return filepath.Join(m.home, ".omp", "agent", "extensions") }
+// NewPiManager builds a Pi-native companion from the same App-embedded OMP
+// source. Exactly one known agent identifier is substituted: the extension
+// still runs inside the *existing* Herdr-owned Pi TUI, not in another process.
+// If the canonical source drifts, fail closed instead of emitting an OMP tag.
+func NewPiManager(home string, canonical []byte) *Manager {
+	return NewPiManagerWithDir(home, "", canonical)
+}
+
+// NewPiManagerWithDir honors Pi's documented PI_CODING_AGENT_DIR override.
+// An invalid relative override never silently installs into another folder.
+func NewPiManagerWithDir(home, agentDir string, canonical []byte) *Manager {
+	if !bytes.Contains(canonical, []byte(ompAnchor)) {
+		return &Manager{home: home, agent: "pi", agentDir: agentDir}
+	}
+	if bytes.Count(canonical, []byte(ompAnchor)) != 1 {
+		return &Manager{home: home, agent: "pi", agentDir: agentDir}
+	}
+	pi := bytes.Replace(canonical, []byte(ompAnchor), []byte(piAnchor), 1)
+	return &Manager{home: home, agent: "pi", agentDir: agentDir, source: pi}
+}
+
+func (m *Manager) dir() string {
+	if m.agent == "pi" && m.agentDir != "" {
+		return filepath.Join(m.agentDir, "extensions")
+	}
+	return filepath.Join(m.home, "."+m.agent, "agent", "extensions")
+}
 func (m *Manager) path() string { return filepath.Join(m.dir(), fileName) }
 
 // validSource refuses an empty, corrupted or unrelated embedded file.
 func (m *Manager) validSource() bool {
-	return len(m.source) > 0 && bytes.Contains(m.source, []byte(ownedMarker))
+	return (m.agent == "omp" || m.agent == "pi") && len(m.source) > 0 &&
+		bytes.Contains(m.source, []byte(ownedMarker)) &&
+		(m.agent != "pi" || bytes.Count(m.source, []byte(piAnchor)) == 1)
 }
 
 func (m *Manager) check() (Diagnosis, error) {
-	if m.home == "" || !filepath.IsAbs(m.home) || !m.validSource() {
+	if m.home == "" || !filepath.IsAbs(m.home) || (m.agentDir != "" && !filepath.IsAbs(m.agentDir)) || !m.validSource() {
 		return Diagnosis{State: Error, Detail: "Live text extension is unavailable in this build"}, errors.New("invalid OMP stream manager")
 	}
 	// Do not follow an extensions-directory symlink to an arbitrary location.
@@ -68,7 +100,7 @@ func (m *Manager) check() (Diagnosis, error) {
 	}
 	info, err := os.Lstat(m.path())
 	if errors.Is(err, os.ErrNotExist) {
-		return Diagnosis{State: Missing, Detail: "Enable live text for newly started OMP sessions"}, nil
+		return Diagnosis{State: Missing, Detail: "Enable live text for newly started " + m.agent + " sessions"}, nil
 	}
 	if err != nil {
 		return Diagnosis{State: Error, Detail: "Couldn't inspect OMP live text"}, err
@@ -84,9 +116,9 @@ func (m *Manager) check() (Diagnosis, error) {
 		return Diagnosis{State: Foreign, Detail: "Extension file is not managed by Solco"}, nil
 	}
 	if bytes.Equal(installed, m.source) {
-		return Diagnosis{State: Current, Detail: "Extension installed; existing OMP sessions need a restart"}, nil
+		return Diagnosis{State: Current, Detail: "Installed; existing " + m.agent + " sessions need a restart"}, nil
 	}
-	return Diagnosis{State: Outdated, Detail: "Update live text extension for newly started OMP sessions"}, nil
+	return Diagnosis{State: Outdated, Detail: "Update live text for new " + m.agent + " sessions"}, nil
 }
 
 func (m *Manager) Diagnose() Diagnosis {

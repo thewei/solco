@@ -37,6 +37,34 @@ func testOMPStreamShell(t *testing.T, home string) (*Shell, *ui.Tester, *ompstre
 	return s, ui.NewTester(s.View, 1200, 800), m
 }
 
+func TestPiStreamRequiresExplicitInstallInItsOwnDirectory(t *testing.T) {
+	home := t.TempDir()
+	s := NewShell()
+	s.newTabStarter = toggleKindsStarter{kinds: []app.SessionKind{{ID: app.TerminalKind, Label: "Terminal"}, {ID: "pi", Label: "Pi"}}}
+	s.providers.loaded = true
+	s.providers.rows = []providerRow{{provider: history.AgentPi, name: "Pi"}}
+	m := ompstream.NewPiManager(home, []byte(ompDemoSource+`const streamAgent = "omp";`))
+	s.piStream.manager, s.piStream.diagnosis, s.piStream.loaded = m, m.Diagnose(), true
+	s.router.Replace("/settings/providers")
+	tester := ui.NewTester(s.View, 1200, 800)
+	if !tester.HasText("Pi live text") || !tester.HasText("Install Live Text") {
+		t.Fatalf("Pi install action missing: %q", tester.Texts())
+	}
+	if m.Diagnose().State != ompstream.Missing {
+		t.Fatal("Pi installed without clicking")
+	}
+	if err := tester.Click("Install Live Text"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if m.Diagnose().State != ompstream.Current || !tester.HasText("Installed") {
+		t.Fatalf("Pi install did not complete: %q", tester.Texts())
+	}
+	if _, err := os.Stat(filepath.Join(home, ".omp", "agent", "extensions", "solco-chat-stream.ts")); !os.IsNotExist(err) {
+		t.Fatalf("Pi installation touched OMP extension: %v", err)
+	}
+}
+
 func TestOMPStreamRequiresExplicitInstallAndShowsHealthyState(t *testing.T) {
 	home := t.TempDir()
 	s, tester, m := testOMPStreamShell(t, home)
