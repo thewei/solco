@@ -151,6 +151,12 @@ func (a *API) handle(args []string, body []byte) (any, error) {
 	}
 	cmd, rest := args[1], args[2:]
 	switch cmd {
+	case "trace":
+		if len(rest) != 2 || rest[0] != "show" {
+			return nil, coded("invalid", "usage: assistant trace show <taskId|goalId>")
+		}
+		tr, err := a.Store.Trace(rest[1])
+		return ok("trace", tr), err
 	case "recovery":
 		if len(rest) != 2 || rest[0] != "show" {
 			return nil, coded("invalid", "usage: assistant recovery show <assistantId>")

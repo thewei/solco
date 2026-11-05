@@ -149,3 +149,66 @@ func TestExtensionActionsMatchTheCoreScope(t *testing.T) {
 		t.Fatalf("extension actions %v != core scope %v", ext, core)
 	}
 }
+
+// C06: a Coordinator that forgets it already filed a piece of work must not
+// file it again under a new requestId; the core points at the open one.
+func TestScopedTaskCreateRefusesAnOpenDuplicate(t *testing.T) {
+	s, _ := openTest(t)
+	api := &API{Store: s}
+	ada := mustAssistant(t, s, "a1", "Ada")
+	body := func(req, title string, extra string) string {
+		return fmt.Sprintf(`{"requestId":%q,"title":%q,"brief":"look it up","kind":"research"%s}`, req, title, extra)
+	}
+	first, err := call(t, api, body("dup-req-0001", "Compare  The Two Options", ""), "assistant", "--as", ada.ID, "task", "create")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstID := field(first, "task", "id").(string)
+	// Same requestId: a replay, never a duplicate.
+	if rep, err := call(t, api, body("dup-req-0001", "Compare  The Two Options", ""), "assistant", "--as", ada.ID, "task", "create"); err != nil || rep["replayed"] != true {
+		t.Fatalf("replay: %v %v", rep, err)
+	}
+	// Same work, new requestId (title compared ignoring case and spacing).
+	_, err = call(t, api, body("dup-req-0002", "compare the two options", ""), "assistant", "--as", ada.ID, "task", "create")
+	if codeOf(err) != "duplicate_task" || !strings.Contains(err.Error(), firstID) {
+		t.Fatalf("want duplicate_task naming %s, got %v", firstID, err)
+	}
+	// Deliberate repeats are allowed, and so is the same title once it is finished.
+	if _, err := call(t, api, body("dup-req-0003", "compare the two options", `,"allowDuplicate":true`), "assistant", "--as", ada.ID, "task", "create"); err != nil {
+		t.Fatalf("allowDuplicate: %v", err)
+	}
+	if _, err := call(t, api, body("dup-req-0004", "Other work", ""), "assistant", "--as", ada.ID, "task", "create"); err != nil {
+		t.Fatalf("different work: %v", err)
+	}
+}
+
+func TestTraceFollowsGoalToTaskToRuns(t *testing.T) {
+	s, _ := openTest(t)
+	api := &API{Store: s}
+	ada := mustAssistant(t, s, "a1", "Ada")
+	g := activeGoalWithPlan(t, s, ada, twoStepPlan())
+	if _, err := (&Supervisor{Store: s}).Tick(); err != nil {
+		t.Fatal(err)
+	}
+	tasks, _ := s.ListTasks(ada.ID)
+	var first Task
+	for _, tk := range tasks {
+		if tk.GoalID == g.ID && tk.Title == "Collect numbers" {
+			first = tk
+		}
+	}
+	if first.ID == "" {
+		t.Fatalf("the supervisor should have filed the first milestone's task: %+v", tasks)
+	}
+	out, err := call(t, api, "", "assistant", "--as", ada.ID, "trace", "show", first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := out["trace"].(map[string]any)
+	if tr["goalId"] != g.ID || tr["taskId"] != first.ID || tr["milestone"] != "m1" {
+		t.Fatalf("trace = %v", tr)
+	}
+	if g2, _ := call(t, api, "", "assistant", "--as", ada.ID, "trace", "show", g.ID); g2["trace"].(map[string]any)["goalId"] != g.ID {
+		t.Fatalf("a goal id traces to itself: %v", g2)
+	}
+}

@@ -107,3 +107,10 @@ test("pause, resume, retry and why are single-record actions the core scopes", (
     expect(() => route(a, owner, "x_1234", "{}")).toThrow(/Unsupported/);
   }
 });
+
+test("trace.show needs a record id and a duplicate override travels in the payload", () => {
+  expect(route("trace.show", owner, "t_abc123").args).toEqual(["assistant", "--as", owner, "trace", "show", "t_abc123"]);
+  expect(() => route("trace.show", owner)).toThrow(/record ID/);
+  const x = route("task.create", owner, "", JSON.stringify({ requestId: req, title: "T", brief: "B", kind: "research", allowDuplicate: true }));
+  expect(JSON.parse(x.input).allowDuplicate).toBe(true);
+});

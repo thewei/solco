@@ -37,6 +37,7 @@ var coordinatorScope = map[string]scopeRule{
 	"task graph":     {own: "pos"},
 	"task show":      {target: "task"},
 	"task why":       {target: "task"},
+	"trace show":     {target: "any"},
 	"task retry":     {target: "task", fillRev: true},
 	"goal create":    {own: "body"},
 	"goal list":      {own: "flag"},
@@ -99,6 +100,11 @@ func (a *API) scoped(who string, args []string, body []byte) (any, error) {
 		if body, err = pinOwner(body, who); err != nil {
 			return nil, err
 		}
+		if group == "task" && sub == "create" {
+			if body, err = a.guardDuplicateTask(body); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if rule.target != "" {
 		if len(rest) < 1 {
@@ -131,6 +137,12 @@ func (a *API) ownerOf(kind, id string) (string, int, error) {
 	case "routine":
 		r, err := a.Store.GetRoutine(id)
 		return r.AssistantID, r.Revision, err
+	case "any": // a task id, else a goal id
+		if t, err := a.Store.GetTask(id); err == nil {
+			return t.AssistantID, t.Revision, nil
+		}
+		g, err := a.Store.GetGoal(id)
+		return g.AssistantID, g.Revision, err
 	}
 	return "", 0, ErrNotFound
 }
@@ -173,6 +185,41 @@ func fillRevision(body []byte, rev int) ([]byte, error) {
 	}
 	if cur == 0 {
 		m["expectedRevision"] = json.RawMessage(fmt.Sprint(rev))
+	}
+	return json.Marshal(m)
+}
+
+// guardDuplicateTask refuses a new task that restates an unfinished one under
+// a fresh requestId (a model forgetting what it already filed), unless the
+// caller says so with allowDuplicate. A repeat of a requestId that already has
+// a receipt is a replay and passes through untouched.
+func (a *API) guardDuplicateTask(body []byte) ([]byte, error) {
+	m, err := objectOf(body)
+	if err != nil {
+		return nil, err
+	}
+	allow := false
+	if raw, ok := m["allowDuplicate"]; ok {
+		_ = json.Unmarshal(raw, &allow)
+		delete(m, "allowDuplicate")
+	}
+	str := func(k string) string {
+		var v string
+		if raw, ok := m[k]; ok {
+			_ = json.Unmarshal(raw, &v)
+		}
+		return v
+	}
+	if !allow {
+		var seen int
+		if req := str("requestId"); req != "" {
+			_ = a.Store.db.QueryRow(`SELECT COUNT(*) FROM receipts WHERE request_id=?`, req).Scan(&seen)
+		}
+		if seen == 0 {
+			if dup, found := a.Store.openDuplicate(str("assistantId"), str("goalId"), str("title")); found {
+				return nil, coded("duplicate_task", "an unfinished task already covers this: %s %q (%s). Look at it with task.why or task.show instead, or set allowDuplicate to true if you really need another.", dup.ID, clip(dup.Title, 60), dup.State)
+			}
+		}
 	}
 	return json.Marshal(m)
 }
