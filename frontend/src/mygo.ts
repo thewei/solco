@@ -881,6 +881,11 @@ export interface CreateTaskInput {
   /** DependsOn lists tasks of the same Assistant that must be done first. */
   dependsOn?: string[];
   parentTaskId?: string;
+  /**
+   * RequireChecks (coding only, Q03): refuse to start review while the
+   * Assistant has no approved checks. It can only make the policy stricter.
+   */
+  requireChecks?: boolean;
 }
 
 /**

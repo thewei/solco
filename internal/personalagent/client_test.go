@@ -57,6 +57,18 @@ func TestBodyGoesOnStdinNotArgv(t *testing.T) {
 	}
 }
 
+// Q03: the stricter-only switch reaches the core.
+func TestRequireChecksTravelsToTheCore(t *testing.T) {
+	var calls []call
+	c := NewClientWithExec(fake(readFixture(t, "task-created"), nil, &calls))
+	if _, err := c.CreateTask(t.Context(), "req-2", CreateTaskInput{AssistantID: "a_1", Kind: "coding", Title: "T", Brief: "b", RepoPath: "/r", RequireChecks: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(calls[0].stdin, `"requireChecks":true`) {
+		t.Fatalf("stdin = %s", calls[0].stdin)
+	}
+}
+
 // The CLI reports refusals as JSON on stdout with exit 1: the code survives.
 func TestCodedErrorSurvivesNonZeroExit(t *testing.T) {
 	var calls []call

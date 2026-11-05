@@ -194,6 +194,9 @@ type CreateTaskInput struct {
 	// DependsOn lists tasks of the same Assistant that must be done first.
 	DependsOn    []string `json:"dependsOn,omitempty"`
 	ParentTaskID string   `json:"parentTaskId,omitempty"`
+	// RequireChecks (coding only, Q03): refuse to start review while the
+	// Assistant has no approved checks. It can only make the policy stricter.
+	RequireChecks bool `json:"requireChecks,omitempty"`
 }
 
 // CommitmentInput drafts a commitment together with its Goal.

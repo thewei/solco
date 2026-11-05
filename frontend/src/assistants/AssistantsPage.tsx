@@ -1173,6 +1173,7 @@ function NewTask({ assistantId, agents, onClose, act }: { assistantId: string; a
   const [kind, setKind] = useState("research");
   const [agent, setAgent] = useState(agents[0]?.id ?? "pi");
   const [repoPath, setRepoPath] = useState("");
+  const [requireChecks, setRequireChecks] = useState(false);
   const [failure, setFailure] = useState("");
   const valid = title.trim() !== "" && brief.trim() !== "" && (kind !== "coding" || repoPath.trim() !== "");
   return (
@@ -1191,6 +1192,7 @@ function NewTask({ assistantId, agents, onClose, act }: { assistantId: string; a
             brief: brief.trim(),
             agent,
             repoPath: repoPath.trim() || undefined,
+            requireChecks: kind === "coding" && requireChecks ? true : undefined,
           }),
         ).then((e) => (e ? setFailure(e) : onClose()));
       }}
@@ -1214,6 +1216,11 @@ function NewTask({ assistantId, agents, onClose, act }: { assistantId: string; a
         <Field label="Repository path">
           <input value={repoPath} onChange={(e) => setRepoPath(e.target.value)} placeholder="/path/to/repo" />
         </Field>
+      ) : null}
+      {kind === "coding" ? (
+        <label className="as-meta">
+          <input type="checkbox" checked={requireChecks} onChange={(e) => setRequireChecks(e.target.checked)} /> Require approved checks before review
+        </label>
       ) : null}
     </Sheet>
   );
