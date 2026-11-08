@@ -7,8 +7,8 @@ import (
 
 /**
  * [INPUT]: 依赖 terminalSurface 的 paneID/agent/agentStatus/scrollOffset/scrollMax、terminal_scroll 的 pane.scroll/send_text 派发通道
- * [OUTPUT]: 对外提供 sgrMouseSplitter（Write 侧 SGR 鼠标事件流式分离）、parseSGRMouse、Shell.routeAttachMouse（真终端语义路由）
- * [POS]: nativeui 的 attach 鼠标语义收口（F144 真终端改造）：客户端像真终端一样把指针事件交给程序/herdr——普通 pane 滚轮走 pane.scroll 权重视口，Agent TUI 的事件原样 pane.send_text；转发以 pane 状态已知（非 unknown，hook/OSC 7501 证明会话存活）为门（2026-10-30 回显修复），2026-10-31 起另以两个会话终结事实收口：status `released`（hook 的 session_end，进程退出镜像）与 service scan 的 shell-idle 实测（前台组只剩 shell，绑定活着而 TUI 已走）——退场 TUI 的注入只会被 cooked tty 回显成乱码
+ * [OUTPUT]: 对外提供 sgrMouseSplitter（Write 侧 SGR 鼠标事件流式分离）、parseSGRMouse、isHoverMotion、isInteractiveMouseAgent、Shell.routeAttachMouse（真终端语义路由）
+ * [POS]: nativeui 的 attach 鼠标语义收口（F144 真终端改造）：客户端像真终端一样把指针事件交给程序/herdr——普通 pane 滚轮走 pane.scroll 权重视口，仅交互式鼠标 Agent TUI（pi/omp）的活跃事件经白名单转发；高频无按键悬停位移（Button 35）全局物理绝缘阻断，彻底杜绝 cooked tty 回显乱码
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -89,35 +89,56 @@ func parseSGRMouse(seq string) (button int, wheel bool, ok bool) {
 	return button, button >= 64, true
 }
 
+// isHoverMotion reports whether the event is mouse motion without any button pressed
+// (button 35 in DECSET 1003 Any-Event Tracking / SGR).
+func isHoverMotion(button int) bool {
+	return (button &^ 28) == 35
+}
+
+// isInteractiveMouseAgent reports whether the agent is known to run as a
+// full-screen alt-screen TUI that consumes mouse pointer events (pi, omp).
+// Stream/scrollback CLIs (agy, claude, codex) do not track the mouse.
+func isInteractiveMouseAgent(agent string) bool {
+	switch strings.ToLower(agent) {
+	case "pi", "omp":
+		return true
+	default:
+		return false
+	}
+}
+
+// isTerminalMouseInteractiveStatus reports whether an agent's runtime status
+// represents a live, interactive session where pointer events may be consumed.
+// Terminated states (done, error, released, unknown) and empty status close the gate.
+func isTerminalMouseInteractiveStatus(status string) bool {
+	switch status {
+	case "working", "idle", "attention", "review", "pending", "running":
+		return true
+	default:
+		return false
+	}
+}
+
 // routeAttachMouse gives one SGR mouse event reported by the terminal view
 // its real-terminal meaning (F144, user-approved): the client behaves like
 // any terminal hosting Herdr. This function is the single narrative home
 // for the probe evidence; docs/herdr-attach-mouse-forwarding.md records the
-// Herdr-side spec. The wheel follows Herdr's own scroll reality, not the
-// agent label: a pane whose projection reports scrollback range (shells,
-// and scrollback-backed TUIs like agy — probed live: agy carries
-// max_offset_from_bottom 82–221 and the Herdr TUI only ever scrolls its
-// viewport, never forwarding wheel) moves the authoritative viewport one
-// row per event (pane.scroll); an Agent TUI with no scrollback range is a
-// true alt-screen program (pi) and gets every mouse event verbatim via
-// pane.send_text — the attach channel drops such bytes. Presses and drags
-// follow the same split: only alt-screen Agent TUIs consume them
-// client-side, and the client does not fabricate pane semantics for
-// ordinary panes. altScreenAgent additionally requires a known pane
-// status (2026-10-30 echo fix): Herdr labels the pane at launch, before
-// the TUI process exists, and the daemon's forced tracking makes the view
-// report into that boot window, where the canonical tty of the booting
-// shell echoes the bytes back as visible garbage; status-unknown panes
-// (also the dead display_agent label of a failed coordinator) forward
-// nothing. The exit side closes the same way (2026-10-31): a `released`
-// status — the hook stream's session end, which mirrors process exit —
-// and a measured shell-idle pane — the service scan's pane.process_info
-// fact that the foreground group holds only the shell, the one case where
-// Herdr's binding outlives a TUI that is gone — forward nothing either,
-// because the bytes would land in the cooked tty of whatever owns the
-// pane now (a prompt, a build) and echo back as the same garbage.
-// Unmeasured panes keep forwarding, per computeShellIdlePanes's absence
-// rule. Runs on the window's UI lane.
+// Herdr-side spec.
+//
+// 1. Hover Motion (Button 35):
+// Bare hover motion (cursor moving without button pressed) is unconditionally
+// dropped. No coding assistant tracks passive cursor hover, and injecting
+// hover coordinates into a returning shell echoes garbled escape codes (^[[<35;…M).
+//
+// 2. Capability & State Gating:
+// Non-wheel events (clicks/drags) and verbatim wheel are forwarded via pane.send_text
+// only for explicit interactive mouse TUIs (pi/omp) that have empty scrollback
+// range and an active interactive status (working/idle). Stream/scrollback CLIs
+// (agy, claude, codex) and exited/shell-idle panes never receive injected mouse bytes.
+//
+// 3. Wheel:
+// Ordinary panes and scrollback-backed CLIs move Herdr's authoritative viewport
+// one row per event (pane.scroll).
 func (s *Shell) routeAttachMouse(surface *terminalSurface, seq string) {
 	if surface == nil || surface.paneID == "" || s.activeInstance == "" {
 		return
@@ -126,9 +147,13 @@ func (s *Shell) routeAttachMouse(surface *terminalSurface, seq string) {
 	if !ok {
 		return
 	}
-	altScreenAgent := surface.agent != "" && surface.scrollMax == 0 &&
-		surface.agentStatus != "" && surface.agentStatus != "unknown" &&
-		surface.agentStatus != "released" && !s.paneShellIdle[surface.paneID]
+	if isHoverMotion(button) {
+		return
+	}
+	altScreenAgent := isInteractiveMouseAgent(surface.agent) &&
+		surface.scrollMax == 0 &&
+		isTerminalMouseInteractiveStatus(surface.agentStatus) &&
+		!s.paneShellIdle[surface.paneID]
 	if !wheel {
 		if altScreenAgent {
 			s.queueAgentMouse(surface.paneID, seq)

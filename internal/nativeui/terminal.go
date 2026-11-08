@@ -40,13 +40,13 @@ func terminalOptionsFromSettings(value settings.TerminalSettings) terminal.Optio
 
 // LocalDragSelect is a per-pane decision, not a setting: panes whose
 // content lives in Herdr's scrollback (shells, scrollback-backed TUIs
-// like agy) keep the primary-button drag and the right click local to the
-// view — plain-drag text selection and a right-click menu — while the
-// wheel still reports (routeAttachMouse moves Herdr's viewport). True
-// alt-screen Agent TUIs (pi; no scrollback range) keep full reporting:
+// like agy, claude, codex) keep the primary-button drag and the right click
+// local to the view — plain-drag text selection and a right-click menu — while
+// the wheel still reports (routeAttachMouse moves Herdr's viewport). True
+// alt-screen Agent TUIs (pi, omp; no scrollback range) keep full reporting:
 // their wheel must reach the program, and selection is Shift+drag.
 func localDragSelectFor(geometry paneGeometry) bool {
-	if geometry.pane.Agent != "" {
+	if isInteractiveMouseAgent(geometry.pane.Agent) {
 		return geometry.pane.Scroll != nil && geometry.pane.Scroll.MaxOffsetFromBottom > 0
 	}
 	return true

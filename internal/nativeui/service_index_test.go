@@ -87,6 +87,34 @@ func TestComputeSidebarServicesCWDFallback(t *testing.T) {
 	}
 }
 
+// TestComputeSidebarServicesSubdirectoryDoesNotAttributeToParentPane pins the
+// fix for parent-pane misattribution: when a daemon runs in a subfolder (e.g.
+// /workspace/my-services/daemon), it must NOT be attributed to a lone pane
+// opened at the parent folder (/workspace); it belongs to the Project.
+func TestComputeSidebarServicesSubdirectoryDoesNotAttributeToParentPane(t *testing.T) {
+	projection := herdr.Projection{
+		Panes: []herdr.Pane{
+			{ID: "pRoot", ProjectID: "wRoot", TabID: "t1", CWD: "/workspace"},
+		},
+	}
+	listeners := map[int]services.ListenerSnapshot{
+		500: {PID: 500, Command: "node", Ports: []uint16{3939}, CWD: "/workspace/my-services/daemon"},
+	}
+	infos := map[string]*herdr.PaneProcessInfo{
+		"pRoot": fgInfo(800, "zsh"),
+	}
+
+	index := computeSidebarServices(projection, listeners, infos)
+
+	if act, ok := index.Panes["pRoot"]; ok {
+		t.Fatalf("daemon in subfolder must not land on parent pane pRoot: %+v", act)
+	}
+	act, ok := index.Projects["wRoot"]
+	if !ok || len(act.Ports) != 1 || act.Ports[0] != 3939 || act.Proc != "node" {
+		t.Fatalf("daemon in subfolder must land on Project wRoot: %+v ok=%v", act, ok)
+	}
+}
+
 func TestBuildSidebarActivityServiceRollup(t *testing.T) {
 	projection := herdr.Projection{
 		Projects: []herdr.Project{{ID: "w1", Label: "repo"}},

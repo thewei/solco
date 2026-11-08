@@ -155,13 +155,17 @@ func computeSidebarServices(projection herdr.Projection, listeners map[int]servi
 		}
 		daemon := paneServiceActivity{Proc: snap.Command, Ports: sortedPorts(snap.Ports)}
 		var matches []herdr.Pane
+		var exactMatches []herdr.Pane
 		for _, pane := range projection.Panes {
+			if samePath(pane.CWD, snap.CWD) {
+				exactMatches = append(exactMatches, pane)
+			}
 			if dirContains(pane.CWD, snap.CWD) {
 				matches = append(matches, pane)
 			}
 		}
-		if len(matches) == 1 {
-			pane := matches[0]
+		if len(exactMatches) == 1 {
+			pane := exactMatches[0]
 			extra := index.Panes[pane.ID]
 			extra.Proc = firstText(extra.Proc, daemon.Proc)
 			extra.Ports = mergePorts(extra.Ports, daemon.Ports)

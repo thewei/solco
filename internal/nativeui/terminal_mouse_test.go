@@ -383,3 +383,95 @@ func TestLocalDragSelectKeepsDragsAndMenuLocal(t *testing.T) {
 		t.Fatalf("wheel stopped reporting under LocalDragSelect: %q", sent)
 	}
 }
+
+// TestRouteAttachMouseHoverMotionIsNeverForwarded pins the physical firewall:
+// button 35 (bare hover motion without a button pressed) is never forwarded
+// to any pane, even when running an active interactive mouse TUI like pi.
+func TestRouteAttachMouseHoverMotionIsNeverForwarded(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "inst"
+	surface := &terminalSurface{key: "t1", paneID: "w1:p1", agent: "pi", agentStatus: "working", scrollMax: 0}
+	var sent []string
+	shell.agentMouseSink = func(_ string, text string) { sent = append(sent, text) }
+
+	for _, seq := range []string{"\x1b[<35;57;24M", "\x1b[<35;57;25M", "\x1b[<39;10;5M", "\x1b[<43;10;5M"} {
+		shell.routeAttachMouse(surface, seq)
+	}
+	if len(sent) != 0 {
+		t.Fatalf("hover motion (button 35) must never be forwarded: %q", sent)
+	}
+
+	// But an actual click press is forwarded for pi.
+	shell.routeAttachMouse(surface, "\x1b[<0;57;24M")
+	if len(sent) != 1 || sent[0] != "\x1b[<0;57;24M" {
+		t.Fatalf("press was not forwarded: %q", sent)
+	}
+}
+
+// TestRouteAttachMouseCLINeverForwardsEvenWithEmptyScrollback pins the capability
+// rule: stream/scrollback CLIs (agy, claude, codex) never receive injected clicks or
+// drags, even when newly spawned with scrollMax == 0.
+func TestRouteAttachMouseCLINeverForwardsEvenWithEmptyScrollback(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "inst"
+	for _, cli := range []string{"agy", "claude", "codex"} {
+		surface := &terminalSurface{key: "t1", paneID: "w1:p1", agent: cli, agentStatus: "working", scrollMax: 0}
+		var sent []string
+		shell.agentMouseSink = func(_ string, text string) { sent = append(sent, text) }
+
+		// Clicks and drags must not be forwarded.
+		shell.routeAttachMouse(surface, "\x1b[<0;10;5M")
+		shell.routeAttachMouse(surface, "\x1b[<32;11;5M")
+		if len(sent) != 0 {
+			t.Fatalf("cli %s must never receive mouse events: %q", cli, sent)
+		}
+	}
+}
+
+// TestRouteAttachMouseDoneStatusClosesGate pins the lifecycle termination gate:
+// when an agent status transitions to done or error, mouse forwarding is closed
+// immediately, even before background shell-idle detection catches up.
+func TestRouteAttachMouseDoneStatusClosesGate(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "inst"
+	for _, status := range []string{"done", "error", "released", "unknown", ""} {
+		surface := &terminalSurface{key: "t1", paneID: "w1:p1", agent: "pi", agentStatus: status, scrollMax: 0}
+		var sent []string
+		shell.agentMouseSink = func(_ string, text string) { sent = append(sent, text) }
+
+		shell.routeAttachMouse(surface, "\x1b[<0;10;5M")
+		if len(sent) != 0 {
+			t.Fatalf("status %q must not forward mouse: %q", status, sent)
+		}
+	}
+}
+
+// TestLocalDragSelectForInteractiveAgentOnly pins the terminal configuration contract:
+// non-interactive agents (agy, claude, codex, plain shells) always keep LocalDragSelect=true,
+// preserving local selection and context menus even with empty scrollback.
+func TestLocalDragSelectForInteractiveAgentOnly(t *testing.T) {
+	for _, cli := range []string{"agy", "claude", "codex", ""} {
+		geom := paneGeometry{
+			pane: herdr.Pane{
+				Agent:  cli,
+				Scroll: &herdr.PaneScroll{MaxOffsetFromBottom: 0},
+			},
+		}
+		if got := localDragSelectFor(geom); !got {
+			t.Fatalf("cli %q with scrollMax=0 must keep LocalDragSelect=true", cli)
+		}
+	}
+
+	// pi / omp with scrollMax=0 yields to full reporting.
+	for _, tui := range []string{"pi", "omp"} {
+		geom := paneGeometry{
+			pane: herdr.Pane{
+				Agent:  tui,
+				Scroll: &herdr.PaneScroll{MaxOffsetFromBottom: 0},
+			},
+		}
+		if got := localDragSelectFor(geom); got {
+			t.Fatalf("interactive tui %q with scrollMax=0 must yield LocalDragSelect=false", tui)
+		}
+	}
+}
