@@ -127,6 +127,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-08 · Terminal pane cards: soft-shadow hierarchy, dark terminal on the surface role
 - 2026-11-08 · Solco Git sidebar tabs: a glyph for each view, the name for the chosen one, a wash on the material (T3 Code review, round 8)
 - 2026-11-08 · Files preview: native first, a page of a few hundred bytes for AVIF and ICO (T3 Code review, round 9)
+- 2026-11-08 · Files preview, round 9b: 2 MiB Markdown, a drawn SVG, find, Quick Look, HTML / math / Mermaid (T3 Code review, round 9b)
 
 ## Git safety
 

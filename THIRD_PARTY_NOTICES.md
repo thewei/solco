@@ -45,6 +45,14 @@ Copied SVGs retain their upstream license notice.
 
 Agent names, logos, and trademarks remain the property of their respective owners. Solco does not claim ownership of those marks.
 
+## Markdown preview components
+
+Go modules linked into the app for the rendered Markdown view (raw HTML, math, diagrams), and the fonts two of them embed. Each keeps its own license; the full texts ship in the module sources at the paths named.
+
+- `github.com/go-tex/math` v0.50.0 — BSD-3-Clause, © 2026 the go-tex/math authors (typesets TeX math). It embeds **STIX Two Math**, SIL Open Font License 1.1, © 2001–2021 The STIX Fonts Project Authors (<https://github.com/stipub/stixfonts>); text: `STIXTwoMath-OFL.txt` in the module.
+- `tuios.dev/sketch` v0.4.0 — MIT, © 2026 kepano (pele, the TypeScript original) and Gaurav Gosain (the Go port) (draws Mermaid diagrams). Its `raster` package embeds subsets of **Arimo** 1.33, SIL Open Font License 1.1, © 2026 The Arimo Project Authors (<https://github.com/googlefonts/Arimo>), and **Go Mono**, © 2016 Bigelow & Holmes Inc., under the Go project's BSD-3-Clause license; texts: `raster/fonts/NOTICE` in the module.
+- `golang.org/x/net` v0.60.0 (the `html` parser) — BSD-3-Clause, © The Go Authors.
+
 ## External runtime dependencies
 
 The following are runtime dependencies installed separately and are not distributed with this repository: `herdr` (the backend runtime) and `lazygit` (used by the right-panel Git surface).
