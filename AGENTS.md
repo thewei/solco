@@ -12,6 +12,17 @@ Before engineering Solco, read:
 
 Architecture ownership lives only in `docs/client-product-architecture.md`; ad-hoc audits/progress evidence that are not part of the active migration contract may remain outside the repository.
 
+## Private assets (solco-docs)
+
+The development record is not in this repository. `docs/`, `designs/`, `.agents/` (skills and their scripts), `TODO.md`, `AUDIT-*.md` and the dev-only scripts listed in `../solco-docs/manifest.tsv` are symlinks into the **private** sibling repository `../solco-docs`; `.gitignore` keeps them out of every commit here, and everything "Start here" names under those paths is read through the link as before. The `solco-docs` skill (`.agents/skills/solco-docs/SKILL.md`) holds the map and the procedures; these rules apply to every session:
+
+- **Read.** A path above that does not resolve means a missing link or checkout: `bash ../solco-docs/link.sh --check`, then `bash ../solco-docs/link.sh`. No `../solco-docs` at all: stop and tell the user; never recreate, stub or reconstruct those files here, never guess their content.
+- **Write.** Decisions, architecture and roadmap text, debug progress files (`docs/debug/`), design explorations with their Decision records (`designs/<topic>/`), skills, dev-only scripts, TODO and audit notes are written through the link (the edit lands in solco-docs) and committed there. A decision keeps the user's words in `docs/product-decisions.md`; this file gets its one index line below, never the paragraph. Never create real files at those paths in this repository.
+- **Commit.** Code and its rules are one commit here (`commit-paths.sh`), the matching record another in solco-docs (`commit-docs.sh`); never both in one, never `git add -A` in either. Report both hashes. Private edits do not show in this repository's `git status`: also check `git -C ../solco-docs status --short`.
+- **Authorship.** Commit as the user's GitHub identity: both scripts set it, a hand-typed `git commit` passes it (name and address: the `solco-docs` skill). Never a placeholder name, never the personal address from the global git config.
+- **No leak back.** Nothing private goes into this repository's files, commit messages or CI: decision text beyond an index title, design contents or evidence, device serials, LAN addresses, home paths, tokens, key material. Tests, `go build` and CI pass on a clone without solco-docs; no code, test or workflow reads those paths at run time.
+- **Publish.** Push only when asked; a public repository after the outbound scan and author check (`solco-commit`). solco-docs stays private; no force-push and no tag there.
+
 ## Product/runtime boundary
 
 - **Solco is the macOS client/product.**

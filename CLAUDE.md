@@ -10,12 +10,12 @@ scripts/ - packaging helpers and read-only OMP Chat stream companion (omp-chat-s
 resources/ - MyGo packaging resources (app icon)
 third_party/ - vendored patched MyGo framework fork (go.mod replace target; see third_party/mygo/LOCAL-PATCH.md)
 site/ - GitHub Pages landing site (static HTML/CSS, no build step); assets/app-icon holds the icon prompt and Apple safe-margin export rule
-docs/ - architecture source of truth, MyGo migration contract/roadmap, interaction/performance/audit documentation
+docs/ - [private: link into ../solco-docs] architecture source of truth, MyGo migration contract/roadmap, interaction/performance/audit documentation, release updater runbook
 design/ - the design language's one source: `tokens.json` (colour roles, pointer/touch tiers) + `icons.json` (Tabler registry) + `gen.mjs`, which writes the Go, Chat-page and phone files (`--check` = drift gate; see design/CLAUDE.md)
-designs/ - interactive design explorations (self-contained `exploration.html` + `README.md` Decision record per topic; not built, not shipped; product code waits for the recorded Decision)
-.agents/skills/ - project-local engineering workflow/checklists
+designs/ - [private: link into ../solco-docs] interactive design explorations (self-contained `exploration.html` + `README.md` Decision record per topic; not built, not shipped; product code waits for the recorded Decision)
+.agents/skills/ - [private: link into ../solco-docs] project-local engineering workflow/checklists; the `solco-docs` skill holds the rules for every private link
+TODO.md, AUDIT-*.md, dev-only scripts under scripts/ and plugins/solco-automations/scripts/e2e-*.sh - [private: links into ../solco-docs] maintainer notes and dev-only checks (the full list is ../solco-docs/manifest.tsv)
 .github/ - CI workflows, issue/PR templates
-docs/ - architecture source of truth, MyGo migration contract/roadmap, interaction/performance/audit documentation, release updater runbook
 </directory>
 
 <config>
@@ -29,11 +29,14 @@ docs/mygo-native-migration-roadmap.md - active migration roadmap and task order
 .github/workflows/pages.yml - GitHub Pages deployment for site/
 .github/workflows/release.yml - signed tag release / updater publishing for installed apps
 docs/github-release-updates.md - release tagging, draft review, publish, and first updater installation rules
+../solco-docs - the private sibling repository behind every [private] path: its link.sh links the files in from manifest.tsv; rules for reading, writing, committing and never leaking them: AGENTS.md "Private assets (solco-docs)"
 </config>
 
 Product rule: **Solco is the client and brand. Herdr is the backend/runtime.** Solco must not introduce a second Workspace registry, pane runtime, terminal authority, or process lifecycle owner. Herdr remains authoritative for workspaces, tabs, panes, layouts, agents, scrollback, persistence, terminal sessions, and process lifecycle. Solco owns native macOS presentation, local interaction state/preferences, and the read-only Agent-history browsing/index layer (plus its user-initiated, reversible Sessions Trash).
 
 Implementation rule: do not hand-roll capabilities while mature owners exist. Search in order: Herdr API → MyGo native components/official plugins → a proven compatible implementation → custom code. Missing runtime APIs are fixed at the Herdr boundary rather than bypassed with a parallel terminal/process path.
+
+Private-assets rule: **code, tests and the rules an agent obeys live here; the development record (decisions, architecture, roadmap, designs, evidence, skills, device facts, keys) lives in the private `solco-docs`, linked in at the same paths.** Read through the link; write and commit there (`commit-docs.sh`), never copy it into this repository or its commit messages; every commit is authored as the user's GitHub identity. Details: `AGENTS.md` "Private assets (solco-docs)".
 
 CI note: `.github/workflows/checks.yml` runs the Go gates (test + mygo build + bundle lint) on macOS runners; the vendored `third_party/mygo` replace keeps CI self-contained.
 
