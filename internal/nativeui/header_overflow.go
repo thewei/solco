@@ -1,13 +1,14 @@
 package nativeui
 
 /**
- * [INPUT]: 依赖 mygo/ui 的 Menu/Element、internal/herdr 的 pane 变更 RPC（SplitPane/TogglePaneZoom/ReleaseAgent）、workbench.go 的 paneRuntimeAgent/canReleaseAgent/agentCardForPane/markAgentReviewed、dialogs 的确认通道
- * [OUTPUT]: 对外提供 headerActions（所有路由标题栏共用的唯一 Actions 触发器：⋯ 图标按钮，位于标题栏右侧工具簇最左，无 chevron）、splitPaneAction/zoomPaneAction/closePaneAction（pane 动作唯一实现）、paneOverflowItems/surfaceOverflowItems（菜单构建器；surfaceOverflowItems 是 Workspace 路由 Actions 的菜单；Release Agent 项只对 done/idle 的 agent pane 出现；Mark Reviewed 只对 ReviewPending 的 agent pane 出现）
- * [POS]: nativeui 的 pane 动作单一来源：卡片头按钮、右键菜单、侧栏行、标题栏溢出全部走这里；单 Pane 的 zoom 语义（两侧栏最大化，F143；右侧面板随侧栏让位、随侧栏回来，sidePanelState.zoomed）在此收口；agent 退出后 Herdr 仍保留条目（词汇表无 exited），显式 Release 是唯一撤除通道
+ * [INPUT]: 依赖 mygo/ui 的 Menu/Element、internal/herdr 的 pane 变更 RPC（SplitPane/TogglePaneZoom/ReleaseAgent）、workbench.go 的 paneRuntimeAgent/canReleaseAgent/agentCardForPane/markAgentReviewed、Shell.copyToClipboard、dialogs 的确认通道
+ * [OUTPUT]: 对外提供 headerActions（所有路由标题栏共用的唯一 Actions 触发器：⋯ 图标按钮，位于标题栏右侧工具簇最左，无 chevron）、splitPaneAction/zoomPaneAction/closePaneAction（pane 动作唯一实现）、paneOverflowItems/surfaceOverflowItems（菜单构建器；surfaceOverflowItems 是 Workspace 路由 Actions 的菜单；含复制 Herdr workspace_id 与 pane_id；Release Agent 项只对 done/idle 的 agent pane 出现；Mark Reviewed 只对 ReviewPending 的 agent pane 出现）
+ * [POS]: nativeui 的 pane 动作单一来源：卡片头按钮、右键菜单、侧栏行、标题栏溢出全部走这里；复制项读取目标 Pane 的 Herdr 投影，不依赖当前选中项；单 Pane 的 zoom 语义（两侧栏最大化，F143；右侧面板随侧栏让位、随侧栏回来，sidePanelState.zoomed）在此收口；agent 退出后 Herdr 仍保留条目（词汇表无 exited），显式 Release 是唯一撤除通道
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/egoist/mygo/ui"
@@ -121,6 +122,11 @@ func (s *Shell) paneOverflowItems(m *ui.Menu, paneID, label string) {
 		m.Separator()
 		if m.Item("Mark Reviewed").Chosen() {
 			s.markAgentReviewed(card.Key)
+		}
+	}
+	if pane := paneByID(s.projection, paneID); pane != nil && pane.ProjectID != "" {
+		if m.Item("Copy Workspace and Pane IDs").Chosen() {
+			s.copyToClipboard(fmt.Sprintf("workspace_id=%s\npane_id=%s", pane.ProjectID, pane.ID))
 		}
 	}
 	m.Separator()

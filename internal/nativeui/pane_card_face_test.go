@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 依赖 gorex_style.go 的 paneCardFaceOf、Design role 与对比度计算
+ * [OUTPUT]: 验证 Terminal 卡片选中细边、统一纸色和阴影，以及高对比/透明终端边界
+ * [POS]: gorex_style.go 卡片外观的回归约束；不接触 Herdr 或系统剪贴板
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 package nativeui
 
 import (
@@ -6,32 +12,21 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// TestPaneCardFaceIsOneSurfaceToldBySelectionByShadow pins the 2026-11-08
-// surface refresh: the card paper is the surface role in both states (so it
-// is one surface with the terminal's own background), no card draws a visible
-// edge, and the selection is carried by the shadow alone — wider and stronger
-// in the light window, a faint light halo in the dark one where a black shadow
-// cannot lift a card off the near-black canvas.
-func TestPaneCardFaceIsOneSurfaceToldBySelectionByShadow(t *testing.T) {
+// TestPaneCardFaceIsOneSurfaceToldByAQuietEdge 检查卡片共用 surface 纸色，
+// 并用现有中性细边区分选中态。
+func TestPaneCardFaceIsOneSurfaceToldByAQuietEdge(t *testing.T) {
 	highContrast.Store(false)
 	for _, dark := range []bool{false, true} {
 		rest, selected := paneCardFaceOf(dark, false, false), paneCardFaceOf(dark, true, false)
 		r := designRoles(dark)
-		if rest.border.A != 0 || selected.border.A != 0 {
-			t.Fatalf("dark=%v: default card edge must be invisible, got %+v / %+v", dark, rest.border, selected.border)
+		if rest.border.A != 0 || selected.border != gorexColorsOf(dark).cardBorder {
+			t.Fatalf("dark=%v: only the selected card uses the palette hairline, got %+v / %+v", dark, rest.border, selected.border)
 		}
 		if rest.paper != r.Surface || selected.paper != r.Surface {
 			t.Fatalf("dark=%v: paper = %+v / %+v, want the surface role %+v in both states", dark, rest.paper, selected.paper, r.Surface)
 		}
-		if rest.shadow.A == 0 || selected.shadow.A == 0 || rest.shadow == selected.shadow {
-			t.Fatalf("dark=%v: the two states need different shadows: %+v vs %+v", dark, rest.shadow, selected.shadow)
-		}
-		if !dark {
-			if selected.shadow.A <= rest.shadow.A || selected.shadowB <= rest.shadowB || selected.shadowY <= rest.shadowY {
-				t.Fatalf("light: the selected shadow must be stronger and reach further: %+v vs %+v", selected, rest)
-			}
-		} else if selected.shadow.R <= rest.shadow.R {
-			t.Fatalf("dark: the selected card is marked by a light halo, got %+v over %+v", selected.shadow, rest.shadow)
+		if rest.shadow.A == 0 || selected.shadow != rest.shadow || selected.shadowY != rest.shadowY || selected.shadowB != rest.shadowB {
+			t.Fatalf("dark=%v: selected and resting cards keep the same depth shadow: %+v vs %+v", dark, rest, selected)
 		}
 	}
 }

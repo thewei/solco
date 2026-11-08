@@ -14,7 +14,7 @@ import (
 
 /**
  * [INPUT]: 依赖 github.com/egoist/mygo/plugins/terminal, github.com/egoist/mygo/ui, os, path/filepath, runtime
- * [OUTPUT]: 对外提供 gorexColors/gorexColorsOf/paneCardFaceOf/paneCardFace.dress（窗格卡片纸色·边·阴影，窗格/右侧面板/Detail 卡共用：纸色=终端底色，两态同色，选中只靠阴影（深色为淡光晕），不靠边框与纸色；Increase contrast 与透明终端纸色保留边）/paneGround（浅色窗口窗格画布底 = grouped）/gorexContentCard/gorexToggleFace/iconButtonRadius（图标按钮圆角唯一来源：min(Radius.Row, size/3)，28/24 档同为 8）/gorexIconButton/gorexIconButtonDisabled（无事可做的图标按钮：字形半透明、无悬停脸）/gorexIconTab/shortDir/samePath/tildePath
+ * [OUTPUT]: 对外提供 gorexColors/gorexColorsOf/paneCardFaceOf/paneCardFace.dress（窗格卡片纸色·边·阴影，窗格/右侧面板/Detail 卡共用：纸色=终端底色，两态同色；Terminal 选中态以 cardBorder 细边区分，卡片保留同级轻阴影；Increase contrast 与透明终端纸色保留强边）/paneGround（浅色窗口窗格画布底 = grouped）/gorexContentCard/gorexToggleFace/iconButtonRadius（图标按钮圆角唯一来源：min(Radius.Row, size/3)，28/24 档同为 8）/gorexIconButton/gorexIconButtonDisabled（无事可做的图标按钮：字形半透明、无悬停脸）/gorexIconTab/shortDir/samePath/tildePath
  * [POS]: nativeui 的窗口 chrome 与终端卡片视觉实现（扁平中性面、细线图标按钮），被 workspace/terminal/titlebar 等模块消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -108,14 +108,9 @@ func gorexColorsOf(dark bool) *gorexColors {
 	return &gorexLightColors
 }
 
-// paneCardFace is one pane card's look. Since the 2026-11-08 surface refresh
-// the card paper is the terminal's own background — one surface in both
-// states — and the selected card is told from the others by its shadow, not
-// by an edge or a different paper: the hairline is transparent in the default
-// look (still drawn, so the card keeps its size). Two modes keep an edge
-// because a shadow cannot carry them: Increase contrast, and the
-// Transparent-terminal paper, where a shadow would show through the
-// see-through fill.
+// paneCardFace 表达所有卡片共用的纸色、边和阴影。纸色继续与终端底色一致。
+// 2026-11-08 起，选中的 Terminal 卡片用调色板细边区分，不再加深阴影。
+// 普通卡片保留同级轻阴影。Increase contrast 与透明终端仍使用强调边。
 type paneCardFace struct {
 	paper, border ui.Color
 	// shadow is the drop under the card; a zero alpha draws none.
@@ -123,13 +118,10 @@ type paneCardFace struct {
 	shadowY, shadowB float32
 }
 
-// Shadow tones are not roles: one neutral ink at two strengths. On the
-// near-black dark canvas a black shadow cannot lift a card, so the selected
-// dark card is marked by a faint light halo instead.
+// 阴影色是局部中性色，不是主题角色。卡片共用同级阴影，选中态由边框区分。
 var (
 	paneShadowLight = ui.RGBA(24, 29, 40, 1)
 	paneShadowDark  = ui.RGBA(0, 0, 0, 1)
-	paneHaloDark    = ui.RGBA(255, 255, 255, 1)
 )
 
 func paneCardFaceOf(dark, selected, transparent bool) paneCardFace {
@@ -142,15 +134,13 @@ func paneCardFaceOf(dark, selected, transparent bool) paneCardFace {
 		return f
 	}
 	f := paneCardFace{paper: designRoles(dark).Surface, border: ui.RGBA(0, 0, 0, 0)}
-	switch {
-	case dark && selected:
-		f.shadow, f.shadowY, f.shadowB = paneHaloDark.Alpha(0.14), 0, 24
-	case dark:
+	if dark {
 		f.shadow, f.shadowY, f.shadowB = paneShadowDark.Alpha(0.30), 2, 8
-	case selected:
-		f.shadow, f.shadowY, f.shadowB = paneShadowLight.Alpha(0.14), 6, 22
-	default:
+	} else {
 		f.shadow, f.shadowY, f.shadowB = paneShadowLight.Alpha(0.07), 2, 8
+	}
+	if selected {
+		f.border = k.cardBorder
 	}
 	if highContrast.Load() {
 		f.border = k.cardBorder

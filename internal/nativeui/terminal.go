@@ -17,7 +17,7 @@ import (
 
 /**
  * [INPUT]: 依赖 mygo/plugins/terminal, mygo/ui, herdr, settings, gorex_style, brands 的 agentProvider/agentMark、markAgentReviewedForPane 聚焦取消 Review
- * [OUTPUT]: 对外提供 terminalCanvas（浅色窗口铺 paneGround 灰底）, paneCard（纸色/阴影来自 paneCardFaceOf）, paneCardHeader, paneStackInfo, paneLogoView, syncTerminals, closeAllTerminals, paneHeaderVisuals；画布内另渲染可拖拽的 split 分隔条（renderSplitDividers → splitGrowTarget/splitResizeAmount → resizePane），把拖拽解析成 Herdr pane.resize；终端聚焦时自动清除对应 Agent 的 Review 状态
+ * [OUTPUT]: 对外提供 terminalCanvas（浅色窗口铺 paneGround 灰底，顶行卡片贴齐侧栏搜索栏）, paneCard（纸色/边/阴影来自 paneCardFaceOf，选中态使用中性细边）, paneCardHeader, paneStackInfo, paneLogoView, syncTerminals, closeAllTerminals, paneHeaderVisuals；画布内另渲染可拖拽的 split 分隔条（renderSplitDividers → splitGrowTarget/splitResizeAmount → resizePane），把拖拽解析成 Herdr pane.resize；终端聚焦时自动清除对应 Agent 的 Review 状态
  * [POS]: nativeui 的终端画布与 Gorex 窗格卡片主渲染器；可见 Pane 的 Herdr attach 与 OSC 回调通过 applyOnWindow + terminal identity 防迟到事件（隐藏不会删除状态记录），布局权威始终在 Herdr
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -110,10 +110,8 @@ type paneGeometry struct {
 // terminalCanvas lays the visible Panes out over the workspace canvas as
 // gorex cards. The geometry is computed in DIPs from the canvas bounds —
 // percent frames cannot carry the gutter reliably, and the daemon's pane
-// rects are contiguous cells. Each pane frame is inset by half a
-// gorexGap on every side (gorexFrameInset), so edges land a full gorexGap
-// out (canvas pad + frame inset) and adjacent cards keep a full gorexGap
-// between them. The card itself must NOT carry a Margin: a filled child
+// rects are contiguous cells. 顶行卡片贴齐 Header 下沿；其余边沿保留一格 gorexGap。
+// The card itself must NOT carry a Margin: a filled child
 // overflows its box by the margin (mygo fills the parent's content box
 // and shifts, it does not shrink), which painted every card through the
 // right/bottom gutter and glued adjacent cards together (2026-10-07
@@ -130,6 +128,9 @@ func (s *Shell) terminalCanvas(c *ui.Context) {
 	// Absolute children position relative to the canvas, while Bounds()
 	// reports window coordinates: only the size carries over.
 	inner := gorexInsetRect(ui.Rect{W: bounds.W, H: bounds.H}, gorexCardsPad)
+	// 顶行卡片贴齐 Header 下沿；只移除画布上沿的半格 gutter。
+	inner.Y = 0
+	inner.H += gorexCardsPad
 	if inner.W <= 0 || inner.H <= 0 {
 		return
 	}
@@ -137,8 +138,12 @@ func (s *Shell) terminalCanvas(c *ui.Context) {
 		for _, surface := range surfaces {
 			surface := surface
 			left, top, width, height := surfacePercent(surface.area, surface.rect)
+			topInset := float32(gorexFrameInset)
+			if top == 0 {
+				topInset = 0
+			}
 			w := inner.W*width/100 - 2*gorexFrameInset
-			h := inner.H*height/100 - 2*gorexFrameInset
+			h := inner.H*height/100 - topInset - gorexFrameInset
 			if w <= 0 || h <= 0 {
 				continue
 			}
@@ -146,7 +151,7 @@ func (s *Shell) terminalCanvas(c *ui.Context) {
 				Transition(ui.ElementTransition{Position: true, Duration: motionHandOver}).
 				Absolute().
 				Left(inner.X + inner.W*left/100 + gorexFrameInset).
-				Top(inner.Y + inner.H*top/100 + gorexFrameInset).
+				Top(inner.Y + inner.H*top/100 + topInset).
 				Width(w).
 				Height(h)
 			frame.Children(func() {
@@ -195,11 +200,15 @@ func (s *Shell) renderSplitDividers(c *ui.Context, inner ui.Rect, layout herdr.L
 			ratioX := (float32(split.Rect.X) + float32(split.Rect.Width)*float32(split.Ratio) - float32(area.X)) / float32(area.Width)
 			topPct := float32(split.Rect.Y-area.Y) / float32(area.Height)
 			hPct := float32(split.Rect.Height) / float32(area.Height)
+			topInset := float32(gorexFrameInset)
+			if topPct == 0 {
+				topInset = 0
+			}
 			d = splitDivider{split: split, vertical: true,
 				x: inner.X + inner.W*ratioX - grip/2,
-				y: inner.Y + inner.H*topPct + gorexFrameInset,
+				y: inner.Y + inner.H*topPct + topInset,
 				w: grip,
-				h: inner.H*hPct - 2*gorexFrameInset,
+				h: inner.H*hPct - topInset - gorexFrameInset,
 			}
 		case "down":
 			ratioY := (float32(split.Rect.Y) + float32(split.Rect.Height)*float32(split.Ratio) - float32(area.Y)) / float32(area.Height)
@@ -471,9 +480,8 @@ func (s *Shell) resizePane(paneID, direction string, amount float64) bool {
 func (s *Shell) paneCard(c *ui.Context, k *gorexColors, surface *terminalSurface) {
 	focused := surface.focused
 	card := ui.Column(c).Fill().Radius(gorexCardR).Clip().MinWidth(0).MinHeight(0)
-	// Paper, edge and shadow come from paneCardFaceOf: the selected card is
-	// the one with the wider, softer shadow (a faint light halo in the dark
-	// window), no edge ring and the same paper as the others. The
+	// 纸色、边和阴影都由 paneCardFaceOf 提供。选中卡片只增加中性细边，阴影与同组一致。
+	// The
 	// Transparent-terminal preference swaps in a deliberately see-through
 	// paper — the user's opt-in look.
 	paneCardFaceOf(c.Theme().Dark, focused, s.settings.Terminal.Transparent).dress(card)
