@@ -1,0 +1,40 @@
+# frontend/
+> L2 | 父级: /CLAUDE.md
+
+Chat WebView 页（产品决策 2026-10-11）的唯一源码：一份嵌入式 SPA 同时服务桌面（`mygo build` 内嵌 `dist`，经 `mygo://localhost` 加载）与手机（`build:mobile` 产出单文件 `dist-mobile/mobile.html`，solco-mobile 经 `scripts/sync-chat-page.mjs` 生成 `src/generated/chat-page.ts` 快照）。页面只与自己的桥（`mygo-runtime`）对话；页面代码禁止出现按客户端分叉的分支。`src/` 变更未完成直至：`bun run build` + `bun run build:mobile` + solco-mobile `pnpm sync:chat-page` + `pnpm check:chat-page`。
+
+成员清单
+main.tsx: 桌面入口，createRoot 按路径挂 `App`（/chat）或懒加载的 `AssistantsPage`（/assistants）——Files 预览自 2026-11-08 起是原生的，这里不再有它的页面（`/files-viewer` 路由、`FilesViewer`、github-markdown-css 都已删）；引入 highlight.js github 主题、`nozoom` 与 `theme.css`（`vite.config.ts`，target safari15）
+mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），渲染同一个 `App`，引入 `nozoom`，零客户端分支
+index.html / mobile.html: 两个 HTML 壳的首帧：内联 `--content` 同一对色（`light-dark(#fcfcfc, #0a0a0a)`，与 `theme.css`、Go `webviewBackground`、原生 `designTokens().Content` 一对，`TestWebviewBackgroundMatchesPageTokens` 钉住）；`mobile.html` 另把 `data-theme` 与 `data-theme-pin` 固定为 dark（手机只有深色，状态未到时也不闪浅色；`App.tsx` 在状态没给 `theme` 时回落到该 pin）
+nozoom.ts: 双指缩放关闭（副作用导入）：gesture 事件与 Ctrl+wheel 的默认缩放被取消——页面是原生窗口里的 App UI，双指放大不原生；普通滚动不受影响
+App.tsx: 页面根：桥接状态（`chat.*` / events 订阅）、`chat:delta` 有序尾 Patch / 缺帧 snapshot 自愈、`data-theme`/`data-contrast`/`data-prose` 写入 html、sticky-bottom 跟尾、会话绑定与开关（`bindLiveAgent` 等）；输入区上方的 `.changes-pill`（「N files changed | Review」：宿主给 `state.changedFiles` 且 `canReview` 才画——手机从自己的 Git 状态读，桌面恒为 0 所以永不显示；Review 走 `reviewChanges("")`）
+mygo.ts: `mygo generate` 生成的类型化桥客户端——唯一桥 API 面，禁止手改；SC-04 包含 chat:delta 的 ChatDelta DTO
+turn.tsx: 转录行渲染器：用户气泡（提及 chips、折叠）、助手纯文本、run 折叠（thinking+工具）、工具行、changes 卡、脚注（时间/复制/重发）、`Markdown`→`CodeBlock`——fenced 块统一脸：SVG 以 `<img>` data URL 预览（Preview|Code），mermaid 经懒加载库渲染图（Diagram|Code，strict 模式，350ms 流式去抖，解析失败回落源码+一行 `mmerr` 提示，主题翻转经 MutationObserver 重绘），超 30 行折叠、复制取 `textContent`
+turnlist.ts: 转录虚拟滚动（@tanstack/react-virtual）
+chat-delta.ts: 桌面/手机唯一的流式回合尾 Patch 合并器；baseSeq + conversationId 双重门控、缺帧返回 null 触发 Snapshot
+测试：`tests/chat-delta.test.ts` 只测纯 reducer，未进入 WebView 产物
+composer-surface.tsx: Chat / Assistant 冷启动 / Group 共用的 React Composer Box、Toolbar、Textarea 与扩容规则；发送与模型等状态仍由各场景 controller 拥有，不复制 Herdr runtime
+composer.tsx: 输入区：`/` `$` 目录弹层（agentcatalog 经桥）、模型/思考档面板、附件 chips、语音键
+dock.tsx: 输入区上方卡片栈：Tasks tray、Question 卡、Blocked 卡、Working line（`.shim.working` 文字 + `.elapsed`；手机显示「Working · 4m 16s」，桌面保留省略号）；`SessionState`：加载态附带骨架 `.sk-rows`（仅手机样式显示，桌面仍是转圈行），等待态带 `draft` 标记（新会话草稿由宿主自己的 hero 邀请，手机样式隐藏页内邀请）
+queue-card.tsx: 追问队列卡：计数徽标、拖拽/⌥↑⌥↓ 重排、单行撤回、Cancel all
+subagents.tsx: 子代理卡片与 `SubagentContext`（嵌套只读事实）
+drawer.tsx: 子代理只读抽屉（`chat:subagent-open` 事件驱动，宽度拖拽记忆）
+toc.tsx: 左栏用户回合 tick-rail 目录
+drafts.ts: 每会话草稿与所选附件的 localStorage 持久化（14 天清理，跨 WebView 回收存活）
+context.tsx: composer 行的上下文用量环与提示
+icons.tsx: 图标渲染器 `Icon`：路径表来自生成文件 `icons.generated.ts`（`design/icons.json`，Tabler 描边；默认线宽取 `--icon-stroke`：指针 1.5、触控 2）；页面保持零图标依赖；`StopIcon` 是画出来的方块，不是图标
+icons.generated.ts / tokens.generated.css: `design/gen.mjs` 生成，禁止手改：颜色角色、圆角档（`--r-*`，`@media (pointer: coarse)` 切到触控档）、`--ff-ui`（桌面系统字体、触控 DM Sans）、`--icon-stroke`
+native.ts: Safari 式状态 pill（指针下链接 href）与选区辅助，Chat 页使用（Files 预览页 2026-11-08 退役）
+theme.css: 引入 `tokens.generated.css`（颜色角色/圆角/字体/线宽的唯一来源），自己只保留令牌表没有名字的值（`--accent-dim`、`--float-shadow`、骨架色、墨色阶 `--i1..i4`/`--hair*`、`--spring`）+ DM Sans `@font-face`（`fonts/`，拉丁子集）；`--content` 与 Go `webviewBackground` 的一致性由 `TestWebviewBackgroundMatchesPageTokens` 钉住
+fonts/: DM Sans 400/500/700 woff2（SIL OFL 1.1，附 `DM-Sans-OFL.txt`）；单文件手机构建内联为 data URL，桌面构建作资产
+chat.css: Chat 本体样式（含 `.codeb` 代码块族、`.mmprev` mermaid 画布、`.mmerr` 解析错误行）；文件末尾的「Phone density」块以 `html[data-host="phone"]` 为键（手机 16/24 阅读尺寸、44px 触控、浮层/停靠卡的 T3 外形；桌面保持 13px 密度，只共享颜色/圆角/字体），另含 `.changes-pill`、加载骨架 `.sk-rows`、手机 `.jump`（44px，让位于输入区与停靠卡）
+assistants/Progress.tsx: Worker 汇总 WorkPulse 与 `ago`（真实状态，不伪装 Agent 回复；2026-11-07 起页头不再画 facts 条，PlanCard/Milestone 与 `.as-plan`/`.as-ms`/`.as-fact-kind` 样式已删，Goal 计划只在 Advanced 的 Goals 里）
+assistants/ResultCards.tsx: 聊天上方的任务结果卡（2026-11-07，确定性，不经模型）：桥 `snapshot.results`（核心 `assistant results`，24 h 内 done/failed/review_required 的任务，最多 4 张）→ 标题 + 状态 + Open Pane（仅当窗格仍在树中）/ Review（交给 Tasks）；收件箱已在问的任务不重复画，叉掉只在本页会话内记住；经 `App` 的 `dockAbove` 画在 composer 栏最上方
+assistants/GroupChat.tsx: Group 的 @ 定向/无 @ 广播；Composer 外壳复用 composer-surface；`GroupsSheet`（2026-11-07：群不再是侧栏入口，由 Primary 的 ⋯ → Groups… 列出/新建，群页头有 ‹ 回 Primary）
+assistants/AssistantsPage.tsx: `/assistants` 对话优先页（2026-11-04，designs/assistants-chat-first）：嵌入同一个 `App` 作 Coordinator 对话；未启动时同款壳 + 自带输入框与 agent 选择，首条消息经 `assistants.ensureChat` 拉起 Coordinator 并在 Chat 绑定后经 `chat.send` 恰好发送一次；Needs-You 条、⋯ 菜单（含 Archive Assistant 的二次确认）、More 抽屉（列表经 `assistants.drawer` 仅开着时读取）
+assistants/Behavior.tsx / WorkStyle.tsx: Settings 页签的两节——Behavior 只剩一个「Carry on by itself」开关 + Quiet hours（提醒间隔/日预算保留原值），WorkStyle 的 MCP 收进「advanced」折叠；更多抽屉只有 Needs you / Tasks（Open·Watching·Routines·Done 四个筛选）/ Memory / Settings 四个页签（2026-11-07，Autonomy 页签已删，核心能力仍在）
+assistants/assistants.css: 上述页面样式（沿用 theme.css 令牌；`.as-scrim` z-index 30 高于 More 抽屉 10 与菜单 20/21，抽屉开着时弹窗也完整）
+
+[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+assistants/AssistantsPage.tsx（2026-11-05）：Coordinator 定期汇报由原 Herdr OMP 对话生成；UI 独立显示 queued/claimed/uncertain 交付状态，uncertain 需检查原 Terminal 并二次确认 skip/retry，exact throughSeq + requestId；`mygo.ts` 必须由 Go `mygo generate` 自动生成，移动端仍复用同一 Chat 组件。

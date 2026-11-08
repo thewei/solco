@@ -1,0 +1,139 @@
+package nativeui
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+)
+
+/**
+ * [INPUT]: 依赖 nativeui 包内非测试源码的 AST（textField 链上的 Placeholder、ButtonBase 的 "Clear" 标签、searchField 调用）与 gitSurfaceTestShell 的 Git 面
+ * [OUTPUT]: 对外提供守卫：列表筛选/搜索框只有 searchField（官方 ui.SearchField 的 DS 脸：放大镜 + 边框 + 清除钮 + Esc 清空）一种脸，不再手搓；Git 面的筛选框收的是文字，输入时不会同时触发面上的快捷键
+ * [POS]: 2026-10-14 第二轮审计：同一角色曾有三种脸（官方 SearchField / 无边框灰底手搓 / 无放大镜的 TextInput），收口为一种
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// callRoot walks a method chain back to the constructor or helper that started
+// it: textField(c, &q).Height(28).Placeholder("x") → "textField",
+// ui.ButtonBase(c).Label("x") → "ButtonBase". It returns "" for a chain that
+// starts anywhere else.
+func callRoot(e ast.Expr) string {
+	for {
+		call, ok := e.(*ast.CallExpr)
+		if !ok {
+			return ""
+		}
+		if fn, isIdent := call.Fun.(*ast.Ident); isIdent {
+			return fn.Name
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return ""
+		}
+		if pkg, isPkg := sel.X.(*ast.Ident); isPkg {
+			if pkg.Name == "ui" {
+				return sel.Sel.Name
+			}
+			return ""
+		}
+		e = sel.X
+	}
+}
+
+// TestListFiltersAreTheOfficialSearchField pins one face for every field that
+// searches or filters a list: searchField, the DS face of ui.SearchField —
+// magnifier, border, a clear button, Escape clears. The app once had three
+// (the official one, a borderless grey hand-rolled copy in the Git surface,
+// and a bare text input with no magnifier); a textField dressed with a
+// "Search…"/"Filter…" hint, or a hand-drawn "Clear" button, is that drift
+// coming back.
+func TestListFiltersAreTheOfficialSearchField(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	searchFields := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if fn, isIdent := call.Fun.(*ast.Ident); isIdent {
+				if fn.Name == "searchField" {
+					searchFields++
+				}
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if len(call.Args) != 1 {
+				return true
+			}
+			lit, ok := call.Args[0].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			text, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return true
+			}
+			where := fset.Position(call.Pos())
+			switch root := callRoot(sel.X); {
+			case sel.Sel.Name == "Placeholder" && (root == "textField" || root == "TextInputBase") &&
+				(strings.HasPrefix(text, "Search") || strings.HasPrefix(text, "Filter")):
+				t.Errorf("%s: a %s hinted %q is a hand-rolled search field; use searchField", where, root, text)
+			case sel.Sel.Name == "Label" && root == "ButtonBase" && text == "Clear":
+				t.Errorf("%s: a hand-drawn Clear button; ui.SearchField owns the clear button", where)
+			}
+			return true
+		})
+	}
+	if searchFields < 6 {
+		t.Fatalf("saw only %d searchField calls; the scan no longer finds the call sites", searchFields)
+	}
+}
+
+// The Changes filter takes its keys as text: whatever the framework binds to
+// a letter or, on a Mac, to Option+letter (Alt+Z types an Omega), typing in
+// the field never also fires a window shortcut. This pins the observable
+// result for whichever layer does the shielding.
+func TestChangesFilterTakesItsKeysAsText(t *testing.T) {
+	root := t.TempDir()
+	shell := gitSurfaceTestShell(t, root)
+	shell.git.rootOf[root] = root
+	if shell.router.Path() != routeWorkspace {
+		shell.router.Push(routeWorkspace)
+	}
+	showChangesPanel(shell)
+	shell.rebuildDiffRows()
+	tester := ui.NewTester(shell.View, 1200, 800)
+	tester.Frame()
+	if err := tester.Click("Search files"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	tester.TypeKey(0, ui.KeyJ, "j")
+	tester.TypeKey(0, ui.KeyK, "k")
+	tester.TypeKey(ui.Alt, ui.KeyZ, "Ω")
+	tester.Frame()
+	if shell.changes.filter != "jkΩ" {
+		t.Fatalf("filter text = %q, want what was typed", shell.changes.filter)
+	}
+}

@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "bad_request",
+    "message": "limit must be a positive integer"
+  }
+}

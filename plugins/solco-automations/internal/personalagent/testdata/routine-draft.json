@@ -1,0 +1,43 @@
+{
+  "approval": {
+    "action": "Enable routine \"morning-check\": run `*/30 * * * *` (cron) on /tmp with omp headless (no terminal prompts), unattended on this Mac. Next run 2027-01-15 08:30 UTC. Prompt: Check the repository for risky changes.",
+    "actionHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "assistantId": "a_0000000000000001",
+    "createdAt": 1800000000000,
+    "decidedAt": 0,
+    "expectedRevision": 1,
+    "expiresAt": 1800604800000,
+    "id": "p_0000000000000019",
+    "state": "pending",
+    "subjectId": "morning-check",
+    "subjectKind": "routine"
+  },
+  "next": [
+    1800001800000,
+    1800003600000,
+    1800005400000
+  ],
+  "replayed": false,
+  "routine": {
+    "agent": "omp",
+    "approvalId": "p_0000000000000019",
+    "approvalState": "pending",
+    "approved": false,
+    "assistantId": "a_0000000000000001",
+    "createdAt": 1800000000000,
+    "cron": "*/30 * * * *",
+    "headless": true,
+    "name": "morning-check",
+    "paused": false,
+    "prompt": "Check the repository for risky changes.",
+    "rationale": "A recurring check the user asked for in chat.",
+    "reason": "Waiting for your approval. A draft never runs before you approve it.",
+    "repo": "/tmp",
+    "requestedBy": "assistant",
+    "revision": 1,
+    "source": "chat",
+    "state": "draft",
+    "updatedAt": 1800000000000
+  },
+  "schema": 1
+}

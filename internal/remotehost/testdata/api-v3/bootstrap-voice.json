@@ -1,0 +1,28 @@
+{
+  "capabilities": {
+    "chat": true,
+    "git": true,
+    "launch": true,
+    "sessions": true,
+    "terminal": true,
+    "voice": true
+  },
+  "hostId": "a1cc1d2af9c5a03e",
+  "hostName": "Test Mac",
+  "instances": [
+    {
+      "id": "default"
+    }
+  ],
+  "launchKinds": [
+    {
+      "id": "terminal",
+      "label": "Terminal"
+    },
+    {
+      "id": "claude-code",
+      "label": "Claude Code"
+    }
+  ],
+  "version": "test"
+}

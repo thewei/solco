@@ -1,0 +1,12 @@
+{
+  "coordinator": {
+    "assistantId": "a_0000000000000001",
+    "createdAt": 1800000000000,
+    "revision": 1,
+    "state": "starting",
+    "taskId": "t_0000000000000007",
+    "updatedAt": 1800000000000
+  },
+  "replayed": false,
+  "schema": 1
+}

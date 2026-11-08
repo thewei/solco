@@ -1,0 +1,646 @@
+package nativeui
+
+// [INPUT]: Agent 投影与会话卡、chat bridge 投影、launch 跟进队列（chatQueuedItems 现读 ledger）、共享 emptyState/banner 构件。
+// [OUTPUT]: Chat 表面的会话呈现与空态（workspaceEmptyBanner 动作走 compact 档）；跟进队列 chip（"Queued after turn · N" + Cancel 全清）与 enqueueChatFollowUp / cancelChatFollowUp / cancelChatFollowUpItem / moveChatQueuedItem。
+// [POS]: Chat 视图专用呈现层；对话运行时与 Agent 语义归 internal/agent 与 bridge。
+// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/agentcatalog"
+	"github.com/thewei/solco/internal/chatsession"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/history"
+)
+
+// chatTimelineRow renders one derived timeline turn with the ChatGPT
+// contract (0.6 §13): narration always visible, thinking consolidated in a
+// Collapsible, tool runs as compact chips (grouped when 2+), failed turns
+// keep the partial scene.
+func (s *Shell) chatTimelineRow(c *ui.Context, turn conversation.TimelineTurn, turnIndex int) {
+	t := c.Theme()
+	tokens := designTokens(t.Dark)
+	sp := Spacing()
+	ui.Column(c).FillWidth().Padding(sp.M, sp.L).Gap(sp.S).
+		Radius(Radius().Row).Background(tokens.Panel).Border(1, tokens.BorderSubtle).Children(func() {
+		switch {
+		case turn.UserRow:
+			ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "USER").FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(t.TextMuted)
+			})
+			ui.Text(c, turn.Text).FontSize(Typography().Body)
+			return
+		default:
+			ui.Row(c).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "ASSISTANT").FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(t.TextMuted)
+				if turn.Failed {
+					statusPill(c, "Stopped", ToneError)
+				}
+			})
+			if turn.Narration != "" {
+				ui.Text(c, turn.Narration).FontSize(Typography().Body)
+			}
+			if turn.Thinking != nil && *turn.Thinking != "" {
+				open := s.chatTurnPartOpen(turnIndex, "thinking")
+				col := ui.Collapsible(c, "Thinking", &open, func() {
+					ui.Text(c, *turn.Thinking).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
+				})
+				col.Changed() // apply a pending toggle now, so the store keeps it
+				s.setChatTurnPartOpen(turnIndex, "thinking", open)
+			}
+			if len(turn.ToolRuns) > 0 {
+				summary := "Tool activity"
+				if turn.Compacted {
+					summary = "Tool activity (grouped)"
+				}
+				open := s.chatTurnPartOpen(turnIndex, "tools")
+				col := ui.Collapsible(c, summary, &open, func() {
+					for _, run := range turn.ToolRuns {
+						toolCard(c, run.Name, run.InputPreview, run.Output, run.IsError)
+					}
+				})
+				col.Changed() // apply a pending toggle now, so the store keeps it
+				s.setChatTurnPartOpen(turnIndex, "tools", open)
+			}
+		}
+	})
+}
+
+// chatComposerRow renders the prompt dock: the outcome banner, then the
+// raised shared dock (dockPanel) with Send/Queue controls on a row of its
+// own underneath, the Cursor-3 composer anatomy.
+func (s *Shell) chatComposerRow(c *ui.Context) {
+	t := c.Theme()
+	sp := Spacing()
+	ui.Column(c).Padding(sp.M, sp.XL, sp.L).Gap(sp.S).Children(func() {
+		// Outcome line (F65): delivery failures, queue refusals and the
+		// "do not resend" warning were written but never rendered.
+		if s.chatOutcome != "" {
+			ui.Row(c).FillWidth().Padding(sp.S, sp.M).Background(t.Danger.Alpha(0.12)).
+				Radius(Radius().Control).Children(func() {
+				ui.Text(c, s.chatOutcome).FontSize(Typography().Caption).TextColor(t.Danger).Grow(1)
+			})
+		}
+		dockPanel(c, func() {
+			// The prompt input itself (F71): chatDraft was read by
+			// sendChatPrompt and cleared after send, but no element ever
+			// bound it — the composer had no field to type into.
+			field := textArea(c, &s.chatDraft).Grow(1).Height(56).
+				Placeholder("Follow up on this conversation…").Label("Chat prompt")
+			// Enter sends (chat convention) but only when the live
+			// disposition is SentNow; multiline TextArea otherwise keeps
+			// Enter as a newline, and queued/terminal-needed states stay
+			// on the explicit buttons (2026-10-06 F82).
+			if field.Shortcut(0, ui.KeyEnter) && s.chatDispositionNow() == conversation.DispositionSentNow {
+				s.sendChatPrompt()
+			}
+			ui.Row(c).FillWidth().Gap(sp.M).AlignItems(ui.Center).Children(func() {
+				if items := s.chatQueuedItems(); len(items) > 0 {
+					ui.Text(c, fmt.Sprintf("Queued after turn · %d", len(items))).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted).Grow(1)
+					if regularButton(c, "Cancel").Clicked() {
+						s.cancelChatFollowUp()
+					}
+					return
+				}
+				ui.Box(c).Grow(1)
+				// Empty drafts render disabled: sendChatPrompt would
+				// no-op, and a live Send on an empty box reads as broken
+				// (2026-10-06 F100). While an input method is composing,
+				// Send stays disabled too: a click would commit a
+				// half-typed composition as the prompt.
+				live := s.chatDispositionNow() == conversation.DispositionSentNow
+				if regularPrimaryButton(c, "Send").Disabled(!live || strings.TrimSpace(s.chatDraft) == "" || field.Composing()).Clicked() {
+					s.sendChatPrompt()
+				}
+			})
+		})
+	})
+}
+
+// workspaceChatSurface renders the Chat view as a first-class WorkspacePrimarySurface
+// directly inside the /workspace center canvas.
+func (s *Shell) workspaceChatSurface(c *ui.Context) {
+	t := c.Theme()
+	sp := Spacing()
+	if s.launchHold() {
+		// A New Pane → Agent launch holds the surface (chat_launch.go): the
+		// unified header stays, the body is the launching/failed card, and
+		// no composer exists to type into.
+		k := gorexColorsOf(t.Dark)
+		ui.Column(c).Grow(1).MinWidth(0).Background(designTokens(t.Dark).Content).Children(func() {
+			s.chatSurfaceHeader(c, k)
+			s.renderLaunchState(c)
+		})
+		return
+	}
+	card, hasCard := s.agentCardForSelectedPane()
+	if hasCard && (s.chatPaneID != card.PaneID || (s.chatConversationID == "" && !s.chatLoading)) {
+		s.rebindWorkspaceChat()
+	}
+
+	ui.Column(c).Grow(1).MinWidth(0).Background(designTokens(t.Dark).Content).Children(func() {
+		// Unified card header (N19 #3/#8): the same anatomy as the terminal
+		// pane card — Agent mark, name, live status dot, chat disposition,
+		// and the single Terminal⇄Chat toggle. Double-click zooms (#6).
+		s.chatSurfaceHeader(c, gorexColorsOf(t.Dark))
+
+		// The selected Agent may disappear while Chat is visible. Do not
+		// reveal a previously bound pane's transcript or composer in that
+		// case, even when the old conversation id still exists locally.
+		if !hasCard {
+			workspaceEmptyBanner(c, iconChat, "No agent in this pane",
+				"This is a standard shell. Select an Agent pane in the sidebar to open its conversation.", func() {
+					if compactPrimaryButton(c, "Open Terminal").Clicked() {
+						s.showSurface(WorkspaceSurfaceTerminal)
+					}
+				})
+			return
+		}
+		// N19 Phase 2: with the WebView chat enabled the body is the embedded
+		// page over the presentation-only bridge, including its loading and
+		// waiting states (SessionState); the header band and rebind logic
+		// stay native, and the native banners below are the no-WebView fallback.
+		if s.chatWebviewBody(c) {
+			return
+		}
+		if s.chatLoading {
+			loadingState(c, "Loading conversation…")
+			return
+		}
+		if s.chatConversationID == "" {
+			workspaceEmptyBanner(c, iconChat, "Waiting for agent session…",
+				fmt.Sprintf("Agent %q has not established a conversation yet.", card.Title), func() {
+					if compactPrimaryButton(c, "Open Terminal").Clicked() {
+						s.showSurface(WorkspaceSurfaceTerminal)
+					}
+				})
+			return
+		}
+
+		ui.Scroll(c).Grow(1).Children(func() {
+			ui.Column(c).FillWidth().Padding(sp.M, sp.XL).Gap(sp.S).Children(func() {
+				for i, turn := range s.chatTurns {
+					s.chatTimelineRow(c, turn, i)
+				}
+			})
+		})
+		s.chatComposerRow(c)
+	})
+}
+
+// chatPage is the /chat Native Conversation surface (0.6 §20): bounded
+// timeline, composer, queued follow-up indicator. It binds to one
+// conversation id at a time; live decoding is the 0.6 live-source lane.
+func (s *Shell) chatPage(c *ui.Context) {
+	sp := Spacing()
+	ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+		if s.chatConversationID == "" {
+			emptyState(c, "No conversation", "Open one from Sessions or an agent.")
+			return
+		}
+		if s.chatLoading {
+			loadingState(c, "Loading conversation…")
+			return
+		}
+		ui.Row(c).Padding(pageTopInset(), sp.XL, sp.S).Gap(sp.M).AlignItems(ui.Center).Children(func() {
+			summary := s.chatDispositionSummary()
+			statusPill(c, summary, dispositionTone(s.chatDispositionNow()))
+		})
+		// N19 Phase 2: with the WebView chat enabled the body is the
+		// embedded page over the presentation-only bridge; the header band,
+		// rebind logic and empty/loading states above stay native.
+		if s.chatWebviewBody(c) {
+			return
+		}
+		ui.Scroll(c).Grow(1).Children(func() {
+			ui.Column(c).FillWidth().Padding(sp.M, sp.XL).Gap(sp.S).Children(func() {
+				for i, turn := range s.chatTurns {
+					s.chatTimelineRow(c, turn, i)
+				}
+			})
+		})
+		s.chatComposerRow(c)
+	})
+}
+
+// sendChatPrompt is the native composer's send action over its bound draft.
+func (s *Shell) sendChatPrompt() {
+	s.sendChatText(s.chatDraft)
+}
+
+// sendChatText routes one prompt through the disposition decided from live
+// sendability at commit time: SentNow delivers via the canonical
+// agent.prompt transaction; MidTurn queues; NeedsTerminal/unknown are
+// refused. Shared by the native composer and the WebView chat bridge; it
+// returns the projection after the attempt.
+func (s *Shell) sendChatText(text string) ChatBridgeState {
+	text = strings.TrimSpace(text)
+	if text == "" || s.launch == nil || s.activeInstance == "" || s.chatPaneID == "" {
+		return s.chatBridgeState()
+	}
+	disposition := s.chatDispositionNow()
+	switch disposition {
+	case conversation.DispositionSentNow:
+		requestID := fmt.Sprintf("chat-%s-%d", s.chatPaneID, time.Now().UnixNano())
+		err := s.launch.PromptLiveAgent(context.Background(), s.activeInstance, s.chatPaneID, text)
+		s.chatAfterPrompt(requestID, text, disposition, err)
+		if err == nil {
+			s.afterChatSend(text)
+		}
+	case conversation.DispositionQueuedAfterTurn:
+		s.enqueueChatFollowUp(text)
+	default:
+		s.chatOutcome = "This agent needs the terminal; prompts stay disabled."
+	}
+	s.publishChatBridge()
+	return s.chatBridgeState()
+}
+
+// enqueueChatFollowUp queues the follow-up in the real delivery ledger
+// (0.6 §11): identity-proven at enqueue so the worker's occupant
+// revalidation has its coordinate; follow-ups stack as an ordered list,
+// refused only behind an unacknowledged uncertain send.
+func (s *Shell) enqueueChatFollowUp(text string) {
+	if s.chatConversationID == "" {
+		// A fresh omp/pi pane whose transcript file is not written yet has no
+		// conversation to queue behind: say so, and keep the draft.
+		s.chatOutcome = "Cannot queue yet: this conversation is not linked until the agent's first reply is written. Send again in a moment."
+		return
+	}
+	fingerprint := s.liveFingerprintForPane(s.chatPaneID)
+	if fingerprint == "" {
+		s.chatOutcome = "Cannot queue: the live session identity is unresolved."
+		return
+	}
+	item := conversation.QueueItem{
+		RequestID:      fmt.Sprintf("chat-queue-%s-%d", s.chatPaneID, time.Now().UnixNano()),
+		ConversationID: conversation.ConversationID(s.chatConversationID),
+		AgentPaneID:    s.chatPaneID,
+		Fingerprint:    fingerprint,
+		Text:           text,
+		Instance:       s.activeInstance,
+	}
+	if err := s.launch.EnqueueFollowUp(item); err != nil {
+		// Only the frozen queue refuses: the uncertain send must be
+		// acknowledged (cancel the entry) before more text stacks behind it.
+		s.chatOutcome = "Cannot queue: " + err.Error()
+		s.publishChatBridge()
+		return
+	}
+	s.chatDraft = ""
+	s.publishChatBridge()
+}
+
+// chatQueuedItems projects the bound conversation's follow-up queue in
+// delivery order, read live from the ledger — a rebind therefore never
+// needs to clear chip state. Delivered and cancelled entries leave the
+// list inside the ledger already; the filter is the second line of
+// defense for a projection raced against a completion.
+func (s *Shell) chatQueuedItems() []conversation.QueueItem {
+	if s.launch == nil || s.chatConversationID == "" {
+		return nil
+	}
+	items, _ := s.launch.Queue().Items(conversation.ConversationID(s.chatConversationID))
+	var live []conversation.QueueItem
+	for _, item := range items {
+		if item.State == conversation.Delivered || item.State == conversation.Cancelled {
+			continue
+		}
+		live = append(live, item)
+	}
+	return live
+}
+
+// cancelChatFollowUp cancels every cancellable follow-up in the ledger
+// (an entry mid-delivery stays; its commit may not be raced) and
+// refreshes the composer chip.
+func (s *Shell) cancelChatFollowUp() {
+	if s.launch != nil && s.chatConversationID != "" {
+		if _, err := s.launch.Queue().CancelAll(conversation.ConversationID(s.chatConversationID)); err != nil && len(s.chatQueuedItems()) > 0 {
+			// The delivery already committed; the chip must not pretend
+			// otherwise.
+			s.chatOutcome = "The follow-up already delivered."
+			s.publishChatBridge()
+			return
+		}
+	}
+	s.publishChatBridge()
+}
+
+// cancelChatFollowUpItem withdraws one follow-up by request id before its
+// delivery commit. Racing the commit loses on purpose: the outcome says
+// the prompt is already being delivered, never that it was unsent.
+func (s *Shell) cancelChatFollowUpItem(requestID string) {
+	if s.launch == nil || s.chatConversationID == "" {
+		return
+	}
+	if _, err := s.launch.Queue().CancelItem(conversation.ConversationID(s.chatConversationID), requestID); err != nil && !errors.Is(err, conversation.ErrNoQueueItem) {
+		s.chatOutcome = "That follow-up is already being delivered."
+	}
+	s.publishChatBridge()
+}
+
+// moveChatQueuedItem reorders one follow-up in the delivery queue (items
+// the worker already claimed stay pinned to the head run).
+func (s *Shell) moveChatQueuedItem(requestID string, to int) error {
+	if s.launch == nil || s.chatConversationID == "" {
+		return conversation.ErrNoQueueItem
+	}
+	err := s.launch.Queue().Move(conversation.ConversationID(s.chatConversationID), requestID, to)
+	s.publishChatBridge()
+	return err
+}
+
+// editChatQueuedItem rewrites one unclaimed follow-up's text in place.
+func (s *Shell) editChatQueuedItem(requestID, text string) {
+	if s.launch == nil || s.chatConversationID == "" {
+		return
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		s.chatOutcome = "A queued message can't be empty — cancel it instead."
+	} else if _, err := s.launch.Queue().Edit(conversation.ConversationID(s.chatConversationID), requestID, text); err != nil && !errors.Is(err, conversation.ErrNoQueueItem) {
+		s.chatOutcome = "That follow-up is already being delivered."
+	}
+	s.publishChatBridge()
+}
+
+func (s *Shell) chatAfterPrompt(requestID, text string, disposition conversation.PromptDisposition, err error) {
+	if err != nil {
+		var uncertain *herdr.DeliveryUncertainError
+		if errors.As(err, &uncertain) {
+			// Uncertainty never pretends the text was unsent nor auto-retries.
+			s.chatOutcome = "Prompt delivery uncertain — do not resend; check the agent."
+			return
+		}
+		s.chatOutcome = "Prompt failed: " + err.Error()
+		return
+	}
+	s.chatDraft = ""
+	s.chatOutcome = ""
+	s.chatLastRequestID = requestID
+	// Pending submission echo (0.6 §12): a temporary local User row bound to
+	// the pane and the live baseline. Only a live tail can reconcile it, so
+	// history-bound sends show no temporary row; a queued prompt is not a
+	// submission and creates none. A fresh pane with no session yet (the
+	// sourceless latch) also echoes: the first prompt is what opens the
+	// session, and the echo carries over to the live bind that follows
+	// (same pane, baseline 0) until the provider row consumes it.
+	// A command the agent answers outside its transcript (a picker, or a
+	// dialog in Terminal) leaves no row to consume the echo: it would stay as
+	// a user bubble over a "Working" line that never ends. /compact is the
+	// same: the agent writes a summary entry, never a user row.
+	if (s.chatLivePump != nil || s.chatPaneSourceless()) && s.chatCommandKind(text) == "" && !agentcatalog.IsCompact(text) {
+		s.chatPendingEcho = &conversation.PendingEcho{
+			Text:     text,
+			Baseline: s.chatLiveCommitted,
+			PaneID:   s.chatPaneID,
+		}
+		s.appendPendingEchoTurn()
+	}
+	s.publishChatBridge()
+}
+
+// bindChatConversation binds one pane's history conversation and fills the
+// timeline from the read-only HistoryService bounded window (CONV-07/
+// CONV-09): latest generation wins, stale loads cannot apply.
+func (s *Shell) bindChatConversation(conversationID string) {
+	s.bindChatWindow(conversationID, false)
+}
+
+// bindChatWindow is the one history-window binding. The window is the
+// newest messages (chat order: the conversation opens at its end and
+// "Earlier messages" pages upward). readOnly detaches the chat from every
+// pane — the Sessions detail: no live tail, no composer, no runtime — and
+// keeps the session's own meta for the header.
+func (s *Shell) bindChatWindow(conversationID string, readOnly bool) {
+	if conversationID == "" || s.hist.service == nil {
+		return
+	}
+	if s.chatConversationID == conversationID && s.chatReadOnly == readOnly && (s.chatLoading || len(s.chatTurns) > 0) {
+		return
+	}
+	s.stopLiveTail()
+	// A history-bound surface cannot reconcile a pending submission against
+	// the provider source, so the echo drops (0.6 §12 rebind rule).
+	s.chatPendingEcho = nil
+	if s.chatOpenCancel != nil {
+		s.chatOpenCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.chatOpenCancel = cancel
+	generation := s.chatGen.Add(1)
+	s.chatConversationID = conversationID
+	s.chatReadOnly = readOnly
+	s.chatSession = nil
+	if readOnly {
+		s.chatPaneID = ""
+		s.chatSourcelessPaneID = ""
+		s.chatOutcome = ""
+	}
+	s.chatLoading = true
+	s.chatTurns = nil
+	s.chatTurnExpanded = nil
+	s.chatWindowMessages = nil
+	s.chatWindowStart = 0
+	s.chatHasOlder = false
+	s.chatContextTokens = nil
+	s.chatModel = ""
+	service := s.hist.service
+	s.publishChatBridge()
+
+	s.dispatch(func() {
+		window, err := service.Open(ctx, history.ConversationWindowRequest{ConversationID: conversationID, Tail: true})
+		s.applyOnWindow(func() {
+			if generation != s.chatGen.Load() {
+				return
+			}
+			s.chatLoading = false
+			if err != nil {
+				s.chatOutcome = "Load failed: " + err.Error()
+			} else {
+				s.chatWindowMessages = window.Messages
+				s.chatWindowStart = window.Start
+				s.chatHasOlder = window.Start > 0
+				items := conversation.ItemsFromTranscript(window.Messages)
+				s.chatTurns = conversation.DeriveTimeline(items)
+				s.chatModel = chatsession.LastModel(items)
+				s.chatContextTokens = chatsession.LastContext(window.Messages)
+				if readOnly {
+					meta := window.Meta
+					s.chatSession = &meta
+				}
+			}
+			s.publishChatBridge()
+		})
+	})
+}
+
+// releaseHistoryChat drops a read-only history binding once its page is
+// gone, so no stale transcript can be mistaken for a pane's conversation
+// (the inspector and the Workspace chat read the same state).
+func (s *Shell) releaseHistoryChat() {
+	s.hist.detailInfo = historyPreview{}
+	if !s.chatReadOnly {
+		return
+	}
+	s.chatGen.Add(1)
+	if s.chatOpenCancel != nil {
+		s.chatOpenCancel()
+		s.chatOpenCancel = nil
+	}
+	s.chatReadOnly = false
+	s.chatSession = nil
+	s.chatConversationID = ""
+	s.chatLoading = false
+	s.chatTurns = nil
+	s.chatWindowMessages = nil
+	s.chatWindowStart = 0
+	s.chatHasOlder = false
+	s.chatContextTokens = nil
+	s.chatModel = ""
+	s.chatOutcome = ""
+	s.publishChatBridge()
+}
+
+// chatDispositionNow derives sendability from the current exact Herdr-owned
+// Pane, not from an AgentCardModel in the Workbench directory. Cards are an
+// asynchronous display cache: a fresh card may not yet have RuntimePhase,
+// and an old working card can linger after a completed turn. Either error
+// leaves the shared Composer stuck with a disabled Send or a stale Stop.
+// The semantic prompt transaction still checks the runtime at commit time.
+func (s *Shell) chatDispositionNow() conversation.PromptDisposition {
+	if s.terminalDialogHeld() {
+		return conversation.DispositionNeedsTerminal
+	}
+	// This must be the Chat's bound Pane. A cached card for another Pane
+	// (or a removed Agent) can never authorize a prompt.
+	if s.chatPaneID == "" {
+		return conversation.DispositionUnknown
+	}
+	for _, runtimeAgent := range s.projection.Agents {
+		if runtimeAgent.PaneID == s.chatPaneID {
+			return conversation.DispositionFor(agent.ClassifySendability(
+				agent.ParseRuntimePhase(runtimeAgent.Status, false)))
+		}
+	}
+	return conversation.DispositionUnknown
+}
+
+// chatOlderPage is one "Earlier messages" page (the service's own window
+// cap); chatMaxAccumulatedMessages bounds how many pages the client window
+// may accumulate before the Earlier control stops offering more (0.6 §6:
+// UI state never holds an unbounded transcript).
+const (
+	chatOlderPage              = history.WindowLimit
+	chatMaxAccumulatedMessages = chatsession.MaxAccumulated
+)
+
+// chatLoadOlder fetches the previous history page and prepends it to the
+// accumulated window, then re-derives the timeline. Live-bound chats page
+// out of their decoder's projection instead (chatLiveLoadOlder).
+func (s *Shell) chatLoadOlder() {
+	if strings.HasPrefix(s.chatConversationID, "live:") {
+		s.chatLiveLoadOlder()
+		return
+	}
+	if s.hist.service == nil || !s.chatHasOlder || s.chatConversationID == "" {
+		return
+	}
+	service := s.hist.service
+	conversationID := s.chatConversationID
+	start := s.chatWindowStart
+	generation := s.chatGen.Load()
+	s.dispatch(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		prevStart := max(0, start-chatOlderPage)
+		window, err := service.Open(ctx, history.ConversationWindowRequest{
+			ConversationID: conversationID,
+			StartIndex:     &prevStart,
+			Limit:          chatOlderPage,
+		})
+		s.applyOnWindow(func() {
+			if generation != s.chatGen.Load() || conversationID != s.chatConversationID {
+				return
+			}
+			if err != nil {
+				s.chatOutcome = "Load failed: " + err.Error()
+				s.publishChatBridge()
+				return
+			}
+			// Prepend only messages the accumulated window does not hold
+			// yet: adjacent pages can overlap around the anchor.
+			headSeq := int64(1) << 62
+			for _, msg := range s.chatWindowMessages {
+				if msg.Seq < headSeq {
+					headSeq = msg.Seq
+				}
+			}
+			older := make([]history.TranscriptMessage, 0, len(window.Messages))
+			for _, msg := range window.Messages {
+				if msg.Seq < headSeq {
+					older = append(older, msg)
+				}
+			}
+			s.chatWindowMessages = append(older, s.chatWindowMessages...)
+			s.chatWindowStart = window.Start
+			s.chatHasOlder = window.Start > 0 && len(s.chatWindowMessages) < chatMaxAccumulatedMessages
+			items := conversation.ItemsFromTranscript(s.chatWindowMessages)
+			s.chatTurns = conversation.DeriveTimeline(items)
+			s.chatModel = chatsession.LastModel(items)
+			s.publishChatBridge()
+		})
+	})
+}
+
+// chatDispositionSummary summarizes the current composer disposition.
+func (s *Shell) chatDispositionSummary() string {
+	switch s.chatDispositionNow() {
+	case conversation.DispositionSentNow:
+		return "Ready"
+	case conversation.DispositionQueuedAfterTurn:
+		return "Working — prompt will queue"
+	case conversation.DispositionNeedsTerminal:
+		if len(s.interactionBroker.PendingForPane(s.chatPaneID)) > 0 {
+			return "Waiting for your answer"
+		}
+		return "Blocked — use the terminal"
+	default:
+		return "Unknown state"
+	}
+}
+
+func dispositionTone(disposition conversation.PromptDisposition) StatusTone {
+	switch disposition {
+	case conversation.DispositionSentNow:
+		return ToneSuccess
+	case conversation.DispositionQueuedAfterTurn:
+		return ToneWorking
+	case conversation.DispositionNeedsTerminal:
+		return ToneAttention
+	default:
+		return ToneMuted
+	}
+}
+
+// chatTurnPartOpen reads the per-turn disclosure state (F94): the shared
+// booleans made every Thinking/Tools collapsible move together.
+func (s *Shell) chatTurnPartOpen(turnIndex int, part string) bool {
+	return s.chatTurnExpanded[fmt.Sprintf("%d:%s", turnIndex, part)]
+}
+
+func (s *Shell) setChatTurnPartOpen(turnIndex int, part string, open bool) {
+	if s.chatTurnExpanded == nil {
+		s.chatTurnExpanded = make(map[string]bool)
+	}
+	s.chatTurnExpanded[fmt.Sprintf("%d:%s", turnIndex, part)] = open
+}

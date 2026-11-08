@@ -1,0 +1,268 @@
+// Solco (next) — MyGo Native UI application entrypoint.
+//
+// main is deliberately thin: it wires process-level services (bounded
+// logs, persisted settings, the read-only history catalog, the durable
+// follow-up ledger) into nativeui.NewShell, shows the single main window,
+// and binds the macOS tray and Dock surfaces. It also embeds the canonical
+// OMP stream companion so the Doctor works outside a developer checkout.
+// All presentation lives in
+// internal/nativeui; Herdr stays the runtime authority.
+package main
+
+import (
+	_ "embed"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sync"
+
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
+	updaterNative "github.com/egoist/mygo/plugins/updater/native"
+	"github.com/egoist/mygo/ui"
+
+	"github.com/thewei/solco/internal/app"
+	"github.com/thewei/solco/internal/applog"
+	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/nativeui"
+	"github.com/thewei/solco/internal/sessiontrash"
+	"github.com/thewei/solco/internal/settings"
+	"github.com/thewei/solco/internal/solcogit"
+)
+
+//go:embed scripts/omp-chat-stream.ts
+var embeddedOMPStreamExtension []byte
+
+// followUpLedgerFileName mirrors app.LaunchService's durable ledger name.
+const followUpLedgerFileName = "follow-up-ledger.json"
+
+// devAppName is the one name every unpackaged run takes, which keeps its
+// data and logs apart from the installed app's.
+const devAppName = "Solco-dev"
+
+// nameUnpackagedRun gives an unpackaged run (go run, or the temporary binary
+// that `mygo build` and `mygo dev` start to write the TypeScript client) a
+// fixed name. MyGo names it after its executable, which carries a process
+// id for those temporary binaries, so each build left a data and a log
+// directory behind. A packaged app keeps its bundle's name.
+func nameUnpackagedRun() {
+	if !mygo.App.IsPackaged() {
+		mygo.App.SetName(devAppName)
+	}
+}
+
+func main() {
+	nameUnpackagedRun()
+
+	// `mygo generate` runs the app just far enough to write the TypeScript
+	// client and returns from App.Run without opening windows; it must
+	// reach App.Run even while the real app holds the single-instance lock.
+	generating := os.Getenv("MYGO_GENERATE") != ""
+	if !generating && !mygo.App.RequestSingleInstanceLock() {
+		return
+	}
+
+	// The updater window is drawn in native UI (no WebView, matching the
+	// frozen WebView presentation rule). Without an `updates` block in
+	// mygo.json the window truthfully reports that this build cannot check;
+	// it becomes live the moment signed releases are published (Gate E5).
+	mygo.Use(updaterNative.Plugin)
+
+	userDataDir, err := mygo.App.Path(mygo.PathUserData)
+	if err != nil {
+		slog.Error("resolve user data dir", "error", err)
+		os.Exit(1)
+	}
+	logsDir := mustLogsDir()
+	if _, err := applog.Setup(logsDir); err != nil {
+		slog.Error("setup application logging", "error", err)
+	} else if stop, err := applog.CaptureStderr(logsDir); err != nil {
+		slog.Warn("capture stderr failed; runtime panics stay invisible", "error", err)
+	} else {
+		defer stop()
+	}
+
+	// Settings persist as settings.json in the user-data directory; without
+	// the file the store falls back to defaults on first launch.
+	settingsService := app.NewSettingsService(settings.NewFileStore(userDataDir))
+
+	// The history catalog is an in-memory index rebuilt from the provider
+	// session files at launch: conversation content is never stored, every
+	// transcript is read from the original file on demand. The SQLite copy
+	// earlier builds kept is removed.
+	freed, err := history.RemoveLegacyCatalog(userDataDir)
+	if err != nil {
+		slog.Warn("remove legacy history catalog failed", "error", err)
+	}
+	if freed > 0 {
+		slog.Info("removed legacy history catalog", "freed_bytes", freed)
+	}
+	home, _ := os.UserHomeDir()
+	// Deleted sessions move into the Trash under the user-data directory, from
+	// and back to the provider roots — the one place a provider file is ever
+	// moved.
+	historyRoots := history.DefaultRoots(home)
+	historyOpts := []nativeui.ShellOption{
+		nativeui.WithHistory(history.NewHistoryService(history.NewCatalog(), historyRoots)),
+		nativeui.WithSessionTrash(sessiontrash.New(filepath.Join(userDataDir, "SessionTrash"), historyRoots)),
+	}
+
+	// Solco's own credentials (Quota tokens, the commit API key) live in an
+	// encrypted file here, not in the Keychain, so rebuilding or reinstalling
+	// the app never makes macOS ask for the Keychain password.
+	nativeui.UseSecretsFile(filepath.Join(userDataDir, "secrets.enc"))
+
+	shell := nativeui.NewShell(append([]nativeui.ShellOption{
+		nativeui.WithSettings(settingsService),
+		nativeui.WithUserDataDir(userDataDir),
+		nativeui.WithOMPStreamExtension(embeddedOMPStreamExtension),
+		// The one-way link to the Solco Git app: its three entries appear
+		// once the app is found on this machine.
+		nativeui.WithSolcoGit(solcogit.NewLink()),
+	}, historyOpts...)...)
+	shell.Launch().AttachLedgerPath(filepath.Join(userDataDir, followUpLedgerFileName))
+
+	// The WebView chat page (N19) talks to the conversation runtime only
+	// through this presentation-only bridge; binding must happen before
+	// App.Run so `mygo generate` sees the service and writes the client.
+	mygo.BindAs("chat", nativeui.NewChatBridge(shell))
+
+	// The WebView Assistants page (product decision 2026-11-03) reads and
+	// writes only through the plugin's `assistant …` CLI behind this bridge.
+	mygo.BindAs("assistants", nativeui.NewAssistantsBridge(shell))
+
+	var raiseMain func()
+
+	// Notification clicks route back to the Agent's owning pane, including
+	// clicks on notifications left over from a previous run (MyGo hands
+	// back the stable notification ID across launches).
+	mygo.App.OnNotificationClick(func(id string) {
+		shell.RouteAgentNotification(id)
+		if raiseMain != nil {
+			raiseMain()
+		}
+	})
+
+	// solco://reveal?session=&workspace=&tab= — an external app (My DevTools'
+	// prox) asking this window to show one Herdr tab. Solco ignores Herdr's
+	// global focus on purpose, so this explicit link is the only way in.
+	// raiseMain is set once the window exists; a link that arrives earlier
+	// stays pending inside the Shell until its tab shows up.
+	mygo.App.OnOpenURL(func(raw string) {
+		shell.RouteExternalURL(raw)
+		if raiseMain != nil {
+			raiseMain()
+		}
+	})
+
+	var closeOnce sync.Once
+	closeShell := func() { closeOnce.Do(shell.Close) }
+
+	// The close button only hides the window (session stays alive); a real
+	// quit comes from the app menu (RoleQuit → App.Quit), which fires
+	// OnBeforeQuit before closing windows. The flag lets OnClose tell the
+	// two apart.
+	quitting := false
+	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
+		quitting = true
+	})
+
+	mygo.App.WhenReady(func() {
+		slog.Info("application ready", "log_path", applog.Path())
+		opts := mygo.WindowOptions{
+			Title:  "Solco",
+			Width:  1280,
+			Height: 820,
+			// Sidebar (250) + a usable content column + a closed right
+			// panel: below this the titlebar tools and diff gutters squeeze
+			// into unreadability (2026-10-06 F41).
+			MinWidth:  720,
+			MinHeight: 420,
+			// Restore the last bounds (position/size/maximized) unless the
+			// user disabled restoration in Settings → General.
+			StateKey: app.WindowStateKey(settingsService.Current().General.RestoreWindow),
+			// The sidebar runs under the traffic lights and the content's
+			// title bar draws itself beside them: hidden title bar, lights
+			// at the bar's height, and a base color matching the content
+			// canvas so the first frame does not flash.
+			TitleBarStyle:        mygo.TitleBarHidden,
+			TrafficLightPosition: &mygo.Point{X: 16, Y: 15},
+			BackgroundColor:      "light-dark(#fcfcfc, #0a0a0a)",
+			Opacity:              settingsService.Current().General.EffectiveOpacity(),
+			// SingleInstanceLock focus-on-second-launch only has a window to
+			// focus once this handle exists; keep it in the ready closure.
+			Content: ui.View(shell.View),
+		}
+		if runtime.GOOS == "darwin" {
+			// The sidebar is the system's translucent sidebar material:
+			// it shows wherever the view draws no background (a window with
+			// a material loses its menu bar on Windows, so only macOS opts in).
+			opts.Vibrancy = mygo.VibrancySidebar
+		}
+		win := mygo.NewWindow(opts)
+		shell.AttachWindow(win)
+		win.OnClose(func(e *mygo.CloseEvent) {
+			if !quitting {
+				shell.SaveSession()
+				e.PreventDefault()
+				win.Hide()
+				return
+			}
+			closeShell()
+		})
+		// Re-open surfaces: Dock-icon clicks and a second `open` of the
+		// single-instance lock both unhide the main window.
+		showMain := func() {
+			if !win.IsVisible() {
+				win.Show()
+			}
+			win.Focus()
+		}
+		raiseMain = showMain
+		mygo.App.OnActivate(func(hasVisibleWindows bool) { showMain() })
+		mygo.App.OnSecondInstance(func(args []string, workingDir string) { showMain() })
+
+		// macOS status tray (0.7 §17-18) and Dock badge (0.9 P12). Either
+		// binding may fail outside packaged macOS runs; the tray click is
+		// then simply absent, and the titlebar agent button stays the
+		// in-window anchor for the quick-panel flyout.
+		if tray, err := mygo.NewTray(mygo.TrayOptions{Title: "Solco"}); err != nil {
+			slog.Warn("attach status tray failed", "error", err)
+		} else {
+			shell.AttachTray(tray)
+		}
+		shell.AttachDock(mygo.App.Dock)
+
+		// macOS menu bar: the shell owns its structure (nativeui.MenuBar);
+		// the updater plugin supplies Check for Updates with its truthful status.
+		if runtime.GOOS == "darwin" {
+			mygo.App.SetMenu(shell.MenuBar(updater.MenuItem()))
+		}
+
+		slog.Info("main window shown", "bounds", win.Bounds())
+	})
+
+	if err := mygo.App.Run(); err != nil {
+		slog.Error("application run", "error", err)
+	}
+	closeShell()
+	if err := applog.Close(); err != nil {
+		slog.Warn("close application log", "error", err)
+	}
+}
+
+// mustLogsDir resolves the platform log directory (~/Library/Logs/Solco
+// on macOS). Unrecoverable failures fall back next to the user data dir.
+func mustLogsDir() string {
+	dir, err := mygo.App.Path(mygo.PathLogs)
+	if err == nil && dir != "" {
+		return dir
+	}
+	slog.Warn("resolve log dir failed", "error", err)
+	userData, err2 := mygo.App.Path(mygo.PathUserData)
+	if err2 != nil {
+		return os.TempDir()
+	}
+	return filepath.Join(userData, "logs")
+}

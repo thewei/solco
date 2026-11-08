@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "transcribe_failed",
+    "message": "transcription auth failed — check the voice API key"
+  }
+}

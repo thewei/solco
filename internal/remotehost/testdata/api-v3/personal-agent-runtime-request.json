@@ -1,0 +1,8 @@
+{
+  "requestId": "9b4e7d21-0c3a-4f58-a6d9-3e1f8c2b5a70",
+  "agent": "claude",
+  "model": "sonnet",
+  "effort": "high",
+  "expectedRevision": 0,
+  "idleSleepMin": 60
+}

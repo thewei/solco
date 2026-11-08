@@ -1,0 +1,36 @@
+package nativeui
+
+/**
+ * [INPUT]: gdPalette 语法色与代码/行号色、框架 editor.DefaultTheme
+ * [OUTPUT]: codeEditorTheme：把 Git 评审的语法配色穿到框架 editor 上
+ * [POS]: 同一份代码在 Files 与 Git 评审里同色——语法色的单一来源仍是 gd_palette；编辑器底色是 Detail 卡片的纸色（paneCardFaceOf），不是窗口画布；选区/查找/缩进线等结构色沿用框架默认
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+import (
+	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
+	"github.com/thewei/solco/internal/codehl"
+)
+
+// codeEditorTheme dresses the framework's code editor in the review's
+// palette: its code color, line numbers and syntax classes, through the one
+// table (codehl.KindClasses) the review's own coloring reads too. Kinds the
+// review has no class for (variables, operators, punctuation) read as
+// plain code, as in the review; links and inline code borrow the tag and
+// string colors.
+func codeEditorTheme(t *ui.Theme) *editor.Theme {
+	th := editor.DefaultTheme(t)
+	p := gdPaletteFor(t)
+	// The code sits on the Detail card, so its ground is the card's paper, not
+	// the window canvas the framework default reads (2026-11-08).
+	th.Background = paneCardFaceOf(t.Dark, false, false).paper
+	th.Text = p.code
+	th.LineNumber = p.lineNumber
+	for _, group := range codehl.KindClasses {
+		for _, kind := range group.Kinds {
+			th.Tokens[kind].Color = p.syntax[group.Class]
+		}
+	}
+	return th
+}

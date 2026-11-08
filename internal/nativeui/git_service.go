@@ -1,0 +1,326 @@
+// [INPUT]: Git Runner, cache, presentation selection and generation guards.
+// [OUTPUT]: One repository-bound Git UI service with local/remote ref and commit history snapshots.
+// [POS]: UI coordination only; Git authority remains solco-gitkit/gitworkbench.
+// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+package nativeui
+
+import (
+	"context"
+	"log/slog"
+	"path/filepath"
+	"sync/atomic"
+	"time"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco-gitkit/gitworkbench"
+)
+
+// gitService is the shell-side orchestration over solco-gitkit/gitworkbench: it
+// owns the single Git cache, background lanes and presentation state. All
+// mutable presentation state below is touched only on the UI update lane;
+// background lanes deliver through guarded applies with operation-specific
+// generations (P0-04): unrelated operations never cancel each other.
+type gitService struct {
+	runner *gitworkbench.Runner
+	cache  *gitworkbench.Cache
+
+	// Operation-specific async generations (P0-04).
+	rootGen      atomic.Uint64
+	snapshotGen  atomic.Uint64
+	branchesGen  atomic.Uint64
+	preflightGen atomic.Uint64
+	gdLoadGen    atomic.Uint64
+	sequencerGen atomic.Uint64
+
+	// root binding: resolved repo root of the selected Tab ("", not a repo).
+	root             string
+	rootBusy         bool
+	rootResolvingCWD string
+	rootOf           map[string]string // cwd -> resolved root; "" = confirmed not a repo
+	rootCancel       context.CancelFunc
+
+	// changes presentation
+	snapshot   *gitworkbench.ChangesSnapshot
+	refreshing bool
+
+	// godiff-style review state (gd_*.go): per-file view state, the lazy
+	// row model, find and j/k selection. All touched only on the UI lane.
+	gdFiles     []*gdFile
+	gdFilesFor  *gitworkbench.ChangesSnapshot
+	gdRows      []gdRow
+	gdRowsDirty bool
+	gdList      ui.ListState
+	gdCurrent   int
+	gdViewed    map[string]string // path -> fingerprint marked viewed
+	gdHScroll   map[string]float32
+	gdHover     gdHoverLine
+	gdDrag      gdGutterDrag
+	gdPick      gdLinePick // the changed lines picked in the gutter, for partial staging
+	gdHostRef   ui.Handle  // the diff list's host, for its width in gdScrollSideways
+	gdCharW     float32
+
+	// collapsedDirs belongs to the changed-file tree, distinct from the Git refs tree.
+	collapsedDirs map[string]bool
+
+	// branches
+	branches        []gitworkbench.Branch
+	branchesLoading bool
+	branchBusy      bool
+	// upstream is the tracking state of the current branch (ahead/behind),
+	// refreshed alongside the branches.
+	upstream gitworkbench.UpstreamStatus
+	// commits is the recent history window (every branch, newest first) the
+	// clean-tree page reads HEAD's latest commits from.
+	commits []gitworkbench.CommitInfo
+
+	// Current Git sequencer facts are refreshed off the UI lane together with
+	// branches. A conflict is repository state, not an ad hoc dialog flag.
+	sequencer        gitworkbench.SequencerStatus
+	sequencerChecked bool
+
+	// explicit repository operations (stage/discard/stash/sync): the UI-level
+	// busy flag keeps buttons single-shot; the Runner owns the real lock.
+	opBusy bool
+
+	// commit fence
+	preflight     *gitworkbench.CommitPreflight
+	preflightSnap *gitworkbench.ChangesSnapshot
+	committing    bool
+
+	// meta owns the sidebar's per-repository facts cache (branch/±/files).
+	meta *gitMetaService
+
+	// lastActivationRefresh debounces window-activation refreshes: flyouts
+	// and dialogs hand the key window back and forth, and each hand-back
+	// looks like an activation.
+	lastActivationRefresh time.Time
+
+	// selected file for Changes↔Diff sync with oscillation guard
+	revealAt    time.Time
+	dirOpenedAt time.Time // when a Changes folder last opened: only then do new rows grow in
+}
+
+// gapExpansion is one expanded unchanged region: numbered context lines.
+type gapExpansion struct {
+	lines []gitworkbench.DiffLine
+}
+
+// newGitService builds the shell-side orchestration over
+// solco-gitkit/gitworkbench.
+func newGitService() *gitService {
+	runner := &gitworkbench.Runner{}
+	return &gitService{
+		runner:        runner,
+		cache:         gitworkbench.NewCache(runner),
+		rootOf:        map[string]string{},
+		collapsedDirs: map[string]bool{},
+		gdViewed:      map[string]string{},
+		gdHScroll:     map[string]float32{},
+		meta:          newGitMetaService(),
+	}
+}
+
+// applyGuarded runs fn on the UI lane when the operation's generation is
+// still current. Without a window (headless tests) background lanes drop
+// their results — tests seed state directly and no render can race an inline
+// application — unless a test installs uiApplyOverride to observe the real
+// production apply path.
+func (s *Shell) applyGuarded(current func() uint64, gen uint64, fn func()) {
+	guarded := func() {
+		if gen != current() {
+			return
+		}
+		fn()
+	}
+	if s.uiApplyOverride != nil {
+		s.uiApplyOverride(guarded)
+		return
+	}
+	if s.win == nil {
+		return
+	}
+	s.win.Update(guarded)
+}
+
+// applyOnUI runs fn on the UI lane without a generation guard (mutation
+// completion paths own their busy flags instead). Same headless rule.
+func (s *Shell) applyOnUI(fn func()) {
+	if s.uiApplyOverride != nil {
+		s.uiApplyOverride(fn)
+		return
+	}
+	if s.win == nil {
+		return
+	}
+	s.win.Update(fn)
+}
+
+// onUI marshals fn onto the window update lane; runs inline when no window
+// exists (headless). Callers that must respect the drop-in-headless rule
+// check s.win themselves before scheduling.
+func (s *Shell) onUI(fn func()) {
+	if s.win == nil {
+		fn()
+		return
+	}
+	s.win.Update(fn)
+}
+
+// syncGitContext rebinds the Git context to the selected Tab's repository
+// root. A context change resets the diff/changes presentation (plan §6).
+// The root cache distinguishes "not yet resolved" from a confirmed
+// non-repository, so the first real repository always resolves (P0-03).
+func (s *Shell) syncGitContext() {
+	if s.git == nil {
+		return
+	}
+	cwd := s.selectedTabCWD()
+	if cwd == "" {
+		if s.git.root != "" {
+			s.git.root = ""
+			s.resetGitContextState()
+		}
+		return
+	}
+
+	if root, known := s.git.rootOf[cwd]; known {
+		if root == s.git.root {
+			return
+		}
+		if s.git.rootCancel != nil {
+			s.git.rootCancel()
+			s.git.rootCancel = nil
+		}
+		s.git.rootBusy = false
+		s.git.rootResolvingCWD = ""
+		s.git.root = root
+		s.resetGitContextState()
+		if root != "" {
+			s.ensureGitSnapshot(false)
+			s.loadBranches()
+		}
+		return
+	}
+
+	// Not yet resolved. One in-flight resolution per cwd; switching cwd
+	// cancels the obsolete resolution and starts a fresh one.
+	if s.git.rootBusy && s.git.rootResolvingCWD == cwd {
+		return
+	}
+	if s.git.rootCancel != nil {
+		s.git.rootCancel()
+		s.git.rootCancel = nil
+	}
+	s.git.rootBusy = true
+	s.git.rootResolvingCWD = cwd
+	if s.git.root != "" {
+		s.git.root = ""
+		s.resetGitContextState()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.git.rootCancel = cancel
+	gen := s.git.rootGen.Add(1)
+
+	go func() {
+		root, err := s.git.runner.ResolveRoot(ctx, cwd)
+		if ctx.Err() != nil {
+			return
+		}
+		s.applyGuarded(s.git.rootGen.Load, gen, func() {
+			s.git.rootBusy = false
+			s.git.rootResolvingCWD = ""
+			if err != nil {
+				// Not a repository (or Git missing): record the negative
+				// result so the empty state is stable and quiet.
+				if ge, ok := gitworkbench.GitError(err); !ok || ge.Class != gitworkbench.ErrNotARepo {
+					slog.Debug("git root resolve failed", "class", err)
+				}
+				s.git.rootOf[cwd] = ""
+				if s.git.root == "" {
+					return
+				}
+				s.git.root = ""
+				s.resetGitContextState()
+				return
+			}
+			s.git.rootOf[cwd] = root
+			if s.selectedTabCWD() != cwd {
+				return
+			}
+			s.git.root = root
+			s.resetGitContextState()
+			s.ensureGitSnapshot(false)
+			s.loadBranches()
+		})
+	}()
+}
+
+// resetGitContextState clears transient presentation state on context change.
+func (s *Shell) resetGitContextState() {
+	s.cancelQuickAICommit()
+	s.git.snapshot = nil
+	s.git.gdFiles = nil
+	s.git.gdFilesFor = nil
+	s.git.gdRows = nil
+	s.git.gdRowsDirty = true
+	s.git.gdList = ui.ListState{}
+	s.git.gdCurrent = 0
+	s.git.gdHScroll = map[string]float32{}
+	s.git.branches = nil
+	s.changesSearchOpen = false
+	s.gitQuickSubject, s.gitQuickBody, s.gitQuickAmend = "", "", false
+	s.git.commits = nil
+	s.branchFilter = ""
+	s.branchMenuOpen = false
+	s.gitConflictFilesExpanded = false
+	s.git.sequencer = gitworkbench.SequencerStatus{}
+	s.git.sequencerChecked = false
+	s.git.preflight = nil
+	s.git.preflightSnap = nil
+	s.changesTree = nil
+}
+
+// workspaceContext derives the current WorkspaceContextKey.
+func (s *Shell) workspaceContext() WorkspaceContextKey {
+	root := ""
+	if s.git != nil {
+		root = s.git.root
+	}
+	return WorkspaceContextKey{
+		InstanceID: s.activeInstance,
+		ProjectID:  s.selectedProjectID,
+		TabID:      s.selectedTabID,
+		RepoRoot:   root,
+	}
+}
+
+// gitRepoName returns the repository directory name for the header.
+func (s *Shell) gitRepoName() string {
+	if s.git == nil || s.git.root == "" {
+		return ""
+	}
+	return filepath.Base(s.git.root)
+}
+
+// gitSnapshot returns the current change snapshot, if any.
+func (s *Shell) gitSnapshot() *gitworkbench.ChangesSnapshot {
+	if s.git == nil {
+		return nil
+	}
+	return s.git.snapshot
+}
+
+// dirtyWorktree reports whether the current snapshot has any changes.
+func (s *Shell) dirtyWorktree() bool {
+	snap := s.gitSnapshot()
+	return snap != nil && len(snap.Files) > 0
+}
+
+// selectedChangeFile returns the ChangeFile record for the diff selection.
+func (s *Shell) selectedChangeFile() (gitworkbench.ChangeFile, bool) {
+	if s.git == nil || s.git.snapshot == nil || s.surface.diff.SelectedPath == "" {
+		return gitworkbench.ChangeFile{}, false
+	}
+	return s.git.snapshot.ByPath(s.surface.diff.SelectedPath)
+}

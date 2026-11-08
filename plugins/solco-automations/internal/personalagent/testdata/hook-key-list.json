@@ -1,0 +1,15 @@
+{
+  "keys": [
+    {
+      "assistantId": "a_0000000000000001",
+      "createdAt": 1800000002000,
+      "id": "hk_0000000000000020",
+      "sources": [
+        "github",
+        "ci"
+      ],
+      "status": "active"
+    }
+  ],
+  "schema": 1
+}

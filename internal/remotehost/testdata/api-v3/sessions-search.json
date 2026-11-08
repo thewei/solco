@@ -1,0 +1,17 @@
+{
+  "sessions": [
+    {
+      "id": "claude-code:7f3a",
+      "agent": "claude-code",
+      "title": "Fix the failing tests",
+      "project": "solco",
+      "updatedMs": 1785549600000,
+      "messages": 42,
+      "running": {
+        "instance": "default",
+        "paneId": "w1:p1",
+        "state": "attention"
+      }
+    }
+  ]
+}

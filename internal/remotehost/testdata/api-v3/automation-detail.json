@@ -1,0 +1,39 @@
+{
+  "name": "nightly-ci-triage",
+  "state": "active",
+  "schedule": "Daily 03:00",
+  "nextRunMs": 1786129200000,
+  "cron": "0 3 * * *",
+  "repo": "/Users/me/work/api",
+  "workspace": "worktree",
+  "agent": "claude",
+  "model": "sonnet",
+  "prompt": "Triage the failing CI jobs and open one issue per root cause.",
+  "rationale": "Goal: keep main green. Guardrail: read-only except issues.",
+  "onOverlap": "skip",
+  "headless": true,
+  "timeoutMinutes": 45,
+  "catchUpMinutes": 30,
+  "cleanupTtlHours": 72,
+  "runs": [
+    {
+      "id": "run-7",
+      "status": "failed",
+      "trigger": "schedule",
+      "atMs": 1786042800000,
+      "durationSec": 31,
+      "agent": "claude",
+      "workspaceId": "w_1",
+      "paneId": "p_9",
+      "unread": true
+    },
+    {
+      "id": "run-6",
+      "status": "done",
+      "trigger": "manual",
+      "atMs": 1785956400000,
+      "durationSec": 412,
+      "agent": "claude"
+    }
+  ]
+}

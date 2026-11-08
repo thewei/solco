@@ -1,0 +1,56 @@
+{
+  "instance": "default",
+  "revision": 1,
+  "workspaces": [
+    {
+      "id": "w1",
+      "label": "solco",
+      "status": "working",
+      "cwd": "/work/solco",
+      "tabs": [
+        {
+          "id": "w1:t1",
+          "label": "main",
+          "status": "working",
+          "panes": [
+            {
+              "paneId": "w1:p1",
+              "terminalId": "term_a",
+              "label": "claude",
+              "cwd": "/work/solco",
+              "agent": {
+                "provider": "claude",
+                "status": "working",
+                "title": "Fix the parser",
+                "lastActiveMs": 1785546001000,
+                "firstSeenMs": 1785546002000,
+                "background": [
+                  {
+                    "kind": "subagent",
+                    "id": "agent-a1",
+                    "title": "Explore",
+                    "detail": "Find the lexer entry points",
+                    "state": "working",
+                    "updatedMs": 1785546000000
+                  },
+                  {
+                    "kind": "service",
+                    "id": "svc:w1:p1",
+                    "title": "node",
+                    "detail": ":3000, :5173",
+                    "state": "running"
+                  }
+                ]
+              }
+            },
+            {
+              "paneId": "w1:p2",
+              "terminalId": "term_b",
+              "label": "zsh"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

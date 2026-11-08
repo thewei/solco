@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "history_busy",
+    "message": "The terminal is still printing; try again in a moment."
+  }
+}

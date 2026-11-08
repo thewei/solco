@@ -1,0 +1,31 @@
+{
+  "name": "solco-frontend",
+  "private": true,
+  "version": "0.11.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "build:mobile": "vite build --config vite.mobile.config.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.14.24",
+    "mermaid": "^12.2.0",
+    "mygo-runtime": "^0.6.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "mygo-cli": "^0.6.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.3.4"
+  }
+}

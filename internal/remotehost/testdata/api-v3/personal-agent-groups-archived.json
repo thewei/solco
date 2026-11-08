@@ -1,0 +1,26 @@
+{
+  "groups": [
+    {
+      "id": "g_0000000000000010",
+      "title": "Launch crew",
+      "status": "archived",
+      "members": [
+        {
+          "assistantId": "a_0000000000000001",
+          "name": "Ada",
+          "status": "active"
+        },
+        {
+          "assistantId": "a_0000000000000009",
+          "name": "Bo",
+          "status": "active"
+        }
+      ],
+      "lastSeq": 1,
+      "revision": 1,
+      "createdAt": 1800000000000,
+      "updatedAt": 1800000000000
+    }
+  ],
+  "schema": 1
+}

@@ -1,0 +1,14 @@
+{
+  "notes": {
+    "assistant": {
+      "rev": "667878c22ecd9714",
+      "text": "- Prefers the weekly digest on Monday\n- Reports go to the team channel\n"
+    },
+    "assistantId": "a_0000000000000001",
+    "user": {
+      "rev": "a26e428cf831da92",
+      "text": "I prefer short reports.\nMy timezone is Asia/Shanghai."
+    }
+  },
+  "schema": 1
+}

@@ -1,0 +1,16 @@
+{
+  "approval": {
+    "id": "p_0000000000000007",
+    "assistantId": "a_0000000000000001",
+    "subjectKind": "task",
+    "subjectId": "t_0000000000000004",
+    "action": "merge work/x",
+    "actionHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "expectedRevision": 5,
+    "expiresAt": 1800003600000,
+    "state": "pending",
+    "decidedAt": 0,
+    "createdAt": 1800000000000
+  },
+  "schema": 1
+}

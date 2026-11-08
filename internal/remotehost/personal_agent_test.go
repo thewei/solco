@@ -1,0 +1,1192 @@
+package remotehost
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/thewei/solco/internal/personalagent"
+)
+
+/**
+ * [INPUT]: server_test.go 的 harness、personal_agent.go 与 personalagent.NewClientWithExec（假插件 CLI，绝不跑真二进制）
+ * [OUTPUT]: 对外提供 /api/v3/personal-agent/* 的行为回归与 golden（bootstrap-personal-agent/personal-agent-*）：无缝/门关 404、需配对、写入需 manage、坏请求在触达核心前被拒、插件拒绝码→HTTP、requestId/expectedRevision/actionHash 原样转发、events 帧只带计数
+ * [POS]: personal_agent.go 的守卫测试；核心由 fakeCore 以 CLI 同一套 JSON 回答
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+const (
+	paAssistantA = "a_0000000000000001"
+	paGoalG      = "g_0000000000000002"
+	paTaskT      = "t_0000000000000004"
+	paApprovalP  = "p_0000000000000007"
+	paHash       = "0000000000000000000000000000000000000000000000000000000000000000"
+)
+
+// fakeCore answers the plugin's `assistant …` commands the way the real CLI
+// does: one JSON object per call, refusals as {"error":{code,message}}.
+type fakeCore struct {
+	mu    sync.Mutex
+	calls []string // "<args joined>|<stdin>"
+	fail  *personalagent.Error
+	// asleep makes `coordinator show` answer a Coordinator the core put to sleep
+	// by itself (stopped, stopReason "idle").
+	asleep bool
+}
+
+func (f *fakeCore) exec(_ context.Context, stdin string, args ...string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, strings.Join(args, " ")+"|"+stdin)
+	if f.fail != nil && len(args) > 1 && args[1] != "list" && args[1] != "overview" {
+		raw, _ := json.Marshal(map[string]any{"schema": 1, "error": f.fail})
+		return raw, nil
+	}
+	key := strings.Join(args[1:], " ")
+	switch {
+	case strings.HasPrefix(key, "inbox"):
+		return []byte(`{"schema":1,"inbox":{"items":[{"id":"task:` + paTaskT + `","kind":"stalled","assistantId":"` + paAssistantA + `","taskId":"` + paTaskT + `","title":"Check it","detail":"Has not started","priority":3,"at":1800000000000}],"needsYou":1,"seq":4}}`), nil
+	case strings.HasPrefix(key, "results "):
+		return []byte(`{"schema":1,"results":[{"taskId":"` + paTaskT + `","title":"Check it","state":"done","at":1800000000000,"herdrSession":"default","paneId":"w1:p1"}]}`), nil
+	case key == "overview":
+		return []byte(`{"schema":1,"activitySeq":4,"needsYou":1,"assistants":[{"id":"` + paAssistantA + `","name":"Ada","status":"active","revision":1,"goals":1,"tasks":1,"running":0,"queued":0,"done":1,"needsYou":0,"approvals":1}]}`), nil
+	case key == "list":
+		return []byte(`{"schema":1,"assistants":[` + paAssistant + `]}`), nil
+	case key == "create", strings.HasPrefix(key, "rename "), strings.HasPrefix(key, "pause "), strings.HasPrefix(key, "resume "), strings.HasPrefix(key, "enable "), strings.HasPrefix(key, "disable "):
+		return []byte(`{"schema":1,"assistant":` + paAssistant + `}`), nil
+	case strings.HasPrefix(key, "persona "):
+		name := map[string]string{"instructions": "persona-instructions", "set-instructions": "persona-instructions", "restore-instructions": "persona-instructions",
+			"runtime": "persona-runtime", "set-runtime": "persona-runtime", "mcp": "persona-mcp", "mcp-grant": "persona-mcp", "mcp-verify": "persona-mcp-verified"}[strings.Fields(key)[1]]
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+	case strings.HasPrefix(key, "activity list "):
+		return []byte(`{"schema":1,"activity":{"facts":[{"seq":4,"id":"f_0000000000000017","assistantId":"` + paAssistantA + `","goalId":"` + paGoalG + `","taskId":"` + paTaskT + `","kind":"delegated","text":"Delegated: Collect numbers","createdAt":1800000000000}],"nextSeq":4,"ackSeq":0,"hasMore":false}}`), nil
+	case strings.HasPrefix(key, "activity ack "):
+		return []byte(`{"schema":1,"ackSeq":4,"replayed":false}`), nil
+	case key == "report probe":
+		return []byte(`{"schema":1,"supported":true}`), nil
+	case strings.HasPrefix(key, "report show "):
+		return []byte(`{"schema":1,"report":{"assistantId":"` + paAssistantA + `","state":"uncertain","fromSeq":4,"throughSeq":9,"submittedSeq":4,"attempts":1,"lastError":"Herdr submission outcome is unknown"}}`), nil
+	case strings.HasPrefix(key, "report resolve "):
+		return []byte(`{"schema":1,"report":{"assistantId":"` + paAssistantA + `","state":"submitted","fromSeq":4,"throughSeq":9,"submittedSeq":9,"attempts":0}}`), nil
+	case key == "group archived":
+		return []byte(`{"schema":1,"groups":[` + strings.Replace(paGroup, `"status":"active"`, `"status":"archived"`, 1) + `]}`), nil
+	case strings.HasPrefix(key, "group archive "):
+		return []byte(`{"schema":1,"replayed":false,"group":` + strings.Replace(strings.Replace(paGroup, `"status":"active"`, `"status":"archived"`, 1), `"revision":1`, `"revision":4`, 1) + `}`), nil
+	case strings.HasPrefix(key, "group delete-forever"):
+		return []byte(`{"schema":1,"deleted":true}`), nil
+	case key == "group list":
+		return []byte(`{"schema":1,"groups":[` + paGroup + `]}`), nil
+	case strings.HasPrefix(key, "group show"):
+		return []byte(`{"schema":1,"feed":{"group":` + paGroup + `,"messages":[` + paGroupMsg + `],"deliveries":[{"id":"d_0000000000000011","messageId":"m_0000000000000012","assistantId":"` + paAssistantB + `","state":"queued","attempts":0}],"tasks":[],"agents":[{"assistantId":"` + paAssistantA + `","state":"none"},{"assistantId":"` + paAssistantB + `","state":"starting","paneId":"w3:p1"}],"seq":1}}`), nil
+	case strings.HasPrefix(key, "group post"):
+		return []byte(`{"schema":1,"replayed":false,"result":{"message":` + paGroupMsg + `,"deliveries":[{"id":"d_0000000000000011","messageId":"m_0000000000000012","assistantId":"` + paAssistantB + `","state":"queued","attempts":0}]}}`), nil
+	case strings.HasPrefix(key, "group "):
+		return []byte(`{"schema":1,"replayed":false,"group":` + paGroup + `}`), nil
+	case strings.HasPrefix(key, "coordinator show"):
+		if f.asleep {
+			return []byte(`{"schema":1,"coordinator":` + paCoordinator("asleep") + `}`), nil
+		}
+		return []byte(`{"schema":1,"coordinator":` + paCoordinator("ready") + `}`), nil
+	case strings.HasPrefix(key, "coordinator start"):
+		return []byte(`{"schema":1,"replayed":false,"coordinator":` + paCoordinator("starting") + `}`), nil
+	case strings.HasPrefix(key, "coordinator stop"):
+		return []byte(`{"schema":1,"replayed":false,"coordinator":` + paCoordinator("stopped") + `}`), nil
+	case strings.HasPrefix(key, "goal plan"), strings.HasPrefix(key, "goal facts"), strings.HasPrefix(key, "facts "):
+		name := "goal-plan"
+		if strings.HasPrefix(key, "goal facts") {
+			name = "goal-facts"
+		} else if strings.HasPrefix(key, "facts ") {
+			name = "assistant-facts"
+		}
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+	case strings.HasPrefix(key, "hook key "), strings.HasPrefix(key, "hook events "), strings.HasPrefix(key, "trigger "):
+		name := map[string]string{"hook key create": "hook-key-created", "hook key list": "hook-key-list", "hook key revoke": "hook-key-revoked",
+			"trigger list": "trigger-list", "trigger pause": "trigger-withdrawn", "trigger resume": "trigger-withdrawn", "trigger cancel": "trigger-withdrawn"}[strings.Join(strings.Fields(key)[:3], " ")]
+		if strings.HasPrefix(key, "hook events ") {
+			name = "hook-events"
+		} else if strings.HasPrefix(key, "trigger ") {
+			name = map[string]string{"list": "trigger-list", "pause": "trigger-withdrawn", "resume": "trigger-withdrawn", "cancel": "trigger-withdrawn"}[strings.Fields(key)[1]]
+		}
+		if f := strings.Fields(key); len(f) > 2 && f[len(f)-2] == "--assistant" && f[len(f)-1] != paAssistantA {
+			// Only Ada owns these records; anyone else's list is empty.
+			return []byte(`{"schema":1,"keys":[],"triggers":[]}`), nil
+		}
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+	case strings.HasPrefix(key, "routine list"):
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/routine-list.json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+	case strings.HasPrefix(key, "memory read"), strings.HasPrefix(key, "memory write"), strings.HasPrefix(key, "memory write-user"),
+		strings.HasPrefix(key, "proactivity "):
+		name := map[string]string{"memory read": "memory-notes", "memory write": "memory-written", "memory write-user": "memory-written-user",
+			"proactivity show": "proactivity-set", "proactivity set": "proactivity-set"}[strings.Join(strings.Fields(key)[:2], " ")]
+		raw, err := os.ReadFile("../../plugins/solco-automations/internal/personalagent/testdata/" + name + ".json")
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+	case strings.HasPrefix(key, "goal list"):
+		return []byte(`{"schema":1,"goals":[` + paGoal + `]}`), nil
+	case strings.HasPrefix(key, "goal "):
+		return []byte(`{"schema":1,"replayed":false,"goal":` + paGoal + `}`), nil
+	case strings.HasPrefix(key, "task list"):
+		return []byte(`{"schema":1,"tasks":[` + paTask + `]}`), nil
+	case strings.HasPrefix(key, "task show"):
+		return []byte(`{"schema":1,"task":` + paTask + `,"runs":[` + paRun + `]}`), nil
+	case strings.HasPrefix(key, "task "):
+		return []byte(`{"schema":1,"replayed":false,"task":` + paTask + `}`), nil
+	case strings.HasPrefix(key, "approval list"):
+		return []byte(`{"schema":1,"approvals":[` + paApproval + `]}`), nil
+	case strings.HasPrefix(key, "approval decide"):
+		return []byte(`{"schema":1,"replayed":false,"approval":` + paApproval + `}`), nil
+	}
+	return []byte(`{"schema":1,"error":{"code":"invalid","message":"unknown command"}}`), nil
+}
+
+func (f *fakeCore) snapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.calls...)
+}
+
+func (f *fakeCore) lastCall() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.calls) == 0 {
+		return ""
+	}
+	return f.calls[len(f.calls)-1]
+}
+
+func (f *fakeCore) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
+}
+
+const (
+	paAssistantB = "a_0000000000000009"
+	paGroupID    = "g_0000000000000010"
+	paGroup      = `{"id":"` + paGroupID + `","title":"Launch crew","status":"active","members":[{"assistantId":"` + paAssistantA + `","name":"Ada","status":"active"},{"assistantId":"` + paAssistantB + `","name":"Bo","status":"active"}],"lastSeq":1,"revision":1,"createdAt":1800000000000,"updatedAt":1800000000000}`
+	paGroupMsg   = `{"seq":1,"id":"m_0000000000000012","groupId":"` + paGroupID + `","authorKind":"user","kind":"text","body":"@Bo can you check the launch plan?","mentions":["` + paAssistantB + `"],"createdAt":1800000000000}`
+)
+
+const (
+	paAssistant = `{"id":"` + paAssistantA + `","name":"Ada","description":"Follows my pull requests","scope":"personal","status":"active","primary":true,"defaultPolicy":"review","coordinatorSession":"","rolePrompt":"","workspaceRefs":[],"revision":1,"createdAt":1800000000000,"updatedAt":1800000000000}`
+	paGoal      = `{"id":"` + paGoalG + `","assistantId":"` + paAssistantA + `","title":"Watch PR 12","objective":"Tell me when it changes","state":"active","evidence":"","revision":2,"createdAt":1800000000000,"updatedAt":1800000000000,"commitments":[{"id":"c_0000000000000003","goalId":"` + paGoalG + `","assistantId":"` + paAssistantA + `","kind":"manual","spec":"{}","successCriteria":"merged","exitCondition":"merged or closed","state":"active","cursor":"","lastError":"","lastCheckedAt":0,"nextCheckAt":0,"revision":2,"createdAt":1800000000000,"updatedAt":1800000000000}]}`
+	paTask      = `{"id":"` + paTaskT + `","assistantId":"` + paAssistantA + `","goalId":"` + paGoalG + `","parentTaskId":"","ruleId":"","kind":"research","title":"Check the PR","brief":"Read it.","agent":"claude","model":"","repoPath":"","state":"running","reviewState":"","needsYou":false,"attempt":1,"revision":5,"createdAt":1800000000000,"updatedAt":1800000000000}`
+	paRun       = `{"id":"r_0000000000000005","taskId":"` + paTaskT + `","ruleId":"","eventId":"","idempotencyKey":"task:` + paTaskT + `:1","claimant":"daemon","status":"running","herdrSession":"default","workspaceId":"w1","paneId":"w1:p1","agentSessionId":"","label":"","result":"","error":"","startedAt":1800000000000,"finishedAt":0,"createdAt":1800000000000}`
+	paApproval  = `{"id":"` + paApprovalP + `","assistantId":"` + paAssistantA + `","subjectKind":"task","subjectId":"` + paTaskT + `","action":"merge work/x","actionHash":"` + paHash + `","expectedRevision":5,"state":"pending","createdAt":1800000000000,"expiresAt":1800003600000,"decidedAt":0}`
+)
+
+// paCoordinator is the core's Coordinator row in one state.
+func paCoordinator(state string) string {
+	row := `{"assistantId":"` + paAssistantA + `","state":"` + state + `","taskId":"` + paTaskT + `","revision":2}`
+	if state == "ready" {
+		row = `{"assistantId":"` + paAssistantA + `","state":"ready","taskId":"` + paTaskT + `","herdrSession":"default","workspaceId":"w1","paneId":"w1:p1","revision":3}`
+	}
+	if state == "asleep" {
+		row = `{"assistantId":"` + paAssistantA + `","state":"stopped","taskId":"` + paTaskT + `","revision":4,"stopReason":"idle"}`
+	}
+	return row
+}
+
+func paHarness(t *testing.T, open bool) (*harness, *fakeCore) {
+	t.Helper()
+	h := newHarness(t)
+	core := &fakeCore{}
+	client := personalagent.NewClientWithExec(core.exec)
+	h.srv.opts.PersonalAgent = func(context.Context) (*personalagent.Client, bool) { return client, open }
+	return h, core
+}
+
+func TestPersonalAgentAbsentWithoutSeamOrWithClosedGate(t *testing.T) {
+	h := newHarness(t)
+	for _, path := range []string{"/overview", "/assistants", "/assistants/" + paAssistantA, "/goals?assistant=" + paAssistantA, "/tasks/" + paTaskT, "/approvals"} {
+		if resp := h.get("/api/v3/personal-agent"+path, h.token, nil); resp.StatusCode != http.StatusNotFound || errCode(t, resp) != "personal_agent_unavailable" {
+			t.Fatalf("no seam %s: status %d", path, resp.StatusCode)
+		}
+	}
+	h, core := paHarness(t, false)
+	if resp := h.get("/api/v3/personal-agent/overview", h.token, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("closed gate: status %d", resp.StatusCode)
+	}
+	if status, _ := h.send("POST", "/api/v3/personal-agent/assistants", h.token, `{"requestId":"r1","name":"Ada"}`); status != http.StatusNotFound {
+		t.Fatalf("closed gate write: status %d", status)
+	}
+	if core.callCount() != 0 {
+		t.Fatalf("closed gate reached the core: %v", core.calls)
+	}
+	var boot struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	if err := json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&boot); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"personalAgent", "personalAgentManage", "personalAgentApprove"} {
+		if boot.Capabilities[k] {
+			t.Errorf("closed gate advertises %s", k)
+		}
+	}
+}
+
+func TestPersonalAgentNeedsAuth(t *testing.T) {
+	h, core := paHarness(t, true)
+	if resp := h.get("/api/v3/personal-agent/overview", "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("read without token: %d", resp.StatusCode)
+	}
+	if status, _ := h.send("POST", "/api/v3/personal-agent/assistants", "", `{"requestId":"r1","name":"Ada"}`); status != http.StatusUnauthorized {
+		t.Fatalf("write without token: %d", status)
+	}
+	if core.callCount() != 0 {
+		t.Fatalf("unauthenticated request reached the core: %v", core.calls)
+	}
+}
+
+func TestPersonalAgentReadsForwardTheCore(t *testing.T) {
+	h, _ := paHarness(t, true)
+	var ov personalagent.Overview
+	if err := json.NewDecoder(h.get("/api/v3/personal-agent/overview", h.token, nil).Body).Decode(&ov); err != nil || ov.NeedsYou != 1 || len(ov.Assistants) != 1 {
+		t.Fatalf("overview %v %+v", err, ov)
+	}
+	var detail PersonalAssistantDetail
+	if err := json.NewDecoder(h.get("/api/v3/personal-agent/assistants/"+paAssistantA, h.token, nil).Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Assistant.Name != "Ada" || len(detail.Goals) != 1 || len(detail.Tasks) != 1 || len(detail.Tasks[0].Runs) != 1 || len(detail.Approvals) != 1 {
+		t.Fatalf("detail %+v", detail)
+	}
+	if resp := h.get("/api/v3/personal-agent/assistants/a_ffffffffffffffff", h.token, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown assistant: %d", resp.StatusCode)
+	}
+	if resp := h.get("/api/v3/personal-agent/assistants/not%20an%20id", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad id: %d", resp.StatusCode)
+	}
+	if resp := h.get("/api/v3/personal-agent/goals", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("goals without assistant: %d", resp.StatusCode)
+	}
+	var approvals struct {
+		Approvals []personalagent.Approval `json:"approvals"`
+	}
+	if err := json.NewDecoder(h.get("/api/v3/personal-agent/approvals", h.token, nil).Body).Decode(&approvals); err != nil || len(approvals.Approvals) != 1 {
+		t.Fatalf("approvals %v %+v", err, approvals)
+	}
+}
+
+func TestPersonalAgentCapabilitiesFollowTheGate(t *testing.T) {
+	h, _ := paHarness(t, true)
+	var boot struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	if err := json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&boot); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"personalAgent", "personalAgentManage", "personalAgentApprove", "personalAgentNarrativeReports"} {
+		if !boot.Capabilities[k] {
+			t.Errorf("open gate misses %s: %v", k, boot.Capabilities)
+		}
+	}
+}
+
+// An older plugin can answer assistant overview but lacks "assistant report".
+// The Host must not advertise the new recovery UI based on Overview alone.
+func TestOlderAssistantPluginDoesNotClaimNarrativeReports(t *testing.T) {
+	h, _ := paHarness(t, true)
+	old := personalagent.NewClientWithExec(func(context.Context, string, ...string) ([]byte, error) {
+		return []byte(`{"schema":1,"error":{"code":"invalid","message":"unknown command"}}`), nil
+	})
+	h.srv.opts.PersonalAgent = func(context.Context) (*personalagent.Client, bool) { return old, true }
+	var boot struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	if err := json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&boot); err != nil {
+		t.Fatal(err)
+	}
+	if !boot.Capabilities["personalAgent"] || boot.Capabilities["personalAgentNarrativeReports"] {
+		t.Fatalf("older plugin must not expose report recovery: %v", boot.Capabilities)
+	}
+}
+
+func TestPersonalAgentWritesForwardIdsAndRevisions(t *testing.T) {
+	h, core := paHarness(t, true)
+	post := func(path, body string) int {
+		status, _ := h.send("POST", "/api/v3/personal-agent"+path, h.token, body)
+		return status
+	}
+	if got := post("/assistants/"+paAssistantA+"/rename", `{"requestId":"req-1","name":"Grace","expectedRevision":1}`); got != 200 {
+		t.Fatalf("rename: %d", got)
+	}
+	if call := core.lastCall(); !strings.Contains(call, `"requestId":"req-1"`) || !strings.Contains(call, `"expectedRevision":1`) || !strings.Contains(call, "Grace") {
+		t.Fatalf("rename call %q", call)
+	}
+	if got := post("/tasks/"+paTaskT+"/publish", `{"requestId":"req-p","expectedRevision":3}`); got != 200 {
+		t.Fatalf("publish: %d", got)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant task publish "+paTaskT) || !strings.Contains(call, `"expectedRevision":3`) {
+		t.Fatalf("publish call %q", call)
+	}
+	if got := post("/goals/"+paGoalG+"/approve", `{"requestId":"req-2","expectedRevision":2}`); got != 200 {
+		t.Fatalf("approve: %d", got)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant goal approve "+paGoalG) {
+		t.Fatalf("goal approve call %q", call)
+	}
+	if got := post("/approvals/"+paApprovalP+"/decision", `{"requestId":"req-3","actionHash":"`+paHash+`","approve":true}`); got != 200 {
+		t.Fatalf("decision: %d", got)
+	}
+	if call := core.lastCall(); !strings.Contains(call, `"actionHash":"`+paHash+`"`) || !strings.Contains(call, `"approve":true`) {
+		t.Fatalf("decision call %q", call)
+	}
+	if got := post("/tasks/"+paTaskT+"/retry", `{"requestId":"req-4","expectedRevision":5}`); got != 200 {
+		t.Fatalf("retry: %d", got)
+	}
+	if got := post("/goals/draft", `{"requestId":"req-5","assistantId":"`+paAssistantA+`","title":"Watch PR 12","commitments":[{"kind":"manual","spec":"{}"}]}`); got != 200 {
+		t.Fatalf("draft: %d", got)
+	}
+}
+
+func TestPersonalAgentRejectsMalformedRequestsBeforeTheCore(t *testing.T) {
+	h, core := paHarness(t, true)
+	long := strings.Repeat("x", 200)
+	bad := []struct{ path, body string }{
+		{"/assistants", `{"name":"Ada"}`},                                             // no requestId
+		{"/assistants", `{"requestId":"r","name":""}`},                                // empty name
+		{"/assistants/" + paAssistantA + "/rename", `{"requestId":"r","name":"Ada"}`}, // no expectedRevision
+		{"/assistants/" + paAssistantA + "/rename", `{"requestId":"r","name":"a\nb","expectedRevision":1}`},
+		{"/assistants/" + paAssistantA + "/pause", `{"requestId":"r"}`},
+		{"/assistants/not-an-id/rename", `{"requestId":"r","name":"Ada","expectedRevision":1}`},
+		{"/goals/draft", `{"requestId":"r","assistantId":"nope","title":"x"}`},
+		{"/goals/draft", `{"requestId":"r","assistantId":"` + paAssistantA + `","title":"x","commitments":[{},{},{},{},{}]}`},
+		{"/goals/" + paGoalG + "/approve", `not json`},
+		{"/goals/" + paGoalG + "/cancel", `{"requestId":"r"}`},
+		{"/approvals/" + paApprovalP + "/decision", `{"requestId":"r","actionHash":"abc","approve":true}`},
+		{"/approvals/" + paApprovalP + "/decision", `{"requestId":"r","actionHash":"` + strings.Repeat("G", 64) + `"}`},
+		{"/tasks/" + paTaskT + "/ack", `{"requestId":"` + long + `","expectedRevision":1}`},
+	}
+	for _, c := range bad {
+		if status, _ := h.send("POST", "/api/v3/personal-agent"+c.path, h.token, c.body); status != http.StatusBadRequest {
+			t.Errorf("%s %q: status %d, want 400", c.path, c.body, status)
+		}
+	}
+	if core.callCount() != 0 {
+		t.Fatalf("a malformed request reached the core: %v", core.calls)
+	}
+}
+
+func TestPersonalAgentMapsTheCoresRefusals(t *testing.T) {
+	cases := map[string]int{
+		"stale_revision":     http.StatusConflict,
+		"request_conflict":   http.StatusConflict,
+		"not_found":          http.StatusNotFound,
+		"bad_state":          http.StatusConflict,
+		"assistant_disabled": http.StatusConflict,
+		"uncertain":          http.StatusConflict,
+		"invalid":            http.StatusBadRequest,
+		"internal":           http.StatusBadGateway,
+	}
+	for code, want := range cases {
+		h, core := paHarness(t, true)
+		core.fail = &personalagent.Error{Code: code, Message: "the core's own words"}
+		status, body := h.send("POST", "/api/v3/personal-agent/goals/"+paGoalG+"/pause", h.token, `{"requestId":"r","expectedRevision":2}`)
+		if status != want {
+			t.Errorf("%s: status %d, want %d", code, status, want)
+		}
+		var env struct {
+			Error struct{ Code, Message string } `json:"error"`
+		}
+		if err := json.Unmarshal(body, &env); err != nil || env.Error.Code != code || env.Error.Message != "the core's own words" {
+			t.Errorf("%s: body %s", code, body)
+		}
+	}
+}
+
+func TestPersonalAgentEventCarriesCountsOnly(t *testing.T) {
+	h, _ := paHarness(t, true)
+	events, _, err := h.dial("/api/v3/events", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readRaw(t, events) // hello
+	h.srv.NotifyPersonalAgent(2, 3)
+	raw := readRaw(t, events)
+	golden(t, "events-personal-agent.json", raw)
+	var frame map[string]any
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatal(err)
+	}
+	if frame["t"] != "personal-agent.changed" || frame["assistants"] != float64(2) || frame["needsYou"] != float64(3) || frame["revision"] == nil || len(frame) != 4 {
+		t.Fatalf("frame %v", frame)
+	}
+}
+
+// The phone starts the Coordinator on an Agent the desktop offers, once per
+// requestId; an Agent outside that list never reaches the core.
+func TestPersonalAgentStartsTheCoordinatorOnAnOfferedAgent(t *testing.T) {
+	h, core := paHarness(t, true)
+	h.srv.opts.AssistantAgents = func() []PersonalAgentKind {
+		return []PersonalAgentKind{{ID: "omp", Label: "OMP"}, {ID: "pi", Label: "Pi"}}
+	}
+	path := "/api/v3/personal-agent/assistants/" + paAssistantA + "/coordinator/start"
+	if status, _ := h.send("POST", path, h.token, `{"requestId":"s1","agent":"codex"}`); status != http.StatusBadRequest {
+		t.Fatalf("an Agent the desktop does not offer = %d", status)
+	}
+	if status, _ := h.send("POST", path, h.token, `{"requestId":"reject-pi","agent":"pi"}`); status != http.StatusBadRequest {
+		t.Fatalf("a currently unsupported Agent must be refused: %d", status)
+	}
+	if core.callCount() != 0 {
+		t.Fatalf("a refused Agent reached the core: %v", core.calls)
+	}
+	status, body := h.send("POST", path, h.token, `{"requestId":"s1","agent":"omp"}`)
+	if status != http.StatusOK || !strings.Contains(string(body), `"state":"starting"`) {
+		t.Fatalf("start = %d %s", status, body)
+	}
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant coordinator start "+paAssistantA) || !strings.Contains(last, `"agent":"omp"`) || !strings.Contains(last, `"requestId":"s1"`) {
+		t.Fatalf("core call %q", last)
+	}
+	if status, _ := h.send("POST", path, h.token, `{"requestId":"s2"}`); status != http.StatusOK {
+		t.Fatalf("the default Agent (empty) = %d", status)
+	}
+	if status, _ := h.send("POST", path, h.token, `{"agent":"omp"}`); status != http.StatusBadRequest {
+		t.Fatalf("no requestId = %d", status)
+	}
+	detail := bodyOf(t, h.get("/api/v3/personal-agent/assistants/"+paAssistantA, h.token, nil))
+	if !strings.Contains(string(detail), `"agents":[{"id":"omp","label":"OMP"}`) || !strings.Contains(string(detail), `"coordinator":{"assistantId":"`+paAssistantA+`","state":"ready"`) {
+		t.Fatalf("the Assistant page carries its Coordinator and the Agent choice: %s", detail)
+	}
+}
+
+// The phone stops a Coordinator through the core (which closes its own pane);
+// the request must carry a requestId and a well-formed id, and needs manage.
+func TestPersonalAgentStopsTheCoordinator(t *testing.T) {
+	h, core := paHarness(t, true)
+	path := "/api/v3/personal-agent/assistants/" + paAssistantA + "/coordinator/stop"
+	status, body := h.send("POST", path, h.token, `{"requestId":"stop-1"}`)
+	if status != http.StatusOK || !strings.Contains(string(body), `"state":"stopped"`) {
+		t.Fatalf("stop = %d %s", status, body)
+	}
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant coordinator stop "+paAssistantA) || !strings.Contains(last, `"requestId":"stop-1"`) {
+		t.Fatalf("core call %q", last)
+	}
+	n := core.callCount()
+	if status, _ := h.send("POST", path, h.token, `{}`); status != http.StatusBadRequest {
+		t.Fatalf("no requestId = %d", status)
+	}
+	if status, _ := h.send("POST", "/api/v3/personal-agent/assistants/not%20an%20id/coordinator/stop", h.token, `{"requestId":"r"}`); status != http.StatusBadRequest {
+		t.Fatalf("malformed id = %d", status)
+	}
+	if status, _ := h.send("POST", path, "", `{"requestId":"r"}`); status != http.StatusUnauthorized {
+		t.Fatalf("no token = %d", status)
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused request reached the core: %v", core.calls[n:])
+	}
+	core.fail = &personalagent.Error{Code: "bad_state", Message: "the previous Coordinator's Herdr pane is still open"}
+	if status, body := h.send("POST", path, h.token, `{"requestId":"stop-2"}`); status != http.StatusConflict || !strings.Contains(string(body), "bad_state") {
+		t.Fatalf("the core's refusal = %d %s", status, body)
+	}
+}
+
+func TestPersonalAgentGroupRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/groups"
+	var list struct {
+		Groups []personalagent.Group `json:"groups"`
+	}
+	if err := json.NewDecoder(h.get(base, h.token, nil).Body).Decode(&list); err != nil || len(list.Groups) != 1 || len(list.Groups[0].Members) != 2 {
+		t.Fatalf("groups %v %+v", err, list)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group list") {
+		t.Fatalf("core call %q", call)
+	}
+	h.get(base+"/"+paGroupID+"?since=4&limit=50", h.token, nil)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group show "+paGroupID+" --since 4 --limit 50") {
+		t.Fatalf("feed call %q", call)
+	}
+	for _, bad := range []string{"?since=-1", "?since=x", "?limit=0", "?limit=999"} {
+		if resp := h.get(base+"/"+paGroupID+bad, h.token, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("feed%s = %d", bad, resp.StatusCode)
+		}
+	}
+	if resp := h.get(base+"/not%20an%20id", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed id = %d", resp.StatusCode)
+	}
+
+	members := `["` + paAssistantA + `","` + paAssistantB + `"]`
+	if status, _ := h.send("POST", base, h.token, `{"requestId":"g1","title":"Launch crew","members":`+members+`}`); status != http.StatusOK {
+		t.Fatalf("create = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group create") || !strings.Contains(call, `"requestId":"g1"`) {
+		t.Fatalf("create call %q", call)
+	}
+	n := core.callCount()
+	for name, body := range map[string]string{
+		"one member":   `{"requestId":"g2","members":["` + paAssistantA + `"]}`,
+		"duplicate":    `{"requestId":"g2","members":["` + paAssistantA + `","` + paAssistantA + `"]}`,
+		"bad id":       `{"requestId":"g2","members":["x","y"]}`,
+		"no requestId": `{"members":` + members + `}`,
+		"too many":     `{"requestId":"g2","members":["a_1","a_2","a_3","a_4","a_5","a_6","a_7","a_8","a_9"]}`,
+	} {
+		if status, _ := h.send("POST", base, h.token, body); status != http.StatusBadRequest {
+			t.Fatalf("create %s = %d", name, status)
+		}
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused create reached the core: %v", core.calls[n:])
+	}
+
+	post := base + "/" + paGroupID + "/messages"
+	if status, _ := h.send("POST", post, h.token, `{"requestId":"m1","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"],"replyTo":"m_0000000000000012"}`); status != http.StatusOK {
+		t.Fatalf("post = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group post") || !strings.Contains(call, `"groupId":"`+paGroupID+`"`) || !strings.Contains(call, `"mentions":["`+paAssistantB+`"]`) {
+		t.Fatalf("post call %q", call)
+	}
+	n = core.callCount()
+	for name, body := range map[string]string{
+		"empty":        `{"requestId":"m2","body":"  "}`,
+		"bad mention":  `{"requestId":"m2","body":"hi","mentions":["nope"]}`,
+		"bad reply":    `{"requestId":"m2","body":"hi","replyTo":"nope"}`,
+		"no requestId": `{"body":"hi"}`,
+	} {
+		if status, _ := h.send("POST", post, h.token, body); status != http.StatusBadRequest {
+			t.Fatalf("post %s = %d", name, status)
+		}
+	}
+	// The phone has no way to speak as an Assistant.
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/say", h.token, `{"requestId":"s1","as":"`+paAssistantB+`","body":"hi"}`); status == http.StatusOK {
+		t.Fatalf("a say route exists")
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused post reached the core: %v", core.calls[n:])
+	}
+
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/rename", h.token, `{"requestId":"n1","title":"Crew","expectedRevision":1}`); status != http.StatusOK {
+		t.Fatalf("rename = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/rename", h.token, `{"requestId":"n2","title":"Crew"}`); status != http.StatusBadRequest {
+		t.Fatalf("rename without revision = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/members/add", h.token, `{"requestId":"a1","assistantId":"`+paAssistantB+`"}`); status != http.StatusOK {
+		t.Fatalf("add member = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group add "+paGroupID) {
+		t.Fatalf("add call %q", call)
+	}
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/members/remove", h.token, `{"requestId":"a2","assistantId":"`+paAssistantB+`"}`); status != http.StatusOK {
+		t.Fatalf("remove member = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group remove "+paGroupID) {
+		t.Fatalf("remove call %q", call)
+	}
+	if status, _ := h.send("POST", post, "", `{"requestId":"m9","body":"hi"}`); status != http.StatusUnauthorized {
+		t.Fatalf("post without token = %d", status)
+	}
+}
+
+func TestPersonalAgentGroupArchiveRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/groups"
+	var list struct {
+		Groups []personalagent.Group `json:"groups"`
+	}
+	if err := json.NewDecoder(h.get(base+"/archived", h.token, nil).Body).Decode(&list); err != nil || len(list.Groups) != 1 {
+		t.Fatalf("archived %v %+v", err, list)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant group archived") {
+		t.Fatalf("archived call %q (must not be read as a group id)", call)
+	}
+	for _, c := range []struct{ action, core string }{
+		{"archive", "assistant group archive " + paGroupID},
+		{"restore", "assistant group restore " + paGroupID},
+		{"delete", "assistant group delete-forever " + paGroupID},
+	} {
+		status, body := h.send("POST", base+"/"+paGroupID+"/"+c.action, h.token, `{"requestId":"x-`+c.action+`","expectedRevision":3}`)
+		if status != http.StatusOK {
+			t.Fatalf("%s = %d %s", c.action, status, body)
+		}
+		if call := core.lastCall(); !strings.HasPrefix(call, c.core) || !strings.Contains(call, `"expectedRevision":3`) || !strings.Contains(call, `"requestId":"x-`+c.action+`"`) {
+			t.Fatalf("%s call %q", c.action, call)
+		}
+		if c.action == "delete" && !strings.Contains(string(body), `"deleted":true`) {
+			t.Fatalf("delete body %s", body)
+		}
+	}
+	n := core.callCount()
+	for name, body := range map[string]string{"no revision": `{"requestId":"r"}`, "no requestId": `{"expectedRevision":3}`} {
+		if status, _ := h.send("POST", base+"/"+paGroupID+"/archive", h.token, body); status != http.StatusBadRequest {
+			t.Fatalf("%s = %d", name, status)
+		}
+	}
+	if status, _ := h.send("POST", base+"/not%20an%20id/archive", h.token, `{"requestId":"r","expectedRevision":1}`); status != http.StatusBadRequest {
+		t.Fatalf("malformed id = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/"+paGroupID+"/delete", "", `{"requestId":"r","expectedRevision":1}`); status != http.StatusUnauthorized {
+		t.Fatalf("delete without token = %d", status)
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused request reached the core: %v", core.calls[n:])
+	}
+	// The core's refusal (a pane still open) reaches the phone as its own sentence, never a Herdr detail.
+	core.fail = &personalagent.Error{Code: "bad_state", Message: "close the group agents' Herdr panes first"}
+	status, body := h.send("POST", base+"/"+paGroupID+"/archive", h.token, `{"requestId":"r2","expectedRevision":3}`)
+	if status != http.StatusConflict || !strings.Contains(string(body), "bad_state") {
+		t.Fatalf("refusal = %d %s", status, body)
+	}
+}
+
+func TestPersonalAgentGolden(t *testing.T) {
+	h, core := paHarness(t, true)
+	h.srv.opts.AssistantAgents = func() []PersonalAgentKind {
+		return []PersonalAgentKind{{ID: "omp", Label: "OMP"}}
+	}
+	golden(t, "personal-agent-coordinator-start-request.json", []byte(`{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"omp"}`))
+	_, started := h.send("POST", "/api/v3/personal-agent/assistants/"+paAssistantA+"/coordinator/start", h.token, `{"requestId":"4d9a1f0e-6c1b-4e52-9a58-1b6f3a2c7d10","agent":"omp"}`)
+	golden(t, "personal-agent-coordinator-start.json", started)
+	golden(t, "personal-agent-coordinator-stop-request.json", []byte(`{"requestId":"b3e5c7a9-2d4f-4681-9a0c-6e8b1d3f5a72"}`))
+	_, stopped := h.send("POST", "/api/v3/personal-agent/assistants/"+paAssistantA+"/coordinator/stop", h.token, `{"requestId":"b3e5c7a9-2d4f-4681-9a0c-6e8b1d3f5a72"}`)
+	golden(t, "personal-agent-coordinator-stop.json", stopped)
+	// A Coordinator the core put to sleep says so; the phone wakes only those when the chat opens.
+	core.asleep = true
+	golden(t, "personal-agent-assistant-asleep.json", bodyOf(t, h.get("/api/v3/personal-agent/assistants/"+paAssistantA, h.token, nil)))
+	core.asleep = false
+	golden(t, "bootstrap-personal-agent.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "personal-agent-system-push-disabled.json", bodyOf(t, h.get("/api/v3/notifications/push", h.token, nil)))
+	_, pushRegistered := h.send("POST", "/api/v3/notifications/push/register", h.token, `{"token":"ExponentPushToken[ABCDEFGHIJKLMNOPQRSTUVWX1234]"}`)
+	golden(t, "personal-agent-system-push-enabled.json", pushRegistered)
+	_, pushDisabled := h.send("POST", "/api/v3/notifications/push/disable", h.token, `{}`)
+	golden(t, "personal-agent-system-push-disabled.json", pushDisabled)
+	golden(t, "personal-agent-overview.json", bodyOf(t, h.get("/api/v3/personal-agent/overview", h.token, nil)))
+	golden(t, "personal-agent-assistants.json", bodyOf(t, h.get("/api/v3/personal-agent/assistants", h.token, nil)))
+	golden(t, "personal-agent-assistant.json", bodyOf(t, h.get("/api/v3/personal-agent/assistants/"+paAssistantA, h.token, nil)))
+	golden(t, "personal-agent-goals.json", bodyOf(t, h.get("/api/v3/personal-agent/goals?assistant="+paAssistantA, h.token, nil)))
+	golden(t, "personal-agent-task.json", bodyOf(t, h.get("/api/v3/personal-agent/tasks/"+paTaskT, h.token, nil)))
+	golden(t, "personal-agent-groups.json", bodyOf(t, h.get("/api/v3/personal-agent/groups", h.token, nil)))
+	golden(t, "personal-agent-groups-archived.json", bodyOf(t, h.get("/api/v3/personal-agent/groups/archived", h.token, nil)))
+	golden(t, "personal-agent-group-archive-request.json", []byte(`{"requestId":"5e2b8c14-7d9a-4a36-b1f0-3c6d8e0a2b47","expectedRevision":3}`))
+	_, groupArchived := h.send("POST", "/api/v3/personal-agent/groups/"+paGroupID+"/archive", h.token, `{"requestId":"5e2b8c14-7d9a-4a36-b1f0-3c6d8e0a2b47","expectedRevision":3}`)
+	golden(t, "personal-agent-group-archived.json", groupArchived)
+	_, groupDeleted := h.send("POST", "/api/v3/personal-agent/groups/"+paGroupID+"/delete", h.token, `{"requestId":"5e2b8c14-7d9a-4a36-b1f0-3c6d8e0a2b48","expectedRevision":4}`)
+	golden(t, "personal-agent-group-deleted.json", groupDeleted)
+	golden(t, "personal-agent-group-feed.json", bodyOf(t, h.get("/api/v3/personal-agent/groups/"+paGroupID, h.token, nil)))
+	golden(t, "personal-agent-group-message-request.json", []byte(`{"requestId":"8c1d5e2a-3b7f-4f60-9a11-2d4c6e8f0a13","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"]}`))
+	_, posted := h.send("POST", "/api/v3/personal-agent/groups/"+paGroupID+"/messages", h.token, `{"requestId":"8c1d5e2a-3b7f-4f60-9a11-2d4c6e8f0a13","body":"@Bo can you check the launch plan?","mentions":["`+paAssistantB+`"]}`)
+	golden(t, "personal-agent-group-message.json", posted)
+	pbase := "/api/v3/personal-agent/assistants/" + paAssistantB
+	golden(t, "personal-agent-instructions.json", bodyOf(t, h.get(pbase+"/instructions", h.token, nil)))
+	golden(t, "personal-agent-instructions-request.json", []byte(`{"requestId":"2f6c1a90-5d3e-4b78-8c21-7a9e0b4d6f15","body":"Be brief and precise.","expectedRevision":1}`))
+	_, setIns := h.send("POST", pbase+"/instructions", h.token, `{"requestId":"2f6c1a90-5d3e-4b78-8c21-7a9e0b4d6f15","body":"Be brief and precise.","expectedRevision":1}`)
+	golden(t, "personal-agent-instructions-saved.json", setIns)
+	golden(t, "personal-agent-runtime.json", bodyOf(t, h.get(pbase+"/runtime", h.token, nil)))
+	golden(t, "personal-agent-runtime-request.json", []byte(`{"requestId":"9b4e7d21-0c3a-4f58-a6d9-3e1f8c2b5a70","agent":"claude","model":"sonnet","effort":"high","expectedRevision":0,"idleSleepMin":60}`))
+	_, setRt := h.send("POST", pbase+"/runtime", h.token, `{"requestId":"9b4e7d21-0c3a-4f58-a6d9-3e1f8c2b5a70","agent":"claude","model":"sonnet","effort":"high","expectedRevision":0,"idleSleepMin":60}`)
+	golden(t, "personal-agent-runtime-saved.json", setRt)
+	if resp, _ := h.send("POST", pbase+"/runtime", h.token, `{"requestId":"5d1f7a33-2c4e-4b86-9a07-1e3b5c7d9f21","agent":"claude","model":"","effort":"","expectedRevision":0,"idleSleepMin":7}`); resp != http.StatusBadRequest {
+		t.Fatalf("an idle sleep the core does not offer = %d, want 400", resp)
+	}
+	golden(t, "personal-agent-mcp.json", bodyOf(t, h.get(pbase+"/mcp", h.token, nil)))
+	golden(t, "personal-agent-mcp-grant-request.json", []byte(`{"requestId":"c7a3f5e8-1b2d-4960-8e4a-5d7f9a1c3b62","serverId":"alpha","granted":true}`))
+	_, grant := h.send("POST", pbase+"/mcp/grant", h.token, `{"requestId":"c7a3f5e8-1b2d-4960-8e4a-5d7f9a1c3b62","serverId":"alpha","granted":true}`)
+	golden(t, "personal-agent-mcp-granted.json", grant)
+	_, verified := h.send("POST", pbase+"/mcp/verify", h.token, `{}`)
+	golden(t, "personal-agent-mcp-verified.json", verified)
+	golden(t, "personal-agent-approvals.json", bodyOf(t, h.get("/api/v3/personal-agent/approvals", h.token, nil)))
+	golden(t, "personal-agent-inbox.json", bodyOf(t, h.get("/api/v3/personal-agent/inbox", h.token, nil)))
+	if resp := h.get("/api/v3/personal-agent/inbox?assistant=not%20an%20id", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a malformed assistant filter = %d", resp.StatusCode)
+	}
+	if resp := h.get("/api/v3/personal-agent/inbox", "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("inbox without a token = %d", resp.StatusCode)
+	}
+	golden(t, "personal-agent-decision-request.json", []byte(`{"requestId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","actionHash":"`+paHash+`","approve":true}`))
+	_, decided := h.send("POST", "/api/v3/personal-agent/approvals/"+paApprovalP+"/decision", h.token, `{"requestId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","actionHash":"`+paHash+`","approve":true}`)
+	golden(t, "personal-agent-decision.json", decided)
+	h2, core := paHarness(t, true)
+	core.fail = &personalagent.Error{Code: "stale_revision", Message: "revision is stale"}
+	_, stale := h2.send("POST", "/api/v3/personal-agent/goals/"+paGoalG+"/approve", h2.token, `{"requestId":"r","expectedRevision":1}`)
+	golden(t, "error-personal-agent-stale.json", stale)
+	h3 := newHarness(t)
+	golden(t, "error-personal-agent-unavailable.json", bodyOf(t, h3.get("/api/v3/personal-agent/overview", h3.token, nil)))
+}
+
+// SOLCO-R03: a phone that lost its connection and sends the same decision again forwards the same requestId (the
+// core answers from its receipt, never deciding twice); a revoked phone is refused over HTTP and its socket is
+// closed, and nothing reaches the core afterwards.
+func TestReconnectReplaysTheRequestIdAndARevokedPhoneIsRefused(t *testing.T) {
+	h, core := paHarness(t, true)
+	decide := `{"requestId":"retry-9","actionHash":"` + paHash + `","approve":true}`
+	path := "/api/v3/personal-agent/approvals/" + paApprovalP + "/decision"
+	for i := 0; i < 2; i++ { // the second send is the retry after a dropped connection
+		if status, _ := h.send("POST", path, h.token, decide); status != 200 {
+			t.Fatalf("decision #%d: %d", i, status)
+		}
+		if call := core.lastCall(); !strings.Contains(call, `"requestId":"retry-9"`) || !strings.Contains(call, "approval decide "+paApprovalP) {
+			t.Fatalf("decision #%d call %q", i, call)
+		}
+	}
+	conn, _, err := h.dial("/api/v3/events", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readJSON(t, conn) // hello
+
+	if err := h.srv.Devices().Revoke(h.devID); err != nil {
+		t.Fatal(err)
+	}
+	before := core.callCount()
+	if status, _ := h.send("POST", path, h.token, decide); status != http.StatusUnauthorized {
+		t.Fatalf("revoked phone decision: %d", status)
+	}
+	if resp := h.get("/api/v3/personal-agent/overview", h.token, nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked phone read: %d", resp.StatusCode)
+	}
+	if core.callCount() != before {
+		t.Fatal("a revoked phone reached the Assistants core")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for {
+		if _, _, err := conn.Read(ctx); err != nil {
+			break // closed by the revoke
+		}
+	}
+	if ctx.Err() != nil {
+		t.Fatal("the revoked phone's events socket stayed open")
+	}
+}
+
+func TestPersonalAgentPlanRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	pbase := "/api/v3/personal-agent"
+	resp := h.get(pbase+"/goals/"+paGoalG+"/plan", h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("plan = %d", resp.StatusCode)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant goal facts "+paGoalG) {
+		t.Fatalf("plan call %q", call)
+	}
+	golden(t, "personal-agent-plan.json", bodyOf(t, h.get(pbase+"/goals/"+paGoalG+"/plan", h.token, nil)))
+	golden(t, "personal-agent-facts.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/facts?limit=20", h.token, nil)))
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant facts "+paAssistantA+" --limit 20") {
+		t.Fatalf("facts call %q", call)
+	}
+	golden(t, "personal-agent-activity.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/activity?after=0&limit=20", h.token, nil)))
+	_, receipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/activity/ack", h.token, `{"requestId":"activity-ack-1","seq":4}`)
+	golden(t, "personal-agent-activity-ack.json", receipt)
+	golden(t, "personal-agent-activity-notifications.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/activity/notifications?limit=20", h.token, nil)))
+	_, noticeReceipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/activity/notifications/ack", h.token, `{"requestId":"notification-ack-1","seq":4}`)
+	golden(t, "personal-agent-activity-notifications-ack.json", noticeReceipt)
+	golden(t, "personal-agent-coordinator-report.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/report", h.token, nil)))
+	_, reportReceipt := h.send("POST", pbase+"/assistants/"+paAssistantA+"/report/resolve", h.token, `{"requestId":"report-ack-1","throughSeq":9,"action":"skip","confirmed":true}`)
+	golden(t, "personal-agent-coordinator-report-resolved.json", reportReceipt)
+	for _, bad := range []string{pbase + "/assistants/" + paAssistantA + "/facts?limit=0", pbase + "/assistants/" + paAssistantA + "/facts?limit=101", pbase + "/assistants/" + paAssistantA + "/facts?limit=x", pbase + "/goals/not%20an%20id/plan"} {
+		if r := h.get(bad, h.token, nil); r.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s = %d", bad, r.StatusCode)
+		}
+	}
+	if r := h.get(pbase+"/goals/"+paGoalG+"/plan", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("plan without a token = %d", r.StatusCode)
+	}
+	h2, _ := paHarness(t, false)
+	if r := h2.get(pbase+"/goals/"+paGoalG+"/plan", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("plan served without the seam")
+	}
+}
+
+func TestPersonalAgentRoutineRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	pbase := "/api/v3/personal-agent"
+	golden(t, "personal-agent-routines.json", bodyOf(t, h.get(pbase+"/assistants/"+paAssistantA+"/routines", h.token, nil)))
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant routine list --assistant "+paAssistantA) {
+		t.Fatalf("routines call %q", call)
+	}
+	if r := h.get(pbase+"/assistants/not%20an%20id/routines", h.token, nil); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad id = %d", r.StatusCode)
+	}
+	if r := h.get(pbase+"/assistants/"+paAssistantA+"/routines", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without a token = %d", r.StatusCode)
+	}
+	h2, _ := paHarness(t, false)
+	if r := h2.get(pbase+"/assistants/"+paAssistantA+"/routines", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("routines served without the seam")
+	}
+}
+
+func TestPersonalAgentPersonaRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA
+
+	h.get(base+"/instructions", h.token, nil)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona instructions "+paAssistantA) {
+		t.Fatalf("instructions call %q", call)
+	}
+	h.get(base+"/runtime", h.token, nil)
+	h.get(base+"/mcp", h.token, nil)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona mcp "+paAssistantA) {
+		t.Fatalf("mcp call %q", call)
+	}
+	if resp := h.get("/api/v3/personal-agent/assistants/not%20an%20id/mcp", h.token, nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed id = %d", resp.StatusCode)
+	}
+	if resp := h.get(base+"/mcp", "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("mcp without a token = %d", resp.StatusCode)
+	}
+
+	if status, _ := h.send("POST", base+"/instructions", h.token, `{"requestId":"i1","body":"Be kind.","expectedRevision":2}`); status != http.StatusOK {
+		t.Fatalf("set instructions = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona set-instructions "+paAssistantA) || !strings.Contains(call, `"expectedRevision":2`) || !strings.Contains(call, `"requestId":"i1"`) {
+		t.Fatalf("set call %q", call)
+	}
+	if status, _ := h.send("POST", base+"/instructions/restore", h.token, `{"requestId":"i2","revision":1,"expectedRevision":2}`); status != http.StatusOK {
+		t.Fatalf("restore = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/runtime", h.token, `{"requestId":"r1","agent":"codex","model":"gpt 5","effort":"","expectedRevision":0}`); status != http.StatusOK {
+		t.Fatalf("set runtime = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/mcp/grant", h.token, `{"requestId":"g1","serverId":"alpha","granted":true}`); status != http.StatusOK {
+		t.Fatalf("grant = %d", status)
+	}
+	if status, _ := h.send("POST", base+"/mcp/verify", h.token, `{}`); status != http.StatusOK {
+		t.Fatalf("verify = %d", status)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant persona mcp-verify "+paAssistantA) {
+		t.Fatalf("verify call %q", call)
+	}
+
+	n := core.callCount()
+	for name, tc := range map[string][2]string{
+		"empty body":      {"/instructions", `{"requestId":"x","body":"  ","expectedRevision":1}`},
+		"no revision":     {"/instructions", `{"requestId":"x","body":"ok"}`},
+		"too long":        {"/instructions", `{"requestId":"x","body":"` + strings.Repeat("a", maxPAInstructions+1) + `","expectedRevision":1}`},
+		"no requestId":    {"/instructions", `{"body":"ok","expectedRevision":1}`},
+		"restore zero":    {"/instructions/restore", `{"requestId":"x","revision":0,"expectedRevision":1}`},
+		"agent has space": {"/runtime", `{"requestId":"x","agent":"my agent","expectedRevision":0}`},
+		"effort newline":  {"/runtime", `{"requestId":"x","effort":"a\nb","expectedRevision":0}`},
+		"negative rev":    {"/runtime", `{"requestId":"x","expectedRevision":-1}`},
+		"bad server id":   {"/mcp/grant", `{"requestId":"x","serverId":"a b","granted":true}`},
+		"empty server id": {"/mcp/grant", `{"requestId":"x","serverId":"","granted":true}`},
+	} {
+		if status, _ := h.send("POST", base+tc[0], h.token, tc[1]); status != http.StatusBadRequest {
+			t.Fatalf("%s = %d", name, status)
+		}
+	}
+	if core.callCount() != n {
+		t.Fatalf("a refused write reached the core: %v", core.calls[n:])
+	}
+	// The core's own refusals keep their codes.
+	core.fail = &personalagent.Error{Code: "mcp_unsupported", Message: "not for this Agent"}
+	status, body := h.send("POST", base+"/mcp/verify", h.token, `{}`)
+	if status != http.StatusConflict || !strings.Contains(string(body), "mcp_unsupported") {
+		t.Fatalf("unsupported = %d %s", status, body)
+	}
+	core.fail = &personalagent.Error{Code: "stale_revision", Message: "edited elsewhere"}
+	if status, _ := h.send("POST", base+"/instructions", h.token, `{"requestId":"i9","body":"x","expectedRevision":1}`); status != http.StatusConflict {
+		t.Fatalf("stale = %d", status)
+	}
+}
+
+func TestPersonalAgentMemoryAndProactivityRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA
+	golden(t, "personal-agent-memory.json", bodyOf(t, h.get(base+"/memory", h.token, nil)))
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant memory read "+paAssistantA) {
+		t.Fatalf("read call %q", call)
+	}
+	golden(t, "personal-agent-proactivity.json", bodyOf(t, h.get(base+"/proactivity", h.token, nil)))
+	if r := h.get("/api/v3/personal-agent/assistants/not%20an%20id/memory", h.token, nil); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad id = %d", r.StatusCode)
+	}
+	if r := h.get(base+"/memory", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without a token = %d", r.StatusCode)
+	}
+
+	// Writing a file has no approval step; the rev from the read is the only fence.
+	req := `{"file":"user","text":"I prefer short reports.\nMy timezone is Asia/Shanghai.","expectedRev":"e3b0c44298fc1c14"}`
+	golden(t, "personal-agent-memory-write-request.json", []byte(req))
+	status, body := h.send("POST", base+"/memory/write", h.token, req)
+	if status != http.StatusOK {
+		t.Fatalf("write user = %d %s", status, body)
+	}
+	golden(t, "personal-agent-memory-written.json", body)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant memory write-user "+paAssistantA) || !strings.Contains(call, `"expectedRev":"e3b0c44298fc1c14"`) {
+		t.Fatalf("write-user call %q", call)
+	}
+	if st, b := h.send("POST", base+"/memory/write", h.token, `{"file":"assistant","text":"- Prefers the weekly digest on Monday\n","expectedRev":"e3b0c44298fc1c14"}`); st != http.StatusOK {
+		t.Fatalf("write assistant = %d %s", st, b)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant memory write "+paAssistantA) {
+		t.Fatalf("write call %q", call)
+	}
+	core.fail = &personalagent.Error{Code: "stale_revision", Message: "the file changed since it was read"}
+	if st, b := h.send("POST", base+"/memory/write", h.token, req); st != http.StatusConflict {
+		t.Fatalf("stale write = %d %s", st, b)
+	} else {
+		golden(t, "error-personal-agent-memory-stale.json", b)
+	}
+	core.fail = nil
+	for name, payload := range map[string]string{
+		"unknown file":  `{"file":"both","text":"x","expectedRev":"abc"}`,
+		"no file":       `{"text":"x","expectedRev":"abc"}`,
+		"oversized":     `{"file":"user","text":"` + strings.Repeat("x", maxPAMemoryText+1) + `","expectedRev":"abc"}`,
+		"newline rev":   `{"file":"user","text":"x","expectedRev":"a\nb"}`,
+		"not an object": `[]`,
+	} {
+		before := core.callCount()
+		if st, _ := h.send("POST", base+"/memory/write", h.token, payload); st != http.StatusBadRequest {
+			t.Fatalf("%s = %d", name, st)
+		}
+		if core.callCount() != before {
+			t.Fatalf("%s reached the core", name)
+		}
+	}
+	// The retired approval-era routes are gone.
+	for _, p := range []string{"/memory/add", "/memory/m_0000000000000006/edit", "/memory/m_0000000000000006/history"} {
+		if st, _ := h.send("POST", "/api/v3/personal-agent"+p, h.token, `{}`); st != http.StatusNotFound && st != http.StatusMethodNotAllowed {
+			t.Fatalf("%s = %d, want it gone", p, st)
+		}
+	}
+	if st, b := h.send("POST", base+"/proactivity", h.token, `{"requestId":"p1","expectedRevision":0,"level":"suggest","quietStart":"22:00","quietEnd":"08:00","tz":"Asia/Shanghai","reportEveryMin":120,"dailyBudget":10}`); st != http.StatusOK {
+		t.Fatalf("set proactivity = %d %s", st, b)
+	}
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant proactivity set "+paAssistantA) || !strings.Contains(call, `"level":"suggest"`) || !strings.Contains(call, `"dailyBudget":10`) {
+		t.Fatalf("set call %q", call)
+	}
+	if st, _ := h.send("POST", base+"/proactivity", h.token, `{"requestId":"p2","expectedRevision":-1,"level":"suggest"}`); st != http.StatusBadRequest {
+		t.Fatalf("negative revision = %d", st)
+	}
+	core.fail = &personalagent.Error{Code: "invalid", Message: "level is respond, suggest or follow_up"}
+	if st, _ := h.send("POST", base+"/proactivity", h.token, `{"requestId":"p3","expectedRevision":1,"level":"autopilot"}`); st != http.StatusBadRequest {
+		t.Fatalf("core refusal = %d", st)
+	}
+	core.fail = nil
+	h2, _ := paHarness(t, false)
+	if r := h2.get(base+"/memory", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("memory served without the seam")
+	}
+	var boot struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	_ = json.Unmarshal(bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)), &boot)
+	if !boot.Capabilities["personalAgentMemory"] || !boot.Capabilities["personalAgentProactivity"] {
+		t.Fatalf("capabilities = %v", boot.Capabilities)
+	}
+}
+
+// Cursor pages are a per-device, ScopeView read. A read never ACKs. Only the
+// explicit ScopeManage write can advance the device's durable cursor.
+func TestPersonalAgentActivityReplayAndDeviceBoundACK(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA + "/activity"
+	resp := h.get(base+"?after=0&limit=2", h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("activity GET status = %d", resp.StatusCode)
+	}
+	var page struct {
+		Facts   []personalagent.Fact `json:"facts"`
+		NextSeq int64                `json:"nextSeq"`
+		AckSeq  int64                `json:"ackSeq"`
+		HasMore bool                 `json:"hasMore"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil || len(page.Facts) != 1 || page.NextSeq != 4 || page.AckSeq != 0 || page.HasMore {
+		t.Fatalf("activity read: %+v %v", page, err)
+	}
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant activity list "+paAssistantA+" --consumer device:dev_") || !strings.Contains(last, "--after 0 --limit 2") {
+		t.Fatalf("activity must use the authenticated device's consumer, got %q", last)
+	}
+	if status, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"a-1","seq":4}`); status != http.StatusOK {
+		t.Fatalf("ACK status %d", status)
+	}
+	if last := core.lastCall(); !strings.Contains(last, "assistant activity ack "+paAssistantA+"|") || !strings.Contains(last, `"consumer":"device:dev_`) || !strings.Contains(last, `"seq":4`) {
+		t.Fatalf("ACK must use device ID, got %q", last)
+	}
+	if status, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"a-2","seq":-1}`); status != http.StatusBadRequest {
+		t.Fatalf("negative ACK status %d", status)
+	}
+	if status, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"a-3","seq":4,"consumer":"device:forged"}`); status != http.StatusBadRequest {
+		t.Fatalf("forged consumer status %d", status)
+	}
+	for _, path := range []string{base + "?after=-1", base + "?after=nan", base + "?limit=0", base + "?limit=101", base + "?limit=nan"} {
+		if resp := h.get(path, h.token, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s = %d", path, resp.StatusCode)
+		}
+	}
+	if resp := h.get(base, "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthorized Activity = %d", resp.StatusCode)
+	}
+	if status, _ := h.send("POST", base+"/ack", "", `{"requestId":"a-1","seq":4}`); status != http.StatusUnauthorized {
+		t.Fatalf("unauthorized ACK = %d", status)
+	}
+	h2, core2 := paHarness(t, false)
+	if resp := h2.get(base, h2.token, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("closed seam = %d", resp.StatusCode)
+	}
+	if core2.callCount() != 0 {
+		t.Fatal("closed seam reached the core")
+	}
+}
+
+func TestPersonalAgentNotificationCursorIsDistinctFromSeenAndBoundToDevice(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA + "/activity"
+	notice := base + "/notifications"
+	resp := h.get(notice+"?limit=5", h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("notification page status = %d", resp.StatusCode)
+	}
+	if last := core.lastCall(); !strings.Contains(last, "--consumer device:dev_") || !strings.Contains(last, ":notifications --unread --limit 5") {
+		t.Fatalf("notification consumer/one unread query: %q", last)
+	}
+	if st, _ := h.send("POST", notice+"/ack", h.token, `{"requestId":"notice-ack","seq":4}`); st != http.StatusOK {
+		t.Fatalf("notification ack = %d", st)
+	}
+	if last := core.lastCall(); !strings.Contains(last, `"consumer":"device:dev_`) || !strings.Contains(last, `:notifications"`) {
+		t.Fatalf("ACK was not device-scoped notice: %q", last)
+	}
+	if st, _ := h.send("POST", base+"/ack", h.token, `{"requestId":"seen-ack","seq":4}`); st != http.StatusOK {
+		t.Fatalf("seen ACK = %d", st)
+	}
+	if last := core.lastCall(); strings.Contains(last, `:notifications"`) || !strings.Contains(last, `"consumer":"device:dev_`) {
+		t.Fatalf("seen ACK used notice consumer: %q", last)
+	}
+	for _, path := range []string{notice + "?after=4", notice + "?limit=101", notice + "?limit=oops"} {
+		if resp := h.get(path, h.token, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("invalid notice request %s = %d", path, resp.StatusCode)
+		}
+	}
+	if resp := h.get(notice, "", nil); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous notices = %d", resp.StatusCode)
+	}
+	if st, _ := h.send("POST", notice+"/ack", "", `{"requestId":"bad","seq":4}`); st != http.StatusUnauthorized {
+		t.Fatalf("anonymous notice ACK = %d", st)
+	}
+}
+
+// The same Report and idempotent owner decision must cross the Host seam.
+// A phone cannot "resolve" uncertain delivery by omitting confirmation or
+// pointing to a different Assistant/fact window.
+func TestPersonalAgentReportStatusAndOwnerResolveAreScoped(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA + "/report"
+	resp := h.get(base, h.token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("read: %d", resp.StatusCode)
+	}
+	var result struct {
+		Report personalagent.CoordinatorReport `json:"report"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.Report.State != "uncertain" || result.Report.ThroughSeq != 9 {
+		t.Fatalf("uncertain report: %+v %v", result, err)
+	}
+	if last := core.lastCall(); !strings.HasPrefix(last, "assistant report show "+paAssistantA+"|") {
+		t.Fatalf("report route: %q", last)
+	}
+	status, raw := h.send("POST", base+"/resolve", h.token, `{"requestId":"report-human-1","throughSeq":9,"action":"skip","confirmed":true}`)
+	if status != http.StatusOK {
+		t.Fatalf("resolve: %d %s", status, raw)
+	}
+	if last := core.lastCall(); !strings.Contains(last, "assistant report resolve "+paAssistantA+"|") ||
+		!strings.Contains(last, `"throughSeq":9`) || !strings.Contains(last, `"confirmed":true`) || !strings.Contains(last, `"action":"skip"`) {
+		t.Fatalf("owner decision not forwarded: %q", last)
+	}
+	for _, body := range []string{
+		`{"requestId":"bad","throughSeq":9,"action":"retry"}`,
+		`{"requestId":"bad","throughSeq":9,"action":"retry","confirmed":false}`,
+		`{"requestId":"bad","throughSeq":0,"action":"skip","confirmed":true}`,
+		`{"requestId":"bad","throughSeq":9,"action":"approve","confirmed":true}`,
+		`{"requestId":"bad","throughSeq":9,"action":"retry","confirmed":true,"assistantId":"a_forged"}`,
+		`{"requestId":"bad","throughSeq":9,"action":"retry","confirmed":true}{} `,
+	} {
+		if st, _ := h.send("POST", base+"/resolve", h.token, body); st != http.StatusBadRequest {
+			t.Errorf("invalid body accepted %s: %d", body, st)
+		}
+	}
+	if r := h.get(base, "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous read: %d", r.StatusCode)
+	}
+	if st, _ := h.send("POST", base+"/resolve", "", `{"requestId":"no","throughSeq":9,"action":"skip","confirmed":true}`); st != http.StatusUnauthorized {
+		t.Fatalf("anonymous write: %d", st)
+	}
+	closed, core2 := paHarness(t, false)
+	if r := closed.get(base, closed.token, nil); r.StatusCode != http.StatusNotFound {
+		t.Fatalf("gate closed: %d", r.StatusCode)
+	}
+	if core2.callCount() != 0 {
+		t.Fatal("closed gate invoked the plugin")
+	}
+}
+
+func TestPersonalAgentAutonomyRoutes(t *testing.T) {
+	h, core := paHarness(t, true)
+	base := "/api/v3/personal-agent/assistants/" + paAssistantA
+	keyID, trigID := "hk_0000000000000020", "g_0000000000000023"
+
+	golden(t, "personal-agent-autonomy.json", bodyOf(t, h.get(base+"/autonomy", h.token, nil)))
+	_, created := h.send("POST", base+"/hooks/keys", h.token, `{"requestId":"hk1","sources":["github","ci"]}`)
+	golden(t, "personal-agent-hook-key-created.json", created)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant hook key create|") || !strings.Contains(call, `"assistantId":"`+paAssistantA+`"`) || !strings.Contains(call, `"requestId":"hk1"`) {
+		t.Fatalf("create call %q", call)
+	}
+	_, revoked := h.send("POST", base+"/hooks/keys/"+keyID+"/revoke", h.token, `{"requestId":"hk2"}`)
+	golden(t, "personal-agent-hook-key-revoked.json", revoked)
+	if call := core.lastCall(); !strings.HasPrefix(call, "assistant hook key revoke "+keyID) {
+		t.Fatalf("revoke call %q", call)
+	}
+	for _, action := range []string{"pause", "resume", "cancel"} {
+		status, body := h.send("POST", base+"/triggers/"+trigID+"/"+action, h.token, `{"requestId":"tg-`+action+`","expectedRevision":1}`)
+		if status != http.StatusOK {
+			t.Fatalf("%s = %d %s", action, status, body)
+		}
+		if call := core.lastCall(); !strings.HasPrefix(call, "assistant trigger "+action+" "+trigID) || !strings.Contains(call, `"expectedRevision":1`) {
+			t.Fatalf("%s call %q", action, call)
+		}
+	}
+
+	// Another Assistant's key or trigger is never reachable through this path.
+	other := "/api/v3/personal-agent/assistants/a_00000000000000ff"
+	core.mu.Lock()
+	core.calls = nil
+	core.mu.Unlock()
+	if status, _ := h.send("POST", other+"/hooks/keys/"+keyID+"/revoke", h.token, `{"requestId":"hk3"}`); status == http.StatusOK {
+		t.Fatal("revoked a key through a path that does not name its Assistant")
+	}
+	if strings.Contains(strings.Join(core.snapshot(), "\n"), "hook key revoke") {
+		t.Fatal("a key outside the path's Assistant reached the core")
+	}
+	for _, bad := range []struct{ path, body string }{
+		{base + "/hooks/keys", `{"requestId":"x1","sources":[]}`},
+		{base + "/hooks/keys", `{"requestId":"x2","sources":["a b"]}`},
+		{base + "/hooks/keys/hk_nothex/revoke", `{"requestId":"x3"}`},
+		{base + "/triggers/" + trigID + "/pause", `{"requestId":"x4","expectedRevision":0}`},
+		{base + "/triggers/" + trigID + "/pause", `{"expectedRevision":1}`},
+	} {
+		if status, _ := h.send("POST", bad.path, h.token, bad.body); status != http.StatusBadRequest {
+			t.Errorf("%s %s = %d", bad.path, bad.body, status)
+		}
+	}
+	if r := h.get(base+"/autonomy", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without a token = %d", r.StatusCode)
+	}
+	h2, _ := paHarness(t, false)
+	if r := h2.get(base+"/autonomy", h2.token, nil); r.StatusCode == http.StatusOK {
+		t.Fatal("autonomy served without the seam")
+	}
+}

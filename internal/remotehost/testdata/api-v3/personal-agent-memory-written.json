@@ -1,0 +1,14 @@
+{
+  "notes": {
+    "assistantId": "a_0000000000000001",
+    "user": {
+      "text": "I prefer short reports.\nMy timezone is Asia/Shanghai.",
+      "rev": "a26e428cf831da92"
+    },
+    "assistant": {
+      "text": "",
+      "rev": "e3b0c44298fc1c14"
+    }
+  },
+  "schema": 1
+}

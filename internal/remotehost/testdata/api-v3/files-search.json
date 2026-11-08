@@ -1,0 +1,8 @@
+{
+  "workspaceId": "w1",
+  "hits": [
+    "src/app.go",
+    "src/util.go"
+  ],
+  "total": 2
+}

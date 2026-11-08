@@ -1,0 +1,35 @@
+{
+  "goals": [
+    {
+      "id": "g_0000000000000002",
+      "assistantId": "a_0000000000000001",
+      "title": "Watch PR 12",
+      "objective": "Tell me when it changes",
+      "state": "active",
+      "evidence": "",
+      "commitments": [
+        {
+          "id": "c_0000000000000003",
+          "assistantId": "a_0000000000000001",
+          "goalId": "g_0000000000000002",
+          "kind": "manual",
+          "successCriteria": "merged",
+          "exitCondition": "merged or closed",
+          "spec": "{}",
+          "state": "active",
+          "nextCheckAt": 0,
+          "lastCheckedAt": 0,
+          "lastError": "",
+          "cursor": "",
+          "revision": 2,
+          "createdAt": 1800000000000,
+          "updatedAt": 1800000000000
+        }
+      ],
+      "revision": 2,
+      "createdAt": 1800000000000,
+      "updatedAt": 1800000000000
+    }
+  ],
+  "schema": 1
+}

@@ -1,0 +1,25 @@
+{
+  "group": {
+    "createdAt": 1800000000000,
+    "id": "g_0000000000000009",
+    "lastSeq": 0,
+    "members": [
+      {
+        "assistantId": "a_0000000000000001",
+        "name": "Ada",
+        "status": "active"
+      },
+      {
+        "assistantId": "a_0000000000000008",
+        "name": "Bo",
+        "status": "active"
+      }
+    ],
+    "revision": 1,
+    "status": "active",
+    "title": "Launch crew",
+    "updatedAt": 1800000000000
+  },
+  "replayed": false,
+  "schema": 1
+}

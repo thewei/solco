@@ -1,0 +1,459 @@
+package nativeui
+
+import (
+	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+
+	"github.com/egoist/mygo/plugins/terminal"
+	"github.com/egoist/mygo/ui"
+)
+
+/**
+ * [INPUT]: 依赖 github.com/egoist/mygo/plugins/terminal, github.com/egoist/mygo/ui, os, path/filepath, runtime
+ * [OUTPUT]: 对外提供 gorexColors/gorexColorsOf/paneCardFaceOf/paneCardFace.dress（窗格卡片纸色·边·阴影，窗格/右侧面板/Detail 卡共用：纸色=终端底色，两态同色，选中只靠阴影（深色为淡光晕），不靠边框与纸色；Increase contrast 与透明终端纸色保留边）/paneGround（浅色窗口窗格画布底 = grouped）/gorexContentCard/gorexToggleFace/iconButtonRadius（图标按钮圆角唯一来源：min(Radius.Row, size/3)，28/24 档同为 8）/gorexIconButton/gorexIconButtonDisabled（无事可做的图标按钮：字形半透明、无悬停脸）/gorexIconTab/shortDir/samePath/tildePath
+ * [POS]: nativeui 的窗口 chrome 与终端卡片视觉实现（扁平中性面、细线图标按钮），被 workspace/terminal/titlebar 等模块消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// The workspace chrome (gorex heritage, flattened on 2026-10-12): a flat
+// neutral canvas under a vibrancy sidebar, terminal cards with in-card pane
+// headers and a hairline edge, and borderless icon buttons. No gradients —
+// depth comes from surface contrast; since 2026-11-08 only the terminal pane
+// cards carry a soft shadow (paneCardFaceOf). Presentation only:
+// Herdr runtime facts, colors included, are never authored here; these
+// palettes style surfaces, and the terminal palettes feed the official MyGo
+// terminal plugin.
+
+// gorexColors is the shared surface palette, in light and dark windows.
+type gorexColors struct {
+	// cardPaper is the right panel's opaque paper — the surface role, the same
+	// paper as a pane card and its terminal since 2026-11-08; cardBorder is the
+	// hairline of the panel and of the card's edge modes.
+	cardPaper, cardBorder ui.Color
+	// cardTranslucent is the pane-card paper when the terminal background
+	// itself is transparent (Settings → Terminal): a see-through fill that
+	// lets what is behind the window read through the undrawn terminal
+	// background.
+	cardTranslucent ui.Color
+
+	text, textMuted, textFaint, iconMuted ui.Color
+	hover, pressed                        ui.Color
+
+	// tabActive fills a selected icon chip (the surface switch).
+	tabActive ui.Color
+}
+
+var gorexLightColors = gorexColors{
+	cardPaper:       designRoles(false).Surface,
+	cardTranslucent: ui.RGBA(255, 255, 255, 0.58),
+	cardBorder:      ui.RGBA(0, 0, 0, 0.08),
+
+	text:      ui.Hex("#1d1d1f"),
+	textMuted: ui.Hex("#636366"),
+	textFaint: ui.Hex("#8e8e93"),
+	iconMuted: ui.Hex("#8a8a8f"),
+	hover:     ui.RGBA(0, 0, 0, 0.05),
+	pressed:   ui.RGBA(0, 0, 0, 0.1),
+
+	// A black wash, not white paper: the light Content is #fcfcfc since the 2026-11-07
+	// redesign and a white chip no longer reads on it (toggle_face_test.go).
+	tabActive: ui.RGBA(0, 0, 0, 0.08),
+}
+
+var gorexDarkColors = gorexColors{
+	cardPaper:       designRoles(true).Surface,
+	cardTranslucent: ui.RGBA(33, 33, 33, 0.6),
+	cardBorder:      ui.RGBA(255, 255, 255, 0.07),
+
+	text:      ui.Hex("#ececee"),
+	textMuted: ui.Hex("#8b8c92"),
+	textFaint: ui.Hex("#8e8e93"),
+	iconMuted: ui.Hex("#8b8c92"),
+	hover:     ui.RGBA(255, 255, 255, 0.06),
+	pressed:   ui.RGBA(255, 255, 255, 0.11),
+
+	tabActive: ui.RGBA(255, 255, 255, 0.10),
+}
+
+// Increase contrast keeps every surface and strengthens what is drawn on it:
+// the card's hairline and the secondary text and icon tones.
+var (
+	gorexLightHighContrast = func() gorexColors {
+		k := gorexLightColors
+		k.cardBorder = ui.RGBA(0, 0, 0, 0.35)
+		k.textMuted, k.textFaint, k.iconMuted = ui.Hex("#3f3f46"), ui.Hex("#52525b"), ui.Hex("#52525b")
+		return k
+	}()
+	gorexDarkHighContrast = func() gorexColors {
+		k := gorexDarkColors
+		k.cardBorder = ui.RGBA(255, 255, 255, 0.35)
+		k.textMuted, k.textFaint, k.iconMuted = ui.Hex("#d4d4d8"), ui.Hex("#b0b0b8"), ui.Hex("#c4c4cc")
+		return k
+	}()
+)
+
+func gorexColorsOf(dark bool) *gorexColors {
+	switch {
+	case dark && highContrast.Load():
+		return &gorexDarkHighContrast
+	case dark:
+		return &gorexDarkColors
+	case highContrast.Load():
+		return &gorexLightHighContrast
+	}
+	return &gorexLightColors
+}
+
+// paneCardFace is one pane card's look. Since the 2026-11-08 surface refresh
+// the card paper is the terminal's own background — one surface in both
+// states — and the selected card is told from the others by its shadow, not
+// by an edge or a different paper: the hairline is transparent in the default
+// look (still drawn, so the card keeps its size). Two modes keep an edge
+// because a shadow cannot carry them: Increase contrast, and the
+// Transparent-terminal paper, where a shadow would show through the
+// see-through fill.
+type paneCardFace struct {
+	paper, border ui.Color
+	// shadow is the drop under the card; a zero alpha draws none.
+	shadow           ui.Color
+	shadowY, shadowB float32
+}
+
+// Shadow tones are not roles: one neutral ink at two strengths. On the
+// near-black dark canvas a black shadow cannot lift a card, so the selected
+// dark card is marked by a faint light halo instead.
+var (
+	paneShadowLight = ui.RGBA(24, 29, 40, 1)
+	paneShadowDark  = ui.RGBA(0, 0, 0, 1)
+	paneHaloDark    = ui.RGBA(255, 255, 255, 1)
+)
+
+func paneCardFaceOf(dark, selected, transparent bool) paneCardFace {
+	k := gorexColorsOf(dark)
+	if transparent {
+		f := paneCardFace{paper: k.cardTranslucent, border: k.cardBorder}
+		if selected {
+			f.border = k.text.Alpha(0.5)
+		}
+		return f
+	}
+	f := paneCardFace{paper: designRoles(dark).Surface, border: ui.RGBA(0, 0, 0, 0)}
+	switch {
+	case dark && selected:
+		f.shadow, f.shadowY, f.shadowB = paneHaloDark.Alpha(0.14), 0, 24
+	case dark:
+		f.shadow, f.shadowY, f.shadowB = paneShadowDark.Alpha(0.30), 2, 8
+	case selected:
+		f.shadow, f.shadowY, f.shadowB = paneShadowLight.Alpha(0.14), 6, 22
+	default:
+		f.shadow, f.shadowY, f.shadowB = paneShadowLight.Alpha(0.07), 2, 8
+	}
+	if highContrast.Load() {
+		f.border = k.cardBorder
+		if selected {
+			f.border = k.text.Alpha(0.5)
+		}
+	}
+	return f
+}
+
+// dress paints the face on a card element: its paper, its edge and, when it
+// casts one, its shadow. The pane cards, the right panel and the Detail card
+// all take their look from here, so there is one card and one place to change it.
+func (f paneCardFace) dress(card ui.Element) ui.Element {
+	card.Background(f.paper).Border(1, f.border)
+	if f.shadow.A > 0 {
+		card.Shadow(0, f.shadowY, f.shadowB, 0, f.shadow)
+	}
+	return card
+}
+
+// paneGround is the backdrop the pane cards sit on: the light window gets the
+// grouped grey so white cards read as raised; the dark window keeps its
+// near-black canvas (ok is false: nothing to paint).
+func paneGround(dark bool) (ui.Color, bool) {
+	if dark {
+		return ui.Color{}, false
+	}
+	return designRoles(false).Grouped, true
+}
+
+// Metrics of the gorex surfaces. gorexGap is the reference code's single
+// spacing unit (its `gap`): the gutter between cards AND around them —
+// every other spacing here derives from it.
+const (
+	gorexGap     = 8
+	gorexCardR   = 12 // Radius().Card: pane cards and grouped panels share it
+	gorexHeaderH = 34
+	// Toolbar buttons are gorexIconBtn with a gorexIconGlyph glyph; the
+	// denser pane-header and find-bar buttons use the smaller pair, and the
+	// actions that appear inside a hovered list or tree row the smallest.
+	gorexIconBtn   = 28
+	gorexIconGlyph = 16
+	gorexPaneBtn   = 24
+	gorexPaneGlyph = 14
+	gorexRowBtn    = 20
+	gorexRowGlyph  = 12
+	// Each card frame insets half the gutter, so adjacent cards keep a
+	// full gorexGap between them; the canvas padding adds the other half,
+	// completing the edge gutter (edges land on exactly gorexGap too).
+	gorexFrameInset = gorexGap / 2
+	gorexCardsPad   = gorexGap / 2
+
+	// Split-divider drag gestures dispatch pane.resize in ratio points.
+	// Gestures below the floor keep accumulating instead of spamming the
+	// daemon with invisible nudges; a single dispatch never exceeds the
+	// cap (the daemon itself clamps ratios to [0.1, 0.9]).
+	resizeGestureFloor = float32(0.005)
+	resizeDispatchCap  = float32(0.8)
+)
+
+// gorexContentCard hosts one primary content surface (Diff, Chat, History,
+// Files, Settings) as the flat page itself: full-bleed in the content column,
+// on the canvas color. There is no floating card, border or shadow around a
+// page — only terminal panes are cards.
+func gorexContentCard(c *ui.Context, k *gorexColors, build func()) {
+	ui.Column(c).Grow(1).MinWidth(0).Clip().
+		Background(designTokens(c.Theme().Dark).Content).Children(build)
+}
+
+// gorexToggleFace is the one set of state faces a button wears: pressed,
+// hovered and — for a toggle that is on — the quiet filled chip. Icon
+// buttons, the surface switch and text toggles all take it from here, so
+// "on" reads the same on every page (2026-10-14 highlight audit: toggles had
+// grown a blue tint, an accent tint and this chip). List and tree rows keep
+// the sidebar selection tint instead — a row is selected, a button is on.
+func gorexToggleFace(b ui.Element, k *gorexColors, on bool) {
+	switch {
+	case b.Pressed():
+		b.Background(k.pressed)
+	case b.Hovered():
+		b.Background(k.hover)
+	case on:
+		b.Background(k.tabActive)
+	}
+}
+
+// iconButtonRadius is the corner of an icon button this many points on a
+// side: a third of it, capped at the row radius — shadcn's icon-sm and
+// icon-xs both round to 8, so the 28 and 24 tiers share Radius().Row and the
+// 20 row tier keeps proportionally round (2026-10-29; it was size/2.6, which
+// made the 28 button 10.8). Every shared icon-button face takes its corner
+// from here and nowhere else.
+func iconButtonRadius(size float32) float32 {
+	return min(Radius().Row, size/3)
+}
+
+// gorexIconButton is a borderless button of an icon, with a face on hover;
+// label names it for screen readers and its tooltip explains it. Selected
+// keeps a quiet filled face, as the surface switch's current side does.
+func gorexIconButton(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, selected bool, size, iconSize float32) ui.Element {
+	// A Tab stop (Enter and Space press it), but a pointer press leaves the
+	// keyboard focus where it was: the Terminal, Chat composer or commit field
+	// a header button sits beside keeps typing (2026-11-08: the shared icon
+	// buttons were not Tab stops, so refresh, search and close were mouse-only).
+	b := ui.Box(c).Size(size, size).Center().Radius(iconButtonRadius(size)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label).
+		Focusable().KeepFocus()
+	return gorexIconFace(c, b, k, svg, tooltip, selected, iconSize)
+}
+
+// gorexIconButtonDisabled is the icon button with nothing to do (Back with no
+// history behind it): the glyph at half strength and no hover face, as
+// shadcn's disabled:opacity-50. The tooltip stays, so the shortcut still
+// reads where the button would have led.
+func gorexIconButtonDisabled(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, size, iconSize float32) ui.Element {
+	b := tipped(c, ui.Box(c).Size(size, size).Center().Radius(iconButtonRadius(size)).Role(ui.RoleButton).Label(label), tooltip)
+	b.Children(func() {
+		ui.Icon(c, svg).Size(iconSize, iconSize).TextColor(k.iconMuted.Alpha(0.5))
+	})
+	return b
+}
+
+// gorexIconTab is gorexIconButton for a strip of equal choices (the sidebar's
+// view tabs): the same faces, but each tab takes an equal share of its row
+// instead of a fixed square.
+func gorexIconTab(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, selected bool) ui.Element {
+	b := ui.Box(c).Grow(1).MinWidth(0).Height(gorexIconBtn).Center().Radius(Radius().Row).
+		Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label)
+	return gorexIconFace(c, b, k, svg, tooltip, selected, gorexIconGlyph)
+}
+
+// gorexIconFace dresses an icon button's box: tooltip, state face, and the
+// glyph that darkens on hover or when on.
+func gorexIconFace(c *ui.Context, b ui.Element, k *gorexColors, svg *ui.SVG, tooltip string, selected bool, iconSize float32) ui.Element {
+	if tooltip != "" {
+		tipped(c, b, tooltip)
+	}
+	gorexToggleFace(b, k, selected)
+	b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
+	col := k.iconMuted
+	if b.Hovered() || selected {
+		col = k.text
+	}
+	b.Children(func() {
+		ui.Icon(c, svg).Size(iconSize, iconSize).TextColor(col)
+	})
+	return b
+}
+
+// gorexPulldown is gorexIconButton's pull-down sibling: an icon with a small
+// chevron, as a native toolbar pop-up button reads, in the same faces. The
+// caller attaches the Menu.
+func gorexPulldown(c *ui.Context, k *gorexColors, svg *ui.SVG, label string, height, iconSize float32) ui.Element {
+	b := tipped(c, ui.Row(c).Height(height).Padding(0, 6).Gap(3).AlignItems(ui.Center).Justify(ui.Center).
+		Radius(iconButtonRadius(height)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label), label)
+	gorexToggleFace(b, k, false)
+	b.Transition(ui.ElementTransition{Colors: true, Duration: motionColor})
+	col := k.iconMuted
+	if b.Hovered() {
+		col = k.text
+	}
+	b.Children(func() {
+		ui.Icon(c, svg).Size(iconSize, iconSize).TextColor(col)
+		ui.Icon(c, iconChevronDown).Size(9, 9).TextColor(col)
+	})
+	return b
+}
+
+// gorexTerminalThemes are the terminals' colors: soft ink on the panes'
+// paper, in both window kinds. The background is the resting card paper
+// (the surface role; since 2026-11-08 the dark one is #111111, not #212121),
+// so an unselected card and its terminal are one surface.
+func gorexTerminalThemes() (light, dark *terminal.Theme) {
+	return &terminal.Theme{
+			Foreground: ui.Hex("#2a2d31"),
+			Background: designRoles(false).Surface,
+			Cursor:     ui.Hex("#3a3d42"),
+			Selection:  ui.RGBA(46, 111, 208, 0.2),
+			Palette: [16]ui.Color{
+				ui.Hex("#2a2d31"), ui.Hex("#c2465a"), ui.Hex("#4e8e5f"), ui.Hex("#b07a1e"),
+				ui.Hex("#2e6fd0"), ui.Hex("#9050c8"), ui.Hex("#1e8c9c"), ui.Hex("#8a8d93"),
+				ui.Hex("#6e7178"), ui.Hex("#d9566b"), ui.Hex("#5ba671"), ui.Hex("#c89026"),
+				ui.Hex("#4a8fe0"), ui.Hex("#a56bd8"), ui.Hex("#2ba2b3"), ui.Hex("#b5b8be"),
+			},
+		}, &terminal.Theme{
+			Foreground: ui.Hex("#e6e6ea"),
+			Background: designRoles(true).Surface,
+			Cursor:     ui.Hex("#e6e6ea"),
+			Selection:  ui.RGBA(108, 178, 255, 0.28),
+			Palette: [16]ui.Color{
+				ui.Hex("#3a3a40"), ui.Hex("#ff6b7f"), ui.Hex("#7bd88f"), ui.Hex("#e5c07b"),
+				ui.Hex("#6cb2ff"), ui.Hex("#c792ea"), ui.Hex("#56d4dd"), ui.Hex("#d0d0d6"),
+				ui.Hex("#6e6e78"), ui.Hex("#ff8c9c"), ui.Hex("#9be8a8"), ui.Hex("#f2d28a"),
+				ui.Hex("#8ec5ff"), ui.Hex("#d7a8f2"), ui.Hex("#7fe3ea"), ui.Hex("#ffffff"),
+			},
+		}
+}
+
+// applyGorexTerminalTheme points one attach's options at the gorex
+// palettes, or at the pinned Ghostty theme when the user picked one.
+// An explicit appearance pins one palette; the system default lets the
+// plugin follow the window's appearance, as Ghostty's light:…,dark:… does.
+func applyGorexTerminalTheme(options *terminal.Options, appearance, themeName string) {
+	if themeName != "" {
+		th, err := terminal.GhosttyTheme(themeName)
+		if err != nil {
+			slog.Warn("terminal theme not found; using the gorex palettes", "theme", themeName, "error", err)
+		} else {
+			options.Theme = th
+			options.MinimumContrast = 1.3
+			return
+		}
+	}
+	light, dark := gorexTerminalThemes()
+	switch appearance {
+	case "light":
+		options.Theme = light
+	case "dark":
+		options.DarkTheme = dark
+	default:
+		options.Theme, options.DarkTheme = light, dark
+	}
+	// Ghostty's minimum-contrast: program-chosen colors that fall under
+	// this WCAG ratio against their cell's background (a dim gray on the
+	// light paper, say) are nudged apart just enough, keeping their hue.
+	// The gorex palettes themselves clear it; this guards the colors
+	// programs paint with themselves.
+	options.MinimumContrast = 1.3
+}
+
+// terminalThemeDefault names the follow-appearance gorex palettes in the
+// theme picker; the settings store keeps "".
+const terminalThemeDefault = "Default (follow window)"
+
+// terminalThemeDisplay maps a stored theme name to the picker's display
+// value: the picker needs a concrete string, the store keeps "".
+func terminalThemeDisplay(name string) string {
+	if name == "" {
+		return terminalThemeDefault
+	}
+	return name
+}
+
+// terminalThemeChoices caches the picker's options once: GhosttyThemes
+// reads the user's themes directory and sorts 300+ names, too much to
+// redo every frame the settings page builds.
+var (
+	terminalThemeChoicesOnce sync.Once
+	terminalThemeChoicesList []string
+)
+
+func terminalThemeChoices() []string {
+	terminalThemeChoicesOnce.Do(func() {
+		terminalThemeChoicesList = append([]string{terminalThemeDefault}, terminal.GhosttyThemes()...)
+	})
+	return terminalThemeChoicesList
+}
+
+// tildePath shortens an absolute path under the home directory to a ~
+// form, as pane headers and path rows show it.
+func tildePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" || !filepath.IsAbs(path) {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	if rel, err := filepath.Rel(home, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return filepath.Join("~", rel)
+	}
+	return path
+}
+
+// shortDir shows a directory as shells do, from ~, and only its last
+// parts when it is deep, handling cross-platform separators.
+func shortDir(d string) string {
+	if d == "" {
+		return ""
+	}
+	sep := string(filepath.Separator)
+	if home, _ := os.UserHomeDir(); home != "" {
+		if samePath(d, home) {
+			return "~"
+		}
+		if len(d) > len(home) && samePath(d[:len(home)], home) && d[len(home)] == filepath.Separator {
+			d = "~" + d[len(home):]
+		}
+	}
+	parts := strings.Split(d, sep)
+	if len(parts) > 5 || (len(d) > 48 && len(parts) > 3) {
+		return "…" + sep + strings.Join(parts[len(parts)-2:], sep)
+	}
+	return d
+}
+
+// samePath reports whether two paths are the same, without case on Windows.
+func samePath(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}

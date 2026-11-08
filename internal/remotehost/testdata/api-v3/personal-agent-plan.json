@@ -1,0 +1,77 @@
+{
+  "facts": [
+    {
+      "seq": 4,
+      "id": "f_0000000000000016",
+      "assistantId": "a_0000000000000001",
+      "goalId": "g_0000000000000002",
+      "taskId": "t_0000000000000015",
+      "kind": "delegated",
+      "text": "Delegated: Collect numbers",
+      "createdAt": 1800000000000
+    },
+    {
+      "seq": 2,
+      "id": "f_0000000000000017",
+      "assistantId": "a_0000000000000001",
+      "goalId": "g_0000000000000002",
+      "kind": "planned",
+      "text": "Plan: 2 milestone(s) — first plan",
+      "createdAt": 1800000000000
+    },
+    {
+      "seq": 1,
+      "id": "f_0000000000000018",
+      "assistantId": "a_0000000000000001",
+      "goalId": "g_0000000000000002",
+      "kind": "accepted",
+      "text": "Accepted: Watch PR 12",
+      "createdAt": 1800000000000
+    }
+  ],
+  "plan": {
+    "goalId": "g_0000000000000002",
+    "assistantId": "a_0000000000000001",
+    "successCriteria": "The report exists and was read.",
+    "milestones": [
+      {
+        "id": "m1",
+        "title": "Collect the numbers",
+        "task": {
+          "kind": "research",
+          "title": "Collect numbers",
+          "brief": "Find the Q3 numbers."
+        },
+        "taskId": "t_0000000000000015",
+        "state": "working",
+        "evidence": "task \"Collect numbers\" is queued (t_0000000000000015)"
+      },
+      {
+        "id": "m2",
+        "title": "You read the report",
+        "dependsOn": [
+          "m1"
+        ],
+        "state": "pending"
+      }
+    ],
+    "nextAction": "Collect the numbers.",
+    "planRevision": 1,
+    "replans": 0,
+    "maxTasks": 12,
+    "staleAfterMs": 2700000,
+    "verified": 0,
+    "total": 2,
+    "state": "working",
+    "revisions": [
+      {
+        "revision": 1,
+        "reason": "first plan",
+        "milestones": 2,
+        "createdAt": 1800000000000
+      }
+    ],
+    "updatedAt": 1800000000000
+  },
+  "schema": 1
+}

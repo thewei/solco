@@ -1,0 +1,192 @@
+// Package wizard implements `solco-automations add`: a plain stdin Q&A that
+// appends a validated entry to automations.yaml and previews the next runs.
+// Flags answer questions before they are asked — the Solco app creates
+// automations entirely through flags, with `--draft` as its default first
+// step — so the same code serves a human at a terminal and a form that is
+// not one.
+package wizard
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/schedule"
+)
+
+// Options carries what flags answered before the first question is asked.
+// Every field set is a question skipped.
+type Options struct {
+	Name, Cron, Repo, Workspace, WorkspaceID, Agent, Model string
+	Prompt, Workflow, MCPConfig, Rationale, OnOverlap      string
+	TimeoutMinutes, CatchUpMinutes, CleanupTTLHours        int
+	Draft, Headless                                        bool
+}
+
+func Run(opts Options) error {
+	in := bufio.NewReader(os.Stdin)
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	// Say so now rather than after twenty questions: appending means rewriting
+	// the file, and the file is not currently something we can rewrite without
+	// losing an entry.
+	if len(cfg.Invalid) > 0 {
+		fmt.Printf("%s has entries that did not load:\n", config.Path())
+		for _, d := range cfg.Invalid {
+			fmt.Printf("  %s\n", d)
+		}
+		return fmt.Errorf("fix those first — adding an entry rewrites the file")
+	}
+
+	name := opts.Name
+	if name == "" {
+		name = ask(in, "Name (kebab-case)", "")
+	}
+	if name == "" {
+		return fmt.Errorf("a name is required (pass --name when calling non-interactively)")
+	}
+	if cfg.Declares(name) {
+		// Declares, not Find: an existing entry that is currently broken is
+		// still an existing entry, and writing a second one by the same name
+		// makes both invalid.
+		return fmt.Errorf("automation %q already exists", name)
+	}
+
+	cronExpr := opts.Cron
+	if cronExpr != "" {
+		if _, err := config.CronParser.Parse(cronExpr); err != nil {
+			return fmt.Errorf("invalid --cron %q: %v", cronExpr, err)
+		}
+	} else {
+		for {
+			cronExpr = ask(in, "Cron (5 fields or @daily/@hourly)", "0 9 * * 1-5")
+			sched, err := config.CronParser.Parse(cronExpr)
+			if err != nil {
+				fmt.Printf("  invalid: %v\n", err)
+				continue
+			}
+			next := time.Now()
+			fmt.Println("  next runs:")
+			for range 3 {
+				next = sched.Next(next)
+				fmt.Printf("    %s\n", next.Format("Mon 02 Jan 15:04"))
+			}
+			// Herdr runs every due automation; the scheduler never holds one back.
+			// Saying so here is the only moment the cron is still up for debate.
+			if clash := schedule.CollidesWith(cfg, cronExpr, time.Now()); len(clash) > 0 {
+				fmt.Printf("  heads up: %s already due at the same time — they will all run at once\n",
+					strings.Join(clash, ", "))
+			}
+			break
+		}
+	}
+
+	cwd, _ := os.Getwd()
+	repo := opts.Repo
+	if repo == "" {
+		repo = ask(in, "Repo path", cwd)
+	}
+	workspace := opts.Workspace
+	if workspace == "" {
+		workspace = ask(in, "Workspace [worktree|root|existing]", "worktree")
+	}
+	workspaceID := opts.WorkspaceID
+	if config.Workspace(workspace) == config.WorkspaceExisting {
+		if workspaceID == "" {
+			workspaceID = ask(in, "Workspace ID (from herdr workspace list)", "")
+		}
+		if workspaceID == "" {
+			return fmt.Errorf("a workspace ID is required for existing mode")
+		}
+	}
+	agent := opts.Agent
+	if agent == "" {
+		agent = ask(in, "Agent kind", "claude")
+	}
+	// Asked every time rather than defaulted in the file: an automation that
+	// does not say which model it uses is one that quietly picks whatever the
+	// agent picks, which is how a nightly chore ends up on a flagship model.
+	model := opts.Model
+	if model == "" && config.KindAcceptsModel(agent) {
+		model = ask(in, "Model (e.g. sonnet, opus — empty for the agent's own default)", "")
+	}
+
+	prompt := opts.Prompt
+	workflow := opts.Workflow
+	if prompt == "" && workflow == "" {
+		fmt.Print("Prompt (single line; leave empty to delegate to a herdr-workflows workflow):\n> ")
+		prompt, _ = in.ReadString('\n')
+		prompt = strings.TrimSpace(prompt)
+		if prompt == "" {
+			workflow = ask(in, "Workflow name (hwf run <name>)", "")
+		}
+	}
+	if prompt == "" && workflow == "" {
+		return fmt.Errorf("either --prompt or --workflow is required when calling non-interactively")
+	}
+
+	mcp := opts.MCPConfig
+	if mcp == "" {
+		mcp = ask(in, "MCP config JSON path (optional)", "")
+	}
+	timeout := opts.TimeoutMinutes
+	if timeout <= 0 {
+		timeout, err = strconv.Atoi(ask(in, "Timeout minutes", "60"))
+		if err != nil || timeout <= 0 {
+			timeout = 60
+		}
+	}
+	if opts.OnOverlap != "" && opts.OnOverlap != config.OnOverlapSkip && opts.OnOverlap != config.OnOverlapQueue {
+		return fmt.Errorf("--on-overlap must be %s or %s", config.OnOverlapSkip, config.OnOverlapQueue)
+	}
+
+	cfg.Automations = append(cfg.Automations, config.Automation{
+		Name: name, Cron: cronExpr, Repo: repo,
+		Workspace: config.Workspace(workspace), WorkspaceID: workspaceID,
+		Agent: agent, Model: model,
+		Prompt: prompt, Headless: opts.Headless, Workflow: workflow,
+		MCPConfig: mcp, TimeoutMinutes: timeout,
+		CatchUpMinutes: opts.CatchUpMinutes,
+		Draft:          opts.Draft, Rationale: opts.Rationale,
+		OnOverlap: opts.OnOverlap, CleanupTTLHours: opts.CleanupTTLHours,
+	})
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	// Re-load to run full validation on what we just wrote.
+	written, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("saved, but %s no longer parses: %w", config.Path(), err)
+	}
+	if d := written.Diagnostic(name); d != nil {
+		return fmt.Errorf("saved, but it will not run — fix %s", d)
+	}
+	fmt.Printf("\nSaved %q to %s\n", name, config.Path())
+	if opts.Draft {
+		// The daemon will not schedule a draft: approval is the point.
+		fmt.Printf("It stays unscheduled until someone approves it:\n  solco-automations approve %s\n", name)
+	} else {
+		fmt.Printf("The daemon picks it up within 30s. Test it now with: solco-automations run %s\n", name)
+	}
+	return nil
+}
+
+func ask(in *bufio.Reader, label, def string) string {
+	if def != "" {
+		fmt.Printf("%s [%s]: ", label, def)
+	} else {
+		fmt.Printf("%s: ", label)
+	}
+	line, _ := in.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return def
+	}
+	return line
+}

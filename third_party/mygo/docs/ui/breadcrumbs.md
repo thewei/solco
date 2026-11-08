@@ -1,0 +1,33 @@
+# Breadcrumbs
+
+<!-- preview breadcrumbs 180 -->
+
+`ui.Breadcrumbs` creates a path of items, as Finder's path bar and AppKit's
+path control, separated by chevrons: the items but the last are links,
+which a click chooses, as Enter does, setting an `*int` to its index, which
+`Changed` reports. Long items shorten with an ellipsis as room runs short.
+
+```go
+path := []string{"Macintosh HD", "Users", "ada", "Documents"}
+if ui.Breadcrumbs(c, path, &app.chosen).Label("Path").Changed() {
+	app.open(path[:app.chosen+1])
+}
+```
+
+The last item is where the user is, which is no link.
+
+## Accessibility
+
+Assistive technology sees links in a navigation landmark, which `Label`
+names and screen readers jump to among the window's landmarks, and the
+last item as the current page (`ui.CurrentPage`), which they read as such.
+A trail of your own says the same with `Role(ui.RoleNavigation)` and
+[`Current`](accessibility.md#states):
+
+```go
+ui.Row(c).Gap(6).Role(ui.RoleNavigation).Label("Breadcrumb").Children(func() {
+	ui.Link(c, "Home", "/")
+	ui.Text(c, "/").AccessHidden(true)
+	ui.Text(c, "Settings").Current(ui.CurrentPage)
+})
+```

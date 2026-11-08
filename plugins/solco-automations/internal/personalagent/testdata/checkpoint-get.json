@@ -1,0 +1,13 @@
+{
+  "checkpoint": {
+    "assistantId": "a_0000000000000001",
+    "blockers": "none",
+    "lastSeq": 5,
+    "nextAction": "wait for the digest",
+    "progress": "two goals checked",
+    "revision": 1,
+    "stopWhen": "the person says stop",
+    "updatedAt": 1800000003000
+  },
+  "schema": 1
+}

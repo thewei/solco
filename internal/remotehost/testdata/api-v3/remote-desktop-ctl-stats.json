@@ -1,0 +1,12 @@
+{
+  "type": "stats",
+  "rttMs": 12.5,
+  "bitrateKbps": 4200,
+  "fps": 29.7,
+  "framesSent": 1800,
+  "framesDropped": 2,
+  "keyframesSent": 15,
+  "keyframeRequests": 1,
+  "pathType": "host",
+  "uptimeSeconds": 60
+}

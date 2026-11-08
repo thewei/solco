@@ -1,0 +1,15 @@
+{
+  "protocol": 1,
+  "state": "ready",
+  "platform": "macos",
+  "permissions": {
+    "screenRecording": true,
+    "accessibility": true
+  },
+  "requireApproval": true,
+  "tiers": [
+    "smooth",
+    "standard",
+    "high"
+  ]
+}

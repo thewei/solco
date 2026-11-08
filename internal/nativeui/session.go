@@ -1,0 +1,305 @@
+package nativeui
+
+import (
+	"slices"
+	"sort"
+	"strings"
+
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/settings"
+)
+
+// The session snapshot (settings.Session) remembers the shell's navigation
+// and panel cosmetics across launches. It is captured when the window hides
+// (close button) and when the shell closes (menu Quit), and restored as
+// launch hints in NewShell. Herdr stays the runtime authority: instance/
+// project/tab/pane entries are hints that reconcileLocalSelection and
+// preferredInstanceName re-validate against the live projection.
+
+// persistableRoute maps the current router path onto the route restored at
+// next launch. Stable top-level routes and Settings sections come back
+// verbatim; context-scoped detail routes (a specific history session, agent
+// inspector pane, or chat binding) normalize to the workspace page because
+// their targets may no longer exist.
+func persistableRoute(path string) string {
+	switch path {
+	case routeWorkspace, routeHosts, routeHistory, routeQuota, routeAutomations, "/history-projects":
+		return path
+	}
+	if strings.HasPrefix(path, "/settings/") {
+		return path
+	}
+	return routeWorkspace
+}
+
+// migrateRoute maps a route saved under an old name onto its current one:
+// Usage became Quota on 2026-10-30.
+func migrateRoute(path string) string {
+	switch path {
+	case "/usage":
+		return routeQuota
+	case "/settings/usage":
+		return usageSettingsPath
+	}
+	return path
+}
+
+// restorableRoute reports whether a persisted route can come back verbatim.
+// Routes removed from the app (e.g. the deleted New Task / Status Center
+// pages) normalize to the workspace instead of rendering a Not Found page.
+func restorableRoute(path string) bool {
+	return persistableRoute(path) == path
+}
+
+// sessionHasState reports whether a snapshot carries anything worth
+// restoring. A fresh install stores the zero value, and the shell must keep
+// its first-launch defaults instead of applying the zero booleans.
+func sessionHasState(session settings.SessionSettings) bool {
+	return session.Route != "" || session.Instance != "" ||
+		session.ProjectID != "" || session.ExpandedProjects != nil ||
+		session.ExpandedTabs != nil
+}
+
+// sortedSetKeys returns the true keys of an expansion map in stable order.
+func sortedSetKeys(expanded map[string]bool) []string {
+	keys := make([]string, 0, len(expanded))
+	for id, on := range expanded {
+		if on {
+			keys = append(keys, id)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// persistableAgentFolds is the sidebar Agents folds worth saving. A terminal
+// id lives as long as its agent run, so a "sub:" fold of an agent that is gone
+// would pile up in the session file; a "group:" fold goes with its Workspace.
+// Nothing is dropped before the first projection, while another Herdr device
+// is showing, or when no Workspace is known (the keys may still be waiting).
+func (s *Shell) persistableAgentFolds() []string {
+	keys := sortedSetKeys(s.foldedAgents)
+	if s.loading || s.activeIsRemote() || len(s.projection.Projects) == 0 {
+		return keys
+	}
+	live := make(map[string]bool, len(s.projection.Projects)+10)
+	for _, project := range s.projection.Projects {
+		live[agentFoldKey("group", project.ID)] = true
+		// The Services section's workspace groups fold under the same
+		// persistence (2026-11-03); they live as long as the Workspace.
+		live[agentFoldKey("svc-group", project.ID)] = true
+	}
+	for _, card := range s.workbenchCards() {
+		live[subagentFoldKey(card)] = true
+	}
+	for _, key := range []string{
+		"time:today", "time:yesterday", "time:week", "time:earlier",
+		"status:attention", "status:working", "status:review", "status:idle", "status:resolved",
+	} {
+		live[agentFoldKey("group", key)] = true
+	}
+	return slices.DeleteFunc(keys, func(key string) bool { return !live[key] })
+}
+
+// clampSessionSidebarWidth bounds a restored sidebar width to the drag
+// limits' static bounds; the window is unknown at restore time, so the
+// window-relative cap applies only on the next drag.
+func clampSessionSidebarWidth(width int) int {
+	if width < int(sidebarMinWidth) {
+		return int(sidebarMinWidth)
+	}
+	if width > int(sidebarMaxWidth) {
+		return int(sidebarMaxWidth)
+	}
+	return width
+}
+
+// captureSession reads the shell's navigation and panel cosmetics into a
+// snapshot. Pure read over presentation state; safe from any lane that
+// already owns the shell.
+func (s *Shell) captureSession() settings.SessionSettings {
+	snapshot := settings.SessionSettings{
+		Route:               persistableRoute(s.router.Path()),
+		Instance:            s.activeInstance,
+		ProjectID:           s.selectedProjectID,
+		TabID:               s.selectedTabID,
+		PaneID:              s.selectedPaneID,
+		ProjectsOpen:        s.projectsOpen,
+		AgentsOpen:          s.agentsOpen,
+		ServicesOpen:        s.servicesOpen,
+		PinsOpen:            s.pinsOpen,
+		TasksClosed:         !s.tasksOpen,
+		FoldedBoards:        sortedSetKeys(s.foldedBoards),
+		FoldedAgents:        s.persistableAgentFolds(),
+		ExpandedProjects:    sortedSetKeys(s.expandedProjects),
+		ExpandedTabs:        sortedSetKeys(s.expandedTabs),
+		SidebarWidth:        int(s.sidebarW),
+		SidePanelOpen:       s.sidePanel.open,
+		SidePanelPage:       string(s.sidePanel.page),
+		SidePanelWidth:      int(s.sidePanel.width),
+		RecentHosts:         s.recentHosts,
+		RecentLaunchKinds:   s.recentLaunchKinds,
+		AgentsSort:          s.agentsSort,
+		AgentsSortByTime:    s.agentsSortByTime,
+		AgentsSortAscending: s.agentsSortAscending,
+	}
+	livePrefix := s.activeInstance + "/"
+	for key, entry := range s.hookIdentities {
+		// Entries of this instance whose pane is gone from the loaded
+		// projection are dead weight; other instances' stay as saved.
+		if paneID, mine := strings.CutPrefix(key, livePrefix); mine && len(s.projection.Panes) > 0 && s.paneAgent(paneID) == nil {
+			continue
+		}
+		if snapshot.HookSessions == nil {
+			snapshot.HookSessions = map[string]settings.HookSessionSettings{}
+		}
+		snapshot.HookSessions[key] = settings.HookSessionSettings{
+			Agent: entry.identity.Agent, Kind: entry.identity.Kind, Source: entry.identity.Source,
+			Value: entry.identity.Value, TerminalID: entry.terminalID,
+		}
+	}
+	// N19 #4: the per-pane surface memory persists, so sidebar Agent clicks
+	// land where the user left them across launches.
+	for paneID, kind := range s.paneSurfaceMemo {
+		if snapshot.PaneSurfaces == nil {
+			snapshot.PaneSurfaces = map[string]string{}
+		}
+		snapshot.PaneSurfaces[paneID] = string(kind)
+	}
+	// The pane→script/command associations persist like the hook
+	// identities: a restart must not strip a running service of its
+	// attribution or its script-defined title.
+	for key, name := range s.scriptPanes {
+		if paneID, mine := strings.CutPrefix(key, livePrefix); mine &&
+			len(s.projection.Panes) > 0 && paneByID(s.projection, paneID) == nil {
+			continue
+		}
+		if snapshot.ScriptPanes == nil {
+			snapshot.ScriptPanes = map[string]string{}
+		}
+		snapshot.ScriptPanes[key] = name
+	}
+	return snapshot
+}
+
+// restoreSessionHooks reloads the remembered hook session identities.
+func (s *Shell) restoreSessionHooks(session settings.SessionSettings) {
+	for key, saved := range session.HookSessions {
+		if s.hookIdentities == nil {
+			s.hookIdentities = map[string]hookIdentity{}
+		}
+		s.hookIdentities[key] = hookIdentity{
+			identity:   herdr.AgentSessionIdentity{Agent: saved.Agent, Kind: saved.Kind, Source: saved.Source, Value: saved.Value},
+			terminalID: saved.TerminalID,
+		}
+	}
+}
+
+// SaveSession persists the current session snapshot through the settings
+// service. Called when the main window hides (close button) and from
+// Shell.Close (menu Quit).
+func (s *Shell) SaveSession() {
+	snapshot := s.captureSession()
+	s.applySettings(func(v *settings.Settings) error {
+		v.Session = snapshot
+		return nil
+	})
+}
+
+// restoreSession applies the persisted session snapshot as launch hints.
+// Called once from NewShell, before the window attaches: the instance hint
+// steers reloadInstances, the selection hints survive until the first
+// projection arrives and reconcileLocalSelection validates them, and the
+// route hint replaces the default workspace page before the first frame.
+func (s *Shell) restoreSession() {
+	session := s.settings.Session
+	if !sessionHasState(session) {
+		return
+	}
+	session.Route = migrateRoute(session.Route)
+	if session.Route != "" && session.Route != s.visibleRoute && restorableRoute(session.Route) {
+		s.router.Replace(session.Route)
+		s.visibleRoute = session.Route
+	}
+	if session.Instance != "" {
+		s.activeInstance = session.Instance
+	}
+	s.selectedProjectID = session.ProjectID
+	s.selectedTabID = session.TabID
+	s.selectedPaneID = session.PaneID
+	if len(session.PaneSurfaces) > 0 {
+		s.paneSurfaceMemo = make(map[string]WorkspaceSurfaceKind, len(session.PaneSurfaces))
+		for paneID, kind := range session.PaneSurfaces {
+			switch WorkspaceSurfaceKind(kind) {
+			case WorkspaceSurfaceChat:
+				s.paneSurfaceMemo[paneID] = WorkspaceSurfaceChat
+			case WorkspaceSurfaceTerminal:
+				s.paneSurfaceMemo[paneID] = WorkspaceSurfaceTerminal
+			}
+		}
+	}
+	s.recentHosts = append([]string(nil), session.RecentHosts...)
+	s.recentLaunchKinds = append([]string(nil), session.RecentLaunchKinds...)
+	s.agentsSort = string(normalizeAgentSort(session.AgentsSort))
+	s.agentsSortByTime = session.AgentsSortByTime
+	s.agentsSortAscending = session.AgentsSortAscending
+	s.restoreSessionHooks(session)
+	s.projectsOpen = session.ProjectsOpen
+	s.agentsOpen = session.AgentsOpen
+	s.servicesOpen = session.ServicesOpen
+	for key, name := range session.ScriptPanes {
+		if s.scriptPanes == nil {
+			s.scriptPanes = make(map[string]string)
+		}
+		s.scriptPanes[key] = name
+	}
+	s.pinsOpen = session.PinsOpen
+	s.tasksOpen = !session.TasksClosed
+	for _, name := range session.FoldedBoards {
+		s.foldedBoards[name] = true
+	}
+	for _, key := range session.FoldedAgents {
+		s.foldedAgents[key] = true
+	}
+	for _, id := range session.ExpandedProjects {
+		s.expandedProjects[id] = true
+	}
+	for _, id := range session.ExpandedTabs {
+		s.expandedTabs[id] = true
+	}
+	if session.SidebarWidth != 0 {
+		s.sidebarW = float32(clampSessionSidebarWidth(session.SidebarWidth))
+	}
+	s.sidePanel.open = session.SidePanelOpen
+	s.sidePanel.page = parseSidePanelPage(session.SidePanelPage)
+	if session.SidePanelWidth != 0 {
+		s.sidePanel.width = float32(clampSessionSidePanelWidth(session.SidePanelWidth))
+	}
+}
+
+// preferredInstanceName resolves the startup instance: the session hint when
+// it is still a listed session of this Mac, else the Herdr-flagged default,
+// else the first local instance. Startup always opens this Mac — a hint that
+// names a saved device is ignored, because switching to a device is a
+// deliberate act (device_switch.go) that must never wait on the network at
+// launch — and a stale hint (renamed or removed instance) never blocks it.
+func preferredInstanceName(instances []herdr.Instance, hint string) string {
+	if hint != "" {
+		for _, instance := range instances {
+			if instance.Name == hint && instance.Machine == nil {
+				return hint
+			}
+		}
+	}
+	for _, instance := range instances {
+		if instance.Default && instance.Machine == nil {
+			return instance.Name
+		}
+	}
+	for _, instance := range instances {
+		if instance.Machine == nil {
+			return instance.Name
+		}
+	}
+	return ""
+}

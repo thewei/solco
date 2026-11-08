@@ -1,0 +1,51 @@
+{
+  "providers": [
+    {
+      "id": "codex",
+      "state": "live",
+      "plan": "Plus",
+      "windows": [
+        {
+          "name": "5-hour",
+          "usedPct": 0,
+          "spanMs": 18000000,
+          "resetsAtMs": 1785549600000
+        },
+        {
+          "name": "Weekly",
+          "usedPct": 19,
+          "spanMs": 604800000,
+          "resetsAtMs": 1786068000000
+        }
+      ],
+      "notes": [
+        "Credits $0.00",
+        "1 rate-limit reset available"
+      ],
+      "atMs": 1785546001000,
+      "checkedMs": 1785546001000
+    },
+    {
+      "id": "claude",
+      "state": "rate_limited",
+      "detail": "rate limited, retry in 15m0s",
+      "plan": "Max 5×",
+      "windows": [
+        {
+          "name": "Weekly",
+          "usedPct": 87,
+          "spanMs": 604800000,
+          "resetsAtMs": 1786068000000
+        }
+      ],
+      "atMs": 1785542400000,
+      "checkedMs": 1785546001000,
+      "retryAtMs": 1785546900000
+    },
+    {
+      "id": "cursor",
+      "state": "disabled",
+      "windows": []
+    }
+  ]
+}

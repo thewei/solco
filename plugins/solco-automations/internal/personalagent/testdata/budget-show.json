@@ -1,0 +1,33 @@
+{
+  "budget": {
+    "assistantId": "a_0000000000000001",
+    "dailyBudget": 10,
+    "day": "2027-01-15",
+    "held": [],
+    "level": "suggest",
+    "quietNow": false,
+    "recent": [
+      {
+        "at": 1800000000000,
+        "kind": "supervisor",
+        "outcome": "spent",
+        "ref": "t_0000000000000015"
+      }
+    ],
+    "remaining": 9,
+    "spent": {
+      "supervisor": 1
+    },
+    "spentToday": 1,
+    "unmeasured": [
+      "tokens",
+      "cost"
+    ],
+    "wake": {
+      "approved": false,
+      "budget": 0,
+      "usedToday": 0
+    }
+  },
+  "schema": 1
+}

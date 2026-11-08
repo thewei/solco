@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "id": "task:t_0000000000000004",
+      "kind": "stalled",
+      "assistantId": "a_0000000000000001",
+      "taskId": "t_0000000000000004",
+      "title": "Check it",
+      "detail": "Has not started",
+      "priority": 3,
+      "at": 1800000000000
+    }
+  ],
+  "needsYou": 1,
+  "schema": 1,
+  "seq": 4
+}

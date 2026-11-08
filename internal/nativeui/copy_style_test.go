@@ -1,0 +1,393 @@
+package nativeui
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+/**
+ * [INPUT]: 依赖 nativeui 包内非测试源码里 emptyState / workspaceEmptyBanner 的字面标题、菜单项（.Item("…")）的字面标签与 openConfirm 的标题实参、全部生产字符串字面量、菜单项/图标按钮/tipped tooltip（语法树取字面量）/按钮的动作名字面量
+ * [OUTPUT]: 对外提供文案回归：空态标题句首大写（专有名词除外），菜单项与按钮 Title Case（短介词/冠词小写），确认框标题一律是问句，文案里没有 Please/successfully/Oops 这类填充词，同一动作在菜单项与图标按钮上只有一种拼写——同一类组件只有一种写法
+ * [POS]: 2026-10-14 文案统一的守卫测试；新增空态/菜单项时由它拦下大小写漂移
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// emptyTitle matches the literal title a page hands to a shared empty state.
+var emptyTitle = regexp.MustCompile(`(?:emptyState\(c|workspaceEmptyBanner\(c, [^,]+), "([^"]+)"`)
+
+// TestEmptyStateTitlesAreSentenceCase pins one voice for the shared empty
+// states: "Nothing to commit", never "Nothing to Commit". Dialog and menu
+// titles keep Title Case; an empty state reads as a sentence.
+func TestEmptyStateTitlesAreSentenceCase(t *testing.T) {
+	proper := map[string]bool{"Git": true, "SSH": true}
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range emptyTitle.FindAllStringSubmatch(string(src), -1) {
+			seen++
+			words := strings.Fields(match[1])
+			for _, word := range words[1:] {
+				if first := word[0]; first >= 'A' && first <= 'Z' && !proper[word] {
+					t.Errorf("%s: empty-state title %q capitalizes %q; titles are sentence case", name, match[1], word)
+				}
+			}
+		}
+	}
+	if seen < 10 {
+		t.Fatalf("matched only %d empty-state titles; the pattern no longer finds the call sites", seen)
+	}
+}
+
+// menuItemLabel matches the literal label of a context-menu or pull-down item.
+var menuItemLabel = regexp.MustCompile(`\.Item\("([^"]+)"`)
+
+// titleCaseSmallWords are the articles and short prepositions that stay
+// lowercase inside a Title Case label (HIG title style).
+var titleCaseSmallWords = map[string]bool{
+	"a": true, "an": true, "the": true, "and": true, "or": true, "in": true, "into": true,
+	"to": true, "of": true, "on": true, "as": true, "from": true, "with": true, "for": true, "at": true, "by": true,
+}
+
+// buttonLabel matches the literal label of a Button, PrimaryButton or their
+// compact forms; a label built with "+" is checked up to its literal part.
+var buttonLabel = regexp.MustCompile(`(?:regularButton|regularPrimaryButton|compactButton|compactPrimaryButton)\(c, "([^"]+)"`)
+
+// TestButtonLabelsAreTitleCase pins the other half of that voice: buttons read
+// "Select All", "Copy Hash", "Retry Connection" — the same Title Case as the
+// menu items beside them. (The Chat WebView is its own surface and keeps its
+// sentence-case voice; this scans native Go code only.)
+func TestButtonLabelsAreTitleCase(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range buttonLabel.FindAllStringSubmatch(string(src), -1) {
+			seen++
+			for _, word := range strings.Fields(match[1]) {
+				if first := word[0]; first >= 'a' && first <= 'z' && !titleCaseSmallWords[word] {
+					t.Errorf("%s: button %q starts %q with a lowercase letter; buttons are Title Case", name, match[1], word)
+				}
+			}
+		}
+	}
+	if seen < 60 {
+		t.Fatalf("matched only %d button labels; the pattern no longer finds the call sites", seen)
+	}
+}
+
+// TestMenuItemsAreTitleCase pins one voice for menu items: "Copy Branch Name",
+// never "Copy branch name". Articles and short prepositions stay lowercase
+// (HIG title style); tooltips and empty states are the sentence-case voices.
+func TestMenuItemsAreTitleCase(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range menuItemLabel.FindAllStringSubmatch(string(src), -1) {
+			seen++
+			for _, word := range strings.Fields(match[1]) {
+				if first := word[0]; first >= 'a' && first <= 'z' && !titleCaseSmallWords[word] {
+					t.Errorf("%s: menu item %q starts %q with a lowercase letter; menu items are Title Case", name, match[1], word)
+				}
+			}
+		}
+	}
+	if seen < 40 {
+		t.Fatalf("matched only %d menu items; the pattern no longer finds the call sites", seen)
+	}
+}
+
+// confirmTitleTail returns the literal tail of an openConfirm title argument:
+// a string literal, the last operand of a "+" chain (which must be a literal),
+// or a Sprintf format. A title that is a plain variable or call result is not
+// decidable here.
+func confirmTitleTail(e ast.Expr) (string, bool) {
+	switch v := e.(type) {
+	case *ast.BasicLit:
+		if v.Kind != token.STRING {
+			return "", false
+		}
+		text, err := strconv.Unquote(v.Value)
+		return text, err == nil
+	case *ast.BinaryExpr:
+		if lit, ok := v.Y.(*ast.BasicLit); ok {
+			return confirmTitleTail(lit)
+		}
+		// A "+" chain must end in its own literal "?", not in a computed value.
+		return "(a computed value)", true
+	case *ast.CallExpr:
+		if sel, ok := v.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Sprintf" && len(v.Args) > 0 {
+			return confirmTitleTail(v.Args[0])
+		}
+	}
+	return "", false
+}
+
+// TestConfirmTitlesAreQuestions pins one voice for confirm dialogs: every
+// openConfirm title asks — "Close Tab?", "Delete Forever?" — so the dialog
+// title never reads like the toolbar button that opened it ("Empty Trash").
+func TestConfirmTitlesAreQuestions(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	seen := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "openConfirm" || len(call.Args) < 4 {
+				return true
+			}
+			tail, decidable := confirmTitleTail(call.Args[2])
+			if !decidable {
+				return true
+			}
+			seen++
+			if !strings.HasSuffix(tail, "?") {
+				t.Errorf("%s: confirm title ending %q is not a question; confirms read “Close Tab?”", fset.Position(call.Pos()), tail)
+			}
+			return true
+		})
+	}
+	if seen < 18 {
+		t.Fatalf("matched only %d confirm titles; the scan no longer finds the call sites", seen)
+	}
+}
+
+// fillerWord matches words that pad a sentence without telling the reader
+// anything: "Please reopen…", "Saved successfully", "Oops".
+var fillerWord = regexp.MustCompile(`(?i)\b(please|successfully|oops)\b`)
+
+// TestCopyHasNoFillerWords keeps the product voice plain: say what happened
+// and what to do next. It scans every string literal of production code, so
+// toasts, tooltips, dialogs and empty states are all covered.
+func TestCopyHasNoFillerWords(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	seen := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			text, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return true
+			}
+			seen++
+			if word := fillerWord.FindString(text); word != "" {
+				t.Errorf("%s: %q uses %q; say what happened and what to do next", fset.Position(lit.Pos()), text, word)
+			}
+			return true
+		})
+	}
+	if seen < 1000 {
+		t.Fatalf("scanned only %d string literals; the scan no longer finds the source", seen)
+	}
+}
+
+// actionLabels matches the literal names a menu item or an icon button gives
+// an action: .Item("…"), the label and tooltip of gorexIconButton and the tip
+// of gdIconButton. The literal text of a tipped(c, anchor, "…") tooltip is
+// read from the syntax tree instead (tippedLabels): its anchor can run over
+// many lines.
+var actionLabels = []*regexp.Regexp{
+	regexp.MustCompile(`\.Item\("([^"]+)"`),
+	regexp.MustCompile(`gorexIconButton\([^"\n]*"([^"]+)",\s*"([^"]+)"`),
+	regexp.MustCompile(`gdIconButton\([^"\n]*"([^"]+)"`),
+}
+
+// tippedLabels is the literal text of every tipped(c, anchor, "…") call in a
+// source file.
+func tippedLabels(t *testing.T, name string, src []byte) []string {
+	t.Helper()
+	parsed, err := parser.ParseFile(token.NewFileSet(), name, src, 0)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	var labels []string
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) < 3 {
+			return true
+		}
+		if fn, ok := call.Fun.(*ast.Ident); !ok || fn.Name != "tipped" {
+			return true
+		}
+		if lit, ok := call.Args[2].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			if label, err := strconv.Unquote(lit.Value); err == nil {
+				labels = append(labels, label)
+			}
+		}
+		return true
+	})
+	return labels
+}
+
+// TestSameActionIsSpelledOnce pins "one name per action": "Copy Path" in one
+// menu and "Copy path" on a toolbar button are the same command written two
+// ways, which reads as two commands. A trailing "…" is not a spelling: the
+// menu item that opens a dialog keeps it, the icon button does not.
+func TestSameActionIsSpelledOnce(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spellings := map[string]map[string][]string{} // lowercase -> spelling -> where
+	seen := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		record := func(label string) {
+			seen++
+			label = strings.TrimRight(label, "… ")
+			key := strings.ToLower(label)
+			if spellings[key] == nil {
+				spellings[key] = map[string][]string{}
+			}
+			spellings[key][label] = append(spellings[key][label], name)
+		}
+		for _, pattern := range actionLabels {
+			for _, match := range pattern.FindAllStringSubmatch(string(src), -1) {
+				for _, label := range match[1:] {
+					record(label)
+				}
+			}
+		}
+		for _, label := range tippedLabels(t, name, src) {
+			record(label)
+		}
+	}
+	for key, variants := range spellings {
+		if len(variants) > 1 {
+			t.Errorf("%q is spelled %d ways: %v", key, len(variants), variants)
+		}
+	}
+	if seen < 100 {
+		t.Fatalf("matched only %d action labels; the patterns no longer find the call sites", seen)
+	}
+}
+
+// commitTimeFormat matches a commit's own time being formatted at a call
+// site — which is how the meta line and the row tooltip each came to spell it.
+var commitTimeFormat = regexp.MustCompile(`\.Time\.Format\(`)
+
+// pluralHedge matches a "(s)" written after a noun: it hedges instead of
+// agreeing with the count.
+var pluralHedge = regexp.MustCompile(`(?i)\b(?:file|session|message|commit|line|item|host|agent|pane|result|entry)\(s\)`)
+
+// TestFileCountIsPluralisedByTheHelper pins one way to say how many files:
+// pluralFiles ("1 file", "2 files"). A count glued to a literal plural —
+// "%d files", itoa(n) + " files" — says "1 files" for the commonest state,
+// and "file(s)" is a hedge, not a sentence.
+func TestFileCountIsPluralisedByTheHelper(t *testing.T) {
+	for n, want := range map[int]string{0: "0 files", 1: "1 file", 2: "2 files"} {
+		if got := pluralFiles(n); got != want {
+			t.Fatalf("pluralFiles(%d) = %q, want %q", n, got, want)
+		}
+	}
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	users := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.CallExpr:
+				if id, ok := n.Fun.(*ast.Ident); ok && id.Name == "pluralFiles" {
+					users++
+				}
+			case *ast.BasicLit:
+				if n.Kind != token.STRING {
+					return true
+				}
+				text, err := strconv.Unquote(n.Value)
+				if err != nil {
+					return true
+				}
+				if strings.Contains(text, "%d files") || strings.HasPrefix(text, " files") {
+					t.Errorf("%s: %q glues a count to a literal plural; use pluralFiles", fset.Position(n.Pos()), text)
+				}
+				if hedge := pluralHedge.FindString(text); hedge != "" {
+					t.Errorf("%s: %q hedges with %q; agree with the count (pluralFiles / pluralS)", fset.Position(n.Pos()), text, hedge)
+				}
+			}
+			return true
+		})
+	}
+	if users < 5 {
+		t.Fatalf("only %d pluralFiles uses; the count labels should all go through it", users)
+	}
+}

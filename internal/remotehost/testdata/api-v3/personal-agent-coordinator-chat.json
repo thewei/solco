@@ -1,0 +1,23 @@
+{
+  "assistantId": "a_0000000000000001",
+  "provider": "omp",
+  "turns": [
+    {
+      "user": true,
+      "text": "remember the launch plan",
+      "tsMs": 1793959202000
+    },
+    {
+      "user": false,
+      "narration": "Noted: the launch plan is on file.",
+      "tsMs": 1793959203000,
+      "steps": [
+        {
+          "kind": "narration",
+          "text": "Noted: the launch plan is on file.",
+          "tsMs": 1793959203000
+        }
+      ]
+    }
+  ]
+}

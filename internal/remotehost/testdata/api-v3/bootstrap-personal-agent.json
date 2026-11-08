@@ -1,0 +1,28 @@
+{
+  "capabilities": {
+    "assistantSystemPush": true,
+    "chat": true,
+    "personalAgent": true,
+    "personalAgentActivityNotices": true,
+    "personalAgentApprove": true,
+    "personalAgentAutonomy": true,
+    "personalAgentGroupArchive": true,
+    "personalAgentGroups": true,
+    "personalAgentManage": true,
+    "personalAgentMemory": true,
+    "personalAgentNarrativeReports": true,
+    "personalAgentPersona": true,
+    "personalAgentPlans": true,
+    "personalAgentProactivity": true,
+    "personalAgentRoutines": true,
+    "terminal": true
+  },
+  "hostId": "",
+  "hostName": "Test Mac",
+  "instances": [
+    {
+      "id": "default"
+    }
+  ],
+  "version": "test"
+}

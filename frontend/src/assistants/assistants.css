@@ -1,0 +1,1108 @@
+/* Assistants page (product decision 2026-11-03). Same surface tokens as the
+   Chat (theme.css); only the state hues are local. Presentation only. */
+
+.as,
+.as-boot,
+.as-empty {
+  height: 100%;
+}
+
+.as-boot {
+  background: var(--content);
+}
+
+.as {
+  display: flex;
+  flex-direction: column;
+  background: var(--content);
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.as-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--content);
+  color: var(--text);
+}
+
+.as-empty h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.as-empty p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.as-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.as-row.end {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.as-row > strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.as-btn {
+  font: inherit;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.as-btn:hover {
+  background: var(--code-bg);
+}
+
+.as-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.as-btn.danger {
+  color: var(--danger);
+}
+
+.as-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.as-link {
+  font: inherit;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.as-error {
+  margin: 4px 24px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.as-count {
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--code-bg);
+}
+
+.as-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.as-card {
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.as-card.quiet {
+  opacity: 0.85;
+}
+
+.as-text {
+  margin: 0;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.as-note-preview {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.as-meta,
+.as-none {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.as-chip {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text-muted);
+}
+
+.as-chip.active,
+.as-chip.done,
+.as-chip.completed {
+  color: var(--ok);
+}
+
+.as-chip.running,
+.as-chip.starting,
+.as-chip.claimed {
+  color: var(--working);
+}
+
+.as-chip.blocked,
+.as-chip.review_required,
+.as-chip.uncertain,
+.as-chip.paused,
+.as-chip.stale,
+.as-chip.draft {
+  color: var(--warning);
+}
+
+.as-chip.failed,
+.as-chip.cancelled {
+  color: var(--danger);
+}
+
+.as-run {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.as-err {
+  color: var(--danger);
+}
+
+.as-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.as-dot.done {
+  background: var(--ok);
+}
+
+.as-dot.running,
+.as-dot.starting {
+  background: var(--working);
+}
+
+.as-dot.failed,
+.as-dot.cancelled {
+  background: var(--danger);
+}
+
+.as-dot.uncertain,
+.as-dot.blocked {
+  background: var(--warning);
+}
+
+.as-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30; /* above the More drawer (10) and its menus (20/21): a sheet opened with the drawer up is whole */
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.as-sheet {
+  width: min(440px, calc(100vw - 48px));
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.as-sheet h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.as-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.as-field input,
+.as-field textarea,
+.as-field select,
+.as-input {
+  font: inherit;
+  color: var(--text);
+  background: var(--content);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 8px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.as-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.as-sub {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.as-clip {
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.as-reason {
+  margin: 0;
+  font-size: 12px;
+  color: var(--amber, var(--text));
+}
+
+.as-reason.failed_start {
+  color: var(--red, var(--text));
+}
+
+/* ---- chat-first layout (designs/assistants-chat-first) ---- */
+
+.as-head {
+  height: 48px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.as-head h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.as-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.as-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.as-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text-muted);
+}
+
+.as-state.warn {
+  color: var(--warning);
+}
+
+.as-state.bad {
+  color: var(--danger);
+}
+
+.as-dot.ok {
+  background: var(--ok);
+}
+
+.as-dot.work {
+  background: var(--working);
+}
+
+.as-dot.warn {
+  background: var(--warning);
+}
+
+.as-dot.bad {
+  background: var(--danger);
+}
+
+.as-needs {
+  font: inherit;
+  font-size: 11px;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.as-ib {
+  font: inherit;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.as-ib:hover,
+.as-ib.on {
+  background: var(--code-bg);
+  color: var(--text);
+}
+
+.as-menu-wrap {
+  position: relative;
+}
+
+.as-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.as-menu {
+  position: absolute;
+  right: 0;
+  top: 32px;
+  z-index: 21;
+  width: 232px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.as-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.as-menu button:hover:not(:disabled) {
+  background: var(--code-bg);
+}
+
+.as-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.as-menu button.danger {
+  color: var(--danger);
+}
+
+.as-menu hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 4px 0;
+}
+
+.as-error {
+  margin: 8px 16px 0;
+  align-items: flex-start;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.as-note {
+  margin: 8px 16px 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--code-bg);
+  color: var(--text-muted);
+}
+
+.as-note.warn {
+  color: var(--warning);
+}
+
+/* The reporting outbox is Solco metadata above the conversation, never a
+   synthetic Chat turn. Keep owner-reconciliation controls quiet and readable. */
+.as-report {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+}
+.as-report p { margin: 0; line-height: 1.45; }
+.as-report .as-meta { color: var(--text-muted); }
+.as-report-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.as-report-actions .as-btn { font-size: 12px; }
+
+/* Settled-work cards in the composer column, above the input. */
+.as-results {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.as-result {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.as-result-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.as-result-text strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.as-result.bad .as-meta {
+  color: var(--danger);
+}
+
+.as-strip {
+  margin: 10px 16px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+  flex: none;
+}
+
+.as-strip-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.as-strip-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.as-strip-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.as-strip-text p {
+  margin: 2px 0;
+}
+
+/* The body: conversation + the More drawer over its right edge. */
+.as-body.chat {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.as-chatwrap {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.as-shell {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.as-shell-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px;
+}
+
+.as-hello {
+  margin: auto;
+  max-width: 440px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.as-hello h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.as-hello p.as-meta {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.as-hello p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.as-thread {
+  width: min(680px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.as-user {
+  align-self: flex-end;
+  max-width: 80%;
+  white-space: pre-wrap;
+  background: var(--code-bg);
+  border-radius: 18px;
+  padding: 8px 14px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* The agent chip is a native select dressed as the Chat's model chip. */
+.as-agent {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--i2);
+  padding-right: 8px;
+}
+
+.as-agent:focus-visible {
+  outline: 1px solid var(--hair3);
+}
+
+.as-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 100%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
+}
+
+.as-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.as-tabs button:not(.as-ib) {
+  font: inherit;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.as-tabs button.on {
+  color: var(--text);
+  background: var(--code-bg);
+}
+
+.as-dbody {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.as-sheet-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Group chat (Assistants 3.1 U1). Same tokens as the Assistant page; messages are selectable. */
+.gc-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.gc-stack {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.gc-stack > span {
+  display: inline-flex;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--content);
+}
+
+.gc-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.gc-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+}
+
+.gc-hint {
+  margin: auto;
+  max-width: 360px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.gc-hint kbd {
+  font: inherit;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--code-bg);
+}
+
+.gc-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 78%;
+}
+
+.gc-row.mine {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.gc-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.gc-row.mine .gc-col {
+  align-items: flex-end;
+}
+
+.gc-author {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.gc-bubble-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gc-row.mine .gc-bubble-wrap {
+  flex-direction: row-reverse;
+}
+
+.gc-bubble {
+  padding: 7px 12px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  min-width: 0;
+}
+
+.gc-bubble:not(.mine) {
+  white-space: normal;
+}
+
+.gc-bubble.mine {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-contrast);
+}
+
+.gc-mention {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.gc-mention.mine {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.gc-quote {
+  margin-bottom: 4px;
+  padding-left: 8px;
+  border-left: 2px solid currentColor;
+  opacity: 0.7;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.gc-reply {
+  font: inherit;
+  font-size: 11px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.gc-bubble-wrap:hover .gc-reply,
+.gc-reply:focus-visible {
+  opacity: 1;
+}
+
+.gc-deliv {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gc-chip {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.gc-chip.failed,
+.gc-chip.uncertain {
+  color: var(--danger);
+}
+
+.gc-fact,
+.gc-status {
+  align-self: center;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.gc-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+}
+
+.gc-pill {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text-muted);
+}
+
+.gc-pill.warn {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.gc-task.done .gc-pill {
+  color: var(--ok);
+}
+
+.gc-task.failed .gc-pill {
+  color: var(--danger);
+}
+
+.gc-warn,
+.gc-error {
+  margin: 0 20px 4px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.gc-replying {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--code-bg);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.gc-replying > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The member popover anchors to the Chat-style composer card. */
+.gc-cmp {
+  position: relative;
+}
+
+.gc-pop {
+  position: absolute;
+  left: 8px;
+  bottom: calc(100% + 6px);
+  min-width: 180px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  z-index: 5;
+}
+
+.gc-pop li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.gc-pop li.on {
+  background: var(--code-bg);
+}
+
+.gc-members {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.gc-members li,
+.gc-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gc-pick {
+  flex: 1;
+  cursor: pointer;
+}
+
+.gc-members .gc-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.gc-link {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* Work style (Assistants 3.1 U2). */
+.as-field textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.45;
+}
+
+.as-mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.as-mcp .as-row {
+  flex-wrap: wrap;
+}
+
+.as-mcp-state {
+  padding-left: 24px;
+}
+
+/* One status lane for every independent task owned by a Coordinator. */
+.as-workpulse {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 29px;
+  padding: 3px 20px;
+  border-bottom: 1px solid var(--hair);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.as-workpulse-title { font-weight: 600; color: var(--text); }
+.as-workpulse-stats { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-workpulse .as-link { flex: none; }
+
+.as-review {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.as-path {
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.as-proof {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.as-artifact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Drawer: the Tasks tab's view chips sit in the body, not under a header rule. */
+.as-tabs.as-filters {
+  padding: 0 0 4px;
+  border-bottom: 0;
+}
+
+.as-adv > summary {
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.as-sub.as-first {
+  margin-top: 0;
+}

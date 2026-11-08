@@ -1,0 +1,27 @@
+{
+  "replayed": false,
+  "result": {
+    "deliveries": [
+      {
+        "assistantId": "a_0000000000000008",
+        "attempts": 0,
+        "id": "d_0000000000000010",
+        "messageId": "m_0000000000000011",
+        "state": "queued"
+      }
+    ],
+    "message": {
+      "authorKind": "user",
+      "body": "@Bo can you check the launch plan?",
+      "createdAt": 1800000000000,
+      "groupId": "g_0000000000000009",
+      "id": "m_0000000000000011",
+      "kind": "text",
+      "mentions": [
+        "a_0000000000000008"
+      ],
+      "seq": 1
+    }
+  },
+  "schema": 1
+}

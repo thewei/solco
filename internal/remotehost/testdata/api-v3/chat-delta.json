@@ -1,0 +1,13 @@
+{
+  "t": "chat_delta",
+  "paneId": "w1:p1",
+  "baseSeq": 1,
+  "seq": 2,
+  "start": 1,
+  "turns": [
+    {
+      "user": false,
+      "narration": "Hello live stream!"
+    }
+  ]
+}

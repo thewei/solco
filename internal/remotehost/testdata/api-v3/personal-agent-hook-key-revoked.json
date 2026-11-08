@@ -1,0 +1,15 @@
+{
+  "key": {
+    "id": "hk_0000000000000020",
+    "assistantId": "a_0000000000000001",
+    "sources": [
+      "github",
+      "ci"
+    ],
+    "status": "revoked",
+    "createdAt": 1800000002000,
+    "revokedAt": 1800000002000,
+    "lastUsedAt": 1800000002000
+  },
+  "schema": 1
+}

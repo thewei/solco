@@ -1,0 +1,130 @@
+{
+  "assistant": {
+    "id": "a_0000000000000001",
+    "name": "Ada",
+    "description": "Follows my pull requests",
+    "rolePrompt": "",
+    "scope": "personal",
+    "workspaceRefs": [],
+    "coordinatorSession": "",
+    "defaultPolicy": "review",
+    "status": "active",
+    "revision": 1,
+    "createdAt": 1800000000000,
+    "updatedAt": 1800000000000,
+    "primary": true
+  },
+  "coordinator": {
+    "assistantId": "a_0000000000000001",
+    "state": "stopped",
+    "taskId": "t_0000000000000004",
+    "revision": 4,
+    "stopReason": "idle"
+  },
+  "agents": [
+    {
+      "id": "omp",
+      "label": "OMP"
+    }
+  ],
+  "goals": [
+    {
+      "id": "g_0000000000000002",
+      "assistantId": "a_0000000000000001",
+      "title": "Watch PR 12",
+      "objective": "Tell me when it changes",
+      "state": "active",
+      "evidence": "",
+      "commitments": [
+        {
+          "id": "c_0000000000000003",
+          "assistantId": "a_0000000000000001",
+          "goalId": "g_0000000000000002",
+          "kind": "manual",
+          "successCriteria": "merged",
+          "exitCondition": "merged or closed",
+          "spec": "{}",
+          "state": "active",
+          "nextCheckAt": 0,
+          "lastCheckedAt": 0,
+          "lastError": "",
+          "cursor": "",
+          "revision": 2,
+          "createdAt": 1800000000000,
+          "updatedAt": 1800000000000
+        }
+      ],
+      "revision": 2,
+      "createdAt": 1800000000000,
+      "updatedAt": 1800000000000
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t_0000000000000004",
+      "assistantId": "a_0000000000000001",
+      "goalId": "g_0000000000000002",
+      "ruleId": "",
+      "parentTaskId": "",
+      "kind": "research",
+      "title": "Check the PR",
+      "brief": "Read it.",
+      "repoPath": "",
+      "agent": "claude",
+      "model": "",
+      "state": "running",
+      "needsYou": false,
+      "reviewState": "",
+      "attempt": 1,
+      "revision": 5,
+      "createdAt": 1800000000000,
+      "updatedAt": 1800000000000,
+      "runs": [
+        {
+          "id": "r_0000000000000005",
+          "taskId": "t_0000000000000004",
+          "ruleId": "",
+          "eventId": "",
+          "idempotencyKey": "task:t_0000000000000004:1",
+          "status": "running",
+          "claimant": "daemon",
+          "herdrSession": "default",
+          "workspaceId": "w1",
+          "paneId": "w1:p1",
+          "agentSessionId": "",
+          "label": "",
+          "result": "",
+          "error": "",
+          "createdAt": 1800000000000,
+          "startedAt": 1800000000000,
+          "finishedAt": 0
+        }
+      ]
+    }
+  ],
+  "approvals": [
+    {
+      "id": "p_0000000000000007",
+      "assistantId": "a_0000000000000001",
+      "subjectKind": "task",
+      "subjectId": "t_0000000000000004",
+      "action": "merge work/x",
+      "actionHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expectedRevision": 5,
+      "expiresAt": 1800003600000,
+      "state": "pending",
+      "decidedAt": 0,
+      "createdAt": 1800000000000
+    }
+  ],
+  "results": [
+    {
+      "taskId": "t_0000000000000004",
+      "title": "Check it",
+      "state": "done",
+      "at": 1800000000000,
+      "herdrSession": "default",
+      "paneId": "w1:p1"
+    }
+  ]
+}

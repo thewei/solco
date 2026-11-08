@@ -1,0 +1,315 @@
+/**
+ * [INPUT]: 依赖标准库 encoding/json, path/filepath, strconv, strings, time, unicode/utf8
+ * [OUTPUT]: CleanTitleCandidate, cleanTitleCandidate, clipText, epochMS, toolInput, formatTokens, projectName
+ * [POS]: internal/history 的纯文本、时间戳、JSON 字段解析工具集，被各 Provider 解析器及 nativeui 会话标题解析消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+package history
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
+
+func clipText(text string, max int) (string, bool) {
+	if len(text) <= max {
+		return text, false
+	}
+	end := max
+	for end > 0 && !utf8.RuneStart(text[end]) {
+		end--
+	}
+	return text[:end] + "\n… (truncated)", true
+}
+
+func epochMS(value any) int64 {
+	switch value := value.(type) {
+	case string:
+		parsed, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return 0
+		}
+		return parsed.UnixMilli()
+	case float64:
+		if value > 1e12 {
+			return int64(value)
+		}
+		if value > 0 {
+			return int64(value * 1000)
+		}
+	case json.Number:
+		number, err := strconv.ParseFloat(string(value), 64)
+		if err == nil {
+			return epochMS(number)
+		}
+	}
+	return 0
+}
+
+func projectName(cwd string) string {
+	if cwd == "" {
+		return "Unknown project"
+	}
+	name := filepath.Base(cwd)
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		return "Unknown project"
+	}
+	return name
+}
+
+// taskPreamble is the fixed lead-in omp's task tool puts in front of every
+// sub-agent assignment; it is followed by a "# Target" header and the repo
+// path, so left in, every sub-agent session shares one title head.
+const taskPreamble = "Complete assignment thoroughly:"
+
+// stripRunMarker drops the `Solco-Run-Id: <id>` line the Assistants daemon puts
+// in front of every prompt it types, when something follows it.
+func stripRunMarker(text string) string {
+	trimmed := strings.TrimLeft(text, " \t\r\n")
+	if !strings.HasPrefix(trimmed, "Solco-Run-Id: ") {
+		return text
+	}
+	_, rest, found := strings.Cut(trimmed, "\n")
+	if !found || strings.TrimSpace(rest) == "" {
+		return text
+	}
+	return rest
+}
+
+// stripTaskPreamble drops the task tool's lead-in, its "# Target" header and
+// the "仓库 /path" / "Repo /path" token after it, so the title starts at what
+// tells assignments apart. Anything else comes back untouched.
+func stripTaskPreamble(text string) string {
+	rest, ok := strings.CutPrefix(strings.TrimLeft(text, " \t\r\n"), taskPreamble)
+	if !ok {
+		return text
+	}
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	rest = strings.TrimLeft(strings.TrimPrefix(rest, "# Target"), " \t\r\n")
+	for _, label := range []string{"仓库", "Repo", "Repository"} {
+		if tail, ok := strings.CutPrefix(rest, label); ok {
+			tail = strings.TrimLeft(tail, " \t")
+			if strings.HasPrefix(tail, "/") {
+				if end := strings.IndexAny(tail, " \t\r\n（(，,。"); end > 0 {
+					rest = strings.TrimLeft(tail[end:], " \t")
+					if after, ok := cutParenthetical(rest); ok {
+						rest = after
+					}
+					rest = strings.TrimLeft(rest, " \t\r\n，,。.")
+				}
+			}
+			break
+		}
+	}
+	return rest
+}
+
+// cutParenthetical drops a leading （…） / (…) remark and returns what follows.
+func cutParenthetical(text string) (string, bool) {
+	closer := map[string]string{"（": "）", "(": ")"}
+	for open, closeMark := range closer {
+		if strings.HasPrefix(text, open) {
+			if end := strings.Index(text, closeMark); end > 0 {
+				return text[end+len(closeMark):], true
+			}
+		}
+	}
+	return text, false
+}
+
+// CleanTitleCandidate normalizes a raw first prompt or candidate string into
+// a clean, presentation-safe session title.
+func CleanTitleCandidate(raw string) string {
+	return cleanTitleCandidate(raw)
+}
+
+func cleanTitleCandidate(raw string) string {
+	text := stripTagBlock(stripTaskPreamble(stripRunMarker(raw)), "system-reminder")
+	text = stripTagBlock(text, "local-command-caveat")
+	text = stripTagBlock(text, "local-command-stdout")
+	// Skill invocations are injected directives, not user prose; their
+	// attribute-carrying open tag also overruns the generic tag scan below
+	// and used to leak verbatim into titles (F166).
+	text = stripTagBlockWithAttributes(text, "skill")
+
+	args := extractTag(text, "command-args")
+	name := extractTag(text, "command-name")
+	if strings.TrimSpace(args) != "" || strings.TrimSpace(name) != "" {
+		if strings.TrimSpace(args) != "" {
+			text = args
+		} else {
+			text = name
+		}
+	}
+
+	var out strings.Builder
+	for index := 0; index < len(text); {
+		if text[index] != '<' {
+			out.WriteByte(text[index])
+			index++
+			continue
+		}
+		closeIndex := strings.IndexByte(text[index:], '>')
+		if closeIndex < 0 || closeIndex > 61 {
+			out.WriteByte('<')
+			index++
+			continue
+		}
+		out.WriteByte(' ')
+		index += closeIndex + 1
+	}
+	words := strings.Fields(out.String())
+	kept := words[:0]
+	for _, word := range words {
+		// Markdown heading marks ("#", "##") flattened into one line read as noise.
+		if strings.Trim(word, "#") != "" {
+			kept = append(kept, word)
+		}
+	}
+	compact := strings.Join(kept, " ")
+	runes := []rune(compact)
+	if len(runes) > MaxTitle {
+		return string(runes[:MaxTitle]) + "…"
+	}
+	return compact
+}
+
+func stripTagBlock(text, tag string) string {
+	open := "<" + tag + ">"
+	closeTag := "</" + tag + ">"
+	for {
+		start := strings.Index(text, open)
+		if start < 0 {
+			return text
+		}
+		endRelative := strings.Index(text[start:], closeTag)
+		if endRelative < 0 {
+			return text[:start] + " "
+		}
+		end := start + endRelative + len(closeTag)
+		text = text[:start] + " " + text[end:]
+	}
+}
+
+// stripTagBlockWithAttributes removes one <tag attrs>…</tag> block (or, when
+// the close tag is missing, just the open tag) — the attribute-tolerant twin
+// of stripTagBlock for tags like <skill name="…">.
+func stripTagBlockWithAttributes(text, tag string) string {
+	open := "<" + tag
+	closeTag := "</" + tag + ">"
+	for {
+		start := strings.Index(text, open)
+		if start < 0 || start+len(open) < len(text) && !isTagBoundary(text[start+len(open)]) {
+			return text
+		}
+		openEnd := strings.IndexByte(text[start:], '>')
+		if openEnd < 0 {
+			return text[:start]
+		}
+		rest := text[start+openEnd+1:]
+		end := strings.Index(rest, closeTag)
+		if end < 0 {
+			return text[:start] + " " + rest
+		}
+		text = text[:start] + " " + rest[end+len(closeTag):]
+	}
+}
+
+func isTagBoundary(c byte) bool {
+	return c == '>' || c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+func extractTag(text, tag string) string {
+	open := "<" + tag + ">"
+	closeTag := "</" + tag + ">"
+	start := strings.Index(text, open)
+	if start < 0 {
+		return ""
+	}
+	body := text[start+len(open):]
+	end := strings.Index(body, closeTag)
+	if end < 0 {
+		return ""
+	}
+	return body[:end]
+}
+
+func injectedUserContent(text string) bool {
+	trimmed := strings.TrimLeft(text, " \t\r\n")
+	prefixes := []string{
+		"<recommended_plugins",
+		"<environment_context",
+		"<user_instructions",
+		"<permissions",
+		"<workspace",
+		"<system-",
+		"<context ",
+		"<session_context",
+		"IMPORTANT: Do NOT read",
+		"Caveat: The messages below",
+		"# Files pasted by the user",
+		"# AGENTS.md instructions", // Codex 0.164+ drops the " for <dir>" tail
+		"<external_codex_apps_",
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return strings.Contains(trimmed, "/.codex/plugins/") ||
+		(strings.Contains(trimmed, "/plugins/cache/") && strings.Contains(trimmed, "SKILL.md"))
+}
+
+func stringifyToolResult(content any) string {
+	switch value := content.(type) {
+	case string:
+		return value
+	case []any:
+		var parts []string
+		for _, item := range value {
+			block, _ := item.(map[string]any)
+			switch block["type"] {
+			case "text":
+				if text, ok := block["text"].(string); ok {
+					parts = append(parts, text)
+				}
+			case "image":
+				parts = append(parts, "[image]")
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]any:
+		data, _ := json.Marshal(value)
+		return string(data)
+	default:
+		return ""
+	}
+}
+
+func toolInput(input any) (preview string, full *string) {
+	if input == nil {
+		return "", nil
+	}
+	data, err := json.MarshalIndent(input, "", "  ")
+	if err != nil || string(data) == "null" {
+		return "", nil
+	}
+	text, _ := clipText(string(data), MaxToolIO)
+	full = &text
+
+	if object, ok := input.(map[string]any); ok {
+		for _, key := range []string{"command", "file_path", "path", "pattern", "query", "url", "description"} {
+			if value, ok := object[key].(string); ok && strings.TrimSpace(value) != "" {
+				preview, _ := clipText(strings.TrimSpace(value), 200)
+				return preview, full
+			}
+		}
+	}
+	preview, _ = clipText(strings.Join(strings.Fields(string(data)), " "), 200)
+	return preview, full
+}

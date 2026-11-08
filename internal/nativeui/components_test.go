@@ -1,0 +1,142 @@
+package nativeui
+
+import (
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+)
+
+func TestRowTintSelectionOutranksHover(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		tokens := designTokens(dark)
+
+		tint, ok := rowTint(tokens, true, true)
+		if !ok || tint != tokens.SidebarSelect {
+			t.Fatalf("dark=%v selected+hover tint = %v ok=%v, want SidebarSelect", dark, tint, ok)
+		}
+		tint, ok = rowTint(tokens, false, true)
+		if !ok || tint != tokens.SidebarHover {
+			t.Fatalf("dark=%v hover-only tint = %v ok=%v, want SidebarHover", dark, tint, ok)
+		}
+		if tint, ok := rowTint(tokens, false, false); ok {
+			t.Fatalf("dark=%v plain row tint = %v ok=%v, want untinted", dark, tint, ok)
+		}
+	}
+}
+
+// TestTreeRowStatePresentation renders the shared tree row through the
+// headless tester in its three appearance states: selected, hovered-untinted
+// surface, and status badge.
+func TestTreeRowStatePresentation(t *testing.T) {
+	view := func(c *ui.Context) {
+		treeRow(c, treeRowSpec{Key: "row:selected", Selected: true, Mark: visualMark{svg: iconFolder}, Label: "Row Selected", Status: "working"})
+		treeRow(c, treeRowSpec{Key: "row:plain", Mark: visualMark{svg: iconTab}, Label: "Row Plain"})
+		treeRow(c, treeRowSpec{Key: "row:status", Mark: visualMark{svg: iconAgent}, Label: "Row Blocked", Status: "blocked"})
+	}
+	tester := ui.NewTester(view, 400, 200)
+	for _, want := range []string{"Row Selected", "Row Plain", "Row Blocked"} {
+		if !tester.HasText(want) {
+			t.Fatalf("tree row states missing %q; texts=%q", want, tester.Texts())
+		}
+	}
+	// The status badge is the dot alone (2026-10-06 A10): the state's
+	// words moved into the tooltip, so no status text renders.
+	for _, statusText := range []string{"Working", "Needs attention"} {
+		if tester.HasText(statusText) {
+			t.Fatalf("tree row status badge rendered text %q; texts=%q", statusText, tester.Texts())
+		}
+	}
+}
+
+// TestTreeRowIndicatorPrecedence pins the single trailing status indicator (2026-10-06
+// annotation round A4, moved to the trailing slot 2026-10-30): an Agent Pane's own state wins, the subtree activity
+// rollup comes next, the raw Status is the fallback, and a quiet row shows
+// nothing. Two dots used to stack at the row's trailing edge.
+func TestTreeRowIndicatorPrecedence(t *testing.T) {
+	dot, detail, ok := treeRowSpec{Dot: opWorking}.indicator()
+	if !ok || dot != ToneWorking || detail != operationalLabel(opWorking) {
+		t.Fatalf("agent dot = %v %q ok=%v, want ToneWorking + label", dot, detail, ok)
+	}
+	idle := treeRowSpec{Dot: opIdle}
+	if dot, _, ok := idle.indicator(); !ok || dot != ToneMuted {
+		t.Fatalf("idle agent dot = %v ok=%v, want muted gray", dot, ok)
+	}
+	dot, detail, ok = treeRowSpec{Activity: sidebarActivity{On: true, Tone: ToneSuccess, Detail: "node on :3000"}}.indicator()
+	if !ok || dot != ToneSuccess || detail != "node on :3000" {
+		t.Fatalf("activity dot = %v %q ok=%v, want green service", dot, detail, ok)
+	}
+	paneBoth := treeRowSpec{Dot: opWorking, Activity: sidebarActivity{On: true, Tone: ToneSuccess}}
+	if dot, _, ok := paneBoth.indicator(); !ok || dot != ToneWorking {
+		t.Fatalf("pane row with both = %v ok=%v, want the agent state to win", dot, ok)
+	}
+	ancestorBoth := treeRowSpec{Status: "working", Activity: sidebarActivity{On: true, Tone: ToneSuccess}}
+	if dot, _, ok := ancestorBoth.indicator(); !ok || dot != ToneSuccess {
+		t.Fatalf("ancestor row with both = %v ok=%v, want the rollup to win", dot, ok)
+	}
+	statusOnly := treeRowSpec{Status: "working"}
+	if dot, _, ok := statusOnly.indicator(); !ok || dot != ToneWorking {
+		t.Fatalf("status fallback = %v ok=%v, want ToneWorking", dot, ok)
+	}
+	quiet := treeRowSpec{Status: "idle"}
+	if _, _, ok := quiet.indicator(); ok {
+		t.Fatalf("quiet row rendered an indicator")
+	}
+}
+
+// TestWorkspaceRowMetaColumnsAlign pins the 2026-10-30 fix: a Workspace row's
+// branch and pane tally sit in fixed columns, and the state slot ends the row
+// — whatever else (dirty, a service dot, no branch at all) the row holds.
+func TestWorkspaceRowMetaColumnsAlign(t *testing.T) {
+	view := func(c *ui.Context) {
+		treeRow(c, treeRowSpec{Key: "r1", Tile: "A", Label: "alpha", Branch: "main", Dirty: true, Count: 3, StatusSlot: true,
+			Activity: sidebarActivity{On: true, Tone: ToneSuccess, Detail: "dev server"}})
+		treeRow(c, treeRowSpec{Key: "r2", Tile: "B", Label: "beta", Branch: "feat/a-rather-long-branch", Count: 12, StatusSlot: true})
+		treeRow(c, treeRowSpec{Key: "r3", Tile: "C", Label: "gamma", Count: 2, StatusSlot: true})
+		treeRow(c, treeRowSpec{Key: "r4", Tile: "D", Label: "delta", Branch: "dev", StatusSlot: true})
+	}
+	tester := ui.NewTester(view, 300, 200)
+	tester.Frame()
+	right := func(label string) float32 {
+		el, ok := tester.Find(label)
+		if !ok {
+			t.Fatalf("%q missing; texts=%q", label, tester.Texts())
+		}
+		return el.X + el.W
+	}
+	counts := []float32{right("3 panes"), right("12 panes"), right("2 panes")}
+	for _, x := range counts[1:] {
+		if x != counts[0] {
+			t.Fatalf("pane tallies end at %v, want one column", counts)
+		}
+	}
+	if a, b := right("main"), right("dev"); a != b {
+		t.Fatalf("branches end at %v and %v, want one column", a, b)
+	}
+}
+
+func TestServiceSlotIsNotAnAgentDot(t *testing.T) {
+	svc := sidebarActivity{On: true, Tone: ToneSuccess, Detail: "node on :3000", Service: true}
+	if !(treeRowSpec{Activity: svc}).serviceSlot() {
+		t.Fatal("a running service must draw as the service square")
+	}
+	if (treeRowSpec{Activity: sidebarActivity{On: true, Tone: ToneSuccess, Detail: "1 agent running"}}).serviceSlot() {
+		t.Fatal("an agent roll-up is a dot, not the service square")
+	}
+	if (treeRowSpec{Dot: opWorking, Activity: svc}).serviceSlot() {
+		t.Fatal("a pane's own Agent state outranks its service and keeps the dot shapes")
+	}
+}
+
+func TestSplitFileExt(t *testing.T) {
+	for name, want := range map[string][2]string{
+		"main.go":             {"main", ".go"},
+		"bootstrap-x.json":    {"bootstrap-x", ".json"},
+		".env":                {".env", ""},
+		"Makefile":            {"Makefile", ""},
+		"a.verylongextension": {"a.verylongextension", ""},
+	} {
+		if stem, ext := splitFileExt(name); stem != want[0] || ext != want[1] {
+			t.Errorf("splitFileExt(%q) = %q, %q; want %q, %q", name, stem, ext, want[0], want[1])
+		}
+	}
+}

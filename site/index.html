@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solco — Coding agents, without the juggling</title>
+  <meta name="description" content="Solco is the native macOS workspace for coding agents, terminal sessions, project files, Git review, devices, and tasks.">
+  <meta property="og:title" content="Solco — Coding agents, without the juggling">
+  <meta property="og:description" content="Native speed. Clear attention. One calm workspace for agents and the work behind them.">
+  <meta property="og:image" content="./assets/appicon/solco-1024.png">
+  <link rel="icon" type="image/png" href="./assets/appicon/favicon-128.png">
+  <link rel="apple-touch-icon" href="./assets/appicon/solco-192.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="solco">
+            <div class="solco">
+  <div class="wrap"><nav class="nav">
+    <a class="brand" href="#features"><img src="./assets/appicon/solco-128.png" alt="">Solco</a>
+    <div class="links"><a href="#features">Features</a><a href="#workflow">Workflow</a><a href="#machines">Machines</a><a href="#ownership">Architecture</a></div>
+    <div class="right"><a href="https://github.com/thewei/solco">GitHub</a><a class="pill" href="#download">Download</a></div>
+  </nav></div>
+  <header class="hero wrap"><div>
+    <h1>Coding agents,<br><span>without the juggling.</span></h1>
+    <p class="sub">Solco is the native macOS workspace for agents and the work behind them. <b>Open it once. Return to what moved.</b></p>
+    <div class="cta"><a class="pill" data-dl href="https://github.com/thewei/solco/releases/latest">Download for Mac</a><span class="latest" data-latest></span><a href="#workflow">Walk the workflow →</a></div>
+    <img class="ram" src="./assets/appicon/solco-512.png" alt="">
+  </div></header>
+  <section class="statement wrap"><p>Native speed. Clear attention. <span>Sessions, terminal, files and review share one calm surface instead of competing for it.</span></p></section>
+  <section id="features" class="herd wrap"><div class="herd-head"><h2>Your workflow,<br><span>step by step.</span></h2><p>Each screen shows the exact moment it belongs to. No feature tour for its own sake.</p></div>
+    <div class="scene"><img src="./assets/screens/product-hero.webp" alt="The complete Solco workspace."></div>
+    <div class="notes">
+      <div class="note"><b>Start a task</b><code>Open a session</code><span>Pick a repo and begin where context belongs.</span></div>
+      <div class="note"><b>Let it work</b><code>Monitor attention</code><span>Terminal and agent stay connected to the task.</span></div>
+      <div class="note"><b>Ship the result</b><code>Review and commit</code><span>Diff, stage and commit beside the session.</span></div>
+    </div>
+  </section>
+  <div class="doc wrap">
+    <aside class="toc"><div class="file">PRODUCT.md</div><a class="on" href="#workflow"><span>01</span>One task surface</a><a href="#machines"><span>02</span>Every machine</a><a href="#review"><span>03</span>Review</a><a href="#ownership"><span>04</span>Ownership</a></aside>
+    <article class="md">
+      <section id="workflow"><h3><i>01</i>One task surface</h3><p>Sessions, terminal and output remain in one native layout. You stop reconstructing context from scattered windows.</p><figure class="crop"><img src="./assets/screens/feature-terminal.webp" alt=""></figure></section>
+      <section id="machines"><h3><i>02</i>Every machine, one view</h3><p>Saved devices and their sessions join the sidebar under their own name.</p><figure class="crop"><img src="./assets/screens/feature-hosts.webp" alt=""></figure></section>
+      <section id="review"><h3><i>03</i>Review before landing</h3><p>Real diffs, staged state and commit flow are native, not another browser tab.</p><figure class="crop"><img src="./assets/screens/feature-git.webp" alt=""></figure></section>
+      <section id="ownership"><h3><i>04</i>Ownership stays clear</h3><p>Solco owns presentation. <b>Herdr owns sessions, processes and runtime state.</b> No second runtime hidden behind the interface.</p><pre class="pre"><span class="d"># the boundary is simple</span>
+Solco  → native macOS workspace
+Herdr  → sessions · panes · agents · process life</pre></section>
+    </article>
+  </div>
+  <section id="download" class="end wrap"><h2>Ready in one install.<br><span>Keep the workflow.</span></h2>
+    <div class="recommend">
+      <div class="recommend-copy">
+        <small data-recommended-platform>Detected platform</small>
+        <b data-recommended-title>Solco</b>
+        <span data-recommended-detail>Default to Apple Silicon. Intel and every other package remain below.</span>
+      </div>
+      <a class="pill" data-release-download data-download-id="darwin-arm64-dmg" href="https://github.com/thewei/solco/releases/latest">Download DMG</a>
+    </div>
+    <div class="downloads-head"><h3>All platforms</h3><a href="https://github.com/thewei/solco/releases/latest">Browse complete release →</a></div>
+    <div class="downloads">
+      <div class="platform-group">
+        <header><b>macOS</b><span>DMG install · universal archive</span></header>
+        <a data-download-id="darwin-arm64-dmg" href="https://github.com/thewei/solco/releases/latest" download><i>DMG</i><span>Apple Silicon</span><em>10.0 MB</em></a>
+        <a data-download-id="darwin-amd64-dmg" href="https://github.com/thewei/solco/releases/latest" download><i>DMG</i><span>Intel</span><em>11.1 MB</em></a>
+        <a data-download-id="darwin-arm64-archive" href="https://github.com/thewei/solco/releases/latest" download><i>Archive</i><span>Apple Silicon</span><em>11.3 MB</em></a>
+        <a data-download-id="darwin-amd64-archive" href="https://github.com/thewei/solco/releases/latest" download><i>Archive</i><span>Intel</span><em>12.1 MB</em></a>
+      </div>
+      <div class="platform-group">
+        <header><b>Windows</b><span>Per-user installer · portable archive</span></header>
+        <a data-download-id="windows-amd64-installer" href="https://github.com/thewei/solco/releases/latest" download><i>Installer</i><span>x86-64</span><em>8.5 MB</em></a>
+        <a data-download-id="windows-amd64-archive" href="https://github.com/thewei/solco/releases/latest" download><i>Archive</i><span>x86-64</span><em>10.6 MB</em></a>
+      </div>
+      <div class="platform-group">
+        <header><b>Linux</b><span>DEB install · portable archive</span></header>
+        <a data-download-id="linux-amd64-deb" href="https://github.com/thewei/solco/releases/latest" download><i>DEB</i><span>x86-64</span><em>10.6 MB</em></a>
+        <a data-download-id="linux-arm64-deb" href="https://github.com/thewei/solco/releases/latest" download><i>DEB</i><span>ARM64</span><em>9.8 MB</em></a>
+        <a data-download-id="linux-amd64-archive" href="https://github.com/thewei/solco/releases/latest" download><i>Archive</i><span>x86-64</span><em>10.8 MB</em></a>
+        <a data-download-id="linux-arm64-archive" href="https://github.com/thewei/solco/releases/latest" download><i>Archive</i><span>ARM64</span><em>10.0 MB</em></a>
+        <a data-download-id="linux-install-script" href="https://github.com/thewei/solco/releases/latest" download><i>Script</i><span>All architectures</span><em>8.7 KB</em></a>
+      </div>
+    </div>
+    <p class="download-note">Release builds use the MyGo signed updater. Install once, then check for updates from the app menu. Signed update manifests stay in the complete release.</p>
+  </section>
+  <footer class="foot wrap"><div class="me"><div class="top"><img src="./assets/appicon/solco-128.png" alt=""><b>Solco</b></div><span>Coding agents, without the juggling.</span><span>Free and open source, GPL-3.0.</span></div><div><h4>Product</h4><a href="#features">Features</a><a href="#download">Download</a></div><div><h4>Learn</h4><a href="#workflow">Workflow</a><a href="#ownership">Architecture</a></div><div><h4>Community</h4><a href="https://github.com/thewei/solco">GitHub</a><a href="https://herdr.dev">Herdr</a></div></footer>
+</div>
+
+  </div>
+  <script>
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(button.dataset.copy);
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy'; }, 1400);
+      });
+    });
+  </script>
+  <script>
+
+    const downloadCatalog = [
+      { id: "darwin-arm64-dmg", group: "macOS", chip: "Apple Silicon", title: "DMG", test: asset => asset.name.endsWith(".arm64.dmg") },
+      { id: "darwin-amd64-dmg", group: "macOS", chip: "Intel", title: "DMG", test: asset => asset.name.endsWith(".amd64.dmg") },
+      { id: "darwin-arm64-archive", group: "macOS", chip: "Apple Silicon", title: "Archive", test: asset => asset.name.includes("darwin-arm64.tar.gz") },
+      { id: "darwin-amd64-archive", group: "macOS", chip: "Intel", title: "Archive", test: asset => asset.name.includes("darwin-amd64.tar.gz") },
+      { id: "windows-amd64-installer", group: "Windows", chip: "x86-64", title: "Installer", test: asset => asset.name.includes("Setup") && asset.name.endsWith(".exe") },
+      { id: "windows-amd64-archive", group: "Windows", chip: "x86-64", title: "Archive", test: asset => asset.name.includes("windows-amd64.tar.gz") },
+      { id: "linux-amd64-deb", group: "Linux", chip: "x86-64", title: "DEB", test: asset => asset.name.endsWith("_amd64.deb") },
+      { id: "linux-arm64-deb", group: "Linux", chip: "ARM64", title: "DEB", test: asset => asset.name.endsWith("_arm64.deb") },
+      { id: "linux-amd64-archive", group: "Linux", chip: "x86-64", title: "Archive", test: asset => asset.name.includes("linux-amd64.tar.gz") },
+      { id: "linux-arm64-archive", group: "Linux", chip: "ARM64", title: "Archive", test: asset => asset.name.includes("linux-arm64.tar.gz") },
+      { id: "linux-install-script", group: "Linux", chip: "All architectures", title: "Script", test: asset => asset.name === "install.sh" }
+    ];
+
+    const sizeOf = bytes => {
+      if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+      return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    };
+
+    const architecture = async () => {
+      const userAgent = navigator.userAgent;
+      if (/aarch64|arm64/i.test(userAgent)) return "arm64";
+      try {
+        const data = navigator.userAgentData && await navigator.userAgentData.getHighEntropyValues(["architecture"]);
+        if (data?.architecture === "arm") return "arm64";
+        if (data?.architecture === "x86") return "amd64";
+      } catch {}
+      if (/Mac|iPhone|iPad/.test(userAgent)) return "arm64";
+      return "amd64";
+    };
+
+    const platform = () => {
+      const userAgent = navigator.userAgent;
+      if (/Windows/i.test(userAgent)) return "Windows";
+      if (/Android/i.test(userAgent)) return "GitHub";
+      if (/Mac|iPhone|iPad/i.test(userAgent)) return "macOS";
+      if (/Linux|X11/i.test(userAgent)) return "Linux";
+      return "GitHub";
+    };
+
+    const assetFor = (release, id) => {
+      const item = downloadCatalog.find(entry => entry.id === id);
+      return release.assets.find(asset => item.test(asset));
+    };
+
+    const paintRelease = release => {
+      const version = String(release.tag_name || "").replace(/^v/, "");
+      for (const item of downloadCatalog) {
+        const asset = assetFor(release, item.id);
+        const links = document.querySelectorAll(`[data-download-id="${item.id}"]`);
+        if (!asset) continue;
+        const url = `https://github.com/thewei/solco/releases/download/${release.tag_name}/${encodeURIComponent(asset.name)}`;
+        links.forEach(link => {
+          link.href = url;
+          const size = link.querySelector("em");
+          if (size) size.textContent = sizeOf(asset.size);
+        });
+      }
+      const dmg = (release.assets || []).find(x => /^Solco\..*\.arm64\.dmg$/.test(x.name));
+      if (dmg) document.querySelectorAll("[data-dl]").forEach(a => { a.href = dmg.browser_download_url; });
+      document.querySelectorAll("[data-latest]").forEach(el => {
+        const a = document.createElement("a");
+        a.href = release.html_url || "https://github.com/thewei/solco/releases";
+        a.textContent = "v" + version;
+        el.textContent = "";
+        el.appendChild(a);
+      });
+    };
+
+    const showRecommendation = async release => {
+      const [osName, arch] = [platform(), await architecture()];
+      const ids = {
+        macOS: arch === "arm64" ? "darwin-arm64-dmg" : "darwin-amd64-dmg",
+        Windows: "windows-amd64-installer",
+        Linux: arch === "arm64" ? "linux-arm64-deb" : "linux-amd64-deb",
+        GitHub: "darwin-arm64-dmg"
+      };
+      const id = ids[osName];
+      const asset = assetFor(release, id);
+      const item = downloadCatalog.find(entry => entry.id === id);
+      const links = document.querySelectorAll(`[data-download-id="${id}"]`);
+      const button = document.querySelector("[data-release-download]");
+      if (asset && links.length) {
+        const url = links[0].href;
+        document.querySelectorAll("[data-recommended-platform]").forEach(node => { node.textContent = `Recommended for ${osName} · ${item.chip}`; });
+        document.querySelectorAll("[data-recommended-title]").forEach(node => { node.textContent = `Solco ${release.tag_name.replace(/^v/, "")}`; });
+        document.querySelectorAll("[data-recommended-detail]").forEach(node => { node.textContent = `${item.title} · ${sizeOf(asset.size)} · install once and receive signed updates in-app.`; });
+        if (button) button.href = url;
+      }
+    };
+
+    // Latest release: cached 1 h in localStorage. On any failure the page
+    // keeps its releases/latest page links — asset filenames are never
+    // hardcoded, release asset names carry the version.
+    (async () => {
+      const KEY = "solco-latest", TTL = 36e5;
+      let rel = null;
+      try { const c = JSON.parse(localStorage.getItem(KEY) || "null"); if (c && Date.now() - c.t < TTL) rel = c.r; } catch {}
+      if (!rel) {
+        try {
+          const res = await fetch("https://api.github.com/repos/thewei/solco/releases/latest", { headers: { Accept: "application/vnd.github+json" } });
+          if (res.ok) { rel = await res.json(); try { localStorage.setItem(KEY, JSON.stringify({ r: rel, t: Date.now() })); } catch {} }
+        } catch {}
+      }
+      if (!rel) return;
+      paintRelease(rel);
+      await showRecommendation(rel);
+    })();
+  </script>
+</body>
+</html>

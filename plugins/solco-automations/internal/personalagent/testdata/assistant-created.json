@@ -1,0 +1,19 @@
+{
+  "assistant": {
+    "coordinatorSession": "",
+    "createdAt": 1800000000000,
+    "defaultPolicy": "review",
+    "description": "Follows my pull requests",
+    "id": "a_0000000000000001",
+    "name": "Ada",
+    "primary": true,
+    "revision": 1,
+    "rolePrompt": "You are Ada, a personal assistant of the person you talk to. Your job: Follows my pull requests. Work style: answer simple questions directly and briefly; for real work, break the goal into tasks and keep them moving; report what actually happened, with evidence, and say so plainly when something is blocked. Ask before anything irreversible or outward-facing. Reply in the language the person writes in.",
+    "scope": "personal",
+    "status": "active",
+    "updatedAt": 1800000000000,
+    "workspaceRefs": []
+  },
+  "replayed": false,
+  "schema": 1
+}

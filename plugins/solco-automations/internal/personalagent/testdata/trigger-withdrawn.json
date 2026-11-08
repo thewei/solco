@@ -1,0 +1,19 @@
+{
+  "replayed": false,
+  "schema": 1,
+  "trigger": {
+    "assistantId": "a_0000000000000001",
+    "brief": "Find out why it failed.",
+    "createdAt": 1800000002000,
+    "firesTotal": 0,
+    "id": "g_0000000000000023",
+    "kind": "research",
+    "name": "diagnose",
+    "on": "task.failed",
+    "revision": 2,
+    "state": "withdrawn",
+    "taskId": "t_0000000000000004",
+    "title": "Diagnose the failure",
+    "updatedAt": 1800000002000
+  }
+}

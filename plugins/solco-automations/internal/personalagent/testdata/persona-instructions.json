@@ -1,0 +1,24 @@
+{
+  "instructions": {
+    "applied": [],
+    "assistantId": "a_0000000000000008",
+    "body": "Be brief and precise.",
+    "history": [
+      {
+        "body": "Be brief and precise.",
+        "createdAt": 1800000000000,
+        "revision": 2,
+        "source": "user"
+      },
+      {
+        "body": "You are Bo, a personal assistant of the person you talk to. Work style: answer simple questions directly and briefly; for real work, break the goal into tasks and keep them moving; report what actually happened, with evidence, and say so plainly when something is blocked. Ask before anything irreversible or outward-facing. Reply in the language the person writes in.",
+        "createdAt": 1800000000000,
+        "revision": 1,
+        "source": "default"
+      }
+    ],
+    "revision": 2
+  },
+  "replayed": false,
+  "schema": 1
+}

@@ -1,0 +1,43 @@
+{
+  "commands": [
+    {
+      "name": "/compact",
+      "insert": "/compact ",
+      "detail": "Compact the conversation",
+      "kind": "text"
+    }
+  ],
+  "skills": [
+    {
+      "name": "/review",
+      "insert": "/review ",
+      "detail": "Review the diff",
+      "kind": "skill"
+    }
+  ],
+  "models": [
+    {
+      "id": "anthropic/sonnet",
+      "efforts": [
+        {
+          "label": "low",
+          "send": "/effort low"
+        },
+        {
+          "label": "high",
+          "send": "/effort high"
+        }
+      ]
+    }
+  ],
+  "modelVerb": "/model ",
+  "defaultModel": "sonnet",
+  "modelNote": "Saved as the default model.",
+  "efforts": [
+    {
+      "label": "medium",
+      "send": "/effort medium"
+    }
+  ],
+  "effortNote": "Saved as the model's default effort."
+}

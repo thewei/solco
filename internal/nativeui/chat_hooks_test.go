@@ -1,0 +1,414 @@
+package nativeui
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/thewei/solco/internal/apphook"
+	"github.com/thewei/solco/internal/chatsession"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/herdr"
+)
+
+// The fixture is the real visible screen of a Claude Code AskUserQuestion
+// prompt (captured via pane.read, 2026-10-11).
+const askUserQuestionScreen = `❯ hi
+
+  Thought for 14s, ran 1 shell command
+
+⏺ Hi! I'm ready to help with Solco (herdr-client). What would you like to work on?
+
+✻ Baked for 17s · done 1:43 PM
+
+❯ 向我展示一下用户问答，也就是 Ask user question，给个例子
+
+  Thought for 15s, ran 1 shell command
+
+⏺ 好的，下面就是 AskUserQuestion 的实际效果：
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ 演示问题  ☐ 主题演示  ✔ Submit  →
+
+这是一个演示：你想让我接下来关注 Solco 的哪个部分？
+
+❯ 1. nativeui 界面层
+     MyGo Native UI 展示层：面板、标签页、交互状态等
+  2. herdr adapter
+     herdr 适配层：与 Herdr 运行时的 API 对接
+  3. 随便看看
+     只是看个效果，不需要真的回答
+  4. Type something.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel`
+
+func TestDetectClaudeInteractionAskUserQuestion(t *testing.T) {
+	kind, prompt, options, ok := chatsession.DetectScreenPrompt(askUserQuestionScreen)
+	if !ok {
+		t.Fatal("the AskUserQuestion screen must detect an interaction")
+	}
+	if kind != conversation.InteractionQuestion {
+		t.Fatalf("kind = %q, want question", kind)
+	}
+	if !strings.Contains(prompt, "哪个部分") {
+		t.Fatalf("prompt = %q, want the full-width question line", prompt)
+	}
+	want := []string{"nativeui 界面层", "herdr adapter", "随便看看", "Type something.", "Chat about this"}
+	if len(options) != len(want) {
+		t.Fatalf("options = %q, want %q", options, want)
+	}
+	for i := range want {
+		if options[i] != want[i] {
+			t.Fatalf("option %d = %q, want %q", i, options[i], want[i])
+		}
+	}
+}
+
+func TestDetectClaudeInteractionPermissionSheet(t *testing.T) {
+	screen := strings.Join([]string{
+		"⏺ Reading internal/nativeui/chat_hooks.go",
+		"",
+		"Do you want to make this edit to chat_hooks.go?",
+		"❯ 1. Yes",
+		"  2. Yes, allow all edits during this session",
+		"  3. No, tell Claude what to do differently (esc)",
+		"",
+		"Enter to select · Arrow keys to navigate · Esc to cancel",
+	}, "\n")
+	kind, prompt, options, ok := chatsession.DetectScreenPrompt(screen)
+	if !ok {
+		t.Fatal("the permission sheet must detect an interaction")
+	}
+	if kind != conversation.InteractionPermission {
+		t.Fatalf("kind = %q, want permission", kind)
+	}
+	if !strings.HasPrefix(prompt, "Do you want") {
+		t.Fatalf("prompt = %q", prompt)
+	}
+	if len(options) != 3 || options[2] != "No, tell Claude what to do differently (esc)" {
+		t.Fatalf("options = %q", options)
+	}
+}
+
+func TestDetectClaudeInteractionIgnoresNumberedTranscript(t *testing.T) {
+	// Numbered lists in plain transcript output, with no footer and no
+	// question line, must not become interactions.
+	screen := strings.Join([]string{
+		"⏺ Here is the plan:",
+		"1. Read the files",
+		"2. Write the code",
+		"3. Run the tests",
+		"",
+		"❯ done",
+	}, "\n")
+	if _, _, _, ok := chatsession.DetectScreenPrompt(screen); ok {
+		t.Fatal("plain numbered transcript must not detect")
+	}
+}
+
+// TestProjectionEquivalent pins the hook-refresh dedupe: identical agent
+// status surfaces skip the apply; status, revision or membership changes
+// must apply.
+func TestProjectionEquivalent(t *testing.T) {
+	base := herdr.Projection{
+		Agents: []herdr.Agent{
+			{PaneID: "p1", Status: "idle", Revision: 3},
+			{PaneID: "p2", Status: "working", Revision: 8},
+		},
+		Panes: []herdr.Pane{{ID: "p1"}, {ID: "p2"}},
+		Tabs:  []herdr.Tab{{ID: "t1"}},
+	}
+	if !projectionEquivalent(base, base) {
+		t.Fatal("identical projections must compare equivalent")
+	}
+	flip := base
+	agents := append([]herdr.Agent(nil), base.Agents...)
+	agents[1].Status = "idle"
+	flip.Agents = agents
+	if projectionEquivalent(base, flip) {
+		t.Fatal("a status change must not compare equivalent")
+	}
+	bump := base
+	agents = append([]herdr.Agent(nil), base.Agents...)
+	agents[0].Revision = 4
+	bump.Agents = agents
+	if projectionEquivalent(base, bump) {
+		t.Fatal("a revision bump must not compare equivalent")
+	}
+	grow := base
+	grow.Panes = append(grow.Panes, herdr.Pane{ID: "p3"})
+	if projectionEquivalent(base, grow) {
+		t.Fatal("a pane membership change must not compare equivalent")
+	}
+}
+
+// TestScheduleProjectionRefreshHeadlessGuard pins the guard: without a
+// runtime the hook-driven refresh is a no-op and never latches the debounce.
+func TestScheduleProjectionRefreshHeadlessGuard(t *testing.T) {
+	shell := NewShell()
+	shell.scheduleProjectionRefresh()
+	shell.chatRefreshMu.Lock()
+	pending := shell.chatRefreshPending
+	shell.chatRefreshMu.Unlock()
+	if pending {
+		t.Fatal("headless shell must not latch the refresh debounce")
+	}
+}
+
+// TestReconcileBlockedInteractionsDeduplicates pins the pending-guard: a
+// pane with a live pending interaction is not re-detected, so repeated
+// projection applies can never duplicate interaction cards.
+func TestReconcileBlockedInteractionsDeduplicates(t *testing.T) {
+	shell := NewShell()
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Status: "blocked"},
+		},
+	}
+	shell.interactionBroker.Publish(conversation.PendingInteraction{
+		ID:             "ia-seed",
+		ConversationID: "live:claude:term-1",
+		AgentPaneID:    "p1",
+		Kind:           conversation.InteractionQuestion,
+		Prompt:         "seeded",
+		Options:        []string{"a", "b"},
+	})
+	for range 3 {
+		shell.reconcileBlockedInteractions()
+		if pending := len(shell.interactionBroker.PendingForPane("p1")); pending != 1 {
+			t.Fatalf("pending interactions = %d, want 1", pending)
+		}
+	}
+}
+
+// A card whose agent is no longer blocked (answered in the terminal or
+// finished) retires on the next projection apply.
+func TestReconcileBlockedInteractionsRetiresCardsOfAgentsThatMovedOn(t *testing.T) {
+	shell := NewShell()
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{{TerminalID: "term-1", PaneID: "p1", Status: "idle"}},
+	}
+	shell.interactionBroker.Publish(conversation.PendingInteraction{
+		ID: "ia-stale", ConversationID: "live:omp:term-1", AgentPaneID: "p1",
+		Kind: conversation.InteractionQuestion, Prompt: "stale", Options: []string{"a", "b"},
+	})
+	shell.reconcileBlockedInteractions()
+	if pending := len(shell.interactionBroker.PendingForPane("p1")); pending != 0 {
+		t.Fatalf("a card of a finished agent must retire: %d", pending)
+	}
+}
+
+// TestReconcileBlockedInteractionsDispatchesSourceless pins the other side:
+// a blocked pane without a pending interaction is scheduled for detection
+// (headless: detect is a no-op on the nil runtime, but the reconcile must
+// not touch paned that are not blocked).
+func TestReconcileBlockedInteractionsDispatchesSourceless(t *testing.T) {
+	shell := NewShell()
+	shell.projection = herdr.Projection{
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Status: "blocked"},
+			{TerminalID: "term-2", PaneID: "p2", Status: "idle"},
+		},
+	}
+	shell.reconcileBlockedInteractions()
+	if pending := len(shell.interactionBroker.PendingForPane("p1")); pending != 0 {
+		t.Fatalf("detection without a runtime must not publish: %d", pending)
+	}
+	if pending := len(shell.interactionBroker.PendingForPane("p2")); pending != 0 {
+		t.Fatalf("idle pane must never be detected: %d", pending)
+	}
+}
+
+func TestHandleAppHookStatusUpdatesProjectionAndInteractions(t *testing.T) {
+	shell := NewShell()
+	shell.projection = herdr.Projection{
+		Panes: []herdr.Pane{
+			{ID: "p1", TerminalID: "term-1", ProjectID: "proj-1", TabID: "tab-1"},
+			{ID: "p2", TerminalID: "term-2", ProjectID: "proj-1", TabID: "tab-1"},
+		},
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Status: "idle", Revision: 1},
+		},
+	}
+
+	// 1. Existing agent status change to working
+	shell.handleAppHookStatus(apphook.StatusEvent{
+		PaneID: "p1",
+		Status: "working",
+		Agent:  "agy",
+	})
+	if shell.projection.Agents[0].Status != "working" {
+		t.Fatalf("agent status = %q, want working", shell.projection.Agents[0].Status)
+	}
+	if shell.projection.Agents[0].Kind != "agy" {
+		t.Fatalf("agent kind = %q, want agy", shell.projection.Agents[0].Kind)
+	}
+	if shell.projection.Agents[0].Revision != 2 {
+		t.Fatalf("agent revision = %d, want 2", shell.projection.Agents[0].Revision)
+	}
+	if shell.projection.Panes[0].AgentStatus != "working" {
+		t.Fatalf("pane status = %q, want working", shell.projection.Panes[0].AgentStatus)
+	}
+
+	// 2. Synthesize agent for unlisted pane
+	shell.handleAppHookStatus(apphook.StatusEvent{
+		PaneID:    "p2",
+		Status:    "working",
+		Agent:     "claude",
+		SessionID: "sess-claude-1",
+	})
+	if len(shell.projection.Agents) != 2 {
+		t.Fatalf("agents len = %d, want 2", len(shell.projection.Agents))
+	}
+	p2Agent := shell.projection.Agents[1]
+	if p2Agent.PaneID != "p2" || p2Agent.Kind != "claude" || p2Agent.Status != "working" {
+		t.Fatalf("synthesized agent = %+v", p2Agent)
+	}
+	if p2Agent.AgentSession == nil || p2Agent.AgentSession.Value != "sess-claude-1" {
+		t.Fatalf("synthesized session = %+v", p2Agent.AgentSession)
+	}
+}
+
+func TestHandleAppHookSessionUpdatesSessionIdentity(t *testing.T) {
+	shell := NewShell()
+	shell.projection = herdr.Projection{
+		Panes: []herdr.Pane{
+			{ID: "p1", TerminalID: "term-1"},
+		},
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Status: "idle", Revision: 5},
+		},
+	}
+
+	shell.handleAppHookSession(apphook.SessionEvent{
+		PaneID:           "p1",
+		Agent:            "agy",
+		AgentSessionID:   "conv-uuid-999",
+		AgentSessionPath: "/tmp/transcript.jsonl",
+		Source:           "solco",
+	})
+
+	agent := shell.projection.Agents[0]
+	if agent.AgentSession == nil {
+		t.Fatal("agent session must not be nil")
+	}
+	if agent.AgentSession.Agent != "agy" {
+		t.Fatalf("agent session agent = %q, want agy", agent.AgentSession.Agent)
+	}
+	if agent.AgentSession.Kind != "path" || agent.AgentSession.Value != "/tmp/transcript.jsonl" {
+		t.Fatalf("agent session = %+v", agent.AgentSession)
+	}
+	if agent.Revision != 6 {
+		t.Fatalf("agent revision = %d, want 6", agent.Revision)
+	}
+}
+
+// Herdr's agent list carries no session for Claude Code: the identity its
+// hooks announced must survive the next projection refresh and a restart,
+// or Chat could never bind to the transcript.
+func TestHookSessionIdentitySurvivesProjectionRefreshAndRestart(t *testing.T) {
+	shell := NewShell()
+	shell.activeInstance = "default"
+	shell.projection = herdr.Projection{
+		Panes: []herdr.Pane{{ID: "p1", TerminalID: "term-1"}},
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Kind: "claude"},
+			{TerminalID: "term-2", PaneID: "p2", Kind: "codex"},
+		},
+	}
+	shell.rememberHookIdentity("p1", &herdr.AgentSessionIdentity{Agent: "claude", Kind: "id", Source: "apphook", Value: "sess-1"})
+
+	// A restart: the identity round-trips through the session snapshot.
+	saved := shell.captureSession()
+	if got := saved.HookSessions["default/p1"]; got.Value != "sess-1" || got.TerminalID != "term-1" {
+		t.Fatalf("snapshot = %+v", got)
+	}
+	fresh := NewShell()
+	fresh.activeInstance = "default"
+	fresh.restoreSessionHooks(saved)
+	fresh.projection = shell.projection
+	fresh.projection.Agents = []herdr.Agent{
+		{TerminalID: "term-1", PaneID: "p1", Kind: "claude"},
+		{TerminalID: "term-2", PaneID: "p2", Kind: "codex"},
+	}
+	fresh.restampHookIdentities()
+	if got := fresh.projection.Agents[0].AgentSession; got == nil || got.Value != "sess-1" {
+		t.Fatalf("claude agent lost its hook identity: %+v", got)
+	}
+
+	// A pane reused by another provider, or a different terminal, inherits nothing.
+	fresh.hookIdentities["default/p2"] = hookIdentity{identity: herdr.AgentSessionIdentity{Agent: "claude", Kind: "id", Value: "stale"}}
+	fresh.hookIdentities["default/p1"] = hookIdentity{identity: herdr.AgentSessionIdentity{Agent: "claude", Kind: "id", Value: "old"}, terminalID: "term-other"}
+	fresh.projection.Agents[0].AgentSession = nil
+	fresh.restampHookIdentities()
+	if fresh.projection.Agents[1].AgentSession != nil {
+		t.Fatal("a pane reused by another provider must not inherit the old identity")
+	}
+	if fresh.projection.Agents[0].AgentSession != nil {
+		t.Fatal("a different terminal must not inherit the old identity")
+	}
+}
+
+func TestDetectInteractionRecognisesOmpReviewSheet(t *testing.T) {
+	screen := "╭─ Ask ─╮\n│ Review answers │\n│ 1. a: x │\n│ ❯ Submit │\n╰─╯"
+	kind, prompt, options, ok := chatsession.DetectScreenPrompt(screen)
+	if !ok || kind != conversation.InteractionQuestion || prompt != "Submit your answers?" || len(options) != 2 || options[0] != "Submit" || options[1] != "Cancel" {
+		t.Fatalf("review sheet = %v %q %v %v", kind, prompt, options, ok)
+	}
+}
+
+// A blocked pane whose screen showed no prompt is left alone for a moment, so
+// a burst of projection events does not re-read it each time; the hold lapses,
+// a prompt found clears it, and a pending card still wins.
+func TestShouldProbeBlockedPaneHoldsAfterAMiss(t *testing.T) {
+	shell := NewShell()
+	if !shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("a pane never probed must be probed")
+	}
+	shell.interactionMisses.miss("p1", timeNow())
+	if shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("a pane that just showed no prompt must be left alone")
+	}
+	if !shell.shouldProbeBlockedPane("p2") {
+		t.Fatal("the hold is per pane")
+	}
+	shell.interactionMisses.at["p1"] = timeNow().Add(-2 * interactionMissHold)
+	if !shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("the hold must lapse")
+	}
+	shell.interactionMisses.miss("p1", timeNow())
+	shell.interactionMisses.clear("p1")
+	if !shell.shouldProbeBlockedPane("p1") {
+		t.Fatal("clearing the miss must allow an immediate probe")
+	}
+}
+
+// TestBlockedFlipSurfacesTranscriptQuestionOnProjectionApply pins the omp
+// ask gap (2026-11-06 report: the ask never surfaced as a Question card
+// while the agent sat blocked): the ask row lands in the transcript a beat
+// BEFORE Herdr flips the status, and once the pane parks the transcript file
+// goes quiet, so the live tail's reconcile (applyLiveSync) never runs again.
+// The projection apply that carries the blocked status is the one reconcile
+// point that sees both facts together.
+func TestBlockedFlipSurfacesTranscriptQuestionOnProjectionApply(t *testing.T) {
+	s := NewShell()
+	s.loading = false
+	s.chatPaneID = "p1"
+	s.chatConversationID = "live:omp:term-1"
+	input := `{"questions":[{"header":"repair","question":"Authorize the fix?","options":[{"label":"Authorize"},{"label":"Report only"}],"recommended":0}]}`
+	s.chatTurns = []conversation.TimelineTurn{{
+		Steps: []conversation.TimelineStep{{Kind: "tool", Tool: &conversation.ConversationToolCall{
+			ID: "call-1", Name: "ask", Input: &input,
+		}}},
+	}}
+	s.projection = herdr.Projection{
+		Projects: []herdr.Project{{ID: "w1"}},
+		Agents:   []herdr.Agent{{TerminalID: "term-1", PaneID: "p1", Kind: "omp", Status: "blocked"}},
+	}
+
+	s.applyProjection(s.projection, false)
+
+	if pending := s.interactionBroker.PendingForPane("p1"); len(pending) == 0 {
+		t.Fatal("a blocked flip on a pane whose transcript ends in an unanswered ask must publish the question card")
+	}
+}

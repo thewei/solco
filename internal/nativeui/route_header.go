@@ -1,0 +1,176 @@
+package nativeui
+
+import (
+	"strings"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/history"
+)
+
+/**
+ * [INPUT]: 依赖 Shell 当前 Router 路径与 Workspace 表面、settingsSections 导航表、History 会话元数据、Hosts 根路径
+ * [OUTPUT]: 对外提供 routeHeaderSpec（含该页 Actions 菜单构建器，由 titlebar.go 画在右侧工具簇）、Shell.routeHeader（Terminal/Chat 工作面以外各页——含遗留 /chat 整页——的标题栏身份）、Shell.routeHeaderBlock（ghost 芯片面包屑：灰色父级 › 当前页 + 事实，与 Workspace 同一组件脸；2026-11-01 起内页无大标题）
+ * [POS]: 标题栏是每个页面标题与页面动作的唯一归属——内页只渲染内容，不再各自画页头（2026-10-14 产品决策）；内页标题统一是与 Workspace 同脸的面包屑（2026-11-01 取消大标题），没有第二行上下文，页面需要的路径/事实放在内容里或标题的悬停提示里；Terminal/Chat 仍是面包屑切换器
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// routeHeaderSpec is what the title bar shows on every page that is not a
+// Terminal or Chat surface (whose identity is the project › tab › pane
+// switcher): the page's breadcrumb — after a muted parent when the page opens
+// from another — and the page's Actions menu. Pages render content only;
+// a path or fact a page needs lives in its content, or in the title's
+// tooltip, never in a second header row.
+type routeHeaderSpec struct {
+	parent   string              // the page this one opens from; empty for a top-level page
+	onParent func()              // makes the parent a way back to it; nil leaves it plain text
+	title    string              // the page itself
+	titleTip string              // the full text on hover: the folder a page browses, the file it edits
+	facts    string              // muted run after the title: what a session is about
+	actions  func(m *ui.Menu)    // the page's Actions pull-down; nil shows none
+	tools    func(c *ui.Context) // page tools drawn in the trailing cluster just ahead of Actions (Quota's Used | Left); nil shows none
+}
+
+// routeHeader resolves the title bar's identity for the current route; the
+// Terminal and Chat surfaces and unknown routes report false and keep their
+// own bar.
+func (s *Shell) routeHeader() (routeHeaderSpec, bool) {
+	path := s.router.Path()
+	switch {
+	case path == routeWorkspace:
+		// A Commit is the one page of its own over the workspace route.
+		if s.surface.current() == WorkspaceSurfaceCommit {
+			return routeHeaderSpec{title: "Commit", actions: s.surfaceOverflowItems}, true
+		}
+	case path == routeHistory || path == "/history-projects":
+		return routeHeaderSpec{title: "Sessions"}, true
+	case path == routeQuota:
+		return s.usageRouteHeader(), true
+	case strings.HasPrefix(path, routeHistory+"/"):
+		return s.sessionRouteHeader(strings.TrimPrefix(path, routeHistory+"/")), true
+	case path == routeHosts:
+		return s.hostsRouteHeader(), true
+	case strings.HasPrefix(path, "/settings/"):
+		return routeHeaderSpec{parent: "Settings", title: settingsSectionFor(path).label}, true
+	case path == routeAutomations:
+		return routeHeaderSpec{title: "Automations"}, true
+	case path == routeAssistants:
+		return routeHeaderSpec{title: "Assistants"}, true
+	case strings.HasPrefix(path, "/inspector/"):
+		return s.inspectorRouteHeader(strings.TrimPrefix(path, "/inspector/")), true
+	case path == "/chat":
+		return routeHeaderSpec{title: "Chat"}, true
+	}
+	return routeHeaderSpec{}, false
+}
+
+// sessionRouteHeader names the open session in the bar: the Sessions parent
+// leads back to the list, the facts run on after the title, and the
+// session's action menu is the bar's Actions.
+func (s *Shell) sessionRouteHeader(key string) routeHeaderSpec {
+	spec := routeHeaderSpec{parent: "Sessions", onParent: s.showHistoryIndex, title: "Session"}
+	meta := s.historyDetailMeta(key)
+	if meta == nil {
+		return spec
+	}
+	spec.title = fallbackText(meta.Title, history.Untitled)
+	facts := []string{meta.ProjectName, meta.Agent.DisplayName()}
+	if s.chatModel != "" && s.chatReadOnly && s.chatConversationID == key {
+		facts = append(facts, s.chatModel)
+	}
+	spec.facts = strings.Join(nonEmptyStrings(facts), " · ")
+	snapshot := *meta
+	spec.actions = func(m *ui.Menu) { s.sessionMenu(m, snapshot, false) }
+	return spec
+}
+
+// hostsRouteHeader titles the Hosts page; the SSH config it indexes is the
+// title's tooltip, and a selected host adds its action menu to the bar's
+// Actions.
+func (s *Shell) hostsRouteHeader() routeHeaderSpec {
+	path := s.hosts.mainPath
+	if path == "" {
+		path = "~/.ssh/config"
+	}
+	spec := routeHeaderSpec{title: "Hosts", titleTip: path}
+	if entry, ok := s.selectedHostEntry(); ok && !s.hosts.editing {
+		spec.actions = func(m *ui.Menu) { s.hostEntryMenu(m, entry) }
+	}
+	return spec
+}
+
+// inspectorRouteHeader titles the Agent inspector with the agent it shows.
+func (s *Shell) inspectorRouteHeader(paneID string) routeHeaderSpec {
+	title := "Agent Inspector"
+	for _, card := range s.workbenchCards() {
+		if card.PaneID == paneID {
+			title = fallbackText(card.Title, title)
+			break
+		}
+	}
+	return routeHeaderSpec{title: title}
+}
+
+// settingsSectionFor resolves a /settings/... path to its navigation entry,
+// General for the unknown ones (the page the layout falls back to).
+func settingsSectionFor(path string) settingsSection {
+	for _, section := range settingsSections {
+		if section.path == path {
+			return section
+		}
+	}
+	return settingsSections[0]
+}
+
+// routeHeaderBlock draws a route's identity as the breadcrumb the Workspace
+// bar wears (2026-11-01: no inner page has a large title any more): ghost
+// chips joined by chevrons that belong to no button. A parent is the muted
+// chip — a way back, with the chip face on hover, when onParent is set — and
+// the page itself the current chip in full ink; the facts run on after it,
+// muted. A long title gives way with an ellipsis instead of pushing the
+// bar's tools — the Actions menu among them, titlebarTools — out.
+func (s *Shell) routeHeaderBlock(c *ui.Context, spec routeHeaderSpec) {
+	t := c.Theme()
+	k := gorexColorsOf(t.Dark)
+	typ := Typography()
+	sp := Spacing()
+	ui.Row(c).FillWidth().MinWidth(0).Gap(sp.XS).AlignItems(ui.Center).Children(func() {
+		if spec.parent != "" {
+			var parent ui.Element
+			if spec.onParent != nil {
+				parent = ui.ButtonBase(c).Label(spec.parent)
+				gorexToggleFace(parent, k, false)
+			} else {
+				parent = ui.Row(c)
+			}
+			parent.Height(Controls().RegularHeight).Shrink(0).Radius(Radius().Row).
+				Padding(0, sp.M).AlignItems(ui.Center)
+			ink := t.TextMuted
+			if spec.onParent != nil && parent.Hovered() {
+				ink = t.Text
+			}
+			parent.Children(func() {
+				ui.Text(c, spec.parent).FontSize(typ.Section).FontWeight(WeightRegular).
+					TextColor(ink).SingleLine()
+			})
+			if spec.onParent != nil && parent.Clicked() {
+				spec.onParent()
+			}
+			crumbSeparator(c)
+		}
+		tip := spec.titleTip
+		if tip == "" {
+			tip = spec.title
+		}
+		current := ui.Row(c).Height(Controls().RegularHeight).Radius(Radius().Row).
+			Padding(0, sp.M).AlignItems(ui.Center).Shrink(1).MinWidth(0).MaxWidth(crumbLastMaxWidth)
+		current.Children(func() {
+			ui.Text(c, spec.title).FontSize(typ.Section).FontWeight(WeightRegular).TextColor(t.Text).
+				SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+		})
+		tipped(c, current, tip)
+		if spec.facts != "" {
+			tipped(c, ui.Text(c, spec.facts).FontSize(typ.BodySmall).TextColor(t.TextMuted).
+				SingleLine().Ellipsis("…").Shrink(2).MinWidth(0), spec.facts)
+		}
+	})
+}

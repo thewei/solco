@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "stale_revision",
+    "message": "the file changed since it was read"
+  }
+}

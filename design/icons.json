@@ -1,0 +1,926 @@
+{
+ "$comment": "The one icon registry (Tabler outline, MIT). id = product meaning; go = nativeui vars, chat = Chat page keys. Generated into internal/nativeui/icons_gen.go, frontend/src/icons.generated.ts and solco-mobile/src/theme/icons.generated.ts by design/gen.mjs.",
+ "stroke": {
+  "pointer": 1.5,
+  "touch": 2
+ },
+ "icons": [
+  {
+   "id": "nav.terminal",
+   "tabler": "terminal-2",
+   "filled": false,
+   "go": [
+    "iconTerminal"
+   ],
+   "chat": [
+    "terminal"
+   ]
+  },
+  {
+   "id": "nav.changes",
+   "tabler": "git-fork",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "nav.sessions",
+   "tabler": "history",
+   "filled": false,
+   "go": [
+    "iconHistory"
+   ],
+   "chat": []
+  },
+  {
+   "id": "nav.files",
+   "tabler": "folder",
+   "filled": true,
+   "go": [
+    "iconFolder"
+   ],
+   "chat": []
+  },
+  {
+   "id": "nav.hosts",
+   "tabler": "world",
+   "filled": true,
+   "go": [
+    "iconGlobe"
+   ],
+   "chat": [
+    "web"
+   ]
+  },
+  {
+   "id": "nav.usage",
+   "tabler": "chart-bar",
+   "filled": false,
+   "go": [
+    "iconQuota"
+   ],
+   "chat": []
+  },
+  {
+   "id": "nav.settings",
+   "tabler": "settings",
+   "filled": true,
+   "go": [
+    "iconSettings"
+   ],
+   "chat": []
+  },
+  {
+   "id": "nav.automations",
+   "tabler": "bolt",
+   "filled": true,
+   "go": [
+    "iconBolt"
+   ],
+   "chat": []
+  },
+  {
+   "id": "nav.assistants",
+   "tabler": "sparkles",
+   "filled": false,
+   "go": [
+    "iconSparkles"
+   ],
+   "chat": []
+  },
+  {
+   "id": "nav.workspace",
+   "tabler": "briefcase",
+   "filled": true,
+   "go": [
+    "iconWorkspace"
+   ],
+   "chat": []
+  },
+  {
+   "id": "nav.about",
+   "tabler": "star",
+   "filled": false,
+   "go": [
+    "iconAbout"
+   ],
+   "chat": []
+  },
+  {
+   "id": "agent.agent",
+   "tabler": "message-chatbot",
+   "filled": false,
+   "go": [
+    "iconAgent"
+   ],
+   "chat": [
+    "agent"
+   ]
+  },
+  {
+   "id": "surface.chat",
+   "tabler": "message",
+   "filled": true,
+   "go": [
+    "iconChat"
+   ],
+   "chat": []
+  },
+  {
+   "id": "surface.tab",
+   "tabler": "app-window",
+   "filled": false,
+   "go": [
+    "iconTab"
+   ],
+   "chat": []
+  },
+  {
+   "id": "surface.split-right",
+   "tabler": "layout-columns",
+   "filled": false,
+   "go": [
+    "iconSplit"
+   ],
+   "chat": []
+  },
+  {
+   "id": "surface.split-down",
+   "tabler": "layout-rows",
+   "filled": false,
+   "go": [
+    "iconSplitDown"
+   ],
+   "chat": []
+  },
+  {
+   "id": "surface.sidebar",
+   "tabler": "layout-sidebar",
+   "filled": true,
+   "go": [
+    "iconPanel"
+   ],
+   "chat": []
+  },
+  {
+   "id": "surface.dock",
+   "tabler": "layout-sidebar-right",
+   "filled": true,
+   "go": [
+    "iconPanelRight"
+   ],
+   "chat": []
+  },
+  {
+   "id": "surface.zoom",
+   "tabler": "arrows-maximize",
+   "filled": false,
+   "go": [
+    "iconZoom"
+   ],
+   "chat": []
+  },
+  {
+   "id": "device.mac",
+   "tabler": "device-desktop",
+   "filled": true,
+   "go": [
+    "iconDesktop"
+   ],
+   "chat": []
+  },
+  {
+   "id": "device.laptop",
+   "tabler": "device-laptop",
+   "filled": false,
+   "go": [
+    "iconLaptop"
+   ],
+   "chat": []
+  },
+  {
+   "id": "device.server",
+   "tabler": "server",
+   "filled": false,
+   "go": [
+    "iconServer"
+   ],
+   "chat": []
+  },
+  {
+   "id": "net.cloud",
+   "tabler": "cloud",
+   "filled": true,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "act.new",
+   "tabler": "plus",
+   "filled": false,
+   "go": [
+    "iconPlus"
+   ],
+   "chat": [
+    "plus"
+   ]
+  },
+  {
+   "id": "act.search",
+   "tabler": "search",
+   "filled": false,
+   "go": [
+    "iconSearch"
+   ],
+   "chat": [
+    "search"
+   ]
+  },
+  {
+   "id": "act.refresh",
+   "tabler": "refresh",
+   "filled": false,
+   "go": [
+    "iconRefresh"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.edit",
+   "tabler": "pencil",
+   "filled": true,
+   "go": [
+    "iconEdit"
+   ],
+   "chat": [
+    "edit",
+    "pencil"
+   ]
+  },
+  {
+   "id": "act.copy",
+   "tabler": "copy",
+   "filled": false,
+   "go": [
+    "iconCopy"
+   ],
+   "chat": [
+    "copy"
+   ]
+  },
+  {
+   "id": "act.close",
+   "tabler": "x",
+   "filled": false,
+   "go": [
+    "iconClose"
+   ],
+   "chat": [
+    "x"
+   ]
+  },
+  {
+   "id": "act.more",
+   "tabler": "dots",
+   "filled": true,
+   "go": [
+    "iconActions"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.open-external",
+   "tabler": "external-link",
+   "filled": false,
+   "go": [
+    "iconOpen"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.trash",
+   "tabler": "trash",
+   "filled": true,
+   "go": [
+    "iconTrash"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.pin",
+   "tabler": "pin",
+   "filled": true,
+   "go": [
+    "iconPin"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.show",
+   "tabler": "eye",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "act.hide",
+   "tabler": "eye-off",
+   "filled": false,
+   "go": [
+    "iconEyeOff"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.check",
+   "tabler": "check",
+   "filled": false,
+   "go": [
+    "iconCheck"
+   ],
+   "chat": [
+    "check"
+   ]
+  },
+  {
+   "id": "act.minus",
+   "tabler": "minus",
+   "filled": false,
+   "go": [
+    "iconMinus"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.play",
+   "tabler": "player-play",
+   "filled": true,
+   "go": [
+    "iconPlay"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.stop",
+   "tabler": "player-stop",
+   "filled": true,
+   "go": [
+    "iconSquare"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.dictate",
+   "tabler": "microphone",
+   "filled": false,
+   "go": [
+    "iconMic"
+   ],
+   "chat": [
+    "mic"
+   ]
+  },
+  {
+   "id": "act.sort",
+   "tabler": "arrows-sort",
+   "filled": false,
+   "go": [
+    "iconSort"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.expand",
+   "tabler": "selector",
+   "filled": false,
+   "go": [
+    "iconExpand"
+   ],
+   "chat": []
+  },
+  {
+   "id": "act.fold",
+   "tabler": "fold",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "act.unfold",
+   "tabler": "fold-down",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "act.send",
+   "tabler": "arrow-up",
+   "filled": false,
+   "go": [],
+   "chat": [
+    "up"
+   ]
+  },
+  {
+   "id": "arrow.up",
+   "tabler": "arrow-up",
+   "filled": false,
+   "go": [
+    "iconArrowUp"
+   ],
+   "chat": []
+  },
+  {
+   "id": "arrow.down",
+   "tabler": "arrow-down",
+   "filled": false,
+   "go": [
+    "iconArrowDown"
+   ],
+   "chat": []
+  },
+  {
+   "id": "arrow.left",
+   "tabler": "arrow-left",
+   "filled": false,
+   "go": [
+    "iconArrowLeft"
+   ],
+   "chat": []
+  },
+  {
+   "id": "arrow.right",
+   "tabler": "arrow-right",
+   "filled": false,
+   "go": [
+    "iconArrowRight"
+   ],
+   "chat": []
+  },
+  {
+   "id": "chev.up",
+   "tabler": "chevron-up",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "chev.down",
+   "tabler": "chevron-down",
+   "filled": false,
+   "go": [
+    "iconChevronDown"
+   ],
+   "chat": []
+  },
+  {
+   "id": "chev.left",
+   "tabler": "chevron-left",
+   "filled": false,
+   "go": [
+    "iconChevronLeft"
+   ],
+   "chat": []
+  },
+  {
+   "id": "chev.right",
+   "tabler": "chevron-right",
+   "filled": false,
+   "go": [
+    "iconChevron",
+    "iconChevronRight"
+   ],
+   "chat": [
+    "chev"
+   ]
+  },
+  {
+   "id": "fs.folder-plus",
+   "tabler": "folder-plus",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "fs.folder-open",
+   "tabler": "folder-open",
+   "filled": true,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "fs.file",
+   "tabler": "file",
+   "filled": true,
+   "go": [
+    "iconFile"
+   ],
+   "chat": [
+    "read"
+   ]
+  },
+  {
+   "id": "fs.file-text",
+   "tabler": "file-text",
+   "filled": true,
+   "go": [
+    "iconFileText"
+   ],
+   "chat": []
+  },
+  {
+   "id": "fs.file-plus",
+   "tabler": "file-plus",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "git.file-diff",
+   "tabler": "file-diff",
+   "filled": true,
+   "go": [
+    "iconFileDiff"
+   ],
+   "chat": [
+    "diff",
+    "filediff"
+   ]
+  },
+  {
+   "id": "git.branch",
+   "tabler": "git-branch",
+   "filled": false,
+   "go": [
+    "iconBranch"
+   ],
+   "chat": []
+  },
+  {
+   "id": "git.commit",
+   "tabler": "git-commit",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "git.stash",
+   "tabler": "archive",
+   "filled": true,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "git.fetch",
+   "tabler": "cloud-download",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "git.pull",
+   "tabler": "arrow-bar-to-down",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "git.push",
+   "tabler": "arrow-bar-to-up",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "git.tag",
+   "tabler": "tag",
+   "filled": true,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "status.activity",
+   "tabler": "activity",
+   "filled": false,
+   "go": [],
+   "chat": []
+  },
+  {
+   "id": "status.info",
+   "tabler": "info-circle",
+   "filled": true,
+   "go": [
+    "iconInfo"
+   ],
+   "chat": []
+  },
+  {
+   "id": "status.task",
+   "tabler": "square-check",
+   "filled": true,
+   "go": [
+    "iconTask"
+   ],
+   "chat": []
+  },
+  {
+   "id": "status.warn",
+   "tabler": "alert-triangle",
+   "filled": true,
+   "go": [],
+   "chat": [
+    "warn"
+   ]
+  },
+  {
+   "id": "chat.command",
+   "tabler": "terminal",
+   "filled": false,
+   "go": [],
+   "chat": [
+    "command"
+   ]
+  },
+  {
+   "id": "chat.plan",
+   "tabler": "list",
+   "filled": false,
+   "go": [],
+   "chat": [
+    "plan"
+   ]
+  },
+  {
+   "id": "chat.tasks",
+   "tabler": "list-check",
+   "filled": false,
+   "go": [],
+   "chat": [
+    "tasks"
+   ]
+  },
+  {
+   "id": "chat.step",
+   "tabler": "sparkles",
+   "filled": true,
+   "go": [],
+   "chat": [
+    "step"
+   ]
+  },
+  {
+   "id": "chat.shield",
+   "tabler": "shield",
+   "filled": true,
+   "go": [],
+   "chat": [
+    "shield"
+   ]
+  },
+  {
+   "id": "chat.image",
+   "tabler": "photo",
+   "filled": true,
+   "go": [],
+   "chat": [
+    "image"
+   ]
+  },
+  {
+   "id": "chat.help",
+   "tabler": "help-circle",
+   "filled": true,
+   "go": [],
+   "chat": [
+    "help"
+   ]
+  }
+ ],
+ "glyphs": {
+  "terminal-2": {
+   "outline": "<path d=\"M8 9l3 3l-3 3\"/><path d=\"M13 15l3 0\"/><path d=\"M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -12\"/>"
+  },
+  "git-fork": {
+   "outline": "<path d=\"M10 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0\"/><path d=\"M5 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0\"/><path d=\"M15 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0\"/><path d=\"M7 8v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2v-2\"/><path d=\"M12 12l0 4\"/>"
+  },
+  "history": {
+   "outline": "<path d=\"M12 8l0 4l2 2\"/><path d=\"M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5\"/>"
+  },
+  "folder": {
+   "outline": "<path d=\"M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2\"/>"
+  },
+  "world": {
+   "outline": "<path d=\"M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0\"/><path d=\"M3.6 9h16.8\"/><path d=\"M3.6 15h16.8\"/><path d=\"M11.5 3a17 17 0 0 0 0 18\"/><path d=\"M12.5 3a17 17 0 0 1 0 18\"/>"
+  },
+  "chart-bar": {
+   "outline": "<path d=\"M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -6\"/><path d=\"M15 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -10\"/><path d=\"M9 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -14\"/><path d=\"M4 20h14\"/>"
+  },
+  "settings": {
+   "outline": "<path d=\"M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065\"/><path d=\"M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0\"/>"
+  },
+  "bolt": {
+   "outline": "<path d=\"M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11\"/>"
+  },
+  "sparkles": {
+   "outline": "<path d=\"M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2m0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2m-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6\"/>"
+  },
+  "briefcase": {
+   "outline": "<path d=\"M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9\"/><path d=\"M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2\"/><path d=\"M12 12l0 .01\"/><path d=\"M3 13a20 20 0 0 0 18 0\"/>"
+  },
+  "star": {
+   "outline": "<path d=\"M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873l-6.158 -3.245\"/>"
+  },
+  "message-chatbot": {
+   "outline": "<path d=\"M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12\"/><path d=\"M9.5 9h.01\"/><path d=\"M14.5 9h.01\"/><path d=\"M9.5 13a3.5 3.5 0 0 0 5 0\"/>"
+  },
+  "message": {
+   "outline": "<path d=\"M8 9h8\"/><path d=\"M8 13h6\"/><path d=\"M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12\"/>"
+  },
+  "app-window": {
+   "outline": "<path d=\"M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10\"/><path d=\"M6 8h.01\"/><path d=\"M9 8h.01\"/>"
+  },
+  "layout-columns": {
+   "outline": "<path d=\"M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12\"/><path d=\"M12 4l0 16\"/>"
+  },
+  "layout-rows": {
+   "outline": "<path d=\"M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12\"/><path d=\"M4 12l16 0\"/>"
+  },
+  "layout-sidebar": {
+   "outline": "<path d=\"M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12\"/><path d=\"M9 4l0 16\"/>"
+  },
+  "layout-sidebar-right": {
+   "outline": "<path d=\"M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12\"/><path d=\"M15 4l0 16\"/>"
+  },
+  "arrows-maximize": {
+   "outline": "<path d=\"M16 4l4 0l0 4\"/><path d=\"M14 10l6 -6\"/><path d=\"M8 20l-4 0l0 -4\"/><path d=\"M4 20l6 -6\"/><path d=\"M16 20l4 0l0 -4\"/><path d=\"M14 14l6 6\"/><path d=\"M8 4l-4 0l0 4\"/><path d=\"M4 4l6 6\"/>"
+  },
+  "device-desktop": {
+   "outline": "<path d=\"M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10\"/><path d=\"M7 20h10\"/><path d=\"M9 16v4\"/><path d=\"M15 16v4\"/>"
+  },
+  "device-laptop": {
+   "outline": "<path d=\"M3 19l18 0\"/><path d=\"M5 7a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v8a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -8\"/>"
+  },
+  "server": {
+   "outline": "<path d=\"M3 7a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-2\"/><path d=\"M3 15a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3l0 -2\"/><path d=\"M7 8l0 .01\"/><path d=\"M7 16l0 .01\"/>"
+  },
+  "cloud": {
+   "outline": "<path d=\"M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878\"/>"
+  },
+  "plus": {
+   "outline": "<path d=\"M12 5l0 14\"/><path d=\"M5 12l14 0\"/>"
+  },
+  "search": {
+   "outline": "<path d=\"M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0\"/><path d=\"M21 21l-6 -6\"/>"
+  },
+  "refresh": {
+   "outline": "<path d=\"M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4\"/><path d=\"M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4\"/>"
+  },
+  "pencil": {
+   "outline": "<path d=\"M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4\"/><path d=\"M13.5 6.5l4 4\"/>"
+  },
+  "copy": {
+   "outline": "<path d=\"M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666\"/><path d=\"M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1\"/>"
+  },
+  "x": {
+   "outline": "<path d=\"M18 6l-12 12\"/><path d=\"M6 6l12 12\"/>"
+  },
+  "dots": {
+   "outline": "<path d=\"M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/><path d=\"M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/><path d=\"M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/>"
+  },
+  "external-link": {
+   "outline": "<path d=\"M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6\"/><path d=\"M11 13l9 -9\"/><path d=\"M15 4h5v5\"/>"
+  },
+  "trash": {
+   "outline": "<path d=\"M4 7l16 0\"/><path d=\"M10 11l0 6\"/><path d=\"M14 11l0 6\"/><path d=\"M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12\"/><path d=\"M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3\"/>"
+  },
+  "pin": {
+   "outline": "<path d=\"M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4\"/><path d=\"M9 15l-4.5 4.5\"/><path d=\"M14.5 4l5.5 5.5\"/>"
+  },
+  "eye": {
+   "outline": "<path d=\"M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0\"/><path d=\"M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6\"/>"
+  },
+  "eye-off": {
+   "outline": "<path d=\"M10.585 10.587a2 2 0 0 0 2.829 2.828\"/><path d=\"M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87\"/><path d=\"M3 3l18 18\"/>"
+  },
+  "check": {
+   "outline": "<path d=\"M5 12l5 5l10 -10\"/>"
+  },
+  "minus": {
+   "outline": "<path d=\"M5 12l14 0\"/>"
+  },
+  "player-play": {
+   "outline": "<path d=\"M7 4v16l13 -8l-13 -8\"/>"
+  },
+  "player-stop": {
+   "outline": "<path d=\"M5 7a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -10\"/>"
+  },
+  "microphone": {
+   "outline": "<path d=\"M9 5a3 3 0 0 1 3 -3a3 3 0 0 1 3 3v5a3 3 0 0 1 -3 3a3 3 0 0 1 -3 -3l0 -5\"/><path d=\"M5 10a7 7 0 0 0 14 0\"/><path d=\"M8 21l8 0\"/><path d=\"M12 17l0 4\"/>"
+  },
+  "arrows-sort": {
+   "outline": "<path d=\"M3 9l4 -4l4 4m-4 -4v14\"/><path d=\"M21 15l-4 4l-4 -4m4 4v-14\"/>"
+  },
+  "selector": {
+   "outline": "<path d=\"M8 9l4 -4l4 4\"/><path d=\"M16 15l-4 4l-4 -4\"/>"
+  },
+  "fold": {
+   "outline": "<path d=\"M12 3v6l3 -3m-6 0l3 3\"/><path d=\"M12 21v-6l3 3m-6 0l3 -3\"/><path d=\"M4 12l1 0\"/><path d=\"M9 12l1 0\"/><path d=\"M14 12l1 0\"/><path d=\"M19 12l1 0\"/>"
+  },
+  "fold-down": {
+   "outline": "<path d=\"M12 11v8l3 -3m-6 0l3 3\"/><path d=\"M9 7l1 0\"/><path d=\"M14 7l1 0\"/><path d=\"M19 7l1 0\"/><path d=\"M4 7l1 0\"/>"
+  },
+  "arrow-up": {
+   "outline": "<path d=\"M12 5l0 14\"/><path d=\"M18 11l-6 -6\"/><path d=\"M6 11l6 -6\"/>"
+  },
+  "arrow-down": {
+   "outline": "<path d=\"M12 5l0 14\"/><path d=\"M18 13l-6 6\"/><path d=\"M6 13l6 6\"/>"
+  },
+  "arrow-left": {
+   "outline": "<path d=\"M5 12l14 0\"/><path d=\"M5 12l6 6\"/><path d=\"M5 12l6 -6\"/>"
+  },
+  "arrow-right": {
+   "outline": "<path d=\"M5 12l14 0\"/><path d=\"M13 18l6 -6\"/><path d=\"M13 6l6 6\"/>"
+  },
+  "chevron-up": {
+   "outline": "<path d=\"M6 15l6 -6l6 6\"/>"
+  },
+  "chevron-down": {
+   "outline": "<path d=\"M6 9l6 6l6 -6\"/>"
+  },
+  "chevron-left": {
+   "outline": "<path d=\"M15 6l-6 6l6 6\"/>"
+  },
+  "chevron-right": {
+   "outline": "<path d=\"M9 6l6 6l-6 6\"/>"
+  },
+  "folder-plus": {
+   "outline": "<path d=\"M12 19h-7a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v3.5\"/><path d=\"M16 19h6\"/><path d=\"M19 16v6\"/>"
+  },
+  "folder-open": {
+   "outline": "<path d=\"M5 19l2.757 -7.351a1 1 0 0 1 .936 -.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1 -1.964 1.625h-14.026a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v2\"/>"
+  },
+  "file": {
+   "outline": "<path d=\"M14 3v4a1 1 0 0 0 1 1h4\"/><path d=\"M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2\"/>"
+  },
+  "file-text": {
+   "outline": "<path d=\"M14 3v4a1 1 0 0 0 1 1h4\"/><path d=\"M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2\"/><path d=\"M9 9l1 0\"/><path d=\"M9 13l6 0\"/><path d=\"M9 17l6 0\"/>"
+  },
+  "file-plus": {
+   "outline": "<path d=\"M14 3v4a1 1 0 0 0 1 1h4\"/><path d=\"M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2\"/><path d=\"M12 11l0 6\"/><path d=\"M9 14l6 0\"/>"
+  },
+  "file-diff": {
+   "outline": "<path d=\"M14 3v4a1 1 0 0 0 1 1h4\"/><path d=\"M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2\"/><path d=\"M12 10l0 4\"/><path d=\"M10 12l4 0\"/><path d=\"M10 17l4 0\"/>"
+  },
+  "git-branch": {
+   "outline": "<path d=\"M5 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0\"/><path d=\"M5 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0\"/><path d=\"M15 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0\"/><path d=\"M7 8l0 8\"/><path d=\"M9 18h6a2 2 0 0 0 2 -2v-5\"/><path d=\"M14 14l3 -3l3 3\"/>"
+  },
+  "git-commit": {
+   "outline": "<path d=\"M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0\"/><path d=\"M12 3l0 6\"/><path d=\"M12 15l0 6\"/>"
+  },
+  "archive": {
+   "outline": "<path d=\"M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2\"/><path d=\"M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10\"/><path d=\"M10 12l4 0\"/>"
+  },
+  "cloud-download": {
+   "outline": "<path d=\"M19 18a3.5 3.5 0 0 0 0 -7h-1a5 4.5 0 0 0 -11 -2a4.6 4.4 0 0 0 -2.1 8.4\"/><path d=\"M12 13l0 9\"/><path d=\"M9 19l3 3l3 -3\"/>"
+  },
+  "arrow-bar-to-down": {
+   "outline": "<path d=\"M4 20l16 0\"/><path d=\"M12 14l0 -10\"/><path d=\"M12 14l4 -4\"/><path d=\"M12 14l-4 -4\"/>"
+  },
+  "arrow-bar-to-up": {
+   "outline": "<path d=\"M12 10l0 10\"/><path d=\"M12 10l4 4\"/><path d=\"M12 10l-4 4\"/><path d=\"M4 4l16 0\"/>"
+  },
+  "tag": {
+   "outline": "<path d=\"M6.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/><path d=\"M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l5.592 -5.592a2.41 2.41 0 0 0 0 -3.408l-7.71 -7.71a2 2 0 0 0 -1.414 -.586h-5.172a3 3 0 0 0 -3 3\"/>"
+  },
+  "activity": {
+   "outline": "<path d=\"M3 12h4l3 8l4 -16l3 8h4\"/>"
+  },
+  "info-circle": {
+   "outline": "<path d=\"M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0\"/><path d=\"M12 9h.01\"/><path d=\"M11 12h1v4h1\"/>"
+  },
+  "square-check": {
+   "outline": "<path d=\"M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14\"/><path d=\"M9 12l2 2l4 -4\"/>"
+  },
+  "alert-triangle": {
+   "outline": "<path d=\"M12 9v4\"/><path d=\"M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0\"/><path d=\"M12 16h.01\"/>"
+  },
+  "terminal": {
+   "outline": "<path d=\"M5 7l5 5l-5 5\"/><path d=\"M12 19l7 0\"/>"
+  },
+  "list": {
+   "outline": "<path d=\"M9 6l11 0\"/><path d=\"M9 12l11 0\"/><path d=\"M9 18l11 0\"/><path d=\"M5 6l0 .01\"/><path d=\"M5 12l0 .01\"/><path d=\"M5 18l0 .01\"/>"
+  },
+  "list-check": {
+   "outline": "<path d=\"M3.5 5.5l1.5 1.5l2.5 -2.5\"/><path d=\"M3.5 11.5l1.5 1.5l2.5 -2.5\"/><path d=\"M3.5 17.5l1.5 1.5l2.5 -2.5\"/><path d=\"M11 6l9 0\"/><path d=\"M11 12l9 0\"/><path d=\"M11 18l9 0\"/>"
+  },
+  "shield": {
+   "outline": "<path d=\"M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3\"/>"
+  },
+  "photo": {
+   "outline": "<path d=\"M15 8h.01\"/><path d=\"M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12\"/><path d=\"M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5\"/><path d=\"M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3\"/>"
+  },
+  "help-circle": {
+   "outline": "<path d=\"M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0\"/><path d=\"M12 16v.01\"/><path d=\"M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483\"/>"
+  }
+ }
+}

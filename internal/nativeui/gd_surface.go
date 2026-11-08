@@ -1,0 +1,765 @@
+// [INPUT]: Current Git snapshot (the worktree), existing Godiff row model.
+// [OUTPUT]: gdDiffSurface — the unified Diff reviewer of the center's Detail card and the card behind the Commit editor, with gated mutations (stage/unstage hunks and lines, discard) and the large-diff placeholder.
+// [POS]: The sole code Diff surface; always unified and without window-level review keys (2026-11-08 G5, when the Git page retired).
+// [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+package nativeui
+
+import (
+	"math"
+	"strings"
+	"time"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco-gitkit/gitworkbench"
+	"github.com/thewei/solco/internal/codehl"
+)
+
+// The diff review surface, ported from egoist/godiff diffview.go, view.go
+// and find.go (commit 88b89e0): one virtualized list of file cards with
+// sticky headers, gutters, syntax colors, word marks and gap expansion.
+
+// gdLineSide is what one side of a line row shows.
+type gdLineSide struct {
+	present bool
+	kind    gitworkbench.LineKind
+	num     int
+	text    string
+	segs    []codehl.Seg
+	words   []gitworkbench.WordRange
+	hunk    int32
+	index   int32 // the line's index in its hunk, -1 for expanded context
+}
+
+// gdDiffSurface renders the Diff review: the Detail card's cards, and the
+// card behind the Commit editor. Its rows are always unified, and it takes no
+// review shortcuts — the surface shares the window with a Terminal and a Chat
+// that own the plain keys (j/k would type).
+func (s *Shell) gdDiffSurface(c *ui.Context) {
+	t := c.Theme()
+	pal := gdPaletteFor(t)
+
+	if s.git == nil || s.git.root == "" {
+		cwd := s.selectedTabCWD()
+		s.gdEmptyPanel(c, pal, "No Git repository", gdAbbreviateHome(cwd), func() {
+			if compactPrimaryButton(c, "Open Terminal").Clicked() {
+				s.showSurface(WorkspaceSurfaceTerminal)
+			}
+		})
+		return
+	}
+	if s.gitSnapshot() == nil {
+		s.gdThinking(c)
+		return
+	}
+	s.gdSetFiles()
+	s.gitSequencerBanner(c)
+
+	// The Git tools live in the panel's header and commit bar, so the diff
+	// opens straight with its content; a clean worktree says so.
+	if len(s.git.gdFiles) == 0 {
+		s.gitCleanState(c, "Working tree clean", gdAbbreviateHome(s.git.root))
+		return
+	}
+
+	if s.git.gdRowsDirty {
+		s.buildGdRows()
+	}
+	if len(s.git.gdRows) == 0 {
+		s.gdEmptyPanel(c, pal, "No matching files", strings.TrimSpace(s.changes.filter), func() {
+			if strings.TrimSpace(s.changes.filter) != "" {
+				if compactButton(c, "Clear File Filter").Clicked() {
+					s.changes.filter = ""
+					s.git.gdRowsDirty = true
+				}
+			}
+		})
+		return
+	}
+	s.gdDiffList(c, pal)
+}
+
+// gdDiffList shows the files' cards, building the rows in view only.
+func (s *Shell) gdDiffList(c *ui.Context, pal *gdPalette) {
+	s.ensureGdListKeys()
+	// The files' cards sit directly on the gorex card hosting the surface;
+	// only the bands above file headers keep the paper color, masking the
+	// lines that scroll under them.
+	// The code is selectable across lines (drag, ⌘C); line numbers, headers
+	// and gap rows are not part of the selection. The list builds only the
+	// rows in view, so a drag reaches those; Copy Hunk and Copy File Patch in
+	// the line menu cover the rest.
+	s.git.gdHover = gdHoverLine{}
+	host := ui.Column(c).Grow(1).MinHeight(0).Selectable().Bind(&s.git.gdHostRef)
+	host.HandleInput(func(ev ui.InputEvent) bool {
+		switch ev.Kind {
+		case ui.InputPointerUp:
+			// A sweep over line numbers ends with the press, wherever it began.
+			s.git.gdDrag = gdGutterDrag{}
+		case ui.InputScroll:
+			return s.gdScrollSideways(ev, s.git.gdHostRef.Bounds(c).W)
+		}
+		return false
+	})
+	host.Children(func() {
+		ui.List(c, &s.git.gdList, len(s.git.gdRows), func(i int) { s.gdDiffRow(c, pal, i) }).
+			Grow(1).MinHeight(0).Padding(0, gdListMargin, 24).Label("Changes")
+	})
+
+	// The file at the top follows the scrolling, and the tree with it.
+	if first, _ := s.git.gdList.Visible(); first >= 0 && first < len(s.git.gdRows) && s.git.gdRows[first].kind != gdRowEnd {
+		file := int(s.git.gdRows[first].file)
+		if file != s.git.gdCurrent && timeSince(s.git.revealAt) > 1200*time.Millisecond {
+			s.git.gdCurrent = file
+			if top := s.git.gdFiles[file].cf.Path; top != "" {
+				s.syncChangesSelectionFromDiff(top)
+			}
+		}
+	}
+}
+
+// gdHoverLine is the code line under the pointer as of the last frame: what a
+// sideways scroll over the list moves.
+type gdHoverLine struct {
+	f      *gdFile
+	gutter float32
+	charW  float32
+}
+
+// gdScrollSideways moves the hovered file's code sideways (no-wrap mode) by a
+// horizontal scroll over the list, up to its longest line. width is the list's.
+func (s *Shell) gdScrollSideways(ev ui.InputEvent, width float32) bool {
+	h := s.git.gdHover
+	if ev.Kind != ui.InputScroll || h.f == nil || math.Abs(float64(ev.DX)) <= math.Abs(float64(ev.DY)) {
+		return false
+	}
+	row := width - 2*gdListMargin
+	code := row - 2*h.gutter - 40
+	limit := max(float32(h.f.metrics().maxCols)*h.charW-code, 0)
+	path := h.f.cf.Path
+	s.git.gdHScroll[path] = min(max(s.git.gdHScroll[path]+ev.DX, 0), limit) // a frame follows an event the handler takes
+	return true
+}
+
+// gdDiffRow draws one row of the surface.
+func (s *Shell) gdDiffRow(c *ui.Context, pal *gdPalette, i int) {
+	r := &s.git.gdRows[i]
+	f := s.git.gdFiles[r.file]
+	switch r.kind {
+	case gdRowHeader:
+		s.gdFileHeader(c, pal, int(r.file), f)
+	case gdRowNote:
+		s.gdNoteRow(c, pal, f)
+	case gdRowGap:
+		s.gdGapRow(c, pal, f, r)
+	case gdRowLine:
+		s.gdLineRow(c, pal, f, r)
+	case gdRowHunk:
+		s.gdHunkRow(c, pal, f, r)
+	case gdRowEnd:
+		ui.Column(c).Children(func() {
+			if !f.collapsed {
+				ui.Box(c).Height(4).Background(pal.codeBg).
+					BorderWidth(0, 1, 1, 1).BorderColor(pal.cardBorder).Radius(0, 0, gdCardRadius, gdCardRadius)
+			}
+			ui.Box(c).Height(gdCardGap).Background(s.tokens(c.Theme().Dark).Content)
+		})
+	}
+}
+
+// gdNoteRow says why a file's lines do not show. A large diff offers Show
+// (Retry after a failed read) and spins while it loads.
+func (s *Shell) gdNoteRow(c *ui.Context, pal *gdPalette, f *gdFile) {
+	if f.cf.Binary {
+		s.gdMediaRow(c, pal, f)
+		return
+	}
+	s.gdCard(c, pal).Padding(10, 16).Background(pal.gapBg).AlignItems(ui.Center).Gap(10).Children(func() {
+		if f.cf.Deferred && f.large.state == gdLargeLoading {
+			ui.Spinner(c).Size(14, 14).Shrink(0)
+		}
+		ui.Text(c, s.gdFileNote(f)).FontSize(Typography().Body).TextColor(pal.gapText).Grow(1).MinWidth(0)
+		if label := gdLargeAction(f); label != "" && compactButton(c, label).Shrink(0).Clicked() {
+			s.gdShowLarge(f)
+		}
+	})
+}
+
+// gdLargeAction is the label of the button a deferred file offers, "" for none.
+func gdLargeAction(f *gdFile) string {
+	if !f.cf.Deferred {
+		return ""
+	}
+	switch f.large.state {
+	case gdLargeIdle:
+		return "Show"
+	case gdLargeFailed:
+		return "Retry"
+	}
+	return ""
+}
+
+// gdCard is a row inside a file's card, between its sides.
+func (s *Shell) gdCard(c *ui.Context, pal *gdPalette) ui.Element {
+	return ui.Row(c).Background(pal.codeBg).BorderWidth(0, 1, 0, 1).BorderColor(pal.cardBorder)
+}
+
+// gdCodeFont is the family of the code.
+func gdCodeFont() string { return "SF Mono, Menlo, monospace" }
+
+// gdCodeSize is the size of the code, in points. It reads the shared
+// Body token: the review matches the sidebar's reading size instead of
+// floating above it (2026-10-14 密度统一).
+var gdCodeSize = Typography().Body
+
+// gdLineHeight is the height of a line of code: 20 at 13.
+func gdLineHeight() float32 {
+	return float32(int(gdCodeSize * 20 / 13))
+}
+
+// gdCharWidth is the width of a column of code.
+func (s *Shell) gdCharWidth(c *ui.Context) float32 {
+	if s.git.gdCharW == 0 {
+		width, _ := c.MeasureText(0, ui.Span{Text: strings.Repeat("0", 20), Font: gdCodeFont(), Size: gdCodeSize})
+		s.git.gdCharW = width / 20
+	}
+	return s.git.gdCharW
+}
+
+// gdGutterWidth is the width of a column of line numbers.
+func (s *Shell) gdGutterWidth(c *ui.Context, f *gdFile) float32 {
+	return float32(f.metrics().digits)*s.gdCharWidth(c) + 18
+}
+
+// gdListMargin is the space between the list of cards and the window's edges.
+const gdListMargin float32 = 12
+
+// gdHeaderRoomy is the card width from which a header has room for all its
+// controls; narrower, the copy/open buttons and the Viewed toggle step aside
+// (the context menu keeps them) so that the file name keeps its width.
+const gdHeaderRoomy float32 = 560
+
+// gdColumnWidth is the width of the diff column: the center the Detail card
+// or the Commit editor's backdrop fills — the window less the sidebar and a
+// docked right panel.
+func (s *Shell) gdColumnWidth(c *ui.Context) float32 {
+	windowW, _ := c.Size()
+	return s.gitCenterWidth(windowW)
+}
+
+// gdCardWidth is the width of a file card: the column less the list's margins.
+func (s *Shell) gdCardWidth(c *ui.Context) float32 {
+	return s.gdColumnWidth(c) - 2*gdListMargin
+}
+
+// gdFileHeader draws one file's card header.
+func (s *Shell) gdFileHeader(c *ui.Context, pal *gdPalette, idx int, f *gdFile) {
+	t := c.Theme()
+	cf := f.cf
+	collapsed := f.collapsed
+	viewed := s.gdIsViewed(f)
+	roomy := s.gdCardWidth(c) >= gdHeaderRoomy
+	// The window's paper behind the header's rounded corners. The space
+	// between two cards is the previous card's end row (gdCardGap), so the
+	// first card, and a header pinned under the title bar, sit flush.
+	band := ui.Column(c).Background(s.tokens(t.Dark).Content)
+	var h ui.Element
+	band.Children(func() {
+		h = ui.Row(c).Height(46).Padding(0, 8, 0, 6).Gap(8).Background(pal.headerBg).Border(1, pal.cardBorder)
+	})
+	if collapsed {
+		h.Radius(gdCardRadius)
+	} else {
+		h.Radius(gdCardRadius, gdCardRadius, 0, 0)
+	}
+	if idx == s.git.gdCurrent && s.git.gdList.FocusWithin(c) {
+		h.Border(1, t.Accent.Alpha(0.6))
+	}
+	h.ContextMenu(func(m *ui.Menu) {
+		// Working-tree actions first, as Fork's file menu does.
+		if cf.Untracked {
+			if m.Item("Stage").Chosen() {
+				s.stageFiles([]string{cf.Path})
+			}
+			if m.Item("Delete…").Chosen() {
+				s.discardChanges([]string{cf.Path})
+			}
+		} else {
+			if cf.Unstaged {
+				if m.Item("Stage").Chosen() {
+					s.stageFiles([]string{cf.Path})
+				}
+			}
+			if cf.Staged {
+				if m.Item("Unstage").Chosen() {
+					s.unstageFiles([]string{cf.Path})
+				}
+			}
+			if m.Item("Discard Changes…").Chosen() {
+				s.discardChanges([]string{cf.Path})
+			}
+		}
+		m.Separator()
+		if m.Item("Open in Editor").Disabled(cf.Status == gitworkbench.StatusDeleted).Chosen() {
+			s.openFileInEditor(cf.Path)
+		}
+		s.gdFileItems(m, cf)
+		if m.Item("Copy Path").Chosen() {
+			s.copyToClipboard(cf.Path)
+		}
+		if m.Item("Viewed").Checked(viewed).Chosen() {
+			s.gdSetViewed(f, !viewed)
+		}
+		m.Separator()
+		if m.Item("Collapse All").Chosen() {
+			s.gdSetAllCollapsed(true)
+		}
+		if m.Item("Expand All").Chosen() {
+			s.gdSetAllCollapsed(false)
+		}
+	})
+	h.Children(func() {
+		toggle := tipped(c, ui.ButtonBase(c).Gap(8).Grow(1).Shrink(1).MinWidth(0).Height(46).Label(cf.Path), cf.Path)
+		if toggle.Clicked() {
+			f.collapsed = !collapsed
+			s.git.gdRowsDirty = true
+		}
+		toggle.FocusRing(false).Children(func() {
+			chevron := ui.Box(c).Size(26, 26).Radius(13).Center().Shrink(0)
+			if toggle.Hovered() {
+				chevron.Background(pal.hover)
+			}
+			chevron.Children(func() {
+				target := float32(0)
+				if collapsed {
+					target = -90
+				}
+				ic := ui.Icon(c, iconChevronDown).FontSize(15).TextColor(t.TextMuted)
+				ic.Rotate(ic.Animate("rot", target, 160*time.Millisecond))
+			})
+			pathColor := t.Text
+			if collapsed || viewed {
+				pathColor = t.TextMuted
+			}
+			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(1).Children(func() {
+				dir, name := gdDirName(cf.Path)
+				nameText := func() {
+					ui.Text(c, name).Font(gdCodeFont()).FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(pathColor).
+						SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+				}
+				renamed := cf.OldPath != "" && cf.OldPath != cf.Path
+				if roomy {
+					// The folder gives way first: a long path keeps the file name.
+					ui.Row(c).MinWidth(0).Children(func() {
+						if dir != "" {
+							ui.Text(c, dir).Font(gdCodeFont()).FontSize(Typography().Body).TextColor(t.TextMuted).
+								SingleLine().Ellipsis("…").Shrink(4).MinWidth(0)
+						}
+						nameText()
+					})
+				} else {
+					// A narrow card gives the name the whole line and the
+					// folder the one below, unless a rename has its say there.
+					nameText()
+				}
+				if renamed {
+					ui.Text(c, "from "+cf.OldPath).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.TextMuted).SingleLine()
+				} else if !roomy && dir != "" {
+					ui.Text(c, dir).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(t.TextMuted).
+						SingleLine().Ellipsis("…").MinWidth(0)
+				}
+			})
+		})
+		// The copy button shows while the pointer is over the header; it
+		// is always built, so that the elements after it keep their state.
+		// A narrow card leaves both buttons to the context menu.
+		if roomy {
+			cp := gdIconButton(c, iconCopy, "Copy Path")
+			if !h.Hovered() && !cp.FocusVisible() {
+				cp.Opacity(0)
+			}
+			if cp.Clicked() {
+				s.copyToClipboard(cf.Path)
+			}
+			open := gdIconButton(c, iconOpen, "Open in Editor").Disabled(cf.Status == gitworkbench.StatusDeleted)
+			if cf.Status == gitworkbench.StatusDeleted {
+				tipped(c, open, "Deleted files cannot be opened")
+			}
+			if open.Clicked() {
+				s.openFileInEditor(cf.Path)
+			}
+		}
+		if adds, dels := f.sideCounts(); gdCountable(cf) && (adds > 0 || dels > 0) {
+			tipped(c, ui.Row(c).Gap(8).Padding(4, 9).Radius(Radius().Pill).Background(pal.pill).Shrink(0), gdLines(adds, "added")+", "+gdLines(dels, "removed")).Children(func() {
+				ui.Text(c, "+"+gdThousands(adds)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.addText)
+				ui.Text(c, "-"+gdThousands(dels)).Font(gdCodeFont()).FontSize(Typography().BodySmall).FontWeight(WeightSemibold).TextColor(pal.delText)
+			})
+		}
+		if cf.Generated {
+			ui.Text(c, "Generated").FontSize(Typography().BodySmall).FontWeight(WeightSemibold).Padding(4, 9).Radius(Radius().Pill).
+				Background(pal.ref.Alpha(0.15)).TextColor(pal.ref).Shrink(0)
+		}
+		if roomy {
+			s.gdViewedButton(c, pal, f, viewed)
+		}
+	})
+}
+
+// gdViewedButton marks a file viewed, which collapses it. It always says so in
+// words: a bare box in a header reads as a stage checkbox, and the narrow
+// card (no room for the word) leaves Viewed to the header's context menu
+// instead of drawing one (2026-11-08: the panel's boxed Viewed collapsed a
+// card where the user expected a stage).
+func (s *Shell) gdViewedButton(c *ui.Context, pal *gdPalette, f *gdFile, viewed bool) {
+	t := c.Theme()
+	on := viewed
+	b := ui.CheckboxBase(c, &on).Gap(7).Height(30).Padding(0, 11).Radius(Radius().Pill).Shrink(0).
+		Border(1, ui.RGBA(127, 127, 127, 0.22)).Label("Viewed")
+	if b.Changed() {
+		s.gdSetViewed(f, on)
+	}
+	if b.Hovered() {
+		b.Background(pal.hover)
+	}
+	if viewed {
+		b.Border(1, pal.viewed.Alpha(0.44)).TextColor(pal.viewed)
+	}
+	b.Children(func() {
+		box := ui.Box(c).Size(15, 15).Radius(4).Center()
+		if viewed {
+			box.Background(pal.viewed).Children(func() {
+				ui.Icon(c, iconCheck).FontSize(11).TextColor(pal.codeBg)
+			})
+		} else {
+			box.Border(1.5, ui.RGBA(127, 127, 127, 0.45))
+		}
+		ui.Text(c, "Viewed").FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(map[bool]ui.Color{true: pal.viewed, false: t.Text}[viewed])
+	})
+}
+
+// gdSetAllCollapsed collapses or expands every file.
+func (s *Shell) gdSetAllCollapsed(collapsed bool) {
+	for _, f := range s.git.gdFiles {
+		f.collapsed = collapsed
+	}
+	s.git.gdRowsDirty = true
+}
+
+// gdGapRow draws the collapsed unchanged lines with their expand controls.
+func (s *Shell) gdGapRow(c *ui.Context, pal *gdPalette, f *gdFile, r *gdRow) {
+	t := c.Theme()
+	gutter := s.gdGutterWidth(c, f)
+	if !f.oneSided() {
+		gutter = 2*gutter - 4
+	}
+	first, last := int(r.gap) == 0, int(r.gap) == len(f.hunks())
+	n := int(r.count)
+	expand := func(top, bottom int) {
+		if f.expanded == nil {
+			f.expanded = map[int]gdGapShown{}
+		}
+		g := f.expanded[int(r.gap)]
+		g.top += top
+		g.bottom += bottom
+		f.expanded[int(r.gap)] = g
+		f.metricsDone = false
+		s.git.gdRowsDirty = true
+	}
+	all := func() { expand(n, 0) }
+	can := f.canExpand()
+	s.gdCard(c, pal).Height(30).Background(pal.gapBg).Children(func() {
+		ui.Row(c).Width(gutter + 4).Height(30).Shrink(0).Children(func() {
+			button := func(svg *ui.SVG, tip string, action func()) {
+				b := tipped(c, ui.ButtonBase(c).Grow(1).Height(30).Center().Label(tip), tip).TextColor(pal.gapText).Disabled(!can)
+				b.BorderWidth(0, 2, 0, 0).BorderColor(pal.codeBg)
+				if b.Hovered() {
+					b.TextColor(t.Text).Background(pal.hover)
+				}
+				b.Children(func() { ui.Icon(c, svg).FontSize(14) })
+				if b.Clicked() {
+					action()
+				}
+			}
+			switch {
+			case n <= gdExpandStep && first:
+				button(iconArrowUp, "Show the lines above", all)
+			case n <= gdExpandStep && last:
+				button(iconArrowDown, "Show the lines below", all)
+			case n <= gdExpandStep:
+				button(iconExpand, "Show the lines", all)
+			default:
+				if !first {
+					button(iconArrowDown, "Show "+itoa(gdExpandStep)+" more lines", func() { expand(gdExpandStep, 0) })
+				}
+				if !last {
+					button(iconArrowUp, "Show "+itoa(gdExpandStep)+" more lines", func() { expand(0, gdExpandStep) })
+				}
+			}
+		})
+		label := ui.ButtonBase(c).Padding(0, 12).Height(30).FocusRing(false).Disabled(!can).Children(func() {
+			ui.Text(c, gdLines(n, "unmodified")).FontSize(Typography().Body).TextColor(pal.gapText)
+		})
+		if label.Hovered() && can {
+			label.Underline()
+		}
+		if label.Clicked() {
+			switch {
+			case n <= gdExpandStep:
+				all()
+			case first:
+				expand(0, gdExpandStep)
+			case last:
+				expand(gdExpandStep, 0)
+			default:
+				expand(gdExpandStep, gdExpandStep)
+			}
+		}
+		if n > gdExpandStep {
+			b := ui.ButtonBase(c).Padding(3, 8).Radius(Radius().Control).Disabled(!can).Children(func() {
+				ui.Text(c, "Expand all").FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(pal.gapText)
+			})
+			if b.Hovered() {
+				b.Background(pal.hover)
+			}
+			if b.Clicked() {
+				all()
+			}
+		}
+		if h := int(r.gap); h < len(f.hunks()) && f.hunks()[h].Section != "" {
+			ui.Text(c, f.hunks()[h].Section).Font(gdCodeFont()).FontSize(Typography().BodySmall).TextColor(pal.gapText).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+		}
+	})
+}
+
+// gdSideOf returns a line of a row for the old or the new side.
+func (s *Shell) gdSideOf(f *gdFile, r *gdRow, side gdSide) gdLineSide {
+	if r.hunk < 0 {
+		// Expanded context.
+		ls := gdLineSide{present: true, kind: gitworkbench.KindContext, hunk: -1, index: -1}
+		if side == gdSideOld {
+			ls.num = int(r.old)
+			ls.text = f.contextText(r.old, r.new)
+			if int(r.old) <= len(f.oldHL) {
+				ls.segs = f.oldHL[r.old-1]
+			} else if int(r.new) <= len(f.newHL) {
+				ls.segs = f.newHL[r.new-1]
+			}
+		} else {
+			ls.num = int(r.new)
+			ls.text = f.contextText(r.old, r.new)
+			if int(r.new) <= len(f.newHL) {
+				ls.segs = f.newHL[r.new-1]
+			}
+		}
+		return ls
+	}
+	idx := r.a
+	l := f.lineAt(r.hunk, idx)
+	if l == nil {
+		return gdLineSide{}
+	}
+	ls := gdLineSide{present: true, kind: l.Kind, text: l.Text, hunk: r.hunk, index: idx}
+	if l.Kind == gitworkbench.KindDelete {
+		ls.num = l.OldLine
+		if l.OldLine <= len(f.oldHL) {
+			ls.segs = f.oldHL[l.OldLine-1]
+		}
+	} else {
+		ls.num = l.NewLine
+		if side == gdSideOld && l.Kind == gitworkbench.KindContext {
+			ls.num = l.OldLine
+		}
+		if l.NewLine > 0 && l.NewLine <= len(f.newHL) {
+			ls.segs = f.newHL[l.NewLine-1]
+		}
+	}
+	ls.words = f.wordsAt(int(r.hunk), int(idx))
+	return ls
+}
+
+// gdLineRow draws one line: the diff is always unified.
+func (s *Shell) gdLineRow(c *ui.Context, pal *gdPalette, f *gdFile, r *gdRow) {
+	gutter := s.gdGutterWidth(c, f)
+	lh := gdLineHeight()
+	e := s.gdCard(c, pal).AlignItems(ui.Stretch).MinHeight(lh)
+	hs := s.git.gdHScroll[f.cf.Path]
+	if e.Hovered() {
+		// Sideways scrolling is handled once, on the list (gdDiffList): an
+		// input handler on the line would make MyGo treat its text as a
+		// control's, and the code could not be selected.
+		s.git.gdHover = gdHoverLine{f: f, gutter: gutter, charW: s.gdCharWidth(c)}
+	}
+	side := gdSideNew
+	side2 := s.gdSideOf(f, r, gdSideNew)
+	if side2.kind == gitworkbench.KindDelete {
+		side = gdSideOld
+	}
+	e.Children(func() {
+		s.gdLineCell(c, pal, f, r, side2, side, gutter, hs, !f.oneSided())
+	})
+}
+
+// gdLineCell shows a line: its numbers and its code.
+func (s *Shell) gdLineCell(c *ui.Context, pal *gdPalette, f *gdFile, r *gdRow, ls gdLineSide, sd gdSide, gutter, hs float32, unified bool) {
+	lh := gdLineHeight()
+	if !ls.present {
+		ui.Box(c).Grow(1).Background(pal.emptySide).MinHeight(lh)
+		return
+	}
+	bg, gutterBg, bar, numColor := pal.codeBg, pal.codeBg, ui.Transparent, pal.lineNumber
+	var wordColor ui.Color
+	switch ls.kind {
+	case gitworkbench.KindAdd:
+		bg, gutterBg, bar, numColor, wordColor = pal.addBg, pal.addGutter, pal.addBar, pal.addBar, pal.addWord
+	case gitworkbench.KindDelete:
+		bg, gutterBg, bar, numColor, wordColor = pal.delBg, pal.delGutter, pal.delBar, pal.delBar, pal.delWord
+	}
+	cell := ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Stretch).Background(bg)
+	_, stageable := s.gdStageSide(f)
+	stageable = stageable && ls.hunk >= 0 && ls.index >= 0 && ls.kind != gitworkbench.KindContext
+	if stageable && s.gdPicked(f, int(ls.hunk), int(ls.index)) {
+		cell.Background(gdBlend(bg, pal.selected))
+		gutterBg = gdBlend(gutterBg, pal.selected)
+	} else if cell.Hovered() {
+		cell.Background(gdBlend(bg, pal.hover.Alpha(0.5)))
+		gutterBg = gdBlend(gutterBg, pal.hover.Alpha(0.5))
+	}
+	cell.ContextMenu(func(m *ui.Menu) {
+		// Copy / Select All of the text under the pointer come first.
+		m.EditItems()
+		m.Separator()
+		if m.Item("Copy Line").Chosen() {
+			s.copyToClipboard(ls.text)
+		}
+		if m.Item("Copy Hunk").Disabled(ls.hunk < 0).Chosen() {
+			s.copyToClipboard(gdHunkPatch(f.hunks()[ls.hunk]))
+		}
+		if patch := gdFilePatch(f); m.Item("Copy File Patch").Disabled(patch == "").Chosen() {
+			s.copyToClipboard(patch)
+		}
+		m.Separator()
+		if m.Item("Open in Editor").Disabled(f.cf.Status == gitworkbench.StatusDeleted).Chosen() {
+			s.openFileInEditor(f.cf.Path)
+		}
+		s.gdFileItems(m, f.cf)
+		if m.Item("Copy Path").Chosen() {
+			s.copyToClipboard(f.cf.Path)
+		}
+	})
+	cell.Children(func() {
+		num := func(n int, width float32) {
+			txt := ""
+			if n > 0 {
+				txt = itoa(n)
+			}
+			ui.Text(c, txt).Font(gdCodeFont()).FontSize(gdCodeSize-1).FixedLineHeight(lh).TextColor(numColor).
+				Width(width).TextAlign(ui.End).Padding(0, 8, 0, 0).Shrink(0).Unselectable()
+		}
+		gutterRow := ui.Row(c).Shrink(0).AlignItems(ui.Start).Background(gutterBg)
+		if stageable {
+			// A changed line's numbers pick it for partial staging (see
+			// gd_stage_lines.go); ⇧ picks a range, ⌘ adds.
+			gutterRow.Cursor(ui.CursorPointer)
+			s.gdGutterPick(f, gutterRow, int(ls.hunk), int(ls.index))
+		}
+		gutterRow.Children(func() {
+			ui.Box(c).Width(4).AlignSelf(ui.Stretch).Background(bar)
+			if unified {
+				old, new := 0, 0
+				if r.hunk < 0 {
+					old, new = int(r.old), int(r.new)
+				} else if l := f.lineAt(r.hunk, ls.index); l != nil {
+					old, new = l.OldLine, l.NewLine
+				}
+				num(old, gutter-4)
+				num(new, gutter-4)
+			} else {
+				num(ls.num, gutter-4)
+			}
+		})
+		spans := s.gdLineSpans(f, ls, sd, pal, wordColor)
+		// The margin keeps the clipped code clear of the line numbers.
+		code := ui.Box(c).Grow(1).Basis(0).MinWidth(0).ClipX().Margin(0, 10)
+		code.Children(func() {
+			ui.RichText(c, spans...).Font(gdCodeFont()).
+				FontSize(gdCodeSize).FixedLineHeight(lh).TextColor(pal.code).
+				NoWrap().AlignSelf(ui.Start).Left(-hs)
+		})
+	})
+}
+
+// gdLineSpans styles the code of a line, kept from frame to frame.
+func (s *Shell) gdLineSpans(f *gdFile, ls gdLineSide, sd gdSide, pal *gdPalette, wordColor ui.Color) []ui.Span {
+	marks := gdWordMarks(ls.text, ls.words, wordColor)
+	key := gdSpanKey{hunk: ls.hunk, index: ls.index, num: int32(ls.num), side: sd, dark: pal.dark}
+	if spans, ok := f.spans[key]; ok {
+		return spans
+	}
+	spans := gdCodeSpans(ls.text, ls.segs, marks, pal)
+	if f.spans == nil {
+		f.spans = map[gdSpanKey][]ui.Span{}
+	}
+	f.spans[key] = spans
+	return spans
+}
+
+// gdBlend lays a translucent color over another.
+func gdBlend(base, over ui.Color) ui.Color { return over.Over(base) }
+
+// openFileInEditor opens the file through argv, never a shell string
+// (GWB-194). Falls back silently when no editor is configured.
+func (s *Shell) openFileInEditor(relPath string) {
+	full := joinRepoPath(s.gitRoot(), relPath)
+	if full == "" {
+		return
+	}
+	s.openExternalPath(full)
+}
+
+func joinRepoPath(root, rel string) string {
+	if root == "" || rel == "" {
+		return ""
+	}
+	if strings.Contains(rel, "\x00") {
+		return ""
+	}
+	return root + "/" + rel
+}
+
+// gitRoot returns the bound repository root.
+func (s *Shell) gitRoot() string {
+	if s.git == nil {
+		return ""
+	}
+	return s.git.root
+}
+
+// gdDirName splits a repo-relative path into its directory and its name.
+func gdDirName(path string) (dir, name string) {
+	if i := strings.LastIndexByte(path, '/'); i >= 0 {
+		return path[:i+1], path[i+1:]
+	}
+	return "", path
+}
+
+// gdIconButton is a button showing an icon alone, as in a toolbar, in the
+// shared icon-button face (gorexIconButton) so Git's toolbars read as every
+// other toolbar. Like every shared icon button it is a Tab stop: the review
+// is driven from the keyboard, its file-header actions appear with
+// FocusVisible, and every toolbar action must stay reachable without the pointer.
+func gdIconButton(c *ui.Context, svg *ui.SVG, tip string) ui.Element {
+	return gorexIconButton(c, gorexColorsOf(c.Theme().Dark), svg, tip, tip, false, gorexIconBtn, gorexIconGlyph)
+}
+
+// gdEmptyPanel says why there is nothing to show.
+func (s *Shell) gdEmptyPanel(c *ui.Context, _ *gdPalette, title, detail string, actions func()) {
+	workspaceEmptyBanner(c, iconFileDiff, title, detail, actions)
+}
+
+// gdThinking is the loading state of the changes view.
+func (s *Shell) gdThinking(c *ui.Context) {
+	t := c.Theme()
+	ui.Column(c).Grow(1).Center().Gap(8).Children(func() {
+		ui.Spinner(c).Size(18, 18)
+		ui.Text(c, "Loading changes…").FontSize(Typography().Body).TextColor(t.TextMuted)
+	})
+}

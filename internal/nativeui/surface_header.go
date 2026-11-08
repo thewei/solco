@@ -1,0 +1,112 @@
+package nativeui
+
+import (
+	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/agent"
+)
+
+/**
+ * [INPUT]: 依赖 gorex 图标按钮、showViewTerminal/showViewChat 切换、pane 卡头范式（paneCardHeader）、tooltip.go 的 tipped 与 shortcuts.go 的 chatSwitchBinding（Chat 切换钮的键帽）
+ * [OUTPUT]: 提供 surfaceToggle（Terminal⇄Chat 单一形态切换，落点经 showSurface 记入 paneSurfaceMemo）、chatSurfaceHeader（Chat 卡统一头：agent 图标/名/状态点/双击 zoom）、paneSurfaceMemo 记忆与 openAgentFromSidebar 直跳
+ * [POS]: N19 UI 批：切换按钮从窗口头移入两种卡片头并合一；侧栏 Agent 点击按记忆的表面直跳；2026-10-31 起选中回跳（树/Tab/Agent）一律恢复窗格记忆的表面
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// surfaceToggle renders the single Terminal⇄Chat switch — one button, two
+// shapes (N19 #7): the icon names the surface it lands on. It replaced the
+// Terminal/Chat pair in the window header and lives in both card headers.
+// The switch lands through showSurface, which records the pane-surface
+// memory.
+func (s *Shell) surfaceToggle(c *ui.Context, k *gorexColors, from WorkspaceSurfaceKind) {
+	if from == WorkspaceSurfaceChat {
+		if gorexIconButton(c, k, iconTerminal, "Terminal", "Switch to Terminal", false, gorexIconBtn, gorexIconGlyph).Clicked() {
+			s.showViewTerminal()
+		}
+		return
+	}
+	chat := gorexIconButton(c, k, iconChat, "Chat", "", false, gorexIconBtn, gorexIconGlyph)
+	tipped(c, chat, "Switch to Chat", tipKeys(chatSwitchBinding.keycaps()))
+	if chat.Clicked() {
+		s.showViewChat()
+	}
+}
+
+// rememberPaneSurface records which surface a pane was last used on. The
+// selection sync restores it whenever navigation lands back on the pane
+// (tree click, Tab switch, Agent jump), and SaveSession persists it, so the
+// view survives restarts (2026-10-31 pane-surface memory).
+func (s *Shell) rememberPaneSurface(paneID string, kind WorkspaceSurfaceKind) {
+	if paneID == "" {
+		return
+	}
+	if s.paneSurfaceMemo == nil {
+		s.paneSurfaceMemo = map[string]WorkspaceSurfaceKind{}
+	}
+	s.paneSurfaceMemo[paneID] = kind
+}
+
+// panePrefersChat is the one answer to "which view does this Agent pane open
+// in": the pane's remembered surface when it has one, otherwise Settings →
+// General → Agent view (Chat only for a pane that really is an Agent).
+func (s *Shell) panePrefersChat(paneID string) bool {
+	if kind, ok := s.paneSurfaceMemo[paneID]; ok {
+		return kind == WorkspaceSurfaceChat
+	}
+	if !s.settings.General.AgentChatFirst() {
+		return false
+	}
+	_, isAgent := s.agentCardForPane(paneID)
+	return isAgent
+}
+
+// openAgentFromSidebar is the sidebar Agent click (N19 #4): jump straight
+// to the pane's remembered surface — Chat when the user left it in Chat,
+// Terminal otherwise.
+func (s *Shell) openAgentFromSidebar(card agent.AgentCardModel) {
+	if s.panePrefersChat(card.PaneID) {
+		s.openChat(card)
+		return
+	}
+	s.rememberPaneSurface(card.PaneID, WorkspaceSurfaceTerminal)
+	s.openAgentCard(card)
+}
+
+// chatSurfaceHeader is the Chat card's header, unified with the terminal
+// pane card (N19 #3/#8): the Agent's brand mark and name, the live status
+// dot, the chat-specific disposition, and the single surface toggle.
+// Double-click zooms exactly like the terminal card (N19 #6).
+func (s *Shell) chatSurfaceHeader(c *ui.Context, k *gorexColors) {
+	dark := c.Theme().Dark
+	h := ui.Row(c).Height(gorexHeaderH).Padding(0, gorexGap, 0, 12).Gap(7).AlignItems(ui.Center).MinWidth(0)
+	if h.DoubleClicked() && s.chatPaneID != "" {
+		s.zoomPaneAction(s.chatPaneID)
+	}
+	h.Children(func() {
+		mark := visualMark{svg: iconChat}
+		title := "Agent Chat"
+		if s.chatPaneID != "" {
+			if m, ok := s.agentMarkForPane(s.chatPaneID, dark); ok {
+				mark = m
+			}
+			if card, ok := s.agentCardTitleForPane(s.chatPaneID); ok {
+				title = card
+			} else if a := s.paneAgent(s.chatPaneID); a != nil && a.Name != "" {
+				title = a.Name
+			}
+		}
+		ui.Box(c).Size(15, 15).Shrink(0).Children(func() {
+			markView(c, mark, 14.5, k.text)
+		})
+		ui.Text(c, title).FontSize(Typography().Body).FontWeight(WeightSemibold).TextColor(k.text).
+			SingleLine().Ellipsis("…").Shrink(0).MaxWidthPercent(60)
+		if _, hasCard := s.agentCardForPane(s.chatPaneID); hasCard && s.chatConversationID != "" {
+			statusPill(c, s.chatDispositionSummary(), dispositionTone(s.chatDispositionNow()))
+		}
+		ui.Spacer(c)
+		s.detailReturnButton(c, k, gorexIconBtn, gorexIconGlyph)
+		s.surfaceToggle(c, k, WorkspaceSurfaceChat)
+		if a := s.paneAgent(s.chatPaneID); a != nil && a.Status != "" {
+			statusIndicator(c, normalizeRuntimeStatus(a.Status))
+		}
+	})
+}

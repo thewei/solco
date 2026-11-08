@@ -1,0 +1,348 @@
+package nativeui
+
+import (
+	"log/slog"
+	"strings"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/herdr"
+)
+
+func (s *Shell) openTextDialog(kind, target, title, label, value string) {
+	s.dialogKind, s.dialogTarget = kind, target
+	s.dialogTitle, s.dialogLabel, s.dialogValue = title, label, value
+	s.dialogAction = ""
+	s.dialogOpen = true
+}
+
+// openCreateDialog asks for the name of something new in the current
+// repository. The dialog is bound to that repository: a submit after the
+// context moved on is refused rather than applied elsewhere.
+func (s *Shell) openCreateDialog(kind, title, label string) {
+	if s.git == nil || s.git.root == "" {
+		return
+	}
+	s.openTextDialog(kind, s.git.root, title, label, "")
+	s.dialogAction = "Create"
+}
+
+// openNewBranchDialog starts a new local branch from HEAD.
+func (s *Shell) openNewBranchDialog() {
+	s.openCreateDialog("git-create-branch", "New Branch", "Branch name")
+}
+
+func (s *Shell) openConfirm(kind, target, title, message string) {
+	s.confirmKind, s.confirmTarget = kind, target
+	s.confirmRepoRoot = ""
+	if strings.HasPrefix(kind, "git-") && s.git != nil {
+		s.confirmRepoRoot = s.git.root
+	}
+	s.confirmTitle, s.confirmMessage = title, message
+	s.confirmOpen = true
+}
+
+// modalTitle is the heading every dialog opens with. One size and weight, so
+// Merge, Commit and the text prompts read as the same kind of surface — and
+// not as pages: the Title size belongs to the page title in the title bar.
+func modalTitle(c *ui.Context, title string) ui.Element {
+	return ui.Text(c, title).FontSize(Typography().Heading).FontWeight(WeightSemibold)
+}
+
+// gitConfirmActions names what a Git confirm's button does, so it reads
+// "Remove" or "Discard" instead of a bare "Confirm".
+var gitConfirmActions = map[string]string{
+	"git-discard": "Discard", "git-delete-untracked": "Delete", "git-delete-branch": "Delete",
+	"git-merge-ff": "Merge", "git-merge-no-ff": "Merge", "git-merge-squash": "Squash", "git-sequencer-abort": "Abort",
+}
+
+// confirmActionText is the confirm button's label for a confirm kind.
+func confirmActionText(kind string) string {
+	if kind == "assistant-delete" || kind == "group-delete" {
+		return "Delete Forever"
+	}
+	if kind == "revoke-phone" {
+		return "Revoke Access"
+	}
+	if text, ok := gitConfirmActions[kind]; ok {
+		return text
+	}
+	return "Confirm"
+}
+
+func (s *Shell) dialogs(c *ui.Context) {
+	if s.mergeDialogOpen && (s.git == nil || s.mergeRepoRoot == "" || s.mergeRepoRoot != s.git.root) {
+		s.mergeDialogOpen = false
+		s.pendingToast = "Repository changed. Reopen Merge for the current repository."
+	}
+	if s.mergeDialogOpen {
+		ui.Modal(c, &s.mergeDialogOpen, func() {
+			ui.Column(c).Width(430).MaxWidth(480).Gap(Spacing().L).Children(func() {
+				modalTitle(c, "Merge Branch")
+				tipped(c, ui.Text(c, s.mergeTarget).FontSize(Typography().Body).FontWeight(WeightSemibold).SingleLine(), s.mergeTarget)
+				segmentedControl(c, &s.mergeStrategy, "Fast-forward only", "Create merge commit", "Squash").FillWidth()
+				hint := "Moves the branch forward if it has not diverged. No merge commit."
+				switch s.mergeStrategy {
+				case 1:
+					hint = "Creates a merge commit. You may need to resolve conflicts."
+				case 2:
+					hint = "Brings every change in as staged changes without a merge commit; you commit them yourself."
+				}
+				ui.Text(c, hint).FontSize(Typography().Caption).TextColor(c.Theme().TextMuted)
+				ui.Row(c).FillWidth().Gap(Spacing().M).Justify(ui.End).Children(func() {
+					if regularButton(c, "Cancel Merge").Clicked() {
+						s.mergeDialogOpen = false
+					}
+					if regularPrimaryButton(c, "Review Merge").Clicked() {
+						target, strategy := s.mergeTarget, s.mergeStrategy
+						s.mergeDialogOpen = false
+						switch strategy {
+						case 1:
+							s.confirmMergeNoFFBranch(target)
+						case 2:
+							s.confirmMergeSquash(target)
+						default:
+							s.confirmMergeBranch(target)
+						}
+					}
+				})
+			})
+		})
+	}
+	// Commit always owns one modal, regardless of which Git entry opened it.
+	// MyGo dismisses Modal on backdrop/Escape; we turn such dismissals into
+	// the same explicit guarded cancel flow on the next frame.
+	if s.surface.current() == WorkspaceSurfaceCommit {
+		if !s.commitDialogOpen {
+			s.commitDialogOpen = true
+			s.requestCancelCommit()
+		}
+		if s.surface.current() == WorkspaceSurfaceCommit {
+			ui.Modal(c, &s.commitDialogOpen, func() {
+				_, height := c.Size()
+				ui.Column(c).Width(680).MaxWidth(760).Height(min(height-100, 600)).
+					MinHeight(240).MinWidth(0).Gap(Spacing().L).Children(func() {
+					modalTitle(c, "Commit Changes")
+					s.commitSurface(c)
+				})
+			})
+		}
+	}
+	if s.dialogOpen {
+		ui.Modal(c, &s.dialogOpen, func() {
+			modalTitle(c, s.dialogTitle)
+			submit := false
+			captionedField(c, s.dialogLabel, "", func() {
+				submit = textField(c, &s.dialogValue).Label(s.dialogLabel).AutoFocus().Width(360).Submitted()
+			})
+			ui.Row(c).Gap(Spacing().M).Justify(ui.End).Children(func() {
+				if regularButton(c, "Cancel").Clicked() {
+					s.dialogOpen = false
+				}
+				action := s.dialogAction
+				if action == "" {
+					action = "Save"
+				}
+				if regularPrimaryButton(c, action).Clicked() {
+					submit = true
+				}
+			})
+			if submit && strings.TrimSpace(s.dialogValue) != "" {
+				kind, target, value := s.dialogKind, s.dialogTarget, strings.TrimSpace(s.dialogValue)
+				s.dialogOpen = false
+				s.submitTextDialog(kind, target, value)
+			}
+		})
+	}
+	s.gitNoticeDialog(c)
+	s.deviceAddDialog(c)
+	s.usageConsentDialog(c)
+	s.voiceConsentDialog(c)
+	s.remotePairDialog(c)
+	s.remoteDesktopDialog(c)
+	s.automationsDialogs(c)
+	s.shortcutsSheet(c)
+	if s.confirmOpen {
+		// Destructive confirms must not default-focus the destructive
+		// button: AlertDialog focuses and Enter-clicks its LAST button, so
+		// Cancel goes last (Enter dismisses safely; Escape still cancels by
+		// label) and Confirm is index 0 (2026-10-06 F69).
+		if ui.AlertDialog(c, &s.confirmOpen, s.confirmTitle, s.confirmMessage, confirmActionText(s.confirmKind), "Cancel") == 0 {
+			kind, target := s.confirmKind, s.confirmTarget
+			s.confirmOpen = false
+			s.submitConfirm(kind, target)
+		}
+	}
+}
+
+func (s *Shell) submitTextDialog(kind, target, value string) {
+	switch kind {
+	case "create-workspace":
+		s.createWorkspace(value)
+	case "rename-workspace":
+		s.renameWorkspace(target, value)
+	case "rename-machine":
+		s.renameMachine(target, value)
+	case "rename-project":
+		s.mutate(func() (herdr.Projection, error) { return s.runtime.RenameProject(s.activeInstance, target, value) })
+	case "rename-tab":
+		s.mutate(func() (herdr.Projection, error) { return s.runtime.RenameTab(s.activeInstance, target, value) })
+	case "rename-pane":
+		s.mutate(func() (herdr.Projection, error) { return s.runtime.RenamePane(s.activeInstance, target, value) })
+	case "git-create-branch":
+		if s.git == nil || s.git.root == "" || s.git.root != target {
+			s.pendingToast = "Repository changed. Reopen the dialog to continue."
+			return
+		}
+		s.confirmCreateBranch(value)
+	}
+}
+
+func (s *Shell) submitConfirm(kind, target string) {
+	if strings.HasPrefix(kind, "git-") && (s.git == nil || s.confirmRepoRoot == "" || s.git.root != s.confirmRepoRoot) {
+		s.pendingToast = "Repository changed. Reopen the dialog to continue."
+		return
+	}
+	switch kind {
+	case "delete-workspace":
+		s.deleteWorkspace(target)
+	case "assistant-delete":
+		s.runArchiveAction("delete", target)
+	case "group-delete":
+		s.runGroupArchiveAction("delete", target)
+	case "forget-machine":
+		s.forgetMachine(target)
+	case "revoke-phone":
+		s.revokePhone(target)
+	case "close-project":
+		s.mutate(func() (herdr.Projection, error) { return s.runtime.CloseProject(s.activeInstance, target) })
+	case "close-tab":
+		s.mutate(func() (herdr.Projection, error) { return s.runtime.CloseTab(s.activeInstance, target) })
+	case "close-pane":
+		s.mutate(func() (herdr.Projection, error) { return s.runtime.ClosePane(s.activeInstance, target) })
+	case "release-agent":
+		if runtimeAgent, ok := s.paneRuntimeAgent(target); ok && runtimeAgent.Kind != "" {
+			kind := runtimeAgent.Kind
+			s.mutate(func() (herdr.Projection, error) { return s.runtime.ReleaseAgent(s.activeInstance, target, kind) })
+		}
+	case "history-continue":
+		s.runContinue(target)
+	case deleteForeverConfirm:
+		s.deleteFromTrash(strings.Split(target, confirmIDSeparator))
+	case emptyTrashConfirm:
+		s.emptyTrash()
+	case automationsRemoveConfirm:
+		s.removeAutomation(target)
+	default:
+		s.runGitConfirm(kind, target)
+	}
+}
+
+func (s *Shell) createWorkspace(displayName string) {
+	if s.win == nil || s.loading {
+		return
+	}
+	generation := s.generation.Add(1)
+	s.loading = true
+	s.status = "Creating Workspace…"
+	slog.Info("create workspace requested", "display_name", displayName)
+	go func() {
+		instance, err := s.runtime.CreateInstance(displayName)
+		if err != nil {
+			s.updateError(generation, err)
+			return
+		}
+		projection, err := s.runtime.Projection(instance.Name)
+		if err != nil {
+			s.updateError(generation, err)
+			return
+		}
+		instances, _ := s.runtime.ListAllInstances()
+		slog.Info("workspace created", "instance", instance.Name)
+		s.win.Update(func() {
+			if generation != s.generation.Load() {
+				return
+			}
+			s.instances = instances
+			s.clearLocalSelection()
+			s.closeAllTerminals()
+			s.activeInstance = instance.Name
+			s.loading = false
+			s.errText = ""
+			s.offline = false
+			s.status = ""
+			s.applyProjection(projection, true)
+		})
+	}()
+}
+
+func (s *Shell) renameWorkspace(name, displayName string) {
+	if s.win == nil || s.loading {
+		return
+	}
+	generation := s.generation.Add(1)
+	s.loading = true
+	slog.Info("rename workspace requested", "instance", name)
+	go func() {
+		if _, err := s.runtime.RenameInstance(name, displayName); err != nil {
+			s.updateError(generation, err)
+			return
+		}
+		instances, err := s.runtime.ListAllInstances()
+		if err != nil {
+			s.updateError(generation, err)
+			return
+		}
+		slog.Info("workspace renamed", "instance", name)
+		s.win.Update(func() {
+			if generation != s.generation.Load() {
+				return
+			}
+			s.instances = instances
+			s.loading = false
+			s.errText = ""
+			s.offline = false
+		})
+	}()
+}
+
+func (s *Shell) deleteWorkspace(name string) {
+	if s.win == nil || s.loading {
+		return
+	}
+	generation := s.generation.Add(1)
+	s.loading = true
+	slog.Info("delete workspace requested", "instance", name)
+	go func() {
+		if err := s.runtime.DeleteInstance(name); err != nil {
+			s.updateError(generation, err)
+			return
+		}
+		slog.Info("workspace deleted", "instance", name)
+		instances, err := s.runtime.ListAllInstances()
+		if err != nil {
+			s.updateError(generation, err)
+			return
+		}
+		s.win.Update(func() {
+			if generation != s.generation.Load() {
+				return
+			}
+			if name == s.activeInstance {
+				if s.watchCancel != nil {
+					s.watchCancel()
+					s.watchCancel = nil
+				}
+				s.closeAllTerminals()
+				s.activeInstance = ""
+				s.projection = herdr.Projection{}
+				s.clearLocalSelection()
+				s.selected = ""
+			}
+			s.instances = instances
+			s.loading = false
+			s.errText = ""
+			s.offline = false
+			s.status = "Choose a Herdr workspace"
+		})
+	}()
+}

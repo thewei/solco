@@ -1,0 +1,33 @@
+{
+  "subagent": {
+    "id": "abc123",
+    "provider": "claude-code",
+    "type": "Explore",
+    "description": "Find the parser",
+    "status": "done",
+    "startedMs": 1785546010000,
+    "updatedMs": 1785546020000,
+    "toolCalls": 0,
+    "result": "It is in parse.go.",
+    "prompt": "Find the parser"
+  },
+  "turns": [
+    {
+      "user": true,
+      "text": "Find the parser",
+      "tsMs": 1785546010000
+    },
+    {
+      "user": false,
+      "narration": "It is in parse.go.",
+      "tsMs": 1785546011000,
+      "steps": [
+        {
+          "kind": "narration",
+          "text": "It is in parse.go.",
+          "tsMs": 1785546011000
+        }
+      ]
+    }
+  ]
+}

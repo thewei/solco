@@ -1,0 +1,18 @@
+{
+  "heartbeat": {
+    "assistantId": "a_0000000000000001",
+    "checklist": "",
+    "cron": "0 9 * * *",
+    "events": {},
+    "held": [],
+    "lastBeatAt": 0,
+    "nextBeatAt": 1800000003000,
+    "revision": 1,
+    "updatedAt": 1800000003000,
+    "wakeApproved": false,
+    "wakeBudget": 0,
+    "wakesDay": "",
+    "wakesToday": 0
+  },
+  "schema": 1
+}

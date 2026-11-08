@@ -1,0 +1,17 @@
+{
+  "proactivity": {
+    "assistantId": "a_0000000000000001",
+    "dailyBudget": 10,
+    "dispatchToday": 1,
+    "level": "suggest",
+    "quietEnd": "08:00",
+    "quietNow": false,
+    "quietStart": "22:00",
+    "reportEveryMin": 120,
+    "revision": 1,
+    "tz": "Asia/Shanghai",
+    "updatedAt": 1800000001000
+  },
+  "replayed": false,
+  "schema": 1
+}

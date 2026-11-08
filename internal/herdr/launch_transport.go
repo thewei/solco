@@ -1,0 +1,460 @@
+package herdr
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// Launch transport over the live Herdr socket API. Every request shape,
+// result discriminator, and field below was verified against the bundled
+// protocol schema (`herdr api schema`, protocol 22, schema_version 1) —
+// nothing here is invented:
+//
+//	agent.start  params {name, kind, pane_id, args?, timeout_ms? (3000..300000)}
+//	             result  {type:"agent_started", agent: AgentInfo, argv}
+//	agent.prompt params {target, text, wait?} result {type:"agent_prompted", agent}
+//	agent.wait   params {target, until?: AgentStatus[], timeout_ms?}
+//	             result  {type:"agent_info", agent: AgentInfo} (a miss is the
+//	             "timeout" error; the result shape is as a live Herdr 0.9.3 answers)
+//	agent.get    params {target} result {type:"agent_info", agent: AgentInfo}
+//	tab.create   params {workspace_id?, cwd?, label?, focus? (default false)}
+//	             result  {type:"tab_created", tab: TabInfo, root_pane: PaneInfo}
+//	workspace.create params {cwd?, focus? (default false), label?, source_workspace_id?}
+//	             result  {type:"workspace_created", workspace, tab, root_pane}
+//	pane.process_info params {pane_id?} result {type:"pane_process_info", process_info}
+
+// launchAgentInfo is the verified AgentInfo subset the launch transaction
+// consumes.
+type launchAgentInfo struct {
+	PaneID        string  `json:"pane_id"`
+	TabID         string  `json:"tab_id"`
+	WorkspaceID   string  `json:"workspace_id"`
+	AgentStatus   string  `json:"agent_status"`
+	InteractiveRd bool    `json:"interactive_ready"`
+	LaunchPending bool    `json:"launch_pending"`
+	Revision      int64   `json:"revision"`
+	Agent         *string `json:"agent"`
+	AgentSession  *struct {
+		Agent  string `json:"agent"`
+		Kind   string `json:"kind"`
+		Source string `json:"source"`
+		Value  string `json:"value"`
+	} `json:"agent_session"`
+}
+
+type launchTabRef struct {
+	TabID string `json:"tab_id"`
+}
+
+type launchPaneRef struct {
+	PaneID string `json:"pane_id"`
+}
+
+type launchWorkspaceRef struct {
+	WorkspaceID string `json:"workspace_id"`
+}
+
+// decodeTypedResult enforces the discriminated result type before decoding
+// the payload, so a mismatching server response fails loudly instead of
+// decoding into the wrong shape.
+func decodeTypedResult(raw json.RawMessage, wantType string, payload any) error {
+	var discriminator struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &discriminator); err != nil {
+		return fmt.Errorf("decode %s result: %w", wantType, err)
+	}
+	if discriminator.Type != wantType {
+		return fmt.Errorf("unexpected %s result type %q", wantType, discriminator.Type)
+	}
+	if payload == nil {
+		return nil
+	}
+	return json.Unmarshal(raw, payload)
+}
+
+// CreateTabWithoutFocus creates one Tab in an existing workspace. The
+// protocol default for `focus` is false and Solco never sends true:
+// navigation stays client-local.
+func (m *Manager) CreateTabWithoutFocus(ctx context.Context, session, workspaceID, cwd string) (tabID, paneID string, err error) {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return "", "", err
+	}
+	params := map[string]any{"workspace_id": workspaceID, "cwd": cwd, "focus": false}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "tab.create", params, true, &raw); err != nil {
+		return "", "", err
+	}
+	var result struct {
+		Tab      launchTabRef  `json:"tab"`
+		RootPane launchPaneRef `json:"root_pane"`
+	}
+	if err := decodeTypedResult(raw, "tab_created", &result); err != nil {
+		return "", "", err
+	}
+	return result.Tab.TabID, result.RootPane.PaneID, nil
+}
+
+// CreateWorkspaceWithoutFocus creates one runtime workspace plus its root
+// tab/pane without moving global focus.
+func (m *Manager) CreateWorkspaceWithoutFocus(ctx context.Context, session, cwd string) (workspaceID, tabID, paneID string, err error) {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return "", "", "", err
+	}
+	params := map[string]any{"cwd": cwd, "focus": false}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "workspace.create", params, true, &raw); err != nil {
+		return "", "", "", err
+	}
+	var result struct {
+		Workspace launchWorkspaceRef `json:"workspace"`
+		Tab       launchTabRef       `json:"tab"`
+		RootPane  launchPaneRef      `json:"root_pane"`
+	}
+	if err := decodeTypedResult(raw, "workspace_created", &result); err != nil {
+		return "", "", "", err
+	}
+	return result.Workspace.WorkspaceID, result.Tab.TabID, result.RootPane.PaneID, nil
+}
+
+// AgentStartParams are the schema-verified agent.start parameters.
+type AgentStartParams struct {
+	Name      string
+	Kind      string
+	PaneID    string
+	Args      []string
+	TimeoutMS int64
+}
+
+// AgentStarted is the verified agent.start result.
+type AgentStarted struct {
+	AgentInfo launchAgentInfo
+	Argv      []string
+}
+
+// StartAgent starts a supported interactive agent in an existing pane
+// (agent.start). Executed exactly once by the launch transaction; an
+// unwritable/unreadable exchange surfaces as DeliveryUncertainError, which
+// the transaction reconciles instead of repeating.
+func (m *Manager) StartAgent(ctx context.Context, session string, params AgentStartParams) (AgentStarted, error) {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return AgentStarted{}, err
+	}
+	args := params.Args
+	if args == nil {
+		args = []string{} // the schema types args as an array, never null
+	}
+	wire := map[string]any{
+		"name":    params.Name,
+		"kind":    params.Kind,
+		"pane_id": params.PaneID,
+		"args":    args,
+	}
+	if params.TimeoutMS > 0 {
+		wire["timeout_ms"] = params.TimeoutMS
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "agent.start", wire, true, &raw); err != nil {
+		return AgentStarted{}, err
+	}
+	var result struct {
+		Agent launchAgentInfo `json:"agent"`
+		Argv  []string        `json:"argv"`
+	}
+	if err := decodeTypedResult(raw, "agent_started", &result); err != nil {
+		return AgentStarted{}, err
+	}
+	return AgentStarted{AgentInfo: result.Agent, Argv: result.Argv}, nil
+}
+
+// PromptAgent submits exactly one semantic prompt to an agent target
+// (agent.prompt {target, text}).
+func (m *Manager) PromptAgent(ctx context.Context, session, target, text string) error {
+	text = submitText(text)
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return err
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "agent.prompt", map[string]any{"target": target, "text": text}, true, &raw); err != nil {
+		if !agentIdentityMismatch(err) {
+			return err
+		}
+		// pane.send_input: text then Enter in one pane-scoped write.
+		return m.SendPaneInput(ctx, session, target, text, []string{"enter"})
+	}
+	return decodeTypedResult(raw, "agent_prompted", nil)
+}
+
+// endsInMention matches a prompt whose last token is an @-mention, quoted
+// (@"a path") or not.
+var endsInMention = regexp.MustCompile(`(^|\s)@("[^"\n]*"|\S*)$`)
+
+// submitText keeps an @-mention from swallowing the submitting Enter: Claude
+// Code and omp open a file picker while the caret sits in an @token, and
+// their Enter then accepts a suggestion instead of submitting (seen on real
+// sessions; Herdr still reports the prompt as delivered). A trailing space
+// closes the picker. Every other prompt is delivered exactly as given.
+func submitText(text string) string {
+	if endsInMention.MatchString(text) {
+		return text + " "
+	}
+	return text
+}
+
+// SendPaneInput writes text then named keys into one Pane's input in a single
+// pane-scoped call (pane.send_input {pane_id, text, keys}); text-only input that carries
+// an ESC is a terminal key sequence and goes out literally (pane.send_text). It is the typed
+// answer path of an interactive prompt: the agent is blocked on that very
+// prompt, which agent.prompt refuses by design.
+func (m *Manager) SendPaneInput(ctx context.Context, session, paneID, text string, keys []string) error {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 && strings.ContainsRune(text, '\x1b') {
+		// A key sequence a terminal emulator encoded (arrows, PageUp, Esc …): pane.send_input pastes its
+		// text, and an Agent TUI reads a pasted ESC[6~ as characters; pane.send_text writes the bytes
+		// literally, as the desktop's own mouse/stop writes do.
+		return callRPCWithContext(ctx, socket, "pane.send_text", map[string]any{"pane_id": paneID, "text": text}, true, nil)
+	}
+	if keys == nil {
+		keys = []string{} // text-only input: Herdr wants a sequence, not null
+	}
+	return callRPCWithContext(ctx, socket, "pane.send_input", map[string]any{"pane_id": paneID, "text": text, "keys": keys}, true, nil)
+}
+
+// agentIdentityMismatch reports Herdr's agent.* identity refusals — the
+// pane's foreground process is not the agent's canonical executable (an omp
+// launched through bun reports `bun.native`), so the pane is "not an active
+// named agent" although its hook-reported session is live. Only these two
+// refusals qualify; a busy or not-ready agent is never bypassed.
+func agentIdentityMismatch(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "not an active named agent") ||
+		strings.Contains(msg, "no longer the pane foreground process")
+}
+
+// WaitAgentState blocks until the agent target reaches one of the requested
+// Herdr statuses (agent.wait {target, until, timeout_ms}).
+func (m *Manager) WaitAgentState(ctx context.Context, session, target string, until []string, timeoutMS int64) error {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return err
+	}
+	params := map[string]any{"target": target}
+	if len(until) > 0 {
+		params["until"] = until
+	}
+	if timeoutMS > 0 {
+		params["timeout_ms"] = timeoutMS
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "agent.wait", params, false, &raw); err != nil {
+		return err
+	}
+	return decodeTypedResult(raw, "agent_info", nil)
+}
+
+// AgentByPane reads one agent through its pane (agent.get {target: pane_id}).
+// A missing agent decodes to (nil, nil) — the launch transaction treats that
+// as "not present yet" inside its bounded identity window.
+func (m *Manager) AgentByPane(ctx context.Context, session, paneID string) (*AgentInfo, error) {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return nil, err
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "agent.get", map[string]any{"target": paneID}, false, &raw); err != nil {
+		return nil, err
+	}
+	var result struct {
+		Agent launchAgentInfo `json:"agent"`
+	}
+	if err := decodeTypedResult(raw, "agent_info", &result); err != nil {
+		return nil, err
+	}
+	info := AgentInfo{
+		PaneID:           result.Agent.PaneID,
+		TabID:            result.Agent.TabID,
+		WorkspaceID:      result.Agent.WorkspaceID,
+		AgentStatus:      result.Agent.AgentStatus,
+		InteractiveReady: result.Agent.InteractiveRd,
+		LaunchPending:    result.Agent.LaunchPending,
+		Revision:         result.Agent.Revision,
+		Agent:            result.Agent.Agent,
+	}
+	if result.Agent.AgentSession != nil {
+		info.AgentSession = &AgentSessionIdentity{
+			Agent:  result.Agent.AgentSession.Agent,
+			Kind:   result.Agent.AgentSession.Kind,
+			Source: result.Agent.AgentSession.Source,
+			Value:  result.Agent.AgentSession.Value,
+		}
+	}
+	return &info, nil
+}
+
+// ShellReady reports whether the pane's shell is interactive: a live shell
+// process and no foreground process beyond it — the verified
+// pane.process_info projection.
+func (m *Manager) ShellReady(ctx context.Context, session, paneID string) (bool, error) {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return false, err
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "pane.process_info", map[string]any{"pane_id": paneID}, false, &raw); err != nil {
+		return false, err
+	}
+	var result struct {
+		ProcessInfo struct {
+			ShellPID            *int `json:"shell_pid"`
+			ForegroundProcesses []struct {
+				PID  uint32 `json:"pid"`
+				Name string `json:"name"`
+			} `json:"foreground_processes"`
+		} `json:"process_info"`
+	}
+	if err := decodeTypedResult(raw, "pane_process_info", &result); err != nil {
+		return false, err
+	}
+	info := result.ProcessInfo
+	if info.ShellPID == nil {
+		return false, nil
+	}
+	// An idle shell is its own foreground process (a zsh at the prompt lists
+	// itself, as captured from a live protocol-22 session); any other
+	// foreground process — an Agent, a build, a pager — means the pane is busy.
+	for _, process := range info.ForegroundProcesses {
+		if int(process.PID) != *info.ShellPID {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// ShellSettled is the stricter gate before `agent.start`: ShellReady, plus
+// the shell has drawn its prompt and Herdr no longer detects an agent in the
+// pane. A shell whose rc files launch helpers is "ready" by process list at
+// birth, yet Herdr either rejects the start (agent_pane_busy) or — at the very
+// first instant — accepts it and never registers the agent (no name, no
+// interactive_ready), so the launch can never verify. Measured live on
+// Herdr 0.9.5 with a slow-starting zsh; the `herdr agent start` CLI avoids it
+// by retrying while the pane is busy.
+func (m *Manager) ShellSettled(ctx context.Context, session, paneID string) (bool, error) {
+	if ready, err := m.ShellReady(ctx, session, paneID); err != nil || !ready {
+		return false, err
+	}
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return false, err
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "pane.get", map[string]any{"pane_id": paneID}, false, &raw); err != nil {
+		return false, err
+	}
+	var pane struct {
+		Pane struct {
+			Agent *string `json:"agent"`
+		} `json:"pane"`
+	}
+	if err := decodeTypedResult(raw, "pane_info", &pane); err != nil {
+		return false, err
+	}
+	if pane.Pane.Agent != nil && *pane.Pane.Agent != "" {
+		return false, nil
+	}
+	text, err := m.ReadPane(ctx, session, paneID, "visible")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(text) != "", nil
+}
+
+// SendAgentKeys sends verified named keys to an agent target
+// (agent.send_keys {target, keys}) — the Plan-mode post-ready operation, a
+// named-key operation on an exact Agent target, never raw terminal text.
+func (m *Manager) SendAgentKeys(ctx context.Context, session, target string, keys []string) error {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return err
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "agent.send_keys", map[string]any{"target": target, "keys": keys}, true, &raw); err != nil {
+		if !agentIdentityMismatch(err) {
+			return err
+		}
+		return callRPCWithContext(ctx, socket, "pane.send_keys", map[string]any{"pane_id": target, "keys": keys}, true, nil)
+	}
+	return decodeTypedResult(raw, "ok", nil)
+}
+
+// ReadPane reads a pane's visible text (pane.read {pane_id, source}) — the
+// hook layer's screen input for interaction detection. The success payload
+// carries the window under the "read" key.
+func (m *Manager) ReadPane(ctx context.Context, session, paneID, source string) (string, error) {
+	socket, err := m.reachableSocket(session)
+	if err != nil {
+		return "", err
+	}
+	var raw json.RawMessage
+	if err := callRPCWithContext(ctx, socket, "pane.read", map[string]any{
+		"pane_id":    paneID,
+		"source":     source,
+		"format":     "text",
+		"strip_ansi": true,
+	}, true, &raw); err != nil {
+		return "", err
+	}
+	var result struct {
+		Read struct {
+			Text string `json:"text"`
+		} `json:"read"`
+	}
+	if err := decodeTypedResult(raw, "pane_read", &result); err != nil {
+		return "", err
+	}
+	return result.Read.Text, nil
+}
+
+// AgentInfo is the exported verified subset for consumers above the adapter.
+type AgentInfo struct {
+	PaneID           string
+	TabID            string
+	WorkspaceID      string
+	AgentStatus      string
+	InteractiveReady bool
+	LaunchPending    bool
+	Revision         int64
+	Agent            *string
+	AgentSession     *AgentSessionIdentity
+}
+
+type AgentSessionIdentity struct {
+	Agent  string
+	Kind   string
+	Source string
+	Value  string
+}
+
+// callRPCWithContext mirrors callRPC with context cancellation support for
+// the launch transaction's cancellable phases.
+func callRPCWithContext(ctx context.Context, socketPath, method string, params any, mutating bool, result any) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- callRPC(socketPath, method, params, mutating, result)
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("%s canceled: %w", method, ctx.Err())
+	}
+}

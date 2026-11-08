@@ -1,0 +1,5 @@
+{
+  "code": "refused",
+  "message": "agent is busy",
+  "t": "input.error"
+}

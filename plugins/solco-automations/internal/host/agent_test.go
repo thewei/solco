@@ -1,0 +1,828 @@
+package host
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+)
+
+func agentWorkWith(ops ops, a config.Automation) agentWork {
+	return agentWork{ops: ops, knobs: fast(), a: a}
+}
+
+// ── starting the agent ──────────────────────────────────────────────
+
+func TestStartRetriesUntilThePaneHasAShell(t *testing.T) {
+	calls := 0
+	ops := &fakeOps{agentStart: func(string, string, string, []string) error {
+		calls++
+		if calls < 3 {
+			return apiErr("agent start", herdr.CodePaneBusy)
+		}
+		return nil
+	}}
+
+	if err := agentWorkWith(ops, config.Automation{}).start(Session{PaneID: "p"}); err != nil {
+		t.Fatalf("want the third attempt to stick, got %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("called %d times, want 3", calls)
+	}
+}
+
+func TestStartGivesUpOnAPaneThatNeverComesUp(t *testing.T) {
+	ops := &fakeOps{agentStart: func(string, string, string, []string) error {
+		return apiErr("agent start", herdr.CodePaneBusy)
+	}}
+	w := agentWorkWith(ops, config.Automation{})
+	w.knobs.paneReady = 20 * time.Millisecond
+
+	err := w.start(Session{PaneID: "p"})
+	if !herdr.HasCode(err, herdr.CodePaneBusy) {
+		t.Fatalf("want the busy error reported, got %v", err)
+	}
+	if ops.starts < 2 {
+		t.Errorf("tried %d times, want more than one attempt", ops.starts)
+	}
+}
+
+// The first real run of this plugin (2026-11-03): herdr read a Claude Code
+// that was still starting as `omp` and refused with agent_kind_mismatch in
+// under a second; the pane registered as claude moments later. The mismatch
+// is a moment, not a verdict.
+func TestStartWaitsOutAKindMismatchUntilTheAgentRegisters(t *testing.T) {
+	polls := 0
+	ops := &fakeOps{
+		agentStart: func(string, string, string, []string) error {
+			return apiErr("agent start", herdr.CodeKindMismatch)
+		},
+		agentIdentity: func(string) (string, string, error) {
+			polls++
+			if polls < 3 {
+				return "omp", "idle", nil
+			}
+			return "claude", "idle", nil
+		},
+	}
+	a := config.Automation{Agent: "claude"}
+
+	if err := agentWorkWith(ops, a).start(Session{PaneID: "p"}); err != nil {
+		t.Fatalf("want the agent to settle into claude, got %v", err)
+	}
+	if polls != 3 {
+		t.Errorf("polled %d times, want 3", polls)
+	}
+	if ops.starts != 1 {
+		t.Errorf("started %d times, want 1: the agent was already there", ops.starts)
+	}
+}
+
+func TestStartReportsTheMismatchWhenThePaneNeverSettles(t *testing.T) {
+	ops := &fakeOps{
+		agentStart: func(string, string, string, []string) error {
+			return apiErr("agent start", herdr.CodeKindMismatch)
+		},
+		agentIdentity: func(string) (string, string, error) { return "omp", "idle", nil },
+	}
+	w := agentWorkWith(ops, config.Automation{Agent: "claude"})
+	w.knobs.agentReady = 20 * time.Millisecond
+
+	err := w.start(Session{PaneID: "p"})
+	if !herdr.HasCode(err, herdr.CodeKindMismatch) {
+		t.Fatalf("want the mismatch reported as herdr said it, got %v", err)
+	}
+}
+
+func TestStartStopsAtAFolderTrustDialogAndSaysSo(t *testing.T) {
+	ops := &fakeOps{
+		agentStart: func(string, string, string, []string) error {
+			return apiErr("agent start", herdr.CodeKindMismatch)
+		},
+		paneRead: func(string, int) (string, error) {
+			return " Quick safety check: Is this a project you created or one you trust?\n ❯ No, exit\n   Yes, I trust this folder", nil
+		},
+	}
+
+	err := agentWorkWith(ops, config.Automation{Agent: "claude"}).start(Session{PaneID: "w1:p1"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError naming the dialog, got %v", err)
+	}
+	if blocked.Pane != "w1:p1" || !strings.Contains(err.Error(), "trust this folder") {
+		t.Errorf("the message should say what is asking and where: %v", err)
+	}
+	if ops.submits != 0 || ops.pending != 0 {
+		t.Errorf("typed into a trust dialog: submits=%d enters=%d", ops.submits, ops.pending)
+	}
+}
+
+func TestSubmitNeverTypesIntoAStartupDialog(t *testing.T) {
+	for name, screen := range map[string]string{
+		"claude mcp approval": "  2 new MCP servers found in this project\n  ❯ [✔] vibe-annotations\n Space to select · Esc to reject all",
+		"codex hooks review":  "⚠ 5 hooks need review before they can run.\n  Event  Installed  Active  Review",
+		"codex trust":         "Folder access\n  /elsewhere\n  Trust this folder? Codex can read, edit, and run files here",
+		"cursor trust":        "Workspace Trust Required",
+		"agy trust":           "Do you trust the contents of this project?",
+	} {
+		t.Run(name, func(t *testing.T) {
+			ops := &fakeOps{paneRead: func(string, int) (string, error) { return screen, nil }}
+
+			err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"})
+			var blocked *BlockedError
+			if !errors.As(err, &blocked) {
+				t.Fatalf("want a BlockedError, got %v", err)
+			}
+			if ops.submits != 0 || ops.pending != 0 {
+				t.Errorf("the keystrokes were an answer to the dialog: submits=%d enters=%d", ops.submits, ops.pending)
+			}
+		})
+	}
+}
+
+// A dialog that appears after the prompt was typed would take the nudge's
+// Enter as its answer.
+func TestSubmitDoesNotPressEnterOnADialogThatCameUpLate(t *testing.T) {
+	ops := &fakeOps{
+		agentSubmit: func(string, string) error { return apiErr("agent prompt", herdr.CodeStalled) },
+		agentStatus: func(string) (string, error) { return "idle", nil },
+	}
+	reads := 0
+	ops.paneRead = func(string, int) (string, error) {
+		reads++
+		if reads == 1 {
+			return "", nil // clean when the prompt went in
+		}
+		return "Workspace Trust Required", nil
+	}
+
+	err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError, got %v", err)
+	}
+	if ops.pending != 0 {
+		t.Errorf("pressed Enter %d times over a dialog", ops.pending)
+	}
+}
+
+func TestStartDoesNotRetryARealFailure(t *testing.T) {
+	want := errors.New(`agent start: unknown kind "clyde"`)
+	ops := &fakeOps{agentStart: func(string, string, string, []string) error { return want }}
+
+	err := agentWorkWith(ops, config.Automation{}).start(Session{PaneID: "p"})
+	if !errors.Is(err, want) {
+		t.Fatalf("got %v, want it passed through", err)
+	}
+	if ops.starts != 1 {
+		t.Errorf("tried %d times, want 1: a bad agent kind will not fix itself", ops.starts)
+	}
+}
+
+func TestStartForwardsModelAndMCPConfigAheadOfAgentArgs(t *testing.T) {
+	var got []string
+	ops := &fakeOps{agentStart: func(_, _, _ string, args []string) error {
+		got = args
+		return nil
+	}}
+	a := config.Automation{
+		Name: "n", Agent: "claude", Model: "sonnet",
+		MCPConfig: "/mcp.json", AgentArgs: []string{"--verbose"},
+	}
+
+	if err := agentWorkWith(ops, a).start(Session{PaneID: "p"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"--mcp-config", "/mcp.json", "--model", "sonnet", "--verbose"}
+	if len(got) != len(want) {
+		t.Fatalf("args = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("args = %v, want %v", got, want)
+		}
+	}
+}
+
+// ── getting the prompt in front of it ───────────────────────────────
+
+func TestSubmitIsDoneWhenHerdrConfirmsTheAgentReacted(t *testing.T) {
+	ops := &fakeOps{}
+	if err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"}); err != nil {
+		t.Fatal(err)
+	}
+	if ops.pending != 0 {
+		t.Errorf("pressed Enter %d times on a prompt that already landed", ops.pending)
+	}
+}
+
+func TestSubmitTreatsAStallAsInconclusiveAndChecksTheStatus(t *testing.T) {
+	// The failure this exists for: herdr calls a prompt stalled after five
+	// seconds, but an agent still loading its MCP servers takes longer than
+	// that to react. The text did land, so nudging further would double-type it.
+	ops := &fakeOps{
+		agentSubmit: func(string, string) error { return apiErr("agent prompt", herdr.CodeStalled) },
+		agentStatus: func(string) (string, error) { return "working", nil },
+	}
+
+	if err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"}); err != nil {
+		t.Fatalf("a stall with the agent working is not a failure: %v", err)
+	}
+	if ops.submits != 1 || ops.pending != 0 {
+		t.Errorf("submits=%d pending=%d, want the prompt left alone", ops.submits, ops.pending)
+	}
+}
+
+func TestSubmitPressesEnterForAnAgentSittingOnAFullComposer(t *testing.T) {
+	ops := &fakeOps{
+		agentSubmit: func(string, string) error { return apiErr("agent prompt", herdr.CodeStalled) },
+	}
+	// Idle until somebody presses Enter on the composer, then working.
+	ops.agentStatus = func(string) (string, error) {
+		if ops.pending > 0 {
+			return "working", nil
+		}
+		return "idle", nil
+	}
+
+	if err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"}); err != nil {
+		t.Fatalf("got %v, want the Enter press to have worked", err)
+	}
+	if ops.pending != 1 {
+		t.Errorf("pressed Enter %d times, want 1", ops.pending)
+	}
+	if ops.submits != 1 {
+		t.Errorf("retyped the prompt %d times, want 0", ops.submits-1)
+	}
+}
+
+func TestSubmitRetypesThePromptWhenEnterChangedNothing(t *testing.T) {
+	typed, checked := 0, 0
+	ops := &fakeOps{}
+	ops.agentSubmit = func(string, string) error {
+		typed++
+		return apiErr("agent prompt", herdr.CodeStalled)
+	}
+	ops.agentStatus = func(string) (string, error) {
+		checked++
+		// Idle through the first two windows; working once it was retyped.
+		if typed >= 2 {
+			return "working", nil
+		}
+		return "idle", nil
+	}
+
+	if err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"}); err != nil {
+		t.Fatalf("got %v, want the retype to have worked", err)
+	}
+	if typed != 2 {
+		t.Errorf("submitted %d times, want 2: once, then once more after Enter", typed)
+	}
+	if ops.pending != 1 {
+		t.Errorf("pressed Enter %d times, want 1", ops.pending)
+	}
+	if checked == 0 {
+		t.Error("never checked the status")
+	}
+}
+
+func TestSubmitGivesUpOnAnAgentThatNeverStartsWorking(t *testing.T) {
+	ops := &fakeOps{
+		agentSubmit: func(string, string) error { return apiErr("agent prompt", herdr.CodeStalled) },
+		agentStatus: func(string) (string, error) { return "idle", nil },
+	}
+
+	err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"})
+	if err == nil {
+		t.Fatal("want an error: nobody is going to read this prompt")
+	}
+	if ops.submits != 2 || ops.pending != 1 {
+		t.Errorf("submits=%d pending=%d, want both nudges tried", ops.submits, ops.pending)
+	}
+}
+
+// identityRefusal is Herdr's live answer for an omp started through bun
+// (measured 2026-11-07): the pane's foreground process is not "omp".
+func identityRefusal() error {
+	return &herdr.APIError{Command: "agent prompt", Code: herdr.CodeNotReady,
+		Message: "agent w1:p1 is no longer the pane foreground process"}
+}
+
+func TestSubmitTypesIntoThePaneWhenHerdrRefusesTheForegroundIdentity(t *testing.T) {
+	var typed []string
+	ops := &fakeOps{
+		agentSubmit:   func(string, string) error { return identityRefusal() },
+		agentIdentity: func(string) (string, string, error) { return "omp", "idle", nil },
+	}
+	ops.paneRun = func(_ string, command ...string) error {
+		typed = append(typed, strings.Join(command, " "))
+		return nil
+	}
+	ops.agentStatus = func(string) (string, error) {
+		if len(typed) > 0 {
+			return "working", nil
+		}
+		return "idle", nil
+	}
+
+	a := config.Automation{Agent: "omp", Prompt: "line one\nline two"}
+	if err := agentWorkWith(ops, a).submit(Session{PaneID: "p"}); err != nil {
+		t.Fatalf("got %v, want the pane-scoped fallback to have delivered it", err)
+	}
+	if len(typed) != 1 || typed[0] != "line one\nline two" {
+		t.Errorf("typed %q, want the whole prompt once", typed)
+	}
+	if ops.submits != 1 || ops.pending != 0 {
+		t.Errorf("submits=%d pending=%d, want one refused agent prompt and no Enter", ops.submits, ops.pending)
+	}
+}
+
+func TestSubmitNeverTypesIntoAPaneThatIsNoLongerThatAgent(t *testing.T) {
+	// The agent exited: the pane is a shell, and the prompt would run as commands.
+	for name, identity := range map[string]func(string) (string, string, error){
+		"gone":      func(string) (string, string, error) { return "", "", apiErr("agent get", herdr.CodeAgentGone) },
+		"other":     func(string) (string, string, error) { return "claude", "idle", nil },
+		"undecided": func(string) (string, string, error) { return "omp", "unknown", nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			typed := 0
+			ops := &fakeOps{
+				agentSubmit:   func(string, string) error { return identityRefusal() },
+				agentIdentity: identity,
+				paneRun:       func(string, ...string) error { typed++; return nil },
+			}
+			err := agentWorkWith(ops, config.Automation{Agent: "omp", Prompt: "go"}).submit(Session{PaneID: "p"})
+			if err == nil {
+				t.Fatal("want an error: nothing was delivered")
+			}
+			if typed != 0 {
+				t.Errorf("typed %d times into a pane that is not the agent", typed)
+			}
+		})
+	}
+}
+
+func TestSubmitDoesNotBypassOtherNotReadyRefusals(t *testing.T) {
+	typed := 0
+	ops := &fakeOps{
+		agentSubmit: func(string, string) error {
+			return &herdr.APIError{Command: "agent prompt", Code: herdr.CodeNotReady, Message: "agent w1:p1 is busy"}
+		},
+		agentIdentity: func(string) (string, string, error) { return "omp", "idle", nil },
+		paneRun:       func(string, ...string) error { typed++; return nil },
+	}
+	err := agentWorkWith(ops, config.Automation{Agent: "omp", Prompt: "go"}).submit(Session{PaneID: "p"})
+	if !herdr.HasCode(err, herdr.CodeNotReady) || typed != 0 {
+		t.Fatalf("err=%v typed=%d, want the refusal kept and nothing typed", err, typed)
+	}
+}
+
+func TestSubmitPaneScopedPressesEnterOnceAndNeverRetypes(t *testing.T) {
+	typed := 0
+	ops := &fakeOps{
+		agentSubmit:   func(string, string) error { return identityRefusal() },
+		agentIdentity: func(string) (string, string, error) { return "omp", "idle", nil },
+		paneRun:       func(string, ...string) error { typed++; return nil },
+		agentStatus:   func(string) (string, error) { return "idle", nil },
+	}
+	err := agentWorkWith(ops, config.Automation{Agent: "omp", Prompt: "go"}).submit(Session{PaneID: "p"})
+	if err == nil {
+		t.Fatal("want an error: the agent never started working")
+	}
+	if typed != 1 || ops.pending != 1 {
+		t.Errorf("typed=%d pending=%d, want the text once and one Enter", typed, ops.pending)
+	}
+}
+
+func TestSubmitPassesThroughAnErrorThatIsNotAStall(t *testing.T) {
+	ops := &fakeOps{
+		agentSubmit: func(string, string) error { return apiErr("agent prompt", herdr.CodeAgentGone) },
+	}
+
+	err := agentWorkWith(ops, config.Automation{Prompt: "go"}).submit(Session{PaneID: "p"})
+	if !herdr.HasCode(err, herdr.CodeAgentGone) {
+		t.Fatalf("got %v, want the gone-agent error kept", err)
+	}
+	if ops.pending != 0 {
+		t.Error("a vanished agent is not something Enter fixes")
+	}
+}
+
+// ── waiting for it to finish ────────────────────────────────────────
+
+func TestAwaitReturnsWhenTheAgentSettles(t *testing.T) {
+	calls := 0
+	ops := &fakeOps{agentWait: func(string, time.Duration) error {
+		calls++
+		if calls < 3 {
+			return apiErr("agent wait", "timeout")
+		}
+		return nil
+	}}
+
+	if err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour); err != nil {
+		t.Fatalf("got %v, want the settled agent reported as success", err)
+	}
+}
+
+func TestAwaitGivesUpAsSoonAsTheWorkspaceIsClosed(t *testing.T) {
+	// The failure this exists for: a run cancelled seconds in used to hold its
+	// in-flight slot for the whole timeout. One slice is all it should cost now.
+	ops := &fakeOps{
+		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentGone) },
+		agentStatus: func(string) (string, error) { return "", apiErr("agent get", herdr.CodeWorkspaceGone) },
+	}
+
+	err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour)
+	if !errors.Is(err, ErrCancelled) {
+		t.Fatalf("got %v, want ErrCancelled", err)
+	}
+	if ops.waits != 1 {
+		t.Errorf("waited %d times, want 1: it should not wait out the timeout", ops.waits)
+	}
+}
+
+func TestAwaitGivesUpWhenHerdrAnswersAgentNotFoundForAClosedPane(t *testing.T) {
+	// Measured on herdr 0.9.5: after `workspace close`, `agent wait` and
+	// `agent get` answer agent_not_found, not agent_not_running. The run must
+	// end at once as cancelled instead of timing out minutes later.
+	ops := &fakeOps{
+		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentNotFound) },
+		agentStatus: func(string) (string, error) { return "", apiErr("agent get", herdr.CodeAgentNotFound) },
+	}
+	err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour)
+	if !errors.Is(err, ErrCancelled) {
+		t.Fatalf("got %v, want ErrCancelled", err)
+	}
+	if ops.waits != 1 {
+		t.Errorf("waited %d times, want 1", ops.waits)
+	}
+}
+
+func TestAwaitCallsAnAgentThatDiedInALiveWorkspaceAFailure(t *testing.T) {
+	ops := &fakeOps{
+		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentGone) },
+		agentStatus: func(string) (string, error) { return "idle", nil },
+	}
+
+	err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour)
+	if errors.Is(err, ErrCancelled) {
+		t.Fatalf("got ErrCancelled, want a real failure: the workspace answered, so the agent crashed")
+	}
+	if err == nil {
+		t.Fatal("want an error for a dead agent")
+	}
+}
+
+func TestAwaitCallsARepeatedAgentGoneAFailureToo(t *testing.T) {
+	// AgentStatus is itself agent-scoped: the most likely answer for a dead
+	// agent in a live workspace is another agent_not_running, not a status
+	// string. That must still land as a crash, not fall through to cancelled.
+	ops := &fakeOps{
+		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentGone) },
+		agentStatus: func(string) (string, error) { return "", apiErr("agent get", herdr.CodeAgentGone) },
+	}
+
+	err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour)
+	if errors.Is(err, ErrCancelled) {
+		t.Fatalf("got ErrCancelled, want a real failure: agent_not_running twice still means the agent crashed")
+	}
+	if err == nil {
+		t.Fatal("want an error for a dead agent")
+	}
+}
+
+func TestAwaitStillCallsAClosedWorkspaceACancellation(t *testing.T) {
+	ops := &fakeOps{
+		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentGone) },
+		agentStatus: func(string) (string, error) { return "", apiErr("agent get", herdr.CodeWorkspaceGone) },
+	}
+
+	err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour)
+	if !errors.Is(err, ErrCancelled) {
+		t.Fatalf("got %v, want ErrCancelled: this is the closed-workspace case, unchanged", err)
+	}
+}
+
+func TestAwaitTreatsAnUnreadableStatusAsACancellation(t *testing.T) {
+	ops := &fakeOps{
+		agentWait:   func(string, time.Duration) error { return apiErr("agent wait", herdr.CodeAgentGone) },
+		agentStatus: func(string) (string, error) { return "", apiErr("agent get", "some_other_error") },
+	}
+
+	err := agentWorkWith(ops, config.Automation{}).await(Session{PaneID: "p"}, time.Hour)
+	if !errors.Is(err, ErrCancelled) {
+		t.Fatalf("got %v, want ErrCancelled: a doubt should not be turned into a failure", err)
+	}
+}
+
+func TestAwaitNeverWaitsPastTheDeadline(t *testing.T) {
+	// The fake sleeps the slice it is handed, as herdr does, so wall-clock time
+	// is what bounds the loop.
+	const timeout = 50 * time.Millisecond
+	var asked []time.Duration
+	ops := &fakeOps{agentWait: func(_ string, d time.Duration) error {
+		asked = append(asked, d)
+		time.Sleep(d)
+		return apiErr("agent wait", "timeout")
+	}}
+	w := agentWorkWith(ops, config.Automation{})
+	w.knobs.waitSlice = 10 * time.Millisecond
+
+	started := time.Now()
+	if err := w.await(Session{PaneID: "p"}, timeout); err == nil {
+		t.Fatal("want the timeout reported")
+	}
+	for _, d := range asked {
+		if d <= 0 || d > w.knobs.waitSlice {
+			t.Fatalf("asked herdr to wait %s, want a slice within (0, %s]", d, w.knobs.waitSlice)
+		}
+	}
+	// Generous: this asserts the deadline is honoured, not the scheduler's
+	// precision.
+	if elapsed := time.Since(started); elapsed > 4*timeout {
+		t.Errorf("took %s for a %s timeout", elapsed, timeout)
+	}
+}
+
+func TestAwaitReportsWhatHerdrLastSaid(t *testing.T) {
+	// Better to surface herdr's own last word than a generic "still working".
+	ops := &fakeOps{agentWait: func(string, time.Duration) error {
+		return apiErr("agent wait", "timeout")
+	}}
+	w := agentWorkWith(ops, config.Automation{})
+	w.knobs.waitSlice = time.Millisecond
+
+	err := w.await(Session{PaneID: "p"}, 2*time.Millisecond)
+	if !herdr.HasCode(err, "timeout") {
+		t.Fatalf("got %v, want herdr's last error kept", err)
+	}
+}
+
+// ── Claude's folder-trust dialog, answered only for the run's own folder ──
+
+const claudeTrustScreen = " Accessing workspace:\n\n %s\n\n Quick safety check: Is this a project you created or one you trust?\n\n %s No, exit\n %s Yes, I trust this folder\n\n Enter to confirm · Esc to cancel\n"
+
+// trustPane scripts the dialog the way Claude draws it: the menu opens on
+// "No, exit", Down moves the cursor, Enter on "Yes" removes the dialog.
+func trustPane(path string, onYes *bool) *fakeOps {
+	cursorOnYes := false
+	gone := false
+	ops := &fakeOps{}
+	ops.paneRead = func(string, int) (string, error) {
+		if gone {
+			return " ❯ \n", nil
+		}
+		if cursorOnYes {
+			return fmt.Sprintf(claudeTrustScreen, path, " ", "❯"), nil
+		}
+		return fmt.Sprintf(claudeTrustScreen, path, "❯", " "), nil
+	}
+	ops.sendKeys = func(_ string, keys ...string) error {
+		for _, k := range keys {
+			switch {
+			case k == "down":
+				cursorOnYes = true
+			case k == "enter" && cursorOnYes:
+				gone = true
+				*onYes = true
+			}
+		}
+		return nil
+	}
+	return ops
+}
+
+func TestClaudeTrustForTheRunsOwnWorktreeIsAnswered(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/.herdr/worktrees/solco/auto-nightly-20261103-2136", &answeredYes)
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco"})
+
+	if err := w.blockedBy(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"}); err != nil {
+		t.Fatalf("an own-worktree trust dialog should be answered, got %v", err)
+	}
+	if !answeredYes || strings.Join(ops.keys, ",") != "down,enter" {
+		t.Errorf("want Down then Enter on 'Yes, I trust this folder', got keys %v (yes=%v)", ops.keys, answeredYes)
+	}
+}
+
+func TestClaudeTrustForTheAutomationsRepositoryIsAnswered(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/work/solco", &answeredYes)
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco", Workspace: "root"})
+
+	if err := w.blockedBy(Session{PaneID: "w1:p1"}); err != nil || !answeredYes {
+		t.Fatalf("root-mode trust dialog: err=%v yes=%v keys=%v", err, answeredYes, ops.keys)
+	}
+}
+
+// Trust is a decision about one folder: a dialog about any other stops the run
+// and nothing is pressed.
+func TestClaudeTrustForAnyOtherFolderStillStopsTheRun(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/somewhere/else", &answeredYes)
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco"})
+
+	err := w.blockedBy(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError, got %v", err)
+	}
+	if len(ops.keys) != 0 || answeredYes {
+		t.Errorf("pressed keys %v on a foreign folder's trust dialog", ops.keys)
+	}
+}
+
+// A dialog that never goes away (the keys had no effect) ends in the refusal,
+// after a bounded number of keys.
+func TestClaudeTrustThatDoesNotCloseGivesUp(t *testing.T) {
+	path := "/Users/me/work/solco"
+	ops := &fakeOps{paneRead: func(string, int) (string, error) {
+		return fmt.Sprintf(claudeTrustScreen, path, "❯", " "), nil
+	}}
+	err := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: path}).blockedBy(Session{PaneID: "w1:p1"})
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want the refusal, got %v", err)
+	}
+	if len(ops.keys) == 0 || len(ops.keys) > 5 {
+		t.Errorf("the attempt should be bounded, pressed %v", ops.keys)
+	}
+}
+
+// herdr answers a start that meets the trust dialog with agent_kind_mismatch
+// on one run and agent_not_ready on the next; both must reach the dialog check.
+func TestStartAnswersTheTrustDialogWhenHerdrSaysNotReady(t *testing.T) {
+	var answeredYes bool
+	ops := trustPane("/Users/me/.herdr/worktrees/solco/auto-nightly-20261103-2136", &answeredYes)
+	ops.agentStart = func(string, string, string, []string) error { return apiErr("agent start", herdr.CodeNotReady) }
+	ops.agentIdentity = func(string) (string, string, error) { return "claude", "idle", nil }
+	w := agentWorkWith(ops, config.Automation{Agent: "claude", Repo: "/Users/me/work/solco"})
+
+	if err := w.start(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"}); err != nil {
+		t.Fatalf("start should go through once the dialog is answered, got %v", err)
+	}
+	if !answeredYes {
+		t.Errorf("the dialog was never answered; keys %v", ops.keys)
+	}
+}
+
+// ── Codex's folder-trust dialog (measured on 0.164): opens on "Trust and
+// continue", names the repository root even for a worktree ──
+
+const codexTrustScreen = "  Folder access\n  %s\n  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings\n  can run code automatically, even without a model request. Continue only if you trust these files. Your trust\n  decision will be saved.\n› 1. Trust and continue\n  2. Back to Agent Command Center\n  enter continue · esc back\n"
+
+func codexTrustPane(path string, onYes *bool) *fakeOps {
+	gone := false
+	ops := &fakeOps{}
+	ops.paneRead = func(string, int) (string, error) {
+		if gone {
+			return "› \n", nil
+		}
+		return fmt.Sprintf(codexTrustScreen, path), nil
+	}
+	ops.sendKeys = func(_ string, keys ...string) error {
+		if len(keys) == 1 && keys[0] == "enter" {
+			gone = true
+			*onYes = true
+		}
+		return nil
+	}
+	return ops
+}
+
+func TestCodexTrustForTheAutomationsRepositoryIsAnswered(t *testing.T) {
+	var yes bool
+	ops := codexTrustPane("/Users/me/work/solco", &yes)
+	// The run is in a worktree, but Codex names the repository it belongs to.
+	w := agentWorkWith(ops, config.Automation{Agent: "codex", Repo: "/Users/me/work/solco"})
+	if err := w.blockedBy(Session{PaneID: "w1:p1", Branch: "auto/nightly-20261103-2136"}); err != nil || !yes {
+		t.Fatalf("err=%v yes=%v keys=%v", err, yes, ops.keys)
+	}
+	if strings.Join(ops.keys, ",") != "enter" {
+		t.Errorf("the menu opens on yes; want a single Enter, got %v", ops.keys)
+	}
+}
+
+func TestCodexTrustForAnyOtherFolderStillStopsTheRun(t *testing.T) {
+	var yes bool
+	ops := codexTrustPane("/Users/me/somewhere/else", &yes)
+	w := agentWorkWith(ops, config.Automation{Agent: "codex", Repo: "/Users/me/work/solco"})
+	var blocked *BlockedError
+	if err := w.blockedBy(Session{PaneID: "w1:p1"}); !errors.As(err, &blocked) || len(ops.keys) != 0 {
+		t.Fatalf("want refusal with no keys, got %v keys=%v", err, ops.keys)
+	}
+}
+
+// A dialog that opens after the prompt was typed leaves the agent idle behind
+// it; the run must not be reported done.
+func TestRunEndingOnAStartupDialogIsNotDone(t *testing.T) {
+	reads := 0
+	ops := &fakeOps{paneRead: func(string, int) (string, error) {
+		reads++
+		if reads == 1 { // before the prompt is typed the pane is clean
+			return "› \n", nil
+		}
+		return "⚠ 5 hooks need review before they can run.\n", nil
+	}}
+	w := agentWorkWith(ops, config.Automation{Agent: "codex", Prompt: "p"})
+	var blocked *BlockedError
+	if err := w.do(Session{PaneID: "w1:p1"}, time.Second); !errors.As(err, &blocked) {
+		t.Fatalf("want a BlockedError, got %v", err)
+	}
+}
+
+// ── Herdr itself going away mid-run (AC-07) ──
+
+func TestAwaitGivesUpOnAHerdrThatStaysDownInsteadOfSpinningToTheDeadline(t *testing.T) {
+	calls := 0
+	ops := &fakeOps{agentWait: func(string, time.Duration) error {
+		calls++
+		return apiErr("agent wait", herdr.CodeServerDown)
+	}}
+	w := agentWorkWith(ops, config.Automation{})
+	w.knobs.waitSlice = time.Millisecond
+	w.knobs.statusPoll = time.Millisecond
+	w.knobs.herdrDownGrace = 30 * time.Millisecond
+
+	started := time.Now()
+	err := w.await(Session{PaneID: "p"}, time.Minute)
+	if !herdr.HasCode(err, herdr.CodeServerDown) {
+		t.Fatalf("got %v, want the server_not_running answer handed back", err)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Errorf("took %s to give up on a Herdr that was gone", elapsed)
+	}
+	if calls > 2000 {
+		t.Errorf("%d wait calls: the loop is spinning, not pacing itself", calls)
+	}
+}
+
+func TestAwaitForgivesAHerdrThatComesBackWithinTheGrace(t *testing.T) {
+	calls := 0
+	ops := &fakeOps{agentWait: func(string, time.Duration) error {
+		calls++
+		if calls < 4 {
+			return apiErr("agent wait", herdr.CodeServerDown)
+		}
+		return nil
+	}}
+	w := agentWorkWith(ops, config.Automation{})
+	w.knobs.statusPoll = time.Millisecond
+	w.knobs.herdrDownGrace = time.Minute
+
+	if err := w.await(Session{PaneID: "p"}, time.Minute); err != nil {
+		t.Fatalf("a restart inside the grace must not fail the run: %v", err)
+	}
+}
+
+// ── a launch with no prompt ─────────────────────────────────────────
+
+// A resumed Coordinator whose conversation already holds this exact brief is
+// started with an empty prompt: the agent is only waited for, never typed into.
+func TestDoWithoutAPromptOnlyWaitsForTheAgentToBeUp(t *testing.T) {
+	ops := &fakeOps{agentIdentity: func(string) (string, string, error) { return "omp", "idle", nil }}
+	w := agentWorkWith(ops, config.Automation{Agent: "omp", Prompt: " \n"})
+
+	if err := w.do(Session{PaneID: "p"}, time.Minute); err != nil {
+		t.Fatalf("an agent that is up and idle is a finished launch: %v", err)
+	}
+	if ops.starts != 1 {
+		t.Errorf("started %d times, want 1", ops.starts)
+	}
+	if ops.submits != 0 || ops.pending != 0 || ops.waits != 0 {
+		t.Errorf("typed or waited for a turn that was never asked: submits=%d enters=%d waits=%d", ops.submits, ops.pending, ops.waits)
+	}
+}
+
+func TestDoWithoutAPromptGivesUpOnAnAgentThatNeverRegisters(t *testing.T) {
+	ops := &fakeOps{agentIdentity: func(string) (string, string, error) { return "", "unknown", nil }}
+	w := agentWorkWith(ops, config.Automation{Agent: "omp"})
+	w.knobs.agentReady = 20 * time.Millisecond
+
+	err := w.do(Session{PaneID: "p"}, time.Minute)
+	if err == nil || !strings.Contains(err.Error(), "never became ready") {
+		t.Fatalf("want a not-ready failure, got %v", err)
+	}
+}
+
+func TestDoWithoutAPromptStopsAtAStartupDialog(t *testing.T) {
+	ops := &fakeOps{
+		agentIdentity: func(string) (string, string, error) { return "claude", "idle", nil },
+		paneRead: func(string, int) (string, error) {
+			return "Workspace Trust Required", nil
+		},
+	}
+	err := agentWorkWith(ops, config.Automation{Agent: "claude"}).do(Session{PaneID: "w1:p1"}, time.Minute)
+	var blocked *BlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("want the dialog reported, got %v", err)
+	}
+	if ops.submits != 0 || ops.pending != 0 {
+		t.Errorf("typed into a dialog: submits=%d enters=%d", ops.submits, ops.pending)
+	}
+}

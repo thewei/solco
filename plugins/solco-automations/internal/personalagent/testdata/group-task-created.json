@@ -1,0 +1,24 @@
+{
+  "replayed": false,
+  "schema": 1,
+  "task": {
+    "agent": "omp",
+    "assistantId": "a_0000000000000008",
+    "attempt": 1,
+    "brief": "Check.",
+    "createdAt": 1800000000000,
+    "goalId": "",
+    "id": "t_0000000000000013",
+    "kind": "research",
+    "model": "",
+    "needsYou": false,
+    "parentTaskId": "",
+    "repoPath": "",
+    "reviewState": "",
+    "revision": 1,
+    "ruleId": "",
+    "state": "queued",
+    "title": "Check the launch plan",
+    "updatedAt": 1800000000000
+  }
+}

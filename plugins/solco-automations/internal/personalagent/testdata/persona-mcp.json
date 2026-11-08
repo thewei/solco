@@ -1,0 +1,63 @@
+{
+  "mcp": {
+    "agent": "claude",
+    "assistantId": "a_0000000000000008",
+    "bindings": [],
+    "servers": [
+      {
+        "agents": [
+          "claude"
+        ],
+        "bound": [],
+        "configured": true,
+        "granted": true,
+        "id": "alpha",
+        "name": "alpha",
+        "sources": [
+          "claude"
+        ],
+        "summary": "alpha-mcp",
+        "transport": "stdio",
+        "verified": "",
+        "verifiedAt": 0
+      },
+      {
+        "agents": [
+          "claude"
+        ],
+        "bound": [],
+        "configured": true,
+        "granted": false,
+        "id": "beta",
+        "name": "beta",
+        "sources": [
+          "mcp.json"
+        ],
+        "summary": "beta.example.com",
+        "transport": "http",
+        "verified": "",
+        "verifiedAt": 0
+      },
+      {
+        "agents": [
+          "codex"
+        ],
+        "bound": [],
+        "configured": true,
+        "granted": false,
+        "id": "gamma",
+        "name": "gamma",
+        "sources": [
+          "codex"
+        ],
+        "summary": "npx",
+        "transport": "stdio",
+        "verified": "",
+        "verifiedAt": 0
+      }
+    ],
+    "supported": true
+  },
+  "replayed": false,
+  "schema": 1
+}

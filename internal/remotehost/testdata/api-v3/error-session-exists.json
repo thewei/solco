@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "session_exists",
+    "message": "A session file already exists there."
+  }
+}

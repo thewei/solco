@@ -1,0 +1,17 @@
+{
+  "approval": {
+    "action": "merge work/x",
+    "actionHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "assistantId": "a_0000000000000001",
+    "createdAt": 1800000000000,
+    "decidedAt": 0,
+    "expectedRevision": 5,
+    "expiresAt": 1800003600000,
+    "id": "p_0000000000000006",
+    "state": "pending",
+    "subjectId": "t_0000000000000004",
+    "subjectKind": "task"
+  },
+  "replayed": false,
+  "schema": 1
+}

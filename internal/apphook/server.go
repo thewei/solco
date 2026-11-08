@@ -1,0 +1,503 @@
+package apphook
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/thewei/solco/internal/chatstream"
+)
+
+/**
+ * [INPUT]: 依赖 net、os、bufio、encoding/json 处理 Unix Domain Socket 流
+ * [OUTPUT]: 对外提供 Server、NewServer、DefaultSocketPath、DefaultRuntimeSocketPath、NormalizeStatus 与 chat.stream 有界接入
+ * [POS]: internal/apphook 的进程内 IPC 监听服务，统一接收并规范化各 Agent Hook 上报
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// DefaultSocketPath returns the primary Unix domain socket path for Solco agent status hooks.
+func DefaultSocketPath() string {
+	if path := strings.TrimSpace(os.Getenv("SOLCO_SOCKET_PATH")); path != "" {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "solco-agent-status.sock")
+	}
+	return filepath.Join(home, ".solco", "run", "agent-status.sock")
+}
+
+// DefaultRuntimeSocketPath returns the convenience runtime socket path (~/.solco/runtime.sock).
+func DefaultRuntimeSocketPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".solco", "runtime.sock")
+}
+
+// NormalizeStatus standardizes raw agent hook events and status keywords
+// into canonical status strings: "working", "blocked", "idle", "done", "released".
+func NormalizeStatus(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	switch s {
+	case "blocked", "waiting", "permission_request", "ask_user_question", "permissionrequest", "askuserquestion":
+		return "blocked"
+	case "working", "busy", "running", "pre_tool_use", "post_tool_use", "user_prompt_submit", "pretooluse", "posttooluse", "userpromptsubmit", "pre_invocation", "preinvocation":
+		return "working"
+	case "idle", "session_start", "stop", "session_idle", "sessionstart":
+		return "idle"
+	case "done", "complete", "completed":
+		return "done"
+	case "released", "session_end", "session_shutdown", "sessionend", "sessionshutdown":
+		return "released"
+	case "launch_pending":
+		return "launch_pending"
+	default:
+		if s != "" {
+			return s
+		}
+		return "idle"
+	}
+}
+
+// Server is the in-app Unix domain socket server ingesting hook events.
+type Server struct {
+	socketPath  string
+	symlinkPath string
+	handler     Handler
+
+	listener net.Listener
+	// socketInfo records the exact inode we own. A failed Start or a later
+	// owner must never have its socket removed by this Server's Close.
+	socketInfo os.FileInfo
+	quit       chan struct{}
+	wg         sync.WaitGroup
+	mu         sync.Mutex
+	closed     bool
+}
+
+// NewServer creates a new in-app hook server instance.
+func NewServer(socketPath string, handler Handler) *Server {
+	if socketPath == "" {
+		socketPath = DefaultSocketPath()
+	}
+	return &Server{
+		socketPath: socketPath,
+		handler:    handler,
+		quit:       make(chan struct{}),
+	}
+}
+
+// SetSymlinkPath sets an optional symlink alias path (such as ~/.solco/runtime.sock).
+func (s *Server) SetSymlinkPath(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.symlinkPath = path
+}
+
+// SocketPath returns the configured socket path.
+func (s *Server) SocketPath() string {
+	return s.socketPath
+}
+
+// Start begins listening on the Unix domain socket.
+func (s *Server) Start() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.listener != nil {
+		return nil
+	}
+
+	dir := filepath.Dir(s.socketPath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create socket directory %s: %w", dir, err)
+	}
+
+	// In a desktop/resident ownership handoff, fail closed on a socket
+	// whose health is uncertain. Only ECONNREFUSED proves a Unix socket is
+	// stale; a timeout or permission denial must NEVER evict a live owner.
+	// Symlink ownership is not inferred from its target, either.
+	if info, err := os.Lstat(s.socketPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("apphook socket path is a symbolic link: %s", s.socketPath)
+		}
+		if info.Mode()&os.ModeSocket != 0 {
+			conn, dialErr := net.DialTimeout("unix", s.socketPath, 100*time.Millisecond)
+			if dialErr == nil {
+				_ = conn.Close()
+				return fmt.Errorf("socket %s is already in use by an active process", s.socketPath)
+			}
+			if !errors.Is(dialErr, syscall.ECONNREFUSED) {
+				return fmt.Errorf("socket %s has uncertain ownership: %w", s.socketPath, dialErr)
+			}
+		} else if !info.Mode().IsRegular() {
+			return fmt.Errorf("apphook socket path is not a regular file or socket: %s", s.socketPath)
+		}
+		if removeErr := os.Remove(s.socketPath); removeErr != nil {
+			return fmt.Errorf("remove stale socket %s: %w", s.socketPath, removeErr)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect socket %s: %w", s.socketPath, err)
+	}
+
+	ln, err := net.Listen("unix", s.socketPath)
+	if err != nil {
+		return fmt.Errorf("listen unix socket %s: %w", s.socketPath, err)
+	}
+	_ = os.Chmod(s.socketPath, 0o600)
+	s.listener = ln
+	s.socketInfo, _ = os.Lstat(s.socketPath)
+
+	// Create symlink if requested and different from socketPath
+	if s.symlinkPath != "" && s.symlinkPath != s.socketPath {
+		_ = os.MkdirAll(filepath.Dir(s.symlinkPath), 0o700)
+		_ = os.Remove(s.symlinkPath)
+		_ = os.Symlink(s.socketPath, s.symlinkPath)
+	}
+
+	s.wg.Add(1)
+	go s.acceptLoop(ln)
+
+	slog.Info("apphook server started", "socket", s.socketPath)
+	return nil
+}
+
+func (s *Server) acceptLoop(ln net.Listener) {
+	defer s.wg.Done()
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			select {
+			case <-s.quit:
+				return
+			default:
+				if ne, ok := err.(net.Error); ok && ne.Temporary() {
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
+				return
+			}
+		}
+
+		s.wg.Add(1)
+		go func(c net.Conn) {
+			defer s.wg.Done()
+			s.handleConnection(c)
+		}(conn)
+	}
+}
+
+// Close gracefully stops the server and removes the socket file.
+func (s *Server) Close() error {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.closed = true
+	close(s.quit)
+
+	var closeErr error
+	owned := s.listener != nil
+	inode := s.socketInfo
+	if owned {
+		closeErr = s.listener.Close()
+	}
+	s.mu.Unlock()
+
+	s.wg.Wait()
+
+	// Ownership is important when hostd yields the port to the GUI (or
+	// when Start failed because the GUI already owns the status socket).
+	// An unsuccessful Start must never remove another process's socket.
+	if owned && inode != nil {
+		if current, err := os.Lstat(s.socketPath); err == nil && os.SameFile(current, inode) {
+			_ = os.Remove(s.socketPath)
+		}
+	}
+	if owned && s.symlinkPath != "" {
+		if target, err := os.Readlink(s.symlinkPath); err == nil && target == s.socketPath {
+			_ = os.Remove(s.symlinkPath)
+		}
+	}
+	if owned {
+		slog.Info("apphook server stopped", "socket", s.socketPath)
+	}
+	return closeErr
+}
+
+type jsonRPCRequest struct {
+	ID     any             `json:"id"`
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
+}
+
+type directHookPayload struct {
+	Agent       string `json:"agent"`
+	Status      string `json:"status"`
+	PaneID      string `json:"pane_id"`
+	HerdrPane   string `json:"herdr_pane"`
+	TmuxPane    string `json:"tmux_pane"`
+	WorkspaceID string `json:"workspace_id"`
+	SessionID   string `json:"session_id"`
+	CWD         string `json:"cwd"`
+	Event       string `json:"event"`
+	Text        string `json:"text"`
+}
+
+type envelopePayload struct {
+	Event string          `json:"event"`
+	Data  json.RawMessage `json:"data"`
+}
+
+type envelopeData struct {
+	PaneID      string `json:"pane_id"`
+	WorkspaceID string `json:"workspace_id"`
+	Agent       string `json:"agent"`
+	AgentStatus string `json:"agent_status"`
+	Status      string `json:"status"`
+	SessionID   string `json:"session_id"`
+}
+
+func (s *Server) handleConnection(conn net.Conn) {
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	// Bound incoming lines before conversion to a string: the hook IPC is
+	// shared with providers that can emit token events at high frequency.
+	reader := bufio.NewReaderSize(conn, 64*1024)
+	for {
+		line, err := reader.ReadSlice('\n')
+		if errors.Is(err, bufio.ErrBufferFull) {
+			return // reject oversized frames; never allocate for an unbounded line
+		}
+		if len(line) > 0 {
+			trimmed := strings.TrimRight(string(line), "\r\n")
+			if trimmed != "" {
+				s.dispatchLine(trimmed, conn)
+			}
+		}
+		if err != nil {
+			if err != io.EOF {
+				slog.Debug("apphook connection read ended", "error", err)
+			}
+			break
+		}
+	}
+}
+
+func (s *Server) dispatchLine(line string, conn net.Conn) {
+	now := time.Now()
+
+	// 1. Format: Tab-delimited (name\tjson)
+	if name, payload, ok := strings.Cut(line, "\t"); ok && name != "" {
+		s.dispatchEnvelope(name, []byte(payload), now)
+		writeACK(conn, nil)
+		return
+	}
+
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "{") {
+		return
+	}
+
+	// 2. Check JSON-RPC format
+	var rpcReq jsonRPCRequest
+	if err := json.Unmarshal([]byte(trimmed), &rpcReq); err == nil && rpcReq.Method != "" {
+		s.handleJSONRPC(rpcReq, now, conn)
+		return
+	}
+
+	// 3. Check Envelope format {"event":"...", "data":{...}}
+	var env envelopePayload
+	if err := json.Unmarshal([]byte(trimmed), &env); err == nil && env.Event != "" && len(env.Data) > 0 {
+		s.dispatchEnvelope(env.Event, env.Data, now)
+		writeACK(conn, nil)
+		return
+	}
+
+	// 4. Direct Solco status object. Pane-less payloads drop.
+	var direct directHookPayload
+	if err := json.Unmarshal([]byte(trimmed), &direct); err == nil &&
+		(direct.PaneID != "" || direct.HerdrPane != "" || direct.TmuxPane != "") {
+		paneID := direct.PaneID
+		if paneID == "" {
+			paneID = direct.HerdrPane
+		}
+		if paneID == "" {
+			paneID = direct.TmuxPane
+		}
+
+		status := NormalizeStatus(direct.Status)
+		if status == "idle" && direct.Event != "" {
+			status = NormalizeStatus(direct.Event)
+		}
+
+		statusEvt := StatusEvent{
+			PaneID:      paneID,
+			WorkspaceID: direct.WorkspaceID,
+			Agent:       direct.Agent,
+			Status:      status,
+			SessionID:   direct.SessionID,
+			CWD:         direct.CWD,
+			RawEvent:    direct.Event,
+			Text:        direct.Text,
+			Timestamp:   now,
+		}
+
+		if s.handler.OnStatus != nil {
+			s.handler.OnStatus(statusEvt)
+		}
+
+		if direct.SessionID != "" && s.handler.OnSession != nil {
+			s.handler.OnSession(SessionEvent{
+				PaneID:         paneID,
+				Agent:          direct.Agent,
+				AgentSessionID: direct.SessionID,
+				Source:         "solco",
+				Timestamp:      now,
+			})
+		}
+
+		writeACK(conn, nil)
+		return
+	}
+}
+
+func (s *Server) handleJSONRPC(req jsonRPCRequest, now time.Time, conn net.Conn) {
+	switch req.Method {
+	case "chat.stream":
+		var event chatstream.Event
+		if len(req.Params) == 0 || len(req.Params) > 12*1024 || json.Unmarshal(req.Params, &event) != nil || event.Validate() != nil {
+			writeJSONRPCResponse(conn, req.ID, map[string]any{"ok": false})
+			return
+		}
+		if s.handler.OnChatStream != nil {
+			s.handler.OnChatStream(event)
+		}
+		writeJSONRPCResponse(conn, req.ID, map[string]any{"ok": true})
+
+	case "pane.report_agent_session":
+		var params struct {
+			PaneID             string `json:"pane_id"`
+			Agent              string `json:"agent"`
+			Source             string `json:"source"`
+			Seq                int64  `json:"seq"`
+			AgentSessionID     string `json:"agent_session_id"`
+			AgentSessionPath   string `json:"agent_session_path"`
+			SessionStartSource string `json:"session_start_source"`
+		}
+		if err := json.Unmarshal(req.Params, &params); err == nil && params.PaneID != "" {
+			if s.handler.OnSession != nil {
+				s.handler.OnSession(SessionEvent{
+					PaneID:             params.PaneID,
+					Agent:              params.Agent,
+					AgentSessionID:     params.AgentSessionID,
+					AgentSessionPath:   params.AgentSessionPath,
+					Source:             params.Source,
+					SessionStartSource: params.SessionStartSource,
+					Seq:                params.Seq,
+					Timestamp:          now,
+				})
+			}
+		}
+		writeJSONRPCResponse(conn, req.ID, map[string]any{"ok": true})
+
+	case "pane.report_agent_status", "pane.agent_status_changed":
+		var params struct {
+			PaneID      string `json:"pane_id"`
+			WorkspaceID string `json:"workspace_id"`
+			Agent       string `json:"agent"`
+			Status      string `json:"status"`
+			AgentStatus string `json:"agent_status"`
+			SessionID   string `json:"session_id"`
+		}
+		if err := json.Unmarshal(req.Params, &params); err == nil && params.PaneID != "" {
+			st := params.Status
+			if st == "" {
+				st = params.AgentStatus
+			}
+			status := NormalizeStatus(st)
+			if s.handler.OnStatus != nil {
+				s.handler.OnStatus(StatusEvent{
+					PaneID:      params.PaneID,
+					WorkspaceID: params.WorkspaceID,
+					Agent:       params.Agent,
+					Status:      status,
+					SessionID:   params.SessionID,
+					Timestamp:   now,
+				})
+			}
+		}
+		writeJSONRPCResponse(conn, req.ID, map[string]any{"ok": true})
+
+	default:
+		writeJSONRPCResponse(conn, req.ID, map[string]any{})
+	}
+}
+
+func (s *Server) dispatchEnvelope(eventName string, raw []byte, now time.Time) {
+	if s.handler.OnStatus == nil {
+		return
+	}
+	var env envelopePayload
+	if err := json.Unmarshal(raw, &env); err == nil && len(env.Data) > 0 {
+		raw = env.Data
+		if env.Event != "" {
+			eventName = env.Event
+		}
+	}
+	var data envelopeData
+	if err := json.Unmarshal(raw, &data); err != nil || data.PaneID == "" {
+		return
+	}
+	st := data.AgentStatus
+	if st == "" {
+		st = data.Status
+	}
+	s.handler.OnStatus(StatusEvent{
+		PaneID:      data.PaneID,
+		WorkspaceID: data.WorkspaceID,
+		Agent:       data.Agent,
+		Status:      NormalizeStatus(st),
+		SessionID:   data.SessionID,
+		RawEvent:    eventName,
+		Timestamp:   now,
+	})
+}
+
+func writeJSONRPCResponse(conn net.Conn, id any, result any) {
+	resp := map[string]any{"id": id, "result": result}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	b = append(b, '\n')
+	_, _ = conn.Write(b)
+}
+
+func writeACK(conn net.Conn, extra map[string]any) {
+	payload := map[string]any{"ok": true}
+	for k, v := range extra {
+		payload[k] = v
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	b = append(b, '\n')
+	_, _ = conn.Write(b)
+}

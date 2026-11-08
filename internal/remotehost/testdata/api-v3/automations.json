@@ -1,0 +1,55 @@
+{
+  "scheduler": true,
+  "draftPrompt": "Draft an automation: state its goal, trigger, guardrails and cost in the rationale, and always create it as a draft.",
+  "agents": [
+    {
+      "id": "claude",
+      "label": "Claude Code"
+    },
+    {
+      "id": "codex",
+      "label": "Codex"
+    }
+  ],
+  "automations": [
+    {
+      "name": "nightly-ci-triage",
+      "state": "active",
+      "schedule": "Daily 03:00",
+      "agent": "claude",
+      "headless": true,
+      "nextRunMs": 1786129200000,
+      "lastRun": {
+        "id": "run-7",
+        "status": "failed",
+        "atMs": 1786042800000,
+        "durationSec": 31
+      },
+      "unread": true
+    },
+    {
+      "name": "weekly-recap",
+      "state": "active",
+      "schedule": "Mondays 09:00",
+      "agent": "codex",
+      "nextRunMs": 1786410000000,
+      "lastRun": {
+        "id": "run-3",
+        "status": "running",
+        "atMs": 1786042900000
+      }
+    },
+    {
+      "name": "dependency-sweep",
+      "state": "draft",
+      "schedule": "Daily 09:00",
+      "agent": "claude"
+    },
+    {
+      "name": "old-report",
+      "state": "paused",
+      "schedule": "Weekdays 18:00",
+      "agent": "pi"
+    }
+  ]
+}

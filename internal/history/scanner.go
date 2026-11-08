@@ -1,0 +1,293 @@
+package history
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sync"
+)
+
+// maxScanWorkers bounds how many provider files one round parses at once:
+// enough to cut a cold scan to a fraction, few enough to leave cores to the
+// UI that is already drawing.
+const maxScanWorkers = 4
+
+// scanBatchSize is one progress batch: a round with thousands of session
+// sources reports every scanBatchSize rows that became queryable, so the
+// visible list fills in batches instead of landing all at once at the end.
+const scanBatchSize = 100
+
+// SourceRoot is one provider-owned data root the scanner observes. Solco
+// never writes to it.
+type SourceRoot struct {
+	Agent     AgentID
+	Directory string
+	NativeID  func(stem string) string
+	// List replaces the generic "every .jsonl under Directory" listing for
+	// providers whose sessions are not a flat JSONL tree (Cursor's SQLite
+	// stores, Antigravity's per-conversation folders).
+	List func(root SourceRoot) ([]SessionFileRef, error)
+}
+
+// refs lists the root's session sources.
+func (r SourceRoot) refs() ([]SessionFileRef, error) {
+	if r.List != nil {
+		return r.List(r)
+	}
+	return listJSONLRefs(r.Directory, r.Agent, r.NativeID)
+}
+
+// DefaultRoots resolves the default provider data roots under the given home
+// directory. CODEX_HOME overrides the Codex root when set.
+func DefaultRoots(home string) []SourceRoot {
+	roots := []SourceRoot{{
+		Agent:     AgentClaudeCode,
+		Directory: filepath.Join(home, ".claude", "projects"),
+		NativeID:  func(stem string) string { return stem },
+	}}
+	codexHome := os.Getenv("CODEX_HOME")
+	if codexHome == "" {
+		codexHome = filepath.Join(home, ".codex")
+	}
+	rollout := rolloutNativeID
+	roots = append(roots,
+		SourceRoot{Agent: AgentCodex, Directory: filepath.Join(codexHome, "sessions"), NativeID: rollout},
+		SourceRoot{Agent: AgentCodex, Directory: filepath.Join(codexHome, "archived_sessions"), NativeID: rollout},
+		SourceRoot{Agent: AgentPi, Directory: filepath.Join(home, ".pi", "agent", "sessions"), NativeID: piRolloutNativeID},
+		SourceRoot{Agent: AgentOMP, Directory: filepath.Join(home, ".omp", "agent", "sessions"), NativeID: piRolloutNativeID},
+		SourceRoot{Agent: AgentCursor, Directory: cursorChatsRoot(home), List: cursorListRefs},
+	)
+	for _, brain := range agyBrainRoots(home) {
+		roots = append(roots, SourceRoot{Agent: AgentAntigravity, Directory: brain, List: agyListRefs})
+	}
+	return roots
+}
+
+// ScanResult summarizes one scanner round.
+type ScanResult struct {
+	Scanned int
+	Changed int
+	Removed int
+}
+
+// Scanner reconciles the in-memory catalog with the observed provider
+// sources. Missing roots are legitimate empty sources; a root that exists but
+// cannot be read aborts the round so cleanup never follows an incomplete
+// observation.
+type Scanner struct {
+	catalog *Catalog
+	roots   []SourceRoot
+	parse   func(reference SessionFileRef) (ParsedTranscript, error)
+	workers int
+}
+
+func NewScanner(catalog *Catalog, roots []SourceRoot) *Scanner {
+	return &Scanner{catalog: catalog, roots: roots, parse: scanParseByAgent, workers: min(maxScanWorkers, runtime.GOMAXPROCS(0))}
+}
+
+// parseByAgent dispatches to the shipped adapters. Unknown providers fail
+// closed instead of being guessed.
+func parseByAgent(reference SessionFileRef) (ParsedTranscript, error) {
+	switch reference.Agent {
+	case AgentClaudeCode:
+		return ParseClaudeTranscript(reference)
+	case AgentCodex:
+		return ParseCodexTranscript(reference)
+	case AgentPi, AgentOMP:
+		return ParsePiTranscript(reference)
+	case AgentCursor:
+		return ParseCursorTranscript(reference)
+	case AgentAntigravity:
+		return parseAgyWithSummary(reference)
+	default:
+		return ParsedTranscript{}, fmt.Errorf("no history adapter for provider %q", reference.Agent)
+	}
+}
+
+// scanParseByAgent is parseByAgent for list rows: Cursor's chats are read in
+// their light summary form (see summarizeCursorTranscript), every other
+// provider parses whole.
+func scanParseByAgent(reference SessionFileRef) (ParsedTranscript, error) {
+	if reference.Agent == AgentCursor {
+		parsed, err := summarizeCursorTranscript(reference)
+		if err != nil {
+			// One damaged or locked store must not fail the whole round
+			// (nothing would be cleaned or listed): it keeps the row its own
+			// meta.json gives and no message counts.
+			slog.Warn("cursor store unreadable; listing from meta.json", "chat", reference.NativeID, "error", err)
+			fallback := newCursorParseState().transcript(reference)
+			applyCursorChatMeta(&fallback.Meta, filepath.Dir(reference.FilePath))
+			return fallback, nil
+		}
+		return parsed, nil
+	}
+	return parseByAgent(reference)
+}
+
+// Scan runs one reconciliation round: list roots, parse changed sources once
+// for their list-row metadata, then remove sessions whose files were not
+// observed. Cancelled rounds return ctx.Err() without cleanup.
+func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
+	return s.scan(ctx, nil)
+}
+
+// scan is Scan with an optional progress observer: onBatch runs on the
+// scanning goroutine after every scanBatchSize indexed sources become
+// queryable in the catalog, plus once more for the remainder of a completed
+// round, so a caller can surface rows while the rest of the tree is still
+// being read. The observer fires outside every lock.
+func (s *Scanner) scan(ctx context.Context, onBatch func()) (ScanResult, error) {
+	result := ScanResult{}
+
+	known := s.catalog.KnownFiles()
+	seen := make(map[string]bool)
+	var changed []SessionFileRef
+	for _, root := range s.roots {
+		references, err := root.refs()
+		if err != nil {
+			return result, fmt.Errorf("observe root %s: %w", root.Directory, err)
+		}
+		for _, reference := range references {
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
+			seen[reference.FilePath] = true
+			result.Scanned++
+			if stamp, ok := known[reference.FilePath]; ok && stamp.mtimeMS == reference.MtimeMS && stamp.size == reference.SizeBytes {
+				continue
+			}
+			changed = append(changed, reference)
+		}
+	}
+	indexed, err := s.indexChanged(ctx, changed, onBatch)
+	result.Changed = indexed
+	if err != nil {
+		return result, err
+	}
+	result.Removed = s.catalog.RemoveMissing(seen)
+	return result, nil
+}
+
+// indexedRow is one parsed source waiting for its turn to enter the catalog.
+type indexedRow struct {
+	meta        SessionMeta
+	mtimeMS     int64
+	description string
+	ready       bool
+}
+
+// indexChanged parses the changed sources on up to s.workers goroutines and
+// commits their rows in listing order, so the catalog ends up exactly as a
+// sequential round would leave it (of two files with the same session key the
+// later one wins, whichever parse finishes first). The first failure cancels
+// the rest of the round and is returned; the rows committed before it stay,
+// and the caller skips cleanup. onBatch fires after every scanBatchSize
+// committed rows and once more for the tail, each time after the lock is
+// released and with the rows already queryable.
+func (s *Scanner) indexChanged(ctx context.Context, references []SessionFileRef, onBatch func()) (int, error) {
+	if len(references) == 0 {
+		return 0, nil
+	}
+	round, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu      sync.Mutex
+		rows    = make([]indexedRow, len(references))
+		next    int // first row not yet committed
+		unread  int // committed rows not yet announced to onBatch
+		failure error
+		wg      sync.WaitGroup
+	)
+	jobs := make(chan int)
+	for range max(1, min(s.workers, len(references))) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				row, err := s.parseRow(round, references[i])
+				announce := false
+				mu.Lock()
+				switch {
+				case err != nil:
+					// A source that cannot be parsed fails the round, not the
+					// catalog: nothing is cleaned after it.
+					if failure == nil {
+						failure = err
+						cancel()
+					}
+				case failure == nil:
+					rows[i] = row
+					for next < len(rows) && rows[next].ready {
+						s.catalog.Put(rows[next].meta, rows[next].mtimeMS, rows[next].description)
+						next++
+						unread++
+					}
+					// Only one worker wins each boundary; the observer itself
+					// runs unlocked, so it may query the catalog freely.
+					if onBatch != nil && unread >= scanBatchSize {
+						unread = 0
+						announce = true
+					}
+				}
+				mu.Unlock()
+				if announce {
+					onBatch()
+				}
+			}
+		}()
+	}
+dispatch:
+	for i := range references {
+		select {
+		case jobs <- i:
+		case <-round.Done():
+			break dispatch
+		}
+	}
+	close(jobs)
+	wg.Wait()
+
+	if failure != nil {
+		return next, failure
+	}
+	if onBatch != nil && unread > 0 && ctx.Err() == nil {
+		unread = 0
+		onBatch()
+	}
+	return next, ctx.Err()
+}
+
+// SummarizeSource reads one provider session file into its list-row summary
+// (title, counts, project, bounded description) and keeps nothing: the
+// Sessions Trash lists trashed sessions this way, straight from the moved
+// file, instead of persisting metadata about them.
+func SummarizeSource(reference SessionFileRef) (SessionSummary, error) {
+	transcript, err := scanParseByAgent(reference)
+	if err != nil {
+		return SessionSummary{}, err
+	}
+	return SessionSummary{Meta: transcript.Meta, Description: descriptionFromMessages(transcript.Mainline)}, nil
+}
+
+// parseRow parses one changed source exactly once, keeps only the session's
+// list-row metadata, and drops the transcript.
+func (s *Scanner) parseRow(ctx context.Context, reference SessionFileRef) (indexedRow, error) {
+	if err := ctx.Err(); err != nil {
+		return indexedRow{}, err
+	}
+	transcript, err := s.parse(reference)
+	if err != nil {
+		return indexedRow{}, fmt.Errorf("parse %s source %s: %w", reference.Agent, reference.FilePath, err)
+	}
+	slog.Debug("indexed history source", "agent", string(reference.Agent), "session", transcript.Meta.Key, "messages", len(transcript.Mainline))
+	return indexedRow{
+		meta:        transcript.Meta,
+		mtimeMS:     reference.MtimeMS,
+		description: descriptionFromMessages(transcript.Mainline),
+		ready:       true,
+	}, nil
+}

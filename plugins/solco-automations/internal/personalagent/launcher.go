@@ -1,0 +1,336 @@
+package personalagent
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/host"
+)
+
+// HostLauncher drives the real Herdr through the same provision/work
+// choreography the cron runner uses. It never uses the hc backend: Assistants
+// run only in the Herdr session the user sees.
+type HostLauncher struct {
+	Host host.Host
+	// Session names the Herdr session ("" = the environment's).
+	Session string
+	// WorkDirRoot holds the controlled folders of repo-less personal tasks.
+	WorkDirRoot string
+	client      herdr.Client
+}
+
+// NewHostLauncher returns the production Launcher for a Herdr session.
+func NewHostLauncher(session, workDirRoot string) *HostLauncher {
+	return &HostLauncher{Host: host.New(), Session: session, WorkDirRoot: workDirRoot, client: herdr.Client{Session: session}}
+}
+
+func (l *HostLauncher) automation(spec LaunchSpec) config.Automation {
+	if spec.Auto != nil {
+		// A legacy rule: its own definition, named so the run's workspace label
+		// carries the run id (Find) and its branch keeps the rule's prefix
+		// (`auto/<rule>-`, which the cleanup TTL matches).
+		a := *spec.Auto
+		a.Name = spec.Auto.Name + " " + spec.RunID
+		if a.Session == "" {
+			a.Session = l.Session
+		}
+		return a
+	}
+	repo := spec.RepoPath
+	if spec.WorkDir != "" {
+		repo = spec.WorkDir
+	}
+	if repo == "" {
+		repo = filepath.Join(l.WorkDirRoot, "personal")
+		if spec.Kind == KindCoordinator && spec.AssistantID != "" {
+			// Each Coordinator has a folder of its own.
+			repo = filepath.Join(repo, "coordinators", spec.AssistantID)
+		}
+		if spec.Kind == KindGroupAgent && spec.GroupID != "" && spec.AssistantID != "" {
+			// Each Group Agent has a folder of its own, apart from the Coordinator's.
+			repo = filepath.Join(repo, "groups", spec.GroupID, spec.AssistantID)
+		}
+		if spec.Kind != KindCoordinator && spec.Kind != KindGroupAgent && spec.AssistantID != "" {
+			// A repo-less task works in its Assistant's own folder, not one
+			// shared with every other Assistant (Gap W11).
+			repo = filepath.Join(repo, "tasks", spec.AssistantID)
+		}
+		_ = os.MkdirAll(repo, 0o700)
+	}
+	mode := config.WorkspaceRoot
+	if spec.Kind == KindCoding && spec.WorkDir == "" {
+		mode = config.WorkspaceWorktree
+	}
+	minutes := int(spec.Timeout / time.Minute)
+	if minutes < 1 {
+		minutes = 45
+	}
+	return config.Automation{
+		Name: spec.RunID + " " + spec.titleHint(), Repo: repo, Workspace: mode, Agent: spec.Agent, Model: spec.Model,
+		Prompt: spec.Prompt, TimeoutMinutes: minutes, Session: l.Session, AgentArgs: spec.AgentArgs,
+	}
+}
+
+func (s LaunchSpec) titleHint() string {
+	// "assistant: <title> (<run id>)" → <title>
+	t := strings.TrimPrefix(s.Label, "assistant: ")
+	if i := strings.LastIndex(t, " ("); i > 0 {
+		t = t[:i]
+	}
+	return t
+}
+
+// Provision opens the workspace for a run.
+func (l *HostLauncher) Provision(spec LaunchSpec) (Session, error) {
+	if spec.Kind == KindCoordinator {
+		if spec.Agent != AssistantAgentKind {
+			return Session{}, fmt.Errorf("Coordinator requires %s, got %q", AssistantAgentKind, spec.Agent)
+		}
+		// A missing policy must fail before creating a Herdr workspace.
+		// Otherwise OMP would launch with unrestricted tools.
+		if st, err := os.Stat(CoordinatorExtensionPath()); err != nil || !st.Mode().IsRegular() {
+			return Session{}, fmt.Errorf("Solco Coordinator OMP tool policy unavailable: %v", err)
+		}
+	}
+	hs, err := l.Host.Provision(l.automation(spec))
+	return Session{HerdrSession: hs.HerdrSession, WorkspaceID: hs.WorkspaceID, PaneID: hs.PaneID, Branch: hs.Branch}, err
+}
+
+// Work starts the Agent, hands it the prompt and waits.
+func (l *HostLauncher) Work(ctx context.Context, sess Session, spec LaunchSpec) error {
+	return l.mapErr(l.Host.Do(host.Session{WorkspaceID: sess.WorkspaceID, PaneID: sess.PaneID, HerdrSession: sess.HerdrSession, Branch: sess.Branch}, l.automation(spec), spec.Timeout))
+}
+
+// How long Await tolerates a Herdr that answers server_not_running, and how
+// often it asks again meanwhile.
+var (
+	awaitHerdrDownGrace = 45 * time.Second
+	awaitHerdrDownPoll  = 2 * time.Second
+)
+
+// Await waits for an Agent that is already working: Herdr's own wait on the pane.
+func (l *HostLauncher) Await(ctx context.Context, sess Session, spec LaunchSpec) error {
+	deadline := time.Now().Add(spec.Timeout)
+	c := herdr.Client{Session: sess.HerdrSession}
+	var downSince time.Time
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := c.AgentWait(sess.PaneID, 30*time.Second)
+		if err == nil {
+			return nil
+		}
+		if herdr.HasCode(err, herdr.CodeServerDown) {
+			// Herdr is gone: the wait returns at once, so pace it, and past
+			// the grace hand the failure back (the run is parked, not held).
+			if downSince.IsZero() {
+				downSince = time.Now()
+			}
+			if time.Since(downSince) > awaitHerdrDownGrace {
+				return err
+			}
+			time.Sleep(awaitHerdrDownPoll)
+			continue
+		}
+		downSince = time.Time{}
+		if herdr.HasCode(err, herdr.CodeWorkspaceGone) || herdr.HasCode(err, herdr.CodeAgentNotFound) {
+			return ErrWorkCancelled
+		}
+		if herdr.HasCode(err, herdr.CodeAgentGone) {
+			// herdr uses one code for "workspace closed" and "no agent here".
+			if l.workspaceOpen(sess.WorkspaceID) {
+				return ErrAgentMissing
+			}
+			return ErrWorkCancelled
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("the agent was still working after %s", spec.Timeout)
+		}
+	}
+}
+
+func (l *HostLauncher) workspaceOpen(id string) bool {
+	list, err := herdr.Client{Session: l.Session}.WorkspaceList()
+	if err != nil {
+		return false
+	}
+	for _, w := range list {
+		if w.WorkspaceID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *HostLauncher) mapErr(err error) error {
+	var blocked *host.BlockedError
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, host.ErrCancelled):
+		return ErrWorkCancelled
+	case errors.As(err, &blocked):
+		return &BlockedError{Reason: blocked.What}
+	}
+	return err
+}
+
+// Find looks for the workspace Herdr holds for a run marker (the run id is in
+// the workspace label).
+func (l *HostLauncher) Find(marker string) (Session, bool, error) {
+	if marker == "" {
+		return Session{}, false, nil
+	}
+	list, err := l.client.WorkspaceList()
+	if err != nil {
+		return Session{}, false, err
+	}
+	for _, w := range list {
+		if !strings.Contains(w.Label, marker) {
+			continue
+		}
+		panes, err := l.client.PaneIDs(w.WorkspaceID)
+		if err != nil {
+			return Session{}, false, err
+		}
+		if len(panes) == 0 {
+			return Session{}, false, nil
+		}
+		return Session{HerdrSession: l.Session, WorkspaceID: w.WorkspaceID, PaneID: panes[0]}, true, nil
+	}
+	return Session{}, false, nil
+}
+
+// HasAgent only confirms a pane when Herdr registers the expected provider.
+// A workspace marker alone cannot prove the launch or its first prompt
+// succeeded. In particular, an empty pane must remain uncertain.
+func (l *HostLauncher) HasAgent(sess Session, expected string) (bool, error) {
+	if sess.PaneID == "" || expected == "" {
+		return false, nil
+	}
+	client := herdr.Client{Session: sess.HerdrSession}
+	kind, status, err := client.AgentIdentity(sess.PaneID)
+	if err != nil {
+		return false, err
+	}
+	// Idle/blocked is not proof that the original prompt was delivered.
+	// Only an actually working Agent is safe to reattach automatically.
+	if kind != expected || status != "working" {
+		return false, nil
+	}
+	// Do not interpret a startup trust or permission dialog as a running worker.
+	if screen, err := client.PaneRead(sess.PaneID, 60); err == nil {
+		if _, blocked := host.StartupDialog(screen); blocked {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// HerdrPaneGone verifies a previously owned pane is no longer present. An
+// unavailable Herdr server is NOT evidence of closure. Do not release or
+// close a pane automatically when permanently deleting an Assistant.
+//
+// A run recorded before Herdr sessions were named carries an empty session.
+// Guessing "the environment's session" could look in the wrong place and call
+// a live pane gone, so an empty session is asked of every running session: the
+// pane is gone only when none of them lists it, and any session that cannot
+// answer makes the answer an error, never "gone".
+func HerdrPaneGone(session, workspace, pane string) (bool, error) {
+	if workspace == "" || pane == "" {
+		return false, fmt.Errorf("missing recorded Herdr identity")
+	}
+	if session != "" {
+		return herdrPaneGoneIn(session, workspace, pane)
+	}
+	running, err := herdr.Client{}.RunningSessions()
+	if err != nil {
+		return false, err
+	}
+	if len(running) == 0 {
+		return false, fmt.Errorf("no running Herdr session to check the recorded pane against")
+	}
+	for _, name := range running {
+		gone, err := herdrPaneGoneIn(name, workspace, pane)
+		if err != nil || !gone {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func herdrPaneGoneIn(session, workspace, pane string) (bool, error) {
+	client := herdr.Client{Session: session}
+	workspaces, err := client.WorkspaceList()
+	if err != nil {
+		return false, err
+	}
+	for _, w := range workspaces {
+		if w.WorkspaceID != workspace {
+			continue
+		}
+		ids, err := client.PaneIDs(workspace)
+		if err != nil {
+			return false, err
+		}
+		for _, id := range ids {
+			if id == pane {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	return true, nil
+}
+
+// HerdrPaneClose closes a Coordinator's own recorded pane. It refuses a pane
+// that Herdr does not list under the recorded workspace (a recycled id must
+// never close someone else's terminal) and confirms the pane is gone after.
+func HerdrPaneClose(session, workspace, pane string) error {
+	if workspace == "" || pane == "" {
+		return fmt.Errorf("missing recorded Herdr identity")
+	}
+	client := herdr.Client{Session: session}
+	ids, err := client.PaneIDs(workspace)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, id := range ids {
+		if id == pane {
+			found = true
+		}
+	}
+	if !found {
+		return nil // already gone
+	}
+	if err := client.PaneClose(pane); err != nil {
+		return err
+	}
+	gone, err := HerdrPaneGone(session, workspace, pane)
+	if err != nil {
+		return err
+	}
+	if !gone {
+		return fmt.Errorf("pane is still present after close")
+	}
+	return nil
+}
+
+// Collect reads a finished Worker's answer from the OMP session directory Solco
+// pinned for the run. Only OMP has a transcript Solco reads; another Agent
+// kind (which the rollout does not launch) has no result and so no success.
+func (l *HostLauncher) Collect(_ context.Context, _ Session, spec LaunchSpec) (WorkerResult, error) {
+	if spec.Agent != AssistantAgentKind {
+		return WorkerResult{}, ErrNoResult
+	}
+	return ReadOMPWorkerResult(WorkerSessionDir(spec.RunID), spec.RunID)
+}

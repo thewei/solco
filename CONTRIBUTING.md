@@ -1,0 +1,44 @@
+# Contributing to Solco
+
+Thank you for your interest in improving Solco. This document covers the setup, the verification gates every change must pass, and what reviewers look for.
+
+## Ground rules
+
+- **Solco is the client; Herdr is the runtime.** Herdr stays authoritative for workspaces, tabs, panes, terminal sessions, agents, scrollback, persistence, and process lifecycle. `AGENTS.md` states the ownership rules; read it before your first change. The long-form architecture notes are kept privately by the maintainer.
+- Prefer mature owners over hand-rolled code, in this order: Herdr API → MyGo native components/official plugins → a proven compatible implementation → custom code.
+- Do not invent Herdr protocol methods or socket shapes; inspect the live API instead.
+
+## Development setup
+
+macOS 13+ and Go 1.27.1 (pinned in `go.mod`; use `GOTOOLCHAIN=auto` so the toolchain fetches itself) are required. The patched MyGo framework fork is vendored in-repo (`third_party/mygo`, wired through `go.mod`) — no sibling checkout or frontend toolchain is needed. See the [README](README.md#requirements).
+
+Run the app for local smoke testing with:
+
+```sh
+GOTOOLCHAIN=auto go tool mygo dev
+```
+
+## Verification gates
+
+Every change must pass before review:
+
+```sh
+GOTOOLCHAIN=auto go test ./...
+GOTOOLCHAIN=auto go tool mygo build
+git diff --check
+git diff --cached --check
+```
+
+Additional expectations:
+
+- Packaging changes must also build and structurally verify `Solco.app` (`go tool mygo build` output under `build/darwin-arm64/`).
+
+## Submitting changes
+
+- Keep the change bounded and describe what you verified, not only what you changed.
+- A few focused commits with clear messages beat one large dump.
+- For behavior changes, include the manual-acceptance steps you ran.
+
+## Reporting issues
+
+Bug reports and feature requests use the issue templates. Security vulnerabilities must **not** go through public issues — see [`SECURITY.md`](SECURITY.md).

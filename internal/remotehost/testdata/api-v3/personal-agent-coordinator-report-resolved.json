@@ -1,0 +1,15 @@
+{
+  "report": {
+    "assistantId": "a_0000000000000001",
+    "state": "submitted",
+    "fromSeq": 4,
+    "throughSeq": 9,
+    "submittedSeq": 9,
+    "attempts": 0,
+    "nextAt": 0,
+    "lastSubmittedAt": 0,
+    "coordinatorRevision": 0,
+    "updatedAt": 0
+  },
+  "schema": 1
+}

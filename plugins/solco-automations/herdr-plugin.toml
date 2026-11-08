@@ -1,0 +1,30 @@
+id = "com.whstudio.solco.automations"
+name = "Solco Automations"
+version = "0.12.0"
+min_herdr_version = "0.9.3"
+description = "Cron-scheduled agent prompts for Herdr — the trigger layer behind Solco's Automations view: prompt + cron, drafted by the agent, approved by a person, run in a fresh worktree or the repo root."
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["sh", "scripts/install.sh"]
+
+[[startup]]
+command = ["./bin/solco-automations", "daemon"]
+
+[[actions]]
+id = "run-now"
+title = "Automations: run now"
+contexts = ["workspace"]
+command = ["./bin/solco-automations", "run", "--pick"]
+
+[[actions]]
+id = "install-cli"
+title = "Automations: put solco-automations on your PATH"
+contexts = ["workspace"]
+command = ["./bin/solco-automations", "install-cli"]
+
+[[panes]]
+id = "board"
+title = "Automations"
+placement = "overlay"
+command = ["./bin/solco-automations", "pane"]

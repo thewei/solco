@@ -1,0 +1,558 @@
+package nativeui
+
+import (
+	"context"
+	"maps"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/services"
+)
+
+/**
+ * [INPUT]: 依赖 Herdr pane.process_info、lsof 监听快照与 statusStore 的 OSC 7501 生命周期接口
+ * [OUTPUT]: 提供服务、PaneBusy、shell-idle 判活索引；真实进程结束时只清瞬态 OSC 记录
+ * [POS]: nativeui 的有限采样 Herdr 运行事实投影层；它不是第二进程/PTY runtime
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// The service index answers one sidebar question: which Panes (and which of
+// their collapsed ancestors) have something running right now. A Pane runs
+// a service when one of its foreground processes (Herdr pane.process_info)
+// owns a listening TCP port from the local lsof snapshot; daemons that left
+// the foreground group fall back to a working-directory match against the
+// Pane CWDs, attributed to the Pane when unambiguous and to the Project
+// otherwise. Everything below runs on background lanes — render reads the
+// cached index only.
+
+const (
+	// serviceScanInterval is the background rescan cadence: services start
+	// and stop without Herdr events, so the index needs its own clock.
+	serviceScanInterval = 10 * time.Second
+	// serviceScanMinGap debounces kicks fired by projection bursts.
+	serviceScanMinGap = 5 * time.Second
+	// serviceScanTimeout bounds one whole scan (lsof + per-pane RPCs).
+	serviceScanTimeout = 8 * time.Second
+	// serviceScanWorkers bounds concurrent pane.process_info calls.
+	serviceScanWorkers = 4
+)
+
+// paneServiceActivity is one observed service: the first listening
+// foreground process name, its deduplicated sorted ports, the bounded
+// argv lines of the pane's whole foreground group — wrapper and children
+// alike — for origin inference (service_origin.go), and the scan's derived
+// health annotation (service_health.go). Argvs stay scan-lane facts:
+// render reads the inferred name and the health tone, never these.
+type paneServiceActivity struct {
+	Proc  string
+	Ports []uint16
+	Argvs [][]string
+	// HealthTone/HealthReason (2026-11-03): the square's color and the
+	// tooltip's reason suffix. Zero tone means the plain green of a
+	// serving listener.
+	HealthTone   StatusTone
+	HealthReason string
+}
+
+// foregroundPaneService matches one Pane's foreground processes against the
+// listener snapshot. It returns the activity and the listener PIDs it
+// consumed, so cwd-fallback attribution can skip them.
+func foregroundPaneService(info *herdr.PaneProcessInfo, listeners map[int]services.ListenerSnapshot) (paneServiceActivity, []int) {
+	if info == nil || len(listeners) == 0 {
+		return paneServiceActivity{}, nil
+	}
+	var act paneServiceActivity
+	var attributed []int
+	for _, fg := range info.ForegroundProcesses {
+		// The wrapper often holds no port itself (`pnpm run start` →
+		// `node dist/cli.js serve` owns :7676): every foreground argv
+		// feeds origin inference, not just the listening process's.
+		if argv := boundedArgv(fg.Argv); len(argv) > 0 {
+			act.Argvs = append(act.Argvs, argv)
+		}
+		snap, ok := listeners[fg.PID]
+		if !ok {
+			continue
+		}
+		attributed = append(attributed, fg.PID)
+		if act.Proc == "" {
+			act.Proc = fg.Name
+		}
+		act.Ports = mergePorts(act.Ports, snap.Ports)
+	}
+	if len(act.Ports) == 0 {
+		return paneServiceActivity{}, nil
+	}
+	sort.Slice(act.Ports, func(i, j int) bool { return act.Ports[i] < act.Ports[j] })
+	return act, attributed
+}
+
+func mergePorts(dst, src []uint16) []uint16 {
+	for _, port := range src {
+		if port == 0 {
+			continue
+		}
+		found := false
+		for _, existing := range dst {
+			if existing == port {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dst = append(dst, port)
+		}
+	}
+	return dst
+}
+
+// dirContains reports whether dir equals or lives under root.
+func dirContains(root, dir string) bool {
+	if root == "" || dir == "" {
+		return false
+	}
+	if root == dir {
+		return true
+	}
+	return strings.HasPrefix(dir, strings.TrimRight(root, "/")+string(filepath.Separator))
+}
+
+// sidebarServiceIndex is the merged per-row service view behind the sidebar:
+// Panes hold foreground-matched services plus unambiguous cwd fallbacks;
+// Projects hold the ambiguous daemons their Panes' directories contain.
+type sidebarServiceIndex struct {
+	Panes    map[string]paneServiceActivity
+	Projects map[string]paneServiceActivity
+}
+
+// computeSidebarServices crosses the projection with the listener snapshot:
+// foreground processes first (exact Pane attribution), then leftover
+// listeners matched by working directory.
+func computeSidebarServices(projection herdr.Projection, listeners map[int]services.ListenerSnapshot, infos map[string]*herdr.PaneProcessInfo) sidebarServiceIndex {
+	index := sidebarServiceIndex{
+		Panes:    make(map[string]paneServiceActivity),
+		Projects: make(map[string]paneServiceActivity),
+	}
+	attributed := make(map[int]bool)
+	for _, pane := range projection.Panes {
+		act, consumed := foregroundPaneService(infos[pane.ID], listeners)
+		for _, pid := range consumed {
+			attributed[pid] = true
+		}
+		if len(act.Ports) > 0 {
+			index.Panes[pane.ID] = act
+		}
+	}
+
+	for pid, snap := range listeners {
+		if attributed[pid] || snap.CWD == "" {
+			continue
+		}
+		daemon := paneServiceActivity{Proc: snap.Command, Ports: sortedPorts(snap.Ports)}
+		var matches []herdr.Pane
+		for _, pane := range projection.Panes {
+			if dirContains(pane.CWD, snap.CWD) {
+				matches = append(matches, pane)
+			}
+		}
+		if len(matches) == 1 {
+			pane := matches[0]
+			extra := index.Panes[pane.ID]
+			extra.Proc = firstText(extra.Proc, daemon.Proc)
+			extra.Ports = mergePorts(extra.Ports, daemon.Ports)
+			index.Panes[pane.ID] = extra
+			continue
+		}
+		seen := make(map[string]bool)
+		for _, pane := range matches {
+			if seen[pane.ProjectID] {
+				continue
+			}
+			seen[pane.ProjectID] = true
+			extra := index.Projects[pane.ProjectID]
+			extra.Proc = firstText(extra.Proc, daemon.Proc)
+			extra.Ports = mergePorts(extra.Ports, daemon.Ports)
+			index.Projects[pane.ProjectID] = extra
+		}
+	}
+	return index
+}
+
+func sortedPorts(ports []uint16) []uint16 {
+	out := append([]uint16(nil), ports...)
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func firstText(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// paneBusyInfo records one Pane's foreground state beyond its shell: the
+// process names of whatever currently runs in the foreground group (an
+// agent, a build, a dev server), capped for presentation. It is the pane
+// header's run control's busy fact — the same measurement ShellReady uses.
+type paneBusyInfo struct {
+	Procs []string
+}
+
+// maxPaneBusyProcs caps the names one pane's busy state carries.
+const maxPaneBusyProcs = 3
+
+// computePaneBusy crosses the projection's panes with their measured
+// pane.process_info: a pane is busy when any foreground process is not its
+// own shell (a zsh at the prompt lists itself — the verified protocol-22
+// fact behind ShellReady).
+func computePaneBusy(panes []herdr.Pane, infos map[string]*herdr.PaneProcessInfo) map[string]paneBusyInfo {
+	busy := make(map[string]paneBusyInfo)
+	for _, pane := range panes {
+		info := infos[pane.ID]
+		if info == nil || info.ShellPID == 0 {
+			continue
+		}
+		var procs []string
+		for _, fg := range info.ForegroundProcesses {
+			if fg.PID == info.ShellPID || fg.Name == "" {
+				continue
+			}
+			procs = append(procs, fg.Name)
+			if len(procs) >= maxPaneBusyProcs {
+				break
+			}
+		}
+		if len(procs) > 0 {
+			busy[pane.ID] = paneBusyInfo{Procs: procs}
+		}
+	}
+	return busy
+}
+
+// computeShellIdlePanes reports the panes whose measured foreground process
+// group holds nothing beyond their own shell — the shell sitting at its
+// prompt. It is the liveness fact behind the pane-Agent gate: Herdr's
+// binding outlives the agent process (status hooks carry transitions, not
+// exits), so a binding on a shell-idle pane is a leftover. Unmeasured panes
+// stay absent, and callers treat absence as "assume alive".
+func computeShellIdlePanes(panes []herdr.Pane, infos map[string]*herdr.PaneProcessInfo) map[string]bool {
+	idle := make(map[string]bool)
+	for _, pane := range panes {
+		info := infos[pane.ID]
+		if info == nil || info.ShellPID == 0 {
+			continue
+		}
+		quiet := true
+		for _, fg := range info.ForegroundProcesses {
+			if fg.PID != info.ShellPID && fg.Name != "" {
+				quiet = false
+				break
+			}
+		}
+		if quiet {
+			idle[pane.ID] = true
+		}
+	}
+	return idle
+}
+
+// paneBusyState reports one pane's busy fact for the run control.
+func (s *Shell) paneBusyState(paneID string) (paneBusyInfo, bool) {
+	info, ok := s.paneBusyIndex[paneID]
+	return info, ok
+}
+
+// sidebarActivity is the rollup marker behind a tree row's icon-corner dot:
+// something is running in this row or below it.
+type sidebarActivity struct {
+	On     bool
+	Tone   StatusTone
+	Detail string
+	// Service marks a running service or daemon (not an Agent state): the
+	// row's status slot draws it as a rounded square, so the green of "a dev
+	// server is up" never reads as the green of "an Agent is ready for review"
+	// (2026-10-30, designs/ux-audit).
+	Service bool
+}
+
+// buildSidebarActivity rolls service and agent activity up the sidebar
+// hierarchy: Panes light for their own services (their Agent state already
+// owns the icon-corner dot), Tabs and Projects light for whatever runs
+// beneath them — a working Agent keeps the slot spinning (the service fact
+// moves into the tooltip), otherwise services light green and the other
+// Agent states take the dot. shellIdle is the scan's measured shell-prompt
+// fact; a binding on such a pane is a dead leftover and must not count as
+// a running agent.
+func buildSidebarActivity(projection herdr.Projection, services sidebarServiceIndex, shellIdle map[string]bool) map[string]sidebarActivity {
+	index := make(map[string]sidebarActivity, len(projection.Panes)+len(projection.Tabs)+len(projection.Projects))
+
+	panesByTab := make(map[string][]string, len(projection.Tabs))
+	tabsByProject := make(map[string][]string, len(projection.Projects))
+	for _, pane := range projection.Panes {
+		panesByTab[pane.TabID] = append(panesByTab[pane.TabID], pane.ID)
+	}
+	for _, tab := range projection.Tabs {
+		tabsByProject[tab.ProjectID] = append(tabsByProject[tab.ProjectID], tab.ID)
+	}
+	agentStateByPane := make(map[string]operationalState, len(projection.Agents))
+	for i := range projection.Agents {
+		agent := &projection.Agents[i]
+		if shellIdle[agent.PaneID] {
+			continue
+		}
+		agentStateByPane[agent.PaneID] = normalizeRuntimeStatus(agent.Status)
+	}
+
+	for _, pane := range projection.Panes {
+		if svc := services.Panes[pane.ID]; len(svc.Ports) > 0 {
+			index[pane.ID] = sidebarActivity{On: true, Tone: healthToneOf(svc), Detail: serviceActivityDetail(svc), Service: true}
+		}
+	}
+	for _, tab := range projection.Tabs {
+		if act, on := rollupActivity(index, agentStateByPane, panesByTab[tab.ID]); on {
+			index[tab.ID] = act
+		}
+	}
+	for _, project := range projection.Projects {
+		var paneIDs []string
+		for _, tabID := range tabsByProject[project.ID] {
+			paneIDs = append(paneIDs, panesByTab[tabID]...)
+		}
+		act, on := rollupActivity(index, agentStateByPane, paneIDs)
+		if daemon := services.Projects[project.ID]; len(daemon.Ports) > 0 {
+			// A working Agent keeps the slot spinning (rollupActivity); the
+			// daemon joins the tooltip instead of stamping the square back.
+			if act.Tone != ToneWorking {
+				act.On, act.Tone, act.Service = true, ToneSuccess, true
+			}
+			act.Detail = joinDetails(act.Detail, serviceActivityDetail(daemon))
+			on = true
+		}
+		if on {
+			index[project.ID] = act
+		}
+	}
+	return index
+}
+
+// rollupActivity aggregates descendant Panes for a Tab/Project row: a
+// working Agent outranks a running service (the slot spins, the service
+// stays in the tooltip), otherwise a service lights the square green and
+// the strongest Agent state takes the dot.
+func rollupActivity(index map[string]sidebarActivity, agentStateByPane map[string]operationalState, paneIDs []string) (sidebarActivity, bool) {
+	act := sidebarActivity{}
+	serviceCount := 0
+	agentCount := 0
+	strongest := opUnknown
+	for _, paneID := range paneIDs {
+		if sub, on := index[paneID]; on && sub.Tone == ToneSuccess {
+			serviceCount++
+			act.Detail = joinDetails(act.Detail, sub.Detail)
+		}
+		if state, ok := agentStateByPane[paneID]; ok && state != opUnknown {
+			agentCount++
+			if operationalPriority(state) < operationalPriority(strongest) {
+				strongest = state
+			}
+		}
+	}
+	agentDetail := pluralUnits(agentCount, "agent") + " running"
+	switch {
+	case strongest == opWorking:
+		// An Agent is actually running beneath this row (2026-10-31 user
+		// request): the slot spins even while a dev server is up — motion
+		// says "working" louder than a quiet green square, and the service
+		// facts stay in the tooltip.
+		act.On, act.Tone, act.Service = true, ToneWorking, false
+		act.Detail = joinDetails(act.Detail, agentDetail)
+	case serviceCount > 0:
+		act.On, act.Tone, act.Service = true, ToneSuccess, true
+	case agentCount > 0:
+		act.On = true
+		if strongest == opUnknown || strongest == opIdle {
+			act.Tone = ToneMuted
+		} else {
+			act.Tone = operationalTone(strongest)
+		}
+		act.Detail = agentDetail
+	default:
+		return sidebarActivity{}, false
+	}
+	return act, true
+}
+
+// servicePortsText is the ports alone: ":3000, :5173" (built directly —
+// the detail string now carries the health reason suffix).
+func servicePortsText(act paneServiceActivity) string {
+	parts := make([]string, 0, len(act.Ports))
+	for i, port := range act.Ports {
+		if i == 4 {
+			parts = append(parts, "…")
+			break
+		}
+		parts = append(parts, ":"+strconv.Itoa(int(port)))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// serviceActivityDetail is the tooltip fact for one service:
+// "node on :3000, :8080 · exited" — the health reason rides the same
+// string when the scan derived one (2026-11-03; ports capped to keep the
+// tooltip readable).
+func serviceActivityDetail(act paneServiceActivity) string {
+	label := firstText(act.Proc, "service")
+	parts := make([]string, 0, len(act.Ports))
+	for i, port := range act.Ports {
+		if i == 4 {
+			parts = append(parts, "…")
+			break
+		}
+		parts = append(parts, ":"+strconv.Itoa(int(port)))
+	}
+	detail := label + " on " + strings.Join(parts, ", ")
+	if act.HealthReason != "" {
+		detail += " · " + act.HealthReason
+	}
+	return detail
+}
+
+func joinDetails(parts ...string) string {
+	joined := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			joined = append(joined, part)
+		}
+	}
+	return strings.Join(joined, " · ")
+}
+
+func pluralUnits(count int, unit string) string {
+	if count == 1 {
+		return "1 " + unit
+	}
+	return strconv.Itoa(count) + " " + unit + "s"
+}
+
+// startServiceScan runs the periodic index refresh for the window's
+// lifetime; Close cancels it.
+func (s *Shell) startServiceScan() {
+	if s.serviceScanCancel != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.serviceScanCancel = cancel
+	go func() {
+		ticker := time.NewTicker(serviceScanInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if s.win == nil {
+					continue
+				}
+				s.win.Update(func() { s.kickServiceScan() })
+			}
+		}
+	}()
+}
+
+// kickServiceScan launches one scan when the index is stale. UI lane only:
+// it snapshots the projection's panes before leaving it.
+func (s *Shell) kickServiceScan() {
+	if s.win == nil || s.activeInstance == "" || len(s.projection.Panes) == 0 {
+		return
+	}
+	if !s.servicesScannedAt.IsZero() && time.Since(s.servicesScannedAt) < serviceScanMinGap {
+		return
+	}
+	s.servicesScannedAt = time.Now()
+	instance := s.activeInstance
+	panes := append([]herdr.Pane(nil), s.projection.Panes...)
+	generation := s.generation.Load()
+	go s.scanPaneServices(instance, panes, generation)
+}
+
+// scanPaneServices builds the next index off the UI lane: one listener
+// snapshot, then bounded pane.process_info calls, applied only when the
+// window still shows the same instance and generation.
+func (s *Shell) scanPaneServices(instance string, panes []herdr.Pane, generation uint64) {
+	ctx, cancel := context.WithTimeout(context.Background(), serviceScanTimeout)
+	defer cancel()
+
+	listeners, err := s.portProbe.ObserveListeners(ctx)
+	if err != nil {
+		// Without the local socket snapshot there is nothing honest to
+		// light up; keep the previous index instead of guessing.
+		return
+	}
+
+	infos := make(map[string]*herdr.PaneProcessInfo, len(panes))
+	sem := make(chan struct{}, serviceScanWorkers)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, pane := range panes {
+		pane := pane
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			info, err := s.runtime.PaneProcessInfo(instance, pane.ID)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			infos[pane.ID] = info
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+
+	next := computeSidebarServices(herdr.Projection{Panes: panes}, listeners, infos)
+	busy := computePaneBusy(panes, infos)
+	shellIdle := computeShellIdlePanes(panes, infos)
+	origins := s.resolveServiceOrigins(panes, next.Panes)
+	// Health probes ride the same scan: one short batch over the pane
+	// services' ports, then the tone derivation inside the UI apply (it
+	// needs the previous index and shell facts, both UI-lane state).
+	ports := make([]uint16, 0, len(next.Panes))
+	for _, act := range next.Panes {
+		ports = append(ports, act.Ports...)
+	}
+	probes := s.serviceProbePorts(ports)
+	if s.win == nil {
+		return
+	}
+	s.win.Update(func() {
+		if generation != s.generation.Load() || instance != s.activeInstance {
+			return
+		}
+		livenessChanged := !maps.Equal(s.paneShellIdle, shellIdle)
+		// pane.process_info is Herdr-owned evidence that the foreground
+		// program returned to the shell. OSC 133 A may be unavailable;
+		// this is the real process-exit fallback, not a status heartbeat.
+		s.retireShellIdleProgramStatuses(shellIdle)
+		s.applyServiceHealth(panes, next.Panes, probes, shellIdle, s.clock())
+		s.serviceIndex = next
+		s.serviceOrigins = origins
+		s.paneBusyIndex = busy
+		s.publishRemoteAgentFacts() // phones list the services beside each agent
+		s.paneShellIdle = shellIdle
+		if livenessChanged {
+			// The measured liveness facts moved: the Agent directory and
+			// its consumers follow immediately instead of waiting for the
+			// next projection event.
+			s.reconcileWorkbench()
+		}
+	})
+}

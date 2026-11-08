@@ -1,0 +1,105 @@
+package daemon
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+)
+
+// acquireLock keeps a single scheduler alive per machine. Two daemons would
+// fire every automation twice.
+//
+// The lock is an advisory flock on the pidfile, not the PID it contains. The
+// kernel drops an flock when the holder exits, however it exits, so a daemon
+// killed with the Herdr server cannot leave a lock behind. Trusting the PID
+// instead would strand the scheduler: the startup hook runs again on every
+// server restart, and by then the recorded PID may belong to an unrelated
+// process, which looks exactly like a running daemon. The PID is still written,
+// for humans reading the file and for the error below, but never decides
+// whether a daemon is live.
+// ErrAlreadyRunning is the expected answer for every startup hook but the
+// first: each Herdr session starts the daemon, and one per machine serves them
+// all (ADR 0010).
+var ErrAlreadyRunning = errors.New("another daemon is already running")
+
+func acquireLock() (release func(), err error) {
+	if err := os.MkdirAll(config.StateDir(), 0o755); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(config.StateDir(), "daemon.pid")
+
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		// Only a held lock means a daemon. Reporting any other failure — a
+		// filesystem without flock, say — as one would send someone hunting
+		// for a process that does not exist.
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, fmt.Errorf("%w (pid %s)", ErrAlreadyRunning, holderPID(path))
+		}
+		return nil, fmt.Errorf("lock %s: %w", path, err)
+	}
+
+	if err := f.Truncate(0); err != nil {
+		releaseFile(f)
+		return nil, err
+	}
+	if _, err := f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0); err != nil {
+		releaseFile(f)
+		return nil, err
+	}
+
+	// Empty the file on release rather than remove it. A daemon that opened it
+	// a moment earlier would otherwise lock a file that is no longer there, and
+	// the next one would lock a fresh one beside it.
+	return func() {
+		f.Truncate(0)
+		releaseFile(f)
+	}, nil
+}
+
+// releaseFile drops the flock. Closing the descriptor would be enough, but
+// unlocking first keeps the intent obvious at the call sites.
+func releaseFile(f *os.File) {
+	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	f.Close()
+}
+
+// holderPID reports what the pidfile claims, for the error message only. The
+// file may be empty if the holder has not written its PID yet.
+func holderPID(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "unknown"
+	}
+	if pid := strings.TrimSpace(string(raw)); pid != "" {
+		return pid
+	}
+	return "unknown"
+}
+
+// Running reports whether a scheduler holds the lock, and its pid when the
+// pidfile says. The flock decides, not the pid: a pid can outlive its daemon
+// or be reused.
+func Running() (int, bool) {
+	f, err := os.Open(filepath.Join(config.StateDir(), "daemon.pid"))
+	if err != nil {
+		return 0, false
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err == nil {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		return 0, false
+	}
+	pid, _ := strconv.Atoi(holderPID(f.Name()))
+	return pid, true
+}

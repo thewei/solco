@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "assistants": [
+    {
+      "id": "a_0000000000000001",
+      "name": "Ada",
+      "status": "active",
+      "revision": 1,
+      "tasks": 1,
+      "queued": 0,
+      "running": 0,
+      "needsYou": 0,
+      "done": 1,
+      "goals": 1,
+      "approvals": 1,
+      "updatedAt": 0
+    }
+  ],
+  "needsYou": 1,
+  "groups": [],
+  "activitySeq": 4
+}

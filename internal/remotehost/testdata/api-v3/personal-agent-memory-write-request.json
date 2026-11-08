@@ -1,0 +1,5 @@
+{
+  "file": "user",
+  "text": "I prefer short reports.\nMy timezone is Asia/Shanghai.",
+  "expectedRev": "e3b0c44298fc1c14"
+}

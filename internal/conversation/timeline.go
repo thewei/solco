@@ -1,0 +1,247 @@
+package conversation
+
+import "strings"
+
+// TimelineStep kinds — the ordered presentation segments of a turn.
+const (
+	StepNarration = "narration"
+	StepThinking  = "thinking"
+	StepTool      = "tool"
+)
+
+// TimelineStep is one ordered segment inside a turn: thinking, narration and
+// tool calls render in their original interleaving (the turn's time chain)
+// instead of grouped buckets. Consecutive same-kind segments merge — the
+// chain shows boundaries, not provider chunking.
+type TimelineStep struct {
+	Kind string
+	// Text carries narration or thinking content for those kinds.
+	Text string
+	// Tool is the invocation for kind tool.
+	Tool *ConversationToolCall
+	// TsMS is the provider timestamp of the item that opened this step, when
+	// recorded; merged text steps keep the first. Presentation only (step
+	// durations), never ordering.
+	TsMS *int64
+}
+
+// TimelineTurn is the ChatGPT-contract presentation row (0.6 §13): the
+// assistant's narration stays visible, thinking consolidates into one
+// collapsible block per turn, and tool activity compacts only when two or
+// more consecutive tool runs appear.
+type TimelineTurn struct {
+	// Narration is the visible assistant text of this turn (possibly empty
+	// while the turn is still streaming).
+	Narration string
+	// Thinking holds the consolidated thinking text for the turn; nil when
+	// the turn had none.
+	Thinking *string
+	// ToolRuns are the compact per-call chip rows.
+	ToolRuns []ConversationToolCall
+	// Steps is the turn's ordered time chain (narration/thinking/tool);
+	// presentation renders from this when non-empty. The consolidated
+	// fields above remain the summary surface.
+	Steps []TimelineStep
+	// Compacted marks two-or-more consecutive tool runs folded into one
+	// expandable group.
+	Compacted bool
+	// Failed marks a failed/aborted turn (the partial scene stays visible).
+	Failed bool
+	// CompactedBefore marks the first row after the provider compacted the
+	// context (a compact-summary row precedes it): the page draws a divider.
+	CompactedBefore bool
+	// NoteBefore is a system annotation drawn as a collapsed chip above the
+	// row (an external source's storage gap). It is never a person's text.
+	NoteBefore string
+	UserRow    bool
+	Text       string
+	FirstSeq   uint64
+	LastSeq    uint64
+	Streamable bool
+	// TsMS is the turn's first item timestamp, when the provider recorded
+	// one; presentation only (hover meta, work-block summaries).
+	TsMS *int64 `json:"ts_ms,omitempty"`
+	// Live marks the provisional streaming tail turn: still uncommitted in
+	// the live decoder, replaced at the next role boundary. Set by the live
+	// bind path after derivation.
+	Live bool
+}
+
+// DeriveTimeline turns the normalized item stream into Chat presentation
+// rows: user rows verbatim; assistant turns with visible narration,
+// consolidated thinking and compacted tool runs; failed turns keep their
+// partial scene.
+func DeriveTimeline(items []ConversationItem) []TimelineTurn {
+	turns := make([]TimelineTurn, 0, len(items))
+	var current *TimelineTurn
+
+	flush := func() {
+		if current != nil {
+			turns = append(turns, *current)
+			current = nil
+		}
+	}
+	// A compact-summary row opens no turn; the next row that does carries the
+	// divider flag.
+	compactPending := false
+	mark := func(turn *TimelineTurn) {
+		if compactPending {
+			turn.CompactedBefore = true
+			compactPending = false
+		}
+	}
+
+	for _, item := range items {
+		switch item.Kind {
+		case KindUser:
+			flush()
+			row := TimelineTurn{
+				UserRow:  true,
+				Text:     item.Text,
+				FirstSeq: item.Seq, LastSeq: item.Seq,
+				TsMS: item.TimestampMS,
+			}
+			mark(&row)
+			turns = append(turns, row)
+		case KindAssistant:
+			if current == nil || current.UserRow {
+				flush()
+				current = &TimelineTurn{FirstSeq: item.Seq, TsMS: item.TimestampMS}
+				mark(current)
+			}
+			if current.TsMS == nil {
+				current.TsMS = item.TimestampMS
+			}
+			if len(item.Parts) > 0 {
+				// The source kept the provider's block order across a merged
+				// message: replay it, so replies and tool runs interleave as
+				// they happened instead of collapsing into one text block and
+				// one tool group.
+				addOrderedParts(current, item)
+			} else {
+				if item.Text != "" {
+					if current.Narration != "" {
+						current.Narration += "\n\n" + item.Text
+					} else {
+						current.Narration = item.Text
+					}
+				}
+				if item.Thinking != nil && *item.Thinking != "" {
+					merged := consolidateThinking(deref(current.Thinking), *item.Thinking)
+					current.Thinking = &merged
+					// Thinking precedes its narration inside one item: the model
+					// thinks, then writes.
+					addTimelineStep(current, TimelineStep{Kind: StepThinking, Text: *item.Thinking, TsMS: item.TimestampMS})
+				}
+				if item.Text != "" {
+					addTimelineStep(current, TimelineStep{Kind: StepNarration, Text: item.Text, TsMS: item.TimestampMS})
+				}
+				for _, call := range item.ToolCalls {
+					current.ToolRuns = append(current.ToolRuns, call)
+					addTimelineStep(current, TimelineStep{Kind: StepTool, Tool: &call, TsMS: item.TimestampMS})
+				}
+			}
+			if item.Stopped || strings.Contains(strings.ToLower(item.Text), "aborted") || item.Truncated && strings.Contains(item.Text, "stopped") {
+				current.Failed = true
+			}
+			current.LastSeq = item.Seq
+		case KindTool:
+			if current == nil || current.UserRow {
+				flush()
+				current = &TimelineTurn{FirstSeq: item.Seq, TsMS: item.TimestampMS}
+				mark(current)
+			}
+			if current.TsMS == nil {
+				current.TsMS = item.TimestampMS
+			}
+			for _, call := range item.ToolCalls {
+				current.ToolRuns = append(current.ToolRuns, call)
+				addTimelineStep(current, TimelineStep{Kind: StepTool, Tool: &call, TsMS: item.TimestampMS})
+			}
+			current.LastSeq = item.Seq
+		case KindMeta, KindCompactSummary, KindReasoning, KindActivity:
+			if item.Kind == KindCompactSummary {
+				compactPending = true
+			}
+			// Meta/compact rows do not open turns; reasoning merges into the
+			// current turn's thinking when one is open.
+			if current != nil && item.Kind == KindReasoning && item.Text != "" {
+				merged := consolidateThinking(deref(current.Thinking), item.Text)
+				current.Thinking = &merged
+				addTimelineStep(current, TimelineStep{Kind: StepThinking, Text: item.Text, TsMS: item.TimestampMS})
+			}
+		}
+	}
+	flush()
+
+	for index := range turns {
+		turns[index].Compacted = len(turns[index].ToolRuns) >= 2
+	}
+	return turns
+}
+
+// addOrderedParts appends one item's blocks to the turn in their written
+// order. A part's own timestamp wins over the item's (a merged message keeps
+// the first row's); a tool part whose index is out of range is skipped.
+func addOrderedParts(turn *TimelineTurn, item ConversationItem) {
+	for _, part := range item.Parts {
+		ts := part.TimestampMS
+		if ts == nil {
+			ts = item.TimestampMS
+		}
+		switch part.Kind {
+		case PartThinking:
+			if part.Text == "" {
+				continue
+			}
+			merged := consolidateThinking(deref(turn.Thinking), part.Text)
+			turn.Thinking = &merged
+			addTimelineStep(turn, TimelineStep{Kind: StepThinking, Text: part.Text, TsMS: ts})
+		case PartText:
+			if part.Text == "" {
+				continue
+			}
+			if turn.Narration != "" {
+				turn.Narration += "\n\n" + part.Text
+			} else {
+				turn.Narration = part.Text
+			}
+			addTimelineStep(turn, TimelineStep{Kind: StepNarration, Text: part.Text, TsMS: ts})
+		case PartTool:
+			if part.Tool < 0 || part.Tool >= len(item.ToolCalls) {
+				continue
+			}
+			call := item.ToolCalls[part.Tool]
+			turn.ToolRuns = append(turn.ToolRuns, call)
+			addTimelineStep(turn, TimelineStep{Kind: StepTool, Tool: &call, TsMS: ts})
+		}
+	}
+}
+
+func deref(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// addTimelineStep appends one ordered segment, merging consecutive
+// same-kind text steps so the chain shows phase boundaries rather than
+// provider chunking. Tool steps never merge — each call stays its own row.
+func addTimelineStep(turn *TimelineTurn, step TimelineStep) {
+	if len(turn.Steps) > 0 {
+		last := &turn.Steps[len(turn.Steps)-1]
+		if last.Kind == step.Kind && step.Kind != StepTool {
+			last.Text = consolidateThinking(last.Text, step.Text)
+			return
+		}
+	}
+	turn.Steps = append(turn.Steps, step)
+}
+
+func consolidateThinking(existing, addition string) string {
+	if existing == "" {
+		return addition
+	}
+	return existing + "\n\n" + addition
+}

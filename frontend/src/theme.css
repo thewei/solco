@@ -1,0 +1,135 @@
+@import "./tokens.generated.css";
+
+/* Chat surface tokens. The colour roles, radii, UI face and icon stroke are the
+   unified design language (design/tokens.json, written into tokens.generated.css by
+   design/gen.mjs); only what that table has no name for lives here. `--content` is
+   the one value the native shell repeats (internal/nativeui `webviewBackground` and
+   `designTokens(...).Content`) so the WebView body sits seamlessly under the native
+   header band; a test pins them. Theme follows the system via matchMedia (App.tsx
+   sets data-theme). */
+
+/* DM Sans (SIL OFL 1.1, fonts/DM-Sans-OFL.txt), Latin subset, three weights: the
+   touch tier's face (--ff-ui under @media (pointer: coarse)); the pointer tier uses the
+   system font. The system stack stays behind it, so Chinese and every other script
+   DM Sans does not carry fall back exactly as before. The single-file phone
+   build inlines these as data URLs; the desktop build ships them as assets. */
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/dm-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/dm-sans-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/dm-sans-700.woff2") format("woff2");
+}
+
+:root {
+  /* What the role table has no name for: the disabled accent fill, the floating pill's
+     shadow, the loading placeholders. */
+  --accent-dim: rgba(27, 78, 216, 0.22);
+  --float-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), 0 0 1px rgba(0, 0, 0, 0.2);
+  --sk1: #ececef;
+  --sk2: #f6f6f8;
+  /* macOS's own easing for sheets and popovers: fast out, soft landing. */
+  --spring: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root[data-theme="dark"] {
+  --accent-dim: rgba(52, 107, 241, 0.28);
+  --float-shadow: 0 2px 10px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.12);
+  --sk1: #161616;
+  --sk2: #202020;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--ff-ui);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--content);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Chat ink ramp: one ink colour at four alphas (reading text i1, secondary
+   i2, quiet i3, placeholder/decoration i4) plus hairlines and tints, so every
+   shade follows the theme. Increase contrast (data-contrast="high", set from
+   the bridge) lifts i2-i4 and the hairlines; i4 reaches 4.5:1 there.
+   Contrast was computed against --content and --panel (designs/chat-view). The
+   2026-11-07 palette (ink 39,39,42 over #fcfcfc) is lighter than the one that
+   figure was drawn for, so light i3 moved .60 -> .65 and light high-contrast i4
+   .62 -> .65: both still clear 4.5:1 on --content and --panel. */
+
+:root {
+  --ink: 39, 39, 42;
+  --i1: rgba(var(--ink), 0.9);
+  --i2: rgba(var(--ink), 0.7);
+  --i3: rgba(var(--ink), 0.65);
+  --i4: rgba(var(--ink), 0.38);
+  --hair: rgba(var(--ink), 0.09);
+  --hair2: rgba(var(--ink), 0.17);
+  --hair3: rgba(var(--ink), 0.34);
+  --tint: rgba(var(--ink), 0.04);
+  --tint2: rgba(var(--ink), 0.07);
+  --link: #1b4ed8;
+  --col: 748px;
+  --ff-prose: inherit;
+}
+
+:root[data-theme="dark"] {
+  --ink: 245, 245, 245;
+  --i1: rgba(var(--ink), 0.92);
+  --i2: rgba(var(--ink), 0.66);
+  --i3: rgba(var(--ink), 0.52);
+  --i4: rgba(var(--ink), 0.34);
+  --hair: rgba(var(--ink), 0.08);
+  --hair2: rgba(var(--ink), 0.152);
+  --link: #6b92f5;
+}
+
+:root:not([data-theme="dark"])[data-contrast="high"] {
+  --i1: rgba(var(--ink), 1);
+  --i2: rgba(var(--ink), 0.8);
+  --i3: rgba(var(--ink), 0.7);
+  --i4: rgba(var(--ink), 0.65);
+  --hair: rgba(var(--ink), 0.22);
+  --hair2: rgba(var(--ink), 0.34);
+  --hair3: rgba(var(--ink), 0.55);
+}
+
+:root[data-theme="dark"][data-contrast="high"] {
+  --i1: rgba(var(--ink), 1);
+  --i2: rgba(var(--ink), 0.78);
+  --i3: rgba(var(--ink), 0.64);
+  --i4: rgba(var(--ink), 0.52);
+  --hair: rgba(var(--ink), 0.22);
+  --hair2: rgba(var(--ink), 0.34);
+  --hair3: rgba(var(--ink), 0.55);
+}
+
+/* Serif reading text (Settings -> General -> "Serif chat text"): assistant
+   prose only; code, rows and controls keep the sans stack. */
+:root[data-prose="serif"] {
+  --ff-prose: ui-serif, "New York", "Iowan Old Style", "Songti SC", Georgia, serif;
+}

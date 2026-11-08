@@ -1,0 +1,33 @@
+{
+  "facts": [
+    {
+      "assistantId": "a_0000000000000001",
+      "createdAt": 1800000000000,
+      "goalId": "g_0000000000000002",
+      "id": "f_0000000000000016",
+      "kind": "delegated",
+      "seq": 4,
+      "taskId": "t_0000000000000015",
+      "text": "Delegated: Collect numbers"
+    },
+    {
+      "assistantId": "a_0000000000000001",
+      "createdAt": 1800000000000,
+      "goalId": "g_0000000000000002",
+      "id": "f_0000000000000017",
+      "kind": "planned",
+      "seq": 2,
+      "text": "Plan: 2 milestone(s) — first plan"
+    },
+    {
+      "assistantId": "a_0000000000000001",
+      "createdAt": 1800000000000,
+      "goalId": "g_0000000000000002",
+      "id": "f_0000000000000018",
+      "kind": "accepted",
+      "seq": 1,
+      "text": "Accepted: Watch PR 12"
+    }
+  ],
+  "schema": 1
+}

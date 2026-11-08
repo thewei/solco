@@ -1,0 +1,12 @@
+{
+  "workspaceId": "w1",
+  "dir": "src",
+  "entries": [
+    {
+      "name": "main.go",
+      "path": "src/main.go",
+      "kind": "file",
+      "size": 13
+    }
+  ]
+}

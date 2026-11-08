@@ -1,0 +1,233 @@
+package daemon
+
+import (
+	"os"
+	"testing"
+
+	"github.com/thewei/solco/plugins/solco-automations/internal/config"
+	"github.com/thewei/solco/plugins/solco-automations/internal/herdr"
+	"github.com/thewei/solco/plugins/solco-automations/internal/history"
+	"github.com/thewei/solco/plugins/solco-automations/internal/notify"
+	"github.com/thewei/solco/plugins/solco-automations/internal/runner"
+)
+
+type fakeSink struct {
+	toasts int
+}
+
+func (f *fakeSink) NotificationShow(title, body string, sound herdr.Sound) error {
+	f.toasts++
+	return nil
+}
+
+func invalidRecords(t *testing.T) int {
+	t.Helper()
+	runs, err := history.Runs("", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, r := range runs {
+		if r.Status == history.StatusInvalid {
+			n++
+		}
+	}
+	return n
+}
+
+func TestReportInvalidComplainsOncePerBrokenEntry(t *testing.T) {
+	// evaluate runs every 30 seconds. Re-recording an unfixed typo would bury
+	// the log and the board under the same line all day.
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", t.TempDir())
+	cfg := &config.Config{Invalid: []config.Diagnostic{
+		{Name: "broken", Line: 3, Message: "broken: invalid cron"},
+	}}
+	state := &scheduleState{Invalid: map[string]bool{}}
+
+	if changed, _ := reportInvalid(cfg, state); !changed {
+		t.Error("the first sighting is a change worth persisting")
+	}
+	if changed, _ := reportInvalid(cfg, state); changed {
+		t.Error("the second tick has nothing new to say")
+	}
+	if got := invalidRecords(t); got != 1 {
+		t.Fatalf("recorded %d invalid entries, want 1", got)
+	}
+}
+
+func TestReportInvalidSpeaksUpAgainAfterAFixAndABreak(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", t.TempDir())
+	broken := &config.Config{Invalid: []config.Diagnostic{
+		{Name: "broken", Line: 3, Message: "broken: invalid cron"},
+	}}
+	fixed := &config.Config{}
+	state := &scheduleState{Invalid: map[string]bool{}}
+
+	reportInvalid(broken, state)
+	if changed, _ := reportInvalid(fixed, state); !changed {
+		t.Error("forgetting a fixed entry is a change worth persisting")
+	}
+	if len(state.Invalid) != 0 {
+		t.Fatalf("state still remembers %v", state.Invalid)
+	}
+	reportInvalid(broken, state)
+	if got := invalidRecords(t); got != 2 {
+		t.Fatalf("recorded %d invalid entries, want 2: breaking it again is news", got)
+	}
+}
+
+func TestReportInvalidNamesAnEntryTooBrokenToHaveAName(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", t.TempDir())
+	cfg := &config.Config{Invalid: []config.Diagnostic{{Line: 7, Message: "cannot decode"}}}
+
+	reportInvalid(cfg, &scheduleState{Invalid: map[string]bool{}})
+
+	runs, err := history.Runs("", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 || runs[0].Automation != "(unnamed)" {
+		t.Fatalf("records = %+v, want one attributed to (unnamed)", runs)
+	}
+}
+
+func TestATickWithThreeBrokenEntriesToastsOnce(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", dir)
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", dir)
+
+	yaml := `automations:
+  - name: a
+    cron: "not a cron"
+    repo: /repo
+    prompt: go
+  - name: b
+    cron: "not a cron either"
+    repo: /repo
+    prompt: go
+  - name: c
+    cron: "still not a cron"
+    repo: /repo
+    prompt: go
+`
+	if err := os.WriteFile(dir+"/automations.yaml", []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sink := &fakeSink{}
+	state := &scheduleState{Invalid: map[string]bool{}}
+	evaluate(state, runner.New(nil), notify.With(sink))
+
+	if sink.toasts != 1 {
+		t.Fatalf("toasts = %d, want exactly one for the whole tick, regardless of file size", sink.toasts)
+	}
+}
+
+func TestReportInvalidToastsOncePerBrokenEntryAcrossTicks(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", dir)
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", dir)
+
+	yaml := `automations:
+  - name: a
+    cron: "not a cron"
+    repo: /repo
+    prompt: go
+`
+	if err := os.WriteFile(dir+"/automations.yaml", []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sink := &fakeSink{}
+	state := &scheduleState{Invalid: map[string]bool{}}
+	evaluate(state, runner.New(nil), notify.With(sink))
+	evaluate(state, runner.New(nil), notify.With(sink))
+
+	if sink.toasts != 1 {
+		t.Fatalf("toasts = %d, want the second tick to stay quiet about the same unfixed entry", sink.toasts)
+	}
+}
+
+func TestTheDaemonStopsOnlyOnceNoSessionIsLeft(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		sessions []string
+		err      error
+		want     bool
+	}{
+		{"its own session stopped, another runs", []string{"alt"}, nil, false},
+		{"nothing runs", nil, nil, true},
+		// Herdr unreachable is not Herdr gone: an orphan beats a machine
+		// without a scheduler.
+		{"cannot tell", nil, os.ErrNotExist, false},
+	} {
+		got := noSessionLeft(func() ([]string, error) { return tc.sessions, tc.err })
+		if got != tc.want {
+			t.Errorf("%s: noSessionLeft = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// AUD-11: Assistants are persistent actors, not TUI session accessories.
+// Absence of Herdr sessions must not stop their scheduler, even when idle.
+func TestPersistentAssistantsSurviveSessionlessScheduler(t *testing.T) {
+	cases := []struct {
+		name                                                string
+		standby                                             bool
+		backend                                             config.Backend
+		runnerBusy, assistantBusy, registered, sessionsLeft bool
+		wantExit                                            bool
+	}{
+		{"legacy no assistants, no sessions", false, config.BackendHerdr, false, false, false, true, true},
+		{"has Assistant, no sessions", false, config.BackendHerdr, false, false, true, true, false},
+		{"has Assistant waiting, no sessions", false, config.BackendHerdr, false, true, true, true, false},
+		{"no registrations, active run", false, config.BackendHerdr, true, false, false, true, false},
+		{"no registrations, active Herdr session", false, config.BackendHerdr, false, false, false, false, false},
+		{"standby is resident", true, config.BackendHerdr, false, false, false, true, false},
+		{"other backend independent of session", false, config.BackendHC, false, false, false, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			shouldExit := shouldExitWithoutSessions(tc.standby, tc.backend, tc.runnerBusy, tc.assistantBusy, tc.registered, func() ([]string, error) {
+				called = true
+				if tc.sessionsLeft {
+					return nil, nil
+				}
+				return []string{"active"}, nil
+			})
+			if shouldExit != tc.wantExit {
+				t.Fatalf("exit=%v want=%v", shouldExit, tc.wantExit)
+			}
+			if tc.registered && called {
+				t.Fatal("registered Assistant caused a session check that might evict its daemon")
+			}
+		})
+	}
+}
+
+// A plugin update installs into a new checkout and keeps the old one, so the
+// login service keeps running the old build unless it notices. It leaves, and
+// launchd relaunches it through the shim onto the installed one. A daemon a
+// TUI session started is re-executed in place instead (#8), so it stays.
+func TestOnlyTheServiceLeavesForTheInstalledBinary(t *testing.T) {
+	const run, other = "/p/1/bin/solco-automations", "/p/2/bin/solco-automations"
+	cases := []struct {
+		name             string
+		standby          bool
+		stamp, installed string
+		want             bool
+	}{
+		{"service, update installed elsewhere", true, "1-2", other, true},
+		{"service, its binary is gone", true, "", other, true},
+		{"service, up to date", true, "1-2", run, false},
+		{"service, herdr did not answer", true, "1-2", "", false},
+		{"hook-started daemon, update elsewhere", false, "1-2", other, false},
+		{"hook-started daemon, binary gone", false, "", other, false},
+	}
+	for _, c := range cases {
+		if got := shouldRelaunch(c.standby, c.stamp, run, c.installed); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}

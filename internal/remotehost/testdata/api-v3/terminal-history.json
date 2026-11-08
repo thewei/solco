@@ -1,0 +1,6 @@
+{
+  "revision": 86,
+  "retainedRows": 1042,
+  "truncated": false,
+  "text": "$ go test ./...\nok  \tgithub.com/thewei/solco\t0.4s\n完成 ✓\n"
+}

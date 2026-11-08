@@ -1,0 +1,850 @@
+package nativeui
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/egoist/mygo"
+	"github.com/thewei/solco-gitkit/gitworkbench"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/chatsession"
+	"github.com/thewei/solco/internal/conversation"
+	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/settings"
+)
+
+// Voice transcription defaults; both are overridable in Settings -> General.
+const (
+	voiceDefaultEndpoint = "https://api.openai.com/v1"
+	voiceDefaultModel    = "whisper-1"
+)
+
+/**
+ * [INPUT]: 依赖 Shell 的 0.6 Chat 状态（chatTurns/chatDisposition/chatOutcome/chatQueuedItems 现读跟进队列）、launch 发送路径、mygo Bind 事件
+ * [OUTPUT]: 对外提供 ChatBridge 绑定服务（Snapshot/Send/InterruptAndSend/AnswerInteraction[Text]/CancelQueued/CancelQueuedItem/ReorderQueued/EditQueuedItem/ReviewChanges）、chat:updated 完整快照、chat:delta 仅覆盖 OMP token 增量、Shell.publishChatBridge、sendChatText 共享发送路径
+ * [POS]: WebView Chat 的唯一表现层桥：投影与动作编组到窗口 UI 通道，会话运行时/Herdr 方法零改动；页面只能通过此桥读取聊天投影
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// ChatFeatures are the optional abilities of a page host (see
+// ChatBridgeState.Features). The page treats an absent field as "on".
+type ChatFeatures struct {
+	// Voice: the dictation button (chat.Transcribe).
+	Voice bool `json:"voice"`
+	// Attach: the file/image entries of the + menu, paste and drop.
+	Attach bool `json:"attach"`
+	// Queue: a follow-up can be queued behind a running turn.
+	Queue bool `json:"queue"`
+	// Reorder: the queued follow-ups can be reordered and individually
+	// cancelled (chat.ReorderQueued / chat.CancelQueuedItem).
+	Reorder bool `json:"reorder"`
+	// Edit: a queued follow-up's text can be rewritten in place (chat.EditQueuedItem).
+	Edit bool `json:"edit"`
+	// SubagentDrawer: a sub-agent's own transcript can be opened (chat.OpenSubagent).
+	SubagentDrawer bool `json:"subagentDrawer"`
+}
+
+// ChatBridgeState is the full chat projection the page renders. It is
+// presentation state only: the conversation runtime, the send path and the
+// follow-up ledger stay in Go (internal/agent + internal/herdr).
+type ChatBridgeState struct {
+	// Seq numbers every projection in the order it was built, so the page can
+	// drop one that arrives after a newer one (a slow snapshot reply landing
+	// behind a chatUpdated event would otherwise show a stale state until the
+	// next change).
+	Seq            uint64 `json:"seq"`
+	ConversationID string `json:"conversationId"`
+	Title          string `json:"title,omitempty"`
+	Provider       string `json:"provider,omitempty"`
+	// VoiceSource is "chatgpt" while dictation goes through the ChatGPT
+	// sign-in Codex holds, else "api" (the mic tooltip names it).
+	VoiceSource string `json:"voiceSource,omitempty"`
+	Loading     bool   `json:"loading"`
+	// Waiting reports a live agent that has not opened a conversation yet
+	// (fresh pane) and nothing is sent yet: the page shows its invitation and
+	// keeps the composer — the first prompt opens the conversation.
+	Waiting bool `json:"waiting,omitempty"`
+	// EchoPending reports a just-sent prompt shown as a temporary User row
+	// that the provider transcript has not confirmed yet: the page stands in
+	// a Working line until the agent's own rows arrive.
+	EchoPending bool `json:"echoPending,omitempty"`
+	// Draft marks a new session whose Agent has not started: there is no pane
+	// yet, so the page offers no Open Terminal (new_chat_draft.go).
+	Draft bool `json:"draft,omitempty"`
+	// LinkCandidates are recent sessions of this agent's provider in its
+	// folder, offered only while the agent has not reported a session of its
+	// own (Waiting): the invitation can then say "show this one instead".
+	LinkCandidates []ChatBridgeLink `json:"linkCandidates,omitempty"`
+	Disposition    string           `json:"disposition"`
+	Outcome        string           `json:"outcome,omitempty"`
+	// TerminalReason is the one fixed sentence the Open Terminal card shows
+	// when a Cursor/Antigravity dialog can only be answered in the terminal.
+	TerminalReason string                 `json:"terminalReason,omitempty"`
+	QueuedItems    []ChatBridgeQueuedItem `json:"queuedItems,omitempty"`
+	// Theme is the app-resolved appearance ("light" or "dark"), following
+	// Settings -> General -> Appearance through mygo.Theme — not the bare
+	// system preference.
+	Theme string `json:"theme"`
+	// HighContrast mirrors Settings -> General -> Increase contrast so the
+	// page lifts its faintest ink level to the 4.5:1 floor.
+	HighContrast bool `json:"highContrast,omitempty"`
+	// SerifProse mirrors Settings -> General -> "Serif chat text": assistant
+	// reading text only; code, tool rows and controls stay sans.
+	SerifProse bool `json:"serifProse,omitempty"`
+	// Outline mirrors Settings -> General -> "Chat outline": the tick rail
+	// that jumps between the user's messages.
+	Outline bool `json:"outline"`
+	// Features names what this host of the page can do beyond reading and
+	// sending. The desktop offers all of them; the phone client's host (the
+	// same page, another bridge) turns off what its Host API does not serve
+	// yet, so the page hides those entries instead of failing on use.
+	Features ChatFeatures `json:"features"`
+	// Root is the local repository root the changes card resolves paths
+	// against ("" for read-only sessions and non-repository panes).
+	Root string `json:"root,omitempty"`
+	// CanReview reports "Review changes" can open the right panel on Changes for Root.
+	CanReview bool `json:"canReview,omitempty"`
+	// ChangedFiles is the Workspace's changed-file count a host supplies for the
+	// floating "N files changed | Review" pill above the composer (the phone's
+	// host reads it from its Git status). The desktop leaves it 0: its changes
+	// card and Review button already serve that, so the pill never shows.
+	ChangedFiles int `json:"changedFiles,omitempty"`
+	// Model is the provider model the transcript last recorded, when known
+	// (presentation pill only; never a runtime fact source).
+	Model string `json:"model,omitempty"`
+	// HasOlder reports an earlier history page exists (history-bound chats
+	// only; the live tail is bounded by design).
+	HasOlder bool `json:"hasOlder,omitempty"`
+	// ReadOnly marks a past session shown from the Sessions list: the page
+	// renders the transcript alone — no composer, no interactions.
+	ReadOnly bool `json:"readOnly,omitempty"`
+	// ContextTokens is the provider-recorded size of the current request
+	// context, when the transcript states one (context ring only).
+	ContextTokens *int64 `json:"contextTokens,omitempty"`
+	// Interactions are the bound pane's pending structured interactions
+	// (our hook layer's feed): approval/question cards above the composer.
+	Interactions []ChatBridgeInteraction `json:"interactions,omitempty"`
+	// Plan is the latest task list the agent published (Tasks panel).
+	Plan *chatsession.ChatPlan `json:"plan,omitempty"`
+	// Subagents are the sub-agents the turns' tool calls spawned.
+	Subagents []chatsession.SubagentCard `json:"subagents,omitempty"`
+	Turns     []chatsession.ChatTurn     `json:"turns"`
+}
+
+// ChatBridgeQueuedItem is one follow-up in the conversation's ordered
+// queue (ChatBridgeState.QueuedItems, delivery order); State is the
+// ledger's QueueState verbatim and Detail carries the state's own
+// annotation (e.g. why an uncertain send froze the queue).
+type ChatBridgeQueuedItem struct {
+	ID     string `json:"id"`
+	Text   string `json:"text"`
+	State  string `json:"state"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// ChatBridgeInteraction is one pending interaction card.
+type ChatBridgeInteraction struct {
+	ID      string   `json:"id"`
+	Kind    string   `json:"kind"`
+	Prompt  string   `json:"prompt"`
+	Options []string `json:"options"`
+	// Header is the provider's short question label; Descriptions explain
+	// each option (parallel to Options, "" when none).
+	Header       string   `json:"header,omitempty"`
+	Descriptions []string `json:"descriptions,omitempty"`
+	// Progress is "2/3" inside a multi-question ask ("" otherwise).
+	Progress string `json:"progress,omitempty"`
+	// Multi marks a multi-select question: the page ticks any subset and
+	// submits them together through AnswerInteractionMulti.
+	Multi bool `json:"multi,omitempty"`
+}
+
+// chatUpdated pushes the projection after every chat state mutation. Events
+// emitted before the page is ready are delivered once it is, so the page
+// also starts from Snapshot and stays current through this event alone.
+var chatUpdated = mygo.NewEvent[ChatBridgeState]("chat:updated")
+
+// ChatBridge is the bound service of the WebView chat surface. Bound methods
+// run on their own goroutines, so every call marshals onto the window UI
+// lane before touching Shell state.
+type ChatBridge struct {
+	shell *Shell
+}
+
+// NewChatBridge builds the chat bound service over the shell's chat state.
+func NewChatBridge(shell *Shell) *ChatBridge {
+	return &ChatBridge{shell: shell}
+}
+
+// Snapshot returns the current chat projection.
+func (b *ChatBridge) Snapshot(ctx context.Context) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		state = b.shell.chatBridgeState()
+		// The page receives this full baseline as an RPC response, not an
+		// event. Future deltas must use its sequence (or fail closed).
+		b.shell.chatLastPublishedState = &state
+	})
+	return state, nil
+}
+
+// Send routes the prompt through the same disposition decision as the
+// native composer: SentNow delivers via the canonical agent.prompt
+// transaction, MidTurn queues, terminal-needed agents are refused. The
+// returned projection carries the outcome line; the page keeps its draft
+// whenever one is set (uncertain deliveries never look like clean sends).
+func (b *ChatBridge) Send(ctx context.Context, text string) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		state = b.shell.sendChatText(text)
+	})
+	return state, nil
+}
+
+// chatInterruptSettle is the pause between the interrupting Escape and the
+// line clear: the TUI needs a beat to tear down the running turn (and, in
+// Claude Code, to restore the interrupted message into its input box).
+const chatInterruptSettle = 600 * time.Millisecond
+
+// chatInterruptClearSettle is the pause between the clearing control-C and
+// the prompt paste — one TUI frame for the line to actually empty.
+const chatInterruptClearSettle = 200 * time.Millisecond
+
+// InterruptAndSend is the explicit "cut in" path (the moshi barge-in analog):
+// one Escape stops the running turn, a short settle lets the TUI land on its
+// input box, then the prompt delivers via the canonical agent.prompt
+// transaction regardless of the now-stale working disposition. A ready
+// disposition skips the Escape (plain send); terminal-bound agents are
+// refused; a failed Escape aborts instead of typing into a running turn.
+func (b *ChatBridge) InterruptAndSend(ctx context.Context, text string) (ChatBridgeState, error) {
+	text = strings.TrimSpace(text)
+	var instance, paneID string
+	var interrupt, blocked bool
+	var guardErr error
+	b.shell.callOnWindow(func() {
+		if text == "" || b.shell.launch == nil || b.shell.activeInstance == "" || b.shell.chatPaneID == "" {
+			guardErr = errors.New("no agent bound to this chat")
+			return
+		}
+		instance, paneID = b.shell.activeInstance, b.shell.chatPaneID
+		switch b.shell.chatDispositionNow() {
+		case conversation.DispositionSentNow:
+			interrupt = false
+		case conversation.DispositionNeedsTerminal:
+			blocked = true
+		default:
+			interrupt = true
+		}
+	})
+	if guardErr != nil {
+		return b.shell.chatBridgeStateOnWindow(), guardErr
+	}
+	if blocked {
+		return b.shell.chatBridgeStateOnWindow(), errors.New("this agent needs the terminal")
+	}
+	if interrupt {
+		if err := b.shell.runtime.SendAgentKeys(ctx, instance, paneID, []string{"esc"}); err != nil {
+			return b.shell.chatBridgeStateOnWindow(), fmt.Errorf("interrupt failed: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return b.shell.chatBridgeStateOnWindow(), ctx.Err()
+		case <-time.After(chatInterruptSettle):
+		}
+		// Claude Code restores the interrupted message into its input box:
+		// without clearing the line, the pasted prompt would append to that
+		// stale text and submit both. One control-C clears a non-empty line
+		// and is a harmless no-op arm on an empty one (never sent twice).
+		if err := b.shell.runtime.SendAgentKeys(ctx, instance, paneID, []string{"ctrl+c"}); err != nil {
+			return b.shell.chatBridgeStateOnWindow(), fmt.Errorf("interrupt failed: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return b.shell.chatBridgeStateOnWindow(), ctx.Err()
+		case <-time.After(chatInterruptClearSettle):
+		}
+	}
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		requestID := fmt.Sprintf("chat-%s-%d", paneID, time.Now().UnixNano())
+		err := b.shell.launch.PromptLiveAgent(ctx, instance, paneID, text)
+		b.shell.chatAfterPrompt(requestID, text, conversation.DispositionSentNow, err)
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
+}
+
+// CancelQueued cancels every cancellable follow-up of the bound
+// conversation (an entry mid-delivery stays) and returns the projection.
+func (b *ChatBridge) CancelQueued(ctx context.Context) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		b.shell.cancelChatFollowUp()
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
+}
+
+// CancelQueuedItem withdraws one follow-up by request id before its
+// delivery commit and returns the projection; a commit race surfaces in
+// the projection's Outcome instead of failing the call.
+func (b *ChatBridge) CancelQueuedItem(ctx context.Context, requestID string) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		b.shell.cancelChatFollowUpItem(requestID)
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
+}
+
+// ReorderQueued moves one queued follow-up to index to (delivery order =
+// list order; entries the worker already claimed stay pinned to the head
+// run) and returns the projection.
+func (b *ChatBridge) ReorderQueued(ctx context.Context, requestID string, to int) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	var err error
+	b.shell.callOnWindow(func() {
+		err = b.shell.moveChatQueuedItem(requestID, to)
+		state = b.shell.chatBridgeState()
+	})
+	return state, err
+}
+
+// EditQueuedItem rewrites the text of one follow-up the worker has not
+// claimed yet (its place in the order stays) and returns the projection; a
+// claim race surfaces in the projection's Outcome instead of failing the call.
+func (b *ChatBridge) EditQueuedItem(ctx context.Context, requestID, text string) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		b.shell.editChatQueuedItem(requestID, text)
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
+}
+
+// Stop interrupts the agent's current turn with one Escape (the product
+// decision of 2026-10-11): agent.send_keys with the named key "esc", the
+// same verified named-key operation the terminal's Esc uses — an interrupt,
+// never a process kill. The RPC runs off the UI lane; the projection
+// refreshes after it settles.
+func (b *ChatBridge) Stop(ctx context.Context) (ChatBridgeState, error) {
+	var paneID string
+	var ready bool
+	b.shell.callOnWindow(func() {
+		if b.shell.launch != nil && b.shell.activeInstance != "" && b.shell.chatPaneID != "" {
+			paneID, ready = b.shell.chatPaneID, true
+		}
+	})
+	if !ready {
+		return b.shell.chatBridgeStateOnWindow(), errors.New("no agent bound to this chat")
+	}
+	err := b.shell.runtime.SendAgentKeys(ctx, b.shell.activeInstance, paneID, []string{"esc"})
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		b.shell.publishChatBridge()
+		state = b.shell.chatBridgeState()
+	})
+	return state, err
+}
+
+// Older pages the history-bound transcript one window up: the load runs on
+// the background lane and the refreshed projection arrives through the
+// chat:updated event; the returned state is the pre-load snapshot.
+func (b *ChatBridge) Older(ctx context.Context) (ChatBridgeState, error) {
+	b.shell.callOnWindow(func() { b.shell.chatLoadOlder() })
+	return b.shell.chatBridgeStateOnWindow(), nil
+}
+
+// PickAttachment opens the native file picker and returns the chosen path,
+// empty when the user canceled. The path goes into the draft as an @mention
+// the agent's own CLI understands — files are local, nothing is uploaded.
+func (b *ChatBridge) PickAttachment(ctx context.Context) (string, error) {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+		Parent:  mygo.CallerWindow(ctx),
+		Title:   "Attach a file",
+		Message: "The file path is inserted into the draft as an @mention.",
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(paths) == 0 {
+		return "", nil
+	}
+	return paths[0], nil
+}
+
+// Transcribe sends a recorded clip to the configured source (see
+// transcribeClip) and returns the text. The API key never reaches the page and
+// is never logged.
+func (b *ChatBridge) Transcribe(ctx context.Context, audioBase64 string, mime string) (string, error) {
+	var vs settings.VoiceSettings
+	b.shell.callOnWindow(func() { vs = b.shell.settings.Voice })
+	audio, err := base64.StdEncoding.DecodeString(audioBase64)
+	if err != nil || len(audio) == 0 {
+		return "", errors.New("empty or malformed recording")
+	}
+	return transcribeClip(ctx, vs, audio, mime)
+}
+
+// chatAnswerTextSettle is the pause between selecting a free-text option
+// ("Type something." / "Chat about this") and pasting the answer: the TUI
+// must land in its text field first.
+const chatAnswerTextSettle = 500 * time.Millisecond
+
+// AnswerInteraction claims the interaction (CAS, first answer wins) and
+// delivers the choice as the option's arrow-navigation key sequence —
+// arrows, never digits, which would type into the TUI (the reference
+// transport's rule). The interaction is consumed even if the delivery
+// fails: the agent stays blocked and may re-ask.
+func (b *ChatBridge) AnswerInteraction(ctx context.Context, interactionID, option string) (ChatBridgeState, error) {
+	return b.answerInteraction(ctx, interactionID, option, "", nil)
+}
+
+// AnswerInteractionMulti answers a multi-select question: from the first row
+// the rows to tick are walked with down/space, then enter submits.
+func (b *ChatBridge) AnswerInteractionMulti(ctx context.Context, interactionID string, options []string) (ChatBridgeState, error) {
+	if options == nil {
+		options = []string{}
+	}
+	return b.answerInteraction(ctx, interactionID, "", "", options)
+}
+
+// AnswerInteractionText answers a free-text option: the option is selected
+// by the same arrow navigation, then the typed answer is pasted and
+// submitted through the canonical agent.prompt once the TUI's text field
+// has focus. An empty answer is refused — selecting without text is what
+// produced "no answer provided".
+func (b *ChatBridge) AnswerInteractionText(ctx context.Context, interactionID, option, text string) (ChatBridgeState, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return b.shell.chatBridgeStateOnWindow(), errors.New("this option needs a typed answer")
+	}
+	return b.answerInteraction(ctx, interactionID, option, text, nil)
+}
+
+// answerInteraction is the shared delivery: locate the pending interaction,
+// claim it (CAS), navigate to the option, optionally paste the typed answer.
+func (b *ChatBridge) answerInteraction(ctx context.Context, interactionID, option, text string, picks []string) (ChatBridgeState, error) {
+	var paneID string
+	var keys []string
+	var prepareErr error
+	var answered conversation.PendingInteraction
+	b.shell.callOnWindow(func() {
+		var chosen *conversation.PendingInteraction
+		for _, interaction := range b.shell.interactionBroker.PendingForPane(b.shell.chatPaneID) {
+			if interaction.ID == interactionID {
+				value := interaction
+				chosen = &value
+				break
+			}
+		}
+		if chosen == nil {
+			prepareErr = errors.New("the interaction is no longer pending")
+			return
+		}
+		if picks != nil {
+			if _, err := b.shell.interactionBroker.ResolveSetCAS(interactionID, picks); err != nil {
+				prepareErr = err
+				return
+			}
+			paneID = chosen.AgentPaneID
+			answered = *chosen
+			keys = chosen.MultiKeys(picks)
+			return
+		}
+		planned, err := chosen.AnswerKeys(option, text != "")
+		if err != nil {
+			prepareErr = err
+			return
+		}
+		if _, err := b.shell.interactionBroker.ResolveCAS(interactionID, option); err != nil {
+			prepareErr = err
+			return
+		}
+		paneID = chosen.AgentPaneID
+		answered = *chosen
+		keys = planned
+	})
+	if prepareErr != nil {
+		return b.shell.chatBridgeStateOnWindow(), prepareErr
+	}
+	err := b.shell.runtime.SendAgentKeys(ctx, b.shell.activeInstance, paneID, keys)
+	if err == nil && text != "" {
+		settle := chatAnswerTextSettle
+		if len(keys) == 1 && keys[0] == "esc" {
+			settle = chatInterruptSettle
+		}
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+		case <-time.After(settle):
+			if answered.ParkedWorking {
+				// Pi's dialog reads `working` to its host, so agent.prompt would
+				// refuse as busy: the text goes straight into the focused
+				// "Type something." input.
+				err = b.shell.runtime.SendPaneInput(ctx, b.shell.activeInstance, paneID, text, []string{"enter"})
+			} else {
+				err = b.shell.runtime.PromptAgent(ctx, b.shell.activeInstance, paneID, text)
+			}
+			if err != nil && !answered.ParkedWorking && strings.Contains(err.Error(), "blocked and requires interactive input") {
+				// The answer goes into the very prompt the agent is blocked
+				// on (omp's "Custom answer" editor): agent.prompt refuses
+				// that by design, so type it into the pane directly.
+				err = b.shell.runtime.SendPaneInput(ctx, b.shell.activeInstance, paneID, text, []string{"enter"})
+			}
+		}
+	}
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		if err != nil {
+			// The agent is still blocked on its question: say so and put
+			// the card back (the transcript's unanswered `ask` re-derives
+			// it) instead of leaving a silent dead end.
+			b.shell.chatOutcome = "Answer not delivered: " + err.Error()
+			b.shell.reconcileChatQuestion()
+		} else {
+			b.shell.chatOutcome = ""
+			if answered.Steps > 0 {
+				// omp presents an ask's questions one after another: move to
+				// the next one, or mark the call answered so the still-blocked
+				// beat before its result lands cannot revive the card.
+				b.shell.chatAskStep = answered.Step + 1
+				if b.shell.chatAskStep >= answered.Steps {
+					b.shell.chatAskDone = true
+					// Newer omp ends an ask on a "Review answers" sheet that
+					// still waits for its Submit.
+					b.shell.redetectAfterAnswer(answered.AgentPaneID)
+				} else {
+					b.shell.publishTranscriptQuestion(answered.AgentPaneID)
+				}
+			} else if answered.Picker {
+				// A picker may continue on a second screen (Codex asks for the
+				// effort after the model); the watcher publishes it if so.
+				// Escape too: Codex's "esc back" returns to the previous list.
+				b.shell.watchPicker(answered.AgentPaneID, 700*time.Millisecond)
+			} else {
+				b.shell.redetectAfterAnswer(answered.AgentPaneID)
+			}
+		}
+		b.shell.publishChatBridge()
+		state = b.shell.chatBridgeState()
+	})
+	return state, err
+}
+
+// OpenTerminal switches the workspace surface to Terminal, for the page's
+// "Waiting for you in the terminal" card. Local surface switch only.
+func (b *ChatBridge) OpenTerminal(ctx context.Context) error {
+	b.shell.callOnWindow(func() { b.shell.showSurface(WorkspaceSurfaceTerminal) })
+	return nil
+}
+
+// ChatBridgeLink is one suggested session for the invitation's link row.
+type ChatBridgeLink struct {
+	Key       string `json:"key"`
+	Title     string `json:"title"`
+	UpdatedMs int64  `json:"updatedMs"`
+	Messages  int64  `json:"messages"`
+}
+
+// LinkSession follows the suggested session's transcript, after the user's
+// click. The key must be one of the offered candidates; the projection after
+// the attempt is returned either way.
+func (b *ChatBridge) LinkSession(ctx context.Context, key string) (ChatBridgeState, error) {
+	var state ChatBridgeState
+	b.shell.callOnWindow(func() {
+		if b.shell.linkChatSession(key) {
+			b.shell.chatOutcome = ""
+		} else {
+			b.shell.chatOutcome = "That session can no longer be linked."
+		}
+		b.shell.publishChatBridge()
+		state = b.shell.chatBridgeState()
+	})
+	return state, nil
+}
+
+// OpenMicrophoneSettings opens System Settings at Privacy → Microphone, the
+// one place a denied dictation can be re-enabled (the page cannot ask the
+// system again once it said no). The pane holds nothing: it is a local door.
+func (b *ChatBridge) OpenMicrophoneSettings(ctx context.Context) error {
+	return mygo.Shell.OpenExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+}
+
+// ReviewChanges opens the right panel on Changes (the Diff Review page retired
+// with the Git page, 2026-11-08) for the card's repository, picking path when
+// it names a changed file. It only opens local presentation: no Git runner
+// call, no Herdr method.
+func (b *ChatBridge) ReviewChanges(ctx context.Context, path string) error {
+	b.shell.callOnWindow(func() {
+		if b.shell.chatReadOnly || b.shell.git == nil || b.shell.git.root == "" {
+			return
+		}
+		if b.shell.holdCommitNavigation() {
+			return
+		}
+		b.shell.openSidePanelChanges(path)
+	})
+	return nil
+}
+
+// ListFiles lists the chat pane's project directory entries matching the
+// composer's typed @ token (shallow; a "sub/dir/" prefix descends into the
+// subdirectory). Bounded, contains-match, dotfiles only when asked for.
+func (b *ChatBridge) ListFiles(ctx context.Context, token string) ([]string, error) {
+	var dir string
+	b.shell.callOnWindow(func() {
+		if a := b.shell.paneAgent(b.shell.chatPaneID); a != nil && a.CWD != "" {
+			dir = a.CWD
+		}
+	})
+	if dir == "" {
+		return nil, nil
+	}
+	return chatsession.ListFiles(dir, token, false), nil
+}
+
+// callOnWindow runs fn on the window UI lane and waits for it; inline when
+// no window exists (headless tests). Shell-bound methods run on their own
+// goroutines, so this is the only path back to Shell state.
+func (s *Shell) callOnWindow(fn func()) {
+	if s.win == nil {
+		fn()
+		return
+	}
+	done := make(chan struct{})
+	s.applyOnWindow(func() {
+		fn()
+		close(done)
+	})
+	<-done
+}
+
+// chatAwaitingBind reports a Chat state that has not been decided yet: no
+// conversation, no echo, no read-only transcript and no sourceless verdict,
+// while either the runtime has not described the selected pane (a restart's
+// first moments) or the pane's agent is known but the surface has not bound
+// it (the page is hidden behind Terminal). "No conversation" says nothing
+// about the agent then, so the page shows loading — never the new-session
+// invitation over an existing conversation. The Chat surface binds or latches
+// sourceless on its next frame, which ends the wait.
+func (s *Shell) chatAwaitingBind() bool {
+	if s.chatConversationID != "" || s.chatReadOnly || s.chatPendingEcho != nil || s.chatLoading || s.chatPaneSourceless() {
+		return false
+	}
+	if s.selectedPaneID != "" && len(s.projection.Panes) == 0 && len(s.projection.Agents) == 0 {
+		return true
+	}
+	_, known := s.agentCardForSelectedPane()
+	return known
+}
+
+// agentCardForChat is the card of the pane the Chat is bound to (an embedding
+// page such as Assistants binds a pane that is not the Workspace selection),
+// else the selected pane's.
+func (s *Shell) agentCardForChat() (agent.AgentCardModel, bool) {
+	if s.chatPaneID != "" {
+		if card, ok := s.agentCardForPane(s.chatPaneID); ok {
+			return card, true
+		}
+	}
+	return s.agentCardForSelectedPane()
+}
+
+// chatBridgeState projects the chat state (UI lane only).
+func (s *Shell) chatBridgeState() ChatBridgeState {
+	s.chatStateSeq++
+	state := ChatBridgeState{
+		Seq:            s.chatStateSeq,
+		ConversationID: s.chatConversationID,
+		Loading:        s.chatLoading,
+		Disposition:    chatBridgeDisposition(s.chatDispositionNow()),
+		Outcome:        s.chatOutcome,
+		TerminalReason: s.terminalReason(),
+		Theme:          s.chatBridgeTheme(),
+		HighContrast:   s.settings.General.HighContrast,
+		VoiceSource:    voiceSourceName(s.settings.Voice),
+		SerifProse:     s.settings.General.ChatSerif,
+		Outline:        s.settings.General.ChatOutline,
+		Features:       ChatFeatures{Voice: true, Attach: true, Queue: true, Reorder: true, Edit: true, SubagentDrawer: true},
+	}
+	state.EchoPending = s.chatPendingEcho != nil
+	for _, item := range s.chatQueuedItems() {
+		state.QueuedItems = append(state.QueuedItems, ChatBridgeQueuedItem{
+			ID:     item.RequestID,
+			Text:   item.Text,
+			State:  string(item.State),
+			Detail: item.Detail,
+		})
+	}
+	if s.chatAwaitingBind() {
+		state.Loading = true
+	}
+	state.Waiting = s.chatConversationID == "" && !state.Loading && !s.chatReadOnly && !state.EchoPending
+	if state.Waiting {
+		for _, summary := range s.chatLinkCandidates() {
+			state.LinkCandidates = append(state.LinkCandidates, ChatBridgeLink{
+				Key:       summary.Meta.Key,
+				Title:     fallbackText(summary.Meta.Title, history.Untitled),
+				UpdatedMs: summary.Meta.UpdatedAt,
+				Messages:  summary.Meta.MessageCount,
+			})
+		}
+	}
+	if s.chatReadOnly {
+		state.ReadOnly = true
+		if s.chatSession != nil {
+			state.Title = fallbackText(s.chatSession.Title, history.Untitled)
+			state.Provider = s.chatSession.Agent.DisplayName()
+		}
+	} else if card, ok := s.agentCardForChat(); ok {
+		state.Title = card.Title
+		state.Provider = card.ProviderLabel
+	}
+	if !s.chatReadOnly && s.chatLiveProvider != "" {
+		if card, ok := s.agentCardForChat(); ok && card.Provider != "" && card.Provider != s.chatLiveProvider {
+			state.Model = ""
+			state.ContextTokens = nil
+		} else {
+			state.Model = s.chatModel
+			state.ContextTokens = s.chatContextTokens
+		}
+	} else {
+		state.Model = s.chatModel
+		state.ContextTokens = s.chatContextTokens
+	}
+	state.HasOlder = s.chatHasOlder
+	if s.chatPaneID != "" {
+		for _, interaction := range s.interactionBroker.PendingForPane(s.chatPaneID) {
+			progress := ""
+			if interaction.Steps > 1 {
+				progress = fmt.Sprintf("%d/%d", interaction.Step+1, interaction.Steps)
+			}
+			state.Interactions = append(state.Interactions, ChatBridgeInteraction{
+				ID:           interaction.ID,
+				Kind:         string(interaction.Kind),
+				Prompt:       interaction.Prompt,
+				Options:      interaction.Options,
+				Header:       interaction.Header,
+				Descriptions: interaction.Descriptions,
+				Progress:     progress,
+				Multi:        interaction.Multi,
+			})
+		}
+	}
+	root, snap := "", (*gitworkbench.ChangesSnapshot)(nil)
+	if !s.chatReadOnly && s.git != nil && s.git.root != "" {
+		root, snap = s.git.root, s.gitSnapshot()
+		state.Root, state.CanReview = root, true
+	}
+	state.Turns = chatsession.Turns(s.chatTurns, root, snap)
+	if (s.chatBriefPane != "" && s.chatBriefPane == s.chatPaneID) || s.assistantPreviewActive() {
+		// The brief is a user row, but not necessarily the first one: the
+		// person's own first message can be echoed ahead of it.
+		state.Turns = withoutAssistantBrief(state.Turns, true)
+	}
+	state.attachSubagents(s.chatSubagents, s.chatTurns, s.chatLiveProvider, time.Now())
+	if s.chatStream != nil && !state.ReadOnly && (s.chatLiveProvider == history.AgentOMP || s.chatLiveProvider == history.AgentPi) {
+		state.Turns = s.chatStream.Overlay(state.Turns)
+		if s.chatStream.Completed && len(state.Turns) > 0 && !state.Turns[len(state.Turns)-1].User {
+			state.Turns = append([]chatsession.ChatTurn(nil), state.Turns...)
+			state.Turns[len(state.Turns)-1].Live = false
+		}
+	}
+	state.Plan = chatsession.PlanOf(s.chatTurns)
+	return state
+}
+
+// chatBridgeTheme reports the app-resolved appearance for the page. The
+// framework call blocks on the main thread, so it only runs with a window
+// attached and always on the UI lane (chatBridgeState's contract);
+// headless sessions (tests) report light without touching the framework.
+func (s *Shell) chatBridgeTheme() string {
+	if s.win != nil && mygo.Theme.IsDark() {
+		return "dark"
+	}
+	return "light"
+}
+
+// chatBridgeStateOnWindow marshals the projection read onto the window lane.
+func (s *Shell) chatBridgeStateOnWindow() ChatBridgeState {
+	var state ChatBridgeState
+	s.callOnWindow(func() { state = s.chatBridgeState() })
+	return state
+}
+
+// chatBridgeDisposition maps the composer disposition to the page's union.
+func chatBridgeDisposition(disposition conversation.PromptDisposition) string {
+	switch disposition {
+	case conversation.DispositionSentNow:
+		return "ready"
+	case conversation.DispositionQueuedAfterTurn:
+		return "queue"
+	case conversation.DispositionNeedsTerminal:
+		return "terminal"
+	default:
+		return "unknown"
+	}
+}
+
+// chatPublishInterval is the minimum spacing between chat projection
+// events while the live tail streams. File appends land well below this
+// interval, so the page sees token-level updates without event flooding.
+const chatPublishInterval = 120 * time.Millisecond
+
+// publishChatBridge pushes the projection to the WebView chat page. Called
+// on the UI lane after every chat state mutation; a no-op without a window.
+// The guard is only on the window: an empty projection (a pane without a
+// conversation) must still reach the page, or it would keep rendering the
+// previously bound conversation's transcript. Publishes coalesce to one
+// event per interval; the trailing state always wins.
+func (s *Shell) publishChatBridge() {
+	if s.win == nil {
+		return
+	}
+	s.chatPublishMu.Lock()
+	elapsed := time.Since(s.chatPublishAt)
+	if elapsed >= chatPublishInterval {
+		s.chatPublishAt = time.Now()
+		s.chatPublishMu.Unlock()
+		s.emitChatBridge()
+		return
+	}
+	if s.chatPublishTrailer == nil {
+		delay := chatPublishInterval - elapsed
+		s.chatPublishTrailer = time.AfterFunc(delay, func() {
+			s.applyOnWindow(func() {
+				s.chatPublishMu.Lock()
+				s.chatPublishTrailer = nil
+				s.chatPublishAt = time.Now()
+				s.chatPublishMu.Unlock()
+				s.emitChatBridge()
+			})
+		})
+	}
+	s.chatPublishMu.Unlock()
+}
+
+// emitChatBridge delivers the canonical full snapshot immediately (UI lane).
+func (s *Shell) emitChatBridge() {
+	if s.chatDeltaTimer != nil {
+		s.chatDeltaTimer.Stop()
+		s.chatDeltaTimer = nil
+	}
+	// A closed window ends delivery; the page is gone with it.
+	if s.win == nil {
+		return
+	}
+	s.emitChatBridgeState(s.chatBridgeState())
+}
+
+// emitChatBridgeState publishes one already-built full projection. A
+// metadata change or a shifted transcript prefix must take this path.
+func (s *Shell) emitChatBridgeState(state ChatBridgeState) {
+	s.chatLastPublishedState = &state
+	_ = chatUpdated.Emit(s.win, state)
+}

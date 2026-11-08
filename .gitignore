@@ -1,0 +1,38 @@
+/build/
+/dist/
+/.config/
+/.solco/
+/.claude/
+/.mygo/
+.DS_Store
+
+# Frontend workspace (N19): deps and build output are reproducible.
+frontend/node_modules/
+frontend/dist/
+.mac-shots/
+frontend/dist-mobile/
+/resources/darwin/
+
+# Machine-local workspace linking the sibling solco-gitkit checkout (see go.mod).
+go.work
+go.work.sum
+
+# Private maintainer assets, symlinked from the private solco-docs (see its manifest.tsv); never committed.
+/docs
+/designs
+/.agents
+/AUDIT-2026-10-13.md
+/TODO.md
+/scripts/build-tailcat-mobile.sh
+/scripts/check-herdr-omp-chat-stream.py
+/scripts/check-herdr-pi-chat-stream.py
+/scripts/check-hostd-chat-stream-process.py
+/scripts/check-omp-chat-stream-live.py
+/scripts/check-omp-chat-stream-load.py
+/scripts/check-pi-chat-stream-live.py
+/scripts/check-shepherdr-2.1-parity.mjs
+/scripts/generate-shepherdr-2.1-test-index.mjs
+/plugins/solco-automations/scripts/e2e-assistants.sh
+/plugins/solco-automations/scripts/e2e-coordinator-idle-sleep.sh
+/plugins/solco-automations/scripts/e2e-coordinator-resume.sh
+/plugins/solco-automations/scripts/e2e-group-delivery.sh

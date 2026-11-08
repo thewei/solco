@@ -1,0 +1,9 @@
+{
+  "coordinator": {
+    "assistantId": "a_0000000000000001",
+    "state": "stopped",
+    "taskId": "t_0000000000000004",
+    "revision": 2
+  },
+  "schema": 1
+}

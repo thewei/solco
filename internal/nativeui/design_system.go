@@ -1,0 +1,161 @@
+package nativeui
+
+import "github.com/egoist/mygo/ui"
+
+// Design System v2 metric tokens (DS-01). Pages choose semantics; the token
+// set owns every common font size, spacing step, radius and control height.
+type TypographyTokens struct {
+	Title     float32 // page title
+	Heading   float32 // detail and sub-page titles
+	Section   float32 // card/section title
+	Body      float32 // primary reading text
+	BodySmall float32 // secondary reading text
+	Caption   float32 // metadata line
+	Micro     float32 // badges, footnotes
+}
+
+// Font weights. Regular text carries most of the UI; emphasis is one step up
+// (medium or semibold), bold is for page titles and numerals. Nothing sits in
+// between — near-identical weights (600/650/700) read as noise, not hierarchy.
+const (
+	WeightRegular  = 400
+	WeightMedium   = 500
+	WeightSemibold = 600
+	WeightBold     = 700
+)
+
+type SpaceTokens struct {
+	XXS float32
+	XS  float32
+	S   float32
+	M   float32
+	L   float32
+	XL  float32
+}
+
+type RadiusTokens struct {
+	Control float32
+	Row     float32
+	Card    float32
+	Pill    float32
+}
+
+type ControlTokens struct {
+	CompactHeight float32
+	RegularHeight float32
+	RowHeight     float32
+	IconSmall     float32
+	IconRegular   float32
+	// PaletteField is the command palette's query field height: the
+	// palette's primary control, a step above a regular field.
+	PaletteField float32
+}
+
+// Typography returns the shared type scale. It follows macOS' own: 13pt
+// section titles, 12pt body, 11pt secondary and captions, with nothing below
+// 10.5pt (2026-11-03, user request: Caption and Micro were a step too small to
+// read comfortably, so both moved up one half-point).
+func Typography() TypographyTokens { return designType }
+
+// Spacing returns the shared spacing scale.
+func Spacing() SpaceTokens { return designSpace }
+
+// Radius returns the shared corner-radius scale.
+func Radius() RadiusTokens { return designRadius }
+
+// Controls returns the shared control-size scale.
+func Controls() ControlTokens {
+	return ControlTokens{
+		CompactHeight: designControlCompact,
+		RegularHeight: designControlRegular,
+		RowHeight:     designControlRow,
+		IconSmall:     11,
+		IconRegular:   designControlIcon,
+		PaletteField:  38,
+	}
+}
+
+// StatusTone is the semantic status vocabulary (DS-02). Surfaces derive a
+// tone from domain facts; colors come only from StatusColor.
+type StatusTone uint8
+
+const (
+	ToneNeutral StatusTone = iota
+	ToneInfo
+	ToneWorking
+	ToneSuccess
+	ToneWarning
+	ToneAttention
+	ToneError
+	ToneMuted
+)
+
+// StatusColor maps a semantic tone onto the active theme. It is the single
+// color authority for status presentation.
+func (t DesignTokens) StatusColor(tone StatusTone, dark bool) ui.Color {
+	theme := solcoTheme(dark)
+	switch tone {
+	case ToneInfo, ToneWorking:
+		return theme.Accent
+	case ToneSuccess:
+		return theme.Success
+	case ToneWarning:
+		return theme.Warning
+	case ToneAttention:
+		// Same hue as a warning; the slot's outer ring (statusIndicatorTone)
+		// is what tells it apart, so the difference is shape, not colour.
+		return theme.Warning
+	case ToneError:
+		return theme.Danger
+	case ToneMuted:
+		return theme.TextMuted
+	default:
+		return theme.Text
+	}
+}
+
+// StatusBackground is the soft surface wash behind notices and pills.
+func (t DesignTokens) StatusBackground(tone StatusTone, dark bool) ui.Color {
+	color := t.StatusColor(tone, dark)
+	return color.Alpha(0.13)
+}
+
+// TileTone is the fill of a colored icon tile (iconTile): the saturated
+// system colors macOS paints behind sidebar and Settings glyphs. Tiles mark
+// destinations and categories; state keeps using StatusTone.
+type TileTone uint8
+
+const (
+	TileGray TileTone = iota
+	TileBlue
+	TileGreen
+	TileOrange
+	TileRed
+	TilePink
+	TilePurple
+	TileTeal
+	TileYellow
+	TileIndigo
+)
+
+var tileColors = [...][2]ui.Color{
+	TileGray:   {ui.Hex("#8e8e93"), ui.Hex("#8e8e93")},
+	TileBlue:   {ui.Hex("#007aff"), ui.Hex("#0a84ff")},
+	TileGreen:  {ui.Hex("#34c759"), ui.Hex("#30d158")},
+	TileOrange: {ui.Hex("#ff9500"), ui.Hex("#ff9f0a")},
+	TileRed:    {ui.Hex("#ff3b30"), ui.Hex("#ff453a")},
+	TilePink:   {ui.Hex("#ff2d55"), ui.Hex("#ff375f")},
+	TilePurple: {ui.Hex("#af52de"), ui.Hex("#bf5af2")},
+	TileTeal:   {ui.Hex("#30b0c7"), ui.Hex("#40c8e0")},
+	TileYellow: {ui.Hex("#ffb800"), ui.Hex("#ffc60a")},
+	TileIndigo: {ui.Hex("#5856d6"), ui.Hex("#5e5ce6")},
+}
+
+// Color resolves the tile fill for the active appearance.
+func (t TileTone) Color(dark bool) ui.Color {
+	pair := tileColors[t]
+	if dark {
+		return pair[1]
+	}
+	return pair[0]
+}

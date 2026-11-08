@@ -1,0 +1,543 @@
+package nativeui
+
+import (
+	"testing"
+	"time"
+
+	"github.com/egoist/mygo/plugins/terminal"
+	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/agent"
+	"github.com/thewei/solco/internal/herdr"
+)
+
+func workbenchTestShell(t *testing.T) *Shell {
+	t.Helper()
+	shell := NewShell()
+	shell.loading = false
+	shell.activeInstance = "default"
+	shell.projection = herdr.Projection{
+		Protocol:         22,
+		FocusedProjectID: "w1",
+		FocusedTabID:     "t1",
+		FocusedPaneID:    "p1",
+		Projects:         []herdr.Project{{ID: "w1", Label: "Demo", TabCount: 1}},
+		Tabs:             []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "main", PaneCount: 1}},
+		Panes: []herdr.Pane{
+			{ID: "p1", TerminalID: "term-1", ProjectID: "w1", TabID: "t1"},
+			{ID: "p2", TerminalID: "term-2", ProjectID: "w1", TabID: "t1"},
+		},
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", ProjectID: "w1", TabID: "t1", Name: "Scout", Kind: "codex", Status: "working"},
+			{TerminalID: "term-2", PaneID: "p2", ProjectID: "w1", TabID: "t1", Name: "Ranger", Kind: "claude-code", Status: "blocked"},
+		},
+	}
+	shell.reconcileWorkbench()
+	return shell
+}
+
+func TestWorkbenchSidebarShowsSharedCardRows(t *testing.T) {
+	shell := workbenchTestShell(t)
+	tester := ui.NewTester(shell.View, 1200, 800)
+	// Compact rows (2026-10-05, retitled 2026-10-30): one row per agent,
+	// the session title as the label. Both seeded agents share project
+	// "Demo", so the labels append the project to stay distinguishable
+	// (F169) while the second line carries it again; state is the corner
+	// dot, so status words no longer appear.
+	for _, want := range []string{"Scout · Demo", "Ranger · Demo"} {
+		if !tester.HasText(want) {
+			t.Fatalf("sidebar missing %q; texts=%q", want, tester.Texts())
+		}
+	}
+	for _, gone := range []string{"Working", "Needs attention"} {
+		if tester.HasText(gone) {
+			t.Fatalf("sidebar still shows status word %q; texts=%q", gone, tester.Texts())
+		}
+	}
+}
+
+// TestWorkbenchAgentsRouteFilters was pinned against the deleted /agents
+// page; since 2026-10-07 the status tab group lives in the floating agent
+// activity panel (quick_panel_test.go covers it).
+
+// TestWorkbenchBlockedRowOpensTerminalLocally pins the quick-panel row click
+// for a blocked Agent: it goes straight to that Agent's Terminal (no preview
+// layer, no second click) and moves only the local selection — Herdr's own
+// focus stays where it was.
+func TestWorkbenchBlockedRowOpensTerminalLocally(t *testing.T) {
+	shell := workbenchTestShell(t)
+	tester := ui.NewTester(shell.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
+	if shell.selectedPaneID != "" {
+		t.Fatalf("fixture selected pane = %q, want none", shell.selectedPaneID)
+	}
+
+	if err := tester.Click("Ranger · Demo"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	// Ranger sits on p2.
+	if shell.selectedPaneID != "p2" {
+		t.Fatalf("selected pane = %q, want p2", shell.selectedPaneID)
+	}
+	if shell.projection.FocusedPaneID != "p1" {
+		t.Fatalf("a row click moved Herdr's focus to %q", shell.projection.FocusedPaneID)
+	}
+}
+
+// TestWorkbenchMarkersFlowThroughDirectory pins the transition → marker →
+// card pipeline across reconciled snapshots.
+func TestWorkbenchMarkersFlowThroughDirectory(t *testing.T) {
+	shell := workbenchTestShell(t)
+
+	// Scout: working → done (attention + review on the reconciled snapshot).
+	shell.projection.Agents[0].Status = "done"
+	shell.reconcileWorkbench()
+	cards := shell.workbenchCards()
+	var scout agent.AgentCardModel
+	for _, card := range cards {
+		if card.Title == "Scout" {
+			scout = card
+		}
+	}
+	if !scout.ReviewPending {
+		t.Fatalf("scout card = %+v", scout)
+	}
+
+	// Mark reviewed through the explicit action.
+	shell.markAgentReviewed(scout.Key)
+	for _, card := range shell.workbenchCards() {
+		if card.Title == "Scout" && (card.ReviewPending || card.Unread) {
+			t.Fatalf("review not cleared: %+v", card)
+		}
+	}
+}
+
+// TestReconcileWorkbenchAnchorsRecentlyWorkingAgents pins the sort
+// hysteresis across reconciled snapshots: a Working agent carries the
+// anchor, keeps it when its hook flips the status to idle between task
+// loops, and loses it when the agent leaves the projection.
+func TestReconcileWorkbenchAnchorsRecentlyWorkingAgents(t *testing.T) {
+	shell := workbenchTestShell(t)
+	cardByTitle := func(title string) (agent.AgentCardModel, bool) {
+		for _, card := range shell.workbenchCards() {
+			if card.Title == title {
+				return card, true
+			}
+		}
+		return agent.AgentCardModel{}, false
+	}
+	scoutKey := agent.AgentKey{InstanceID: "default", TerminalID: "term-1"}
+
+	scout, ok := cardByTitle("Scout")
+	if !ok || !scout.ActiveUntil.After(time.Now()) {
+		t.Fatalf("working agent must carry the hysteresis anchor: %+v", scout)
+	}
+
+	// The Stop hook fires after every short loop: the honest status flips
+	// to idle but the anchor (and thus the list position) survives.
+	shell.projection.Agents[0].Status = "idle"
+	shell.reconcileWorkbench()
+	scout, ok = cardByTitle("Scout")
+	if !ok || scout.Attention != agent.OpIdle || scout.RuntimePhase != agent.PhaseIdle {
+		t.Fatalf("status must stay honest: %+v", scout)
+	}
+	if !scout.ActiveUntil.After(time.Now()) {
+		t.Fatalf("idle-between-loops agent must keep the anchor: %+v", scout.ActiveUntil)
+	}
+
+	// A never-working agent carries no anchor.
+	ranger, ok := cardByTitle("Ranger")
+	if !ok || ranger.ActiveUntil != (time.Time{}) {
+		t.Fatalf("blocked agent must have no anchor: %+v", ranger.ActiveUntil)
+	}
+
+	// Agents that leave the projection are pruned from the anchor map.
+	shell.projection.Agents = shell.projection.Agents[1:]
+	shell.reconcileWorkbench()
+	if _, anchored := shell.workbench.recentWorking[scoutKey]; anchored {
+		t.Fatal("recent-working anchor must be pruned with the agent")
+	}
+}
+
+// TestAgentSwitcherCycleCommitCancel pins the MRU switcher contract: open
+// snapshots MRU order, Switch Agent (the Window menu's ⌃⇥ — AppKit never hands
+// Control-Tab to a view, so a menu accelerator is the only carrier) cycles,
+// Enter commits local navigation, Esc restores.
+func TestAgentSwitcherCycleCommitCancel(t *testing.T) {
+	shell := workbenchTestShell(t)
+	tester := ui.NewTester(shell.View, 1200, 800)
+
+	// Visit Ranger then Scout to establish MRU order [Scout, Ranger].
+	ranger, ok := shell.workbench.directory.Get(agent.AgentKey{InstanceID: "default", TerminalID: "term-2"})
+	if !ok {
+		t.Fatal("ranger card missing")
+	}
+	shell.openAgentCard(ranger)
+	scout, ok := shell.workbench.directory.Get(agent.AgentKey{InstanceID: "default", TerminalID: "term-1"})
+	if !ok {
+		t.Fatal("scout card missing")
+	}
+	shell.openAgentCard(scout)
+
+	tester.Frame()
+	shell.SwitchAgentFromMenu(1)
+	tester.Frame()
+	if !shell.workbench.switcherOpen {
+		t.Fatal("Switch Agent did not open the switcher")
+	}
+	if len(shell.AgentMRUList()) != 2 || len(shell.AgentMRUList()) > 10 {
+		t.Fatalf("MRU list = %d", len(shell.AgentMRUList()))
+	}
+
+	// Cycle forward once, then backwards twice (wrapping).
+	shell.SwitchAgentFromMenu(1)
+	tester.Frame()
+	if shell.workbench.switcherIndex != 1 {
+		t.Fatalf("index = %d, want 1", shell.workbench.switcherIndex)
+	}
+	shell.SwitchAgentFromMenu(-1)
+	tester.Frame()
+	if shell.workbench.switcherIndex != 0 {
+		t.Fatalf("backwards: index = %d, want 0", shell.workbench.switcherIndex)
+	}
+	shell.SwitchAgentFromMenu(-1)
+	tester.Frame()
+	if shell.workbench.switcherIndex != 1 {
+		t.Fatalf("backwards past the start should wrap: index = %d, want 1", shell.workbench.switcherIndex)
+	}
+
+	// Esc cancels and restores the pre-switcher selection.
+	tester.Key(0, ui.KeyEscape)
+	tester.Frame()
+	if shell.workbench.switcherOpen {
+		t.Fatal("Esc did not close the switcher")
+	}
+
+	// Reopen and commit with Enter: local navigation to the highlighted card.
+	shell.SwitchAgentFromMenu(1)
+	tester.Frame()
+	tester.Key(0, ui.KeyEnter)
+	tester.Frame()
+	if shell.workbench.switcherOpen {
+		t.Fatal("Enter did not commit")
+	}
+	if shell.selectedPaneID == "" {
+		t.Fatal("commit did not navigate to a pane")
+	}
+
+	// ⌃⇧⇥ from closed opens on the other end of the list.
+	shell.SwitchAgentFromMenu(-1)
+	tester.Frame()
+	if !shell.workbench.switcherOpen || shell.workbench.switcherIndex != len(shell.AgentMRUList())-1 {
+		t.Fatalf("⌃⇧⇥ from closed: open=%v index=%d, want open on the last card", shell.workbench.switcherOpen, shell.workbench.switcherIndex)
+	}
+}
+
+// TestSwitcherEnterCommitsWhileASidebarRowHoldsTheFocus pins the 2026-11-08
+// real run: a click on an Agent in the sidebar leaves the keyboard on its row,
+// and an overlay with nothing focusable in it left it there — Enter went to
+// the row, which opened that Agent again, instead of committing the highlighted
+// card. The overlay takes the keyboard as it opens.
+func TestSwitcherEnterCommitsWhileASidebarRowHoldsTheFocus(t *testing.T) {
+	shell := workbenchTestShell(t)
+	tt := ui.NewTester(shell.View, 1200, 800)
+	tt.Frame()
+	var panes []string
+	for _, label := range []string{"Ranger · Demo", "Scout · Demo"} { // MRU: Scout, Ranger
+		if err := tt.Click(label); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		panes = append(panes, shell.selectedPaneID)
+	}
+	if !tt.Focused("Scout · Demo") {
+		t.Fatal("fixture: the clicked sidebar row should hold the keyboard")
+	}
+	tt.Move(5, 790) // the pointer rests away from the overlay
+	tt.Frame()
+
+	shell.SwitchAgentFromMenu(1) // opens on Scout, the Agent on screen
+	tt.Frame()
+	shell.SwitchAgentFromMenu(1) // → Ranger
+	tt.Frame()
+	if !shell.workbench.switcherOpen || shell.workbench.switcherIndex != 1 {
+		t.Fatalf("open=%v index=%d, want the overlay open on its second card", shell.workbench.switcherOpen, shell.workbench.switcherIndex)
+	}
+	if tt.Focused("Scout · Demo") {
+		t.Fatal("the overlay left the keyboard on the sidebar row behind it")
+	}
+
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if shell.workbench.switcherOpen {
+		t.Fatal("Enter did not commit the highlighted card")
+	}
+	if shell.selectedPaneID != panes[0] {
+		t.Fatalf("committed pane %q, want Ranger's %q", shell.selectedPaneID, panes[0])
+	}
+}
+
+// TestSwitcherKeysNeverReachATerminalBehindIt pins the other common holder of
+// the keyboard: a Terminal pane. Enter commits and Esc cancels without a byte
+// reaching the Agent's program behind the overlay.
+func TestSwitcherKeysNeverReachATerminalBehindIt(t *testing.T) {
+	shell := workbenchTestShell(t)
+	conn := newScriptPipe()
+	term, err := terminal.New(terminal.Options{Conn: conn})
+	if err != nil {
+		t.Skip("terminal library unavailable:", err)
+	}
+	defer term.Close()
+	shell.terminals["term-1"] = &terminalSurface{
+		key: "term-1", paneID: "p1", term: term, label: "shell",
+		area: herdr.LayoutRect{Width: 1, Height: 1}, rect: herdr.LayoutRect{Width: 1, Height: 1}, focused: true,
+	}
+	for _, id := range []string{"term-2", "term-1"} { // MRU: term-1, term-2
+		card, ok := shell.workbench.directory.Get(agent.AgentKey{InstanceID: "default", TerminalID: id})
+		if !ok {
+			t.Fatalf("card %s missing", id)
+		}
+		shell.openAgentCard(card)
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		shell.terminalCanvas(c)
+		shell.agentSwitcherOverlay(c)
+	}, 1200, 800)
+	tt.Frame()
+	tt.ClickAt(600, 400)
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if got := conn.take(1); got != "\r" {
+		t.Fatalf("fixture: the terminal does not hold the keyboard (Enter sent %q)", got)
+	}
+	conn.drainSent()
+	tt.Move(20, 780)
+	tt.Frame()
+
+	shell.SwitchAgentFromMenu(1)
+	tt.Frame()
+	shell.SwitchAgentFromMenu(1)
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if shell.workbench.switcherOpen {
+		t.Fatal("Enter did not commit with a Terminal behind the overlay")
+	}
+	shell.SwitchAgentFromMenu(1)
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if shell.workbench.switcherOpen {
+		t.Fatal("Esc did not cancel with a Terminal behind the overlay")
+	}
+	if got := conn.take(1); got != "" {
+		t.Fatalf("the overlay's keys reached the program behind it: %q", got)
+	}
+}
+
+// TestSwitcherHighlightFollowsKeysNotAPointerAtRest pins the 2026-11-08 finding
+// that the overlay opens in the middle of the window, where the pointer often
+// rests: a row that stays hovered put the highlight back on itself every
+// frame, so ⌃⇥ could not leave it. A pointer at rest leaves the keys alone;
+// one that moves chooses the row it is on again.
+func TestSwitcherHighlightFollowsKeysNotAPointerAtRest(t *testing.T) {
+	shell := workbenchTestShell(t)
+	for _, id := range []string{"term-2", "term-1"} { // MRU: term-1, term-2
+		card, ok := shell.workbench.directory.Get(agent.AgentKey{InstanceID: "default", TerminalID: id})
+		if !ok {
+			t.Fatalf("card %s missing", id)
+		}
+		shell.openAgentCard(card)
+	}
+	// The overlay alone, so each title below is its row (the page behind
+	// would label the same names in its pane header).
+	tt := ui.NewTester(func(c *ui.Context) { shell.agentSwitcherOverlay(c) }, 1200, 800)
+	tt.Frame()
+	// Where the first card's row lands: open once with the pointer away,
+	// note the spot, close.
+	shell.SwitchAgentFromMenu(1)
+	tt.Frame()
+	row, ok := tt.Find("Scout")
+	if !ok {
+		t.Fatalf("overlay shows no Scout row; texts=%q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if shell.workbench.switcherOpen {
+		t.Fatal("fixture: Esc did not close the overlay")
+	}
+
+	x, y := row.X+row.W/2, row.Y+row.H/2
+	tt.Move(x, y) // the pointer rests over the first row as the overlay opens
+	tt.Frame()
+	shell.SwitchAgentFromMenu(1)
+	tt.Frame()
+	if !shell.workbench.switcherPointer.seen || shell.workbench.switcherPointer.row != 0 {
+		t.Fatalf("fixture: the pointer is not over the first row as the overlay opens (%+v)", shell.workbench.switcherPointer)
+	}
+	shell.SwitchAgentFromMenu(1)
+	tt.Frame()
+	tt.Frame()
+	if shell.workbench.switcherIndex != 1 {
+		t.Fatalf("index = %d: a pointer at rest over the first row undid ⌃⇥", shell.workbench.switcherIndex)
+	}
+
+	tt.Move(x+3, y) // a pointer that moves chooses the row it is on
+	tt.Frame()
+	if shell.workbench.switcherIndex != 0 {
+		t.Fatalf("index = %d: moving over the first row did not choose it", shell.workbench.switcherIndex)
+	}
+}
+
+// TestPaneMenuOffersReleaseAgentForFinishedAgents pins the exit affordance:
+// Herdr keeps a done/idle agent listed on a live pane forever (its status
+// vocabulary has no exited), so the one pane menu offers Release Agent —
+// pane.release_agent via the shared confirm — only for those phases; a
+// working agent still owns its pane and is not offered.
+func TestPaneMenuOffersReleaseAgentForFinishedAgents(t *testing.T) {
+	shell := NewShell()
+	shell.loading = false
+	shell.activeInstance = "default"
+	shell.projection = herdr.Projection{
+		Protocol:         22,
+		FocusedProjectID: "w1",
+		FocusedTabID:     "t1",
+		FocusedPaneID:    "p1",
+		Projects:         []herdr.Project{{ID: "w1", Label: "Demo", TabCount: 1}},
+		Tabs:             []herdr.Tab{{ID: "t1", ProjectID: "w1", Label: "main", PaneCount: 3}},
+		Panes: []herdr.Pane{
+			{ID: "p1", TerminalID: "term-1", ProjectID: "w1", TabID: "t1"},
+			{ID: "p2", TerminalID: "term-2", ProjectID: "w1", TabID: "t1"},
+			{ID: "p3", TerminalID: "term-3", ProjectID: "w1", TabID: "t1"},
+		},
+		Agents: []herdr.Agent{
+			{TerminalID: "term-1", PaneID: "p1", Name: "Scout", Kind: "omp", Status: "working"},
+			{TerminalID: "term-2", PaneID: "p2", Name: "Finisher", Kind: "omp", Status: "done"},
+			{TerminalID: "term-3", PaneID: "p3", Name: "Sitter", Kind: "omp", Status: "idle"},
+		},
+	}
+	shell.reconcileWorkbench()
+
+	tester := ui.NewTester(shell.View, 1200, 800)
+	tester.Frame()
+
+	if err := tester.RightClick("Finisher"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := tester.Menu(); !containsText(menu, "Release Agent") {
+		t.Fatalf("done agent row menu missing Release Agent: %q", menu)
+	}
+	// PopoverMenus draws the menu in the window: close it before the next
+	// right click, or the click lands on the open menu's dismissal layer.
+	tester.CloseMenu()
+	if err := tester.RightClick("Sitter"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := tester.Menu(); !containsText(menu, "Release Agent") {
+		t.Fatalf("idle agent row menu missing Release Agent: %q", menu)
+	}
+	tester.CloseMenu()
+	if err := tester.RightClick("Scout"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := tester.Menu(); containsText(menu, "Release Agent") {
+		t.Fatalf("working agent row must not offer Release Agent: %q", menu)
+	}
+}
+
+// TestSidebarAgentRowReviewActionAndMenu verifies that sidebar Agent rows
+// render the shared "Mark Reviewed" check button and right-click menu item
+// when ReviewPending is true, and clicking it clears the review marker.
+func TestSidebarAgentRowReviewActionAndMenu(t *testing.T) {
+	shell := workbenchTestShell(t)
+	shell.projection.Agents[0].Status = "done"
+	shell.reconcileWorkbench()
+
+	scoutKey := agent.AgentKey{InstanceID: "default", TerminalID: "term-1"}
+	if !shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("Scout must be ReviewPending after transitioning to done")
+	}
+
+	tester := ui.NewTester(shell.View, 1200, 800)
+	tester.Frame()
+
+	// Right click Scout in the sidebar: menu must offer Mark Reviewed.
+	if err := tester.RightClick("Scout"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tester.Menu()
+	if !containsText(menu, "Mark Reviewed") {
+		t.Fatalf("sidebar agent row menu %q missing Mark Reviewed", menu)
+	}
+	tester.CloseMenu()
+
+	// The trailing action button "Mark Reviewed" must be rendered.
+	if !tester.HasText("Mark Reviewed") {
+		t.Fatalf("sidebar agent row missing trailing 'Mark Reviewed' button; texts=%q", tester.Texts())
+	}
+
+	// Clicking the trailing check button clears ReviewPending.
+	if err := tester.Click("Mark Reviewed"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+
+	if shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("clicking Mark Reviewed must clear ReviewPending")
+	}
+	for _, card := range shell.workbenchCards() {
+		if card.Key == scoutKey && card.ReviewPending {
+			t.Fatal("reconciled card must reflect cleared ReviewPending")
+		}
+	}
+}
+
+// TestReviewPendingClearedOnPaneFocus verifies that when a pane or window
+// gains focus (selectPane / applyPaneSelection / terminal.View focus),
+// the corresponding agent's ReviewPending state is automatically cleared.
+func TestReviewPendingClearedOnPaneFocus(t *testing.T) {
+	shell := workbenchTestShell(t)
+	shell.projection.Agents[0].Status = "done"
+	shell.reconcileWorkbench()
+
+	scoutKey := agent.AgentKey{InstanceID: "default", TerminalID: "term-1"}
+	if !shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("Scout must be ReviewPending initially")
+	}
+
+	// Selecting the pane (e.g. user focused or switched to pane p1) clears review.
+	shell.selectPane("p1")
+
+	if shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("selecting pane must automatically clear ReviewPending")
+	}
+	for _, card := range shell.workbenchCards() {
+		if card.Key == scoutKey && card.ReviewPending {
+			t.Fatal("reconciled card must have ReviewPending = false")
+		}
+	}
+}
+
+// TestReviewPendingClearedOnOpenChat verifies that opening chat for an agent
+// automatically clears its ReviewPending state.
+func TestReviewPendingClearedOnOpenChat(t *testing.T) {
+	shell := workbenchTestShell(t)
+	shell.projection.Agents[0].Status = "done"
+	shell.reconcileWorkbench()
+
+	scoutKey := agent.AgentKey{InstanceID: "default", TerminalID: "term-1"}
+	if !shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("Scout must be ReviewPending initially")
+	}
+
+	scout, ok := shell.workbench.directory.Get(scoutKey)
+	if !ok {
+		t.Fatal("scout card not found in directory")
+	}
+
+	shell.openChat(scout)
+
+	if shell.workbench.markers.Get(scoutKey).ReviewPending {
+		t.Fatal("openChat must automatically clear ReviewPending")
+	}
+}

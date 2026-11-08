@@ -1,0 +1,15 @@
+{
+  "key": {
+    "id": "hk_0000000000000020",
+    "assistantId": "a_0000000000000001",
+    "sources": [
+      "github",
+      "ci"
+    ],
+    "status": "active",
+    "createdAt": 1800000002000
+  },
+  "path": "/api/v3/hooks/assistants/a_0000000000000001/wake",
+  "schema": 1,
+  "secret": "0000000000000000000000000000000000000000000000000000000000000000"
+}
