@@ -59,8 +59,8 @@ func evidenceHistory(t *testing.T) *history.HistoryService {
 	}{
 		{history.AgentPi, "Overhaul the chrome and drop the AI flavor", "/Users/me/Workspaces/acme/herdr-client", &bigTokens, 7_800_000},
 		{history.AgentPi, "Move the inner-page back button into the sidebar", "/Users/me/Workspaces/acme/herdr-client", &tokens, 410_000},
-		{history.AgentClaudeCode, "Review the migration roadmap", "/Users/me/Workspaces/labs-portal-dev", &tokens, 96_000},
-		{history.AgentClaudeCode, "Untangle the billing webhook retries", "/Users/me/Workspaces/labs-portal-dev", nil, 52_000},
+		{history.AgentClaudeCode, "Review the migration roadmap", "/Users/me/Workspaces/acme-portal", &tokens, 96_000},
+		{history.AgentClaudeCode, "Untangle the billing webhook retries", "/Users/me/Workspaces/acme-portal", nil, 52_000},
 	} {
 		updated := time.Now().Add(-time.Duration(i+1) * 5 * time.Hour).UnixMilli()
 		meta := history.SessionMeta{
@@ -87,8 +87,8 @@ func evidenceShell(t *testing.T) *Shell {
 		FocusedProjectID: "w1", FocusedTabID: "t1", FocusedPaneID: "p1",
 		Projects: []herdr.Project{
 			{ID: "w1", Label: "herdr-client", TabCount: 2, PaneCount: 3, CWD: "/Users/me/Workspaces/acme/herdr-client"},
-			{ID: "w2", Label: "labs-portal-dev", TabCount: 1, PaneCount: 1, CWD: "/Users/me/Workspaces/labs-portal-dev"},
-			{ID: "w3", Label: "getaipages", TabCount: 2, PaneCount: 2, CWD: "/Users/me/Workspaces/getaipages"},
+			{ID: "w2", Label: "acme-portal", TabCount: 1, PaneCount: 1, CWD: "/Users/me/Workspaces/acme-portal"},
+			{ID: "w3", Label: "landing-site", TabCount: 2, PaneCount: 2, CWD: "/Users/me/Workspaces/landing-site"},
 		},
 		Tabs: []herdr.Tab{
 			{ID: "t1", ProjectID: "w1", Label: "Coding", PaneCount: 2},
@@ -101,9 +101,9 @@ func evidenceShell(t *testing.T) *Shell {
 			{ID: "p1", TerminalID: "term-1", ProjectID: "w1", TabID: "t1", Label: "pi", CWD: "/Users/me/Workspaces/acme/herdr-client"},
 			{ID: "p2", TerminalID: "term-2", ProjectID: "w1", TabID: "t1", Label: "zsh", CWD: "/Users/me/Workspaces/acme/herdr-client"},
 			{ID: "p3", TerminalID: "term-3", ProjectID: "w1", TabID: "t2", Label: "server", CWD: "/Users/me/Workspaces/acme/herdr-client"},
-			{ID: "p4", TerminalID: "term-4", ProjectID: "w2", TabID: "t3", Label: "claude", CWD: "/Users/me/Workspaces/labs-portal-dev"},
-			{ID: "p5", TerminalID: "term-5", ProjectID: "w3", TabID: "t4", Label: "codex", CWD: "/Users/me/Workspaces/getaipages"},
-			{ID: "p6", TerminalID: "term-6", ProjectID: "w3", TabID: "t5", Label: "zsh", CWD: "/Users/me/Workspaces/getaipages"},
+			{ID: "p4", TerminalID: "term-4", ProjectID: "w2", TabID: "t3", Label: "claude", CWD: "/Users/me/Workspaces/acme-portal"},
+			{ID: "p5", TerminalID: "term-5", ProjectID: "w3", TabID: "t4", Label: "codex", CWD: "/Users/me/Workspaces/landing-site"},
+			{ID: "p6", TerminalID: "term-6", ProjectID: "w3", TabID: "t5", Label: "zsh", CWD: "/Users/me/Workspaces/landing-site"},
 		},
 		Layouts: []herdr.Layout{{
 			ProjectID: "w1", TabID: "t1", Area: area,
