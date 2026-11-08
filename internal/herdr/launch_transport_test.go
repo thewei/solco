@@ -273,7 +273,7 @@ func TestLaunchTransportShellSettled(t *testing.T) {
 		{"fresh pane, no prompt drawn yet", idle, pane(""), "", false},
 		{"prompt drawn but a helper is still the foreground", busy, pane(""), "% ", false},
 		{"Herdr still detects an agent from the rc files", idle, pane("omp"), "% ", false},
-		{"settled", idle, pane(""), "wilson@mac %", true},
+		{"settled", idle, pane(""), "deploy@mac %", true},
 	}
 	for _, tc := range cases {
 		startFakeHerdr(t, func(method string, params map[string]any) (json.RawMessage, error) {
@@ -442,7 +442,7 @@ func TestSubmitTextClosesATrailingMention(t *testing.T) {
 		`look at @"/tmp/My Dir/a.png"`:      `look at @"/tmp/My Dir/a.png" `,
 		"describe\n@/tmp/a.png":             "describe\n@/tmp/a.png ",
 		"what is this? @/tmp/a.png and why": "what is this? @/tmp/a.png and why",
-		"mail me at wilson@example.com":     "mail me at wilson@example.com",
+		"mail me at deploy@example.com":     "mail me at deploy@example.com",
 		"/skill:tdd fix it":                 "/skill:tdd fix it",
 		"already closed @/tmp/a.png ":       "already closed @/tmp/a.png ",
 		"":                                  "",

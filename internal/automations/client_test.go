@@ -26,7 +26,7 @@ const listFixture = `{"result":{"paused":false,"scheduler":4242,"state":"/tmp/st
  "automations":[{
    "name":"nightly-ci-triage","draft":false,"disabled":false,
    "cron":"0 9 * * 1-5","schedule_text":"Weekdays 09:00","once_at":null,
-   "repo":"~/Workspaces/wh-studio/solco","workspace_mode":"worktree",
+   "repo":"~/Workspaces/acme/solco","workspace_mode":"worktree",
    "agent":"claude","model":"","prompt":"triage","rationale":"nightly",
    "on_overlap":"skip","timeout_minutes":60,"catch_up_minutes":120,
    "cleanup_ttl_hours":0,
@@ -36,7 +36,7 @@ const listFixture = `{"result":{"paused":false,"scheduler":4242,"state":"/tmp/st
    "history30":{"done":18,"failed":2,"skipped":1}},
   {"name":"draft-sweep","draft":true,"disabled":false,
    "cron":"","schedule_text":"","once_at":null,
-   "repo":"~/Workspaces/wh-studio/solco","workspace_mode":"worktree",
+   "repo":"~/Workspaces/acme/solco","workspace_mode":"worktree",
    "agent":"codex","model":"","prompt":"sweep","rationale":"",
    "on_overlap":"queue","timeout_minutes":0,"catch_up_minutes":0,
    "cleanup_ttl_hours":48,"next_run":"","last_run":null,

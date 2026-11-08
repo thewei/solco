@@ -147,8 +147,8 @@ func TestDeviceStoreKeepsOnlyTheTokenHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dev, token, err := s.Add("  Wilson's iPhone  ")
-	if err != nil || token == "" || dev.Name != "Wilson's iPhone" {
+	dev, token, err := s.Add("  Test iPhone  ")
+	if err != nil || token == "" || dev.Name != "Test iPhone" {
 		t.Fatalf("Add = %+v, %q, %v", dev, token, err)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, devicesFile))

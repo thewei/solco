@@ -116,8 +116,8 @@ func TestAddressWatcherFollowsChangedAddress(t *testing.T) {
 
 	// The heal rides the normal path (Reconfigure): quiet once the configured
 	// address is on the interfaces again, whatever the bind outcome.
-	ifaces.set([]ifaceAddr{{"en0", netip.MustParseAddr("192.168.5.42")}})
-	if err := srv.Reconfigure(Config{Mode: ModeLAN, Port: 7788, Address: "192.168.5.42"}, RelayConfig{}); err != nil {
+	ifaces.set([]ifaceAddr{{"en0", netip.MustParseAddr("192.168.0.42")}})
+	if err := srv.Reconfigure(Config{Mode: ModeLAN, Port: 7788, Address: "192.168.0.42"}, RelayConfig{}); err != nil {
 		t.Logf("reconfigure bind failed (address not on this machine): %v", err)
 	}
 	deadline := time.Now().Add(100 * time.Millisecond)

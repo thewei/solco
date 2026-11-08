@@ -24,8 +24,8 @@ func groupAliases(g hostGroup) []string {
 // the main file leaves ungrouped (a marker naming an undeclared group counts
 // as none), then one group per Include file, labelled by its path.
 func TestHostGroupsOrderDeclaredThenLooseThenIncluded(t *testing.T) {
-	const main = "/Users/wilson/.ssh/config"
-	const included = "/Users/wilson/.orbstack/ssh/config"
+	const main = "/Users/me/.ssh/config"
+	const included = "/Users/me/.orbstack/ssh/config"
 	entries := []sshconfig.Entry{
 		groupTestEntry("orb", included, ""),
 		groupTestEntry("web", main, "A"),
@@ -67,7 +67,7 @@ func TestHostGroupsOrderDeclaredThenLooseThenIncluded(t *testing.T) {
 // TestHostGroupsLeaveASimpleConfigFlat pins the no-op: nothing declared and
 // every entry in the main file means one plain list, not one lonely header.
 func TestHostGroupsLeaveASimpleConfigFlat(t *testing.T) {
-	const main = "/Users/wilson/.ssh/config"
+	const main = "/Users/me/.ssh/config"
 	entries := []sshconfig.Entry{groupTestEntry("a", main, ""), groupTestEntry("b", main, "")}
 	if got := hostGroups(entries, nil, main); got != nil {
 		t.Fatalf("flat config grouped as %+v", got)
@@ -85,8 +85,8 @@ func TestHostGroupsLeaveASimpleConfigFlat(t *testing.T) {
 // the main file's hosts are named by the file, not called "ungrouped" next to
 // nothing; and a declared group without a name still gets a header.
 func TestHostGroupsNameTheMainFileWhenOnlyFilesGroup(t *testing.T) {
-	const main = "/Users/wilson/.ssh/config"
-	const included = "/Users/wilson/.ssh/extra"
+	const main = "/Users/me/.ssh/config"
+	const included = "/Users/me/.ssh/extra"
 	entries := []sshconfig.Entry{groupTestEntry("main", main, ""), groupTestEntry("inc", included, "")}
 	got := hostGroups(entries, nil, main)
 	if len(got) != 2 || got[0].Label != "~/.ssh/config" || got[1].Label != "~/.ssh/extra" {

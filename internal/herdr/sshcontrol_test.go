@@ -138,8 +138,8 @@ func TestClassifyFailure(t *testing.T) {
 		message string
 		want    FailureKind
 	}{
-		{"wilson@127.0.0.1: Permission denied (publickey).", FailureAuth},
-		{"remote platform detection failed: wilson@127.0.0.1: Permission denied (publickey).", FailureAuth},
+		{"deploy@127.0.0.1: Permission denied (publickey).", FailureAuth},
+		{"remote platform detection failed: deploy@127.0.0.1: Permission denied (publickey).", FailureAuth},
 		{"auth required", FailureAuth},
 		{"Received disconnect: Too many authentication failures", FailureAuth},
 		{"Host key verification failed.", FailureHostKey},

@@ -57,10 +57,10 @@ func evidenceHistory(t *testing.T) *history.HistoryService {
 		tokens  *int64
 		size    int64
 	}{
-		{history.AgentPi, "Overhaul the chrome and drop the AI flavor", "/Users/wilson/Workspaces/wh-studio/herdr-client", &bigTokens, 7_800_000},
-		{history.AgentPi, "Move the inner-page back button into the sidebar", "/Users/wilson/Workspaces/wh-studio/herdr-client", &tokens, 410_000},
-		{history.AgentClaudeCode, "Review the migration roadmap", "/Users/wilson/Workspaces/labs-portal-dev", &tokens, 96_000},
-		{history.AgentClaudeCode, "Untangle the billing webhook retries", "/Users/wilson/Workspaces/labs-portal-dev", nil, 52_000},
+		{history.AgentPi, "Overhaul the chrome and drop the AI flavor", "/Users/me/Workspaces/acme/herdr-client", &bigTokens, 7_800_000},
+		{history.AgentPi, "Move the inner-page back button into the sidebar", "/Users/me/Workspaces/acme/herdr-client", &tokens, 410_000},
+		{history.AgentClaudeCode, "Review the migration roadmap", "/Users/me/Workspaces/labs-portal-dev", &tokens, 96_000},
+		{history.AgentClaudeCode, "Untangle the billing webhook retries", "/Users/me/Workspaces/labs-portal-dev", nil, 52_000},
 	} {
 		updated := time.Now().Add(-time.Duration(i+1) * 5 * time.Hour).UnixMilli()
 		meta := history.SessionMeta{
@@ -86,9 +86,9 @@ func evidenceShell(t *testing.T) *Shell {
 		Protocol: 22, Version: "0.9.3",
 		FocusedProjectID: "w1", FocusedTabID: "t1", FocusedPaneID: "p1",
 		Projects: []herdr.Project{
-			{ID: "w1", Label: "herdr-client", TabCount: 2, PaneCount: 3, CWD: "/Users/wilson/Workspaces/wh-studio/herdr-client"},
-			{ID: "w2", Label: "labs-portal-dev", TabCount: 1, PaneCount: 1, CWD: "/Users/wilson/Workspaces/labs-portal-dev"},
-			{ID: "w3", Label: "getaipages", TabCount: 2, PaneCount: 2, CWD: "/Users/wilson/Workspaces/getaipages"},
+			{ID: "w1", Label: "herdr-client", TabCount: 2, PaneCount: 3, CWD: "/Users/me/Workspaces/acme/herdr-client"},
+			{ID: "w2", Label: "labs-portal-dev", TabCount: 1, PaneCount: 1, CWD: "/Users/me/Workspaces/labs-portal-dev"},
+			{ID: "w3", Label: "getaipages", TabCount: 2, PaneCount: 2, CWD: "/Users/me/Workspaces/getaipages"},
 		},
 		Tabs: []herdr.Tab{
 			{ID: "t1", ProjectID: "w1", Label: "Coding", PaneCount: 2},
@@ -98,12 +98,12 @@ func evidenceShell(t *testing.T) *Shell {
 			{ID: "t5", ProjectID: "w3", Label: "Docs", PaneCount: 1},
 		},
 		Panes: []herdr.Pane{
-			{ID: "p1", TerminalID: "term-1", ProjectID: "w1", TabID: "t1", Label: "pi", CWD: "/Users/wilson/Workspaces/wh-studio/herdr-client"},
-			{ID: "p2", TerminalID: "term-2", ProjectID: "w1", TabID: "t1", Label: "zsh", CWD: "/Users/wilson/Workspaces/wh-studio/herdr-client"},
-			{ID: "p3", TerminalID: "term-3", ProjectID: "w1", TabID: "t2", Label: "server", CWD: "/Users/wilson/Workspaces/wh-studio/herdr-client"},
-			{ID: "p4", TerminalID: "term-4", ProjectID: "w2", TabID: "t3", Label: "claude", CWD: "/Users/wilson/Workspaces/labs-portal-dev"},
-			{ID: "p5", TerminalID: "term-5", ProjectID: "w3", TabID: "t4", Label: "codex", CWD: "/Users/wilson/Workspaces/getaipages"},
-			{ID: "p6", TerminalID: "term-6", ProjectID: "w3", TabID: "t5", Label: "zsh", CWD: "/Users/wilson/Workspaces/getaipages"},
+			{ID: "p1", TerminalID: "term-1", ProjectID: "w1", TabID: "t1", Label: "pi", CWD: "/Users/me/Workspaces/acme/herdr-client"},
+			{ID: "p2", TerminalID: "term-2", ProjectID: "w1", TabID: "t1", Label: "zsh", CWD: "/Users/me/Workspaces/acme/herdr-client"},
+			{ID: "p3", TerminalID: "term-3", ProjectID: "w1", TabID: "t2", Label: "server", CWD: "/Users/me/Workspaces/acme/herdr-client"},
+			{ID: "p4", TerminalID: "term-4", ProjectID: "w2", TabID: "t3", Label: "claude", CWD: "/Users/me/Workspaces/labs-portal-dev"},
+			{ID: "p5", TerminalID: "term-5", ProjectID: "w3", TabID: "t4", Label: "codex", CWD: "/Users/me/Workspaces/getaipages"},
+			{ID: "p6", TerminalID: "term-6", ProjectID: "w3", TabID: "t5", Label: "zsh", CWD: "/Users/me/Workspaces/getaipages"},
 		},
 		Layouts: []herdr.Layout{{
 			ProjectID: "w1", TabID: "t1", Area: area,
@@ -255,10 +255,10 @@ func TestUIEvidence(t *testing.T) {
 		config := filepath.Join(hostsDir, "config")
 		hostsConfig := "Include " + filepath.Join(hostsDir, "orbstack") + "\n\n" +
 			"#SCE_GROUP:A:::Development\n\n" +
-			"Host dev-box\n  HostName 10.0.0.12\n  User wilson\n  ProxyCommand ssh -W %h:%p -q -o StrictHostKeyChecking=accept-new jump.internal.example.com\n  IdentityFile ~/.ssh/id_ed25519\n#SCEGroup A\n\n" +
+			"Host dev-box\n  HostName 10.0.0.12\n  User deploy\n  ProxyCommand ssh -W %h:%p -q -o StrictHostKeyChecking=accept-new jump.internal.example.com\n  IdentityFile ~/.ssh/id_ed25519\n#SCEGroup A\n\n" +
 			"Host staging\n  HostName staging.example.com\n  User deploy\n  Port 2222\n#SCEGroup A\n\n" +
 			"#SCE_GROUP:B:::Personal\n\n" +
-			"Host nas\n  HostName nas.local\n  User wilson\n#SCEGroup B\n\n" +
+			"Host nas\n  HostName nas.local\n  User deploy\n#SCEGroup B\n\n" +
 			"Host scratch\n  HostName scratch.example.com\n\n" +
 			"Host *\n  ServerAliveInterval 30\n  AddKeysToAgent yes\n"
 		if err := os.WriteFile(config, []byte(hostsConfig), 0o600); err != nil {
@@ -288,7 +288,7 @@ func TestUIEvidence(t *testing.T) {
 		shell.hosts.form = hostsFormState{}
 		shell.hosts.effOpen, shell.hosts.effFor = true, "dev-box"
 		shell.hosts.eff = []sshconfig.KV{
-			{Key: "hostname", Value: "10.0.0.12"}, {Key: "user", Value: "wilson"}, {Key: "port", Value: "22"},
+			{Key: "hostname", Value: "10.0.0.12"}, {Key: "user", Value: "deploy"}, {Key: "port", Value: "22"},
 			{Key: "proxycommand", Value: "ssh -W %h:%p -q -o StrictHostKeyChecking=accept-new jump.internal.example.com"},
 			{Key: "identityfile", Value: "~/.ssh/id_ed25519"}, {Key: "serveraliveinterval", Value: "30"},
 		}
@@ -298,7 +298,7 @@ func TestUIEvidence(t *testing.T) {
 		render("11d-hosts-pattern")
 		shell.instances = append(shell.instances, herdr.Instance{
 			Name: "workbox", DisplayName: "workbox",
-			Machine: &herdr.Machine{ID: "m1", Label: "workbox", Target: "wilson@workbox.local", Enabled: true},
+			Machine: &herdr.Machine{ID: "m1", Label: "workbox", Target: "deploy@workbox.local", Enabled: true},
 		})
 		shell.machineStates = map[string]herdr.MachineState{"m1": {Reachable: true}}
 		shell.hosts.selected = hostMachineKeyPrefix + "m1"

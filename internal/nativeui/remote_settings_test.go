@@ -343,11 +343,11 @@ func TestRemoteAddressModesWithoutACandidateStayStopped(t *testing.T) {
 }
 
 func TestRemoteAddressStaleWhenTheModeNoLongerOffersIt(t *testing.T) {
-	cands := []remotehost.Candidate{{Address: "192.168.5.59", Interface: "en0"}}
-	if remoteAddressStale("192.168.5.59", cands) {
+	cands := []remotehost.Candidate{{Address: "192.168.0.59", Interface: "en0"}}
+	if remoteAddressStale("192.168.0.59", cands) {
 		t.Fatal("an offered address is not stale")
 	}
-	if !remoteAddressStale("192.168.139.3", cands) {
+	if !remoteAddressStale("192.168.64.3", cands) {
 		t.Fatal("a saved bridge address that is no longer offered must be flagged")
 	}
 	if remoteAddressStale("", cands) {

@@ -101,5 +101,9 @@ func TestAcceptanceHold(t *testing.T) {
 	}
 }
 
-// realHome is the user's own home, read only to copy one extension file.
-func realHome() string { return "/Users/wilson" }
+// realHome is the user's own home, read only to copy one extension file. The sandbox env is a
+// separate slice for child processes, so this process's HOME is still the real one.
+func realHome() string {
+	home, _ := os.UserHomeDir()
+	return home
+}

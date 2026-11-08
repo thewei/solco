@@ -50,7 +50,7 @@ func TestPaneProcessInfoDecodesLiveShape(t *testing.T) {
 		t.Fatalf("foreground processes = %#v", info.ForegroundProcesses)
 	}
 	proc := info.ForegroundProcesses[0]
-	if proc.PID != 3055 || proc.Name != "zsh" || proc.CWD != "/Users/wilson/Workspaces" {
+	if proc.PID != 3055 || proc.Name != "zsh" || proc.CWD != "/Users/me/Workspaces" {
 		t.Fatalf("process = %#v", proc)
 	}
 
@@ -92,7 +92,7 @@ func servePaneProcessInfo(conn net.Conn) {
 						"argv":    []string{"-zsh"},
 						"argv0":   "zsh",
 						"cmdline": "-zsh",
-						"cwd":     "/Users/wilson/Workspaces",
+						"cwd":     "/Users/me/Workspaces",
 						"name":    "zsh",
 						"pid":     3055,
 					},

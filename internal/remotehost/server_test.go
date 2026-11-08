@@ -346,7 +346,7 @@ func TestPairingHandsOutOneTokenPerCodeAndRefusesTheRest(t *testing.T) {
 	if resp, _ := postPair(t, h.http.URL, "WRONGCODE", "x"); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("a wrong code = %d, want 401", resp.StatusCode)
 	}
-	resp, out := postPair(t, h.http.URL, code, "Wilson's iPhone")
+	resp, out := postPair(t, h.http.URL, code, "Test iPhone")
 	if resp.StatusCode != http.StatusOK || out["token"] == "" || out["deviceId"] == "" {
 		t.Fatalf("pair = %d %v", resp.StatusCode, out)
 	}
@@ -359,7 +359,7 @@ func TestPairingHandsOutOneTokenPerCodeAndRefusesTheRest(t *testing.T) {
 	var found bool
 	for _, d := range h.srv.Devices().List() {
 		if d.ID == out["deviceId"] {
-			found = d.Name == "Wilson's iPhone"
+			found = d.Name == "Test iPhone"
 		}
 	}
 	if !found {
@@ -515,7 +515,7 @@ func TestUnknownInstanceNeverReachesTheBackend(t *testing.T) {
 func TestBackendFailureIsAGenericBadGateway(t *testing.T) {
 	h := newHarness(t)
 	h.back.mu.Lock()
-	h.back.projErr = errors.New("dial unix /Users/wilson/.config/herdr/herdr.sock: connection refused")
+	h.back.projErr = errors.New("dial unix /Users/me/.config/herdr/herdr.sock: connection refused")
 	h.back.mu.Unlock()
 	resp := h.get("/api/v3/tree", h.token, nil)
 	body := new(strings.Builder)

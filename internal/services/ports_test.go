@@ -5,10 +5,10 @@ import (
 )
 
 const sampleLsofOutput = `COMMAND     PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
-node      12345 wilson   23u  IPv6 0x1234567890abcdef      0t0  TCP *:3000 (LISTEN)
-node      12345 wilson   24u  IPv4 0xabcdef1234567890      0t0  TCP 127.0.0.1:3000 (LISTEN)
-postgres  23456 wilson    7u  IPv4 0x1111222233334444      0t0  TCP 127.0.0.1:5432 (LISTEN)
-vite      34567 wilson   19u  IPv6 0x5555666677778888      0t0  TCP [::1]:5173 (LISTEN)
+node      12345 deploy   23u  IPv6 0x1234567890abcdef      0t0  TCP *:3000 (LISTEN)
+node      12345 deploy   24u  IPv4 0xabcdef1234567890      0t0  TCP 127.0.0.1:3000 (LISTEN)
+postgres  23456 deploy    7u  IPv4 0x1111222233334444      0t0  TCP 127.0.0.1:5432 (LISTEN)
+vite      34567 deploy   19u  IPv6 0x5555666677778888      0t0  TCP [::1]:5173 (LISTEN)
 `
 
 // TestParseLsofListeningPorts pins WIX-090: PID→ports mapping, port extraction,

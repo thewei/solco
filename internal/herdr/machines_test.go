@@ -121,7 +121,7 @@ func TestDecodeMachineStatesShapes(t *testing.T) {
 func TestDecodeMachineStatesHerdrVerdicts(t *testing.T) {
 	raw := []byte(`[
   {"id":"a1","label":"fixture-a","status":"reachable","error":null},
-  {"id":"b2","label":"fixture-b","status":"auth required","error":"remote platform detection failed: wilson@127.0.0.1: Permission denied (publickey)."},
+  {"id":"b2","label":"fixture-b","status":"auth required","error":"remote platform detection failed: deploy@127.0.0.1: Permission denied (publickey)."},
   {"id":"c3","label":"fixture-c","status":"error","error":"remote platform detection failed: ssh: connect to host 127.0.0.1 port 22222: Connection refused"},
   {"id":"d4","label":"fixture-d","status":"unreachable","error":"timed out"}
 ]`)

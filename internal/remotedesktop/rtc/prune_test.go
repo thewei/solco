@@ -39,7 +39,7 @@ func TestIPFilterTakesOneGlobalIPv6(t *testing.T) {
 		ip   string
 		want bool
 	}{
-		{"192.168.5.67", true}, {"100.88.0.1", true}, {"169.254.1.1", false}, {"fe80::1", false},
+		{"192.168.0.67", true}, {"100.101.102.1", true}, {"169.254.1.1", false}, {"fe80::1", false},
 		{"fd7a:115c:a1e0::2358:d911", true}, {"fd12:3456::9", false},
 		{"2408:8256:4c86:2de3::1", true}, {"2408:8256:4c86:2de3::2", false},
 	} {

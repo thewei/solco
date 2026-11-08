@@ -10,8 +10,8 @@ import (
 // (or its attribute-carrying open tag, which overruns the generic tag scan)
 // as the user-visible title.
 func TestCleanTitleCandidateStripsSkillBlocks(t *testing.T) {
-	raw := `<skill name="think" location="/Users/wilson/.agents/skills/think/SKILL.md">
-References are relative to /Users/wilson/.agents/skills/think.
+	raw := `<skill name="think" location="/Users/me/.agents/skills/think/SKILL.md">
+References are relative to /Users/me/.agents/skills/think.
 # Think: Design and Validate Before You Build…
 </skill>
 帮我把面板可以拖宽`
@@ -33,7 +33,7 @@ References are relative to /Users/wilson/.agents/skills/think.
 // bug: Codex injects the repository AGENTS.md as a user message, which must
 // become metadata so the real first request titles the session.
 func TestAgentsInstructionsInjectionIsMetaNotTitle(t *testing.T) {
-	injected := "# AGENTS.md instructions for /Users/wilson/Workspaces/solco\n\n<INSTRUCTIONS>…</INSTRUCTIONS>"
+	injected := "# AGENTS.md instructions for /Users/me/Workspaces/solco\n\n<INSTRUCTIONS>…</INSTRUCTIONS>"
 	if userKind(injected) != MessageMeta {
 		t.Fatalf("AGENTS.md injection kind = %v, want MessageMeta", userKind(injected))
 	}

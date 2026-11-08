@@ -37,7 +37,7 @@ func TestMatchArgvTypedWrappers(t *testing.T) {
 		{"trailing passthrough extras", []string{"pnpm", "run", "start", "--", "--port", "9"}, "start"},
 		{"make target", []string{"/opt/homebrew/bin/make", "build"}, "make.up"},
 		{"user definition typed line", []string{"npm", "run", "start"}, "server.up"},
-		{"absolute config path matches the definition's relative one", []string{"/opt/homebrew/bin/caddy", "run", "--config", "/Users/w/Workspaces/tools/jenkins-mtls/Caddyfile"}, "caddy.up"},
+		{"absolute config path matches the definition's relative one", []string{"/opt/homebrew/bin/caddy", "run", "--config", "/Users/me/Workspaces/tools/jenkins-mtls/Caddyfile"}, "caddy.up"},
 	}
 	for _, tc := range cases {
 		entry, tier := MatchArgv(matchEntries(), [][]string{tc.argv})
@@ -54,7 +54,7 @@ func TestMatchArgvBodyChildren(t *testing.T) {
 		want string
 	}{
 		{"devspace server child", []string{"node", "dist/cli.js", "serve"}, "start"},
-		{"child carries an absolute path", []string{"node", "/Users/w/Workspaces/wh-studio/devspace/dist/cli.js", "serve"}, "start"},
+		{"child carries an absolute path", []string{"node", "/Users/me/Workspaces/acme/devspace/dist/cli.js", "serve"}, "start"},
 		{"seed disambiguates from reset", []string{"tsx", "scripts/dev-state.ts", "seed"}, "dev:seed"},
 		{"reset disambiguates from seed", []string{"tsx", "scripts/dev-state.ts", "reset"}, "dev:reset"},
 		{"simple dev body", []string{"tsx", "scripts/dev.ts"}, "dev"},

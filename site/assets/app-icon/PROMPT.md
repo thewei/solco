@@ -9,6 +9,6 @@
 
 Premium macOS app icon, monochrome gray and silver palette. Preserve the recognizable minimalist ram silhouette and spiral horn from Herdr’s logo, keeping the shape close and immediately familiar. Integrate the terminal prompt “>-” into the face. Render the ram as a sculptural gray-white dimensional form with soft metallic gradients, crisp edges, and subtle depth shadows. Light neutral gray rounded-square background, elegant and dynamic but restrained, scalable at small sizes, centered composition, no wordmark, no text.
 
-Generated source: /Users/wilson/.codex/generated_images/01a18afb-1dcd-7a13-9cea-17a8cc4fd293/call_a66c3e0a0fd945eebc9dc949.png
+Generated source: a local image-generation export (kept out of the repository).
 
 Export rule: crop to the icon subject, keep a square 1024px canvas, and reserve Apple's icon safe margin. Place the rounded-square subject in a 100px transparent border on every side; its content box is 824px and its corner radius is about 185.4px. Copy that 1024px master verbatim to resources/icon.png and site/assets/appicon/solco-1024.png; derive all smaller site exports from that master.
