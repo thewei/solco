@@ -1,7 +1,7 @@
 package agenthooks
 
 /**
- * [INPUT]: 内嵌的通用 Agent hook 脚本（v7：支持 Antigravity CLI 完整生命周期 SessionStart/PreInvocation/PreToolUse/PostToolUse/Stop 与 JSON stdout 应答，支持 Cursor camelCase 与 Codex 子线程闸）
+ * [INPUT]: 内嵌的通用 Agent hook 脚本（v9：支持 Antigravity CLI 完整生命周期 SessionStart/PreInvocation/PreToolUse/PostToolUse/Stop 与 JSON stdout 应答，支持 Cursor camelCase 与 Codex 子线程闸；支持 Codex 跨 pane daemon 解析与 herdr 权威源匹配）
  * [OUTPUT]: 对外提供 hookScriptTemplate、hookScriptMarker、hookScriptVersion
  * [POS]: agenthooks 的脚本供给源；install 原子写入 ~/.solco/hooks/ 下的 provider 副本
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -9,7 +9,7 @@ package agenthooks
 
 // hookScriptVersion is the version this build provisions; the marker line
 // inside the template must match.
-const hookScriptVersion = 7
+const hookScriptVersion = 9
 
 // hookScriptMarker identifies files installed by Solco; foreign files
 // at our install paths are never overwritten.
@@ -24,7 +24,7 @@ const hookScriptMarker = "installed by Solco"
 const hookScriptTemplate = `#!/bin/sh
 # installed by Solco
 # managed by Solco; reinstalling or updating the hook overwrites this file.
-# SOLCO_HOOK_VERSION=7
+# SOLCO_HOOK_VERSION=9
 
 set -eu
 
@@ -44,8 +44,13 @@ if [ -z "$PANE_ID" ]; then
         else
             printf '{}\n'
         fi
+        exit 0
     fi
-    exit 0
+    # Cursor GUI sessions and Codex app-server daemon sessions fall through:
+    # python reports to the status socket and resolves pane from cwd/session.
+    if [ "$AGENT" != "cursor" ] && [ "$AGENT" != "codex" ]; then
+        exit 0
+    fi
 fi
 
 HOOK_INPUT=""
@@ -132,6 +137,43 @@ if agent == "codex":
     if _inherited and session_id and _inherited != session_id:
         sys.exit(0)
 
+cwd = (
+    hook_data.get("cwd")
+    or hook_data.get("project_path")
+    or os.getcwd()
+)
+
+# Codex runs hooks inside the background app-server daemon, which inherits
+# the environment of whichever pane first spawned it (or no pane at all).
+# If HERDR_PANE_ID points to an unrelated pane or is empty, resolve the real
+# pane running Codex in this cwd from Herdr's agent.list.
+if agent == "codex":
+    _herdr_sock = os.environ.get("HERDR_SOCKET_PATH") or os.path.expanduser("~/.config/herdr/herdr.sock")
+    if os.path.exists(_herdr_sock):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as _h:
+                _h.settimeout(0.3)
+                _h.connect(_herdr_sock)
+                _h.sendall(b'{"id":"chk","method":"agent.list","params":{}}\n')
+                _res = json.loads(_h.recv(65536).decode())
+                _agents = _res.get("result", {}).get("agents", [])
+                _matched = None
+                for _a in _agents:
+                    if _a.get("agent") == "codex" and _a.get("cwd") == cwd:
+                        _matched = _a.get("pane_id")
+                        break
+                if _matched:
+                    pane_id = _matched
+                elif pane_id:
+                    _valid = any(_a.get("pane_id") == pane_id and _a.get("agent") == "codex" for _a in _agents)
+                    if not _valid and _agents:
+                        for _a in _agents:
+                            if _a.get("agent") == "codex":
+                                pane_id = _a.get("pane_id")
+                                break
+        except Exception:
+            pass
+
 status = "working"
 
 # Cursor Agent 的事件名是 camelCase（sessionStart / beforeSubmitPrompt /
@@ -150,7 +192,7 @@ elif event_name in ("SessionEnd", "session_end", "session_shutdown", "sessionEnd
     status = "released"
 
 # 1. Report to Solco local Unix socket if available (managed panes only)
-if not (os.environ.get("HERDR_PANE_ID") or os.environ.get("TMUX_PANE")):
+if not (os.environ.get("HERDR_PANE_ID") or os.environ.get("TMUX_PANE") or pane_id):
     if agent in ("agy", "antigravity"):
         if event_name in ("PreToolUse", "pre_tool_use", "preToolUse"):
             sys.stdout.write('{"decision":"allow"}\n')
@@ -167,11 +209,11 @@ if os.path.exists(sock_path):
             "status": status,
             "pane_id": pane_id,
             "tmux_pane": os.environ.get("TMUX_PANE"),
-            "herdr_pane": os.environ.get("HERDR_PANE_ID"),
+            "herdr_pane": pane_id or os.environ.get("HERDR_PANE_ID"),
             # 缺失时发 null（不是空串）：空串曾绕过 ingest 的会话锚定
             # 校验，把全部会话写进同一个 journal 文件（审计 adv2-F1）。
             "session_id": session_id or None,
-            "cwd": os.getcwd(),
+            "cwd": cwd,
             "event": event_name,
             "text": prompt_text,
         }
@@ -182,16 +224,17 @@ if os.path.exists(sock_path):
     except Exception:
         pass
 
-# 2. 会话身份接管（v3；v6 补齐字段；v7 支持 Antigravity 路径正规化）：载荷/父进程参数拿到会话 id 后，直接向
-# Herdr socket 报 pane.report_agent_session（source=solco，客户端上报
-# 语义）。Herdr 有了 typed session identity，Chat 入口链路即通；
-# herdr 官方 hook 组只在存在时兜底，不再是前置依赖。
-if session_id and os.environ.get("HERDR_ENV") == "1" and os.environ.get("HERDR_PANE_ID") and os.environ.get("HERDR_SOCKET_PATH"):
+# 2. 会话身份接管（v3；v6 补齐字段；v7 支持 Antigravity 路径正规化；v9 权威 source）：
+# 载荷/父进程参数拿到会话 id 后，直接向 Herdr socket 报 pane.report_agent_session
+# 使用各 Agent 对应的权威 source (herdr:<agent>)。
+_herdr_sock = os.environ.get("HERDR_SOCKET_PATH") or os.path.expanduser("~/.config/herdr/herdr.sock")
+if session_id and pane_id and os.path.exists(_herdr_sock):
     try:
         _seq = time.time_ns()
+        _source = f"herdr:{agent}" if agent in ("codex", "cursor", "omp", "pi", "claude") else ("herdr:antigravity_cli" if agent in ("agy", "antigravity") else "solco")
         _params = {
-            "pane_id": os.environ["HERDR_PANE_ID"],
-            "source": "solco",
+            "pane_id": pane_id,
+            "source": _source,
             "agent": agent,
             "seq": _seq,
             "agent_session_id": session_id,
@@ -211,13 +254,13 @@ if session_id and os.environ.get("HERDR_ENV") == "1" and os.environ.get("HERDR_P
             if isinstance(_start_source, str) and _start_source:
                 _params["session_start_source"] = _start_source
         _req = json.dumps({
-            "id": f"solco:{agent}:{_seq}",
+            "id": f"{_source}:{_seq}",
             "method": "pane.report_agent_session",
             "params": _params,
         })
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as h:
             h.settimeout(0.5)
-            h.connect(os.environ["HERDR_SOCKET_PATH"])
+            h.connect(_herdr_sock)
             h.sendall((_req + "\n").encode("utf-8"))
     except Exception:
         pass

@@ -412,3 +412,34 @@ func TestBlockedFlipSurfacesTranscriptQuestionOnProjectionApply(t *testing.T) {
 		t.Fatal("a blocked flip on a pane whose transcript ends in an unanswered ask must publish the question card")
 	}
 }
+
+func TestResolveHookPaneIDDaemonLeak(t *testing.T) {
+	s := NewShell()
+	s.projection = herdr.Projection{
+		Agents: []herdr.Agent{
+			{PaneID: "w87:p1", Kind: "", CWD: "/other/repo"},
+			{PaneID: "w5M:p2A", Kind: "codex", CWD: "/work/solco"},
+		},
+	}
+
+	// 1. Direct match: hook reports w5M:p2A for codex -> keeps w5M:p2A
+	if got := s.resolveHookPaneID("w5M:p2A", "codex", "/work/solco"); got != "w5M:p2A" {
+		t.Fatalf("direct match got %q, want w5M:p2A", got)
+	}
+
+	// 2. Daemon leak: codex daemon in w87:p1 inherited stale HERDR_PANE_ID,
+	// but hook has cwd /work/solco where w5M:p2A is running codex -> remaps to w5M:p2A
+	if got := s.resolveHookPaneID("w87:p1", "codex", "/work/solco"); got != "w5M:p2A" {
+		t.Fatalf("daemon leak remap got %q, want w5M:p2A", got)
+	}
+
+	// 3. Empty pane_id: falls back to cwd-matched agent
+	if got := s.resolveHookPaneID("", "codex", "/work/solco"); got != "w5M:p2A" {
+		t.Fatalf("empty pane remap got %q, want w5M:p2A", got)
+	}
+
+	// 4. Single agent fallback: even without cwd, if only one codex agent is running
+	if got := s.resolveHookPaneID("w87:p1", "codex", ""); got != "w5M:p2A" {
+		t.Fatalf("single agent fallback got %q, want w5M:p2A", got)
+	}
+}

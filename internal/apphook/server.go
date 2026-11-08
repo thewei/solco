@@ -367,6 +367,7 @@ func (s *Server) dispatchLine(line string, conn net.Conn) {
 				PaneID:         paneID,
 				Agent:          direct.Agent,
 				AgentSessionID: direct.SessionID,
+				CWD:            direct.CWD,
 				Source:         "solco",
 				Timestamp:      now,
 			})

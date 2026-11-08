@@ -32,6 +32,7 @@ type SessionEvent struct {
 	Agent              string    `json:"agent"`
 	AgentSessionID     string    `json:"agent_session_id"`
 	AgentSessionPath   string    `json:"agent_session_path,omitempty"`
+	CWD                string    `json:"cwd,omitempty"`
 	Source             string    `json:"source,omitempty"`
 	SessionStartSource string    `json:"session_start_source,omitempty"`
 	Seq                int64     `json:"seq,omitempty"`

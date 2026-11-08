@@ -21,7 +21,7 @@ import (
 
 /**
  * [INPUT]: 依赖 apphook（进程内 IPC Hook Server）、herdrhooks spool（可选兼容向后尾部）、runtime.ReadPane（pane.read 可见文本）、InteractionBroker
- * [OUTPUT]: 提供 Shell hook 层：直接 Hook 状态/会话更新与 OMP Chat 事件分流、blocked 触发的交互检测 → 结构化 PendingInteraction、非 blocked 的 pane 级取消、实时投影重推
+ * [OUTPUT]: 提供 Shell hook 层：直接 Hook 状态/会话更新与 OMP Chat 事件分流、resolveHookPaneID（防御 Codex app-server 等常驻 daemon 环境变量泄漏导致的跨 pane 串话）、blocked 触发的交互检测 → 结构化 PendingInteraction、非 blocked 的 pane 级取消、实时投影重推
  * [POS]: Solco 自有 Unix Socket Hook 优先级高于 Herdr spool fallback；两个来源显式分支再汇入 agentstatus 唯一状态仲裁器，Herdr 仍掌管 runtime
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -260,26 +260,71 @@ func (s *Shell) restampHookIdentities() {
 	}
 }
 
+// resolveHookPaneID validates whether paneID currently hosts agentName.
+// If the reported pane has no active agent or a conflicting agent (e.g. from
+// a persistent background daemon like Codex app-server inheriting a stale
+// pane ID), it remaps to the pane in the projection that actually hosts
+// agentName and matches cwd.
+func (s *Shell) resolveHookPaneID(paneID, agentName, cwd string) string {
+	wantAgent, wantOK := history.ParseAgentID(agentName)
+	matchesAgent := func(kind, name string) bool {
+		haveAgent, haveOK := history.ParseAgentID(kind)
+		if haveOK && wantOK && haveAgent == wantAgent {
+			return true
+		}
+		return strings.EqualFold(kind, agentName) || strings.EqualFold(name, agentName)
+	}
+
+	if paneID != "" {
+		if a := s.paneAgent(paneID); a != nil {
+			if matchesAgent(a.Kind, a.Name) {
+				return paneID
+			}
+		}
+	}
+
+	// Reported pane does not host agentName. Try to find the actual pane
+	// hosting this agent in the same working directory.
+	var fallbackMatch string
+	matchCount := 0
+	for _, a := range s.projection.Agents {
+		if matchesAgent(a.Kind, a.Name) {
+			if cwd != "" && a.CWD != "" && a.CWD == cwd {
+				return a.PaneID
+			}
+			fallbackMatch = a.PaneID
+			matchCount++
+		}
+	}
+	// If only one pane is running this agent, resolve to it.
+	if matchCount == 1 && fallbackMatch != "" {
+		return fallbackMatch
+	}
+
+	return paneID
+}
+
 func (s *Shell) handleAppHookStatus(evt apphook.StatusEvent) {
 	if evt.PaneID == "" {
 		return
 	}
-	slog.Debug("hook status event", "pane", evt.PaneID, "status", evt.Status, "agent", evt.Agent)
+	paneID := s.resolveHookPaneID(evt.PaneID, evt.Agent, evt.CWD)
+	slog.Debug("hook status event", "pane", paneID, "status", evt.Status, "agent", evt.Agent)
 
 	// The status lane is arbitrated per pane (OSC 7501 vs hooks); the
 	// session identity riding the same event is hook-only and always
 	// passes, even when the status is yielded to the protocol stream.
-	effective, applied := s.statusStore.ApplySolcoHookStatus(evt.PaneID, evt.Status, time.Now())
+	effective, applied := s.statusStore.ApplySolcoHookStatus(paneID, evt.Status, time.Now())
 	if applied {
-		slog.Debug("hook status applied", "pane", evt.PaneID, "status", effective)
+		slog.Debug("hook status applied", "pane", paneID, "status", effective)
 	} else {
-		slog.Debug("hook status yielded to osc7501", "pane", evt.PaneID, "hook", evt.Status, "effective", effective)
+		slog.Debug("hook status yielded to osc7501", "pane", paneID, "hook", evt.Status, "effective", effective)
 	}
 
 	// Direct update to the in-memory projection (locate-or-create in one
 	// place; see upsertProjectionAgent).
 	session := chatSessionIdentity(evt.Agent, evt.SessionID)
-	s.upsertProjectionAgent(evt.PaneID, func(agent *herdr.Agent) {
+	s.upsertProjectionAgent(paneID, func(agent *herdr.Agent) {
 		if applied {
 			agent.Status = effective
 		}
@@ -291,14 +336,14 @@ func (s *Shell) handleAppHookStatus(evt apphook.StatusEvent) {
 		}
 	})
 	if session != nil {
-		previous, hadPrevious := s.hookIdentities[s.hookKey(evt.PaneID)]
-		s.rememberHookIdentity(evt.PaneID, session)
+		previous, hadPrevious := s.hookIdentities[s.hookKey(paneID)]
+		s.rememberHookIdentity(paneID, session)
 		if !hadPrevious || previous.identity.Value != session.Value {
 			s.refreshUsageProjection(true)
 		}
 	}
 	if evt.Text != "" {
-		if a := s.paneAgent(evt.PaneID); a != nil && a.TerminalID != "" {
+		if a := s.paneAgent(paneID); a != nil && a.TerminalID != "" {
 			k := agent.AgentKey{InstanceID: s.activeInstance, TerminalID: a.TerminalID}
 			if s.agentSessionTitle[k] == "" {
 				if clean := history.CleanTitleCandidate(evt.Text); clean != "" {
@@ -316,7 +361,7 @@ func (s *Shell) handleAppHookStatus(evt apphook.StatusEvent) {
 		s.scheduleProjectionRefresh()
 		return
 	}
-	s.applyPaneStatus(evt.PaneID, effective)
+	s.applyPaneStatus(paneID, effective)
 }
 
 // handleAppHookSession updates the agent session identity directly in the
@@ -325,7 +370,8 @@ func (s *Shell) handleAppHookSession(evt apphook.SessionEvent) {
 	if evt.PaneID == "" {
 		return
 	}
-	slog.Info("hook session event", "pane", evt.PaneID, "agent", evt.Agent, "session_id", evt.AgentSessionID)
+	paneID := s.resolveHookPaneID(evt.PaneID, evt.Agent, evt.CWD)
+	slog.Info("hook session event", "pane", paneID, "agent", evt.Agent, "session_id", evt.AgentSessionID)
 
 	source := evt.Source
 	if source == "" {
@@ -345,7 +391,7 @@ func (s *Shell) handleAppHookSession(evt apphook.SessionEvent) {
 		Value:  val,
 	}
 
-	s.upsertProjectionAgent(evt.PaneID, func(agent *herdr.Agent) {
+	s.upsertProjectionAgent(paneID, func(agent *herdr.Agent) {
 		agent.AgentSession = sessionIdentity
 		if agent.Kind == "" && evt.Agent != "" {
 			agent.Kind = evt.Agent
@@ -358,8 +404,8 @@ func (s *Shell) handleAppHookSession(evt apphook.SessionEvent) {
 	// Every tool call reports the same session; only a pane's new identity
 	// can have a fresh transcript to index. (The projection's own identity
 	// cannot tell: a status event may have stamped it first.)
-	previous, hadPrevious := s.hookIdentities[s.hookKey(evt.PaneID)]
-	s.rememberHookIdentity(evt.PaneID, sessionIdentity)
+	previous, hadPrevious := s.hookIdentities[s.hookKey(paneID)]
+	s.rememberHookIdentity(paneID, sessionIdentity)
 	if !hadPrevious || previous.identity.Value != val {
 		// A fresh session identity may already have a catalog row (or gains
 		// one moments later): re-resolve the History-meta projection now so
