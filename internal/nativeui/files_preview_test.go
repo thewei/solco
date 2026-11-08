@@ -131,13 +131,13 @@ func TestPreviewSourceChoiceDrivesTheBarToggle(t *testing.T) {
 	tester.Frame()
 	tester.Click("Source")
 	tester.Frame()
-	if !s.rightPanel.markdownSource || s.rightPanel.nativePreviewPath != small {
-		t.Fatalf("clicking Source: markdownSource=%v native=%q", s.rightPanel.markdownSource, s.rightPanel.nativePreviewPath)
+	if !s.rightPanel.previewSource || s.rightPanel.nativePreviewPath != small {
+		t.Fatalf("clicking Source: previewSource=%v native=%q", s.rightPanel.previewSource, s.rightPanel.nativePreviewPath)
 	}
 	tester.Click("Rendered")
 	tester.Frame()
-	if s.rightPanel.markdownSource || s.rightPanel.nativeMarkdown == nil {
-		t.Fatalf("clicking Rendered: markdownSource=%v rendered=%v", s.rightPanel.markdownSource, s.rightPanel.nativeMarkdown != nil)
+	if s.rightPanel.previewSource || s.rightPanel.nativeMarkdown == nil {
+		t.Fatalf("clicking Rendered: previewSource=%v rendered=%v", s.rightPanel.previewSource, s.rightPanel.nativeMarkdown != nil)
 	}
 }
 

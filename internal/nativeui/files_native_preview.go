@@ -1,8 +1,8 @@
 package nativeui
 
 /**
- * [INPUT]: rightPanel.selectedFilePath/currentRoot/markdownSource、planPreviewTier/newMarkdownPreview（files_markdown.go）、filesview.ReadText/DecodeImageBounded、ui/editor（只读代码视图）、stdlib image 解码 + ui.NewBitmap
- * [OUTPUT]: Files 预览的分级计划（文件名×大小 → previewTier）、原生代码视图（editor.View，Buffer 离 UI lane 构建）、Markdown 渲染视图的挂载（与代码视图同一次读取、开关不重读；文档里指向项目内文件的链接走 openLinkedFile：开成 Detail 卡并展开树里的上层文件夹）、原生 ui.Image 视图（像素预算）、查看条（大小/截断/Markdown 渲染⇄源码；文件名由 Detail 卡头部给出，条里不再重复）与失败真实态、filesWebviewFill（AVIF/ICO 那页的 WebView 底色 = Detail 卡纸色）、clearNativeFilesPreview 清理点
+ * [INPUT]: rightPanel.selectedFilePath/currentRoot/previewSource、planPreviewTier/newMarkdownPreview（files_markdown.go）、ui.ParseSVG、filesview.ReadText/DecodeImageBounded、ui/editor（只读代码视图）、stdlib image 解码 + ui.NewBitmap
+ * [OUTPUT]: Files 预览的分级计划（文件名×大小 → previewTier）、原生代码视图（editor.View，Buffer 离 UI lane 构建）、Markdown 渲染视图的挂载（与代码视图同一次读取、开关不重读；文档里指向项目内文件的链接走 openLinkedFile：开成 Detail 卡并展开树里的上层文件夹）、SVG 的 Image⇄Source（同一次读取，ui.ParseSVG 离 UI lane；解析失败只给源码并说明）、原生 ui.Image 视图（像素预算）、查看条（大小/截断/原因提示/Markdown 渲染⇄源码、SVG 图像⇄源码；文件名由 Detail 卡头部给出，条里不再重复）与失败真实态、filesWebviewFill（AVIF/ICO 那页的 WebView 底色 = Detail 卡纸色）、clearNativeFilesPreview 清理点
  * [POS]: 产品决策 2026-11-08「Files 预览原生优先」：文本/代码/Markdown/常见图片全在原生视图里，只有 AVIF/ICO 这两种 Go 解不了的格式才交给一页几百字节的 WebView（files_webview.go）；读取与解码全部离 UI lane，ui.NewBitmap 与 editor.State 回 UI lane；不新增 Herdr 方法
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -50,17 +50,31 @@ func (s *Shell) planFilePreview(path string) {
 	}()
 }
 
-// setMarkdownSource switches the sticky Rendered/Source choice. A small
+// setPreviewSource switches the sticky Rendered/Source choice. A small
 // Markdown file holds both views from one read, so the switch only changes
 // which one the body builds; a line a search hit asked for lands now if the
 // editor is the view the switch brought up.
-func (s *Shell) setMarkdownSource(source bool) {
+func (s *Shell) setPreviewSource(source bool) {
 	st := &s.rightPanel
-	if st.markdownSource == source {
+	if st.previewSource == source {
 		return
 	}
-	st.markdownSource = source
+	st.previewSource = source
 	s.applyFilesReveal()
+}
+
+// closePreviewFind takes down the find bar of the formatted Markdown the card
+// shows, if one is up, and says whether it did. Esc is the bar's before it is
+// the card's: the shell sees the key first, so without this the card would
+// step away with the bar still open behind it.
+func (s *Shell) closePreviewFind() bool {
+	st := &s.rightPanel
+	mp := st.nativeMarkdown
+	if mp == nil || st.previewSource || !mp.find.open {
+		return false
+	}
+	mp.find.open = false
+	return true
 }
 
 // probePreview stats the file and reads its flavor off the UI lane.
@@ -90,7 +104,7 @@ func (s *Shell) applyPreviewPlan(path, root string, size int64, flavor filesview
 	case tierImageTooLarge:
 		s.claimNativePreview(path)
 		st.nativeImageFailed = "This image is too large to preview. Reveal it in Finder to open it."
-	default: // tierText, tierMarkdown
+	default: // tierText, tierMarkdown, tierSVG
 		s.beginNativeText(path, flavor)
 	}
 }
@@ -107,6 +121,8 @@ func (s *Shell) claimNativePreview(path string) {
 	st.nativeText = nil
 	st.nativeCode = nil
 	st.nativeMarkdown = nil
+	st.nativeSVG = nil
+	st.previewNote = ""
 	st.nativeTextLoading = false
 	st.nativeTextFailed = ""
 	st.nativeImage = nil
@@ -115,9 +131,11 @@ func (s *Shell) claimNativePreview(path string) {
 }
 
 // beginNativeText loads a text file into the code view; a Markdown file
-// under markdownRenderCap also gets its formatted view from the same read.
-// The read and the editor Buffer (a rope, safe from any goroutine) build off
-// the UI lane; the State that shows it is made on it.
+// under markdownRenderCap also gets its formatted view, and an SVG under
+// svgRenderCap its drawing, from the same read. The read, the editor Buffer (a
+// rope, safe from any goroutine), the cut of a Markdown file into rows and the
+// parse of an SVG all happen off the UI lane; the State that shows it is made
+// on it.
 func (s *Shell) beginNativeText(path string, flavor filesview.Flavor) {
 	st := &s.rightPanel
 	s.claimNativePreview(path)
@@ -125,54 +143,76 @@ func (s *Shell) beginNativeText(path string, flavor filesview.Flavor) {
 	gen := st.filesGen.Load()
 	root := st.currentRoot
 	name := filepath.Base(path)
-	render := planPreviewTier(path, st.previewSize) == tierMarkdown
-	load := func() (filesview.Preview, *editor.Buffer, error) {
+	tier := planPreviewTier(path, st.previewSize)
+	type loaded struct {
+		preview filesview.Preview
+		buf     *editor.Buffer
+		md      *markdownPreview
+		svg     *ui.SVG
+		note    string // why a file with a second view has only the source
+		err     error
+	}
+	load := func() loaded {
 		preview, err := filesview.ReadText(path, root)
 		if err != nil || preview.IsBinary {
-			return preview, nil, err
+			return loaded{preview: preview, err: err}
 		}
-		buf := editor.NewBuffer(preview.Content)
-		buf.SetLanguage(editor.LanguageFor(name))
-		if !render {
-			preview.Content = "" // the Buffer holds the text now
+		l := loaded{buf: editor.NewBuffer(preview.Content)}
+		l.buf.SetLanguage(editor.LanguageFor(name))
+		if !preview.Truncated {
+			switch tier {
+			case tierMarkdown:
+				if l.md = newMarkdownPreview(path, root, preview.Content, s.openLinkedFile); l.md == nil {
+					l.note = "Too complex to format, showing the source"
+				}
+			case tierSVG:
+				var err error
+				if l.svg, err = ui.ParseSVG([]byte(preview.Content)); err != nil {
+					l.svg, l.note = nil, "Can't draw this SVG, showing the source"
+				}
+			}
 		}
-		return preview, buf, nil
+		preview.Content = "" // the Buffer (and the formatted view) hold the text now
+		l.preview = preview
+		return l
 	}
-	apply := func(preview filesview.Preview, buf *editor.Buffer, err error) {
+	apply := func(l loaded) {
 		if gen != st.filesGen.Load() || st.currentRoot != root || st.selectedFilePath != path {
 			return
 		}
 		st.nativeTextLoading = false
-		if err != nil {
-			st.nativeTextFailed = err.Error()
+		if l.err != nil {
+			st.nativeTextFailed = l.err.Error()
 			return
 		}
+		preview := l.preview
 		st.nativeText = &preview
-		if render && buf != nil && !preview.Truncated {
-			st.nativeMarkdown = newMarkdownPreview(path, root, preview.Content, s.openLinkedFile)
-			preview.Content = "" // the formatted view holds the text now
-		}
-		if buf != nil {
+		st.nativeMarkdown, st.nativeSVG, st.previewNote = l.md, l.svg, l.note
+		if l.buf != nil {
 			st.nativeCode = &editor.State{
-				Buffer:       buf,
+				Buffer:       l.buf,
 				ReadOnly:     true,
 				NoActiveLine: true, // a viewer has no line being worked on
 				Label:        name,
 				Placeholder:  "Empty file",
 				// Prose wraps; code scrolls sideways.
-				SoftWrap: flavor == filesview.FlavorMarkdown || buf.Language() == nil,
+				SoftWrap: flavor == filesview.FlavorMarkdown || l.buf.Language() == nil,
+				// After the editor's own Copy / Select All.
+				ContextMenu: func(m *ui.Menu) {
+					m.Separator()
+					s.filesPathItems(m, path, true)
+				},
 			}
 		}
 		s.applyFilesReveal()
 	}
 	if s.win == nil {
-		preview, buf, err := load()
-		apply(preview, buf, err)
+		apply(load())
 		return
 	}
 	go func() {
-		preview, buf, err := load()
-		s.applyOnWindow(func() { apply(preview, buf, err) })
+		l := load()
+		s.applyOnWindow(func() { apply(l) })
 	}()
 }
 
@@ -216,7 +256,7 @@ func (s *Shell) beginNativeImage(path string) {
 
 // clearNativeFilesPreview drops the per-selection preview state (selection
 // change, root change, removal of the selected file); the sticky
-// markdownSource choice stays.
+// previewSource choice stays.
 func (s *Shell) clearNativeFilesPreview() {
 	st := &s.rightPanel
 	st.previewSize = 0
@@ -247,6 +287,9 @@ func (s *Shell) filesPreviewBar(c *ui.Context, selected string) {
 		if st.nativeText != nil && st.nativeText.Truncated {
 			statusPill(c, "Showing the first "+filesview.FormatFileSize(filesview.TextPreviewCap), ToneAttention)
 		}
+		if st.previewNote != "" {
+			statusPill(c, st.previewNote, ToneAttention)
+		}
 		if isHTMLPage(selected) {
 			s.syncStaticPreview()
 			k := gorexColorsOf(t.Dark)
@@ -257,13 +300,22 @@ func (s *Shell) filesPreviewBar(c *ui.Context, selected string) {
 				s.openStaticPreview(selected)
 			}
 		}
-		if st.previewPlanned == selected && planPreviewTier(selected, st.previewSize) == tierMarkdown {
-			choice := 0
-			if st.markdownSource {
-				choice = 1
+		if st.previewPlanned == selected {
+			rendered, label := "", ""
+			switch {
+			case st.nativeMarkdown != nil:
+				rendered, label = "Rendered", "Markdown view"
+			case st.nativeSVG != nil:
+				rendered, label = "Image", "SVG view"
 			}
-			if segmentedControl(c, &choice, "Rendered", "Source").Label("Markdown view").Changed() {
-				s.setMarkdownSource(choice == 1)
+			if rendered != "" {
+				choice := 0
+				if st.previewSource {
+					choice = 1
+				}
+				if segmentedControl(c, &choice, rendered, "Source").Label(label).Changed() {
+					s.setPreviewSource(choice == 1)
+				}
 			}
 		}
 	})
@@ -292,6 +344,13 @@ func filesWebviewFill() string {
 	return "light-dark(" + hex(paneCardFaceOf(false, false, false).paper) + ", " + hex(paneCardFaceOf(true, false, false).paper) + ")"
 }
 
+// previewFileMenu is the right-click menu of an image's or drawing's body: the
+// helpers of the open file (the code and Markdown views add them to their own
+// menus).
+func (s *Shell) previewFileMenu(m *ui.Menu) {
+	s.filesPathItems(m, s.rightPanel.nativePreviewPath, true)
+}
+
 // nativePreviewBody renders what the plan chose for the center: the formatted
 // Markdown, the code view, the decoded image, the AVIF/ICO page, or the
 // truthful state.
@@ -307,15 +366,20 @@ func (s *Shell) nativePreviewBody(c *ui.Context) {
 	case st.nativeTextFailed != "":
 		emptyState(c, "Can't read this file", st.nativeTextFailed)
 	case st.nativeImage != nil:
-		ui.Box(c).Grow(1).FillWidth().Padding(Spacing().L).Children(func() {
+		ui.Box(c).Grow(1).FillWidth().Padding(Spacing().L).ContextMenu(s.previewFileMenu).Children(func() {
 			ui.Image(c, st.nativeImage).Fit(ui.ScaleDown).Grow(1).FillWidth()
 		})
 	case st.webImage:
 		s.filesWebviewBody(c)
 	case st.nativeText != nil && st.nativeText.IsBinary:
 		emptyState(c, "Binary file", "Reveal it in Finder to open it.")
-	case st.nativeMarkdown != nil && !st.markdownSource:
+	case st.nativeMarkdown != nil && !st.previewSource:
 		s.markdownBody(c, st.nativeMarkdown)
+	case st.nativeSVG != nil && !st.previewSource:
+		// A drawing is sharp at any size: it fills the card, up or down.
+		ui.Box(c).Grow(1).FillWidth().Padding(Spacing().L).ContextMenu(s.previewFileMenu).Children(func() {
+			ui.Image(c, st.nativeSVG).Fit(ui.Contain).Grow(1).FillWidth()
+		})
 	case st.nativeCode != nil:
 		// The theme follows the window each frame: an appearance change
 		// repaints an open file without reloading it.

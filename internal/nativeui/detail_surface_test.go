@@ -114,6 +114,78 @@ func TestEscapeLeavesTheDetailCard(t *testing.T) {
 	}
 }
 
+// Esc is the find bar's before it is the card's: with the bar of a formatted
+// Markdown file open, the first Esc takes it down and the card stays (the bar
+// used to stay open behind a card that had already stepped away); the next one
+// steps out as before.
+func TestEscapeClosesTheMarkdownFindBeforeLeavingTheCard(t *testing.T) {
+	s, tt, root := filesOpsTestShell(t)
+	writePreviewFile(t, root, "notes.md", []byte("# Notes\n\nsome needle text, another needle\n"))
+	s.refreshFiles()
+	settleFrames(tt, 3)
+	if err := tt.Click("notes.md"); err != nil {
+		t.Fatalf("the file is not in the panel's tree: %v", err)
+	}
+	settleFrames(tt, 6)
+	mp := s.rightPanel.nativeMarkdown
+	if mp == nil || s.surface.current() != WorkspaceSurfaceDetail {
+		t.Fatalf("the Markdown file must show formatted in its card: markdown=%v surface=%v", mp != nil, s.surface.current())
+	}
+	tt.Key(ui.Cmd, ui.KeyF)
+	settleFrames(tt, 3)
+	tt.Type("needle")
+	settleFrames(tt, 3)
+	if !mp.find.open || len(mp.find.hits) != 2 {
+		t.Fatalf("⌘F and a query must leave the bar open on two hits: open=%v hits=%d", mp.find.open, len(mp.find.hits))
+	}
+
+	// With the cursor still in the bar's field the field takes Esc itself; the
+	// shell sees it only once focus is anywhere else — a click on the page.
+	heading, ok := tt.Find("Notes")
+	if !ok {
+		t.Fatalf("the heading is not drawn: %q", tt.Texts())
+	}
+	tt.ClickAt(heading.X+heading.W/2, heading.Y+heading.H/2)
+	settleFrames(tt, 2)
+	tt.Key(0, ui.KeyEscape)
+	settleFrames(tt, 3)
+	if mp.find.open || mp.find.hits != nil {
+		t.Fatalf("the first Esc closes the bar and clears its hits: open=%v hits=%d", mp.find.open, len(mp.find.hits))
+	}
+	if s.surface.current() != WorkspaceSurfaceDetail {
+		t.Fatalf("the first Esc belongs to the bar; the card must stay, got %v", s.surface.current())
+	}
+
+	tt.Key(0, ui.KeyEscape)
+	settleFrames(tt, 3)
+	if s.surface.current() == WorkspaceSurfaceDetail {
+		t.Fatal("with no bar open Esc steps out of the card")
+	}
+
+	// A bar left open behind the source view is not on screen, so it does not
+	// hold the Esc: the card steps out.
+	if err := tt.Click("notes.md"); err != nil {
+		t.Fatalf("the picked row no longer brings the card back: %v", err)
+	}
+	settleFrames(tt, 3)
+	tt.Key(ui.Cmd, ui.KeyF)
+	settleFrames(tt, 3)
+	tt.Type("needle")
+	settleFrames(tt, 3)
+	if !mp.find.open {
+		t.Fatal("the bar must be open before the source view takes the page")
+	}
+	if err := tt.Click("Source"); err != nil {
+		t.Fatalf("the card has no Source switch: %v", err)
+	}
+	settleFrames(tt, 3)
+	tt.Key(0, ui.KeyEscape)
+	settleFrames(tt, 3)
+	if s.surface.current() == WorkspaceSurfaceDetail {
+		t.Fatal("a find bar behind the source view held the Esc")
+	}
+}
+
 // In a window too narrow to dock the panel it floats over the center; picking
 // an item in it opens the card and the floating panel steps away, so the card
 // is what shows.

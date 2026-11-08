@@ -241,7 +241,7 @@ func TestUIEvidence(t *testing.T) {
 		tt.Frame() // the root swap and its directory read land
 		shell.openFilePreview(filepath.Join(code, "code_theme.go"))
 		render("09b-files-code")
-		shell.setMarkdownSource(true)
+		shell.setPreviewSource(true)
 		shell.openFilePreview(filepath.Join(code, "README.md"))
 		render("09c-files-markdown-source")
 

@@ -156,8 +156,8 @@ func TestFilesSearchMarkdownHitOpensTheSource(t *testing.T) {
 	tester.Frame()
 	tester.Frame()
 	st := &s.rightPanel
-	if st.selectedFilePath != filepath.Join(root, "docs", "guide.md") || !st.markdownSource || st.nativeCode == nil {
-		t.Fatalf("a Markdown hit shows its source: sel=%q source=%v code=%v", st.selectedFilePath, st.markdownSource, st.nativeCode != nil)
+	if st.selectedFilePath != filepath.Join(root, "docs", "guide.md") || !st.previewSource || st.nativeCode == nil {
+		t.Fatalf("a Markdown hit shows its source: sel=%q source=%v code=%v", st.selectedFilePath, st.previewSource, st.nativeCode != nil)
 	}
 	if got := st.nativeCode.SelectedText(); got != "needle here" {
 		t.Fatalf("selected %q", got)

@@ -32,22 +32,26 @@ type rightPanelState struct {
 	ignoredRoot string
 	ignoredSet  *filesview.IgnoreSet
 
-	// Preview tiers (FILES-09, native first since 2026-11-08): text, code and
-	// Markdown source show in the framework's code editor, Markdown under
-	// markdownRenderCap also as formatted text, common images as a native
-	// bitmap; only AVIF and ICO ride a few hundred bytes of WebView page
-	// (webImage). nativePreviewPath is the selection the state below belongs
-	// to; previewSize is its stat'd size for the viewer bar and previewPlanned
-	// the path whose tier plan has landed; markdownSource is the sticky
-	// Rendered/Source choice. nativeMarkdown and nativeCode come from one
-	// read, so the choice flips without touching the disk.
+	// Preview tiers (FILES-09, native first since 2026-11-08): text, code,
+	// Markdown and SVG source show in the framework's code editor, Markdown
+	// under markdownRenderCap also as formatted text and an SVG under
+	// svgRenderCap also as the drawing, common images as a native bitmap; only
+	// AVIF and ICO ride a few hundred bytes of WebView page (webImage).
+	// nativePreviewPath is the selection the state below belongs to;
+	// previewSize is its stat'd size for the viewer bar and previewPlanned the
+	// path whose tier plan has landed; previewSource is the sticky
+	// Rendered|Image / Source choice. nativeMarkdown (or nativeSVG) and
+	// nativeCode come from one read, so the choice flips without touching the
+	// disk; previewNote says why a file under its cap has only the source.
 	previewSize        int64
 	previewPlanned     string
-	markdownSource     bool
+	previewSource      bool
+	previewNote        string
 	nativePreviewPath  string
 	nativeText         *filesview.Preview
 	nativeCode         *editor.State
 	nativeMarkdown     *markdownPreview
+	nativeSVG          *ui.SVG
 	nativeTextLoading  bool
 	nativeTextFailed   string
 	nativeImage        *ui.Bitmap

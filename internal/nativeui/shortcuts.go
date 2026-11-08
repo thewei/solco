@@ -280,8 +280,9 @@ func (s *Shell) handleSurfaceShortcuts(c *ui.Context) {
 		}
 	case WorkspaceSurfaceDetail:
 		// Esc steps back to the Terminal or Chat the card came from, the
-		// detail kept open; a floating right panel takes the Esc first.
-		if !s.sidePanelOverlayUp() && c.Shortcut(0, ui.KeyEscape) {
+		// detail kept open; a floating right panel takes the Esc first, and
+		// so does a find bar the file's formatted view has open.
+		if !s.sidePanelOverlayUp() && c.Shortcut(0, ui.KeyEscape) && !s.closePreviewFind() {
 			s.leaveDetail()
 		}
 	case WorkspaceSurfaceCommit:
