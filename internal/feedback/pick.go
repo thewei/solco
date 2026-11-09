@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 agentcatalog.ListSkills（已装 Skill 的 SKILL.md）、filesview.ListFiles/MatchFiles（git ls-files / ripgrep 的项目文件索引）
- * [OUTPUT]: 对外提供 ContextRef、PickItem、Pick（给「选文件 / 选 Skill」按钮的候选）、ResolveContext（把页面选的引用校验并解析成 Agent 能读的绝对路径）、ErrBadContext
+ * [OUTPUT]: 对外提供 ContextRef、PickItem、Pick（给「选文件 / 选 Skill」按钮的候选；文件先列 git 改动过的）、FilterSuggest（Agent 建议的上下文，丢弃无效项）、ResolveContext（把页面选的引用校验并解析成 Agent 能读的绝对路径）、ErrBadContext
  * [POS]: 回答附带的「上下文引用」——用户在回答里指给 Agent 的文件、文件夹、Skill；只传路径，不传内容，不写任何文件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/thewei/solco-gitkit/filesview"
+	"github.com/thewei/solco-gitkit/gitworkbench"
 	"github.com/thewei/solco/internal/agentcatalog"
 )
 
@@ -27,6 +28,8 @@ var ErrBadContext = errors.New("feedback: bad context reference")
 const (
 	maxContextRefs = 20
 	maxPickItems   = 40
+	maxSuggest     = 8
+	maxChanged     = 12
 	indexTTL       = 15 * time.Second
 )
 
@@ -66,7 +69,39 @@ var (
 	listFiles = func(ctx context.Context, root string) (filesview.FileIndex, error) {
 		return filesview.ListFiles(ctx, root, false)
 	}
+	// listChanged is the working tree's changed files (git status, newest work first for the picker); replaced by tests.
+	listChanged = func(ctx context.Context, root string) []string {
+		out, err := (&gitworkbench.Runner{}).Read(ctx, root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+		if err != nil {
+			return nil
+		}
+		return parseChanged(out)
+	}
 )
+
+// ChangedDetail marks a picker row that is a changed file of the working tree.
+const ChangedDetail = "changed"
+
+// parseChanged reads `git status --porcelain=v1 -z`: "XY path\0", a rename or copy is followed by its source path.
+func parseChanged(out []byte) []string {
+	var paths []string
+	parts := strings.Split(string(out), "\x00")
+	for i := 0; i < len(parts); i++ {
+		e := parts[i]
+		if len(e) < 4 {
+			continue
+		}
+		xy, p := e[:2], e[3:]
+		if strings.ContainsAny(xy, "RC") {
+			i++ // the source path of the rename
+		}
+		if strings.Contains(xy, "D") {
+			continue // nothing left to read
+		}
+		paths = append(paths, p)
+	}
+	return paths
+}
 
 func projectIndex(ctx context.Context, root string) ([]string, []string) {
 	indexMu.Lock()
@@ -120,14 +155,28 @@ func Pick(ctx context.Context, root, kind, query string) []PickItem {
 		}
 		files, dirs := projectIndex(ctx, root)
 		var out []PickItem
+		changed := map[string]bool{}
+		if listChanged != nil {
+			for _, p := range listChanged(ctx, root) {
+				changed[p] = true
+			}
+		}
 		if query == "" {
+			n := 0
+			for _, p := range sortedKeys(changed) {
+				if n == maxChanged {
+					break
+				}
+				out = append(out, PickItem{Kind: RefFile, Name: p, Detail: ChangedDetail})
+				n++
+			}
 			for _, d := range dirs {
 				if !strings.Contains(d, "/") {
 					out = append(out, PickItem{Kind: RefFolder, Name: d})
 				}
 			}
 			for _, f := range files {
-				if !strings.Contains(f, "/") {
+				if !strings.Contains(f, "/") && !changed[f] {
 					out = append(out, PickItem{Kind: RefFile, Name: f})
 				}
 			}
@@ -137,9 +186,15 @@ func Pick(ctx context.Context, root, kind, query string) []PickItem {
 				out = append(out, PickItem{Kind: RefFolder, Name: d})
 			}
 			fh, _ := filesview.MatchFiles(files, query, maxPickItems)
+			var hot, rest []PickItem
 			for _, f := range fh {
-				out = append(out, PickItem{Kind: RefFile, Name: f})
+				if changed[f] {
+					hot = append(hot, PickItem{Kind: RefFile, Name: f, Detail: ChangedDetail})
+				} else {
+					rest = append(rest, PickItem{Kind: RefFile, Name: f})
+				}
 			}
+			out = append(append(out, hot...), rest...)
 		}
 		if len(out) > maxPickItems {
 			out = out[:maxPickItems]
@@ -205,4 +260,34 @@ func ResolveContext(root string, refs []ContextRef) ([]ContextRef, error) {
 		}
 	}
 	return out, nil
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// FilterSuggest keeps the references an Agent suggested that name something real in root (or an installed Skill),
+// as path-free Kind + Name pairs; a bad suggestion is dropped, never an error, because the Agent is not the user.
+func FilterSuggest(root string, refs []ContextRef) []ContextRef {
+	var out []ContextRef
+	seen := map[string]bool{}
+	for _, r := range refs {
+		if len(out) == maxSuggest {
+			break
+		}
+		ok, err := ResolveContext(root, []ContextRef{{Kind: r.Kind, Name: r.Name}})
+		if err != nil || len(ok) != 1 {
+			continue
+		}
+		if key := ok[0].Kind + "\x00" + ok[0].Name; !seen[key] {
+			seen[key] = true
+			out = append(out, ContextRef{Kind: ok[0].Kind, Name: ok[0].Name})
+		}
+	}
+	return out
 }

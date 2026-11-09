@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -63,6 +65,12 @@ type askArgs struct {
 	TaskID         string        `json:"task_id,omitempty" jsonschema:"Optional. A stable id for the task; asks with the same task_id and project share one thread in Solco."`
 	ThreadID       string        `json:"thread_id,omitempty" jsonschema:"Optional. Asks with the same thread_id share one thread in Solco, across clients and time. Without it Solco groups by project, client and a 60 minute gap."`
 	ProjectRoot    string        `json:"project_root,omitempty" jsonschema:"Absolute path of the current workspace/project root. Always pass this so asks attach to the right project."`
+	SuggestContext []contextArg  `json:"suggest_context,omitempty" jsonschema:"Optional. Files, folders or skills you would like the user to attach to the answer (at most 8). Solco shows them as one-tap chips; the user decides. Paths are relative to project_root; a skill is its name."`
+}
+
+type contextArg struct {
+	Kind string `json:"kind" jsonschema:"file, folder or skill"`
+	Name string `json:"name" jsonschema:"A path relative to project_root, or the skill's name"`
 }
 
 type waitArgs struct {
@@ -94,7 +102,7 @@ The preferred way to ask the user anything: it creates a question, notifies the 
 
 Always pass "description" (what you have done so far, what the question is about) and "project_root". With the FIRST question of a task also pass "task": the user's original request in their words (or a faithful summary), which Solco pins at the top of the thread so the user sees the task, your progress and every answer together. Use caller_info to identify yourself. Questions from the same project and client are filed in one thread automatically; pass thread_id or task_id to group them yourself.
 
-If your client cuts the call short (a tool timeout such as Codex's default 60 s tool_timeout_sec, or a cancellation), that is not an answer: ask again with interactive_feedback_start and loop interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account. If an answered result contains "context", the user attached files, folders or skills (absolute paths): read them, and for a skill follow its SKILL.md.`,
+If your client cuts the call short (a tool timeout such as Codex's default 60 s tool_timeout_sec, or a cancellation), that is not an answer: ask again with interactive_feedback_start and loop interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account. If an answered result contains "context", the user attached files, folders or skills (absolute paths): read them, and for a skill follow its SKILL.md. Optionally pass "suggest_context" (files, folders or skills relevant to your question, project-relative): Solco shows them as one-tap chips the user may attach.`,
 		Annotations: askNotes("Ask the user (blocking)"),
 	}, s.ask(true))
 	mcp.AddTool(srv, &mcp.Tool{
@@ -147,6 +155,32 @@ func toQuestions(in []questionArg) []feedback.Question {
 	return out
 }
 
+func toSuggest(in []contextArg) []feedback.ContextRef {
+	out := make([]feedback.ContextRef, 0, len(in))
+	for _, c := range in {
+		out = append(out, feedback.ContextRef{Kind: strings.ToLower(strings.TrimSpace(c.Kind)), Name: c.Name})
+	}
+	return out
+}
+
+// launchProject is the folder this shim was started in when an Agent forgot project_root and that folder lies inside a
+// Git repository (many clients start their MCP servers in the workspace); anywhere else it is "", never a guess.
+func launchProject() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	if key, _, _ := feedback.ResolveProject(wd); key != wd || isRepoRoot(wd) {
+		return wd
+	}
+	return ""
+}
+
+func isRepoRoot(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
 // awaitBroker waits until a broker answers; the shim's own standby loop may be the one that has to start it.
 func (s *Server) awaitBroker(ctx context.Context) error {
 	deadline := time.Now().Add(20 * time.Second)
@@ -179,11 +213,14 @@ func (s *Server) create(ctx context.Context, req *mcp.CallToolRequest, a askArgs
 	if timeout > 24*time.Hour {
 		timeout = 24 * time.Hour
 	}
+	if strings.TrimSpace(a.ProjectRoot) == "" {
+		a.ProjectRoot = launchProject()
+	}
 	client, cv := clientName(req)
 	id, _, err = s.c.Create(ctx, feedback.CreateInput{
 		CallerInfo: a.CallerInfo, Client: client, ClientVersion: cv, Description: a.Description, Task: a.Task,
 		ProjectRoot: a.ProjectRoot, TaskID: a.TaskID, ThreadID: a.ThreadID,
-		Questions: toQuestions(a.Questions), TimeoutMs: timeout.Milliseconds(),
+		Questions: toQuestions(a.Questions), TimeoutMs: timeout.Milliseconds(), Suggest: toSuggest(a.SuggestContext),
 	})
 	if err != nil {
 		return "", 0, fmt.Errorf("could not register the question: %w", err)
@@ -228,7 +265,13 @@ func (s *Server) wait(ctx context.Context, _ *mcp.CallToolRequest, a waitArgs) (
 				return textResult(map[string]string{"status": "error", "message": "Solco feedback broker is not reachable"}, true, nil), nil, nil
 			}
 		default:
-			return textResult(map[string]string{"status": "error", "message": "Failed to read session status"}, true, nil), nil, nil
+			// A read that failed for another reason (a broker restarting mid-answer, a dropped connection) is held to
+			// the same grace as an offline broker instead of ending the wait at once.
+			if offlineSince.IsZero() {
+				offlineSince = time.Now()
+			} else if time.Since(offlineSince) > offlineGrace {
+				return textResult(map[string]string{"status": "error", "message": "Failed to read session status", "session_id": a.SessionID}, true, nil), nil, nil
+			}
 		}
 		if time.Now().After(deadline) {
 			return textResult(map[string]any{"status": "pending", "message": "Still waiting for user response",
@@ -272,7 +315,11 @@ func (s *Server) poll(ctx context.Context, req *mcp.CallToolRequest, id string, 
 				return lostSession(id, "Solco feedback broker is not reachable")
 			}
 		default:
-			return lostSession(id, "Failed to read session status")
+			if offlineSince.IsZero() {
+				offlineSince = time.Now()
+			} else if time.Since(offlineSince) > offlineGrace {
+				return lostSession(id, "Failed to read session status")
+			}
 		}
 		if req != nil && req.Session != nil && time.Since(lastProgress) >= progressEvery {
 			lastProgress = time.Now()

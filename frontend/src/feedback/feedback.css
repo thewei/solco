@@ -1092,6 +1092,60 @@
 
 /* ---- context: the File / Skill picker and what was picked ---- */
 
+.fb-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fb-tool.saved {
+  gap: 4px;
+  padding-right: 6px;
+}
+
+.fb-tool.dashed,
+.fb-ref.sug {
+  border-style: dashed;
+}
+
+.fb-quick-use {
+  max-width: 220px;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-quick-x {
+  display: grid;
+  place-items: center;
+  color: var(--i3);
+}
+
+.fb-ref.sug {
+  border: 1px dashed var(--hair2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.fb-ref.sug:hover {
+  background: var(--tint);
+  color: var(--i1);
+}
+
+.fb-hint.fit {
+  flex: none;
+}
+
+.fb-pk.cur {
+  background: var(--tint);
+}
+
+.fb-pk-detail.changed {
+  color: var(--accent);
+}
+
+
 .fb-ctx {
   display: flex;
   flex-wrap: wrap;
@@ -1396,4 +1450,13 @@ html[data-host="phone"] .fb-pk-detail {
 }
 html[data-host="phone"] .fb-pick-list {
   max-height: 38vh;
+}
+
+/* Phone: the hint above Send gets a row of its own, so it never squeezes the buttons beside it. */
+html[data-host="phone"] .fb-send {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+html[data-host="phone"] .fb-send .fb-hint {
+  flex: 1 0 100%;
 }

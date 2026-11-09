@@ -124,6 +124,7 @@ func sampleFeedback() *fakeFeedback {
 	ask := &feedback.Ask{
 		ID: "a_1", ThreadID: "t_1", CreatedAt: 1786042800000, TimeoutMs: 1800000, State: feedback.StatePending, LastHeartbeat: 1786042800000,
 		Description: "Pick the migration path",
+		Suggest:     []feedback.ContextRef{{Kind: "file", Name: "docs/api.md"}, {Kind: "skill", Name: "think"}},
 		Questions: []feedback.Question{
 			{ID: "q1", Text: "Which database should the service use?", Type: "single", Options: []string{"SQLite", "Postgres"}, AllowCustom: true, Required: true},
 			{ID: "q2", Text: "Anything else?", Type: "text", Placeholder: "optional"},

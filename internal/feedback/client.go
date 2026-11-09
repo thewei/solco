@@ -150,7 +150,7 @@ func (c *Client) Create(ctx context.Context, in CreateInput) (askID, threadID st
 	}
 	err = c.do(ctx, http.MethodPost, "/v1/asks", createBody{ID: in.ID, CallerInfo: in.CallerInfo, Client: in.Client,
 		ClientVersion: in.ClientVersion, Description: in.Description, Task: in.Task, ProjectRoot: in.ProjectRoot, TaskID: in.TaskID,
-		ThreadID: in.ThreadID, Questions: in.Questions, TimeoutMs: in.TimeoutMs}, &out)
+		ThreadID: in.ThreadID, Questions: in.Questions, TimeoutMs: in.TimeoutMs, Suggest: in.Suggest}, &out)
 	return out.ID, out.ThreadID, err
 }
 

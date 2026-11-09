@@ -178,17 +178,18 @@ func (b *Broker) guard(next http.Handler) http.Handler {
 }
 
 type createBody struct {
-	ID            string     `json:"id"`
-	CallerInfo    string     `json:"callerInfo"`
-	Client        string     `json:"client"`
-	ClientVersion string     `json:"clientVersion"`
-	Description   string     `json:"description"`
-	Task          string     `json:"task,omitempty"`
-	ProjectRoot   string     `json:"projectRoot"`
-	TaskID        string     `json:"taskId"`
-	ThreadID      string     `json:"threadId"`
-	Questions     []Question `json:"questions"`
-	TimeoutMs     int64      `json:"timeoutMs"`
+	ID            string       `json:"id"`
+	CallerInfo    string       `json:"callerInfo"`
+	Client        string       `json:"client"`
+	ClientVersion string       `json:"clientVersion"`
+	Description   string       `json:"description"`
+	Task          string       `json:"task,omitempty"`
+	ProjectRoot   string       `json:"projectRoot"`
+	TaskID        string       `json:"taskId"`
+	ThreadID      string       `json:"threadId"`
+	Questions     []Question   `json:"questions"`
+	TimeoutMs     int64        `json:"timeoutMs"`
+	Suggest       []ContextRef `json:"suggest,omitempty"`
 }
 
 func (b *Broker) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -199,7 +200,8 @@ func (b *Broker) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	ask, thread, err := b.Store.Create(CreateInput{ID: body.ID, CallerInfo: body.CallerInfo, Client: body.Client,
 		ClientVersion: body.ClientVersion, Description: body.Description, Task: body.Task, ProjectRoot: body.ProjectRoot, TaskID: body.TaskID,
-		ThreadID: body.ThreadID, Questions: body.Questions, TimeoutMs: body.TimeoutMs})
+		ThreadID: body.ThreadID, Questions: body.Questions, TimeoutMs: body.TimeoutMs,
+		Suggest: FilterSuggest(body.ProjectRoot, body.Suggest)})
 	if err != nil {
 		replyErr(w, err)
 		return

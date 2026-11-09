@@ -28,6 +28,8 @@ export function ContextPicker(props: {
   const { threadId, kind, picked, onToggle, onClose, onError } = props;
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<PickItem[] | null>(null);
+  const [active, setActive] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
 
   useEffect(() => {
@@ -35,7 +37,11 @@ export function ContextPicker(props: {
     const timer = window.setTimeout(() => {
       feedback
         .pickContext(threadId, kind, query)
-        .then((rows) => mine === seq.current && setItems(rows))
+        .then((rows) => {
+          if (mine !== seq.current) return;
+          setItems(rows);
+          setActive(0);
+        })
         .catch((e) => {
           if (mine !== seq.current) return;
           setItems([]);
@@ -61,9 +67,19 @@ export function ContextPicker(props: {
             aria-label="Search"
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
+              const n = items?.length ?? 0;
               if (e.key === "Escape") {
                 e.stopPropagation();
                 onClose();
+              } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n > 0) {
+                e.preventDefault();
+                const next = (active + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+                setActive(next);
+                listRef.current?.children[next]?.scrollIntoView({ block: "nearest" });
+              } else if (e.key === "Enter" && items?.[active]) {
+                e.preventDefault();
+                e.stopPropagation(); // not the form's send
+                onToggle(items[active]);
               }
             }}
           />
@@ -72,17 +88,17 @@ export function ContextPicker(props: {
           Done
         </button>
       </div>
-      <div className="fb-pick-list" role="listbox" aria-multiselectable>
+      <div className="fb-pick-list" role="listbox" aria-multiselectable ref={listRef}>
         {items === null ? null : items.length === 0 ? (
           <div className="fb-pick-empty">{empty}</div>
         ) : (
-          items.map((it) => {
+          items.map((it, i) => {
             const on = chosen.has(key(it));
             return (
-              <button key={key(it)} className={`fb-pk${on ? " on" : ""}`} role="option" aria-selected={on} onClick={() => onToggle(it)}>
+              <button key={key(it)} className={`fb-pk${on ? " on" : ""}${i === active ? " cur" : ""}`} role="option" aria-selected={on} onClick={() => onToggle(it)}>
                 <Icon name={refIcon(it.kind)} size={14} />
                 <span className="fb-pk-name">{it.name}</span>
-                {it.detail && <span className="fb-pk-detail">{it.detail}</span>}
+                {it.detail && <span className={`fb-pk-detail${it.detail === "changed" ? " changed" : ""}`}>{it.detail}</span>}
                 {on && <Icon name="check" size={14} />}
               </button>
             );

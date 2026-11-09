@@ -76,6 +76,8 @@ export interface Ask {
   attachmentCount?: number;
   /** Context is what the user pointed the Agent at with the answer: files, folders and Skills (paths, never content). */
   context?: ContextRef[];
+  /** Suggest is what the Agent proposes the user attach (path-free Kind + Name, validated when the Ask is created). */
+  suggest?: ContextRef[];
   message?: string;
   late?: boolean;
   lateDelivered?: boolean;
@@ -943,6 +945,11 @@ export interface FeedbackView {
    * asks its Host's feedbackManage capability).
    */
   canManage: boolean;
+  /**
+   * Stale (phone only) is when this copy was saved, unix ms: the Host could not be reached and the page shows what the
+   * phone last held, read-only. Zero = live.
+   */
+  stale?: number;
   /**
    * CanPick says the answer form may offer the file / Skill picker (always true on the desktop; the phone follows
    * the Host's feedbackContext capability).

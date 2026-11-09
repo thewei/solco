@@ -214,6 +214,7 @@ func (s *Store) Create(in CreateInput) (Ask, ThreadSummary, error) {
 	a := &Ask{
 		ID: in.ID, CreatedAt: nowMs, LastHeartbeat: nowMs, State: StatePending,
 		Description: clipBytes(in.Description, maxDescription), Questions: qs, TimeoutMs: clampTimeout(in.TimeoutMs),
+		Suggest: in.Suggest,
 	}
 	t := s.assignLocked(in, nowMs)
 	if t.Task == "" {

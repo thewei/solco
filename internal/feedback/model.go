@@ -56,7 +56,9 @@ type Ask struct {
 	Answers         map[string]Answer `json:"answers,omitempty"`
 	AttachmentCount int               `json:"attachmentCount,omitempty"`
 	// Context is what the user pointed the Agent at with the answer: files, folders and Skills (paths, never content).
-	Context       []ContextRef `json:"context,omitempty"`
+	Context []ContextRef `json:"context,omitempty"`
+	// Suggest is what the Agent proposes the user attach (path-free Kind + Name, validated when the Ask is created).
+	Suggest       []ContextRef `json:"suggest,omitempty"`
 	Message       string       `json:"message,omitempty"`
 	Late          bool         `json:"late,omitempty"`
 	LateDelivered bool         `json:"lateDelivered,omitempty"`
@@ -114,6 +116,7 @@ type CreateInput struct {
 	ThreadID      string
 	Questions     []Question
 	TimeoutMs     int64
+	Suggest       []ContextRef
 }
 
 // Event is what the SSE stream carries. It names ids and a one-line preview; a UI fetches the rest.

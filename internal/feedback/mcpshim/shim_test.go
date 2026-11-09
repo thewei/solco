@@ -250,3 +250,37 @@ func TestLostSessionKeepsTheSessionID(t *testing.T) {
 		t.Fatalf("result: %s", text(t, res))
 	}
 }
+
+func TestSuggestContextIsKeptWhenRealAndProjectDefaultsToTheLaunchRepo(t *testing.T) {
+	c, store := setup(t)
+	sess := connect(t, c)
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// project_root left out on purpose: the launch folder is a repository, so the thread files under it.
+	if _, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback_start", Arguments: map[string]any{
+		"caller_info":     "Cursor Agent",
+		"suggest_context": []map[string]any{{"kind": "file", "name": "main.go"}, {"kind": "file", "name": "ghost.go"}},
+		"questions":       []map[string]any{{"id": "q1", "text": "Which?", "type": "text"}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	rows := store.Threads(feedback.Filter{})
+	if len(rows) != 1 {
+		t.Fatalf("threads: %+v", rows)
+	}
+	th, _ := store.Thread(rows[0].ID)
+	if got := th.Asks[0].Suggest; len(got) != 1 || got[0] != (feedback.ContextRef{Kind: "file", Name: "main.go"}) {
+		t.Fatalf("suggest: %+v", got)
+	}
+	if th.ProjectRoot == "" {
+		t.Fatal("project root was not defaulted to the launch folder")
+	}
+}

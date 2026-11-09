@@ -51,6 +51,9 @@ type FeedbackView struct {
 	// CanManage says the page may delete threads and set the keep-for window (always true on the desktop; the phone
 	// asks its Host's feedbackManage capability).
 	CanManage bool `json:"canManage"`
+	// Stale (phone only) is when this copy was saved, unix ms: the Host could not be reached and the page shows what the
+	// phone last held, read-only. Zero = live.
+	Stale int64 `json:"stale,omitempty"`
 	// CanPick says the answer form may offer the file / Skill picker (always true on the desktop; the phone follows
 	// the Host's feedbackContext capability).
 	CanPick bool `json:"canPick"`

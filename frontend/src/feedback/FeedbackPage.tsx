@@ -3,6 +3,7 @@ import { Icon } from "../icons";
 import { feedback, type Answer, type Ask, type ContextRef, type FeedbackView, type Question, type Thread, type ThreadSummary } from "../mygo";
 import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
+import { QuickReplies } from "./QuickReplies";
 import { ContextPicker, refIcon, type PickKind } from "./ContextPicker";
 import { TidyDialog } from "./Tidy";
 import "./feedback.css";
@@ -395,7 +396,7 @@ export function FeedbackPage() {
 
   return (
     <div className={`fb${narrow ? " narrow" : ""}`}>
-      {!view.online && <Offline onRetry={pull} />}
+      {view.stale ? <Stale at={view.stale} onRetry={pull} /> : !view.online && <Offline onRetry={pull} />}
       {error && (
         <div className="fb-banner warn">
           <span>{error}</span>
@@ -823,6 +824,18 @@ function AnswerForm(props: {
       else d.selected = [option];
     });
 
+  // Where a quick reply lands: the first free-text question, else the first choice question that takes custom text.
+  const replyTo = ask.questions.find((q) => q.type === "text") ?? ask.questions.find((q) => q.allowCustom);
+  const useReply = (text: string) =>
+    replyTo &&
+    set(() => {
+      const d = get(replyTo);
+      d.custom = text;
+      if (replyTo.type !== "multiple") d.selected = [];
+    });
+  const suggested = (ask.suggest ?? []).filter((s) => !refs.some((r) => r.kind === s.kind && r.name === s.name));
+  const addRef = (r: { kind: string; name: string }) => set(() => (refDrafts[ask.id] = [...refs, { kind: r.kind, name: r.name }]));
+
   const send = useCallback(() => {
     if (sending || !online || !ready) return;
     setSending(true);
@@ -958,6 +971,19 @@ function AnswerForm(props: {
           ))}
         </div>
       )}
+      {canPick && suggested.length > 0 && (
+        <div className="fb-ctx" aria-label="Suggested by the agent">
+          <span className="fb-hint fit">Suggested</span>
+          {suggested.map((s) => (
+            <button className="fb-ref sug" key={`${s.kind}:${s.name}`} title={s.name} onClick={() => addRef(s)}>
+              <Icon name="plus" size={12} />
+              <Icon name={refIcon(s.kind)} size={12} />
+              <span>{s.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {replyTo && <QuickReplies current={get(replyTo).custom} onUse={useReply} />}
       {canPick && picking && (
         <ContextPicker
           threadId={thread.id}
@@ -984,6 +1010,15 @@ function AnswerForm(props: {
           Send
         </button>
       </div>
+    </div>
+  );
+}
+
+function Stale({ at, onRetry }: { at: number; onRetry: () => void }) {
+  return (
+    <div className="fb-banner warn" role="status">
+      <span>Can't reach your Mac. Showing the copy saved at {clock(at)}; retrying…</span>
+      <button onClick={onRetry}>Retry</button>
     </div>
   );
 }

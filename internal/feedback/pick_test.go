@@ -35,6 +35,7 @@ func project(t *testing.T) string {
 	listFiles = func(context.Context, string) (filesview.FileIndex, error) {
 		return filesview.FileIndex{Paths: []string{"docs/api.md", "main.go"}}, nil
 	}
+	listChanged = nil
 	t.Cleanup(func() {
 		indexMu.Lock()
 		indexes = map[string]cachedIndex{}
@@ -138,5 +139,34 @@ func TestAnswerContextReachesTheAgentAsAbsolutePaths(t *testing.T) {
 	th, _ := c.Thread(ctx, threadID)
 	if len(th.Asks[0].Context) != 2 {
 		t.Fatalf("the timeline keeps what was attached: %+v", th.Asks[0])
+	}
+}
+
+func TestPickPutsChangedFilesFirstAndParsesGitStatus(t *testing.T) {
+	root := project(t)
+	listChanged = func(context.Context, string) []string { return []string{"main.go"} }
+	ctx := context.Background()
+	top := Pick(ctx, root, "files", "")
+	if len(top) != 2 || top[0] != (PickItem{Kind: RefFile, Name: "main.go", Detail: ChangedDetail}) || top[1].Name != "docs" {
+		t.Fatalf("changed first, once: %+v", top)
+	}
+	hit := Pick(ctx, root, "files", "go")
+	if len(hit) == 0 || hit[0].Name != "main.go" || hit[0].Detail != ChangedDetail {
+		t.Fatalf("a changed search hit leads: %+v", hit)
+	}
+	got := parseChanged([]byte(" M a.go\x00R  new.go\x00old.go\x00 D gone.go\x00?? n/x.md\x00"))
+	if strings.Join(got, ",") != "a.go,new.go,n/x.md" {
+		t.Fatalf("porcelain: %v", got)
+	}
+}
+
+func TestFilterSuggestKeepsOnlyRealReferencesWithoutPaths(t *testing.T) {
+	root := project(t)
+	got := FilterSuggest(root, []ContextRef{
+		{Kind: RefFile, Name: "main.go"}, {Kind: RefFile, Name: "../etc/passwd"}, {Kind: RefSkill, Name: "think"},
+		{Kind: RefSkill, Name: "nope"}, {Kind: RefFile, Name: "main.go"}, {Kind: "weird", Name: "x"},
+	})
+	if len(got) != 2 || got[0] != (ContextRef{Kind: RefFile, Name: "main.go"}) || got[1] != (ContextRef{Kind: RefSkill, Name: "think"}) {
+		t.Fatalf("suggest: %+v", got)
 	}
 }
