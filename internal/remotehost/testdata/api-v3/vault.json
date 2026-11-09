@@ -1,0 +1,24 @@
+{
+  "online": true,
+  "access": true,
+  "state": "unlocked",
+  "canReveal": true,
+  "approvals": [
+    {
+      "id": 7,
+      "project": "api",
+      "command": "make deploy",
+      "refs": [
+        {
+          "ref": "vault://agent/prod/pg#password",
+          "standing": "new"
+        },
+        {
+          "ref": "vault://agent/prod/pg#username",
+          "standing": "new"
+        }
+      ],
+      "asked": "2026-11-09T10:00:00Z"
+    }
+  ]
+}

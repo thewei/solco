@@ -20,6 +20,7 @@ import (
 	"github.com/thewei/solco/internal/notifyhook"
 	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/settings"
+	"github.com/thewei/solco/internal/vaultlink"
 )
 
 /**
@@ -121,6 +122,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		Usage:            s.hostUsage,
 		Automations:      s.hostAutomations,
 		Feedback:         feedbackSource,
+		Vault:            vaultlink.New(""),
 		Channels:         func() ([]notifyhook.Target, time.Duration) { return notifyhook.Load(userDataDir) },
 		AutomationsAdmin: s.hostAutomationsAdmin(),
 		PersonalAgent:    s.hostPersonalAgent,

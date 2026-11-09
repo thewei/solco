@@ -26,6 +26,7 @@ import (
 	"github.com/thewei/solco/internal/personalagent"
 	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/settings"
+	"github.com/thewei/solco/internal/vaultlink"
 )
 
 // RemoteDir is the Host's own directory under the app's user-data directory (certificate, devices, relay secret,
@@ -49,6 +50,7 @@ func NewServer(userDataDir, version string) func() (Host, error) {
 			Backend:       remotehost.NewManagerBackend(herdr.NewManager()),
 			PersonalAgent: newPluginSeam(),
 			Feedback:      feedback.NewClient(feedback.Dir(userDataDir)),
+			Vault:         vaultlink.New(""),
 			Channels:      func() ([]notifyhook.Target, time.Duration) { return notifyhook.Load(userDataDir) },
 			HostName:      host,
 			Version:       version,

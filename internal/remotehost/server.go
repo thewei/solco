@@ -126,6 +126,9 @@ type Options struct {
 	// Feedback is the Feedback inbox's broker (GET /feedback, POST /feedback/asks/{id}/answer|end):
 	// nil = no such view and bootstrap does not advertise feedback. The broker is the state's only owner.
 	Feedback FeedbackSource
+	// Vault is the Solco Vault app's phone bridge (GET /vault, /vault/items, POST /vault/approvals/{id}/answer,
+	// /vault/reveal): nil = no such view and bootstrap does not advertise vault. The app is the state's only owner.
+	Vault VaultSource
 	// Channels returns the user's webhook channels and the phone's grace period (channels.go); nil = the Host
 	// never calls out.
 	Channels ChannelSource
@@ -183,6 +186,8 @@ type Server struct {
 	pushCancel     context.CancelFunc
 	feedbackCancel context.CancelFunc // the Feedback broker follower (feedback_watch.go)
 	feedbackDone   chan struct{}
+	vaultCancel    context.CancelFunc // the Vault bridge poller (vault.go)
+	vaultDone      chan struct{}
 	channels       channelState // webhook channels' grace gate (channels.go)
 	pushDone       chan struct{}
 
@@ -393,6 +398,7 @@ func (s *Server) serve(ln net.Listener, cfg Config) error {
 	s.startRelay()         // tunnels through its own loopback bridge; needs a running Host
 	s.startPush()          // optional OS push while the Mac Host process is serving
 	s.startFeedbackWatch() // Feedback asks become one content-free events frame
+	s.startVaultWatch()    // Vault approvals become one names-only events frame
 	return nil
 }
 
@@ -479,6 +485,7 @@ func (s *Server) relaySecret() (string, error) {
 func (s *Server) Close() {
 	s.stopPush()
 	s.stopFeedbackWatch()
+	s.stopVaultWatch()
 	s.stopChannels()
 	s.stopRelay()
 	s.stopOverlay()
@@ -608,6 +615,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+apiPrefix+"/devices/{id}/connect", s.guard(ScopeManage, s.handleDeviceConnect))
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
 	mux.Handle("GET "+apiPrefix+"/automations", s.guard(ScopeView, s.handleAutomations))
+	mux.Handle("GET "+apiPrefix+"/vault", s.guard(ScopeView, s.handleVault))
+	mux.Handle("GET "+apiPrefix+"/vault/items", s.guard(ScopeView, s.handleVaultItems))
+	mux.Handle("POST "+apiPrefix+"/vault/approvals/{id}/answer", s.guard(ScopeTerminalInput, s.handleVaultAnswer))
+	mux.Handle("POST "+apiPrefix+"/vault/reveal", s.guard(ScopeTerminalInput, s.handleVaultReveal))
 	mux.Handle("GET "+apiPrefix+"/feedback", s.guard(ScopeView, s.handleFeedback))
 	mux.Handle("POST "+apiPrefix+"/feedback/asks/{id}/answer", s.guard(ScopeTerminalInput, s.handleFeedbackAnswer))
 	mux.Handle("POST "+apiPrefix+"/feedback/asks/{id}/end", s.guard(ScopeTerminalInput, s.handleFeedbackEnd))
@@ -913,6 +924,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 			capabilities["feedbackManage"] = true
 			capabilities["feedbackContext"] = true
 		}
+	}
+	if s.vaultOffered() {
+		capabilities["vault"] = true
 	}
 	if s.opts.Automations != nil {
 		if _, ok := s.opts.Automations(r.Context()); ok {

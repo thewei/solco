@@ -21,6 +21,7 @@ import (
 	"github.com/thewei/solco/internal/feedback"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
+	"github.com/thewei/solco/internal/vaultlink"
 )
 
 // [INPUT]: server_test.go 的假 Backend 与 harness，真实的 handler / WebSocket 帧
@@ -177,6 +178,9 @@ func TestGoldenAPIv3(t *testing.T) {
 	// feedback: an Agent's question reached the broker; the frame holds ids, the waiting count and the notification's words
 	h.srv.NotifyFeedback(FeedbackNotice{Kind: "ask", ThreadID: "t_1", AskID: "a_1", Waiting: 1, Project: "solco", Client: "Claude Code", Preview: "Which database should the service use?"})
 	golden(t, "events-feedback.json", readRaw(t, events))
+	// vault: a secret approval reached the Vault app; the frame holds the project and the reference names, never a value
+	h.srv.NotifyVault(VaultNotice{Kind: "approval", ID: 7, Waiting: 1, Project: "api", Preview: "agent/prod/pg#password, agent/prod/pg#username"})
+	golden(t, "events-vault.json", readRaw(t, events))
 
 	// terminal: frame header, ping, bad input, refused input
 	term, _, err := h.dial("/api/v3/terminals/term_b/stream?cols=51&rows=19", true)
@@ -368,6 +372,30 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "feedback-offline.json", bodyOf(t, h.get("/api/v3/feedback", h.token, nil)))
 	h.srv.opts.Feedback = nil
 	golden(t, "error-feedback-unavailable.json", bodyOf(t, h.get("/api/v3/feedback", h.token, nil)))
+	// vault: the Solco Vault app's phone bridge; the seam is its client, the handler forwards (names only; one value on request)
+	vf := sampleVault()
+	h.srv.opts.Vault = vf
+	golden(t, "bootstrap-vault.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "vault.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
+	golden(t, "vault-items.json", bodyOf(t, h.get("/api/v3/vault/items", h.token, nil)))
+	golden(t, "vault-answer-request.json", []byte(`{"allow":true}`))
+	_, vaultAck := h.send("POST", "/api/v3/vault/approvals/7/answer", h.token, `{"allow":true}`)
+	golden(t, "vault-ack.json", vaultAck)
+	golden(t, "vault-reveal-request.json", []byte(`{"ref":"vault://agent/prod/pg#password"}`))
+	_, vaultValue := h.send("POST", "/api/v3/vault/reveal", h.token, `{"ref":"vault://agent/prod/pg#password"}`)
+	golden(t, "vault-reveal.json", vaultValue)
+	vf.set(&vaultlink.Error{Code: vaultlink.CodeRevealOff})
+	_, vaultRevealOff := h.send("POST", "/api/v3/vault/reveal", h.token, `{"ref":"vault://agent/prod/pg#password"}`)
+	golden(t, "error-vault-reveal-off.json", vaultRevealOff)
+	vf.set(&vaultlink.Error{Code: vaultlink.CodeGone})
+	_, vaultGone := h.send("POST", "/api/v3/vault/approvals/7/answer", h.token, `{"allow":true}`)
+	golden(t, "error-vault-gone.json", vaultGone)
+	vf.set(&vaultlink.Error{Code: vaultlink.CodePhoneOff})
+	golden(t, "vault-phone-off.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
+	vf.set(vaultlink.ErrOffline)
+	golden(t, "vault-offline.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
+	h.srv.opts.Vault = nil
+	golden(t, "error-vault-unavailable.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
 	// automations (read-only): the desktop's Automations page behind a capability that
 	// follows the plugin gate; the seam answers the whole list, the handler only forwards
 	h.srv.opts.Automations = func(context.Context) (Automations, bool) { return sampleAutomations(), true }

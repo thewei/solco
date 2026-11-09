@@ -1,0 +1,8 @@
+{
+  "id": 7,
+  "kind": "approval",
+  "preview": "agent/prod/pg#password, agent/prod/pg#username",
+  "project": "api",
+  "t": "vault",
+  "waiting": 1
+}

@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "path": "agent/prod/pg",
+      "kind": "login",
+      "fields": [
+        "username",
+        "password"
+      ]
+    },
+    {
+      "path": "agent/prod/app-env",
+      "kind": "env",
+      "fields": [
+        "DB_HOST"
+      ]
+    }
+  ]
+}

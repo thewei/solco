@@ -7,7 +7,7 @@ config.go: ConfigFrom/RelayFrom/P2PFrom——保存的 Remote Access 选择 → 
 run.go: 常驻服务主循环 Run——设置 off 不监听；租约空闲且无新鲜让位请求才接管；桌面让位请求→关监听放租约；设置变化→Reconfigure；失败 5 s 后重试；Host 是最小接口，测试用假 Host
 overlay.go: TailcatOverlay(dir)——把 internal/tailcatnet 的节点包成 remotehost.OverlayFactory（身份 LoadOrCreateIdentity 存统一的 RemoteHost 目录，桌面与常驻服务共用同一个节点密钥，所以切换所有者时手机不用重配）
 tailcat_e2e_test.go: 隧道端到端（真实 DERP/直连路径下的 pair → bootstrap → 吊销），需网络的用例按环境变量跳过
-serve.go: 无 GUI Host 的装配 NewServer（Herdr Manager 的 Backend + Feedback 缝＝`feedback.NewClient(feedback.Dir(userDataDir))`，手机 Feedback 页在 App 关闭时照常可达 + 经 `herdr plugin list` 找到的 Assistants 插件缝，30 s 缓存；不接窗口缝）。SC-06 新增 residentServer 组合 Host：仅在成功取得监听租约并 Reconfigure 后绑定共享 AppHook Socket，收到 OMP stream 事件用 remotehost.IngestOMPChatStream；桌面仍占用时只回退 JSONL，不抢 Socket；ModeOff/Close 先关 Socket 再让出 Host。RemoteDir 仍是统一身份目录；LoadRemoteSettings 只读 settings.json
+serve.go: 无 GUI Host 的装配 NewServer（Herdr Manager 的 Backend + Feedback 缝＝`feedback.NewClient(feedback.Dir(userDataDir))`，手机 Feedback 页在 App 关闭时照常可达；Vault 缝＝`vaultlink.New("")`（手机 Vault 页同理，Vault 应用没开 = 离线态） + 经 `herdr plugin list` 找到的 Assistants 插件缝，30 s 缓存；不接窗口缝）。SC-06 新增 residentServer 组合 Host：仅在成功取得监听租约并 Reconfigure 后绑定共享 AppHook Socket，收到 OMP stream 事件用 remotehost.IngestOMPChatStream；桌面仍占用时只回退 JSONL，不抢 Socket；ModeOff/Close 先关 Socket 再让出 Host。RemoteDir 仍是统一身份目录；LoadRemoteSettings 只读 settings.json
 serve_chat_test.go: 私有 /tmp 短 Unix Socket 实际发送 OMP chat.stream，验证 Host 启停绑定/桌面立即接管；桌面持有 Socket 时常驻不得抢占或关闭它
 launchd.go: 用户级 launchd 服务 com.whstudio.solco.hostd（RunAtLoad+KeepAlive+ThrottleInterval 3，日志 ~/Library/Logs/Solco/hostd.log）；Locate（Contents/Helpers|Resources）、Installed、Install/InstallSelf、Uninstall、Status
 run_test.go: 让位/接管/关闭/过期请求的状态机
