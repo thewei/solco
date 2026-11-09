@@ -154,6 +154,7 @@ func (s *Shell) QuickPanelView(c *ui.Context) {
 		s.quickPanelChrome(c)
 		if s.quickPanelTabIndex() == quickPanelAgentsTab {
 			s.quickPanelRemoteDesktop(c)
+			s.quickPanelFeedback(c)
 		}
 		// One keyed body per tab: a tab switch builds a new one, which fades
 		// in (rowEnter) instead of the content snapping.
@@ -408,6 +409,9 @@ func (s *Shell) quickPanelContentHeight() int {
 	}
 	if s.remoteDesktopTrayLabel() != "" {
 		height += quickPanelRemoteHeight
+	}
+	if s.feedbackWaiting() > 0 && s.feedbackAvailable() {
+		height += quickPanelFeedbackHeight
 	}
 	return min(height, QuickPanelHeight)
 }

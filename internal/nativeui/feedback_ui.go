@@ -9,12 +9,14 @@ package nativeui
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/commandcenter"
 	"github.com/thewei/solco/internal/feedback"
 )
@@ -231,7 +233,47 @@ func (s *Shell) refreshFeedbackThreads(ctx context.Context, client *feedback.Cli
 	if len(threads) > feedbackPaletteMax {
 		threads = threads[:feedbackPaletteMax]
 	}
-	s.applyOnWindow(func() { s.feedback.threads = threads })
+	s.applyOnWindow(func() {
+		before := s.feedbackWaiting()
+		s.feedback.threads = threads
+		if s.feedbackWaiting() != before {
+			s.fitQuickPanel() // the menu-bar panel's Feedback row appears / goes with the count
+			s.invalidateQuickPanel()
+		}
+	})
+}
+
+// feedbackWaiting is how many Agent questions wait for an answer, from the
+// thread rows the watcher keeps. Window lane only.
+func (s *Shell) feedbackWaiting() int {
+	n := 0
+	for _, t := range s.feedback.threads {
+		n += t.Waiting
+	}
+	return n
+}
+
+// quickPanelFeedbackHeight is the Feedback row's height in the menu-bar panel.
+const quickPanelFeedbackHeight = 44
+
+// quickPanelFeedback is the menu-bar panel's one line while Agent questions
+// wait ("Feedback, N waiting"): drawn only then, with an Open that lands on
+// the inbox the way a notification click does.
+func (s *Shell) quickPanelFeedback(c *ui.Context) {
+	n := s.feedbackWaiting()
+	if n == 0 || !s.feedbackAvailable() {
+		return
+	}
+	sp := Spacing()
+	t := c.Theme()
+	ui.Row(c.Key("qp-feedback")).FillWidth().Padding(sp.XS, sp.M, sp.XS).Gap(sp.S).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, fmt.Sprintf("Feedback, %d waiting", n)).FontSize(Typography().Caption).Grow(1).SingleLine().TextColor(t.TextMuted)
+		if compactButton(c, "Open").Clicked() {
+			s.hideQuickPanel()
+			s.activateWindow()
+			s.openFeedback(feedbackFocus{})
+		}
+	})
 }
 
 // feedbackThreadTarget is the Command Center target of one thread.

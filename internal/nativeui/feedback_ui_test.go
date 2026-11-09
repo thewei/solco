@@ -206,3 +206,23 @@ func TestFeedbackThreadsOnlyShowInThePaletteOnceTyped(t *testing.T) {
 		t.Error("typing \"feed\" did not list the waiting thread")
 	}
 }
+
+func TestQuickPanelGrowsByTheFeedbackRowOnlyWhileQuestionsWait(t *testing.T) {
+	s := NewShell(WithFeedback(t.TempDir()))
+	base := s.quickPanelContentHeight()
+	if s.feedbackWaiting() != 0 {
+		t.Fatalf("waiting = %d on a quiet inbox", s.feedbackWaiting())
+	}
+	s.feedback.threads = []feedback.ThreadSummary{{ID: "th_1", Waiting: 2}, {ID: "th_2", Waiting: 0}, {ID: "th_3", Waiting: 1}}
+	if s.feedbackWaiting() != 3 {
+		t.Fatalf("waiting = %d, want the sum 3", s.feedbackWaiting())
+	}
+	if got := s.quickPanelContentHeight(); got != min(base+quickPanelFeedbackHeight, QuickPanelHeight) {
+		t.Errorf("height = %d, base %d: the row is not accounted for", got, base)
+	}
+	plain := NewShell()
+	plain.feedback.threads = s.feedback.threads
+	if plain.quickPanelContentHeight() != base {
+		t.Error("a shell without a broker grew a Feedback row")
+	}
+}
