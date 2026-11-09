@@ -187,6 +187,7 @@ func (s *Shell) sidebarSearchRow(c *ui.Context) {
 		if gorexIconButton(c, k, iconHistory, "History view", historyTip, onHistory, gorexIconBtn, gorexIconGlyph).Clicked() {
 			s.showViewHistory()
 		}
+		s.sidebarBell(c, k)
 	})
 }
 

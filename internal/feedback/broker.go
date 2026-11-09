@@ -76,6 +76,13 @@ func NewHandler(b *Broker) http.Handler {
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	})
+	mux.HandleFunc("GET /v1/inbox/asks/{id}/thumbnails", func(w http.ResponseWriter, r *http.Request) {
+		thumbs := Thumbnails(b.Store.Attachments(r.PathValue("id")))
+		if thumbs == nil {
+			thumbs = []Attachment{}
+		}
+		writeJSON(w, 200, map[string]any{"thumbnails": thumbs})
+	})
 	mux.HandleFunc("POST /v1/inbox/asks/{id}/end", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, b.Store.End(r.PathValue("id"), ""))
 	})

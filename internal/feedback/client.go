@@ -201,6 +201,16 @@ func (c *Client) Pick(ctx context.Context, threadID, kind, q string) ([]PickItem
 	return out.Items, err
 }
 
+// Thumbnails reads the small JPEGs of an answered Ask's images, in the order they were attached; an image that could
+// not be shrunk keeps its slot with an empty DataBase64.
+func (c *Client) Thumbnails(ctx context.Context, askID string) ([]Attachment, error) {
+	var out struct {
+		Thumbnails []Attachment `json:"thumbnails"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/inbox/asks/"+url.PathEscape(askID)+"/thumbnails", nil, &out)
+	return out.Thumbnails, err
+}
+
 // End closes a pending Ask without an answer.
 func (c *Client) End(ctx context.Context, askID string) error {
 	return c.do(ctx, http.MethodPost, "/v1/inbox/asks/"+url.PathEscape(askID)+"/end", map[string]string{}, nil)

@@ -1,0 +1,14 @@
+{
+  "thumbnails": [
+    {
+      "mimeType": "image/jpeg",
+      "dataBase64": "AQID",
+      "name": "shot.png"
+    },
+    {
+      "mimeType": "",
+      "dataBase64": "",
+      "name": "huge.tiff"
+    }
+  ]
+}

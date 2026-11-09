@@ -242,13 +242,19 @@ func iconButtonRadius(size float32) float32 {
 // label names it for screen readers and its tooltip explains it. Selected
 // keeps a quiet filled face, as the surface switch's current side does.
 func gorexIconButton(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, selected bool, size, iconSize float32) ui.Element {
+	return gorexIconButtonCount(c, k, svg, label, tooltip, selected, size, iconSize, 0)
+}
+
+// gorexIconButtonCount is gorexIconButton with a numeral badge on its corner
+// while count is positive: a bell that says how many things wait.
+func gorexIconButtonCount(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, selected bool, size, iconSize float32, count int) ui.Element {
 	// A Tab stop (Enter and Space press it), but a pointer press leaves the
 	// keyboard focus where it was: the Terminal, Chat composer or commit field
 	// a header button sits beside keeps typing (2026-11-08: the shared icon
 	// buttons were not Tab stops, so refresh, search and close were mouse-only).
 	b := ui.Box(c).Size(size, size).Center().Radius(iconButtonRadius(size)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label).
 		Focusable().KeepFocus()
-	return gorexIconFace(c, b, k, svg, tooltip, selected, iconSize)
+	return gorexIconFace(c, b, k, svg, tooltip, selected, iconSize, count)
 }
 
 // gorexIconButtonDisabled is the icon button with nothing to do (Back with no
@@ -269,12 +275,13 @@ func gorexIconButtonDisabled(c *ui.Context, k *gorexColors, svg *ui.SVG, label, 
 func gorexIconTab(c *ui.Context, k *gorexColors, svg *ui.SVG, label, tooltip string, selected bool) ui.Element {
 	b := ui.Box(c).Grow(1).MinWidth(0).Height(gorexIconBtn).Center().Radius(Radius().Row).
 		Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label)
-	return gorexIconFace(c, b, k, svg, tooltip, selected, gorexIconGlyph)
+	return gorexIconFace(c, b, k, svg, tooltip, selected, gorexIconGlyph, 0)
 }
 
 // gorexIconFace dresses an icon button's box: tooltip, state face, and the
-// glyph that darkens on hover or when on.
-func gorexIconFace(c *ui.Context, b ui.Element, k *gorexColors, svg *ui.SVG, tooltip string, selected bool, iconSize float32) ui.Element {
+// glyph that darkens on hover or when on. A positive count floats a numeral
+// badge on the glyph's top-right corner (the sidebar bell).
+func gorexIconFace(c *ui.Context, b ui.Element, k *gorexColors, svg *ui.SVG, tooltip string, selected bool, iconSize float32, count int) ui.Element {
 	if tooltip != "" {
 		tipped(c, b, tooltip)
 	}
@@ -286,6 +293,9 @@ func gorexIconFace(c *ui.Context, b ui.Element, k *gorexColors, svg *ui.SVG, too
 	}
 	b.Children(func() {
 		ui.Icon(c, svg).Size(iconSize, iconSize).TextColor(col)
+		if count > 0 {
+			countBadge(c, count, ToneAttention).Right(1).Top(1)
+		}
 	})
 	return b
 }

@@ -1,6 +1,7 @@
 package nativeui
 
 import (
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -353,6 +354,27 @@ func statusPill(c *ui.Context, text string, tone StatusTone) {
 		ui.Box(c).Size(6, 6).Radius(3).Background(color).Shrink(0)
 		ui.Text(c, text).FontSize(typ.Micro).FontWeight(WeightSemibold).TextColor(color)
 	})
+}
+
+// countBadge is the small numeral pill that floats on an icon's corner (the
+// stacked-Pane mark, the sidebar bell): the tone's colour behind an inverted
+// numeral. The caller places it (Absolute + Left/Top) inside the icon's box.
+func countBadge(c *ui.Context, n int, tone StatusTone) ui.Element {
+	dark := c.Theme().Dark
+	textColor := ui.RGBA(255, 255, 255, 1)
+	if dark {
+		textColor = ui.Hex("#1d1d1f")
+	}
+	text := strconv.Itoa(n)
+	if n > 99 {
+		text = "99+"
+	}
+	badge := ui.Box(c).Absolute().MinWidth(11).Height(11).Padding(0, 2.5).Center().
+		Radius(Radius().Row).Background(designTokens(dark).StatusColor(tone, dark))
+	badge.Children(func() {
+		ui.Text(c, text).FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(textColor)
+	})
+	return badge
 }
 
 // providerBadge shows the provider display name with a stable neutral pill.

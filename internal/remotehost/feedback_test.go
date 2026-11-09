@@ -29,6 +29,7 @@ type fakeFeedback struct {
 	answers   map[string]feedback.Answer
 	refs      []feedback.ContextRef
 	picked    string
+	thumbsOf  string
 	ended     string
 	events    chan feedback.Event
 	streamErr chan struct{}
@@ -98,6 +99,13 @@ func (f *fakeFeedback) Pick(_ context.Context, thread, kind, q string) ([]feedba
 	defer f.mu.Unlock()
 	f.picked = thread + "|" + kind + "|" + q
 	return []feedback.PickItem{{Kind: "skill", Name: "think", Detail: "Plan before coding"}}, nil
+}
+
+func (f *fakeFeedback) Thumbnails(_ context.Context, askID string) ([]feedback.Attachment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.thumbsOf = askID
+	return []feedback.Attachment{{MimeType: "image/jpeg", DataBase64: "AQID", Name: "shot.png"}, {Name: "huge.tiff"}}, f.err
 }
 
 func (f *fakeFeedback) Retention(context.Context) (int, error) { return f.retention, nil }
@@ -310,6 +318,17 @@ func TestFeedbackContextPickerAndAnswerReferences(t *testing.T) {
 	}
 	if code, _ := h.send("POST", "/api/v3/feedback/asks/a_1/answer", h.token, `{"answers":{"q1":{"selected":["SQLite"]}},"context":[{"kind":"file","name":"docs/api.md"}]}`); code != http.StatusOK || len(f.refs) != 1 || f.refs[0].Name != "docs/api.md" {
 		t.Fatalf("answer with context: %d %+v", code, f.refs)
+	}
+}
+
+func TestFeedbackThumbnailsForwardAndNeedAuth(t *testing.T) {
+	h, f := feedbackHarness(t)
+	code, body := h.send("GET", "/api/v3/feedback/asks/a_1/thumbnails", h.token, "")
+	if code != http.StatusOK || f.thumbsOf != "a_1" || !strings.Contains(string(body), `"dataBase64":"AQID"`) {
+		t.Fatalf("thumbnails: %d %s %q", code, body, f.thumbsOf)
+	}
+	if code, _ := h.send("GET", "/api/v3/feedback/asks/a_1/thumbnails", "", ""); code != http.StatusUnauthorized {
+		t.Errorf("thumbnails need auth: %d", code)
 	}
 }
 

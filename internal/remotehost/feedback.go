@@ -13,7 +13,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Options.Feedback（本机 Feedback broker 的回环客户端，桌面与常驻服务各自接线）、internal/feedback 的 ReadSnapshot 与模型、server.go 的 guard/writeJSON/writeError
- * [OUTPUT]: 对外提供 FeedbackSource、GET /api/v3/feedback[?thread=&q=]（scope view）、POST /api/v3/feedback/asks/{id}/answer 与 …/end、POST …/feedback/threads/delete 与 …/cleanup 与 …/retention（scope terminal-input；源还实现 feedback.Manager 时才有，capabilities.feedbackManage）、GET …/feedback/context?thread=&kind=files|skills&q=（scope view；picker 候选，capabilities.feedbackContext；回答体可带 context 引用，手机永远看不到 Mac 绝对路径）、bootstrap 的 capabilities.feedback
+ * [OUTPUT]: 对外提供 FeedbackSource、GET /api/v3/feedback[?thread=&q=]（scope view）、POST /api/v3/feedback/asks/{id}/answer 与 …/end、POST …/feedback/threads/delete 与 …/cleanup 与 …/retention（scope terminal-input；源还实现 feedback.Manager 时才有，capabilities.feedbackManage）、GET …/feedback/asks/{id}/thumbnails（scope view；已答 Ask 的图片缩略图，源须实现 feedback.Manager，无 capability 位：旧 Host 404，页面画占位）、GET …/feedback/context?thread=&kind=files|skills&q=（scope view；picker 候选，capabilities.feedbackContext；回答体可带 context 引用，手机永远看不到 Mac 绝对路径）、bootstrap 的 capabilities.feedback
  * [POS]: 手机「Feedback」页（2026-11-09 决策）：与桌面 /feedback 页读到同一个 feedback.Snapshot；线程与 Ask 状态的唯一所有者是 broker，Host 只转发；broker 不在 = 200 online:false（页面画离线态）而非错误；日志只记设备与计数，从不记问题、答案、描述或图片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -133,6 +133,26 @@ func (s *Server) handleFeedbackContext(w http.ResponseWriter, r *http.Request, d
 		items = []feedback.PickItem{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// handleFeedbackThumbnails answers GET /api/v3/feedback/asks/{id}/thumbnails: the answered Ask's attached images as
+// small JPEGs (a few KB each, never the 4 MiB originals), in attach order; a slot that could not be shrunk is empty.
+func (s *Server) handleFeedbackThumbnails(w http.ResponseWriter, r *http.Request, dev Device) {
+	m := s.feedbackManager(w)
+	if m == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), feedbackCallTimeout)
+	defer cancel()
+	thumbs, err := m.Thumbnails(ctx, r.PathValue("id"))
+	if err != nil {
+		s.finishFeedback(w, dev, "thumbnails", err)
+		return
+	}
+	if thumbs == nil {
+		thumbs = []feedback.Attachment{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"thumbnails": thumbs})
 }
 
 // feedbackManageable says the source can also tidy the inbox (bootstrap's feedbackManage).

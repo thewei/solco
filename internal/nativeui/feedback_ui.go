@@ -239,6 +239,7 @@ func (s *Shell) refreshFeedbackThreads(ctx context.Context, client *feedback.Cli
 		if s.feedbackWaiting() != before {
 			s.fitQuickPanel() // the menu-bar panel's Feedback row appears / goes with the count
 			s.invalidateQuickPanel()
+			s.republishWaiting() // the count is part of the one waiting number
 		}
 	})
 }
@@ -253,12 +254,42 @@ func (s *Shell) feedbackWaiting() int {
 	return n
 }
 
-// quickPanelFeedbackHeight is the Feedback row's height in the menu-bar panel.
-const quickPanelFeedbackHeight = 44
+// quickPanelFeedbackHeight is the Feedback card's height in the Agent panel
+// (its two lines, padding and the margin around it).
+const quickPanelFeedbackHeight = 68
 
-// quickPanelFeedback is the menu-bar panel's one line while Agent questions
-// wait ("Feedback, N waiting"): drawn only then, with an Open that lands on
-// the inbox the way a notification click does.
+// feedbackWaitingLine words the card's second line: the newest waiting
+// thread's project and question, "+N" when more threads wait. The question's
+// first line is already what the broker keeps as Preview.
+func feedbackWaitingLine(threads []feedback.ThreadSummary) (line, thread string) {
+	waiting := 0
+	for _, t := range threads {
+		if t.Waiting == 0 {
+			continue
+		}
+		if waiting == 0 {
+			line, thread = t.Preview, t.ID
+			if line == "" {
+				line = t.Title
+			}
+			if t.Project != "" {
+				line = t.Project + " · " + line
+			}
+		}
+		waiting++
+	}
+	if waiting > 1 {
+		line += fmt.Sprintf("  +%d", waiting-1)
+		thread = ""
+	}
+	return line, thread
+}
+
+// quickPanelFeedback is the Agent panel's loudest row while Agent questions
+// wait: a tinted card (the attention tone, as the bell's badge) naming how
+// many and what the newest one asks; one click lands on the inbox — on the
+// thread itself when only one waits — the way a notification click does.
+// Drawn only while something waits.
 func (s *Shell) quickPanelFeedback(c *ui.Context) {
 	n := s.feedbackWaiting()
 	if n == 0 || !s.feedbackAvailable() {
@@ -266,12 +297,36 @@ func (s *Shell) quickPanelFeedback(c *ui.Context) {
 	}
 	sp := Spacing()
 	t := c.Theme()
-	ui.Row(c.Key("qp-feedback")).FillWidth().Padding(sp.XS, sp.M, sp.XS).Gap(sp.S).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, fmt.Sprintf("Feedback, %d waiting", n)).FontSize(Typography().Caption).Grow(1).SingleLine().TextColor(t.TextMuted)
-		if compactButton(c, "Open").Clicked() {
+	typ := Typography()
+	tokens := s.tokens(t.Dark)
+	tone := tokens.StatusColor(ToneAttention, t.Dark)
+	line, thread := feedbackWaitingLine(s.feedback.threads)
+	title := fmt.Sprintf("%d Agent questions waiting", n)
+	if n == 1 {
+		title = "1 Agent question waiting"
+	}
+	ui.Column(c.Key("qp-feedback")).FillWidth().Padding(sp.XS, sp.M, sp.XS).Children(func() {
+		card := ui.ButtonBase(c).FillWidth().PaddingX(sp.M).PaddingY(sp.S).Gap(sp.M).AlignItems(ui.Center).
+			Radius(Radius().Control).Border(1, tone.Alpha(0.45)).Background(tokens.StatusBackground(ToneAttention, t.Dark)).
+			Label("Open Feedback")
+		if card.Hovered() {
+			card.Background(tone.Alpha(0.2))
+		}
+		card.Transition(rowFade)
+		card.Children(func() {
+			ui.Icon(c, iconBell).Size(16, 16).TextColor(tone).Shrink(0)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(sp.XXS).Children(func() {
+				ui.Text(c, title).FontSize(typ.Body).FontWeight(WeightSemibold).SingleLine()
+				if line != "" {
+					ui.Text(c, line).FontSize(typ.Caption).TextColor(t.TextMuted).SingleLine()
+				}
+			})
+			ui.Text(c, "Answer").FontSize(typ.Caption).FontWeight(WeightSemibold).TextColor(tone).Shrink(0)
+		})
+		if card.Clicked() {
 			s.hideQuickPanel()
 			s.activateWindow()
-			s.openFeedback(feedbackFocus{})
+			s.openFeedback(feedbackFocus{Thread: thread})
 		}
 	})
 }

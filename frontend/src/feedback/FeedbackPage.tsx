@@ -5,6 +5,7 @@ import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
 import { QuickReplies } from "./QuickReplies";
 import { ContextPicker, refIcon, type PickKind } from "./ContextPicker";
+import { Thumbs } from "./Thumbs";
 import { TidyDialog } from "./Tidy";
 import "./feedback.css";
 
@@ -744,6 +745,7 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
               ))}
             </div>
           )}
+          {!!ask.attachmentCount && <Thumbs askId={ask.id} count={ask.attachmentCount} />}
           <small>
             {ask.late ? `Late answer after ${took(ask)}` : `Answered in ${took(ask)}`}
             {ask.late && !ask.lateDelivered ? ", reaches the agent with its next question" : ""}

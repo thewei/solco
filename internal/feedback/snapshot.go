@@ -28,6 +28,7 @@ type Manager interface {
 	Retention(ctx context.Context) (int, error)
 	SetRetention(ctx context.Context, days int) error
 	Pick(ctx context.Context, threadID, kind, q string) ([]PickItem, error)
+	Thumbnails(ctx context.Context, askID string) ([]Attachment, error)
 }
 
 // Snapshot is what the Feedback page draws, one value per read.

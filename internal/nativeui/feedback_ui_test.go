@@ -252,3 +252,35 @@ func TestQuickPanelGrowsByTheFeedbackRowOnlyWhileQuestionsWait(t *testing.T) {
 		t.Error("a shell without a broker grew a Feedback row")
 	}
 }
+
+func TestWaitingTotalCountsAgentQuestionsWithTheStatusCenter(t *testing.T) {
+	s := NewShell(WithFeedback(t.TempDir()))
+	if got := s.waitingTotal(); got != 0 {
+		t.Fatalf("quiet shell waiting = %d", got)
+	}
+	s.feedback.threads = []feedback.ThreadSummary{{ID: "th_1", Waiting: 2}, {ID: "th_2"}, {ID: "th_3", Waiting: 1}}
+	if got := s.waitingTotal(); got != 3 {
+		t.Errorf("waitingTotal = %d, want the 3 questions", got)
+	}
+	attention, _ := s.waitingExtras()
+	if attention != 3 {
+		t.Errorf("the tray/Dock extras carry %d, want 3: the menu-bar number must equal the bell's", attention)
+	}
+	if bellTip(0) != "Nothing waiting for you" || bellTip(3) != "3 waiting for you" {
+		t.Errorf("tips: %q / %q", bellTip(0), bellTip(3))
+	}
+}
+
+func TestFeedbackWaitingLineNamesTheNewestAndOnlyJumpsToASingleThread(t *testing.T) {
+	one := []feedback.ThreadSummary{{ID: "th_0"}, {ID: "th_1", Project: "solco", Preview: "Keep it?", Waiting: 1}}
+	if line, thread := feedbackWaitingLine(one); line != "solco · Keep it?" || thread != "th_1" {
+		t.Errorf("one waiting: %q → %q", line, thread)
+	}
+	many := []feedback.ThreadSummary{{ID: "th_1", Project: "solco", Preview: "Keep it?", Waiting: 1}, {ID: "th_2", Waiting: 2}}
+	if line, thread := feedbackWaitingLine(many); line != "solco · Keep it?  +1" || thread != "" {
+		t.Errorf("two waiting: %q → %q (several threads land on the inbox)", line, thread)
+	}
+	if line, thread := feedbackWaitingLine(nil); line != "" || thread != "" {
+		t.Errorf("none: %q → %q", line, thread)
+	}
+}

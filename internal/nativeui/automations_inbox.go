@@ -65,7 +65,8 @@ func (s *Shell) waitingExtras() (attention, review int) {
 		attention += s.assistants.overview.NeedsYou
 	}
 	autoAttention, autoReview := s.automationsHeaderCounts()
-	return attention + autoAttention, autoReview
+	// An Agent question waits for the user's answer: attention, like a failed run.
+	return attention + autoAttention + s.feedbackWaiting(), autoReview
 }
 
 // republishWaiting re-projects the one waiting number onto the menu-bar title

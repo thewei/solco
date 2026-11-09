@@ -1994,6 +1994,13 @@ export const feedback = {
   snapshot(selected: string, query: string): Promise<FeedbackView> {
     return call("feedback.Snapshot", selected, query);
   },
+  /**
+   * Thumbnails reads the small JPEGs of an answered Ask's attached images, in attach order (history shows them next to
+   * the answer). A slot whose image could not be shrunk has an empty DataBase64.
+   */
+  thumbnails(askID: string): Promise<Attachment[]> {
+    return call("feedback.Thumbnails", askID);
+  },
 } as const;
 
 // ---- Events ----

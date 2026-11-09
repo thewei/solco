@@ -161,6 +161,20 @@ func (b *FeedbackBridge) PickContext(ctx context.Context, threadID, kind, query 
 	return items, err
 }
 
+// Thumbnails reads the small JPEGs of an answered Ask's attached images, in attach order (history shows them next to
+// the answer). A slot whose image could not be shrunk has an empty DataBase64.
+func (b *FeedbackBridge) Thumbnails(ctx context.Context, askID string) ([]feedback.Attachment, error) {
+	var thumbs []feedback.Attachment
+	err := b.call(ctx, func(ctx context.Context, c *feedback.Client) (err error) {
+		thumbs, err = c.Thumbnails(ctx, askID)
+		return err
+	})
+	if thumbs == nil {
+		thumbs = []feedback.Attachment{}
+	}
+	return thumbs, err
+}
+
 // SetRetention sets how many days finished threads are kept (0 = forever).
 func (b *FeedbackBridge) SetRetention(ctx context.Context, days int) error {
 	return b.call(ctx, func(ctx context.Context, c *feedback.Client) error { return c.SetRetention(ctx, days) })

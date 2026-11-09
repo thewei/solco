@@ -309,15 +309,22 @@ func (s *Shell) ToggleQuickPanel() {
 	if s.trayHandle == nil {
 		return
 	}
-	if quickPanelToggleCloses(s.quickPanel, s.quickPanelDismissedAt, time.Now()) {
-		s.closeQuickPanel()
-		return
-	}
-	s.openQuickPanelFlyout(mygo.FlyoutOptions{
+	s.toggleQuickPanelAt(mygo.FlyoutOptions{
 		Tray:      s.trayHandle,
 		Placement: mygo.PlacementBottom,
 		Gap:       quickPanelGap,
 	})
+}
+
+// toggleQuickPanelAt is the one open/close decision both anchors share — the
+// menu-bar item and the sidebar bell: an open (or just dismissed) panel
+// closes, otherwise one opens against the given anchor.
+func (s *Shell) toggleQuickPanelAt(anchor mygo.FlyoutOptions) {
+	if quickPanelToggleCloses(s.quickPanel, s.quickPanelDismissedAt, time.Now()) {
+		s.closeQuickPanel()
+		return
+	}
+	s.openQuickPanelFlyout(anchor)
 }
 
 // openQuickPanelFlyout creates and shows the panel (§17.1): a focusable

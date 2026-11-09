@@ -1191,6 +1191,37 @@
   line-height: 18px;
 }
 
+/* An answer's attached pictures: small tiles under the bubble, on the user's side. */
+.fb-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.fb-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-row);
+  background: var(--tint2);
+  color: var(--i2);
+  object-fit: cover;
+}
+
+.fb-thumb.wait {
+  animation: fb-thumb-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes fb-thumb-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .fb-ref > span {
   min-width: 0;
   overflow: hidden;
@@ -1437,6 +1468,10 @@ html[data-host="phone"] .fb-tool {
   min-height: 36px;
   padding: 0 14px;
   font-size: 14px;
+}
+html[data-host="phone"] .fb-thumb {
+  width: 72px;
+  height: 72px;
 }
 html[data-host="phone"] .fb-ref {
   font-size: 13px;

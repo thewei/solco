@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -645,18 +644,7 @@ func (s *Shell) paneLogoView(c *ui.Context, k *gorexColors, surface *terminalSur
 		markView(c, mark, 14.5, k.text)
 		// The count badge floats at the mark's top-right corner (titlebar
 		// activity badge idiom): theme status color, inverted numeral.
-		dark := c.Theme().Dark
-		textColor := ui.RGBA(255, 255, 255, 1)
-		if dark {
-			textColor = ui.Hex("#1d1d1f")
-		}
-		badge := ui.Box(c).Absolute().Left(6).Top(-2).
-			MinWidth(11).Height(11).Padding(0, 2.5).Center().
-			Radius(Radius().Row).
-			Background(designTokens(dark).StatusColor(ToneInfo, dark))
-		badge.Children(func() {
-			ui.Text(c, strconv.Itoa(stackCount)).FontSize(Typography().Micro).FontWeight(WeightSemibold).TextColor(textColor)
-		})
+		countBadge(c, stackCount, ToneInfo).Left(6).Top(-2)
 	})
 }
 

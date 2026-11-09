@@ -144,6 +144,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-09 · Feedback phone notification carries the words
 - 2026-11-09 · Mobile ChatView windowing, theme sync and zero-CLS skeleton
 - 2026-11-09 · Notification channels: a webhook when the phone cannot be told
+- 2026-11-09 · Sidebar bell: one waiting number, one panel
 
 ## Git safety
 
