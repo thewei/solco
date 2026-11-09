@@ -6,8 +6,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
+
+/**
+ * [INPUT]: 依赖 io/bufio/encoding/json 读取 Codex rollout JSONL 与 session_index.jsonl
+ * [OUTPUT]: 对外提供 ParseCodexTranscript
+ * [POS]: internal/history 的 Codex 会话解析器，支持从 session_index.jsonl 提取原生对话标题并回退首条用户消息
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 // codexParseState is the line-level interpretation state for one Codex
 // rollout JSONL file. It mirrors the audited Rust CodexSession semantics:
@@ -124,9 +134,116 @@ func (s *codexParseState) codexMessages() []TranscriptMessage {
 	return s.messages
 }
 
+type codexSessionIndexEntry struct {
+	ID         string `json:"id"`
+	ThreadName string `json:"thread_name"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
+var (
+	codexTitleMu         sync.Mutex
+	codexTitleMtime      time.Time
+	codexTitleCache      map[string]string // session_id -> thread_name
+	codexTitleCachedPath string
+)
+
+// codexSessionIndexPath locates the session_index.jsonl associated with a rollout path.
+func codexSessionIndexPath(filePath string) string {
+	if filePath != "" {
+		cur := filepath.Dir(filePath)
+		for i := 0; i < 6; i++ {
+			base := filepath.Base(cur)
+			if base == "sessions" || base == "archived_sessions" || base == ".codex" {
+				candidate := filepath.Join(filepath.Dir(cur), "session_index.jsonl")
+				if base == ".codex" {
+					candidate = filepath.Join(cur, "session_index.jsonl")
+				}
+				if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+					return candidate
+				}
+			}
+			parent := filepath.Dir(cur)
+			if parent == cur {
+				break
+			}
+			cur = parent
+		}
+	}
+
+	if codexHome := os.Getenv("CODEX_HOME"); codexHome != "" {
+		candidate := filepath.Join(codexHome, "session_index.jsonl")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidate := filepath.Join(home, ".codex", "session_index.jsonl")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// lookupCodexTitle queries session_index.jsonl for the thread title of sessionID.
+// Returns empty string if not found, allowing caller to fall back to first user message.
+func lookupCodexTitle(filePath, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	indexPath := codexSessionIndexPath(filePath)
+	if indexPath == "" {
+		return ""
+	}
+
+	codexTitleMu.Lock()
+	defer codexTitleMu.Unlock()
+
+	info, err := os.Stat(indexPath)
+	if err != nil || info.IsDir() {
+		return ""
+	}
+
+	if codexTitleCache == nil || indexPath != codexTitleCachedPath || !info.ModTime().Equal(codexTitleMtime) {
+		file, err := os.Open(indexPath)
+		if err != nil {
+			return ""
+		}
+		defer file.Close()
+
+		newCache := make(map[string]string)
+		scanner := bufio.NewScanner(file)
+		scanner.Buffer(make([]byte, 64*1024), 64*1024)
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			var entry codexSessionIndexEntry
+			if err := json.Unmarshal(line, &entry); err == nil && entry.ID != "" && entry.ThreadName != "" {
+				newCache[entry.ID] = entry.ThreadName
+			}
+		}
+		codexTitleCache = newCache
+		codexTitleCachedPath = indexPath
+		codexTitleMtime = info.ModTime()
+	}
+
+	if name, ok := codexTitleCache[sessionID]; ok {
+		clean := cleanTitleCandidate(name)
+		if clean != "" {
+			return clean
+		}
+	}
+	return ""
+}
+
 func (s *codexParseState) codexTranscript(reference SessionFileRef) ParsedTranscript {
 	messages := s.codexMessages()
-	title := titleFromMessages(messages)
+	title := lookupCodexTitle(reference.FilePath, reference.NativeID)
+	if title == "" {
+		title = titleFromMessages(messages)
+	}
 	if title == "" {
 		title = Untitled
 	}

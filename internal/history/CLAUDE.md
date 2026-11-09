@@ -17,7 +17,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `parse_utils.go`：解析器共用安全裁剪、路径与时间工具。
 - `claude.go`：Claude Code 会话流解析器。
 - `claude_blocks.go`：Claude 原生消息块映射。
-- `codex.go`：Codex rollout 会话流解析器。
+- `codex.go`：Codex rollout 会话流解析器；会话标题优先从 session_index.jsonl（thread_name）提取，无标题行或未编目才回退首条用户消息；首条用户消息仍无才回退 Untitled。
 - `codex_blocks.go`：Codex 工具与内容块映射。
 - `usage.go`：按需流式读取单个会话文件的 token 用量（输入/输出/缓存读写）与按模型×思考档位的路由聚合（Pi/OMP、Claude Code 按消息 id 去重、Codex 取累计 total，并带回它自己 rollout 里的 `model_context_window`→`SessionUsage.Window`）；不进目录库、只读、256 MiB/8 MiB 行上限，不支持的 Provider 返回 ErrNoUsage。
 - `subagents.go`：子代理清单统一记录 `Subagent`（Claude `<session>/subagents/agent-*`、omp、Codex、pi、Antigravity；`SubagentsFor` 分派；Active=20s 内写过或末个工具调用挂起(Busy,10min)且未 Ended；Stopped=Provider 自己的中断标记（Claude 子文件末行 `[Request interrupted by user]`、Codex `turn_aborted`、omp 末条对话行为 `stopReason:"aborted"` 且已 session_exit、Antigravity `killed`）；布局缺失即空，Herdr 无父子关系）
@@ -32,7 +32,7 @@ History 是 Solco 的只读 Provider 会话目录；扫描 Provider 原生文件
 - `catalog_test.go`：内存 Catalog 的写入/排序/搜索/路径唯一/并发（-race）契约与描述行提取；Forget 同时释放行与路径。
 - `legacy_test.go`：旧 SQLite 目录清理（只删 history.sqlite3 家族、幂等）。
 - `claude_test.go`：Claude 会话解析行为。
-- `codex_test.go`：Codex 会话解析行为。
+- `codex_test.go`：Codex 会话解析行为与 session_index.jsonl 原生标题优先/首条消息回退回归。
 - `agy_test.go` / `cursor_test.go`：agy 转录与 Cursor store 形状（真机 2026-11-01）回归——配对/ERROR/CHECKPOINT/合并、live=整文件、追加/压缩重建、轻量摘要=完整解析、真实 sqlite3 读取（无 sqlite3 时跳过）、列表与 WAL 戳。
 - `live_parity_test.go`：live 增量解码（一次灌入 / 逐行追加）的投影必须与整文件解析的 Mainline 逐字段一致——Chat 的三条入口（新会话 / 已有 Agent 窗格 live tail / 历史记录）共用同一份转录的守卫。
 - `history_test.go`：跨 Provider 解析与历史模型语义。

@@ -259,3 +259,41 @@ func TestCodexLastRequestFillsTheContextOfItsAssistantMessage(t *testing.T) {
 		t.Fatalf("the assistant message must take last_token_usage (a sibling of the total), got %+v", last.ContextTokens)
 	}
 }
+
+func TestCodexTitlePrefersSessionIndexOverFirstMessage(t *testing.T) {
+	dir := t.TempDir()
+	sessions := filepath.Join(dir, "sessions", "2026", "11", "08")
+	if err := os.MkdirAll(sessions, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessionID := "33333333-aaaa-bbbb-cccc-000000000003"
+	rollout := filepath.Join(sessions, "rollout-2026-11-08T12-00-00-"+sessionID+".jsonl")
+	if err := os.WriteFile(rollout, []byte(codexFixtureRollout), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Without session_index.jsonl -> falls back to first message ("Build history")
+	ref := SessionFileRef{Agent: AgentCodex, NativeID: sessionID, FilePath: rollout}
+	parsed, err := ParseCodexTranscript(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Meta.Title != "Build history" {
+		t.Fatalf("title without index = %q, want 'Build history'", parsed.Meta.Title)
+	}
+
+	// 2. With session_index.jsonl -> prefers thread_name ("优化 Terminal 卡片与 Pane 菜单")
+	indexFile := filepath.Join(dir, "session_index.jsonl")
+	indexContent := `{"id":"` + sessionID + `","thread_name":"优化 Terminal 卡片与 Pane 菜单","updated_at":"2026-11-08T12:55:34Z"}` + "\n"
+	if err := os.WriteFile(indexFile, []byte(indexContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	parsedWithIndex, err := ParseCodexTranscript(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsedWithIndex.Meta.Title != "优化 Terminal 卡片与 Pane 菜单" {
+		t.Fatalf("title with index = %q, want '优化 Terminal 卡片与 Pane 菜单'", parsedWithIndex.Meta.Title)
+	}
+}
