@@ -848,13 +848,14 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
     const button = olderRef.current;
     const log = logRef.current;
     if (!button || !log || loadingOlder || typeof IntersectionObserver === "undefined") return;
+    const phone = typeof document !== "undefined" && document.documentElement.dataset.host === "phone";
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting) || autoOlderAt.current === turnCount) return;
         autoOlderAt.current = turnCount;
         void loadOlderRef.current();
       },
-      { root: log, rootMargin: "120px 0px 0px 0px" },
+      { root: log, rootMargin: phone ? "360px 0px 0px 0px" : "120px 0px 0px 0px" },
     );
     observer.observe(button);
     return () => observer.disconnect();
