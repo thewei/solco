@@ -35,7 +35,7 @@ assistants/GroupChat.tsx: Group 的 @ 定向/无 @ 广播；Composer 外壳复�
 assistants/AssistantsPage.tsx: `/assistants` 对话优先页（2026-11-04，designs/assistants-chat-first）：嵌入同一个 `App` 作 Coordinator 对话；未启动时同款壳 + 自带输入框与 agent 选择，首条消息经 `assistants.ensureChat` 拉起 Coordinator 并在 Chat 绑定后经 `chat.send` 恰好发送一次；Needs-You 条、⋯ 菜单（含 Archive Assistant 的二次确认）、More 抽屉（列表经 `assistants.drawer` 仅开着时读取）
 assistants/Behavior.tsx / WorkStyle.tsx: Settings 页签的两节——Behavior 只剩一个「Carry on by itself」开关 + Quiet hours（提醒间隔/日预算保留原值），WorkStyle 的 MCP 收进「advanced」折叠；更多抽屉只有 Needs you / Tasks（Open·Watching·Routines·Done 四个筛选）/ Memory / Settings 四个页签（2026-11-07，Autonomy 页签已删，核心能力仍在）
 feedback/FeedbackPage.tsx: `/feedback` 收件箱（2026-11-09，designs/feedback-inbox 方向 A）：左线程列表（Needs you / All、项目 chips、按天分组）+ 右时间线（Agent 提问卡、你的回答气泡、静默间隔、迟到回答表单）；经 `feedback.*` 桥每 1.5 s 轮询（页面不可见不读）；落点（通知/深链/⌘K）由快照的 `focus` 一次性交付；窄屏（≤700px，手机复用同一页）列表→线程两屏；草稿只存页面内存；1-9 选项、⌘↵ 发送只作用于最新等待表单
-feedback/feedback.css: 上述页面样式（只用 tokens.generated.css 与 theme.css 的墨色阶；触控档 44px）
+feedback/feedback.css: 上述页面样式（只用 tokens.generated.css 与 theme.css 的墨色阶；2026-11-09 起读起来同 Chat：`--col` 居中栏、Agent 的话是无卡片正文、回答是 tint 气泡、待答表单是 `.ask` 提问卡、字重 500；按钮重置用 `:where` 以免 `.fb button` 的特异性吃掉行内边距；手机密度键在 `html[data-host="phone"]`，不再用 pointer: coarse）
 assistants/assistants.css: 上述页面样式（沿用 theme.css 令牌；`.as-scrim` z-index 30 高于 More 抽屉 10 与菜单 20/21，抽屉开着时弹窗也完整）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

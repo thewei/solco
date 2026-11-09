@@ -244,15 +244,17 @@ function ThreadRows({ threads, selected, onOpen }: { threads: ThreadSummary[]; s
             <button className={`fb-row${selected === t.id ? " on" : ""}`} onClick={() => onOpen(t.id)}>
               <span className="fb-glyph">{glyphOf(t.client)}</span>
               <span className="fb-mid">
-                <span className="fb-t">{(t.waiting > 0 && t.preview ? t.preview : t.title).replace(/`/g, "")}</span>
-                <span className="fb-s">
-                  {t.project}
-                  {t.branch ? `, ${t.branch}` : ""}
+                <span className="fb-l1">
+                  <span className="fb-t">{(t.waiting > 0 && t.preview ? t.preview : t.title).replace(/`/g, "")}</span>
+                  <span className="fb-time">{clock(t.lastAt).replace(/^.*, /, "")}</span>
                 </span>
-              </span>
-              <span className="fb-end">
-                <span>{clock(t.lastAt).replace(/^.*, /, "")}</span>
-                {t.waiting > 0 ? <span className="fb-dot" aria-label="waiting" /> : <span>{t.askCount} asks</span>}
+                <span className="fb-l2">
+                  <span className="fb-s">
+                    {t.project}
+                    {t.branch ? `, ${t.branch}` : ""}
+                  </span>
+                  {t.waiting > 0 ? <span className="fb-dot" aria-label="waiting" /> : <span className="fb-n">{t.askCount === 1 ? "1 ask" : `${t.askCount} asks`}</span>}
+                </span>
               </span>
             </button>
           </div>
@@ -368,10 +370,9 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
   const asked = (
     <div className="fb-ask">
       <div className="fb-who">
-        <span className="fb-glyph">{glyphOf(thread.client)}</span>
+        <span className="fb-glyph sm">{glyphOf(thread.client)}</span>
         <span>
-          {who}, {clock(ask.createdAt)}
-          {ask.state === "pending" ? ", waiting for you" : ""}
+          <b>{who}</b> · {clock(ask.createdAt)}
         </span>
       </div>
       {ask.description && <div className="fb-desc">{md(ask.description)}</div>}
@@ -390,9 +391,12 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
     case "answered":
       reply = (
         <div className="fb-reply">
-          {ask.questions.map((q) => (
-            <div key={q.id}>{answerText(ask.answers?.[q.id])}</div>
-          ))}
+          <div className="fb-bub">
+            {ask.questions
+              .map((q) => answerText(ask.answers?.[q.id]))
+              .filter(Boolean)
+              .join("\n")}
+          </div>
           <small>
             {ask.late ? "Late answer" : took(ask)}
             {ask.late && !ask.lateDelivered ? ", reaches the agent with its next question" : ""}
@@ -402,17 +406,23 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
       );
       break;
     case "ended":
-      reply = <div className="fb-reply none">Ended without an answer</div>;
+      reply = (
+        <div className="fb-reply">
+          <div className="fb-bub none">Ended without an answer</div>
+        </div>
+      );
       break;
     default:
       reply = (
-        <div className="fb-reply none">
-          {ask.message || "No answer, the agent stopped waiting"}
-          {!late && (
-            <button className="fb-link" onClick={() => setLate(true)}>
-              Answer anyway
-            </button>
-          )}
+        <div className="fb-reply">
+          <div className="fb-bub none">
+            {ask.message || "No answer, the agent stopped waiting"}
+            {!late && (
+              <button className="fb-link" onClick={() => setLate(true)}>
+                Answer anyway
+              </button>
+            )}
+          </div>
         </div>
       );
   }
@@ -510,13 +520,9 @@ function AnswerForm(props: {
   return (
     <div className="fb-form" data-form={ask.id}>
       <div className="fb-nh">
-        <span className="fb-glyph">{glyphOf(thread.client)}</span>
-        <span className="fb-mid">
-          <b>{thread.client || "Agent"}</b>
-          <span className="fb-s">
-            {clock(ask.createdAt)}
-            {lateMode ? ", expired" : ", waiting for you"}
-          </span>
+        <span className="fb-glyph sm">{glyphOf(thread.client)}</span>
+        <span>
+          <b>{thread.client || "Agent"}</b> · {clock(ask.createdAt)} · {lateMode ? "expired" : "waiting for you"}
         </span>
       </div>
       {ask.description && <div className="fb-desc">{md(ask.description)}</div>}

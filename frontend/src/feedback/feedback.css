@@ -1,13 +1,17 @@
 /* Feedback inbox (decision 2026-11-09, designs/feedback-inbox direction A). Only the role tokens of
    tokens.generated.css and the ink ramp of theme.css; nothing here names a colour, radius or typeface.
-   Presentation only. */
+   Presentation only. The conversation reads as the Chat page does (chat.css): a --col column, the Agent's words as
+   plain reading text, the user's answer in a tint bubble, the waiting form as the Chat's question card (.ask), the
+   same ink ramp, radii and weights (500 for emphasis, never 600 in running text). */
 
 .fb,
 .fb-boot {
   height: 100%;
   background: var(--content);
-  color: var(--text);
+  color: var(--i1);
   font-size: 13px;
+  line-height: 1.4;
+  text-rendering: optimizeLegibility;
 }
 
 .fb {
@@ -19,31 +23,29 @@
   cursor: default;
 }
 
-.fb button {
+.fb :where(button) {
   font: inherit;
   color: inherit;
   background: none;
   border: 0;
   padding: 0;
-  cursor: pointer;
+  cursor: default;
   text-align: left;
 }
 
-.fb button:focus-visible,
-.fb textarea:focus-visible,
-.fb input:focus-visible {
+.fb :where(button):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
 .fb code,
 .fb pre {
-  font-family: ui-monospace, Menlo, monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 .fb-wrap {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
@@ -61,11 +63,11 @@
   flex-direction: column;
   min-height: 0;
   border-right: 1px solid var(--hair);
-  padding-top: 10px;
+  padding-top: 12px;
 }
 
 .fb-lens {
-  padding: 0 12px 6px;
+  padding: 0 12px 8px;
 }
 
 .fb-seg {
@@ -85,16 +87,17 @@
   padding: 4px 10px;
   border-radius: calc(var(--r-row) - 2px);
   color: var(--i2);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .fb-seg button.on {
   background: var(--menu);
-  color: var(--text);
+  color: var(--i1);
+  box-shadow: 0 0 0 1px var(--hair);
 }
 
 .fb-seg b {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
@@ -102,19 +105,25 @@
 .fb-chips {
   display: flex;
   gap: 6px;
-  padding: 0 12px 8px;
+  padding: 0 12px 10px;
   overflow-x: auto;
   flex: none;
+  scrollbar-width: none;
+}
+
+.fb-chips::-webkit-scrollbar {
+  display: none;
 }
 
 .fb-chips button {
   flex: none;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: var(--r-pill);
-  background: var(--grouped);
+  background: var(--tint2);
   color: var(--i2);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
   white-space: nowrap;
 }
 
@@ -127,14 +136,15 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 6px 12px;
+  overscroll-behavior-y: contain;
+  padding: 0 8px 14px;
 }
 
 .fb-gh {
-  padding: 12px 10px 4px;
-  color: var(--i2);
-  font-weight: 600;
-  font-size: 11px;
+  padding: 14px 10px 4px;
+  color: var(--i3);
+  font-weight: 500;
+  font-size: 11.5px;
 }
 
 .fb-row {
@@ -157,36 +167,50 @@
 .fb-mid {
   display: flex;
   flex-direction: column;
+  gap: 1px;
   flex: 1;
   min-width: 0;
 }
 
+.fb-l1,
+.fb-l2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .fb-t {
-  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .fb-s {
-  color: var(--i2);
-  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+  color: var(--i3);
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.fb-end {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
+.fb-time,
+.fb-n {
+  flex: none;
   color: var(--i3);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .fb-dot {
+  flex: none;
+  align-self: center;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -194,14 +218,14 @@
 }
 
 .fb-glyph {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--tint2);
   display: grid;
   place-items: center;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--i2);
   flex: none;
 }
@@ -211,11 +235,17 @@
   height: 44px;
 }
 
+.fb-glyph.sm {
+  width: 20px;
+  height: 20px;
+  font-size: 9.5px;
+}
+
 .fb-quiet,
 .fb-note {
   margin: 0;
   padding: 16px 12px;
-  color: var(--i2);
+  color: var(--i3);
 }
 
 /* ---- thread ---- */
@@ -227,11 +257,19 @@
   min-height: 0;
 }
 
+/* The header and the timeline share one inset so both sit on the Chat's centred column. */
+.fb-head,
+.fb-tl {
+  padding-left: max(24px, calc((100% - var(--col)) / 2 + 24px));
+  padding-right: max(24px, calc((100% - var(--col)) / 2 + 24px));
+}
+
 .fb-head {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px 20px 10px;
+  padding-top: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--hair);
 }
 
@@ -239,6 +277,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 28px;
 }
 
 .fb-title {
@@ -256,7 +295,12 @@
   place-items: center;
   width: 28px;
   height: 28px;
+  margin-left: -6px;
   border-radius: var(--r-control);
+}
+
+.fb-back:hover {
+  background: var(--tint);
 }
 
 .fb-flip {
@@ -271,12 +315,13 @@
 }
 
 .fb-chip {
-  padding: 1px 7px;
-  border-radius: var(--r-control);
-  background: var(--grouped);
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--tint2);
   color: var(--i2);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
   white-space: nowrap;
 }
 
@@ -301,7 +346,7 @@
   display: block;
   width: 100%;
   padding: 6px 10px;
-  border-radius: var(--r-row);
+  border-radius: var(--r-control);
 }
 
 .fb-menu button:hover {
@@ -312,144 +357,151 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior-y: contain;
 }
 
 .fb-tl {
   display: flex;
   flex-direction: column;
-  padding: 4px 20px 28px;
-}
-
-.fb.narrow .fb-tl,
-.fb.narrow .fb-head {
-  padding-left: 14px;
-  padding-right: 14px;
+  padding-top: 22px;
+  padding-bottom: 28px;
 }
 
 .fb-it {
-  padding-top: 12px;
+  margin-bottom: 18px;
+}
+
+.fb-it:last-child {
+  margin-bottom: 0;
 }
 
 .fb-gap {
-  color: var(--i2);
-  font-size: 11px;
+  color: var(--i3);
+  font-size: 12px;
   text-align: center;
-  padding: 12px 0 4px;
+  padding: 0 0 14px;
 }
 
-.fb-ask,
-.fb-form {
-  max-width: 640px;
-  border-radius: var(--r-card);
-  padding: 12px 14px;
-  background: var(--panel);
-  border: 1px solid var(--hair);
-}
-
-.fb-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  border-color: var(--hair2);
-}
-
-.fb.narrow .fb-ask,
-.fb.narrow .fb-form {
-  max-width: none;
-}
-
+/* The Agent's turn: no card, like the Chat's assistant text. */
 .fb-who,
 .fb-nh {
   display: flex;
   gap: 8px;
   align-items: center;
-  color: var(--i2);
-  font-size: 11px;
+  color: var(--i3);
+  font-size: 12px;
 }
 
 .fb-who {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
+.fb-who b,
 .fb-nh b {
-  color: var(--text);
-  font-weight: 600;
+  color: var(--i2);
+  font-weight: 500;
   font-size: 13px;
 }
 
 .fb-desc {
+  margin: 0 0 8px;
   color: var(--i2);
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fb-qt {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--i1);
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fb-qt + .fb-qt {
   margin-top: 6px;
+}
+
+.fb-qt code,
+.fb-desc code {
+  font-size: 0.86em;
+  background: var(--tint2);
+  padding: 0.12em 0.38em;
+  border-radius: 5px;
+}
+
+/* The user's answer: the Chat's own user bubble, its footnote beneath. */
+.fb-reply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-top: 10px;
+}
+
+.fb-bub {
+  max-width: 82%;
+  padding: 9px 16px;
+  border-radius: var(--r-bubble);
+  background: var(--tint2);
+  font-size: 15px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fb-bub.none {
+  padding: 5px 14px;
+  background: none;
+  border: 1px dashed var(--hair2);
+  color: var(--i2);
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fb-reply small {
+  margin-top: 3px;
+  padding: 0 4px;
+  color: var(--i3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fb-link {
+  margin-left: 10px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ---- answer form: the Chat's question card ---- */
+
+.fb-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--hair2);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 14px 16px;
 }
 
 .fb-form .fb-desc {
   margin: 0;
 }
 
-.fb-qt {
-  font-size: 15px;
-  line-height: 22px;
-  margin-bottom: 6px;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.fb-ask .fb-qt {
-  margin-bottom: 0;
-}
-
-.fb-ask .fb-qt + .fb-qt {
-  margin-top: 6px;
-}
-
-.fb-qt code,
-.fb-desc code {
-  font-size: 12px;
-  background: var(--code-bg);
-  padding: 1px 4px;
-  border-radius: 4px;
-}
-
-.fb-reply {
-  margin: 8px 0 0 auto;
-  max-width: 520px;
-  width: fit-content;
-  padding: 8px 14px;
-  border-radius: var(--r-bubble);
-  background: var(--user);
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.fb-reply small {
-  display: block;
-  margin-top: 2px;
-  color: var(--i3);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.fb-reply.none {
-  background: none;
-  border: 1px dashed var(--hair2);
-  color: var(--i2);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.fb-link {
-  margin-left: 10px;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* ---- answer form ---- */
-
 .fb-opts {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
+  margin-top: 8px;
 }
 
 .fb-opt {
@@ -457,9 +509,9 @@
   gap: 10px;
   align-items: center;
   width: 100%;
-  padding: 7px 10px;
-  border-radius: var(--r-row);
-  border: 1px solid var(--hair);
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13.5px;
 }
 
 .fb-opt:hover {
@@ -467,78 +519,98 @@
 }
 
 .fb-opt.on {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  background: var(--tint2);
 }
 
 .fb-opt kbd {
   display: grid;
   place-items: center;
-  min-width: 18px;
-  height: 18px;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
   border-radius: 5px;
-  background: var(--grouped);
-  color: var(--i2);
-  font: 600 11px/16px var(--ff-ui);
+  border: 1px solid var(--hair2);
+  color: var(--i3);
+  font: 500 11px/1 var(--ff-ui);
 }
 
 .fb-opt.on kbd {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--i1);
+  border-color: var(--i1);
+  color: var(--panel);
 }
 
 .fb textarea,
 .fb-other {
+  display: block;
   width: 100%;
-  padding: 8px 10px;
-  border-radius: var(--r-row);
-  border: 1px solid var(--hair);
-  background: var(--content);
-  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--hair2);
+  background: none;
+  color: var(--i1);
   font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
   resize: none;
+  outline: 0;
   user-select: text;
   -webkit-user-select: text;
 }
 
 .fb textarea {
-  min-height: 56px;
+  min-height: 72px;
+  margin-top: 8px;
+}
+
+.fb-other {
+  margin-top: 4px;
+}
+
+.fb textarea::placeholder,
+.fb-other::placeholder {
+  color: var(--i4);
+}
+
+.fb textarea:focus,
+.fb-other:focus {
+  border-color: var(--hair3);
 }
 
 .fb-send {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .fb-hint {
   flex: 1;
-  color: var(--i2);
-  font-size: 11px;
+  color: var(--i3);
+  font-size: 12px;
 }
 
 .fb-ghost {
-  padding: 5px 10px;
-  border-radius: var(--r-control);
+  padding: 4px 12px;
+  border-radius: var(--r-row);
   color: var(--i2);
 }
 
 .fb-ghost:hover:not(:disabled) {
   background: var(--tint);
-  color: var(--text);
+  color: var(--i1);
 }
 
 .fb-primary {
-  padding: 6px 14px;
-  border-radius: var(--r-control);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-weight: 600;
+  padding: 5px 16px;
+  border-radius: var(--r-pill);
+  background: var(--i1);
+  color: var(--panel);
+  font-weight: 500;
+  transition: opacity 0.12s;
 }
 
-.fb button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.fb :where(button):disabled {
+  opacity: 0.3;
 }
 
 /* ---- states ---- */
@@ -547,7 +619,7 @@
   display: flex;
   gap: 10px;
   align-items: center;
-  margin: 8px 16px 0;
+  margin: 8px 12px 0;
   padding: 8px 12px;
   border-radius: var(--r-row);
   background: var(--grouped);
@@ -561,7 +633,7 @@
 .fb-banner button {
   margin-left: auto;
   color: var(--accent);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .fb-empty {
@@ -584,6 +656,7 @@
 .fb-empty p {
   margin: 0;
   color: var(--i2);
+  line-height: 1.55;
 }
 
 .fb-empty pre {
@@ -593,8 +666,8 @@
   border-radius: var(--r-row);
   background: var(--grouped);
   color: var(--i2);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 11.5px;
+  line-height: 1.5;
   text-align: left;
   white-space: pre-wrap;
   word-break: break-all;
@@ -602,40 +675,112 @@
   -webkit-user-select: text;
 }
 
-/* Touch tier: the phone's 44 px targets. */
-@media (pointer: coarse) {
-  .fb {
-    font-size: 16px;
-  }
-  .fb-row,
-  .fb-opt {
-    padding: 12px 14px;
-  }
-  .fb-seg button,
-  .fb-chips button,
-  .fb-ghost,
-  .fb-opt,
-  .fb-other {
-    min-height: 44px;
-  }
-  .fb-chips button {
-    padding: 0 16px;
-  }
-  .fb-primary {
-    padding: 11px 20px;
-  }
-  .fb-glyph {
-    width: 36px;
-    height: 36px;
-  }
-  .fb-s,
-  .fb-end,
-  .fb-chip,
-  .fb-hint,
-  .fb-who,
-  .fb-nh,
-  .fb-gap,
-  .fb-gh {
-    font-size: 13px;
-  }
+/* ======================================================================
+   Phone density (the Chat's own block, chat.css "Phone density"): 16/24 reading text, a 24 px bubble, 44 px targets,
+   the accent send button. Keyed on <html data-host="phone"> as every phone rule of the shared page (mobile.tsx).
+   ====================================================================== */
+
+html[data-host="phone"] .fb {
+  font-size: 16px;
+}
+html[data-host="phone"] .fb-row,
+html[data-host="phone"] .fb-opt {
+  padding: 10px 12px;
+}
+html[data-host="phone"] .fb-row {
+  min-height: 56px;
+}
+html[data-host="phone"] .fb-glyph {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+html[data-host="phone"] .fb-glyph.sm {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+html[data-host="phone"] .fb-t,
+html[data-host="phone"] .fb-opt {
+  font-size: 16px;
+}
+html[data-host="phone"] .fb-s,
+html[data-host="phone"] .fb-time,
+html[data-host="phone"] .fb-n,
+html[data-host="phone"] .fb-chip,
+html[data-host="phone"] .fb-hint,
+html[data-host="phone"] .fb-who,
+html[data-host="phone"] .fb-nh,
+html[data-host="phone"] .fb-gap,
+html[data-host="phone"] .fb-gh,
+html[data-host="phone"] .fb-reply small {
+  font-size: 13px;
+}
+html[data-host="phone"] .fb-who b,
+html[data-host="phone"] .fb-nh b {
+  font-size: 14px;
+}
+html[data-host="phone"] .fb-seg button,
+html[data-host="phone"] .fb-chips button,
+html[data-host="phone"] .fb-ghost,
+html[data-host="phone"] .fb-opt,
+html[data-host="phone"] .fb-other {
+  min-height: 44px;
+}
+html[data-host="phone"] .fb-chips button {
+  padding: 0 16px;
+  font-size: 14px;
+}
+html[data-host="phone"] .fb-head,
+html[data-host="phone"] .fb-tl {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+html[data-host="phone"] .fb-tl {
+  padding-top: 16px;
+}
+html[data-host="phone"] .fb-desc {
+  font-size: 16px;
+  line-height: 24px;
+}
+html[data-host="phone"] .fb-qt {
+  font-size: 16px;
+  line-height: 24px;
+}
+html[data-host="phone"] .fb-bub {
+  max-width: 86%;
+  padding: 12px 16px;
+  background: var(--user);
+  font-size: 16px;
+  line-height: 24px;
+}
+html[data-host="phone"] .fb-bub.none {
+  padding: 8px 16px;
+  background: none;
+  font-size: 14px;
+  line-height: 20px;
+}
+html[data-host="phone"] .fb-form {
+  border-radius: var(--r-card);
+  padding: 14px;
+}
+html[data-host="phone"] .fb textarea,
+html[data-host="phone"] .fb-other {
+  font-size: 16px;
+  padding: 10px 14px;
+}
+html[data-host="phone"] .fb-primary {
+  min-height: 44px;
+  padding: 0 22px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+html[data-host="phone"] .fb-primary:disabled {
+  opacity: 1;
+  background: var(--accent-dim);
+}
+html[data-host="phone"] .fb-opt kbd {
+  min-width: 24px;
+  height: 24px;
+  font-size: 12px;
 }
