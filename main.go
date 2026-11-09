@@ -115,9 +115,18 @@ func main() {
 	// the app never makes macOS ask for the Keychain password.
 	nativeui.UseSecretsFile(filepath.Join(userDataDir, "secrets.enc"))
 
+	// The Feedback inbox (product decision 2026-11-09): Agents outside Solco
+	// ask through the broker; this process serves it when nothing else does
+	// (the resident solco-hostd, or another Solco) and always reads it. The
+	// option must be in NewShell's list: NewShell starts the Remote Host at its
+	// end, and a Host built before the broker client exists never advertises
+	// Feedback to the phone (device run 2026-11-09).
+	feedbackDir := feedback.Dir(userDataDir)
+
 	shell := nativeui.NewShell(append([]nativeui.ShellOption{
 		nativeui.WithSettings(settingsService),
 		nativeui.WithUserDataDir(userDataDir),
+		nativeui.WithFeedback(feedbackDir),
 		nativeui.WithOMPStreamExtension(embeddedOMPStreamExtension),
 		// The one-way link to the Solco Git app: its three entries appear
 		// once the app is found on this machine.
@@ -134,11 +143,6 @@ func main() {
 	// writes only through the plugin's `assistant …` CLI behind this bridge.
 	mygo.BindAs("assistants", nativeui.NewAssistantsBridge(shell))
 
-	// The Feedback inbox (product decision 2026-11-09): Agents outside Solco
-	// ask through the broker; this process serves it when nothing else does
-	// (the resident solco-hostd, or another Solco) and always reads it.
-	feedbackDir := feedback.Dir(userDataDir)
-	nativeui.WithFeedback(feedbackDir)(shell)
 	mygo.BindAs("feedback", nativeui.NewFeedbackBridge(shell))
 	feedbackCtx, stopFeedback := context.WithCancel(context.Background())
 	defer stopFeedback()
