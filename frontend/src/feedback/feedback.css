@@ -475,8 +475,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.fb-bub.none {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 10px;
+}
+
 .fb-link {
-  margin-left: 10px;
   color: var(--accent);
   font-weight: 500;
 }
