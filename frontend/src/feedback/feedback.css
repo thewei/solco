@@ -1142,9 +1142,9 @@
 }
 
 .fb-pk-detail.changed {
+  flex: none;
   color: var(--accent);
 }
-
 
 .fb-ctx {
   display: flex;
@@ -1255,7 +1255,8 @@
 }
 
 .fb-pk-name {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 70%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1459,4 +1460,7 @@ html[data-host="phone"] .fb-send {
 }
 html[data-host="phone"] .fb-send .fb-hint {
   flex: 1 0 100%;
+}
+html[data-host="phone"] .fb-pick-list {
+  max-height: 34vh;
 }

@@ -30,6 +30,22 @@ export function ContextPicker(props: {
   const [items, setItems] = useState<PickItem[] | null>(null);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // A phone keyboard rises over the lower page a moment after the search field takes focus: bring the whole panel back
+  // into the part still visible, once the page has been resized.
+  useEffect(() => {
+    if (document.documentElement.dataset.host !== "phone") return;
+    const show = () => rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    // The page is resized as the keyboard settles (possibly after the first scroll): follow each resize for a moment.
+    const timer = window.setTimeout(show, 400);
+    const stop = window.setTimeout(() => window.removeEventListener("resize", show), 2500);
+    window.addEventListener("resize", show);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(stop);
+      window.removeEventListener("resize", show);
+    };
+  }, []);
   const seq = useRef(0);
 
   useEffect(() => {
@@ -56,7 +72,7 @@ export function ContextPicker(props: {
   const empty = kind === "skills" ? "No installed skill matches." : "No file or folder matches.";
 
   return (
-    <div className="fb-pick" role="dialog" aria-label={kind === "skills" ? "Pick skills" : "Pick files and folders"}>
+    <div className="fb-pick" ref={rootRef} role="dialog" aria-label={kind === "skills" ? "Pick skills" : "Pick files and folders"}>
       <div className="fb-pick-head">
         <span className="fb-search">
           <Icon name="search" size={14} />
