@@ -1,0 +1,14 @@
+{
+  "answers": {
+    "q1": {
+      "selected": [
+        "SQLite"
+      ],
+      "custom": "with WAL"
+    },
+    "q2": {
+      "selected": [],
+      "custom": "ship it"
+    }
+  }
+}

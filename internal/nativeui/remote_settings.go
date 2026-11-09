@@ -106,6 +106,10 @@ func (s *Shell) remoteServer() *remotehost.Server {
 	host, _ := os.Hostname()
 	userDataDir := s.userDataDir // fixed at startup; the Host's goroutines must not touch the Shell
 	git := app.NewRemoteGit()
+	var feedbackSource remotehost.FeedbackSource // stays a nil interface without a broker directory
+	if s.feedback.client != nil {
+		feedbackSource = s.feedback.client
+	}
 	opts := remotehost.Options{
 		Config:           remoteConfigFrom(s.settings.Remote),
 		Overlay:          remoteOverlay(s.userDataDir),
@@ -115,6 +119,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		AgentFacts:       s.hostAgentFacts,
 		Usage:            s.hostUsage,
 		Automations:      s.hostAutomations,
+		Feedback:         feedbackSource,
 		AutomationsAdmin: s.hostAutomationsAdmin(),
 		PersonalAgent:    s.hostPersonalAgent,
 		AssistantAgents:  s.hostAssistantAgents,

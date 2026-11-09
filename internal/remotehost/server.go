@@ -122,6 +122,9 @@ type Options struct {
 	// answer to it; every Chat state the phone reads goes through it. nil keeps
 	// every row.
 	FilterTurns func([]chatsession.ChatTurn) []chatsession.ChatTurn
+	// Feedback is the Feedback inbox's broker (GET /feedback, POST /feedback/asks/{id}/answer|end):
+	// nil = no such view and bootstrap does not advertise feedback. The broker is the state's only owner.
+	Feedback FeedbackSource
 	// Sessions serves the desktop's session catalog for the phone (GET /sessions):
 	// metadata, search and the running-pane link; nil = no such view and bootstrap
 	// says so. It runs on the Host's goroutines.
@@ -169,12 +172,14 @@ type PairingOffer struct {
 // Server is the optional phone-client Host. The zero Config mode is off: New
 // succeeds, Start does nothing, no port is opened.
 type Server struct {
-	opts       Options
-	devices    *DeviceStore
-	pairing    *Pairing
-	push       *pushBridge
-	pushCancel context.CancelFunc
-	pushDone   chan struct{}
+	opts           Options
+	devices        *DeviceStore
+	pairing        *Pairing
+	push           *pushBridge
+	pushCancel     context.CancelFunc
+	feedbackCancel context.CancelFunc // the Feedback broker follower (feedback_watch.go)
+	feedbackDone   chan struct{}
+	pushDone       chan struct{}
 
 	mu             sync.Mutex
 	httpServer     *http.Server
@@ -378,8 +383,9 @@ func (s *Server) serve(ln net.Listener, cfg Config) error {
 	if cfg.Tailcat {
 		s.startOverlay(srv)
 	}
-	s.startRelay() // tunnels through its own loopback bridge; needs a running Host
-	s.startPush()  // optional OS push while the Mac Host process is serving
+	s.startRelay()         // tunnels through its own loopback bridge; needs a running Host
+	s.startPush()          // optional OS push while the Mac Host process is serving
+	s.startFeedbackWatch() // Feedback asks become one content-free events frame
 	return nil
 }
 
@@ -465,6 +471,7 @@ func (s *Server) relaySecret() (string, error) {
 // first: it dials home and bridges into the handler that is about to die.
 func (s *Server) Close() {
 	s.stopPush()
+	s.stopFeedbackWatch()
 	s.stopRelay()
 	s.stopOverlay()
 	s.closeP2P()
@@ -593,6 +600,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+apiPrefix+"/devices/{id}/connect", s.guard(ScopeManage, s.handleDeviceConnect))
 	mux.Handle("GET "+apiPrefix+"/quota", s.guard(ScopeView, s.handleQuota))
 	mux.Handle("GET "+apiPrefix+"/automations", s.guard(ScopeView, s.handleAutomations))
+	mux.Handle("GET "+apiPrefix+"/feedback", s.guard(ScopeView, s.handleFeedback))
+	mux.Handle("POST "+apiPrefix+"/feedback/asks/{id}/answer", s.guard(ScopeTerminalInput, s.handleFeedbackAnswer))
+	mux.Handle("POST "+apiPrefix+"/feedback/asks/{id}/end", s.guard(ScopeTerminalInput, s.handleFeedbackEnd))
 	mux.Handle("GET "+apiPrefix+"/automations/{name}", s.guard(ScopeView, s.handleAutomationDetail))
 	mux.Handle("POST "+apiPrefix+"/automations", s.guard(ScopeManage, s.handleAutomationCreate))
 	mux.Handle("POST "+apiPrefix+"/automations/{name}/save", s.guard(ScopeManage, s.handleAutomationUpdate))
@@ -883,6 +893,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	}
 	if s.opts.Usage != nil {
 		capabilities["quota"] = true
+	}
+	if s.opts.Feedback != nil {
+		capabilities["feedback"] = true
 	}
 	if s.opts.Automations != nil {
 		if _, ok := s.opts.Automations(r.Context()); ok {

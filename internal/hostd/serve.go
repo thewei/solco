@@ -20,6 +20,7 @@ import (
 	"github.com/thewei/solco/internal/apphook"
 	"github.com/thewei/solco/internal/automations"
 	"github.com/thewei/solco/internal/chatstream"
+	"github.com/thewei/solco/internal/feedback"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/personalagent"
 	"github.com/thewei/solco/internal/remotehost"
@@ -46,6 +47,7 @@ func NewServer(userDataDir, version string) func() (Host, error) {
 			Dir:           RemoteDir(userDataDir),
 			Backend:       remotehost.NewManagerBackend(herdr.NewManager()),
 			PersonalAgent: newPluginSeam(),
+			Feedback:      feedback.NewClient(feedback.Dir(userDataDir)),
 			HostName:      host,
 			Version:       version,
 		})

@@ -18,6 +18,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/thewei/solco/internal/agentcatalog"
 	"github.com/thewei/solco/internal/chatsession"
+	"github.com/thewei/solco/internal/feedback"
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 )
@@ -173,6 +174,9 @@ func TestGoldenAPIv3(t *testing.T) {
 	// automation: one step of a plugin automation, worded by the phone (no prompt, no error text)
 	h.srv.NotifyAutomation("failed", "nightly-ci-triage", "run-7")
 	golden(t, "events-automation.json", readRaw(t, events))
+	// feedback: an Agent's question reached the broker; the frame holds ids and the waiting count, no text
+	h.srv.NotifyFeedback("ask", "t_1", "a_1", 1)
+	golden(t, "events-feedback.json", readRaw(t, events))
 
 	// terminal: frame header, ping, bad input, refused input
 	term, _, err := h.dial("/api/v3/terminals/term_b/stream?cols=51&rows=19", true)
@@ -339,6 +343,22 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "quota.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
 	h.srv.opts.Usage = nil
 	golden(t, "error-quota-unavailable.json", bodyOf(t, h.get("/api/v3/quota", h.token, nil)))
+	// feedback: the Agent-question inbox; the seam is the broker's client, the handler forwards and strips Mac paths
+	fb := sampleFeedback()
+	h.srv.opts.Feedback = fb
+	golden(t, "bootstrap-feedback.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "feedback.json", bodyOf(t, h.get("/api/v3/feedback", h.token, nil)))
+	golden(t, "feedback-thread.json", bodyOf(t, h.get("/api/v3/feedback?thread=t_1", h.token, nil)))
+	golden(t, "feedback-answer-request.json", []byte(`{"answers":{"q1":{"selected":["SQLite"],"custom":"with WAL"},"q2":{"selected":[],"custom":"ship it"}}}`))
+	_, fbAck := h.send("POST", "/api/v3/feedback/asks/a_1/answer", h.token, `{"answers":{"q1":{"selected":["SQLite"]}}}`)
+	golden(t, "feedback-ack.json", fbAck)
+	fb.err = feedback.ErrFinal
+	_, fbFinal := h.send("POST", "/api/v3/feedback/asks/a_0/end", h.token, "")
+	golden(t, "error-feedback-final.json", fbFinal)
+	fb.err, fb.offline = nil, true
+	golden(t, "feedback-offline.json", bodyOf(t, h.get("/api/v3/feedback", h.token, nil)))
+	h.srv.opts.Feedback = nil
+	golden(t, "error-feedback-unavailable.json", bodyOf(t, h.get("/api/v3/feedback", h.token, nil)))
 	// automations (read-only): the desktop's Automations page behind a capability that
 	// follows the plugin gate; the seam answers the whole list, the handler only forwards
 	h.srv.opts.Automations = func(context.Context) (Automations, bool) { return sampleAutomations(), true }

@@ -1,0 +1,91 @@
+{
+  "online": true,
+  "threads": [
+    {
+      "id": "t_1",
+      "project": "solco",
+      "branch": "main",
+      "client": "Claude Code",
+      "title": "solco · Claude Code",
+      "lastAt": 1786042800000,
+      "waiting": 1,
+      "askCount": 2,
+      "preview": "Which database should the service use?",
+      "lastState": "pending"
+    }
+  ],
+  "waiting": 1,
+  "selected": "t_1",
+  "detail": {
+    "id": "t_1",
+    "projectKey": "",
+    "project": "solco",
+    "branch": "main",
+    "client": "Claude Code",
+    "title": "solco · Claude Code",
+    "createdAt": 1786039200000,
+    "lastAt": 1786042800000,
+    "waiting": 1,
+    "asks": [
+      {
+        "id": "a_0",
+        "threadId": "t_1",
+        "createdAt": 1786039200000,
+        "resolvedAt": 1786039500000,
+        "questions": [
+          {
+            "id": "q1",
+            "text": "Keep the old API?",
+            "type": "single",
+            "options": [
+              "Yes",
+              "No"
+            ],
+            "allowCustom": false,
+            "required": true
+          }
+        ],
+        "timeoutMs": 1800000,
+        "state": "answered",
+        "answers": {
+          "q1": {
+            "selected": [
+              "Yes"
+            ]
+          }
+        },
+        "lastHeartbeat": 1786039500000
+      },
+      {
+        "id": "a_1",
+        "threadId": "t_1",
+        "createdAt": 1786042800000,
+        "description": "Pick the migration path",
+        "questions": [
+          {
+            "id": "q1",
+            "text": "Which database should the service use?",
+            "type": "single",
+            "options": [
+              "SQLite",
+              "Postgres"
+            ],
+            "allowCustom": true,
+            "required": true
+          },
+          {
+            "id": "q2",
+            "text": "Anything else?",
+            "type": "text",
+            "allowCustom": false,
+            "required": false,
+            "placeholder": "optional"
+          }
+        ],
+        "timeoutMs": 1800000,
+        "state": "pending",
+        "lastHeartbeat": 1786042800000
+      }
+    ]
+  }
+}

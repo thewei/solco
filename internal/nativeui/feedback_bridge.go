@@ -64,33 +64,9 @@ func (b *FeedbackBridge) Snapshot(ctx context.Context, selected string) (Feedbac
 	}
 	ctx, cancel := context.WithTimeout(ctx, feedbackCallTimeout)
 	defer cancel()
-	threads, err := client.Threads(ctx, false, "")
-	if err != nil {
-		if errors.Is(err, feedback.ErrOffline) {
-			return view, nil
-		}
-		return view, err
-	}
-	view.Online = true
-	if threads != nil {
-		view.Threads = threads
-	}
-	for _, t := range view.Threads {
-		view.Waiting += t.Waiting
-	}
-	if selected == "" {
-		return view, nil
-	}
-	detail, err := client.Thread(ctx, selected)
-	if err != nil {
-		if errors.Is(err, feedback.ErrNotFound) {
-			return view, nil // the thread is gone (history trimmed); the page falls back to the list
-		}
-		return view, err
-	}
-	view.Selected = selected
-	view.Detail = &detail
-	return view, nil
+	snap, err := feedback.ReadSnapshot(ctx, client, selected)
+	view.Online, view.Threads, view.Waiting, view.Selected, view.Detail = snap.Online, snap.Threads, snap.Waiting, snap.Selected, snap.Detail
+	return view, err
 }
 
 func (b *FeedbackBridge) call(ctx context.Context, fn func(context.Context, *feedback.Client) error) error {

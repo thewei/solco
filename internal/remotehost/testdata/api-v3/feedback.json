@@ -1,0 +1,19 @@
+{
+  "online": true,
+  "threads": [
+    {
+      "id": "t_1",
+      "project": "solco",
+      "branch": "main",
+      "client": "Claude Code",
+      "title": "solco · Claude Code",
+      "lastAt": 1786042800000,
+      "waiting": 1,
+      "askCount": 2,
+      "preview": "Which database should the service use?",
+      "lastState": "pending"
+    }
+  ],
+  "waiting": 1,
+  "selected": ""
+}

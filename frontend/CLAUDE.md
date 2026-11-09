@@ -5,7 +5,7 @@ Chat WebView 页（产品决策 2026-10-11）的唯一源码：一份嵌入式 S
 
 成员清单
 main.tsx: 桌面入口，createRoot 按路径挂 `App`（/chat）、懒加载的 `AssistantsPage`（/assistants）或 `FeedbackPage`（/feedback）——Files 预览自 2026-11-08 起是原生的，这里不再有它的页面（`/files-viewer` 路由、`FilesViewer`、github-markdown-css 都已删）；引入 highlight.js github 主题、`nozoom` 与 `theme.css`（`vite.config.ts`，target safari15）
-mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），渲染同一个 `App`，引入 `nozoom`，零客户端分支
+mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），默认渲染同一个 `App`，宿主在脚本前注入 `__SOLCO_ROUTE__="feedback"` 时渲染 `FeedbackPage`（与桌面按 pathname 选页同理，页面代码本身零客户端分支），引入 `nozoom`
 index.html / mobile.html: 两个 HTML 壳的首帧：内联 `--content` 同一对色（`light-dark(#fcfcfc, #0a0a0a)`，与 `theme.css`、Go `webviewBackground`、原生 `designTokens().Content` 一对，`TestWebviewBackgroundMatchesPageTokens` 钉住）；`mobile.html` 另把 `data-theme` 与 `data-theme-pin` 固定为 dark（手机只有深色，状态未到时也不闪浅色；`App.tsx` 在状态没给 `theme` 时回落到该 pin）
 nozoom.ts: 双指缩放关闭（副作用导入）：gesture 事件与 Ctrl+wheel 的默认缩放被取消——页面是原生窗口里的 App UI，双指放大不原生；普通滚动不受影响
 App.tsx: 页面根：桥接状态（`chat.*` / events 订阅）、`chat:delta` 有序尾 Patch / 缺帧 snapshot 自愈、`data-theme`/`data-contrast`/`data-prose` 写入 html、sticky-bottom 跟尾、会话绑定与开关（`bindLiveAgent` 等）；输入区上方的 `.changes-pill`（「N files changed | Review」：宿主给 `state.changedFiles` 且 `canReview` 才画——手机从自己的 Git 状态读，桌面恒为 0 所以永不显示；Review 走 `reviewChanges("")`）
