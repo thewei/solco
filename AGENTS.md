@@ -142,6 +142,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-08 · Files preview, round 9b: 2 MiB Markdown, a drawn SVG, find, Quick Look, HTML / math / Mermaid (T3 Code review, round 9b)
 - 2026-11-09 · Solco Feedback: the feedback MCP joins Solco
 - 2026-11-09 · Feedback phone notification carries the words
+- 2026-11-09 · Mobile ChatView windowing, theme sync and zero-CLS skeleton
 
 ## Git safety
 
