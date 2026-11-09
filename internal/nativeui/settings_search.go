@@ -38,6 +38,9 @@ var settingsLabels = map[string][][2]string{
 	"/settings/voice": {
 		{"Transcription", "Source"}, {"Transcription", "Account"}, {"Transcription", "What is sent"}, {"Transcription", "Endpoint"}, {"Transcription", "API key"}, {"Transcription", "Model"},
 	},
+	"/settings/notifications": {
+		{"Webhook channels", "No channels"}, {"", "Add a channel"}, {"Delivery", "Phone grace"}, {"Delivery", "Check"},
+	},
 	"/settings/remote": {
 		{"Phone access", "Remote Access"}, {"Phone access", "Pair a phone"}, {"Phone access", "Keep Running When Solco Quits"}, {"Paired phones", "Revoke Access"},
 		{"Advanced", "Built-in Secure Connection"}, {"Advanced", "Allow Local Network Fallback"}, {"Advanced", "Existing Tailscale Address"},

@@ -241,6 +241,8 @@ type Shell struct {
 	settingsCommitEndpointDraft string
 	settingsCommitModelDraft    string
 	settingsCommitKeyDraft      string
+	// notifyUI backs Settings → Notifications (page_settings_notifications.go).
+	notifyUI notifyChannelsUI
 
 	// hist owns the Native History presentation state over the read-only
 	// HistoryService.

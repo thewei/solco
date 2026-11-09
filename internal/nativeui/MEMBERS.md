@@ -257,10 +257,12 @@ commit_modal_layout_test.go: 960×640/1200×800 长文件与 Pi 展开后固定 
 branch_menu_filter_test.go: 搜索过滤与当前分支优先
 commit_ai.go: AI 一次性候选生成 UI 协调（唯一通道 = OpenAI 兼容 API：endpoint/model 存设置、key 只进 Keychain `git.commitapi.token`，commitAPIKeySet 缓存供渲染路径判就绪，未配置即拒绝启动）、后台取消/超时、repo/snapshot/paths identity fence，拒绝自动 git commit
 page_settings_git.go: Git 配置页：可编辑的只含风格的 Conventional Commit 规则（安全约束固定在 agent.BuildCommitPrompt，不在页面展示）、显式保存/恢复、AI commit 通道（endpoint 预置+校验、model、Keychain key 存/删、15s 测试请求与就绪状态）
+page_settings_notifications.go: 通知渠道页（/settings/notifications，2026-11-09）：已添加的 webhook 渠道（开关/移除）、添加渠道（名称/URL/可选令牌，URL 与令牌只进加密凭据文件，永不回显，非 https 拒绝）、手机宽限（15 s–5 min，默认 30 s）、对每个启用渠道发送测试并按渠道名报告；渠道只在手机告知不到时由 Host 调用，本页不发任何通知
 design_system.go: 排版/间距/圆角/控件高度/TileTone 令牌，字号字重只经此处取值，禁止字面量（Caption 11 / Micro 10.5，App 内最小 10.5pt，2026-11-03 上调一档）
 theme.go: 中性调色板与 DesignTokens；框架 Theme.Radius 取 Radius().Row（8，2026-10-29 Phase 3：所有 MyGo 控件圆角一处设定，原 7pt，TestControlCornerHasOneSource 钉）；Sidebar 仅在窗口无 vibrancy 材质时作为不透明回退；`highContrast`（设置「Increase contrast」的进程级镜像，Shell.View 每帧发布）让框架 Theme（Border/TextMuted）、DesignTokens、gorexColors、gdPalette 四个颜色来源同时加强边框与次要文字
 ui_evidence_test.go: 显式启用的视觉取证（SOLCO_UI_EVIDENCE=<dir> 渲染主要视图的深浅色 PNG，不访问真实会话）
 commit_pi_test.go, settings_git_test.go: Pi 后台时序/过期消息隔离、Git Settings 持久化及 MyGo 控件回归
+settings_notifications_test.go: 渠道添加（非 https 拒绝、URL/令牌不进 settings 也不上屏）/移除（密钥随渠道删除）与宽限标签往返
 commit_message_import.go: 生成候选文本纯校验与 Subject/Body 导入，已有手写消息时必须二次确认，不触发 Git 提交
 commit_message_import_test.go: 消息长度/代码围栏/空主题校验、覆盖确认及本地状态销毁回归
 workspace_header.go: Commit Modal 打开/取消/草稿导航防护，仍使用既有 WorkspaceSurfaceCommit 主状态；取消或提交成功后经 landAfterCommit 回到 Commit 开始时的表面（workspaceSurfaceState.previous：Terminal 或 Chat）

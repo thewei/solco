@@ -195,6 +195,11 @@ func (s Sender) post(ctx context.Context, t Target, ev Event) error {
 	return nil
 }
 
+// Test posts a harmless event to one target and returns what went wrong, if anything (Settings → Send Test).
+func (s Sender) Test(ctx context.Context, t Target) error {
+	return s.post(ctx, t, Event{Kind: KindQuestion, Title: "Solco · test", Text: "A test from Settings → Notifications", Link: "solco://feedback"})
+}
+
 // Words bounds one line of text for an Event.
 func Words(s string, max int) string {
 	s = strings.TrimSpace(s)

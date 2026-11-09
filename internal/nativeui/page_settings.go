@@ -59,6 +59,7 @@ var settingsSections = []settingsSection{
 	{"/settings/assistants-archive", "Archived Assistants", iconSparkles, TileGray},
 	{"/settings/git", "Git", iconBranch, TileOrange},
 	{usageSettingsPath, "Quota", iconQuota, TileTeal},
+	{"/settings/notifications", "Notifications", iconChat, TileBlue},
 	{remoteSettingsPath, "Remote Access", iconGlobe, TileIndigo},
 	{remoteDesktopSettingsPath, "Remote Desktop", iconDesktop, TileIndigo},
 	{"/settings/diagnostics", "Diagnostics", iconInfo, TileBlue},
@@ -131,6 +132,9 @@ func (s *Shell) settingsLayout(c *ui.Context, r *ui.Route) {
 			case r.Match("/quota"), r.Match("/usage"):
 				r.Title("Settings · Quota")
 				settingsPage(c, func() { s.settingsUsage(c) })
+			case r.Match("/notifications"):
+				r.Title("Settings · Notifications")
+				settingsPage(c, func() { s.settingsNotifications(c) })
 			case r.Match("/remote"):
 				r.Title("Settings · Remote Access")
 				settingsPage(c, func() { s.settingsRemote(c) })
