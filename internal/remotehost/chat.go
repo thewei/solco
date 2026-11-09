@@ -254,7 +254,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 			return false
 		}
 		raw := full
-		if sent && !force && (target.Provider == history.AgentOMP || target.Provider == history.AgentPi) {
+		if sent && !force {
 			if delta, ok := chatSuffixDelta(last, frame); ok {
 				if compact, err := json.Marshal(delta); err == nil && len(compact) < len(full) {
 					raw = compact

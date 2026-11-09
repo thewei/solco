@@ -172,6 +172,51 @@ func TestPiChatStreamReachesAuthenticatedWebSocket(t *testing.T) {
 	}
 }
 
+func TestGenericProviderTailUpdateSendsChatDelta(t *testing.T) {
+	h := newHarness(t)
+	home := t.TempDir()
+	path := filepath.Join(home, "claude.jsonl")
+	content := `{"type":"user","message":{"role":"user","content":"hello"}}` + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	proj := fixtureProjection()
+	proj.Agents = []herdr.Agent{{TerminalID: "term_c", PaneID: "w1:p1", Kind: "claude", Status: "working",
+		AgentSession: &herdr.AgentSessionIdentity{Agent: "claude", Kind: "path", Value: path}}}
+	h.back.set(proj)
+	conn, _, err := h.dial("/api/v3/panes/w1:p1/chat/stream?instance=default", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	baseline := readJSON(t, conn)
+	if baseline["t"] != "chat" {
+		t.Fatalf("missing baseline: %+v", baseline)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"world"}]}}` + "\n")
+	_ = f.Close()
+
+	patch := readJSON(t, conn)
+	if patch["t"] != "chat" {
+		t.Fatalf("first assistant line did not deliver full frame with Working=true: %+v", patch)
+	}
+	f, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":" and universe"}]}}` + "\n")
+	_ = f.Close()
+
+	deltaPatch := readJSON(t, conn)
+	if deltaPatch["t"] != "chat_delta" || deltaPatch["baseSeq"] != patch["seq"] {
+		t.Fatalf("Claude streaming chunk did not get suffix delta: %+v", deltaPatch)
+	}
+}
+
 func TestPiAndOMPStreamCannotCrossProviderFence(t *testing.T) {
 	var server Server
 	path := filepath.Join(t.TempDir(), "session.jsonl")
