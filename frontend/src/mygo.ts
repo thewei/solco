@@ -925,6 +925,13 @@ export interface FeedbackView {
    * standard install path.
    */
   mcpBin?: string;
+  /**
+   * CanManage says the page may delete threads and set the keep-for window (always true on the desktop; the phone
+   * asks its Host's feedbackManage capability).
+   */
+  canManage: boolean;
+  /** RetentionDays is how long finished threads are kept (0 = forever). */
+  retentionDays?: number;
 }
 
 /** Goal is a long-lived objective. */
@@ -1395,6 +1402,8 @@ export interface Thread {
   title: string;
   explicitId?: string;
   taskId?: string;
+  /** Task is the user's original request the Agent works on (Markdown), given with the thread's first ask. */
+  task?: string;
   createdAt: number;
   lastAt: number;
   /** computed: pending Asks */
@@ -1911,6 +1920,17 @@ export const feedback = {
   answer(askID: string, answers: Record<string, Answer>, attachments: Attachment[]): Promise<void> {
     return call("feedback.Answer", askID, answers, attachments);
   },
+  /**
+   * Cleanup counts (dryRun) or removes the finished threads idle for more than olderThanDays; it returns how many
+   * matched, so the dialog can say "Delete 12 threads" before it does.
+   */
+  cleanup(olderThanDays: number, dryRun: boolean): Promise<number> {
+    return call("feedback.Cleanup", olderThanDays, dryRun);
+  },
+  /** DeleteThreads removes the named finished threads (a thread an Agent still waits on stays) and reports how many went. */
+  deleteThreads(ids: string[]): Promise<number> {
+    return call("feedback.DeleteThreads", ids);
+  },
   /** End closes an Ask without an answer. */
   end(askID: string): Promise<void> {
     return call("feedback.End", askID);
@@ -1923,12 +1943,17 @@ export const feedback = {
   openProject(threadID: string, target: string): Promise<void> {
     return call("feedback.OpenProject", threadID, target);
   },
+  /** SetRetention sets how many days finished threads are kept (0 = forever). */
+  setRetention(days: number): Promise<void> {
+    return call("feedback.SetRetention", days);
+  },
   /**
    * Snapshot reads the thread list and, for the thread the page is on, its
-   * timeline. selected is client-local navigation; a pending Focus overrides it.
+   * timeline. selected is client-local navigation; a pending Focus overrides it. query narrows the list to the threads
+   * whose text contains it.
    */
-  snapshot(selected: string): Promise<FeedbackView> {
-    return call("feedback.Snapshot", selected);
+  snapshot(selected: string, query: string): Promise<FeedbackView> {
+    return call("feedback.Snapshot", selected, query);
   },
 } as const;
 

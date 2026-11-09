@@ -272,3 +272,53 @@ func TestLegacyImportRealFile(t *testing.T) {
 	sort.Ints(asks)
 	t.Logf("records=%d threads=%d projects=%d median=%d", n, len(rows), len(projects), asks[len(asks)/2])
 }
+
+func TestBrokerManagesThreadsThroughClient(t *testing.T) {
+	dir := t.TempDir()
+	token, _ := EnsureToken(dir)
+	b := &Broker{Store: NewMemory(), Token: token}
+	srv := httptest.NewServer(NewHandler(b))
+	defer srv.Close()
+	writeEndpoint(t, dir, srv.Listener.Addr().String())
+	c := NewClient(dir)
+	ctx := context.Background()
+
+	askID, threadID, err := c.Create(ctx, CreateInput{CallerInfo: "Cursor Agent", Task: "Do it", ProjectRoot: mkRepo(t), Questions: q1("Deploy?")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th, _ := c.Thread(ctx, threadID); th.Task != "Do it" {
+		t.Fatalf("task: %+v", th)
+	}
+	if ids, _ := c.Search(ctx, "deploy"); len(ids) != 1 || ids[0] != threadID {
+		t.Fatalf("search: %v", ids)
+	}
+	if n, err := c.DeleteThreads(ctx, []string{threadID}); err != nil || n != 0 {
+		t.Fatalf("a waiting thread stays: %d %v", n, err)
+	}
+	if err := c.Answer(ctx, askID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := c.Purge(ctx, 30, true); err != nil || n != 0 {
+		t.Fatalf("nothing is 30 days old: %d %v", n, err)
+	}
+	if _, err := c.Purge(ctx, 0, true); err == nil {
+		t.Fatal("0 days is refused")
+	}
+	if err := c.SetRetention(ctx, 90); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := c.Retention(ctx); d != 90 {
+		t.Fatalf("retention: %d", d)
+	}
+	snap, err := ReadSnapshotQuery(ctx, c, "", "deploy")
+	if err != nil || snap.RetentionDays != 90 || len(snap.Threads) != 1 {
+		t.Fatalf("snapshot: %+v %v", snap, err)
+	}
+	if snap, _ := ReadSnapshotQuery(ctx, c, "", "zzz"); len(snap.Threads) != 0 {
+		t.Fatalf("a search narrows the list: %+v", snap.Threads)
+	}
+	if n, err := c.DeleteThreads(ctx, []string{threadID}); err != nil || n != 1 {
+		t.Fatalf("a finished thread goes: %d %v", n, err)
+	}
+}

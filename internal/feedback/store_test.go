@@ -295,3 +295,95 @@ func TestAbandonedAskStaysAnswerableAsLate(t *testing.T) {
 		t.Fatalf("the earlier answer must come back as a late answer, not an end: %+v", r)
 	}
 }
+
+func TestTaskIsKeptFromTheFirstAskThatHasOne(t *testing.T) {
+	s, _ := clockStore(t)
+	repo := mkRepo(t)
+	_, th, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: repo, Questions: q1("one?")})
+	if got, _ := s.Thread(th.ID); got.Task != "" {
+		t.Fatalf("no task given: %q", got.Task)
+	}
+	s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: repo, Task: "  Ship the **thing**  ", Questions: q1("two?")})
+	s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: repo, Task: "another", Questions: q1("three?")})
+	if got, _ := s.Thread(th.ID); got.Task != "Ship the **thing**" {
+		t.Fatalf("the first task wins: %q", got.Task)
+	}
+}
+
+func TestDeletePurgeAndRetentionSparePendingThreads(t *testing.T) {
+	s, now := clockStore(t)
+	mk := func(client string) (string, string) {
+		a, th, err := s.Create(CreateInput{CallerInfo: client, ProjectRoot: mkRepo(t), Questions: q1("q?")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.ID, th.ID
+	}
+	oldAsk, oldThread := mk("Cursor Agent")
+	_ = s.Resolve(oldAsk, map[string]Answer{"a": {Selected: []string{"x"}}}, nil)
+	waitAsk, waitThread := mk("Claude Code")
+	_ = waitAsk
+	*now = now.Add(40 * 24 * time.Hour)
+	freshAsk, freshThread := mk("Codex")
+	_ = s.Resolve(freshAsk, map[string]Answer{"a": {Selected: []string{"y"}}}, nil)
+
+	if n := s.Purge(30*24*time.Hour, true); n != 1 {
+		t.Fatalf("dry run counts only the old finished thread: %d", n)
+	}
+	if len(s.Threads(Filter{})) != 3 {
+		t.Fatal("a dry run removes nothing")
+	}
+	if n := s.DeleteThreads([]string{waitThread, "nope"}); n != 0 {
+		t.Fatalf("a thread an Agent waits on is never deleted: %d", n)
+	}
+	// The waiting thread is 40 days old too but pending, so a purge spares it.
+	if n := s.Purge(30*24*time.Hour, false); n != 1 {
+		t.Fatalf("purge: %d", n)
+	}
+	if _, ok := s.Thread(oldThread); ok {
+		t.Fatal("old finished thread must be gone")
+	}
+	if _, ok := s.ThreadOfAsk(oldAsk); ok {
+		t.Fatal("its asks must leave the index too")
+	}
+	if n := s.DeleteThreads([]string{freshThread}); n != 1 {
+		t.Fatalf("delete: %d", n)
+	}
+
+	if err := s.SetRetentionDays(-1); err == nil {
+		t.Fatal("a negative retention is invalid")
+	}
+	mkOld := func() string {
+		a, th, _ := s.Create(CreateInput{CallerInfo: "Zed", ProjectRoot: mkRepo(t), Questions: q1("q?")})
+		_ = s.Resolve(a.ID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil)
+		return th.ID
+	}
+	old := mkOld()
+	*now = now.Add(100 * 24 * time.Hour)
+	_, livePending, _ := s.Create(CreateInput{CallerInfo: "Aider", ProjectRoot: mkRepo(t), Questions: q1("q?")})
+	if s.Tick(); len(s.Threads(Filter{})) != 3 {
+		t.Fatal("retention 0 keeps everything")
+	}
+	if err := s.SetRetentionDays(90); err != nil {
+		t.Fatal(err)
+	}
+	s.Tick()
+	if _, ok := s.Thread(old); ok {
+		t.Fatal("retention must remove a finished thread past the window")
+	}
+	if _, ok := s.Thread(livePending.ID); !ok {
+		t.Fatal("retention never removes a thread with a pending ask")
+	}
+}
+
+func TestSearchReadsTitlesQuestionsAndAnswers(t *testing.T) {
+	s, _ := clockStore(t)
+	a, th, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: mkRepo(t), Description: "Migrating the BILLING tables", Questions: q1("Which index?")})
+	_ = s.Resolve(a.ID, map[string]Answer{"a": {Custom: "use the composite one"}}, nil)
+	s.Create(CreateInput{CallerInfo: "Claude Code", ProjectRoot: mkRepo(t), Questions: q1("Unrelated?")})
+	for q, want := range map[string]int{"billing": 1, "composite": 1, "which index": 1, "unrelated": 1, "zzz": 0, " ": 0} {
+		if got := s.Search(q); len(got) != want || (want == 1 && q != "unrelated" && got[0] != th.ID) {
+			t.Errorf("search %q: %v", q, got)
+		}
+	}
+}

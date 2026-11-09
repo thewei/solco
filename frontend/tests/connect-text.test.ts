@@ -12,6 +12,7 @@ test("the prompt asks for a blocking, long-lived call with the start/wait fallba
   expect(p).toContain("interactive_feedback_start");
   expect(p).toContain("interactive_feedback_wait");
   expect(p).toContain(`tool_timeout_sec = ${TOOL_TIMEOUT_SEC}`);
+  expect(p).toContain("also pass task");
 });
 
 test("Codex gets a long tool timeout, since its default of 60 s cuts every question", () => {

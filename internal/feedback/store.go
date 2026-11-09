@@ -49,8 +49,10 @@ var (
 )
 
 type persisted struct {
-	Version int       `json:"version"`
-	Threads []*Thread `json:"threads"`
+	Version int `json:"version"`
+	// RetentionDays: finished threads older than this many days are removed (0 = keep forever).
+	RetentionDays int       `json:"retentionDays,omitempty"`
+	Threads       []*Thread `json:"threads"`
 }
 
 // Store owns every Thread and Ask.
@@ -58,11 +60,13 @@ type Store struct {
 	mu      sync.Mutex
 	path    string
 	threads []*Thread
-	byAsk   map[string]*Thread
-	atts    map[string][]Attachment
-	subs    map[int]chan Event
-	nextSub int
-	now     func() time.Time
+	// retentionDays is the user's keep-for setting (0 = forever); Tick applies it.
+	retentionDays int
+	byAsk         map[string]*Thread
+	atts          map[string][]Attachment
+	subs          map[int]chan Event
+	nextSub       int
+	now           func() time.Time
 }
 
 // NewMemory returns a Store that never touches the disk.
@@ -91,6 +95,7 @@ func Open(dir string) (*Store, error) {
 		slog.Warn("feedback: store unreadable, started empty", "error", err)
 		return s, nil
 	}
+	s.retentionDays = p.RetentionDays
 	for _, t := range p.Threads {
 		s.threads = append(s.threads, t)
 		for _, a := range t.Asks {
@@ -104,7 +109,7 @@ func (s *Store) saveLocked() {
 	if s.path == "" {
 		return
 	}
-	b, err := json.Marshal(persisted{Version: 1, Threads: s.threads})
+	b, err := json.Marshal(persisted{Version: 1, RetentionDays: s.retentionDays, Threads: s.threads})
 	if err != nil {
 		slog.Warn("feedback: encode failed", "error", err)
 		return
@@ -211,6 +216,9 @@ func (s *Store) Create(in CreateInput) (Ask, ThreadSummary, error) {
 		Description: clipBytes(in.Description, maxDescription), Questions: qs, TimeoutMs: clampTimeout(in.TimeoutMs),
 	}
 	t := s.assignLocked(in, nowMs)
+	if t.Task == "" {
+		t.Task = clipBytes(strings.TrimSpace(in.Task), maxDescription)
+	}
 	a.ThreadID = t.ID
 	t.Asks = append(t.Asks, a)
 	t.LastAt = nowMs
@@ -514,6 +522,12 @@ func (s *Store) Tick() int {
 			}
 		}
 	}
+	if s.retentionDays > 0 {
+		cutoff := s.now().Add(-time.Duration(s.retentionDays) * 24 * time.Hour).UnixMilli()
+		if gone := s.removeFinishedLocked(cutoff, false); gone > 0 {
+			n++
+		}
+	}
 	if n > 0 {
 		s.saveLocked()
 	}
@@ -709,4 +723,123 @@ func (s *Store) Recall(project, query string, limit int) []RecallItem {
 		out = out[:limit]
 	}
 	return out
+}
+
+// removeThreadLocked drops one thread and what hangs off its Asks.
+func (s *Store) removeThreadLocked(t *Thread) {
+	for _, a := range t.Asks {
+		delete(s.byAsk, a.ID)
+		delete(s.atts, a.ID)
+	}
+	for i, x := range s.threads {
+		if x == t {
+			s.threads = append(s.threads[:i], s.threads[i+1:]...)
+			return
+		}
+	}
+}
+
+// removeFinishedLocked counts (dryRun) or removes the threads with no pending Ask whose last activity is before cutoffMs.
+func (s *Store) removeFinishedLocked(cutoffMs int64, dryRun bool) int {
+	var doomed []*Thread
+	for _, t := range s.threads {
+		if pendingCount(t) == 0 && t.LastAt < cutoffMs {
+			doomed = append(doomed, t)
+		}
+	}
+	if !dryRun {
+		for _, t := range doomed {
+			s.removeThreadLocked(t)
+		}
+	}
+	return len(doomed)
+}
+
+// DeleteThreads removes the named threads that have no pending Ask and reports how many went; a thread an Agent is
+// still waiting on is never deleted.
+func (s *Store) DeleteThreads(ids []string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	var doomed []*Thread
+	for _, t := range s.threads {
+		if want[t.ID] && pendingCount(t) == 0 {
+			doomed = append(doomed, t)
+		}
+	}
+	for _, t := range doomed {
+		s.removeThreadLocked(t)
+	}
+	if len(doomed) > 0 {
+		s.saveLocked()
+	}
+	return len(doomed)
+}
+
+// Purge removes (or, with dryRun, only counts) the finished threads idle for longer than olderThan.
+func (s *Store) Purge(olderThan time.Duration, dryRun bool) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.removeFinishedLocked(s.now().Add(-olderThan).UnixMilli(), dryRun)
+	if n > 0 && !dryRun {
+		s.saveLocked()
+	}
+	return n
+}
+
+// RetentionDays is the keep-for setting (0 = forever).
+func (s *Store) RetentionDays() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.retentionDays
+}
+
+// SetRetentionDays sets how long finished threads are kept (0 = forever, at most ten years).
+func (s *Store) SetRetentionDays(days int) error {
+	if days < 0 || days > 3650 {
+		return fmt.Errorf("%w: retention days", ErrInvalid)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.retentionDays = days
+	s.saveLocked()
+	return nil
+}
+
+// Search returns the ids of the threads whose title, project, branch, Agent, task, descriptions, questions or answers
+// contain q (case-insensitive).
+func (s *Store) Search(q string) []string {
+	q = strings.ToLower(strings.TrimSpace(q))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := []string{}
+	if q == "" {
+		return ids
+	}
+	has := func(v string) bool { return v != "" && strings.Contains(strings.ToLower(v), q) }
+	for _, t := range s.threads {
+		hit := has(t.Title) || has(t.Project) || has(t.Branch) || has(t.Client) || has(t.Task)
+		for _, a := range t.Asks {
+			if hit {
+				break
+			}
+			hit = has(a.Description)
+			for _, qu := range a.Questions {
+				hit = hit || has(qu.Text)
+			}
+			for _, an := range a.Answers {
+				hit = hit || has(an.Custom)
+				for _, sel := range an.Selected {
+					hit = hit || has(sel)
+				}
+			}
+		}
+		if hit {
+			ids = append(ids, t.ID)
+		}
+	}
+	return ids
 }

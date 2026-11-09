@@ -30,6 +30,11 @@ type fakeFeedback struct {
 	ended     string
 	events    chan feedback.Event
 	streamErr chan struct{}
+	deleted   []string
+	purgeDays int
+	purgeDry  bool
+	searched  string
+	retention int
 }
 
 func (f *fakeFeedback) Threads(context.Context, bool, string) ([]feedback.ThreadSummary, error) {
@@ -64,6 +69,37 @@ func (f *fakeFeedback) End(_ context.Context, id string) error {
 	return f.err
 }
 
+// The management side: fakeFeedback is a feedback.Manager.
+func (f *fakeFeedback) DeleteThreads(_ context.Context, ids []string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleted = ids
+	return len(ids), f.err
+}
+
+func (f *fakeFeedback) Purge(_ context.Context, days int, dry bool) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.purgeDays, f.purgeDry = days, dry
+	return 3, f.err
+}
+
+func (f *fakeFeedback) Search(_ context.Context, q string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.searched = q
+	return []string{"t_1"}, nil
+}
+
+func (f *fakeFeedback) Retention(context.Context) (int, error) { return f.retention, nil }
+
+func (f *fakeFeedback) SetRetention(_ context.Context, days int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.retention = days
+	return f.err
+}
+
 func (f *fakeFeedback) Stream(ctx context.Context, fn func(feedback.Event)) error {
 	for {
 		select {
@@ -93,7 +129,7 @@ func sampleFeedback() *fakeFeedback {
 	return &fakeFeedback{
 		events:  make(chan feedback.Event, 4),
 		threads: []feedback.ThreadSummary{{ID: "t_1", Project: "solco", Branch: "main", Client: "Claude Code", Title: "solco · Claude Code", LastAt: 1786042800000, Waiting: 1, AskCount: 2, Preview: "Which database should the service use?", LastState: "pending"}},
-		detail:  feedback.Thread{ID: "t_1", ProjectKey: "/Users/me/solco", ProjectRoot: "/Users/me/solco", Project: "solco", Branch: "main", Client: "Claude Code", CallerInfo: "claude-code 2.1", Title: "solco · Claude Code", CreatedAt: 1786039200000, LastAt: 1786042800000, Waiting: 1, Asks: []*feedback.Ask{done, ask}},
+		detail:  feedback.Thread{ID: "t_1", ProjectKey: "/Users/me/solco", ProjectRoot: "/Users/me/solco", Project: "solco", Branch: "main", Client: "Claude Code", CallerInfo: "claude-code 2.1", Title: "solco · Claude Code", Task: "Move the service to a managed database without downtime.", CreatedAt: 1786039200000, LastAt: 1786042800000, Waiting: 1, Asks: []*feedback.Ask{done, ask}},
 	}
 }
 
@@ -233,5 +269,45 @@ func TestFeedbackFrameWordsAreBounded(t *testing.T) {
 	}
 	if clip("short", feedbackPreviewMax) != "short" {
 		t.Fatal("a short text must pass unchanged")
+	}
+}
+
+func TestFeedbackManagementForwardsAndSearches(t *testing.T) {
+	h, f := feedbackHarness(t)
+	f.retention = 90
+	var snap feedback.Snapshot
+	if err := json.Unmarshal(bodyOf(t, h.get("/api/v3/feedback?q=database", h.token, nil)), &snap); err != nil || f.searched != "database" || snap.RetentionDays != 90 {
+		t.Fatalf("search: %v %q %+v", err, f.searched, snap)
+	}
+	if code, body := h.send("POST", "/api/v3/feedback/threads/delete", h.token, `{"ids":["t_1","t_2"]}`); code != http.StatusOK || len(f.deleted) != 2 || !strings.Contains(string(body), `"deleted":2`) {
+		t.Fatalf("delete: %d %s %v", code, body, f.deleted)
+	}
+	if code, body := h.send("POST", "/api/v3/feedback/threads/cleanup", h.token, `{"olderThanDays":30,"dryRun":true}`); code != http.StatusOK || f.purgeDays != 30 || !f.purgeDry || !strings.Contains(string(body), `"matched":3`) || !strings.Contains(string(body), `"deleted":0`) {
+		t.Fatalf("cleanup dry run: %d %s", code, body)
+	}
+	if code, body := h.send("POST", "/api/v3/feedback/threads/cleanup", h.token, `{"olderThanDays":30}`); code != http.StatusOK || f.purgeDry || !strings.Contains(string(body), `"deleted":3`) {
+		t.Fatalf("cleanup: %d %s", code, body)
+	}
+	if code, _ := h.send("POST", "/api/v3/feedback/retention", h.token, `{"days":0}`); code != http.StatusOK || f.retention != 0 {
+		t.Fatalf("retention 0 means forever and must be accepted: %d", code)
+	}
+	for path, bad := range map[string]string{
+		"/api/v3/feedback/threads/delete":  `{"ids":[]}`,
+		"/api/v3/feedback/threads/cleanup": `{"olderThanDays":0}`,
+		"/api/v3/feedback/retention":       `{}`,
+	} {
+		if code, _ := h.send("POST", path, h.token, bad); code != http.StatusBadRequest {
+			t.Errorf("%s %s: %d", path, bad, code)
+		}
+		if code, _ := h.send("POST", path, "", bad); code != http.StatusUnauthorized {
+			t.Errorf("%s needs auth: %d", path, code)
+		}
+	}
+	var boot struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	_ = json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&boot)
+	if !boot.Capabilities["feedbackManage"] {
+		t.Fatal("a source that can manage advertises feedbackManage")
 	}
 }

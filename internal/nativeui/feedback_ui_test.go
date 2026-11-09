@@ -122,7 +122,7 @@ func TestFeedbackBridgeReadsAnswersAndDeliversFocusOnce(t *testing.T) {
 	b := NewFeedbackBridge(s)
 	ctx := context.Background()
 
-	view, err := b.Snapshot(ctx, "")
+	view, err := b.Snapshot(ctx, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,18 +131,18 @@ func TestFeedbackBridgeReadsAnswersAndDeliversFocusOnce(t *testing.T) {
 	}
 
 	s.openFeedback(feedbackFocus{Thread: threadID, Ask: askID})
-	view, err = b.Snapshot(ctx, "")
+	view, err = b.Snapshot(ctx, "", "")
 	if err != nil || view.Focus == nil || view.Focus.Ask != askID || view.Selected != threadID || view.Detail == nil || len(view.Detail.Asks) != 1 {
 		t.Fatalf("focused view = %+v, %v", view, err)
 	}
-	if again, _ := b.Snapshot(ctx, threadID); again.Focus != nil {
+	if again, _ := b.Snapshot(ctx, threadID, ""); again.Focus != nil {
 		t.Error("the landing was delivered twice")
 	}
 
 	if err := b.Answer(ctx, askID, map[string]feedback.Answer{"q1": {Selected: []string{"yes"}}}, nil); err != nil {
 		t.Fatal(err)
 	}
-	view, _ = b.Snapshot(ctx, threadID)
+	view, _ = b.Snapshot(ctx, threadID, "")
 	if view.Waiting != 0 || view.Detail.Asks[0].State != feedback.StateAnswered {
 		t.Fatalf("after answering: %+v", view)
 	}
@@ -150,8 +150,34 @@ func TestFeedbackBridgeReadsAnswersAndDeliversFocusOnce(t *testing.T) {
 		t.Error("ending an answered Ask succeeded")
 	}
 	// A thread the broker no longer has is not an error: the page falls back to the list.
-	if view, err := b.Snapshot(ctx, "th_gone"); err != nil || view.Detail != nil || view.Selected != "" {
+	if view, err := b.Snapshot(ctx, "th_gone", ""); err != nil || view.Detail != nil || view.Selected != "" {
 		t.Errorf("gone thread: %+v, %v", view, err)
+	}
+}
+
+func TestFeedbackBridgeManagesThreadsAndSearches(t *testing.T) {
+	s, client := feedbackShell(t)
+	askID, threadID := newAsk(t, client, t.TempDir())
+	b := NewFeedbackBridge(s)
+	ctx := context.Background()
+
+	if n, err := b.DeleteThreads(ctx, []string{threadID}); err != nil || n != 0 {
+		t.Fatalf("a waiting thread was deleted: %d, %v", n, err)
+	}
+	if err := b.Answer(ctx, askID, map[string]feedback.Answer{"q1": {Selected: []string{"yes"}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if view, err := b.Snapshot(ctx, "", "Keep it"); err != nil || len(view.Threads) != 1 || !view.CanManage {
+		t.Fatalf("search by question: %+v, %v", view, err)
+	}
+	if view, _ := b.Snapshot(ctx, "", "zzz-no-match"); len(view.Threads) != 0 {
+		t.Fatalf("search matched nothing yet listed %d", len(view.Threads))
+	}
+	if n, err := b.Cleanup(ctx, 30, true); err != nil || n != 0 {
+		t.Fatalf("a fresh thread counted as old: %d, %v", n, err)
+	}
+	if n, err := b.DeleteThreads(ctx, []string{threadID}); err != nil || n != 1 {
+		t.Fatalf("delete finished thread: %d, %v", n, err)
 	}
 }
 
@@ -178,7 +204,7 @@ func TestFeedbackBridgeOpenProjectUsesTheBrokersFolder(t *testing.T) {
 
 func TestFeedbackBridgeSnapshotWithNoBrokerIsOfflineNotAnError(t *testing.T) {
 	s := NewShell(WithFeedback(t.TempDir()))
-	view, err := NewFeedbackBridge(s).Snapshot(context.Background(), "")
+	view, err := NewFeedbackBridge(s).Snapshot(context.Background(), "", "")
 	if err != nil || view.Online {
 		t.Fatalf("offline view = %+v, %v", view, err)
 	}

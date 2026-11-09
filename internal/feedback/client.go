@@ -149,7 +149,7 @@ func (c *Client) Create(ctx context.Context, in CreateInput) (askID, threadID st
 		ThreadID string `json:"threadId"`
 	}
 	err = c.do(ctx, http.MethodPost, "/v1/asks", createBody{ID: in.ID, CallerInfo: in.CallerInfo, Client: in.Client,
-		ClientVersion: in.ClientVersion, Description: in.Description, ProjectRoot: in.ProjectRoot, TaskID: in.TaskID,
+		ClientVersion: in.ClientVersion, Description: in.Description, Task: in.Task, ProjectRoot: in.ProjectRoot, TaskID: in.TaskID,
 		ThreadID: in.ThreadID, Questions: in.Questions, TimeoutMs: in.TimeoutMs}, &out)
 	return out.ID, out.ThreadID, err
 }
@@ -192,6 +192,47 @@ func (c *Client) Answer(ctx context.Context, askID string, answers map[string]An
 // End closes a pending Ask without an answer.
 func (c *Client) End(ctx context.Context, askID string) error {
 	return c.do(ctx, http.MethodPost, "/v1/inbox/asks/"+url.PathEscape(askID)+"/end", map[string]string{}, nil)
+}
+
+// DeleteThreads removes the named finished threads (a thread an Agent still waits on stays) and reports how many went.
+func (c *Client) DeleteThreads(ctx context.Context, ids []string) (int, error) {
+	var out struct {
+		Deleted int `json:"deleted"`
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/inbox/threads/delete", map[string][]string{"ids": ids}, &out)
+	return out.Deleted, err
+}
+
+// Purge counts (dryRun) or removes the finished threads idle for more than olderThanDays; it reports how many matched.
+func (c *Client) Purge(ctx context.Context, olderThanDays int, dryRun bool) (int, error) {
+	var out struct {
+		Matched int `json:"matched"`
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/inbox/threads/purge", map[string]any{"olderThanDays": olderThanDays, "dryRun": dryRun}, &out)
+	return out.Matched, err
+}
+
+// Search returns the ids of the threads whose text contains q.
+func (c *Client) Search(ctx context.Context, q string) ([]string, error) {
+	var out struct {
+		IDs []string `json:"ids"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/inbox/search?"+url.Values{"q": {q}}.Encode(), nil, &out)
+	return out.IDs, err
+}
+
+// Retention reads how many days finished threads are kept (0 = forever).
+func (c *Client) Retention(ctx context.Context) (int, error) {
+	var out struct {
+		Days int `json:"days"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/inbox/retention", nil, &out)
+	return out.Days, err
+}
+
+// SetRetention sets how many days finished threads are kept (0 = forever).
+func (c *Client) SetRetention(ctx context.Context, days int) error {
+	return c.do(ctx, http.MethodPut, "/v1/inbox/retention", map[string]int{"days": days}, nil)
 }
 
 // Abandon tells the broker the Agent stopped waiting; the Ask stays answerable as a late answer.

@@ -23,6 +23,7 @@
     "branch": "main",
     "client": "Claude Code",
     "title": "solco · Claude Code",
+    "task": "Move the service to a managed database without downtime.",
     "createdAt": 1786039200000,
     "lastAt": 1786042800000,
     "waiting": 1,

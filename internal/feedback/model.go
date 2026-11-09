@@ -76,10 +76,12 @@ type Thread struct {
 	Title         string `json:"title"`
 	ExplicitID    string `json:"explicitId,omitempty"`
 	TaskID        string `json:"taskId,omitempty"`
-	CreatedAt     int64  `json:"createdAt"`
-	LastAt        int64  `json:"lastAt"`
-	Waiting       int    `json:"waiting"` // computed: pending Asks
-	Asks          []*Ask `json:"asks,omitempty"`
+	// Task is the user's original request the Agent works on (Markdown), given with the thread's first ask.
+	Task      string `json:"task,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	LastAt    int64  `json:"lastAt"`
+	Waiting   int    `json:"waiting"` // computed: pending Asks
+	Asks      []*Ask `json:"asks,omitempty"`
 }
 
 // ThreadSummary is a Thread row without its Asks.
@@ -104,6 +106,7 @@ type CreateInput struct {
 	Client        string
 	ClientVersion string
 	Description   string
+	Task          string
 	ProjectRoot   string
 	TaskID        string
 	ThreadID      string

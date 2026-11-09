@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { feedback, type Answer, type Ask, type FeedbackView, type Question, type Thread, type ThreadSummary } from "../mygo";
 import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
+import { TidyDialog } from "./Tidy";
 import "./feedback.css";
 
 /**
@@ -28,16 +29,18 @@ const isPhone = document.documentElement.dataset.host === "phone";
 
 type ProjectCount = { name: string; count: number; waiting: number };
 
-function useFeedback(selected: string) {
+function useFeedback(selected: string, query: string) {
   const [view, setView] = useState<FeedbackView | null>(null);
   const [error, setError] = useState("");
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const queryRef = useRef(query);
+  queryRef.current = query;
   const [focus, setFocus] = useState<{ thread: string; ask: string; n: number } | null>(null);
   const seq = useRef(0);
   const pull = useCallback(() => {
     feedback
-      .snapshot(selectedRef.current)
+      .snapshot(selectedRef.current, queryRef.current)
       .then((v) => {
         setView(v);
         setError("");
@@ -54,11 +57,84 @@ function useFeedback(selected: string) {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", show);
     };
-  }, [pull]);
+  }, [pull, query]);
   useEffect(() => {
     if (view?.theme) document.documentElement.dataset.theme = view.theme;
   }, [view?.theme]);
   return { view, error, setError, pull, focus };
+}
+
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = window.setTimeout(() => setV(value), ms);
+    return () => window.clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+/** An armed two-step button: the first click arms it for a few seconds, the second one acts. */
+function useArmed(): [boolean, () => void, () => void] {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = window.setTimeout(() => setArmed(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [armed]);
+  return [armed, () => setArmed(true), () => setArmed(false)];
+}
+
+function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement("textarea");
+    ta.className = "fb-clip";
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    if (ok) resolve();
+    else reject(new Error("copy failed"));
+  });
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      className="fb-copy"
+      aria-label={label}
+      title={label}
+      onClick={() =>
+        copyText(text)
+          .then(() => {
+            setDone(true);
+            window.setTimeout(() => setDone(false), 1400);
+          })
+          .catch(() => {})
+      }
+    >
+      <Icon name={done ? "check" : "copy"} size={14} />
+    </button>
+  );
+}
+
+/** A text area that grows with what is typed up to its CSS max-height, then scrolls inside. */
+function AutoTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+  }, [props.value]);
+  return <textarea ref={ref} {...props} />;
+}
+
+/** "just now" / "12 min" / "2 h 5 min": how long an ask has waited. */
+function waited(ms: number): string {
+  return ms < 60_000 ? "just now" : span(ms);
 }
 
 function msg(e: unknown): string {
@@ -103,6 +179,9 @@ function took(ask: Ask): string {
   const s = Math.max(1, Math.round((ask.resolvedAt - ask.createdAt) / 1000));
   return s < 90 ? `${s} s` : span(ask.resolvedAt - ask.createdAt);
 }
+function askText(ask: Ask): string {
+  return [ask.description ?? "", ...ask.questions.map((q) => q.text)].filter(Boolean).join("\n\n");
+}
 function answerText(a?: Answer): string {
   if (!a) return "";
   return [...(a.selected ?? []), a.custom ?? ""].filter(Boolean).join(", ");
@@ -121,7 +200,14 @@ export function FeedbackPage() {
   const [screen, setScreen] = useState<"list" | "thread">("list");
   const [connect, setConnect] = useState(false);
   const narrow = useNarrow();
-  const { view, error, setError, pull, focus } = useFeedback(selected);
+  const [search, setSearch] = useState("");
+  const query = useDebounced(search.trim(), 250);
+  const { view, error, setError, pull, focus } = useFeedback(selected, query);
+  const [tools, setTools] = useState(false);
+  const [tidy, setTidy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [delArmed, armDelete, disarmDelete] = useArmed();
   const [flash, setFlash] = useState<{ ask: string; n: number } | null>(null);
 
   // A notification or link landing: show that thread, in All (the asked-for item may be answered), and scroll to it.
@@ -163,6 +249,27 @@ export function FeedbackPage() {
     setScreen("thread");
     setFlash(null);
   };
+  const togglePick = (id: string) => {
+    disarmDelete();
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  };
+  const stopPicking = () => {
+    setPicking(false);
+    setPicked([]);
+    disarmDelete();
+  };
+  const removeThreads = (ids: string[]) =>
+    feedback
+      .deleteThreads(ids)
+      .then(() => {
+        if (ids.includes(selected)) {
+          setSelected("");
+          setScreen("list");
+        }
+        stopPicking();
+        pull();
+      })
+      .catch((e) => setError(msg(e)));
 
   if (!view) return <div className="fb-boot">{error && <p className="fb-note">{error}</p>}</div>;
 
@@ -178,14 +285,78 @@ export function FeedbackPage() {
           </button>
         </div>
       </div>
+      <div className="fb-find">
+        <label className="fb-search">
+          <Icon name="search" size={14} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search threads" aria-label="Search threads" enterKeyHint="search" />
+          {search && (
+            <button type="button" aria-label="Clear search" onClick={() => setSearch("")}>
+              <Icon name="x" size={12} />
+            </button>
+          )}
+        </label>
+        {view.canManage && (
+          <div className="fb-menuwrap">
+            <button className="fb-iconbtn" aria-label="Manage threads" aria-haspopup="menu" aria-expanded={tools} onClick={() => setTools((m) => !m)}>
+              <Icon name="dots" size={16} />
+            </button>
+            {tools && (
+              <div className="fb-menu" role="menu" onMouseLeave={() => setTools(false)}>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setTools(false);
+                    setPicking(true);
+                  }}
+                >
+                  Select threads
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setTools(false);
+                    setTidy(true);
+                  }}
+                >
+                  Clean up…
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       {(projects.length > 1 || project) && <ProjectFilter projects={projects} value={project} onChange={setProject} />}
       <div className="fb-rows">
         {visible.length === 0 && (
-          <p className="fb-quiet">{activeLens === "needs" ? "Nothing is waiting. Switch to All to read earlier threads." : "No threads yet."}</p>
+          <p className="fb-quiet">
+            {query
+              ? "No thread matches."
+              : activeLens === "needs"
+                ? "Nothing is waiting. Switch to All to read earlier threads."
+                : "No threads yet."}
+          </p>
         )}
-        <ThreadRows threads={visible} selected={narrow ? "" : selected} onOpen={open} />
+        <ThreadRows threads={visible} selected={narrow ? "" : selected} onOpen={open} picking={picking} picked={picked} onPick={togglePick} />
       </div>
-      {!isPhone && (
+      {picking && (
+        <div className="fb-foot fb-picking">
+          <span className="fb-hint">{picked.length ? `${picked.length} selected` : "Pick finished threads"}</span>
+          <button className="fb-ghost" onClick={() => setPicked(visible.filter((t) => t.waiting === 0).map((t) => t.id))}>
+            All
+          </button>
+          <button className="fb-ghost" onClick={stopPicking}>
+            Cancel
+          </button>
+          <button
+            className="fb-primary danger"
+            disabled={picked.length === 0}
+            onClick={() => (delArmed ? void removeThreads(picked) : armDelete())}
+          >
+            {delArmed ? `Delete ${picked.length}?` : "Delete"}
+          </button>
+        </div>
+      )}
+      {!isPhone && !picking && (
         <div className="fb-foot">
           <button className="fb-connect" onClick={() => setConnect(true)}>
             <Icon name="plus" size={14} />
@@ -202,6 +373,8 @@ export function FeedbackPage() {
       thread={current}
       online={view.online}
       canOpenGit={view.canOpenGit}
+      canManage={view.canManage}
+      onDelete={(id) => removeThreads([id])}
       flash={flash}
       onBack={narrow ? () => setScreen("list") : undefined}
       onChanged={pull}
@@ -236,6 +409,7 @@ export function FeedbackPage() {
         </div>
       )}
       {connect && <ConnectDialog bin={view.mcpBin ?? ""} onClose={() => setConnect(false)} />}
+      {tidy && <TidyDialog keep={view.retentionDays ?? 0} onClose={() => setTidy(false)} onChanged={pull} onError={setError} />}
     </div>
   );
 }
@@ -309,7 +483,15 @@ function ProjectFilter({ projects, value, onChange }: { projects: ProjectCount[]
   );
 }
 
-function ThreadRows({ threads, selected, onOpen }: { threads: ThreadSummary[]; selected: string; onOpen: (id: string) => void }) {
+function ThreadRows(props: {
+  threads: ThreadSummary[];
+  selected: string;
+  onOpen: (id: string) => void;
+  picking: boolean;
+  picked: string[];
+  onPick: (id: string) => void;
+}) {
+  const { threads, selected, onOpen, picking, picked, onPick } = props;
   let day = "";
   return (
     <>
@@ -320,13 +502,25 @@ function ThreadRows({ threads, selected, onOpen }: { threads: ThreadSummary[]; s
         return (
           <div key={t.id}>
             {head}
-            <button className={`fb-row${selected === t.id ? " on" : ""}`} onClick={() => onOpen(t.id)}>
-              <span className="fb-glyph">{glyphOf(t.client)}</span>
+            <button
+              className={`fb-row${selected === t.id && !picking ? " on" : ""}${t.waiting === 0 ? " done" : ""}`}
+              disabled={picking && t.waiting > 0}
+              title={picking && t.waiting > 0 ? "An agent is waiting on this thread" : undefined}
+              onClick={() => (picking ? onPick(t.id) : onOpen(t.id))}
+            >
+              {picking ? (
+                <span className={`fb-check${picked.includes(t.id) ? " on" : ""}`} aria-hidden>
+                  {picked.includes(t.id) && <Icon name="check" size={12} />}
+                </span>
+              ) : (
+                <span className="fb-glyph">{glyphOf(t.client)}</span>
+              )}
               <span className="fb-mid">
                 <span className="fb-l1">
                   <span className="fb-t">{(t.waiting > 0 && t.preview ? t.preview : t.title).replace(/`/g, "")}</span>
                   <span className="fb-time">{clock(t.lastAt).replace(/^.*, /, "")}</span>
                 </span>
+                {t.preview && t.waiting === 0 && <span className="fb-pv">{t.preview.replace(/`/g, "")}</span>}
                 <span className="fb-l2">
                   <span className="fb-s">
                     {t.project}
@@ -347,15 +541,19 @@ function ThreadView(props: {
   thread: Thread;
   online: boolean;
   canOpenGit: boolean;
+  canManage: boolean;
+  onDelete: (id: string) => void;
   flash: { ask: string; n: number } | null;
   onBack?: () => void;
   onChanged: () => void;
   onError: (m: string) => void;
 }) {
-  const { thread, online, canOpenGit, flash, onBack, onChanged, onError } = props;
+  const { thread, online, canOpenGit, canManage, onDelete, flash, onBack, onChanged, onError } = props;
   const asks = (thread.asks ?? []).filter((a): a is Ask => !!a);
   const scroller = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
+  const [away, setAway] = useState(false);
+  const [delArmed, armDelete] = useArmed();
   const lastPending = [...asks].reverse().find((a) => a.state === "pending")?.id ?? "";
 
   // Land on the asked-for item, else on the newest end of the timeline, once per thread / landing.
@@ -367,6 +565,13 @@ function ThreadView(props: {
     else el.scrollTop = el.scrollHeight;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.id, flash?.n]);
+
+  // "Back to latest": a long thread that was scrolled up by more than a screen.
+  const onScroll = () => {
+    const el = scroller.current;
+    if (el) setAway(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
+  };
+  const toLatest = () => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
 
   const openProject = (target: "git" | "finder") => {
     setMenu(false);
@@ -385,6 +590,11 @@ function ThreadView(props: {
             </button>
           )}
           <div className="fb-title">{thread.title}</div>
+          {canManage && thread.waiting === 0 && (
+            <button className={`fb-ghost fb-del${delArmed ? " armed" : ""}`} aria-label="Delete thread" onClick={() => (delArmed ? onDelete(thread.id) : armDelete())}>
+              {delArmed ? "Delete thread?" : <Icon name="trash" size={14} />}
+            </button>
+          )}
           {thread.projectRoot && (
             <div className="fb-menuwrap">
               <button className="fb-ghost" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}>
@@ -413,12 +623,21 @@ function ThreadView(props: {
               {thread.worktree ? ", worktree" : ""}
             </span>
           )}
-          {thread.client && <span className="fb-chip">{thread.client}</span>}
-          <span className="fb-chip">{asks.length} asks</span>
+          {thread.client && (
+            <span className="fb-chip">
+              {thread.client}
+              {thread.clientVersion ? ` ${thread.clientVersion}` : ""}
+            </span>
+          )}
+          <span className="fb-chip">{asks.length === 1 ? "1 ask" : `${asks.length} asks`}</span>
+        </div>
+        <div className="fb-when">
+          Started {clock(thread.createdAt)} · Last activity {clock(thread.lastAt)}
         </div>
       </header>
-      <div className="fb-scroll" ref={scroller}>
+      <div className="fb-scroll" ref={scroller} onScroll={onScroll}>
         <div className="fb-tl">
+          {thread.task && <TaskCard text={thread.task} />}
           {asks.map((ask, n) => {
             const prev = n ? asks[n - 1] : null;
             const gap = prev ? ask.createdAt - (prev.resolvedAt || prev.createdAt) : 0;
@@ -438,7 +657,38 @@ function ThreadView(props: {
           })}
         </div>
       </div>
+      {away && (
+        <button className="fb-jump" aria-label="Back to latest" onClick={toLatest}>
+          <Icon name="down" size={14} />
+        </button>
+      )}
     </section>
+  );
+}
+
+/** The user's original request, pinned above the conversation (the Agent sends it with the thread's first ask). */
+function TaskCard({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 420 || text.split("\n").length > 8;
+  return (
+    <div className="fb-it">
+      <div className={`fb-task${long && !open ? " clamp" : ""}`}>
+        <div className="fb-nh">
+          <span>
+            <b>Task</b>
+          </span>
+          <CopyButton text={text} label="Copy task" />
+        </div>
+        <div className="fb-desc">
+          <Markdown text={text} />
+        </div>
+        {long && (
+          <button className="fb-link" onClick={() => setOpen((o) => !o)}>
+            {open ? "Show less" : "Show more"}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -453,6 +703,7 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
         <span>
           <b>{who}</b> · {clock(ask.createdAt)}
         </span>
+        <CopyButton text={askText(ask)} label="Copy message" />
       </div>
       {ask.description && <div className="fb-desc"><Markdown text={ask.description} /></div>}
       {ask.state !== "pending" && ask.questions.map((q) => <div className="fb-qt" key={q.id}><Markdown text={q.text} /></div>)}
@@ -477,9 +728,16 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
               .join("\n")}
           </div>
           <small>
-            {ask.late ? "Late answer" : took(ask)}
+            {ask.late ? `Late answer after ${took(ask)}` : `Answered in ${took(ask)}`}
             {ask.late && !ask.lateDelivered ? ", reaches the agent with its next question" : ""}
             {ask.attachmentCount ? `, ${ask.attachmentCount} image${ask.attachmentCount > 1 ? "s" : ""}` : ""}
+            <CopyButton
+              text={ask.questions
+                .map((q) => answerText(ask.answers?.[q.id]))
+                .filter(Boolean)
+                .join("\n")}
+              label="Copy answer"
+            />
           </small>
         </div>
       );
@@ -502,6 +760,7 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
               </button>
             )}
           </div>
+          {(ask.resolvedAt ?? 0) > 0 && <small>After {took(ask)}</small>}
         </div>
       );
   }
@@ -614,8 +873,9 @@ function AnswerForm(props: {
       <div className="fb-nh">
         <span className="fb-glyph sm">{glyphOf(thread.client)}</span>
         <span>
-          <b>{thread.client || "Agent"}</b> · {clock(ask.createdAt)} · {lateMode ? "expired" : "waiting for you"}
+          <b>{thread.client || "Agent"}</b> · {clock(ask.createdAt)} · {lateMode ? "expired" : `waiting for you · ${waited(Date.now() - ask.createdAt)}`}
         </span>
+        <CopyButton text={askText(ask)} label="Copy message" />
       </div>
       {ask.description && <div className="fb-desc"><Markdown text={ask.description} /></div>}
       {ask.questions.map((q) => {
@@ -624,7 +884,7 @@ function AnswerForm(props: {
           <div key={q.id}>
             <div className="fb-qt"><Markdown text={q.text} /></div>
             {q.type === "text" ? (
-              <textarea
+              <AutoTextarea
                 aria-label={q.text}
                 placeholder={q.placeholder || "Type an answer"}
                 value={d.custom}

@@ -352,6 +352,13 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "feedback-answer-request.json", []byte(`{"answers":{"q1":{"selected":["SQLite"],"custom":"with WAL"},"q2":{"selected":[],"custom":"ship it"}}}`))
 	_, fbAck := h.send("POST", "/api/v3/feedback/asks/a_1/answer", h.token, `{"answers":{"q1":{"selected":["SQLite"]}}}`)
 	golden(t, "feedback-ack.json", fbAck)
+	golden(t, "feedback-delete-request.json", []byte(`{"ids":["t_1","t_2"]}`))
+	_, fbDeleted := h.send("POST", "/api/v3/feedback/threads/delete", h.token, `{"ids":["t_1","t_2"]}`)
+	golden(t, "feedback-delete-ack.json", fbDeleted)
+	golden(t, "feedback-cleanup-request.json", []byte(`{"olderThanDays":30,"dryRun":true}`))
+	_, fbCleanup := h.send("POST", "/api/v3/feedback/threads/cleanup", h.token, `{"olderThanDays":30,"dryRun":true}`)
+	golden(t, "feedback-cleanup-ack.json", fbCleanup)
+	golden(t, "feedback-retention-request.json", []byte(`{"days":90}`))
 	fb.err = feedback.ErrFinal
 	_, fbFinal := h.send("POST", "/api/v3/feedback/asks/a_0/end", h.token, "")
 	golden(t, "error-feedback-final.json", fbFinal)

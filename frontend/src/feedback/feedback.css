@@ -858,6 +858,238 @@
   line-height: 1.55;
 }
 
+/* ---- search, selection, management, task, jump ---- */
+
+.fb-find {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.fb-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: var(--r-row);
+  border: 1px solid var(--hair2);
+  color: var(--i3);
+}
+
+.fb-search:focus-within {
+  border-color: var(--hair3);
+}
+
+.fb-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--i1);
+  font: inherit;
+  font-size: 13px;
+}
+
+.fb-search input::placeholder {
+  color: var(--i4);
+}
+
+.fb-search button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--i3);
+}
+
+.fb-iconbtn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-row);
+  color: var(--i2);
+}
+
+.fb-iconbtn:hover {
+  background: var(--tint);
+  color: var(--i1);
+}
+
+.fb-find .fb-menu {
+  min-width: 150px;
+}
+
+.fb-pv {
+  color: var(--i3);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A thread nobody waits on has been dealt with: it steps back. */
+.fb-row.done .fb-t {
+  color: var(--i2);
+  font-weight: 400;
+}
+
+.fb-row.done .fb-glyph {
+  opacity: 0.7;
+}
+
+.fb-row:disabled {
+  opacity: 0.45;
+}
+
+.fb-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: 3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--hair3);
+  color: var(--accent-contrast);
+  flex: none;
+}
+
+.fb-check.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.fb-foot.fb-picking {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fb-primary.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.fb-del {
+  display: inline-flex;
+  align-items: center;
+}
+
+.fb-del.armed {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.fb-when {
+  margin-top: 6px;
+  color: var(--i3);
+  font-size: 12px;
+}
+
+.fb-task {
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--grouped);
+}
+
+.fb-task .fb-nh {
+  margin-bottom: 6px;
+}
+
+.fb-task.clamp .fb-desc {
+  max-height: 9.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+.fb-task .fb-desc {
+  margin-bottom: 4px;
+}
+
+.fb-copy {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border-radius: var(--r-row);
+  color: var(--i3);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.fb-it:hover .fb-copy,
+.fb-copy:focus-visible,
+.fb-form:hover .fb-copy {
+  opacity: 1;
+}
+
+.fb-copy:hover {
+  background: var(--tint);
+  color: var(--i1);
+}
+
+.fb-reply small {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fb-reply small .fb-copy {
+  margin-left: 4px;
+}
+
+.fb-clip {
+  position: fixed;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fb-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--hair2);
+  background: var(--panel);
+  color: var(--i1);
+  box-shadow: var(--float-shadow);
+  z-index: 3;
+}
+
+.fb-detail {
+  position: relative;
+}
+
+.fb-dl {
+  color: var(--i2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.fb-dsep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--hair);
+}
+
+/* The answer field grows with the text, then scrolls inside. */
+.fb textarea {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
 /* ======================================================================
    Phone density (the Chat's own block, chat.css "Phone density"): 16/24 reading text, a 24 px bubble, 44 px targets,
    the accent send button. Keyed on <html data-host="phone"> as every phone rule of the shared page (mobile.tsx).
@@ -966,4 +1198,43 @@ html[data-host="phone"] .fb-opt kbd {
   min-width: 24px;
   height: 24px;
   font-size: 12px;
+}
+html[data-host="phone"] .fb textarea {
+  max-height: 40vh;
+}
+html[data-host="phone"] .fb-copy {
+  opacity: 1;
+  width: 32px;
+  height: 32px;
+}
+html[data-host="phone"] .fb-iconbtn {
+  width: 40px;
+  height: 40px;
+}
+html[data-host="phone"] .fb-search input {
+  font-size: 16px;
+  padding: 9px 0;
+}
+html[data-host="phone"] .fb-pv {
+  font-size: 14px;
+}
+html[data-host="phone"] .fb-when {
+  font-size: 13px;
+}
+html[data-host="phone"] .fb-jump {
+  bottom: 22px;
+  width: 44px;
+  height: 44px;
+}
+html[data-host="phone"] .fb-check {
+  width: 26px;
+  height: 26px;
+}
+html[data-host="phone"] .fb-primary.danger,
+html[data-host="phone"] .fb-primary.danger:disabled {
+  background: var(--danger);
+  color: #fff;
+}
+html[data-host="phone"] .fb-primary.danger:disabled {
+  opacity: 0.35;
 }

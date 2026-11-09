@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 feedback_ui.go 的 feedbackState（broker 客户端与落点）、internal/feedback 的模型、solco_git_link.go 的 openInSolcoGit、script_actions.go 的 revealInFinder
- * [OUTPUT]: FeedbackBridge（`mygo.BindAs("feedback", …)`）——Snapshot（线程列表 + 选中线程的时间线 + 一次性落点 + MCPBin：随 App 的 solco-hostd 路径，供「Connect an Agent」）、Answer、End、OpenProject
+ * [OUTPUT]: FeedbackBridge（`mygo.BindAs("feedback", …)`）——Snapshot（线程列表[可按 query 搜索] + 选中线程的时间线 + 一次性落点 + MCPBin：随 App 的 solco-hostd 路径，供「Connect an Agent」 + CanManage/RetentionDays）、Answer、End、DeleteThreads、Cleanup（dryRun 先数后删）、SetRetention、OpenProject
  * [POS]: Feedback WebView 页（2026-11-09 决策）的唯一数据与命令口：全部读写走 broker 的回环 HTTP（线程/Ask 状态的唯一所有者在进程外），Solco 不缓存也不重算；broker 不在时返回 online=false 而不是错误；IO 在桥 goroutine 上，窗口线程只被借来读落点与发起 Solco Git 打开；日志不记问题、答案与路径
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -48,13 +48,19 @@ type FeedbackView struct {
 	// itself; "" outside an app bundle (a dev run), where the page shows the
 	// standard install path.
 	MCPBin string `json:"mcpBin,omitempty"`
+	// CanManage says the page may delete threads and set the keep-for window (always true on the desktop; the phone
+	// asks its Host's feedbackManage capability).
+	CanManage bool `json:"canManage"`
+	// RetentionDays is how long finished threads are kept (0 = forever).
+	RetentionDays int `json:"retentionDays,omitempty"`
 }
 
 // Snapshot reads the thread list and, for the thread the page is on, its
-// timeline. selected is client-local navigation; a pending Focus overrides it.
-func (b *FeedbackBridge) Snapshot(ctx context.Context, selected string) (FeedbackView, error) {
+// timeline. selected is client-local navigation; a pending Focus overrides it. query narrows the list to the threads
+// whose text contains it.
+func (b *FeedbackBridge) Snapshot(ctx context.Context, selected, query string) (FeedbackView, error) {
 	s := b.shell
-	view := FeedbackView{Threads: []feedback.ThreadSummary{}}
+	view := FeedbackView{Threads: []feedback.ThreadSummary{}, CanManage: true}
 	var client *feedback.Client
 	s.callOnWindow(func() {
 		view.Theme = s.chatBridgeTheme()
@@ -72,8 +78,9 @@ func (b *FeedbackBridge) Snapshot(ctx context.Context, selected string) (Feedbac
 	}
 	ctx, cancel := context.WithTimeout(ctx, feedbackCallTimeout)
 	defer cancel()
-	snap, err := feedback.ReadSnapshot(ctx, client, selected)
+	snap, err := feedback.ReadSnapshotQuery(ctx, client, selected, query)
 	view.Online, view.Threads, view.Waiting, view.Selected, view.Detail = snap.Online, snap.Threads, snap.Waiting, snap.Selected, snap.Detail
+	view.RetentionDays = snap.RetentionDays
 	return view, err
 }
 
@@ -111,6 +118,32 @@ func (b *FeedbackBridge) End(ctx context.Context, askID string) error {
 	return b.call(ctx, func(ctx context.Context, c *feedback.Client) error {
 		return c.End(ctx, askID)
 	})
+}
+
+// DeleteThreads removes the named finished threads (a thread an Agent still waits on stays) and reports how many went.
+func (b *FeedbackBridge) DeleteThreads(ctx context.Context, ids []string) (int, error) {
+	n := 0
+	err := b.call(ctx, func(ctx context.Context, c *feedback.Client) (err error) {
+		n, err = c.DeleteThreads(ctx, ids)
+		return err
+	})
+	return n, err
+}
+
+// Cleanup counts (dryRun) or removes the finished threads idle for more than olderThanDays; it returns how many
+// matched, so the dialog can say "Delete 12 threads" before it does.
+func (b *FeedbackBridge) Cleanup(ctx context.Context, olderThanDays int, dryRun bool) (int, error) {
+	n := 0
+	err := b.call(ctx, func(ctx context.Context, c *feedback.Client) (err error) {
+		n, err = c.Purge(ctx, olderThanDays, dryRun)
+		return err
+	})
+	return n, err
+}
+
+// SetRetention sets how many days finished threads are kept (0 = forever).
+func (b *FeedbackBridge) SetRetention(ctx context.Context, days int) error {
+	return b.call(ctx, func(ctx context.Context, c *feedback.Client) error { return c.SetRetention(ctx, days) })
 }
 
 // OpenProject hands a thread's project folder to Solco Git ("git") or shows

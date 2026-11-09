@@ -286,7 +286,9 @@
    "go": [
     "iconActions"
    ],
-   "chat": []
+   "chat": [
+    "dots"
+   ]
   },
   {
    "id": "act.open-external",
@@ -304,7 +306,9 @@
    "go": [
     "iconTrash"
    ],
-   "chat": []
+   "chat": [
+    "trash"
+   ]
   },
   {
    "id": "act.pin",
@@ -437,7 +441,9 @@
    "go": [
     "iconArrowDown"
    ],
-   "chat": []
+   "chat": [
+    "down"
+   ]
   },
   {
    "id": "arrow.left",

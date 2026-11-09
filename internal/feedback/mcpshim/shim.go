@@ -32,7 +32,7 @@ const (
 
 // instructions is the usage rule sent in initialize; clients put it in the Agent's system prompt, so the blocking
 // contract holds even when the Agent never reads a tool description.
-const instructions = `Solco Feedback is the user's question inbox. To ask the user anything, call interactive_feedback and keep that ONE call open until it returns: the user may need minutes or hours, so do not poll, do not shorten timeout_seconds, do not give up and never continue on an assumed answer (only status "answered" is an answer). Always pass description (Markdown: what you did, what you ask) and project_root. If your client cuts the call short, ask again with interactive_feedback_start and loop interactive_feedback_wait. Use recall_decisions before asking something the user may already have decided.`
+const instructions = `Solco Feedback is the user's question inbox. To ask the user anything, call interactive_feedback and keep that ONE call open until it returns: the user may need minutes or hours, so do not poll, do not shorten timeout_seconds, do not give up and never continue on an assumed answer (only status "answered" is an answer). Always pass description (Markdown: what you did so far and what you ask) and project_root; with the first question of a task also pass task (the user's original request), which Solco pins at the top of the thread. If your client cuts the call short, ask again with interactive_feedback_start and loop interactive_feedback_wait. Use recall_decisions before asking something the user may already have decided.`
 
 var closedWorld = false
 
@@ -54,6 +54,7 @@ type questionArg struct {
 type askArgs struct {
 	CallerInfo     string        `json:"caller_info" jsonschema:"Who is asking, e.g. 'Claude Code - main task' or 'Cursor Agent'"`
 	Description    string        `json:"description,omitempty" jsonschema:"Markdown context shown above the questions. Summarize what you did and what the question is about."`
+	Task           string        `json:"task,omitempty" jsonschema:"Markdown. The task the user gave you, in their words or a faithful summary (goal, constraints, files named). Pass it with the FIRST question of a task; Solco pins it at the top of the thread so the user sees task, progress and answers together."`
 	Questions      []questionArg `json:"questions" jsonschema:"1 to 20 questions to present"`
 	TimeoutSeconds float64       `json:"timeout_seconds,omitempty" jsonschema:"Wait time in seconds. Default 14400 (4h), max 86400 (24h). Do not override unless the user asked for it."`
 	TaskID         string        `json:"task_id,omitempty" jsonschema:"Optional. A stable id for the task; asks with the same task_id and project share one thread in Solco."`
@@ -88,7 +89,7 @@ func NewServer(c *feedback.Client, version string) *mcp.Server {
 
 The preferred way to ask the user anything: it creates a question, notifies the user (Solco, phone, Feishu) and waits for the answer, sending keep-alive progress every 10 seconds. The user is a person who may need minutes or hours to notice, read and answer, so keep this ONE call open until it returns: do not poll, do not shorten timeout_seconds (the default is 4 hours on purpose), do not give up, and never carry on with an assumed answer. Only status "answered" is an answer; on "timeout" ask again unless "ended_by_user" is true.
 
-Always pass "description" (what you did, what the question is about) and "project_root". Use caller_info to identify yourself. Questions from the same project and client are filed in one thread automatically; pass thread_id or task_id to group them yourself.
+Always pass "description" (what you have done so far, what the question is about) and "project_root". With the FIRST question of a task also pass "task": the user's original request in their words (or a faithful summary), which Solco pins at the top of the thread so the user sees the task, your progress and every answer together. Use caller_info to identify yourself. Questions from the same project and client are filed in one thread automatically; pass thread_id or task_id to group them yourself.
 
 If your client cuts the call short (a tool timeout such as Codex's default 60 s tool_timeout_sec, or a cancellation), that is not an answer: ask again with interactive_feedback_start and loop interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account.`,
 		Annotations: askNotes("Ask the user (blocking)"),
@@ -177,7 +178,7 @@ func (s *Server) create(ctx context.Context, req *mcp.CallToolRequest, a askArgs
 	}
 	client, cv := clientName(req)
 	id, _, err = s.c.Create(ctx, feedback.CreateInput{
-		CallerInfo: a.CallerInfo, Client: client, ClientVersion: cv, Description: a.Description,
+		CallerInfo: a.CallerInfo, Client: client, ClientVersion: cv, Description: a.Description, Task: a.Task,
 		ProjectRoot: a.ProjectRoot, TaskID: a.TaskID, ThreadID: a.ThreadID,
 		Questions: toQuestions(a.Questions), TimeoutMs: timeout.Milliseconds(),
 	})

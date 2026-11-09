@@ -74,6 +74,44 @@ func NewHandler(b *Broker) http.Handler {
 	mux.HandleFunc("POST /v1/inbox/asks/{id}/abandon", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, b.Store.Abandon(r.PathValue("id")))
 	})
+	mux.HandleFunc("POST /v1/inbox/threads/delete", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			IDs []string `json:"ids"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in) != nil || len(in.IDs) == 0 {
+			writeJSON(w, 400, map[string]string{"error": "ids required"})
+			return
+		}
+		writeJSON(w, 200, map[string]int{"deleted": b.Store.DeleteThreads(in.IDs)})
+	})
+	mux.HandleFunc("POST /v1/inbox/threads/purge", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			OlderThanDays int  `json:"olderThanDays"`
+			DryRun        bool `json:"dryRun"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in) != nil || in.OlderThanDays < 1 || in.OlderThanDays > 3650 {
+			writeJSON(w, 400, map[string]string{"error": "olderThanDays must be 1..3650"})
+			return
+		}
+		n := b.Store.Purge(time.Duration(in.OlderThanDays)*24*time.Hour, in.DryRun)
+		writeJSON(w, 200, map[string]int{"matched": n})
+	})
+	mux.HandleFunc("GET /v1/inbox/search", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"ids": b.Store.Search(r.URL.Query().Get("q"))})
+	})
+	mux.HandleFunc("GET /v1/inbox/retention", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]int{"days": b.Store.RetentionDays()})
+	})
+	mux.HandleFunc("PUT /v1/inbox/retention", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Days int `json:"days"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&in) != nil {
+			writeJSON(w, 400, map[string]string{"error": "days required"})
+			return
+		}
+		replyErr(w, b.Store.SetRetentionDays(in.Days))
+	})
 	mux.HandleFunc("GET /v1/inbox/stream", b.handleStream)
 	return b.guard(mux)
 }
@@ -137,6 +175,7 @@ type createBody struct {
 	Client        string     `json:"client"`
 	ClientVersion string     `json:"clientVersion"`
 	Description   string     `json:"description"`
+	Task          string     `json:"task,omitempty"`
 	ProjectRoot   string     `json:"projectRoot"`
 	TaskID        string     `json:"taskId"`
 	ThreadID      string     `json:"threadId"`
@@ -151,7 +190,7 @@ func (b *Broker) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ask, thread, err := b.Store.Create(CreateInput{ID: body.ID, CallerInfo: body.CallerInfo, Client: body.Client,
-		ClientVersion: body.ClientVersion, Description: body.Description, ProjectRoot: body.ProjectRoot, TaskID: body.TaskID,
+		ClientVersion: body.ClientVersion, Description: body.Description, Task: body.Task, ProjectRoot: body.ProjectRoot, TaskID: body.TaskID,
 		ThreadID: body.ThreadID, Questions: body.Questions, TimeoutMs: body.TimeoutMs})
 	if err != nil {
 		replyErr(w, err)
