@@ -1,6 +1,9 @@
 {
   "askId": "a_1",
+  "client": "Claude Code",
   "kind": "ask",
+  "preview": "Which database should the service use?",
+  "project": "solco",
   "t": "feedback",
   "threadId": "t_1",
   "waiting": 1

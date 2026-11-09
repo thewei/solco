@@ -197,18 +197,19 @@ func TestFeedbackCapabilityFollowsTheSource(t *testing.T) {
 	}
 }
 
-// A broker event becomes one events frame holding ids and the waiting count, never the question.
-func TestFeedbackEventBecomesAContentFreeFrame(t *testing.T) {
+// A broker event becomes one events frame: ids, the waiting count and the notification's words (project, Agent,
+// the question's first line) — never the description, an answer or a path.
+func TestFeedbackEventBecomesAFrameWithTheNotificationWords(t *testing.T) {
 	h, f := feedbackHarness(t)
 	q, unsubscribe := h.srv.subscribeNotices()
 	defer unsubscribe()
 	h.srv.startFeedbackWatch()
 	defer h.srv.stopFeedbackWatch()
-	f.events <- feedback.Event{Type: "ask_created", ThreadID: "t_1", AskID: "a_1", Project: "solco", Title: "secret title", Preview: "Which database should the service use?"}
+	f.events <- feedback.Event{Type: "ask_created", ThreadID: "t_1", AskID: "a_1", Project: "solco", Client: "Claude Code", Title: "solco · Claude Code", Preview: "Which database should the service use?"}
 	select {
 	case frame := <-q:
 		raw, _ := json.Marshal(frame)
-		if string(raw) != `{"askId":"a_1","kind":"ask","t":"feedback","threadId":"t_1","waiting":1}` {
+		if string(raw) != `{"askId":"a_1","client":"Claude Code","kind":"ask","preview":"Which database should the service use?","project":"solco","t":"feedback","threadId":"t_1","waiting":1}` {
 			t.Fatalf("frame %s", raw)
 		}
 	case <-time.After(3 * time.Second):
@@ -217,10 +218,20 @@ func TestFeedbackEventBecomesAContentFreeFrame(t *testing.T) {
 	f.events <- feedback.Event{Type: "ask_resolved", ThreadID: "t_1", AskID: "a_1"}
 	select {
 	case frame := <-q:
-		if frame["kind"] != "resolved" {
+		if frame["kind"] != "resolved" || frame["preview"] != nil || frame["project"] != nil {
 			t.Fatalf("frame %v", frame)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("no resolved frame")
+	}
+}
+
+func TestFeedbackFrameWordsAreBounded(t *testing.T) {
+	long := strings.Repeat("长", 500)
+	if got := []rune(clip(long, feedbackPreviewMax)); len(got) != feedbackPreviewMax || got[len(got)-1] != '…' {
+		t.Fatalf("clip: %d runes", len(got))
+	}
+	if clip("short", feedbackPreviewMax) != "short" {
+		t.Fatal("a short text must pass unchanged")
 	}
 }

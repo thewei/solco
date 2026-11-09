@@ -11,7 +11,7 @@ import (
 /**
  * [INPUT]: Options.Feedback（若还实现 Stream——*feedback.Client 实现）、feedback.Event
  * [OUTPUT]: Server.startFeedbackWatch/stopFeedbackWatch（随 serve/Close）、Server.NotifyFeedback（events 帧 `feedback`）
- * [POS]: 手机收到“有 Agent 在等你”的唯一来源（2026-11-09）：Host 跟随 broker 的 SSE，把每个新 Ask / 已解决的 Ask 变成一帧 `{"t":"feedback","kind":"ask"|"resolved","threadId","askId","waiting"}` 推给所有已打开的 events 套接字；帧只带不透明 id 与等待数，永远没有项目名、问题或答案——手机的本地通知也只用固定文案；桌面与常驻 hostd 都经此路径，不另接线；broker 不在时每 5 s 重连，不报错
+ * [POS]: 手机收到“有 Agent 在等你”的唯一来源（2026-11-09）：Host 跟随 broker 的 SSE，把每个新 Ask / 已解决的 Ask 变成一帧 `{"t":"feedback","kind":"ask"|"resolved","threadId","askId","waiting"[,"project","client","preview"]}` 推给所有已打开的 events 套接字；新 Ask 的帧带项目名、Agent 名和问题首行（用户 2026-11-09 要求：通知要看得出是哪个项目发生什么事，与桌面系统通知同字，修订了“手机推送不带文字”；帧只走已鉴权的固定指纹连接，通知由手机本地发出，不经 Expo/FCM 等第三方），永远没有答案、描述、图片或路径；桌面与常驻 hostd 都经此路径，不另接线；broker 不在时每 5 s 重连，不报错
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -80,14 +80,47 @@ func (s *Server) feedbackEvent(ctx context.Context, e feedback.Event) {
 		slog.Debug("remote host feedback watch read failed", "error", err)
 		return
 	}
-	s.NotifyFeedback(kind, e.ThreadID, e.AskID, snap.Waiting)
+	n := FeedbackNotice{Kind: kind, ThreadID: e.ThreadID, AskID: e.AskID, Waiting: snap.Waiting}
+	if kind == "ask" {
+		n.Project, n.Client, n.Preview = clip(e.Project, feedbackNameMax), clip(e.Client, feedbackNameMax), clip(e.Preview, feedbackPreviewMax)
+	}
+	s.NotifyFeedback(n)
+}
+
+const (
+	feedbackNameMax    = 80  // runes of a project or Agent name in a frame
+	feedbackPreviewMax = 200 // runes of the question's first line in a frame
+)
+
+func clip(text string, max int) string {
+	if r := []rune(text); len(r) > max {
+		return string(r[:max-1]) + "…"
+	}
+	return text
+}
+
+// FeedbackNotice is one `feedback` events frame: which Ask moved and, for a new one, the words the phone's
+// notification shows (the same project, Agent and question first line as the desktop's system notification).
+type FeedbackNotice struct {
+	Kind     string // "ask" | "resolved"
+	ThreadID string
+	AskID    string
+	Waiting  int
+	Project  string
+	Client   string
+	Preview  string
 }
 
 // NotifyFeedback tells every open events socket that an Ask appeared (kind "ask") or was settled ("resolved"). The
-// frame holds opaque ids and the count of waiting Asks and nothing else; the phone re-reads GET /feedback for the
-// rest. A socket whose queue is full drops the frame rather than stall the Mac.
-func (s *Server) NotifyFeedback(kind, threadID, askID string, waiting int) {
-	frame := map[string]any{"t": "feedback", "kind": kind, "threadId": threadID, "askId": askID, "waiting": waiting}
+// frame holds opaque ids, the count of waiting Asks and, for a new Ask, the short words of the notification; the
+// phone re-reads GET /feedback for the rest. A socket whose queue is full drops the frame rather than stall the Mac.
+func (s *Server) NotifyFeedback(n FeedbackNotice) {
+	frame := map[string]any{"t": "feedback", "kind": n.Kind, "threadId": n.ThreadID, "askId": n.AskID, "waiting": n.Waiting}
+	for k, v := range map[string]string{"project": n.Project, "client": n.Client, "preview": n.Preview} {
+		if v != "" {
+			frame[k] = v
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for q := range s.notices {

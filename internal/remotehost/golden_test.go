@@ -174,8 +174,8 @@ func TestGoldenAPIv3(t *testing.T) {
 	// automation: one step of a plugin automation, worded by the phone (no prompt, no error text)
 	h.srv.NotifyAutomation("failed", "nightly-ci-triage", "run-7")
 	golden(t, "events-automation.json", readRaw(t, events))
-	// feedback: an Agent's question reached the broker; the frame holds ids and the waiting count, no text
-	h.srv.NotifyFeedback("ask", "t_1", "a_1", 1)
+	// feedback: an Agent's question reached the broker; the frame holds ids, the waiting count and the notification's words
+	h.srv.NotifyFeedback(FeedbackNotice{Kind: "ask", ThreadID: "t_1", AskID: "a_1", Waiting: 1, Project: "solco", Client: "Claude Code", Preview: "Which database should the service use?"})
 	golden(t, "events-feedback.json", readRaw(t, events))
 
 	// terminal: frame header, ping, bad input, refused input
