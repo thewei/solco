@@ -1,7 +1,7 @@
 package agenthooks
 
 /**
- * [INPUT]: 内嵌的通用 Agent hook 脚本（v9：支持 Antigravity CLI 完整生命周期 SessionStart/PreInvocation/PreToolUse/PostToolUse/Stop 与 JSON stdout 应答，支持 Cursor camelCase 与 Codex 子线程闸；支持 Codex 跨 pane daemon 解析与 herdr 权威源匹配）
+ * [INPUT]: 内嵌的通用 Agent hook 脚本（v10：支持 Antigravity CLI 完整生命周期 SessionStart/PreInvocation/PreToolUse/PostToolUse/Stop 与 JSON stdout 应答，支持 Cursor camelCase 与 Codex 子线程闸；支持基于 PTY/TTY 交互进程拓扑与 Herdr 权威源双层解析 Codex 跨 pane daemon）
  * [OUTPUT]: 对外提供 hookScriptTemplate、hookScriptMarker、hookScriptVersion
  * [POS]: agenthooks 的脚本供给源；install 原子写入 ~/.solco/hooks/ 下的 provider 副本
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -9,7 +9,7 @@ package agenthooks
 
 // hookScriptVersion is the version this build provisions; the marker line
 // inside the template must match.
-const hookScriptVersion = 9
+const hookScriptVersion = 10
 
 // hookScriptMarker identifies files installed by Solco; foreign files
 // at our install paths are never overwritten.
@@ -24,7 +24,7 @@ const hookScriptMarker = "installed by Solco"
 const hookScriptTemplate = `#!/bin/sh
 # installed by Solco
 # managed by Solco; reinstalling or updating the hook overwrites this file.
-# SOLCO_HOOK_VERSION=9
+# SOLCO_HOOK_VERSION=10
 
 set -eu
 
@@ -143,36 +143,65 @@ cwd = (
     or os.getcwd()
 )
 
-# Codex runs hooks inside the background app-server daemon, which inherits
-# the environment of whichever pane first spawned it (or no pane at all).
-# If HERDR_PANE_ID points to an unrelated pane or is empty, resolve the real
-# pane running Codex in this cwd from Herdr's agent.list.
+# Codex runs hooks inside the background app-server daemon (tty=??), which
+# inherits the environment of whichever pane first spawned it (or no pane at all).
+# Scheme A (PTY/TTY Process Topology): Discover active interactive codex processes
+# with a real controlling terminal (tty != "??") and read their direct HERDR_PANE_ID.
 if agent == "codex":
-    _herdr_sock = os.environ.get("HERDR_SOCKET_PATH") or os.path.expanduser("~/.config/herdr/herdr.sock")
-    if os.path.exists(_herdr_sock):
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as _h:
-                _h.settimeout(0.3)
-                _h.connect(_herdr_sock)
-                _h.sendall(b'{"id":"chk","method":"agent.list","params":{}}\n')
-                _res = json.loads(_h.recv(65536).decode())
-                _agents = _res.get("result", {}).get("agents", [])
-                _matched = None
-                for _a in _agents:
-                    if _a.get("agent") == "codex" and _a.get("cwd") == cwd:
-                        _matched = _a.get("pane_id")
-                        break
-                if _matched:
-                    pane_id = _matched
-                elif pane_id:
-                    _valid = any(_a.get("pane_id") == pane_id and _a.get("agent") == "codex" for _a in _agents)
-                    if not _valid and _agents:
-                        for _a in _agents:
-                            if _a.get("agent") == "codex":
-                                pane_id = _a.get("pane_id")
-                                break
-        except Exception:
-            pass
+    _found_pane = None
+    try:
+        import subprocess as _sp
+        import re as _re
+        _ps_out = _sp.run(["ps", "-eo", "pid,tty,command"], capture_output=True, text=True, timeout=1).stdout
+        _candidates = []
+        for _line in _ps_out.splitlines():
+            _parts = _line.strip().split()
+            if len(_parts) >= 3 and _parts[1] != "??" and _parts[2].endswith("codex"):
+                _candidates.append(_parts[0])
+        for _cpid in _candidates:
+            _env_out = _sp.run(["ps", "ewww", "-p", _cpid], capture_output=True, text=True, timeout=1).stdout
+            _m_pane = _re.search(r'HERDR_PANE_ID=([^\s]+)', _env_out)
+            _m_pwd = _re.search(r'PWD=([^\s]+)', _env_out)
+            if _m_pane:
+                _c_pane = _m_pane.group(1)
+                _c_pwd = _m_pwd.group(1) if _m_pwd else ""
+                if cwd and _c_pwd and _c_pwd == cwd:
+                    _found_pane = _c_pane
+                    break
+                elif len(_candidates) == 1:
+                    _found_pane = _c_pane
+    except Exception:
+        pass
+
+    if _found_pane:
+        pane_id = _found_pane
+    else:
+        # Fallback to Herdr agent.list over socket if process inspection was inconclusive
+        _herdr_sock = os.environ.get("HERDR_SOCKET_PATH") or os.path.expanduser("~/.config/herdr/herdr.sock")
+        if os.path.exists(_herdr_sock):
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as _h:
+                    _h.settimeout(0.3)
+                    _h.connect(_herdr_sock)
+                    _h.sendall(b'{"id":"chk","method":"agent.list","params":{}}\n')
+                    _res = json.loads(_h.recv(65536).decode())
+                    _agents = _res.get("result", {}).get("agents", [])
+                    _matched = None
+                    for _a in _agents:
+                        if _a.get("agent") == "codex" and _a.get("cwd") == cwd:
+                            _matched = _a.get("pane_id")
+                            break
+                    if _matched:
+                        pane_id = _matched
+                    elif pane_id:
+                        _valid = any(_a.get("pane_id") == pane_id and _a.get("agent") == "codex" for _a in _agents)
+                        if not _valid and _agents:
+                            for _a in _agents:
+                                if _a.get("agent") == "codex":
+                                    pane_id = _a.get("pane_id")
+                                    break
+            except Exception:
+                pass
 
 status = "working"
 
