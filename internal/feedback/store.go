@@ -37,7 +37,6 @@ const (
 	defaultTimeout    = 4 * time.Hour
 	disconnectedAfter = 60 * time.Second
 	lostAfter         = 5 * time.Minute
-	attachmentKeep    = time.Hour
 	maxAttachments    = 5
 	maxAttachmentSize = 4 << 20
 )
@@ -102,6 +101,7 @@ func Open(dir string) (*Store, error) {
 			s.byAsk[a.ID] = t
 		}
 	}
+	s.sweepAtts()
 	return s, nil
 }
 
@@ -297,7 +297,7 @@ func (s *Store) trimLocked(t *Thread) {
 			}
 			if a.State != StatePending {
 				delete(s.byAsk, a.ID)
-				delete(s.atts, a.ID)
+				s.dropAtts(a.ID)
 				drop++
 			} else {
 				break
@@ -312,7 +312,7 @@ func (s *Store) trimLocked(t *Thread) {
 			if i >= maxThreads && pendingCount(th) == 0 {
 				for _, a := range th.Asks {
 					delete(s.byAsk, a.ID)
-					delete(s.atts, a.ID)
+					s.dropAtts(a.ID)
 				}
 				continue
 			}
@@ -444,7 +444,7 @@ func (s *Store) Resolve(id string, answers map[string]Answer, atts []Attachment,
 	a.AttachmentCount = len(atts)
 	a.Context = refs
 	if len(atts) > 0 {
-		s.atts[id] = atts
+		s.putAtts(id, atts)
 	}
 	if a.ResolvedAt > t.LastAt {
 		t.LastAt = a.ResolvedAt
@@ -519,8 +519,6 @@ func (s *Store) Tick() int {
 					n++
 					s.emitLocked(Event{Type: "ask_resolved", ThreadID: t.ID, AskID: a.ID, State: a.State, Project: t.Project, Client: t.Client, Title: t.Title})
 				}
-			} else if a.ResolvedAt > 0 && nowMs-a.ResolvedAt > attachmentKeep.Milliseconds() {
-				delete(s.atts, a.ID)
 			}
 		}
 	}
@@ -657,7 +655,7 @@ func (s *Store) Result(id string) AskResult {
 	case StatePending:
 		return AskResult{Status: "pending"}
 	case StateAnswered:
-		r := AskResult{Status: "answered", Answers: a.Answers, Attachments: s.atts[id], Context: a.Context}
+		r := AskResult{Status: "answered", Answers: a.Answers, Attachments: s.attsOf(id), Context: a.Context}
 		r.LateAnswers = s.popLateLocked(t, id)
 		return r
 	default:
@@ -682,11 +680,107 @@ func (s *Store) popLateLocked(t *Thread, except string) []LateAnswer {
 	return out
 }
 
+// attsDir is where an Ask's image attachments live on disk ("" = a memory-only Store).
+func (s *Store) attsDir() string {
+	if s.path == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(s.path), "attachments")
+}
+
+func attsFile(dir, id string) string {
+	// Ask ids are UUIDs or "a_…" hex; anything else never reaches a path.
+	for _, r := range id {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '-' || r == '_') {
+			return ""
+		}
+	}
+	return filepath.Join(dir, id+".json")
+}
+
+// putAtts keeps an answered Ask's images: in memory, and on disk (0600) so a restarted broker, a new owner or a later
+// look at the history still has them. They stay until the Ask itself is removed.
+func (s *Store) putAtts(id string, atts []Attachment) {
+	dir := s.attsDir()
+	f := attsFile(dir, id)
+	if dir == "" || f == "" {
+		s.atts[id] = atts // memory-only Store
+		return
+	}
+	// On disk only: a long history of images is not held in memory.
+	b, err := json.Marshal(atts)
+	if err == nil {
+		err = os.MkdirAll(dir, 0o700)
+	}
+	if err == nil {
+		err = os.WriteFile(f+".tmp", b, 0o600)
+	}
+	if err == nil {
+		err = os.Rename(f+".tmp", f)
+	}
+	if err != nil {
+		slog.Warn("feedback: attachment not saved, kept in memory", "error", err)
+		s.atts[id] = atts
+	}
+}
+
+// attsOf reads an Ask's images from memory, else from disk.
+func (s *Store) attsOf(id string) []Attachment {
+	if a, ok := s.atts[id]; ok {
+		return a
+	}
+	dir := s.attsDir()
+	if dir == "" {
+		return nil
+	}
+	f := attsFile(dir, id)
+	if f == "" {
+		return nil
+	}
+	b, err := os.ReadFile(f)
+	if err != nil {
+		return nil
+	}
+	var a []Attachment
+	if json.Unmarshal(b, &a) != nil {
+		return nil
+	}
+	return a
+}
+
+// dropAtts forgets an Ask's images everywhere.
+func (s *Store) dropAtts(id string) {
+	delete(s.atts, id)
+	if dir := s.attsDir(); dir != "" {
+		if f := attsFile(dir, id); f != "" {
+			_ = os.Remove(f)
+		}
+	}
+}
+
+// sweepAtts removes image files whose Ask no longer exists (a crash between the two writes, an old build).
+func (s *Store) sweepAtts() {
+	dir := s.attsDir()
+	if dir == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		id := strings.TrimSuffix(e.Name(), ".json")
+		if _, ok := s.byAsk[id]; !ok || e.Name() == id {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
 // Attachments returns an answered Ask's image bytes while they are still held.
 func (s *Store) Attachments(id string) []Attachment {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]Attachment(nil), s.atts[id]...)
+	return append([]Attachment(nil), s.attsOf(id)...)
 }
 
 // RecallItem is one earlier answer an Agent can look up.
@@ -756,7 +850,7 @@ func (s *Store) Recall(project, query string, limit int) []RecallItem {
 func (s *Store) removeThreadLocked(t *Thread) {
 	for _, a := range t.Asks {
 		delete(s.byAsk, a.ID)
-		delete(s.atts, a.ID)
+		s.dropAtts(a.ID)
 	}
 	for i, x := range s.threads {
 		if x == t {

@@ -387,3 +387,42 @@ func TestSearchReadsTitlesQuestionsAndAnswers(t *testing.T) {
 		}
 	}
 }
+
+func TestAttachmentsSurviveARestartAndGoWithTheirThread(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask, _, err := s.Create(CreateInput{ProjectRoot: t.TempDir(), Questions: []Question{{ID: "q", Text: "Look?", Type: "text"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := Attachment{MimeType: "image/png", DataBase64: "aGk=", Name: "a.png"}
+	if err := s.Resolve(ask.ID, map[string]Answer{"q": {Custom: "see"}}, []Attachment{img}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// A new owner of the broker (a restart) still has the image for the Agent and for the history.
+	again, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Result(ask.ID); got.Status != "answered" || len(got.Attachments) != 1 || got.Attachments[0].DataBase64 != "aGk=" {
+		t.Fatalf("after restart: %+v", got)
+	}
+	// An orphan file is swept on open; deleting the thread removes the Ask's file.
+	if err := os.WriteFile(filepath.Join(dir, "attachments", "ghost.json"), []byte("[]"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	third, _ := Open(dir)
+	if _, err := os.Stat(filepath.Join(dir, "attachments", "ghost.json")); err == nil {
+		t.Fatal("orphan not swept")
+	}
+	row := third.Threads(Filter{})[0]
+	if n := third.DeleteThreads([]string{row.ID}); n != 1 {
+		t.Fatalf("delete: %d", n)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "attachments", ask.ID+".json")); err == nil {
+		t.Fatal("image file outlived its thread")
+	}
+}
