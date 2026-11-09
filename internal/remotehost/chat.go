@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"encoding/json"
+	"strconv"
 	"github.com/coder/websocket"
 	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/conversation"
@@ -136,8 +137,17 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request, _ Device) {
 		writeError(w, chatErrorStatus[target.Code], target.Code, "")
 		return
 	}
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
 	reader, err := chatsession.Open(target.Provider, target.Path)
 	if err == nil {
+		if limit > 0 {
+			reader.SetLimit(limit)
+		}
 		_, err = reader.Sync()
 	}
 	if err != nil {
@@ -164,11 +174,20 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, dev De
 		writeError(w, chatErrorStatus[target.Code], target.Code, "")
 		return
 	}
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
 	status := target.Status
 	reader, err := chatsession.Open(target.Provider, target.Path)
 	if err != nil {
 		writeError(w, http.StatusConflict, "no_conversation", "")
 		return
+	}
+	if limit > 0 {
+		reader.SetLimit(limit)
 	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{subprotocolBearer}})
 	if err != nil {

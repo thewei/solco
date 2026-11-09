@@ -5,15 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Solco Chat</title>
-    <!-- The phone is dark-only (2026-11-07 redesign) and its host sends theme "dark" in every
-         state: settle the theme and the --content colour before the first paint, so a phone in
-         light system mode never flashes a light page. -->
+    <!-- The phone follows the app's resolved theme (Settings -> Appearance:
+         System, Light or Dark). First paint settles synchronously from themePin
+         (injected by withShim from the host's active scheme) or matchMedia,
+         so a phone in light mode never flashes dark, and vice versa. -->
     <script>
-      document.documentElement.dataset.theme = document.documentElement.dataset.themePin = "dark";
+      (function() {
+        var t = document.documentElement.dataset.themePin || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.dataset.theme = t;
+      })();
     </script>
     <style>
       html {
+        background: #fcfcfc;
+      }
+      html[data-theme="dark"] {
         background: #0a0a0a;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) {
+          background: #0a0a0a;
+        }
       }
     </style>
   </head>

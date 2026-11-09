@@ -7,7 +7,7 @@ import (
 
 /**
  * [INPUT]: 依赖 history.TranscriptMessage（LiveDecoder 的投影）、conversation.ItemsFromTranscript/DeriveTimeline
- * [OUTPUT]: 对外提供 MaxAccumulated、Window、Fold（解码投影 → 一个渲染窗口的时间线/模型/上下文）、LastModel、LastContext
+ * [OUTPUT]: 对外提供 MaxAccumulated、Window、Fold、FoldWithLimit（解码投影 → 一个渲染窗口的时间线/模型/上下文）、LastModel、LastContext
  * [POS]: Chat「尾部窗口 → 时间线」的唯一实现（2026-10-31 自 nativeui.applyLiveSync 抽出）：桌面 live 追尾与手机 Host 读同一个窗口规则（最新一页、新消息延长、超出渲染上界时前移）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,11 +35,19 @@ type Window struct {
 // streaming tail (nil when settled): it renders uncommitted and marks the last
 // turn live.
 func Fold(projection []history.TranscriptMessage, pending *history.TranscriptMessage, start int) Window {
-	if start < 0 {
-		start = max(0, len(projection)-history.WindowLimit)
+	return FoldWithLimit(projection, pending, start, history.WindowLimit)
+}
+
+// FoldWithLimit is Fold with a configurable message limit for the window.
+func FoldWithLimit(projection []history.TranscriptMessage, pending *history.TranscriptMessage, start int, limit int) Window {
+	if limit <= 0 {
+		limit = history.WindowLimit
 	}
-	if limit := conversation.MaxBeforeAfter * 2; len(projection)-start > limit {
-		start = len(projection) - limit
+	if start < 0 {
+		start = max(0, len(projection)-limit)
+	}
+	if maxLimit := conversation.MaxBeforeAfter * 2; len(projection)-start > maxLimit {
+		start = len(projection) - maxLimit
 	}
 	start = min(start, len(projection))
 	messages := projection[start:]

@@ -9,14 +9,14 @@ Shell/MyGo 无关的 Chat 投影共享层：桌面 `ChatBridge` 与将来的手�
 - `turns.go`：`ChatTurn/ChatStep/ChatTool/ChatChange` 线格式与 `Turns`（时间线 → 页面回合；改动卡的 `+/−` 仅在传入工作树快照时出现）。
 - `plan.go`：`ChatPlan/ChatPlanItem` 与 `PlanOf`（Claude TodoWrite/TaskCreate·Update、Codex update_plan、omp todo → Tasks 面板；Cursor 的 `TodoWrite merge:true` 只带变更项，按 id 重放整窗，`cancelled`=dropped）。
 - `changes.go`：`TurnChanges`（edit 类工具白名单——含 Cursor `StrReplace/Write/Delete/ApplyPatch`、agy `edit_file/write_file`——+ 文件头，只读文件名，不解析 diff）。
-- `window.go`：`Fold`（解码投影 → 一个渲染窗口：最新一页、新消息延长、超界前移）、`LastModel`/`LastContext`、`MaxAccumulated`。
+- `window.go`：`Fold`/`FoldWithLimit`（解码投影 → 一个渲染窗口：最新一页、新消息延长、超界前移，支持自定义分页上限）、`LastModel`/`LastContext`、`MaxAccumulated`。
 - `attach.go`：`AttachSubagents`（给步骤打 SubagentIDs，并列出被链接的卡片）。
 - `question.go`：`TranscriptQuestion`（omp/pi 的 `ask`、agy 的 `ask_question` 尚无结果的调用 → 结构化问题序列；agy 光标恒从第 1 行起、单选末尾补 `Write-in...`、多选不补；自 nativeui/chat_ask.go 迁入）与 `Reader.Ask`。
 - `agentprompt.go`：Cursor Agent / Antigravity CLI 屏幕提示——`DetectAgentPrompt`（shell 权限卡，按键走 `PendingInteraction.OptionKeys`/方向键，永不提供“永久允许/写入 settings”行）、`DetectTerminalDialog`（Herdr 报 idle/done 的终端专属对话框：Cursor AskQuestion/信任页、agy 首次设置/信任页 → 一句固定提示）；真机截屏做测试。
 - `picker.go`：`DetectPicker`（Claude/Codex 编号选择器的可见屏纯解析，自 nativeui/chat_picker.go 迁入；桌面与手机 Host 共用）。
 - `subagent_view.go`：`OpenSubagent`/`Reader.Subagent`（抽屉：子代理卡 + 它自己的轮次，未知 id → ErrUnknownSubagent）。
 - `screenprompt.go`：`DetectScreenPrompt`/`IsOmpReviewSheet`（Claude AskUserQuestion / 权限页 / omp Review 页的可见屏纯解析；自 nativeui/chat_hooks.go 迁入）。
-- `reader.go`：`Reader`（`Open/Sync/State/Ask/Older`——Older 在解码器已持有的整份投影里上移一页，不重读文件：一个转录文件的增量解码器 + 与桌面相同的投影）与 `State` 只读线格式，供 Remote Host P2。
+- `reader.go`：`Reader`（`Open/Sync/State/Ask/Older/SetLimit`——Older 在解码器已持有的整份投影里上移一页，不重读文件：一个转录文件的增量解码器 + 与桌面相同的投影，支持自定义 limit）与 `State` 只读线格式，供 Remote Host P2。
 - `files.go`：`ListFiles`（输入框 `@` 补全：窗格目录浅层、子目录前缀下钻、包含匹配、点文件仅在 token 以点开头、≤20 条；`contained` 把遍历限制在目录内，手机 Host 开、桌面不开；自 nativeui/chat_bridge.go 迁入）。
 - `question_test.go`：ask 读取规则（单问/多问/多选/带 recommended 拒绝/已有结果或后续用户回合不再出卡）。
 - `reader_test.go`/`plan_test.go`/`changes_test.go`：Reader 仅在文件变化时报变更、未知 Provider/空路径拒绝、窗口规则；任务清单与改动卡规则（自 nativeui 随代码迁入）。

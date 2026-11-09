@@ -102,3 +102,33 @@ func TestReaderOlderMovesTheWindowOnePageUpToTheTop(t *testing.T) {
 		t.Fatal("nothing above the top")
 	}
 }
+
+func TestReaderConfigurableLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	var body []byte
+	for i := 0; i < 40; i++ {
+		body = append(body, claudeUser(fmt.Sprint("m", i))...)
+	}
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Open(history.AgentClaudeCode, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetLimit(15)
+	if _, err := r.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	st := r.State(time.Now())
+	if len(st.Turns) != 15 || !st.HasOlder {
+		t.Fatalf("custom limit page: turns=%d older=%v", len(st.Turns), st.HasOlder)
+	}
+	if !r.Older() {
+		t.Fatal("Older must succeed")
+	}
+	st = r.State(time.Now())
+	if len(st.Turns) != 30 || !st.HasOlder {
+		t.Fatalf("second page with limit: turns=%d older=%v", len(st.Turns), st.HasOlder)
+	}
+}

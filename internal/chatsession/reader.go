@@ -42,9 +42,24 @@ type Reader struct {
 	decoder  *history.LiveDecoder
 	watcher  *history.LiveWatcher
 	start    int
+	limit    int
 	views    []View
 	viewsAt  time.Time
 	hydrated bool
+}
+
+// SetLimit sets the maximum message window size (default: history.WindowLimit).
+func (r *Reader) SetLimit(limit int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.limit = limit
+}
+
+func (r *Reader) effectiveLimit() int {
+	if r.limit > 0 {
+		return r.limit
+	}
+	return history.WindowLimit
 }
 
 // Open builds a Reader for provider's transcript at path. It fails closed for
@@ -89,7 +104,7 @@ func (r *Reader) Sync() (bool, error) {
 func (r *Reader) Ask() (TranscriptAsk, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return TranscriptQuestion(Fold(r.decoder.Projection(), r.decoder.PendingTail(), r.start).Turns)
+	return TranscriptQuestion(FoldWithLimit(r.decoder.Projection(), r.decoder.PendingTail(), r.start, r.effectiveLimit()).Turns)
 }
 
 // Older moves the window one page up the decoder's own projection (it already
@@ -98,11 +113,12 @@ func (r *Reader) Ask() (TranscriptAsk, bool) {
 func (r *Reader) Older() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	window := Fold(r.decoder.Projection(), r.decoder.PendingTail(), r.start)
+	limit := r.effectiveLimit()
+	window := FoldWithLimit(r.decoder.Projection(), r.decoder.PendingTail(), r.start, limit)
 	if !window.HasOlder {
 		return false
 	}
-	r.start = max(0, window.Start-history.WindowLimit)
+	r.start = max(0, window.Start-limit)
 	return true
 }
 
@@ -111,7 +127,8 @@ func (r *Reader) State(now time.Time) State {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	pending := r.decoder.PendingTail()
-	window := Fold(r.decoder.Projection(), pending, r.start)
+	limit := r.effectiveLimit()
+	window := FoldWithLimit(r.decoder.Projection(), pending, r.start, limit)
 	r.start = window.Start
 	state := State{
 		Provider:      string(r.provider),
@@ -133,7 +150,8 @@ func (r *Reader) State(now time.Time) State {
 // one State listed; the sub-agent's own file is read outside the Reader's lock.
 func (r *Reader) Subagent(id string, now time.Time) (SubagentView, error) {
 	r.mu.Lock()
-	window := Fold(r.decoder.Projection(), r.decoder.PendingTail(), r.start)
+	limit := r.effectiveLimit()
+	window := FoldWithLimit(r.decoder.Projection(), r.decoder.PendingTail(), r.start, limit)
 	if r.viewsAt.IsZero() || now.Sub(r.viewsAt) >= subagentsEvery {
 		r.views, r.viewsAt = Read(r.provider, r.path, now), now
 	}

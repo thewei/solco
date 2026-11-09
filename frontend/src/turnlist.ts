@@ -13,6 +13,8 @@ import type { ChatTurn } from "./mygo";
 
 /** Conversations with fewer turns render every row (no windowing). */
 export const VIRTUAL_MIN = 40;
+/** On phones, window earlier to keep DOM lightweight and avoid rendering dozens of rich turns. */
+export const PHONE_VIRTUAL_MIN = 15;
 
 export interface TurnList {
   /** Whether rows are windowed. */
@@ -35,7 +37,8 @@ export function useTurnList(
   keyOf: (index: number) => string,
   margin: number,
 ): TurnList {
-  const virtual = count >= VIRTUAL_MIN;
+  const threshold = typeof document !== "undefined" && document.documentElement.dataset.host === "phone" ? PHONE_VIRTUAL_MIN : VIRTUAL_MIN;
+  const virtual = count >= threshold;
   const list = useVirtualizer({
     count: virtual ? count : 0,
     getScrollElement: () => logRef.current,
