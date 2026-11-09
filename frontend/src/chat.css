@@ -58,13 +58,20 @@
 }
 
 .older {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: center;
   margin: 0 auto 18px;
   font-size: 12px;
   color: var(--i3);
-  padding: 3px 12px;
+  padding: 4px 14px;
   border: 1px solid var(--hair);
   border-radius: 999px;
+  background: var(--panel);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
 }
 
 .older:hover:not(:disabled) {
@@ -74,6 +81,7 @@
 
 .older:disabled {
   opacity: 0.6;
+  cursor: default;
 }
 
 .ic {
@@ -3039,6 +3047,12 @@ html[data-host="phone"] .chat-log {
 }
 html[data-host="phone"] .col {
   padding: 0 16px;
+}
+html[data-host="phone"] .older {
+  min-height: 38px;
+  padding: 8px 18px;
+  font-size: 13px;
+  margin-bottom: 22px;
 }
 html[data-host="phone"] .composer {
   padding: 0 0 12px;

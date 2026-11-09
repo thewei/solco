@@ -1352,7 +1352,7 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
     const settle = () => {
       const at = list.top(index);
       if (at !== null) log.scrollTop = at - anchor.offset;
-      if (++frames < 4) requestAnimationFrame(settle);
+      if (++frames < 8) requestAnimationFrame(settle);
       else anchorRef.current = null;
     };
     settle();
@@ -1476,7 +1476,14 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
         <div className="col">
           {state?.hasOlder ? (
             <button ref={olderRef} type="button" className="older" onClick={() => void loadOlder()} disabled={loadingOlder}>
-              {loadingOlder ? "Loading…" : "Earlier messages"}
+              {loadingOlder ? (
+                <>
+                  <span className="spin" aria-hidden />
+                  <span>Loading earlier messages…</span>
+                </>
+              ) : (
+                "Earlier messages"
+              )}
             </button>
           ) : null}
           {state?.loading ? (

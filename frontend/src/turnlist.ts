@@ -9,6 +9,7 @@ import type { ChatTurn } from "./mygo";
  *        (@tanstack/react-virtual, measured rows); short ones stay plain DOM.
  *        Turn navigation (⌘↑/⌘↓, the outline rail, find) asks this hook for a
  *        turn's top and for scrolling, never the DOM, so both modes behave alike.
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 /** Conversations with fewer turns render every row (no windowing). */
@@ -51,7 +52,8 @@ export function useTurnList(
 
   const top = useCallback(
     (index: number): number | null => {
-      if (virtual) return list.measurementsCache[index]?.start ?? null;
+      const cached = virtual ? list.measurementsCache[index]?.start : null;
+      if (typeof cached === "number") return cached;
       const log = logRef.current;
       const node = log?.querySelector<HTMLElement>(`[data-turn="${index}"]`);
       if (!log || !node) return null;
