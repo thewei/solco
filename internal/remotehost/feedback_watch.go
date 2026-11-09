@@ -80,6 +80,11 @@ func (s *Server) feedbackEvent(ctx context.Context, e feedback.Event) {
 		slog.Debug("remote host feedback watch read failed", "error", err)
 		return
 	}
+	if kind == "resolved" {
+		s.askResolvedForChannels(e.AskID)
+	} else if targets, _ := s.channelTargets(); len(targets) > 0 {
+		s.notifyChannelsAsk(s.channelEventForAsk(turn, e), time.Now())
+	}
 	n := FeedbackNotice{Kind: kind, ThreadID: e.ThreadID, AskID: e.AskID, Waiting: snap.Waiting}
 	if kind == "ask" {
 		n.Project, n.Client, n.Preview = clip(e.Project, feedbackNameMax), clip(e.Client, feedbackNameMax), clip(e.Preview, feedbackPreviewMax)

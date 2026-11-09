@@ -17,6 +17,7 @@ import (
 	"github.com/thewei/solco/internal/herdr"
 	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/hostd"
+	"github.com/thewei/solco/internal/notifyhook"
 	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/settings"
 )
@@ -120,6 +121,7 @@ func (s *Shell) remoteServer() *remotehost.Server {
 		Usage:            s.hostUsage,
 		Automations:      s.hostAutomations,
 		Feedback:         feedbackSource,
+		Channels:         func() ([]notifyhook.Target, time.Duration) { return notifyhook.Load(userDataDir) },
 		AutomationsAdmin: s.hostAutomationsAdmin(),
 		PersonalAgent:    s.hostPersonalAgent,
 		AssistantAgents:  s.hostAssistantAgents,

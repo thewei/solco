@@ -22,6 +22,7 @@ import (
 	"github.com/thewei/solco/internal/chatstream"
 	"github.com/thewei/solco/internal/feedback"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/notifyhook"
 	"github.com/thewei/solco/internal/personalagent"
 	"github.com/thewei/solco/internal/remotehost"
 	"github.com/thewei/solco/internal/settings"
@@ -48,6 +49,7 @@ func NewServer(userDataDir, version string) func() (Host, error) {
 			Backend:       remotehost.NewManagerBackend(herdr.NewManager()),
 			PersonalAgent: newPluginSeam(),
 			Feedback:      feedback.NewClient(feedback.Dir(userDataDir)),
+			Channels:      func() ([]notifyhook.Target, time.Duration) { return notifyhook.Load(userDataDir) },
 			HostName:      host,
 			Version:       version,
 		})

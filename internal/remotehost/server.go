@@ -19,6 +19,7 @@ import (
 
 	"github.com/thewei/solco/internal/chatsession"
 	"github.com/thewei/solco/internal/herdr"
+	"github.com/thewei/solco/internal/notifyhook"
 )
 
 /**
@@ -125,6 +126,9 @@ type Options struct {
 	// Feedback is the Feedback inbox's broker (GET /feedback, POST /feedback/asks/{id}/answer|end):
 	// nil = no such view and bootstrap does not advertise feedback. The broker is the state's only owner.
 	Feedback FeedbackSource
+	// Channels returns the user's webhook channels and the phone's grace period (channels.go); nil = the Host
+	// never calls out.
+	Channels ChannelSource
 	// Sessions serves the desktop's session catalog for the phone (GET /sessions):
 	// metadata, search and the running-pane link; nil = no such view and bootstrap
 	// says so. It runs on the Host's goroutines.
@@ -179,6 +183,7 @@ type Server struct {
 	pushCancel     context.CancelFunc
 	feedbackCancel context.CancelFunc // the Feedback broker follower (feedback_watch.go)
 	feedbackDone   chan struct{}
+	channels       channelState // webhook channels' grace gate (channels.go)
 	pushDone       chan struct{}
 
 	mu             sync.Mutex
@@ -200,6 +205,8 @@ type Server struct {
 	controlStop    time.Duration                    // how long a released takeover controller may take to exit; 0 = defaultControlStop
 	poke           chan struct{}                    // closed and replaced by Poke; every events pump waits on the current one
 	paRevision     uint64                           // Assistants change counter (NotifyPersonalAgent)
+	paNeeds        int                              // the last "needs you" count NotifyPersonalAgent saw
+	paNeedsKnown   bool                             // paNeeds is set (the first call only records)
 	notices        map[chan map[string]any]struct{} // open events sockets' queues for one-off frames (NotifyAutomation)
 	netStop        chan struct{}                    // closed by Close; stops the address watcher (watch.go)
 	netDone        chan struct{}                    // closed by the watcher goroutine on exit; Close joins it
@@ -472,6 +479,7 @@ func (s *Server) relaySecret() (string, error) {
 func (s *Server) Close() {
 	s.stopPush()
 	s.stopFeedbackWatch()
+	s.stopChannels()
 	s.stopRelay()
 	s.stopOverlay()
 	s.closeP2P()
@@ -1109,6 +1117,10 @@ func (s *Server) Poke() {
 // rationale, no error text. A socket whose queue is full drops the frame
 // rather than stall the Mac.
 func (s *Server) NotifyAutomation(kind, name, runID string) {
+	if kind != "started" { // a start is a heartbeat, not a call for the user
+		title, text := automationChannelWords(kind, name)
+		s.NotifyChannels(notifyhook.Event{Kind: notifyhook.KindAutomation, Title: title, Text: text})
+	}
 	frame := map[string]any{"t": "automation", "kind": kind, "name": name}
 	if runID != "" {
 		frame["runId"] = runID

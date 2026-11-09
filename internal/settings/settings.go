@@ -36,6 +36,46 @@ type Settings struct {
 	// Agents is the per-agent launch toggle (Settings → Agents). Absent
 	// keys mean enabled; see AgentsSettings.
 	Agents AgentsSettings `json:"agents,omitempty"`
+
+	// Notifications are the user's own webhook channels (product decision 2026-11-09): a channel is called when
+	// the phone could not be told. The channel's URL and token are secrets and live in the credential file.
+	Notifications NotificationSettings `json:"notifications,omitempty"`
+}
+
+// NotificationSettings lists the webhook channels and how long the phone gets to answer first.
+type NotificationSettings struct {
+	Channels []NotificationChannel `json:"channels,omitempty"`
+	// GraceSeconds is how long a phone that is connected gets to open a waiting Ask before the channels are
+	// called; 0 = the default (DefaultNotificationGrace).
+	GraceSeconds int `json:"grace_seconds,omitempty"`
+}
+
+// NotificationChannel is one webhook: only its identity and switch are kept here (URL and token: secretstore,
+// key notifyhook.SecretKey(ID)).
+type NotificationChannel struct {
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	Enabled bool   `json:"enabled"`
+}
+
+// Notification grace bounds, in seconds.
+const (
+	DefaultNotificationGrace = 30
+	MinNotificationGrace     = 5
+	MaxNotificationGrace     = 600
+)
+
+// Grace is the effective grace period in seconds, clamped to the bounds.
+func (n NotificationSettings) Grace() int {
+	switch {
+	case n.GraceSeconds <= 0:
+		return DefaultNotificationGrace
+	case n.GraceSeconds < MinNotificationGrace:
+		return MinNotificationGrace
+	case n.GraceSeconds > MaxNotificationGrace:
+		return MaxNotificationGrace
+	}
+	return n.GraceSeconds
 }
 
 // AgentsSettings is the per-agent launch toggle (Settings → Agents). Enabled

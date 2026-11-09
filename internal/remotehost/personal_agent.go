@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/thewei/solco/internal/notifyhook"
 	"github.com/thewei/solco/internal/personalagent"
 )
 
@@ -668,6 +669,13 @@ func (s *Server) handlePATaskAction(action string) deviceHandler {
 // answers by re-reading the authoritative overview. A socket whose queue is
 // full drops the frame rather than stall the Mac.
 func (s *Server) NotifyPersonalAgent(assistants, needsYou int) {
+	s.mu.Lock()
+	rose := s.paNeedsKnown && needsYou > s.paNeeds
+	s.paNeeds, s.paNeedsKnown = needsYou, true
+	s.mu.Unlock()
+	if rose { // the phone raises its own notification; the channels hear it only when no phone is there
+		s.NotifyChannels(notifyhook.Event{Kind: notifyhook.KindAssistant, Title: "Assistants", Text: assistantNeedsWords(needsYou)})
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.paRevision++

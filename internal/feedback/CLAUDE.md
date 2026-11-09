@@ -11,7 +11,8 @@ owner.go: Run（flock 抢到就服务、否则 3 s 待命重试）、EnsureToken
 lock_unix.go / lock_windows.go: 平台文件锁（flock / LockFileEx）
 client.go: Client——发现端点、连不上重读一次 broker.json（换主后端口会变）、仍连不上 ErrOffline（调用方把离线当一等状态）；Create/Result/Threads/Thread/Answer/End/Recall/Stream
 snapshot.go: Source（Threads/Thread 两个读口，Client 满足）、Snapshot（online + 线程列表 + 等待数 + 选中线程时间线）、ReadSnapshot——桌面 WebView 桥与手机 Host v3 `GET /feedback` 共用的页面读法；broker 离线 = Online=false，线程不存在 = 无 Detail
-notify.go: Notifier 接口、WorkerNotifier（飞书 Worker 卡片：项目 · Agent · 问题首行 + 只含 id 的落地页链接，失败只记日志）、LocalNotifier（没有 Solco 窗口订阅时的 macOS 通知）、DefaultNotifier（notify.json 每次读取，配置不用重启）
+notify.go: Notifier 接口、WorkerNotifier（飞书 Worker 卡片：项目 · Agent · 问题首行 + 只含 id 的落地页链接，失败只记日志）、LocalNotifier（没有 Solco 窗口订阅时的 macOS 通知）、DefaultNotifier（notify.json 每次读取，配置不用重启；Settings 里一旦有启用的 webhook 渠道（channelsConfigured），旧 Worker 文件不再调用，由 Host 在手机告知不到时调用渠道，避免同一 Ask 发两条飞书）
+notify_channels_test.go: 启用的渠道取代旧 Worker 文件、关闭的渠道不算
 mcpshim/: 外部 Agent 侧的 stdio MCP 服务器（官方 Go SDK）——interactive_feedback / _start / _wait / recall_decisions，工具名与入参兼容旧 Bun 服务（新增可选 thread_id）；`solco-hostd feedback-mcp` 启动它，它自己也参与 broker 所有权，所以没有 Solco 时 Agent 也能提问
 
 法则: 状态只有一个所有者（拿到 broker.lock 的进程）·令牌 + loopback + 无 Origin，三者缺一拒绝·日志只记操作名/id/计数，绝不记问题、答案、描述或图片·线程归属是只读展示规则，不据此做任何运行时决定·离线是一等状态

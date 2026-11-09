@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/thewei/solco/internal/settings"
 )
 
 // Notice is what a Notifier is told about a new Ask.
@@ -130,7 +132,23 @@ type configNotifier struct{ dir string }
 
 func (c configNotifier) Notify(ctx context.Context, n Notice) {
 	LocalNotifier{}.Notify(ctx, n)
-	if cfg, ok := LoadWorkerConfig(c.dir); ok {
+	if cfg, ok := LoadWorkerConfig(c.dir); ok && !channelsConfigured(c.dir) {
 		WorkerNotifier{Config: cfg}.Notify(ctx, n)
 	}
+}
+
+// channelsConfigured reports whether the user has an enabled webhook channel in Settings (the broker's directory
+// sits under the user-data directory). A channel replaces the old always-on Worker file: the Host calls channels
+// only when no phone can be told, and two calls for one Ask would double the Feishu message.
+func channelsConfigured(dir string) bool {
+	cur, err := settings.NewFileStore(filepath.Dir(dir)).Load(context.Background())
+	if err != nil {
+		return false
+	}
+	for _, ch := range cur.Notifications.Channels {
+		if ch.Enabled {
+			return true
+		}
+	}
+	return false
 }

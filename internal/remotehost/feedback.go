@@ -53,6 +53,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request, dev Devi
 		return
 	}
 	if snap.Detail != nil {
+		s.markFeedbackSeen(snap.Detail.ID)
 		// The phone never sees a Mac path: the project is its display name, and "open project" stays on the desktop.
 		d := *snap.Detail
 		d.ProjectKey, d.ProjectRoot, d.CallerInfo = "", "", ""
