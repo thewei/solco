@@ -74,19 +74,19 @@ func NewServer(c *feedback.Client, version string) *mcp.Server {
 		Name: "interactive_feedback",
 		Description: `Ask the user questions through Solco and BLOCK until they answer or the timeout passes.
 
-The preferred way to ask the user anything: it creates a question, notifies the user (Solco, phone, Feishu) and waits for the answer, sending keep-alive progress every 10 seconds. Default timeout is 1 hour on purpose; the user may be away from the computer. Do not set timeout_seconds unless the user asked.
+The preferred way to ask the user anything: it creates a question, notifies the user (Solco, phone, Feishu) and waits for the answer, sending keep-alive progress every 10 seconds. The user is a person who may need minutes or hours to notice, read and answer, so keep this ONE call open until it returns: do not poll, do not shorten timeout_seconds (the default is 1 hour on purpose), do not give up, and never carry on with an assumed answer. Only status "answered" is an answer; on "timeout" ask again unless "ended_by_user" is true.
 
 Always pass "description" (what you did, what the question is about) and "project_root". Use caller_info to identify yourself. Questions from the same project and client are filed in one thread automatically; pass thread_id or task_id to group them yourself.
 
-If the call times out on the client side, use interactive_feedback_start + interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account.`,
+If your client cuts the call short (a tool timeout such as Codex's default 60 s tool_timeout_sec, or a cancellation), that is not an answer: ask again with interactive_feedback_start and loop interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account.`,
 	}, s.ask(true))
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "interactive_feedback_start",
-		Description: `Start a question and return IMMEDIATELY with a session_id. Use only when interactive_feedback times out or your client has strict per-call time limits. Then loop interactive_feedback_wait with the session_id until the status is no longer "pending".`,
+		Description: `Start a question and return IMMEDIATELY with a session_id. Use only when interactive_feedback is cut short by your client or your client has strict per-call time limits. Then loop interactive_feedback_wait with the session_id until the status is no longer "pending": the user may need hours, so never stop waiting and never assume an answer.`,
 	}, s.ask(false))
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "interactive_feedback_wait",
-		Description: `Poll a question started with interactive_feedback_start. Each call waits up to wait_seconds (default and max 300) and returns "pending" if the user has not answered yet; call it again immediately. Stop when the status is "answered", "timeout", "ended" or "not_found".`,
+		Description: `Poll a question started with interactive_feedback_start. Each call waits up to wait_seconds (default and max 300; set it below your client's per-call limit, e.g. 45 for a 60 s limit) and returns "pending" if the user has not answered yet; call it again immediately. Stop when the status is "answered", "timeout", "ended" or "not_found".`,
 	}, s.wait)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "recall_decisions",

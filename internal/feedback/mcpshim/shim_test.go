@@ -74,6 +74,29 @@ func TestToolsAreListedWithOldNames(t *testing.T) {
 	}
 }
 
+// The tool descriptions are what every connected Agent reads: they must ask for one open, blocking call and name the
+// fallback for a client that cuts it short (2026-11-09: the user may need hours to answer).
+func TestDescriptionsAskForABlockingLongCall(t *testing.T) {
+	c, _ := setup(t)
+	sess := connect(t, c)
+	res, err := sess.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"interactive_feedback":       {"BLOCK", "ONE call open", "do not poll", "assumed answer", "interactive_feedback_start"},
+		"interactive_feedback_start": {"never stop waiting", "interactive_feedback_wait"},
+		"interactive_feedback_wait":  {"wait_seconds", "per-call limit"},
+	}
+	for _, tool := range res.Tools {
+		for _, w := range want[tool.Name] {
+			if !strings.Contains(tool.Description, w) {
+				t.Errorf("%s description lacks %q", tool.Name, w)
+			}
+		}
+	}
+}
+
 func TestAskBlocksUntilTheUserAnswers(t *testing.T) {
 	c, store := setup(t)
 	sess := connect(t, c)
