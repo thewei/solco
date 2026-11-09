@@ -614,12 +614,18 @@
   margin-top: 6px;
 }
 
-.fb-qt code,
-.fb-desc code {
-  font-size: 0.86em;
-  background: var(--tint2);
-  padding: 0.12em 0.38em;
-  border-radius: 5px;
+/* The Agent writes Markdown (lists, bold, code, links): the Chat's own renderer and .prose rules draw it; only the
+   size, ink and weight come from the surrounding role. */
+.fb-desc .prose,
+.fb-qt .prose {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.fb-qt .prose strong {
+  font-weight: 700;
 }
 
 /* The user's answer: the Chat's own user bubble, its footnote beneath. */

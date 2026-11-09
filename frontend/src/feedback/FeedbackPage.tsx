@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { feedback, type Answer, type Ask, type FeedbackView, type Question, type Thread, type ThreadSummary } from "../mygo";
+import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
 import "./feedback.css";
 
@@ -101,12 +102,6 @@ function took(ask: Ask): string {
   if (!ask.resolvedAt) return "";
   const s = Math.max(1, Math.round((ask.resolvedAt - ask.createdAt) / 1000));
   return s < 90 ? `${s} s` : span(ask.resolvedAt - ask.createdAt);
-}
-/** md renders the one inline markup a question uses: `code`. */
-function md(text: string) {
-  return text.split(/(`[^`]+`)/g).map((part, i) =>
-    part.startsWith("`") && part.endsWith("`") && part.length > 2 ? <code key={i}>{part.slice(1, -1)}</code> : part,
-  );
 }
 function answerText(a?: Answer): string {
   if (!a) return "";
@@ -459,8 +454,8 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
           <b>{who}</b> · {clock(ask.createdAt)}
         </span>
       </div>
-      {ask.description && <div className="fb-desc">{md(ask.description)}</div>}
-      {ask.state !== "pending" && ask.questions.map((q) => <div className="fb-qt" key={q.id}>{md(q.text)}</div>)}
+      {ask.description && <div className="fb-desc"><Markdown text={ask.description} /></div>}
+      {ask.state !== "pending" && ask.questions.map((q) => <div className="fb-qt" key={q.id}><Markdown text={q.text} /></div>)}
     </div>
   );
   if (ask.state === "pending") {
@@ -609,12 +604,12 @@ function AnswerForm(props: {
           <b>{thread.client || "Agent"}</b> · {clock(ask.createdAt)} · {lateMode ? "expired" : "waiting for you"}
         </span>
       </div>
-      {ask.description && <div className="fb-desc">{md(ask.description)}</div>}
+      {ask.description && <div className="fb-desc"><Markdown text={ask.description} /></div>}
       {ask.questions.map((q) => {
         const d = get(q);
         return (
           <div key={q.id}>
-            <div className="fb-qt">{md(q.text)}</div>
+            <div className="fb-qt"><Markdown text={q.text} /></div>
             {q.type === "text" ? (
               <textarea
                 aria-label={q.text}
