@@ -7,6 +7,9 @@
 //	solco-hostd install [-data DIR]      write and load ~/Library/LaunchAgents/com.whstudio.solco.hostd.plist
 //	solco-hostd uninstall                unload and remove it
 //	solco-hostd status                   print whether the service is loaded
+//	solco-hostd feedback-mcp [-data DIR] the stdio MCP server external Agents use to ask the user (Solco Feedback)
+//
+// `run` also keeps the Feedback broker (internal/feedback) alive: it serves it whenever no other process does.
 package main
 
 import (
@@ -19,6 +22,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/thewei/solco/internal/feedback"
+	"github.com/thewei/solco/internal/feedback/mcpshim"
 	"github.com/thewei/solco/internal/hostd"
 	"github.com/thewei/solco/internal/settings"
 )
@@ -33,7 +38,7 @@ func defaultDataDir() string {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: solco-hostd run|install|uninstall|status [-data DIR]")
+		fmt.Fprintln(os.Stderr, "usage: solco-hostd run|install|uninstall|status|feedback-mcp [-data DIR]")
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
@@ -50,6 +55,8 @@ func main() {
 		err = hostd.Uninstall()
 	case "status":
 		fmt.Println(hostd.Status())
+	case "feedback-mcp":
+		err = feedbackMCP(*data)
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}
@@ -65,6 +72,11 @@ func run(dataDir string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	log.Info("solco-hostd started", "version", version)
+	fdir := feedback.Dir(dataDir)
+	go func() {
+		_ = feedback.Run(ctx, feedback.Options{Dir: fdir, Version: version, Notifier: feedback.DefaultNotifier(fdir),
+			ImportLegacy: feedback.LegacyDecisionsPath(), Log: log})
+	}()
 	return hostd.Run(ctx, hostd.Options{
 		Dir: hostd.RemoteDir(dataDir),
 		Settings: func() settings.RemoteAccessSettings {
@@ -77,4 +89,14 @@ func run(dataDir string) error {
 		New: hostd.NewServer(dataDir, version),
 		Log: log,
 	})
+}
+
+// feedbackMCP is what an Agent's MCP configuration launches. Stdout belongs to the protocol, so every log goes to
+// stderr.
+func feedbackMCP(dataDir string) error {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	dir := feedback.Dir(dataDir)
+	return mcpshim.Run(ctx, dir, version, feedback.DefaultNotifier(dir))
 }

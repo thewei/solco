@@ -13,5 +13,7 @@ launchd.go: 用户级 launchd 服务 com.whstudio.solco.hostd（RunAtLoad+KeepAl
 run_test.go: 让位/接管/关闭/过期请求的状态机
 identity_test.go: 两个所有者共享证书指纹与设备库（SOLCO-R02）；plist 渲染
 
+注: cmd/solco-hostd 的 run 同时跑 internal/feedback.Run（Feedback broker 待命/服务，与 Host 租约无关）；子命令 feedback-mcp 是外部 Agent 的 stdio MCP 入口
+
 法则: 同一时刻一个所有者·身份只有一份·常驻只服务不需要窗口的能力·能力如实声明；同名 AppHook Socket 只能一个所有者，抢不到退回原始 JSONL
 [PROTOCOL]: 变更时更新此头部，然后检查 ../../CLAUDE.md

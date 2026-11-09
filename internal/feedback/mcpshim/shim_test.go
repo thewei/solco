@@ -1,0 +1,156 @@
+package mcpshim
+
+import (
+	"context"
+	"encoding/json"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/thewei/solco/internal/feedback"
+)
+
+func setup(t *testing.T) (*feedback.Client, *feedback.Store) {
+	t.Helper()
+	dir := t.TempDir()
+	token, _ := feedback.EnsureToken(dir)
+	store := feedback.NewMemory()
+	srv := httptest.NewServer(feedback.NewHandler(&feedback.Broker{Store: store, Token: token}))
+	t.Cleanup(srv.Close)
+	ep, _ := json.Marshal(map[string]any{"addr": srv.Listener.Addr().String(), "pid": 1})
+	if err := os.WriteFile(filepath.Join(dir, "broker.json"), ep, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return feedback.NewClient(dir), store
+}
+
+func connect(t *testing.T, c *feedback.Client) *mcp.ClientSession {
+	t.Helper()
+	ctx := context.Background()
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := NewServer(c, "test").Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	cl := mcp.NewClient(&mcp.Implementation{Name: "cursor-vscode", Version: "9.9"}, nil)
+	sess, err := cl.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sess.Close() })
+	return sess
+}
+
+func text(t *testing.T, r *mcp.CallToolResult) string {
+	t.Helper()
+	for _, c := range r.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			return tc.Text
+		}
+	}
+	t.Fatal("no text content")
+	return ""
+}
+
+func TestToolsAreListedWithOldNames(t *testing.T) {
+	c, _ := setup(t)
+	sess := connect(t, c)
+	res, err := sess.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, tool := range res.Tools {
+		got[tool.Name] = true
+	}
+	for _, want := range []string{"interactive_feedback", "interactive_feedback_start", "interactive_feedback_wait", "recall_decisions"} {
+		if !got[want] {
+			t.Fatalf("missing tool %s in %v", want, got)
+		}
+	}
+}
+
+func TestAskBlocksUntilTheUserAnswers(t *testing.T) {
+	c, store := setup(t)
+	sess := connect(t, c)
+	repo := t.TempDir()
+	go func() {
+		// the user, in Solco
+		for i := 0; i < 100; i++ {
+			rows := store.Threads(feedback.Filter{Waiting: true})
+			if len(rows) == 1 {
+				th, _ := store.Thread(rows[0].ID)
+				_ = store.Resolve(th.Asks[0].ID, map[string]feedback.Answer{"q1": {Selected: []string{"ship"}}}, nil)
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback", Arguments: map[string]any{
+		"caller_info": "Cursor Agent - release", "project_root": repo,
+		"questions": []map[string]any{{"id": "q1", "text": "Ship?", "type": "single", "options": []string{"ship", "hold"}}},
+	}})
+	if err != nil || res.IsError {
+		t.Fatalf("call: %v %+v", err, res)
+	}
+	var out struct {
+		Status  string                     `json:"status"`
+		Answers map[string]feedback.Answer `json:"answers"`
+	}
+	if err := json.Unmarshal([]byte(text(t, res)), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Status != "answered" || out.Answers["q1"].Selected[0] != "ship" {
+		t.Fatalf("result: %s", text(t, res))
+	}
+	// The handshake client name reached the thread.
+	rows := store.Threads(feedback.Filter{})
+	if rows[0].Client != "Cursor" {
+		t.Fatalf("client: %+v", rows[0])
+	}
+}
+
+func TestStartThenWaitAndRecall(t *testing.T) {
+	c, store := setup(t)
+	sess := connect(t, c)
+	ctx := context.Background()
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback_start", Arguments: map[string]any{
+		"caller_info": "Codex", "thread_id": "T1",
+		"questions": []map[string]any{{"id": "a", "text": "Which database?", "type": "text"}},
+	}})
+	if err != nil || res.IsError {
+		t.Fatalf("start: %v", err)
+	}
+	var started struct {
+		Data struct {
+			SessionID string `json:"session_id"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal([]byte(text(t, res)), &started)
+	id := started.Data.SessionID
+	if id == "" {
+		t.Fatalf("no session id: %s", text(t, res))
+	}
+	w, _ := sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback_wait", Arguments: map[string]any{"session_id": id, "wait_seconds": 1}})
+	if !strings.Contains(text(t, w), `"pending"`) {
+		t.Fatalf("expected pending: %s", text(t, w))
+	}
+	_ = store.Resolve(id, map[string]feedback.Answer{"a": {Custom: "Postgres"}}, nil)
+	w, _ = sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback_wait", Arguments: map[string]any{"session_id": id, "wait_seconds": 5}})
+	if !strings.Contains(text(t, w), `"answered"`) || !strings.Contains(text(t, w), "Postgres") {
+		t.Fatalf("expected answer: %s", text(t, w))
+	}
+	r, _ := sess.CallTool(ctx, &mcp.CallToolParams{Name: "recall_decisions", Arguments: map[string]any{"query": "database"}})
+	if !strings.Contains(text(t, r), "Postgres") || !strings.Contains(text(t, r), `"count": 1`) {
+		t.Fatalf("recall: %s", text(t, r))
+	}
+	if bad, _ := sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback_wait", Arguments: map[string]any{"session_id": "nope"}}); !strings.Contains(text(t, bad), "not_found") {
+		t.Fatalf("unknown id: %s", text(t, bad))
+	}
+}
