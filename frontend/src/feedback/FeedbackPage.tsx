@@ -588,6 +588,19 @@ function AnswerForm(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primary, ask.id, send]);
 
+  // A phone keyboard takes the lower half of the page a moment after the focus: bring the whole form (Send
+  // included) back above it, once the page has been resized.
+  const formRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isPhone) return;
+    const settle = () => {
+      const form = formRef.current;
+      if (form && form.contains(document.activeElement)) form.scrollIntoView({ block: "end", behavior: "smooth" });
+    };
+    window.addEventListener("resize", settle);
+    return () => window.removeEventListener("resize", settle);
+  }, []);
+
   const hint = !online
     ? "Feedback service is offline."
     : lateMode
@@ -597,7 +610,7 @@ function AnswerForm(props: {
         : "Goes straight back to the agent.";
 
   return (
-    <div className="fb-form" data-form={ask.id}>
+    <div className="fb-form" data-form={ask.id} ref={formRef} onFocus={() => isPhone && window.setTimeout(() => formRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }), 350)}>
       <div className="fb-nh">
         <span className="fb-glyph sm">{glyphOf(thread.client)}</span>
         <span>
