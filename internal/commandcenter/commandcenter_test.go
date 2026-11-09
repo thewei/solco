@@ -126,3 +126,16 @@ func TestFuzzySubsequence(t *testing.T) {
 		t.Fatal("empty query must match")
 	}
 }
+
+func TestQueryOnlyActionsSurfaceOnlyOnceTheUserTypes(t *testing.T) {
+	ix := Build([]Action{
+		{ID: "a", Title: "Open", Section: "App", Available: true},
+		{ID: "b", Title: "Feedback thread", Section: "Feedback", Keywords: []string{"feedback"}, Available: true, QueryOnly: true},
+	})
+	if got := ix.Query("", ScopeAll); len(got) != 1 || got[0].Action.ID != "a" {
+		t.Fatalf("empty query = %+v, want only the ordinary action", got)
+	}
+	if got := ix.Query("feed", ScopeAll); len(got) != 1 || got[0].Action.ID != "b" {
+		t.Fatalf("typed query = %+v, want the query-only action", got)
+	}
+}

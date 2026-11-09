@@ -4,7 +4,7 @@
 Chat WebView 页（产品决策 2026-10-11）的唯一源码：一份嵌入式 SPA 同时服务桌面（`mygo build` 内嵌 `dist`，经 `mygo://localhost` 加载）与手机（`build:mobile` 产出单文件 `dist-mobile/mobile.html`，solco-mobile 经 `scripts/sync-chat-page.mjs` 生成 `src/generated/chat-page.ts` 快照）。页面只与自己的桥（`mygo-runtime`）对话；页面代码禁止出现按客户端分叉的分支。`src/` 变更未完成直至：`bun run build` + `bun run build:mobile` + solco-mobile `pnpm sync:chat-page` + `pnpm check:chat-page`。
 
 成员清单
-main.tsx: 桌面入口，createRoot 按路径挂 `App`（/chat）或懒加载的 `AssistantsPage`（/assistants）——Files 预览自 2026-11-08 起是原生的，这里不再有它的页面（`/files-viewer` 路由、`FilesViewer`、github-markdown-css 都已删）；引入 highlight.js github 主题、`nozoom` 与 `theme.css`（`vite.config.ts`，target safari15）
+main.tsx: 桌面入口，createRoot 按路径挂 `App`（/chat）、懒加载的 `AssistantsPage`（/assistants）或 `FeedbackPage`（/feedback）——Files 预览自 2026-11-08 起是原生的，这里不再有它的页面（`/files-viewer` 路由、`FilesViewer`、github-markdown-css 都已删）；引入 highlight.js github 主题、`nozoom` 与 `theme.css`（`vite.config.ts`，target safari15）
 mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），渲染同一个 `App`，引入 `nozoom`，零客户端分支
 index.html / mobile.html: 两个 HTML 壳的首帧：内联 `--content` 同一对色（`light-dark(#fcfcfc, #0a0a0a)`，与 `theme.css`、Go `webviewBackground`、原生 `designTokens().Content` 一对，`TestWebviewBackgroundMatchesPageTokens` 钉住）；`mobile.html` 另把 `data-theme` 与 `data-theme-pin` 固定为 dark（手机只有深色，状态未到时也不闪浅色；`App.tsx` 在状态没给 `theme` 时回落到该 pin）
 nozoom.ts: 双指缩放关闭（副作用导入）：gesture 事件与 Ctrl+wheel 的默认缩放被取消——页面是原生窗口里的 App UI，双指放大不原生；普通滚动不受影响
@@ -34,6 +34,8 @@ assistants/ResultCards.tsx: 聊天上方的任务结果卡（2026-11-07，确定
 assistants/GroupChat.tsx: Group 的 @ 定向/无 @ 广播；Composer 外壳复用 composer-surface；`GroupsSheet`（2026-11-07：群不再是侧栏入口，由 Primary 的 ⋯ → Groups… 列出/新建，群页头有 ‹ 回 Primary）
 assistants/AssistantsPage.tsx: `/assistants` 对话优先页（2026-11-04，designs/assistants-chat-first）：嵌入同一个 `App` 作 Coordinator 对话；未启动时同款壳 + 自带输入框与 agent 选择，首条消息经 `assistants.ensureChat` 拉起 Coordinator 并在 Chat 绑定后经 `chat.send` 恰好发送一次；Needs-You 条、⋯ 菜单（含 Archive Assistant 的二次确认）、More 抽屉（列表经 `assistants.drawer` 仅开着时读取）
 assistants/Behavior.tsx / WorkStyle.tsx: Settings 页签的两节——Behavior 只剩一个「Carry on by itself」开关 + Quiet hours（提醒间隔/日预算保留原值），WorkStyle 的 MCP 收进「advanced」折叠；更多抽屉只有 Needs you / Tasks（Open·Watching·Routines·Done 四个筛选）/ Memory / Settings 四个页签（2026-11-07，Autonomy 页签已删，核心能力仍在）
+feedback/FeedbackPage.tsx: `/feedback` 收件箱（2026-11-09，designs/feedback-inbox 方向 A）：左线程列表（Needs you / All、项目 chips、按天分组）+ 右时间线（Agent 提问卡、你的回答气泡、静默间隔、迟到回答表单）；经 `feedback.*` 桥每 1.5 s 轮询（页面不可见不读）；落点（通知/深链/⌘K）由快照的 `focus` 一次性交付；窄屏（≤700px，手机复用同一页）列表→线程两屏；草稿只存页面内存；1-9 选项、⌘↵ 发送只作用于最新等待表单
+feedback/feedback.css: 上述页面样式（只用 tokens.generated.css 与 theme.css 的墨色阶；触控档 44px）
 assistants/assistants.css: 上述页面样式（沿用 theme.css 令牌；`.as-scrim` z-index 30 高于 More 抽屉 10 与菜单 20/21，抽屉开着时弹窗也完整）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

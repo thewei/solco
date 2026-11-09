@@ -55,6 +55,8 @@ func (s *Shell) routeHeader() (routeHeaderSpec, bool) {
 		return routeHeaderSpec{title: "Automations"}, true
 	case path == routeAssistants:
 		return routeHeaderSpec{title: "Assistants"}, true
+	case path == routeFeedback:
+		return routeHeaderSpec{title: "Feedback"}, true
 	case strings.HasPrefix(path, "/inspector/"):
 		return s.inspectorRouteHeader(strings.TrimPrefix(path, "/inspector/")), true
 	case path == "/chat":

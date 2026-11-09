@@ -275,7 +275,12 @@ func (s *Shell) buildCommandCenterActions() []commandcenter.Action {
 			Keywords: []string{"scheduled", "cron", "定时", "runs"}, Kind: commandcenter.TargetRoute, TargetID: routeAutomations, Available: s.automationsAvailable()},
 		commandcenter.Action{ID: "app.assistants", Title: "Assistants", Section: "App",
 			Keywords: []string{"assistant", "goal", "task", "coordinator", "memory", "助手"}, Kind: commandcenter.TargetRoute, TargetID: routeAssistants, Available: s.assistantsAvailable()},
+		// The Feedback inbox (2026-11-09): where Agents outside Solco ask the
+		// user; rarely opened by hand, so the palette is its only entry.
+		commandcenter.Action{ID: "app.feedback", Title: "Feedback", Section: "App",
+			Keywords: []string{"inbox", "ask", "question", "interactive", "mcp", "agent", "反馈", "提问"}, Kind: commandcenter.TargetRoute, TargetID: routeFeedback, Available: s.feedbackAvailable()},
 	)
+	actions = append(actions, s.feedbackCommandActions()...)
 	// Hands the selected Tab's repository to Solco Git; listed once the app is
 	// found (2026-11-07 decision, item 2).
 	if s.solcoGitReady() {
@@ -433,6 +438,7 @@ var commandCenterGlyphs = map[string]*ui.SVG{
 	"app.hook-doctor":    iconAgent,
 	"app.automations":    iconBolt,
 	"app.assistants":     iconSparkles,
+	"app.feedback":       iconChat,
 	"app.open-solco-git": iconBranch,
 	"device.add":         iconPlus,
 }
@@ -607,6 +613,10 @@ func (s *Shell) executeCommandCenterResult(result commandcenter.Result) {
 		// Command actions have no Context during execution. The native window
 		// size supplies the same geometry that View gets from c.Size(); in
 		// headless mode a zero width means geometry is not yet established.
+		if thread, ok := strings.CutPrefix(action.TargetID, feedbackThreadTargetPrefix); ok {
+			s.openFeedback(feedbackFocus{Thread: thread})
+			return
+		}
 		switch action.TargetID {
 		case "action:add-device":
 			s.openDeviceAdd("")

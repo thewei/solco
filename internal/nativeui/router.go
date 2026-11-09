@@ -22,6 +22,7 @@ const (
 	routeQuota       = "/quota"
 	routeAutomations = "/automations"
 	routeAssistants  = "/assistants"
+	// routeFeedback ("/feedback") is declared in feedback_ui.go.
 )
 
 // isHistoryRoute is the one exact boundary for the History top-level view.
@@ -61,6 +62,9 @@ func (s *Shell) routeView(c *ui.Context) {
 		case r.Match(routeAssistants):
 			r.Title("Assistants")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.assistantsPage(c) })
+		case r.Match(routeFeedback):
+			r.Title("Feedback")
+			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.feedbackPage(c) })
 		case r.Match("/history/{id}"):
 			r.Title("Session Detail")
 			gorexContentCard(c, gorexColorsOf(c.Theme().Dark), func() { s.historyDetailPage(c, r.Param("id")) })
@@ -103,6 +107,8 @@ func (s *Shell) currentRouteTitle() string {
 		return "Automations"
 	case path == routeAssistants:
 		return "Assistants"
+	case path == routeFeedback:
+		return "Feedback"
 	case path == routeHosts:
 		return "Hosts"
 	case strings.HasPrefix(path, "/history/"):

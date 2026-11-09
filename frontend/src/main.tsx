@@ -6,12 +6,17 @@ import "./nozoom";
 import "./theme.css";
 
 // One embedded SPA serves both WebView pages from the app content origin:
-// /chat (the chat body) and /assistants (the Assistants body, which embeds
-// the chat). The Files preview is native (2026-11-08) and has no page here.
+// /chat (the chat body), /assistants (the Assistants body, which embeds
+// the chat) and /feedback (the Feedback inbox). The Files preview is native (2026-11-08) and has no page here.
 const AssistantsPage = React.lazy(() =>
   import("./assistants/AssistantsPage").then((m) => ({ default: m.AssistantsPage })),
 );
 
+const FeedbackPage = React.lazy(() =>
+  import("./feedback/FeedbackPage").then((m) => ({ default: m.FeedbackPage })),
+);
+
+const isFeedback = /\/feedback\/?$/.test(window.location.pathname);
 const isAssistants = /\/assistants\/?$/.test(window.location.pathname);
 
 // Dev-only crash visor: an embedded WKWebView has no inspector in the
@@ -38,7 +43,11 @@ if (import.meta.env.DEV) {
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <React.StrictMode>
-    {isAssistants ? (
+    {isFeedback ? (
+      <React.Suspense fallback={<div className="fb-boot" />}>
+        <FeedbackPage />
+      </React.Suspense>
+    ) : isAssistants ? (
       <React.Suspense fallback={<div className="as-boot" />}>
         <AssistantsPage />
       </React.Suspense>

@@ -205,7 +205,7 @@ func (s *Shell) sidebarSearchRowShown() bool {
 // Assistants keep the standard foot.
 func (s *Shell) sidebarBackFoot() bool {
 	path := s.router.Path()
-	return s.sidebarInSettings() || isHistoryRoute(path) || path == routeHosts
+	return s.sidebarInSettings() || isHistoryRoute(path) || path == routeHosts || path == routeFeedback
 }
 
 // sidebarBackRow is the Back foot, labelled Back; its tooltip names the

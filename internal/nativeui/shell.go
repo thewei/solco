@@ -315,6 +315,8 @@ type Shell struct {
 	// assistants is the Assistants gate and sidebar overview (assistants_state.go),
 	// opened by the automations plugin gate plus its own capability probe.
 	assistants assistantsState
+	// feedback is the Feedback inbox (feedback_ui.go): the broker client, its page's WebView and the pending landing.
+	feedback feedbackState
 	// assistantsRemote is the client the paired phones' Assistants routes use (nil while the gate is closed); written on the window lane, read by Host goroutines.
 	assistantsRemote atomic.Pointer[personalagent.Client]
 	// rightPanel holds the Files explorer's cache and preview tiers (the
@@ -914,6 +916,7 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	// Our hook layer: start in-app Unix domain socket server and tail the
 	// event spool for backward compatibility.
 	s.AttachHookServer()
+	s.startFeedbackWatch()
 	// Silent background check for application updates (2s after launch)
 	time.AfterFunc(2*time.Second, func() {
 		s.checkForUpdates(false)
@@ -996,6 +999,7 @@ func (s *Shell) Close() {
 	s.sidePanelStopTick()
 	s.cancelQuickAICommit()
 	s.cancelCommitAISuggestion()
+	s.stopFeedbackWatch()
 	if s.hooksStop != nil {
 		s.hooksStop()
 		s.hooksStop = nil

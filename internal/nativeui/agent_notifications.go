@@ -79,6 +79,9 @@ func (s *Shell) routeAgentNotification(id string) {
 		s.routeAutomationNotification(name)
 		return
 	}
+	if s.routeFeedbackNotification(id) {
+		return
+	}
 	s.activateWindow()
 	key, ok := parseAgentNotificationID(id)
 	if !ok {

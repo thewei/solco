@@ -57,6 +57,10 @@ type Action struct {
 	// Available gates execution and display; the builder derives it from
 	// snapshot facts (an agent exists, a pane is attachable, ...).
 	Available bool
+	// QueryOnly keeps the action out of the empty query: it surfaces only once
+	// the user types something that matches (a long, rarely wanted list such
+	// as the Feedback threads).
+	QueryOnly bool
 }
 
 // Result is one ranked palette hit.
@@ -100,6 +104,9 @@ func (ix *Index) Query(text string, scope Scope) []Result {
 			continue
 		}
 		if !scopeAllows(action, scope) {
+			continue
+		}
+		if action.QueryOnly && text == "" {
 			continue
 		}
 		class, ok := matchClass(action, text)

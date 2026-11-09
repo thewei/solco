@@ -10,6 +10,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"log/slog"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/thewei/solco/internal/app"
 	"github.com/thewei/solco/internal/applog"
+	"github.com/thewei/solco/internal/feedback"
 	"github.com/thewei/solco/internal/history"
 	"github.com/thewei/solco/internal/nativeui"
 	"github.com/thewei/solco/internal/sessiontrash"
@@ -131,6 +133,19 @@ func main() {
 	// The WebView Assistants page (product decision 2026-11-03) reads and
 	// writes only through the plugin's `assistant …` CLI behind this bridge.
 	mygo.BindAs("assistants", nativeui.NewAssistantsBridge(shell))
+
+	// The Feedback inbox (product decision 2026-11-09): Agents outside Solco
+	// ask through the broker; this process serves it when nothing else does
+	// (the resident solco-hostd, or another Solco) and always reads it.
+	feedbackDir := feedback.Dir(userDataDir)
+	nativeui.WithFeedback(feedbackDir)(shell)
+	mygo.BindAs("feedback", nativeui.NewFeedbackBridge(shell))
+	feedbackCtx, stopFeedback := context.WithCancel(context.Background())
+	defer stopFeedback()
+	go func() {
+		_ = feedback.Run(feedbackCtx, feedback.Options{Dir: feedbackDir, Version: "solco-app", Notifier: feedback.DefaultNotifier(feedbackDir),
+			ImportLegacy: feedback.LegacyDecisionsPath()})
+	}()
 
 	var raiseMain func()
 

@@ -52,6 +52,10 @@ func parseRevealURL(raw string) (revealTarget, bool) {
 // the window lane and navigates this window to the requested tab.
 func (s *Shell) RouteExternalURL(raw string) {
 	s.activateWindow()
+	if focus, ok := parseFeedbackURL(raw); ok {
+		s.applyOnWindow(func() { s.openFeedback(focus) })
+		return
+	}
 	target, ok := parseRevealURL(raw)
 	if !ok {
 		slog.Warn("ignored unsupported deep link")

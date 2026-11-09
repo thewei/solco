@@ -17,6 +17,12 @@ export interface Acceptance {
   finishedAt: number;
 }
 
+/** Answer is the user's answer to one Question. */
+export interface Answer {
+  selected: string[];
+  custom?: string;
+}
+
 /** AppliedRevision is the revision a running surface was launched with. */
 export interface AppliedRevision {
   surface: string;
@@ -54,6 +60,30 @@ export interface Artifact {
   items?: ProofItem[];
   runId?: string;
 }
+
+/** Ask is one set of questions an Agent put to the user. */
+export interface Ask {
+  id: string;
+  threadId: string;
+  /** unix ms */
+  createdAt: number;
+  resolvedAt?: number;
+  description?: string;
+  questions: Question[];
+  timeoutMs: number;
+  state: AskState;
+  answers?: Record<string, Answer>;
+  attachmentCount?: number;
+  message?: string;
+  late?: boolean;
+  lateDelivered?: boolean;
+  lastHeartbeat: number;
+  /** computed: pending and the Agent's shim stopped polling */
+  disconnected?: boolean;
+}
+
+/** AskState is where an Ask stands. Answered after expired is a late answer (Ask.Late). */
+export type AskState = "pending" | "answered" | "expired" | "ended";
 
 /** Assistant is one persistent identity. */
 export interface Assistant {
@@ -293,6 +323,16 @@ export interface AssistantsView {
    * not "none turned on".
    */
   agentsReady: boolean;
+}
+
+/**
+ * Attachment is an image the user attached to an answer. Bytes live in memory until delivered; history keeps
+ * only the count.
+ */
+export interface Attachment {
+  mimeType: string;
+  dataBase64: string;
+  name?: string;
 }
 
 /** ChatBridgeInteraction is one pending interaction card. */
@@ -852,6 +892,34 @@ export interface Fact {
   createdAt: number;
 }
 
+/** feedbackFocus names a thread and, optionally, one Ask inside it. */
+export interface FeedbackFocus {
+  thread: string;
+  ask: string;
+}
+
+/** FeedbackView is everything the page draws, one value per read. */
+export interface FeedbackView {
+  theme: string;
+  /**
+   * Online is false while no process serves the broker; the page shows its
+   * offline state and keeps polling.
+   */
+  online: boolean;
+  threads: ThreadSummary[];
+  waiting: number;
+  /** Selected is the thread Detail belongs to ("" = none). */
+  selected: string;
+  detail?: Thread;
+  /** Focus is a landing a notification or link asked for, delivered once. */
+  focus?: FeedbackFocus;
+  /**
+   * CanOpenGit says Solco Git is on this machine (the thread header's
+   * "open project" menu offers it).
+   */
+  canOpenGit: boolean;
+}
+
 /** Goal is a long-lived objective. */
 export interface Goal {
   id: string;
@@ -1176,6 +1244,18 @@ export interface ProofItem {
   state?: string;
 }
 
+/** Question is one question of an Ask. */
+export interface Question {
+  id: string;
+  text: string;
+  /** single | multiple | text */
+  type: string;
+  options?: string[];
+  allowCustom: boolean;
+  required: boolean;
+  placeholder?: string;
+}
+
 /**
  * Routine is a scheduled automation that belongs to an Assistant, with the
  * definition it points at and how it is doing. The definition itself lives in
@@ -1291,6 +1371,44 @@ export interface TaskProof {
   state: string;
   artifacts: Artifact[];
   missing: string[];
+}
+
+/** Thread groups the Asks of one Agent in one project. */
+export interface Thread {
+  id: string;
+  projectKey: string;
+  projectRoot?: string;
+  /** display name: last path element of ProjectKey */
+  project: string;
+  branch?: string;
+  worktree?: boolean;
+  client?: string;
+  clientVersion?: string;
+  callerInfo?: string;
+  title: string;
+  explicitId?: string;
+  taskId?: string;
+  createdAt: number;
+  lastAt: number;
+  /** computed: pending Asks */
+  waiting: number;
+  asks?: (Ask | null)[];
+}
+
+/** ThreadSummary is a Thread row without its Asks. */
+export interface ThreadSummary {
+  id: string;
+  project: string;
+  branch?: string;
+  worktree?: boolean;
+  client?: string;
+  title: string;
+  lastAt: number;
+  waiting: number;
+  askCount: number;
+  /** first line of the newest Ask's first question */
+  preview?: string;
+  lastState?: string;
 }
 
 // ---- Services ----
@@ -1774,6 +1892,36 @@ export const assistants = {
   /** VerifyMCP asks a headless Agent which of the granted servers it connects to. */
   verifyMCP(id: string): Promise<void> {
     return call("assistants.VerifyMCP", id);
+  },
+} as const;
+
+/** FeedbackBridge is the page's bound service. */
+export const feedback = {
+  /**
+   * Answer delivers the user's answers to a pending Ask, or to an expired one
+   * as a late answer.
+   */
+  answer(askID: string, answers: Record<string, Answer>, attachments: Attachment[]): Promise<void> {
+    return call("feedback.Answer", askID, answers, attachments);
+  },
+  /** End closes an Ask without an answer. */
+  end(askID: string): Promise<void> {
+    return call("feedback.End", askID);
+  },
+  /**
+   * OpenProject hands a thread's project folder to Solco Git ("git") or shows
+   * it in Finder ("finder"). The folder comes from the broker's own record of
+   * the thread, never from the page.
+   */
+  openProject(threadID: string, target: string): Promise<void> {
+    return call("feedback.OpenProject", threadID, target);
+  },
+  /**
+   * Snapshot reads the thread list and, for the thread the page is on, its
+   * timeline. selected is client-local navigation; a pending Focus overrides it.
+   */
+  snapshot(selected: string): Promise<FeedbackView> {
+    return call("feedback.Snapshot", selected);
   },
 } as const;
 
