@@ -74,6 +74,8 @@ export interface Ask {
   state: AskState;
   answers?: Record<string, Answer>;
   attachmentCount?: number;
+  /** Context is what the user pointed the Agent at with the answer: files, folders and Skills (paths, never content). */
+  context?: ContextRef[];
   message?: string;
   late?: boolean;
   lateDelivered?: boolean;
@@ -771,6 +773,17 @@ export interface Commitment {
 }
 
 /**
+ * ContextRef is one thing the user points the Agent at with an answer. The page sends Kind + Name (a project-relative
+ * path, or a Skill name); the broker resolves it and fills Path with the absolute path the Agent reads (a Skill's is
+ * its SKILL.md). Hosts strip Path before it reaches a phone.
+ */
+export interface ContextRef {
+  kind: string;
+  name: string;
+  path?: string;
+}
+
+/**
  * Coordinator is an Assistant's Coordinator Agent as the plugin reports it:
  * the session fields are exactly what Herdr reported for its run.
  */
@@ -930,6 +943,11 @@ export interface FeedbackView {
    * asks its Host's feedbackManage capability).
    */
   canManage: boolean;
+  /**
+   * CanPick says the answer form may offer the file / Skill picker (always true on the desktop; the phone follows
+   * the Host's feedbackContext capability).
+   */
+  canPick: boolean;
   /** RetentionDays is how long finished threads are kept (0 = forever). */
   retentionDays?: number;
 }
@@ -1211,6 +1229,13 @@ export interface PersonaView {
   instructions: Instructions;
   runtime: Runtime;
   mcp: MCPView;
+}
+
+/** PickItem is one row of the file / Skill picker. */
+export interface PickItem {
+  kind: string;
+  name: string;
+  detail?: string;
 }
 
 /** PlanRevision is one entry of a plan's trail. */
@@ -1917,8 +1942,8 @@ export const feedback = {
    * Answer delivers the user's answers to a pending Ask, or to an expired one
    * as a late answer.
    */
-  answer(askID: string, answers: Record<string, Answer>, attachments: Attachment[]): Promise<void> {
-    return call("feedback.Answer", askID, answers, attachments);
+  answer(askID: string, answers: Record<string, Answer>, attachments: Attachment[], refs: ContextRef[]): Promise<void> {
+    return call("feedback.Answer", askID, answers, attachments, refs);
   },
   /**
    * Cleanup counts (dryRun) or removes the finished threads idle for more than olderThanDays; it returns how many
@@ -1942,6 +1967,13 @@ export const feedback = {
    */
   openProject(threadID: string, target: string): Promise<void> {
     return call("feedback.OpenProject", threadID, target);
+  },
+  /**
+   * PickContext lists the answer form's picker rows for a thread: kind "files" (files and folders of its project) or
+   * "skills" (installed Skills), ranked for query. Names only; the broker resolves a pick to a path when answering.
+   */
+  pickContext(threadID: string, kind: string, query: string): Promise<PickItem[]> {
+    return call("feedback.PickContext", threadID, kind, query);
   },
   /** SetRetention sets how many days finished threads are kept (0 = forever). */
   setRetention(days: number): Promise<void> {

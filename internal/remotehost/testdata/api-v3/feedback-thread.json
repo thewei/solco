@@ -55,6 +55,16 @@
             ]
           }
         },
+        "context": [
+          {
+            "kind": "file",
+            "name": "docs/api.md"
+          },
+          {
+            "kind": "skill",
+            "name": "think"
+          }
+        ],
         "lastHeartbeat": 1786039500000
       },
       {

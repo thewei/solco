@@ -107,7 +107,7 @@ func TestBrokerRoundTripThroughClient(t *testing.T) {
 	go func() { _ = c.Stream(sctx, func(e Event) { events <- e }) }()
 	waitFor(t, b.UIAttached)
 
-	if err := c.Answer(ctx, askID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil); err != nil {
+	if err := c.Answer(ctx, askID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -122,10 +122,10 @@ func TestBrokerRoundTripThroughClient(t *testing.T) {
 	if r.Status != "answered" || r.Answers["a"].Selected[0] != "x" {
 		t.Fatalf("%+v", r)
 	}
-	if err := c.Answer(ctx, askID, nil, nil); !errors.Is(err, ErrFinal) {
+	if err := c.Answer(ctx, askID, nil, nil, nil); !errors.Is(err, ErrFinal) {
 		t.Fatalf("second answer: %v", err)
 	}
-	if err := c.Answer(ctx, "missing", nil, nil); !errors.Is(err, ErrNotFound) {
+	if err := c.Answer(ctx, "missing", nil, nil, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing: %v", err)
 	}
 	th, err := c.Thread(ctx, threadID)
@@ -296,7 +296,7 @@ func TestBrokerManagesThreadsThroughClient(t *testing.T) {
 	if n, err := c.DeleteThreads(ctx, []string{threadID}); err != nil || n != 0 {
 		t.Fatalf("a waiting thread stays: %d %v", n, err)
 	}
-	if err := c.Answer(ctx, askID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil); err != nil {
+	if err := c.Answer(ctx, askID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := c.Purge(ctx, 30, true); err != nil || n != 0 {

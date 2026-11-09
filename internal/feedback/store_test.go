@@ -118,7 +118,7 @@ func TestAskLifecycleAndLateAnswer(t *testing.T) {
 	if r := s.Result(a1.ID); r.Status != "expired" {
 		t.Fatalf("status %q", r.Status)
 	}
-	if err := s.Resolve(a1.ID, map[string]Answer{"a": {Selected: []string{"x"}}, "zzz": {Custom: "dropped"}}, nil); err != nil {
+	if err := s.Resolve(a1.ID, map[string]Answer{"a": {Selected: []string{"x"}}, "zzz": {Custom: "dropped"}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	th, _ := s.ThreadOfAsk(a1.ID)
@@ -128,7 +128,7 @@ func TestAskLifecycleAndLateAnswer(t *testing.T) {
 	}
 	// The next Ask in the thread hands the late answer over exactly once.
 	a2, _, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: repo, Questions: q1("second?")})
-	if err := s.Resolve(a2.ID, map[string]Answer{"a": {Selected: []string{"y"}}}, nil); err != nil {
+	if err := s.Resolve(a2.ID, map[string]Answer{"a": {Selected: []string{"y"}}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	r := s.Result(a2.ID)
@@ -138,10 +138,10 @@ func TestAskLifecycleAndLateAnswer(t *testing.T) {
 	if r2 := s.Result(a2.ID); len(r2.LateAnswers) != 0 {
 		t.Fatal("late answers must be delivered once")
 	}
-	if err := s.Resolve(a2.ID, nil, nil); !errors.Is(err, ErrFinal) {
+	if err := s.Resolve(a2.ID, nil, nil, nil); !errors.Is(err, ErrFinal) {
 		t.Fatalf("answered ask is final, got %v", err)
 	}
-	if err := s.Resolve("nope", nil, nil); !errors.Is(err, ErrNotFound) {
+	if err := s.Resolve("nope", nil, nil, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -152,7 +152,7 @@ func TestEndIsFinalAndLostAgentExpires(t *testing.T) {
 	if err := s.End(a.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Resolve(a.ID, nil, nil); !errors.Is(err, ErrFinal) {
+	if err := s.Resolve(a.ID, nil, nil, nil); !errors.Is(err, ErrFinal) {
 		t.Fatalf("ended ask cannot be answered: %v", err)
 	}
 	b, _, _ := s.Create(CreateInput{CallerInfo: "X", Questions: q1("again?")})
@@ -184,7 +184,7 @@ func TestValidationAndAttachments(t *testing.T) {
 		{MimeType: "image/png", DataBase64: "AAAA", Name: "ok.png"},
 		{MimeType: "text/plain", DataBase64: "AAAA"},
 		{MimeType: "image/png"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,14 +214,14 @@ func TestPersistenceAndBounds(t *testing.T) {
 	if fi, _ := os.Stat(filepath.Join(dir, "feedback.json")); fi.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v", fi.Mode())
 	}
-	if err := s2.Resolve(a.ID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil); err != nil {
+	if err := s2.Resolve(a.ID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	m := NewMemory()
 	for i := 0; i < maxAsksPerThread+5; i++ {
 		x, _, _ := m.Create(CreateInput{CallerInfo: "X", ProjectRoot: "/tmp/p", Questions: q1("q")})
-		_ = m.Resolve(x.ID, nil, nil)
+		_ = m.Resolve(x.ID, nil, nil, nil)
 	}
 	th := m.Threads(Filter{})
 	got, _ := m.Thread(th[0].ID)
@@ -241,7 +241,7 @@ func TestPersistenceAndBounds(t *testing.T) {
 func TestListingAndRecall(t *testing.T) {
 	s, now := clockStore(t)
 	a, _, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent - a", ProjectRoot: "/tmp/alpha", Questions: q1("Which database?")})
-	_ = s.Resolve(a.ID, map[string]Answer{"a": {Selected: []string{"Postgres"}, Custom: "with pgvector"}}, nil)
+	_ = s.Resolve(a.ID, map[string]Answer{"a": {Selected: []string{"Postgres"}, Custom: "with pgvector"}}, nil, nil)
 	*now = now.Add(time.Minute)
 	b, _, _ := s.Create(CreateInput{CallerInfo: "Claude Code - b", ProjectRoot: "/tmp/beta", Questions: q1("Ship it?")})
 	rows := s.Threads(Filter{})
@@ -280,7 +280,7 @@ func TestAbandonedAskStaysAnswerableAsLate(t *testing.T) {
 	if err := s.Abandon(a.ID); err == nil {
 		t.Fatal("a finished ask cannot be abandoned twice")
 	}
-	if err := s.Resolve(a.ID, map[string]Answer{"q1": {Selected: []string{"yes"}}}, nil); err != nil {
+	if err := s.Resolve(a.ID, map[string]Answer{"q1": {Selected: []string{"yes"}}}, nil, nil); err != nil {
 		t.Fatalf("an abandoned ask is still answerable: %v", err)
 	}
 	b, _, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: repo, Questions: q1("again?")})
@@ -320,12 +320,12 @@ func TestDeletePurgeAndRetentionSparePendingThreads(t *testing.T) {
 		return a.ID, th.ID
 	}
 	oldAsk, oldThread := mk("Cursor Agent")
-	_ = s.Resolve(oldAsk, map[string]Answer{"a": {Selected: []string{"x"}}}, nil)
+	_ = s.Resolve(oldAsk, map[string]Answer{"a": {Selected: []string{"x"}}}, nil, nil)
 	waitAsk, waitThread := mk("Claude Code")
 	_ = waitAsk
 	*now = now.Add(40 * 24 * time.Hour)
 	freshAsk, freshThread := mk("Codex")
-	_ = s.Resolve(freshAsk, map[string]Answer{"a": {Selected: []string{"y"}}}, nil)
+	_ = s.Resolve(freshAsk, map[string]Answer{"a": {Selected: []string{"y"}}}, nil, nil)
 
 	if n := s.Purge(30*24*time.Hour, true); n != 1 {
 		t.Fatalf("dry run counts only the old finished thread: %d", n)
@@ -355,7 +355,7 @@ func TestDeletePurgeAndRetentionSparePendingThreads(t *testing.T) {
 	}
 	mkOld := func() string {
 		a, th, _ := s.Create(CreateInput{CallerInfo: "Zed", ProjectRoot: mkRepo(t), Questions: q1("q?")})
-		_ = s.Resolve(a.ID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil)
+		_ = s.Resolve(a.ID, map[string]Answer{"a": {Selected: []string{"x"}}}, nil, nil)
 		return th.ID
 	}
 	old := mkOld()
@@ -379,7 +379,7 @@ func TestDeletePurgeAndRetentionSparePendingThreads(t *testing.T) {
 func TestSearchReadsTitlesQuestionsAndAnswers(t *testing.T) {
 	s, _ := clockStore(t)
 	a, th, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: mkRepo(t), Description: "Migrating the BILLING tables", Questions: q1("Which index?")})
-	_ = s.Resolve(a.ID, map[string]Answer{"a": {Custom: "use the composite one"}}, nil)
+	_ = s.Resolve(a.ID, map[string]Answer{"a": {Custom: "use the composite one"}}, nil, nil)
 	s.Create(CreateInput{CallerInfo: "Claude Code", ProjectRoot: mkRepo(t), Questions: q1("Unrelated?")})
 	for q, want := range map[string]int{"billing": 1, "composite": 1, "which index": 1, "unrelated": 1, "zzz": 0, " ": 0} {
 		if got := s.Search(q); len(got) != want || (want == 1 && q != "unrelated" && got[0] != th.ID) {

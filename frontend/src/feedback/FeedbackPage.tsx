@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../icons";
-import { feedback, type Answer, type Ask, type FeedbackView, type Question, type Thread, type ThreadSummary } from "../mygo";
+import { feedback, type Answer, type Ask, type ContextRef, type FeedbackView, type Question, type Thread, type ThreadSummary } from "../mygo";
 import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
+import { ContextPicker, refIcon, type PickKind } from "./ContextPicker";
 import { TidyDialog } from "./Tidy";
 import "./feedback.css";
 
@@ -20,6 +21,8 @@ type Drafts = Record<string, Record<string, Draft>>;
 
 /** Drafts outlive polls and thread switches; they are page memory only and never leave the WebView. */
 const drafts: Drafts = {};
+/** Files, folders and Skills picked for an ask's answer (names; the broker resolves the paths on send). */
+const refDrafts: Record<string, ContextRef[]> = {};
 const GAP_MIN_MS = 10 * 60_000;
 
 const POLL_MS = 1500;
@@ -374,6 +377,7 @@ export function FeedbackPage() {
       online={view.online}
       canOpenGit={view.canOpenGit}
       canManage={view.canManage}
+      canPick={view.canPick}
       onDelete={(id) => removeThreads([id])}
       flash={flash}
       onBack={narrow ? () => setScreen("list") : undefined}
@@ -542,13 +546,14 @@ function ThreadView(props: {
   online: boolean;
   canOpenGit: boolean;
   canManage: boolean;
+  canPick: boolean;
   onDelete: (id: string) => void;
   flash: { ask: string; n: number } | null;
   onBack?: () => void;
   onChanged: () => void;
   onError: (m: string) => void;
 }) {
-  const { thread, online, canOpenGit, canManage, onDelete, flash, onBack, onChanged, onError } = props;
+  const { thread, online, canOpenGit, canManage, canPick, onDelete, flash, onBack, onChanged, onError } = props;
   const asks = (thread.asks ?? []).filter((a): a is Ask => !!a);
   const scroller = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
@@ -649,6 +654,7 @@ function ThreadView(props: {
                   thread={thread}
                   online={online}
                   primary={ask.id === lastPending}
+                  canPick={canPick}
                   onChanged={onChanged}
                   onError={onError}
                 />
@@ -692,8 +698,8 @@ function TaskCard({ text }: { text: string }) {
   );
 }
 
-function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: boolean; onChanged: () => void; onError: (m: string) => void }) {
-  const { ask, thread, online, primary, onChanged, onError } = props;
+function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: boolean; canPick: boolean; onChanged: () => void; onError: (m: string) => void }) {
+  const { ask, thread, online, primary, canPick, onChanged, onError } = props;
   const [late, setLate] = useState(false);
   const who = thread.client || "Agent";
   const asked = (
@@ -712,7 +718,7 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
   if (ask.state === "pending") {
     return (
       <div className="fb-form-wrap">
-        <AnswerForm ask={ask} thread={thread} online={online} primary={primary} onChanged={onChanged} onError={onError} />
+        <AnswerForm ask={ask} thread={thread} online={online} primary={primary} canPick={canPick} onChanged={onChanged} onError={onError} />
       </div>
     );
   }
@@ -727,6 +733,16 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
               .filter(Boolean)
               .join("\n")}
           </div>
+          {!!ask.context?.length && (
+            <div className="fb-refs">
+              {ask.context.map((r) => (
+                <span className="fb-ref" key={`${r.kind}:${r.name}`} title={r.name}>
+                  <Icon name={refIcon(r.kind)} size={12} />
+                  <span>{r.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <small>
             {ask.late ? `Late answer after ${took(ask)}` : `Answered in ${took(ask)}`}
             {ask.late && !ask.lateDelivered ? ", reaches the agent with its next question" : ""}
@@ -770,7 +786,7 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
       {reply}
       {ask.state === "expired" && late && (
         <div className="fb-form-wrap">
-          <AnswerForm ask={ask} thread={thread} online={online} primary={false} lateMode onChanged={onChanged} onError={onError} />
+          <AnswerForm ask={ask} thread={thread} online={online} primary={false} canPick={canPick} lateMode onChanged={onChanged} onError={onError} />
         </div>
       )}
     </>
@@ -782,12 +798,15 @@ function AnswerForm(props: {
   thread: Thread;
   online: boolean;
   primary: boolean;
+  canPick: boolean;
   lateMode?: boolean;
   onChanged: () => void;
   onError: (m: string) => void;
 }) {
-  const { ask, thread, online, primary, lateMode, onChanged, onError } = props;
+  const { ask, thread, online, primary, canPick, lateMode, onChanged, onError } = props;
   const [, bump] = useState(0);
+  const [picking, setPicking] = useState<PickKind | null>(null);
+  const refs = (refDrafts[ask.id] ||= []);
   const [sending, setSending] = useState(false);
   const draft = (drafts[ask.id] ||= {});
   const get = (q: Question): Draft => (draft[q.id] ||= { selected: [], custom: "" });
@@ -813,9 +832,10 @@ function AnswerForm(props: {
       if (d && (d.selected.length || d.custom.trim())) answers[q.id] = { selected: d.selected, custom: d.custom.trim() };
     }
     feedback
-      .answer(ask.id, answers, [])
+      .answer(ask.id, answers, [], refDrafts[ask.id] ?? [])
       .then(() => {
         delete drafts[ask.id];
+        delete refDrafts[ask.id];
         onChanged();
       })
       .catch((e) => onError(msg(e)))
@@ -917,6 +937,42 @@ function AnswerForm(props: {
           </div>
         );
       })}
+      {canPick && (
+        <div className="fb-ctx">
+          <button className={`fb-tool${picking === "files" ? " on" : ""}`} onClick={() => setPicking(picking === "files" ? null : "files")} aria-expanded={picking === "files"}>
+            <Icon name="read" size={14} />
+            File
+          </button>
+          <button className={`fb-tool${picking === "skills" ? " on" : ""}`} onClick={() => setPicking(picking === "skills" ? null : "skills")} aria-expanded={picking === "skills"}>
+            <Icon name="sparkles" size={14} />
+            Skill
+          </button>
+          {refs.map((r) => (
+            <span className="fb-ref" key={`${r.kind}:${r.name}`} title={r.name}>
+              <Icon name={refIcon(r.kind)} size={12} />
+              <span>{r.name}</span>
+              <button aria-label={`Remove ${r.name}`} onClick={() => set(() => (refDrafts[ask.id] = refs.filter((x) => !(x.kind === r.kind && x.name === r.name))))}>
+                <Icon name="x" size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {canPick && picking && (
+        <ContextPicker
+          threadId={thread.id}
+          kind={picking}
+          picked={refs}
+          onError={onError}
+          onClose={() => setPicking(null)}
+          onToggle={(it) =>
+            set(() => {
+              const has = refs.some((x) => x.kind === it.kind && x.name === it.name);
+              refDrafts[ask.id] = has ? refs.filter((x) => !(x.kind === it.kind && x.name === it.name)) : [...refs, { kind: it.kind, name: it.name }];
+            })
+          }
+        />
+      )}
       <div className="fb-send">
         <span className="fb-hint">{hint}</span>
         {!lateMode && (

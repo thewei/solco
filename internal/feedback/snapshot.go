@@ -27,6 +27,7 @@ type Manager interface {
 	Search(ctx context.Context, q string) ([]string, error)
 	Retention(ctx context.Context) (int, error)
 	SetRetention(ctx context.Context, days int) error
+	Pick(ctx context.Context, threadID, kind, q string) ([]PickItem, error)
 }
 
 // Snapshot is what the Feedback page draws, one value per read.

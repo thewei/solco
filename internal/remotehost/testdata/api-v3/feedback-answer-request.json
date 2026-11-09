@@ -10,5 +10,15 @@
       "selected": [],
       "custom": "ship it"
     }
-  }
+  },
+  "context": [
+    {
+      "kind": "file",
+      "name": "docs/api.md"
+    },
+    {
+      "kind": "skill",
+      "name": "think"
+    }
+  ]
 }

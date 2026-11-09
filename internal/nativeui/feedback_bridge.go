@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 feedback_ui.go 的 feedbackState（broker 客户端与落点）、internal/feedback 的模型、solco_git_link.go 的 openInSolcoGit、script_actions.go 的 revealInFinder
- * [OUTPUT]: FeedbackBridge（`mygo.BindAs("feedback", …)`）——Snapshot（线程列表[可按 query 搜索] + 选中线程的时间线 + 一次性落点 + MCPBin：随 App 的 solco-hostd 路径，供「Connect an Agent」 + CanManage/RetentionDays）、Answer、End、DeleteThreads、Cleanup（dryRun 先数后删）、SetRetention、OpenProject
+ * [OUTPUT]: FeedbackBridge（`mygo.BindAs("feedback", …)`）——Snapshot（线程列表[可按 query 搜索] + 选中线程的时间线 + 一次性落点 + MCPBin：随 App 的 solco-hostd 路径，供「Connect an Agent」 + CanManage/RetentionDays）、Answer（可带 ContextRef：用户指给 Agent 的文件/文件夹/Skill）、PickContext（选择器候选）、End、DeleteThreads、Cleanup（dryRun 先数后删）、SetRetention、OpenProject
  * [POS]: Feedback WebView 页（2026-11-09 决策）的唯一数据与命令口：全部读写走 broker 的回环 HTTP（线程/Ask 状态的唯一所有者在进程外），Solco 不缓存也不重算；broker 不在时返回 online=false 而不是错误；IO 在桥 goroutine 上，窗口线程只被借来读落点与发起 Solco Git 打开；日志不记问题、答案与路径
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -51,6 +51,9 @@ type FeedbackView struct {
 	// CanManage says the page may delete threads and set the keep-for window (always true on the desktop; the phone
 	// asks its Host's feedbackManage capability).
 	CanManage bool `json:"canManage"`
+	// CanPick says the answer form may offer the file / Skill picker (always true on the desktop; the phone follows
+	// the Host's feedbackContext capability).
+	CanPick bool `json:"canPick"`
 	// RetentionDays is how long finished threads are kept (0 = forever).
 	RetentionDays int `json:"retentionDays,omitempty"`
 }
@@ -60,7 +63,7 @@ type FeedbackView struct {
 // whose text contains it.
 func (b *FeedbackBridge) Snapshot(ctx context.Context, selected, query string) (FeedbackView, error) {
 	s := b.shell
-	view := FeedbackView{Threads: []feedback.ThreadSummary{}, CanManage: true}
+	view := FeedbackView{Threads: []feedback.ThreadSummary{}, CanManage: true, CanPick: true}
 	var client *feedback.Client
 	s.callOnWindow(func() {
 		view.Theme = s.chatBridgeTheme()
@@ -107,9 +110,9 @@ func (b *FeedbackBridge) call(ctx context.Context, fn func(context.Context, *fee
 
 // Answer delivers the user's answers to a pending Ask, or to an expired one
 // as a late answer.
-func (b *FeedbackBridge) Answer(ctx context.Context, askID string, answers map[string]feedback.Answer, attachments []feedback.Attachment) error {
+func (b *FeedbackBridge) Answer(ctx context.Context, askID string, answers map[string]feedback.Answer, attachments []feedback.Attachment, refs []feedback.ContextRef) error {
 	return b.call(ctx, func(ctx context.Context, c *feedback.Client) error {
-		return c.Answer(ctx, askID, answers, attachments)
+		return c.Answer(ctx, askID, answers, attachments, refs)
 	})
 }
 
@@ -139,6 +142,20 @@ func (b *FeedbackBridge) Cleanup(ctx context.Context, olderThanDays int, dryRun 
 		return err
 	})
 	return n, err
+}
+
+// PickContext lists the answer form's picker rows for a thread: kind "files" (files and folders of its project) or
+// "skills" (installed Skills), ranked for query. Names only; the broker resolves a pick to a path when answering.
+func (b *FeedbackBridge) PickContext(ctx context.Context, threadID, kind, query string) ([]feedback.PickItem, error) {
+	var items []feedback.PickItem
+	err := b.call(ctx, func(ctx context.Context, c *feedback.Client) (err error) {
+		items, err = c.Pick(ctx, threadID, kind, query)
+		return err
+	})
+	if items == nil {
+		items = []feedback.PickItem{}
+	}
+	return items, err
 }
 
 // SetRetention sets how many days finished threads are kept (0 = forever).

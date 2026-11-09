@@ -13,7 +13,7 @@ import (
 
 /**
  * [INPUT]: 依赖 Options.Feedback（本机 Feedback broker 的回环客户端，桌面与常驻服务各自接线）、internal/feedback 的 ReadSnapshot 与模型、server.go 的 guard/writeJSON/writeError
- * [OUTPUT]: 对外提供 FeedbackSource、GET /api/v3/feedback[?thread=&q=]（scope view）、POST /api/v3/feedback/asks/{id}/answer 与 …/end、POST …/feedback/threads/delete 与 …/cleanup 与 …/retention（scope terminal-input；源还实现 feedback.Manager 时才有，capabilities.feedbackManage）、bootstrap 的 capabilities.feedback
+ * [OUTPUT]: 对外提供 FeedbackSource、GET /api/v3/feedback[?thread=&q=]（scope view）、POST /api/v3/feedback/asks/{id}/answer 与 …/end、POST …/feedback/threads/delete 与 …/cleanup 与 …/retention（scope terminal-input；源还实现 feedback.Manager 时才有，capabilities.feedbackManage）、GET …/feedback/context?thread=&kind=files|skills&q=（scope view；picker 候选，capabilities.feedbackContext；回答体可带 context 引用，手机永远看不到 Mac 绝对路径）、bootstrap 的 capabilities.feedback
  * [POS]: 手机「Feedback」页（2026-11-09 决策）：与桌面 /feedback 页读到同一个 feedback.Snapshot；线程与 Ask 状态的唯一所有者是 broker，Host 只转发；broker 不在 = 200 online:false（页面画离线态）而非错误；日志只记设备与计数，从不记问题、答案、描述或图片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,7 +27,7 @@ const (
 // bootstrap does not advertise it.
 type FeedbackSource interface {
 	feedback.Source
-	Answer(ctx context.Context, askID string, answers map[string]feedback.Answer, atts []feedback.Attachment) error
+	Answer(ctx context.Context, askID string, answers map[string]feedback.Answer, atts []feedback.Attachment, refs []feedback.ContextRef) error
 	End(ctx context.Context, askID string) error
 }
 
@@ -35,6 +35,8 @@ type FeedbackSource interface {
 type feedbackAnswer struct {
 	Answers     map[string]feedback.Answer `json:"answers"`
 	Attachments []feedback.Attachment      `json:"attachments,omitempty"`
+	// Context are files, folders and Skills the user points the Agent at (kind + name; the broker resolves the paths).
+	Context []feedback.ContextRef `json:"context,omitempty"`
 }
 
 // handleFeedback answers GET /api/v3/feedback: the thread list and, for ?thread=, that thread's timeline.
@@ -57,6 +59,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request, dev Devi
 		// The phone never sees a Mac path: the project is its display name, and "open project" stays on the desktop.
 		d := *snap.Detail
 		d.ProjectKey, d.ProjectRoot, d.CallerInfo = "", "", ""
+		d.Asks = stripContextPaths(d.Asks)
 		snap.Detail = &d
 	}
 	slog.Info("remote host feedback", "device", dev.ID, "threads", len(snap.Threads), "waiting", snap.Waiting)
@@ -76,7 +79,7 @@ func (s *Server) handleFeedbackAnswer(w http.ResponseWriter, r *http.Request, de
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), feedbackCallTimeout)
 	defer cancel()
-	s.finishFeedback(w, dev, "answer", s.opts.Feedback.Answer(ctx, r.PathValue("id"), req.Answers, req.Attachments))
+	s.finishFeedback(w, dev, "answer", s.opts.Feedback.Answer(ctx, r.PathValue("id"), req.Answers, req.Attachments, req.Context))
 }
 
 // handleFeedbackEnd answers POST /api/v3/feedback/asks/{id}/end: close an Ask without an answer.
@@ -88,6 +91,48 @@ func (s *Server) handleFeedbackEnd(w http.ResponseWriter, r *http.Request, dev D
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), feedbackCallTimeout)
 	defer cancel()
 	s.finishFeedback(w, dev, "end", s.opts.Feedback.End(ctx, r.PathValue("id")))
+}
+
+// stripContextPaths copies the asks without the absolute path of each context reference: a phone sees what the user
+// picked (kind + name), never where it lives on the Mac.
+func stripContextPaths(asks []*feedback.Ask) []*feedback.Ask {
+	out := make([]*feedback.Ask, len(asks))
+	for i, a := range asks {
+		c := *a
+		if len(a.Context) > 0 {
+			c.Context = make([]feedback.ContextRef, len(a.Context))
+			for j, ref := range a.Context {
+				c.Context[j] = feedback.ContextRef{Kind: ref.Kind, Name: ref.Name}
+			}
+		}
+		out[i] = &c
+	}
+	return out
+}
+
+// handleFeedbackContext answers GET /api/v3/feedback/context?thread=&kind=files|skills&q=: the picker's rows for the
+// thread's project (names only, relative paths; needs the manager side, capabilities.feedbackContext).
+func (s *Server) handleFeedbackContext(w http.ResponseWriter, r *http.Request, dev Device) {
+	m := s.feedbackManager(w)
+	if m == nil {
+		return
+	}
+	q := r.URL.Query()
+	if kind := q.Get("kind"); q.Get("thread") == "" || (kind != "files" && kind != "skills") {
+		writeError(w, http.StatusBadRequest, "bad_request", "")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), feedbackCallTimeout)
+	defer cancel()
+	items, err := m.Pick(ctx, q.Get("thread"), q.Get("kind"), q.Get("q"))
+	if err != nil {
+		s.finishFeedback(w, dev, "context", err)
+		return
+	}
+	if items == nil {
+		items = []feedback.PickItem{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 // feedbackManageable says the source can also tidy the inbox (bootstrap's feedbackManage).

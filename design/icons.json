@@ -39,7 +39,9 @@
    "go": [
     "iconFolder"
    ],
-   "chat": []
+   "chat": [
+    "folder"
+   ]
   },
   {
    "id": "nav.hosts",
@@ -86,7 +88,9 @@
    "go": [
     "iconSparkles"
    ],
-   "chat": []
+   "chat": [
+    "sparkles"
+   ]
   },
   {
    "id": "nav.workspace",

@@ -107,7 +107,7 @@ func TestAskBlocksUntilTheUserAnswers(t *testing.T) {
 			rows := store.Threads(feedback.Filter{Waiting: true})
 			if len(rows) == 1 {
 				th, _ := store.Thread(rows[0].ID)
-				_ = store.Resolve(th.Asks[0].ID, map[string]feedback.Answer{"q1": {Selected: []string{"ship"}}}, nil)
+				_ = store.Resolve(th.Asks[0].ID, map[string]feedback.Answer{"q1": {Selected: []string{"ship"}}}, nil, nil)
 				return
 			}
 			time.Sleep(50 * time.Millisecond)
@@ -164,10 +164,13 @@ func TestStartThenWaitAndRecall(t *testing.T) {
 	if !strings.Contains(text(t, w), `"pending"`) {
 		t.Fatalf("expected pending: %s", text(t, w))
 	}
-	_ = store.Resolve(id, map[string]feedback.Answer{"a": {Custom: "Postgres"}}, nil)
+	_ = store.Resolve(id, map[string]feedback.Answer{"a": {Custom: "Postgres"}}, nil, []feedback.ContextRef{{Kind: "skill", Name: "think", Path: "/Users/me/.agents/skills/think/SKILL.md"}})
 	w, _ = sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback_wait", Arguments: map[string]any{"session_id": id, "wait_seconds": 5}})
 	if !strings.Contains(text(t, w), `"answered"`) || !strings.Contains(text(t, w), "Postgres") {
 		t.Fatalf("expected answer: %s", text(t, w))
+	}
+	if !strings.Contains(text(t, w), `"context"`) || !strings.Contains(text(t, w), "SKILL.md") || !strings.Contains(text(t, w), "context_note") {
+		t.Fatalf("the attached skill must reach the Agent with its path and a note: %s", text(t, w))
 	}
 	r, _ := sess.CallTool(ctx, &mcp.CallToolParams{Name: "recall_decisions", Arguments: map[string]any{"query": "database"}})
 	if !strings.Contains(text(t, r), "Postgres") || !strings.Contains(text(t, r), `"count": 1`) {
@@ -182,7 +185,7 @@ func TestStartThenWaitAndRecall(t *testing.T) {
 func TestServerCarriesInstructionsAndAnnotations(t *testing.T) {
 	c, _ := setup(t)
 	sess := connect(t, c)
-	if got := sess.InitializeResult().Instructions; !strings.Contains(got, "ONE call open") || !strings.Contains(got, "project_root") {
+	if got := sess.InitializeResult().Instructions; !strings.Contains(got, "ONE call open") || !strings.Contains(got, "project_root") || !strings.Contains(got, `"context"`) {
 		t.Fatalf("instructions: %q", got)
 	}
 	res, err := sess.ListTools(context.Background(), nil)
@@ -228,7 +231,7 @@ func TestCancelledAskExpiresAndStaysAnswerable(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		th, _ := store.Thread(store.Threads(feedback.Filter{})[0].ID)
 		if th.Asks[0].State == feedback.StateExpired {
-			if err := store.Resolve(askID, map[string]feedback.Answer{"q1": {Selected: []string{"a"}}}, nil); err != nil {
+			if err := store.Resolve(askID, map[string]feedback.Answer{"q1": {Selected: []string{"a"}}}, nil, nil); err != nil {
 				t.Fatalf("late answer refused: %v", err)
 			}
 			return

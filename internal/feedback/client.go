@@ -185,8 +185,20 @@ func (c *Client) Thread(ctx context.Context, id string) (Thread, error) {
 }
 
 // Answer submits the user's answer.
-func (c *Client) Answer(ctx context.Context, askID string, answers map[string]Answer, atts []Attachment) error {
-	return c.do(ctx, http.MethodPost, "/v1/inbox/asks/"+url.PathEscape(askID)+"/answer", answerBody{Answers: answers, Attachments: atts}, nil)
+// refs are the files, folders and Skills the user points the Agent at (Kind + Name; the broker resolves the paths and
+// refuses a reference outside the thread's project or the installed Skills with ErrBadContext).
+func (c *Client) Answer(ctx context.Context, askID string, answers map[string]Answer, atts []Attachment, refs []ContextRef) error {
+	return c.do(ctx, http.MethodPost, "/v1/inbox/asks/"+url.PathEscape(askID)+"/answer", answerBody{Answers: answers, Attachments: atts, Context: refs}, nil)
+}
+
+// Pick lists the picker's rows for a thread: kind "files" or "skills", ranked for q.
+func (c *Client) Pick(ctx context.Context, threadID, kind, q string) ([]PickItem, error) {
+	v := url.Values{"thread": {threadID}, "kind": {kind}, "q": {q}}
+	var out struct {
+		Items []PickItem `json:"items"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/inbox/pick?"+v.Encode(), nil, &out)
+	return out.Items, err
 }
 
 // End closes a pending Ask without an answer.

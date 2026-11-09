@@ -32,7 +32,10 @@ const (
 
 // instructions is the usage rule sent in initialize; clients put it in the Agent's system prompt, so the blocking
 // contract holds even when the Agent never reads a tool description.
-const instructions = `Solco Feedback is the user's question inbox. To ask the user anything, call interactive_feedback and keep that ONE call open until it returns: the user may need minutes or hours, so do not poll, do not shorten timeout_seconds, do not give up and never continue on an assumed answer (only status "answered" is an answer). Always pass description (Markdown: what you did so far and what you ask) and project_root; with the first question of a task also pass task (the user's original request), which Solco pins at the top of the thread. If your client cuts the call short, ask again with interactive_feedback_start and loop interactive_feedback_wait. Use recall_decisions before asking something the user may already have decided.`
+// contextNote rides with every result that carries context: what the references are and what to do with them.
+const contextNote = "The user attached these as context: read each path yourself (a folder: look inside it; a skill: its path is the SKILL.md, follow it for this task)."
+
+const instructions = `Solco Feedback is the user's question inbox. To ask the user anything, call interactive_feedback and keep that ONE call open until it returns: the user may need minutes or hours, so do not poll, do not shorten timeout_seconds, do not give up and never continue on an assumed answer (only status "answered" is an answer). Always pass description (Markdown: what you did so far and what you ask) and project_root; with the first question of a task also pass task (the user's original request), which Solco pins at the top of the thread. If your client cuts the call short, ask again with interactive_feedback_start and loop interactive_feedback_wait. If an answered result has "context", the user attached files, folders or skills as absolute paths: read them (a skill's path is its SKILL.md) before you carry on. Use recall_decisions before asking something the user may already have decided.`
 
 var closedWorld = false
 
@@ -91,7 +94,7 @@ The preferred way to ask the user anything: it creates a question, notifies the 
 
 Always pass "description" (what you have done so far, what the question is about) and "project_root". With the FIRST question of a task also pass "task": the user's original request in their words (or a faithful summary), which Solco pins at the top of the thread so the user sees the task, your progress and every answer together. Use caller_info to identify yourself. Questions from the same project and client are filed in one thread automatically; pass thread_id or task_id to group them yourself.
 
-If your client cuts the call short (a tool timeout such as Codex's default 60 s tool_timeout_sec, or a cancellation), that is not an answer: ask again with interactive_feedback_start and loop interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account.`,
+If your client cuts the call short (a tool timeout such as Codex's default 60 s tool_timeout_sec, or a cancellation), that is not an answer: ask again with interactive_feedback_start and loop interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account. If an answered result contains "context", the user attached files, folders or skills (absolute paths): read them, and for a skill follow its SKILL.md.`,
 		Annotations: askNotes("Ask the user (blocking)"),
 	}, s.ask(true))
 	mcp.AddTool(srv, &mcp.Tool{
@@ -293,6 +296,7 @@ type lateOut struct {
 	AskedAt   string                     `json:"asked_at"`
 	Questions []string                   `json:"questions"`
 	Answers   map[string]feedback.Answer `json:"answers"`
+	Context   []feedback.ContextRef      `json:"context,omitempty"`
 }
 
 func resultToTool(r feedback.AskResult) *mcp.CallToolResult {
@@ -301,6 +305,10 @@ func resultToTool(r feedback.AskResult) *mcp.CallToolResult {
 	case "answered":
 		out["status"] = "answered"
 		out["answers"] = r.Answers
+		if len(r.Context) > 0 {
+			out["context"] = r.Context
+			out["context_note"] = contextNote
+		}
 	case "not_found":
 		out["status"] = "not_found"
 		out["message"] = r.Message
@@ -322,7 +330,7 @@ func resultToTool(r feedback.AskResult) *mcp.CallToolResult {
 			for _, q := range l.Questions {
 				qs = append(qs, q.Text)
 			}
-			late = append(late, lateOut{AskedAt: time.UnixMilli(l.AskedAt).UTC().Format(time.RFC3339), Questions: qs, Answers: l.Answers})
+			late = append(late, lateOut{AskedAt: time.UnixMilli(l.AskedAt).UTC().Format(time.RFC3339), Questions: qs, Answers: l.Answers, Context: l.Context})
 		}
 		out["late_answers"] = late
 	}

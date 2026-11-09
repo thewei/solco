@@ -1,0 +1,9 @@
+{
+  "items": [
+    {
+      "kind": "skill",
+      "name": "think",
+      "detail": "Plan before coding"
+    }
+  ]
+}

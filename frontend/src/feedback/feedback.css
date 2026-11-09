@@ -1090,6 +1090,146 @@
   overflow-y: auto;
 }
 
+/* ---- context: the File / Skill picker and what was picked ---- */
+
+.fb-ctx {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.fb-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hair2);
+  color: var(--i2);
+  font-size: 12.5px;
+}
+
+.fb-tool:hover,
+.fb-tool.on {
+  background: var(--tint);
+  color: var(--i1);
+}
+
+.fb-refs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.fb-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--tint2);
+  color: var(--i2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.fb-ref > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-ref button {
+  display: grid;
+  place-items: center;
+  color: var(--i3);
+}
+
+.fb-pick {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.fb-pick-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.fb-pick-head .fb-search {
+  border: 0;
+  padding: 0;
+}
+
+.fb-pick-list {
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+}
+
+.fb-pk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--r-row);
+  color: var(--i1);
+  font-size: 13px;
+  text-align: left;
+}
+
+.fb-pk:hover,
+.fb-pk.on {
+  background: var(--tint);
+}
+
+.fb-pk .ic {
+  flex: none;
+  color: var(--i3);
+}
+
+.fb-pk-name {
+  flex: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.fb-pk-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--i3);
+  font-size: 12px;
+}
+
+.fb-pk.on > .ic:last-child {
+  margin-left: auto;
+  color: var(--accent);
+}
+
+.fb-pick-empty {
+  padding: 14px 10px;
+  color: var(--i3);
+  font-size: 13px;
+}
+
 /* ======================================================================
    Phone density (the Chat's own block, chat.css "Phone density"): 16/24 reading text, a 24 px bubble, 44 px targets,
    the accent send button. Keyed on <html data-host="phone"> as every phone rule of the shared page (mobile.tsx).
@@ -1237,4 +1377,23 @@ html[data-host="phone"] .fb-primary.danger:disabled {
 }
 html[data-host="phone"] .fb-primary.danger:disabled {
   opacity: 0.35;
+}
+html[data-host="phone"] .fb-tool {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+html[data-host="phone"] .fb-ref {
+  font-size: 13px;
+  padding: 3px 10px;
+}
+html[data-host="phone"] .fb-pk {
+  min-height: 44px;
+  font-size: 15px;
+}
+html[data-host="phone"] .fb-pk-detail {
+  font-size: 13px;
+}
+html[data-host="phone"] .fb-pick-list {
+  max-height: 38vh;
 }

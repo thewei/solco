@@ -55,11 +55,13 @@ type Ask struct {
 	State           AskState          `json:"state"`
 	Answers         map[string]Answer `json:"answers,omitempty"`
 	AttachmentCount int               `json:"attachmentCount,omitempty"`
-	Message         string            `json:"message,omitempty"`
-	Late            bool              `json:"late,omitempty"`
-	LateDelivered   bool              `json:"lateDelivered,omitempty"`
-	LastHeartbeat   int64             `json:"lastHeartbeat"`
-	Disconnected    bool              `json:"disconnected,omitempty"` // computed: pending and the Agent's shim stopped polling
+	// Context is what the user pointed the Agent at with the answer: files, folders and Skills (paths, never content).
+	Context       []ContextRef `json:"context,omitempty"`
+	Message       string       `json:"message,omitempty"`
+	Late          bool         `json:"late,omitempty"`
+	LateDelivered bool         `json:"lateDelivered,omitempty"`
+	LastHeartbeat int64        `json:"lastHeartbeat"`
+	Disconnected  bool         `json:"disconnected,omitempty"` // computed: pending and the Agent's shim stopped polling
 }
 
 // Thread groups the Asks of one Agent in one project.

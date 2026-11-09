@@ -27,6 +27,8 @@ type fakeFeedback struct {
 	err       error
 	answered  string
 	answers   map[string]feedback.Answer
+	refs      []feedback.ContextRef
+	picked    string
 	ended     string
 	events    chan feedback.Event
 	streamErr chan struct{}
@@ -55,10 +57,10 @@ func (f *fakeFeedback) Thread(_ context.Context, id string) (feedback.Thread, er
 	return f.detail, nil
 }
 
-func (f *fakeFeedback) Answer(_ context.Context, id string, a map[string]feedback.Answer, _ []feedback.Attachment) error {
+func (f *fakeFeedback) Answer(_ context.Context, id string, a map[string]feedback.Answer, _ []feedback.Attachment, refs []feedback.ContextRef) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.answered, f.answers = id, a
+	f.answered, f.answers, f.refs = id, a, refs
 	return f.err
 }
 
@@ -89,6 +91,13 @@ func (f *fakeFeedback) Search(_ context.Context, q string) ([]string, error) {
 	defer f.mu.Unlock()
 	f.searched = q
 	return []string{"t_1"}, nil
+}
+
+func (f *fakeFeedback) Pick(_ context.Context, thread, kind, q string) ([]feedback.PickItem, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.picked = thread + "|" + kind + "|" + q
+	return []feedback.PickItem{{Kind: "skill", Name: "think", Detail: "Plan before coding"}}, nil
 }
 
 func (f *fakeFeedback) Retention(context.Context) (int, error) { return f.retention, nil }
@@ -124,6 +133,7 @@ func sampleFeedback() *fakeFeedback {
 		ID: "a_0", ThreadID: "t_1", CreatedAt: 1786039200000, ResolvedAt: 1786039500000, TimeoutMs: 1800000, State: feedback.StateAnswered,
 		Questions:     []feedback.Question{{ID: "q1", Text: "Keep the old API?", Type: "single", Options: []string{"Yes", "No"}, Required: true}},
 		Answers:       map[string]feedback.Answer{"q1": {Selected: []string{"Yes"}}},
+		Context:       []feedback.ContextRef{{Kind: "file", Name: "docs/api.md", Path: "/Users/me/solco/docs/api.md"}, {Kind: "skill", Name: "think", Path: "/Users/me/.agents/skills/think/SKILL.md"}},
 		LastHeartbeat: 1786039500000,
 	}
 	return &fakeFeedback{
@@ -272,6 +282,36 @@ func TestFeedbackFrameWordsAreBounded(t *testing.T) {
 	}
 }
 
+func TestFeedbackContextPickerAndAnswerReferences(t *testing.T) {
+	h, f := feedbackHarness(t)
+	var thread feedback.Snapshot
+	if err := json.Unmarshal(bodyOf(t, h.get("/api/v3/feedback?thread=t_1", h.token, nil)), &thread); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range thread.Detail.Asks[0].Context {
+		if ref.Path != "" || ref.Name == "" {
+			t.Fatalf("a phone sees what was picked, never where it lives: %+v", ref)
+		}
+	}
+	if f.detail.Asks[0].Context[0].Path == "" {
+		t.Fatal("stripping the paths must not touch the source's own thread")
+	}
+	if code, body := h.send("GET", "/api/v3/feedback/context?thread=t_1&kind=skills&q=th", h.token, ""); code != http.StatusOK || f.picked != "t_1|skills|th" || !strings.Contains(string(body), `"think"`) {
+		t.Fatalf("pick: %d %s %q", code, body, f.picked)
+	}
+	for _, bad := range []string{"?kind=files", "?thread=t_1&kind=secrets"} {
+		if code, _ := h.send("GET", "/api/v3/feedback/context"+bad, h.token, ""); code != http.StatusBadRequest {
+			t.Errorf("%s: %d", bad, code)
+		}
+	}
+	if code, _ := h.send("GET", "/api/v3/feedback/context?thread=t_1&kind=files", "", ""); code != http.StatusUnauthorized {
+		t.Errorf("picker needs auth: %d", code)
+	}
+	if code, _ := h.send("POST", "/api/v3/feedback/asks/a_1/answer", h.token, `{"answers":{"q1":{"selected":["SQLite"]}},"context":[{"kind":"file","name":"docs/api.md"}]}`); code != http.StatusOK || len(f.refs) != 1 || f.refs[0].Name != "docs/api.md" {
+		t.Fatalf("answer with context: %d %+v", code, f.refs)
+	}
+}
+
 func TestFeedbackManagementForwardsAndSearches(t *testing.T) {
 	h, f := feedbackHarness(t)
 	f.retention = 90
@@ -309,5 +349,8 @@ func TestFeedbackManagementForwardsAndSearches(t *testing.T) {
 	_ = json.NewDecoder(h.get("/api/v3/bootstrap", h.token, nil).Body).Decode(&boot)
 	if !boot.Capabilities["feedbackManage"] {
 		t.Fatal("a source that can manage advertises feedbackManage")
+	}
+	if !boot.Capabilities["feedbackContext"] {
+		t.Fatal("and the picker")
 	}
 }

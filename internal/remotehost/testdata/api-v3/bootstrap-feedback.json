@@ -2,6 +2,7 @@
   "capabilities": {
     "chat": true,
     "feedback": true,
+    "feedbackContext": true,
     "feedbackManage": true,
     "git": true,
     "launch": true,

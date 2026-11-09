@@ -409,7 +409,7 @@ func sanitizeAttachments(in []Attachment) []Attachment {
 
 // Resolve records the user's answer. A pending Ask becomes answered; an expired one becomes a late answer that
 // the Agent receives with its next Ask in the same thread. Ended and already answered Asks are final.
-func (s *Store) Resolve(id string, answers map[string]Answer, atts []Attachment) error {
+func (s *Store) Resolve(id string, answers map[string]Answer, atts []Attachment, refs []ContextRef) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, a := s.askLocked(id)
@@ -441,6 +441,7 @@ func (s *Store) Resolve(id string, answers map[string]Answer, atts []Attachment)
 	a.Message = ""
 	a.ResolvedAt = s.now().UnixMilli()
 	a.AttachmentCount = len(atts)
+	a.Context = refs
 	if len(atts) > 0 {
 		s.atts[id] = atts
 	}
@@ -590,6 +591,29 @@ func (s *Store) Thread(id string) (Thread, bool) {
 	return Thread{}, false
 }
 
+// ProjectRootOfAsk is the project folder of the thread an Ask belongs to ("" = none known); context references are
+// resolved against it.
+func (s *Store) ProjectRootOfAsk(askID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if t := s.byAsk[askID]; t != nil {
+		return t.ProjectRoot
+	}
+	return ""
+}
+
+// ProjectRootOf is the project folder of a thread.
+func (s *Store) ProjectRootOf(threadID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.threads {
+		if t.ID == threadID {
+			return t.ProjectRoot
+		}
+	}
+	return ""
+}
+
 // ThreadOfAsk returns the thread id an Ask belongs to.
 func (s *Store) ThreadOfAsk(askID string) (string, bool) {
 	s.mu.Lock()
@@ -606,6 +630,7 @@ type LateAnswer struct {
 	AskedAt   int64             `json:"askedAt"`
 	Questions []Question        `json:"questions"`
 	Answers   map[string]Answer `json:"answers"`
+	Context   []ContextRef      `json:"context,omitempty"`
 }
 
 // AskResult is what an Agent's shim reads.
@@ -613,6 +638,7 @@ type AskResult struct {
 	Status      string            `json:"status"` // pending | answered | expired | ended | not_found
 	Answers     map[string]Answer `json:"answers,omitempty"`
 	Attachments []Attachment      `json:"attachments,omitempty"`
+	Context     []ContextRef      `json:"context,omitempty"`
 	Message     string            `json:"message,omitempty"`
 	LateAnswers []LateAnswer      `json:"lateAnswers,omitempty"`
 }
@@ -630,7 +656,7 @@ func (s *Store) Result(id string) AskResult {
 	case StatePending:
 		return AskResult{Status: "pending"}
 	case StateAnswered:
-		r := AskResult{Status: "answered", Answers: a.Answers, Attachments: s.atts[id]}
+		r := AskResult{Status: "answered", Answers: a.Answers, Attachments: s.atts[id], Context: a.Context}
 		r.LateAnswers = s.popLateLocked(t, id)
 		return r
 	default:
@@ -647,7 +673,7 @@ func (s *Store) popLateLocked(t *Thread, except string) []LateAnswer {
 			continue
 		}
 		a.LateDelivered = true
-		out = append(out, LateAnswer{AskID: a.ID, AskedAt: a.CreatedAt, Questions: a.Questions, Answers: a.Answers})
+		out = append(out, LateAnswer{AskID: a.ID, AskedAt: a.CreatedAt, Questions: a.Questions, Answers: a.Answers, Context: a.Context})
 	}
 	if len(out) > 0 {
 		s.saveLocked()

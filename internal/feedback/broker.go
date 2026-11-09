@@ -68,6 +68,14 @@ func NewHandler(b *Broker) http.Handler {
 		writeJSON(w, 200, t)
 	})
 	mux.HandleFunc("POST /v1/inbox/asks/{id}/answer", b.handleAnswer)
+	mux.HandleFunc("GET /v1/inbox/pick", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		items := Pick(r.Context(), b.Store.ProjectRootOf(q.Get("thread")), q.Get("kind"), q.Get("q"))
+		if items == nil {
+			items = []PickItem{}
+		}
+		writeJSON(w, 200, map[string]any{"items": items})
+	})
 	mux.HandleFunc("POST /v1/inbox/asks/{id}/end", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, b.Store.End(r.PathValue("id"), ""))
 	})
@@ -210,6 +218,7 @@ func (b *Broker) handleCreate(w http.ResponseWriter, r *http.Request) {
 type answerBody struct {
 	Answers     map[string]Answer `json:"answers"`
 	Attachments []Attachment      `json:"attachments"`
+	Context     []ContextRef      `json:"context"`
 }
 
 func (b *Broker) handleAnswer(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +227,16 @@ func (b *Broker) handleAnswer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
 	}
-	replyErr(w, b.Store.Resolve(r.PathValue("id"), body.Answers, body.Attachments))
+	id := r.PathValue("id")
+	var refs []ContextRef
+	if len(body.Context) > 0 {
+		var err error
+		if refs, err = ResolveContext(b.Store.ProjectRootOfAsk(id), body.Context); err != nil {
+			writeJSON(w, 400, map[string]string{"error": "bad_context"})
+			return
+		}
+	}
+	replyErr(w, b.Store.Resolve(id, body.Answers, body.Attachments, refs))
 }
 
 func (b *Broker) handleStream(w http.ResponseWriter, r *http.Request) {

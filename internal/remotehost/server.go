@@ -614,6 +614,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST "+apiPrefix+"/feedback/threads/delete", s.guard(ScopeTerminalInput, s.handleFeedbackDelete))
 	mux.Handle("POST "+apiPrefix+"/feedback/threads/cleanup", s.guard(ScopeTerminalInput, s.handleFeedbackCleanup))
 	mux.Handle("POST "+apiPrefix+"/feedback/retention", s.guard(ScopeTerminalInput, s.handleFeedbackRetention))
+	mux.Handle("GET "+apiPrefix+"/feedback/context", s.guard(ScopeView, s.handleFeedbackContext))
 	mux.Handle("GET "+apiPrefix+"/automations/{name}", s.guard(ScopeView, s.handleAutomationDetail))
 	mux.Handle("POST "+apiPrefix+"/automations", s.guard(ScopeManage, s.handleAutomationCreate))
 	mux.Handle("POST "+apiPrefix+"/automations/{name}/save", s.guard(ScopeManage, s.handleAutomationUpdate))
@@ -909,6 +910,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 		capabilities["feedback"] = true
 		if s.feedbackManageable() {
 			capabilities["feedbackManage"] = true
+			capabilities["feedbackContext"] = true
 		}
 	}
 	if s.opts.Automations != nil {

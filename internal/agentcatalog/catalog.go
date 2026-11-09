@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 history.AgentID, 用户目录配置 (~/.omp, ~/.claude, ~/.gemini, ~/.codex, ~/.cursor) 与命令行 (agy, omp, pi)
- * [OUTPUT]: 对外提供 Catalog, Entry, Model, Effort, Load, ModelVerb, EffortVerb, ModelWindow, Classify, IsCompact
+ * [OUTPUT]: 对外提供 Catalog, Entry, Skill, ListSkills, Model, Effort, Load, ModelVerb, EffortVerb, ModelWindow, Classify, IsCompact
  * [POS]: Composer 只读目录与命令能力中心，扫描 agent 自有命令、技能与模型列表
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -431,11 +431,17 @@ func codexHome(home string) string {
 	return filepath.Join(home, ".codex")
 }
 
-// skills reads <dir>/<name>/SKILL.md for each directory; the first directory
-// that defines a name wins.
-func skills(prefix string, dirs ...string) []Entry {
+// Skill is one installed Skill: its name, one-line description and the SKILL.md that defines it.
+type Skill struct {
+	Name   string
+	Detail string
+	Path   string
+}
+
+// scanSkills reads <dir>/<name>/SKILL.md for each directory; the first directory that defines a name wins.
+func scanSkills(dirs ...string) []Skill {
 	seen := map[string]bool{}
-	var out []Entry
+	var out []Skill
 	for _, dir := range dirs {
 		items, err := os.ReadDir(dir)
 		if err != nil {
@@ -449,7 +455,8 @@ func skills(prefix string, dirs ...string) []Entry {
 			if info, err := os.Stat(path); err != nil || !info.IsDir() {
 				continue
 			}
-			meta, ok := frontmatter(filepath.Join(path, "SKILL.md"))
+			file := filepath.Join(path, "SKILL.md")
+			meta, ok := frontmatter(file)
 			if !ok {
 				continue
 			}
@@ -461,11 +468,40 @@ func skills(prefix string, dirs ...string) []Entry {
 				continue
 			}
 			seen[name] = true
-			out = append(out, Entry{Name: prefix + name, Insert: prefix + name + " ", Detail: meta["description"], Kind: KindSkill})
+			out = append(out, Skill{Name: name, Detail: meta["description"], Path: file})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// skills lists scanSkills as `/` or `$` popover rows.
+func skills(prefix string, dirs ...string) []Entry {
+	found := scanSkills(dirs...)
+	out := make([]Entry, 0, len(found))
+	for _, sk := range found {
+		out = append(out, Entry{Name: prefix + sk.Name, Insert: prefix + sk.Name + " ", Detail: sk.Detail, Kind: KindSkill})
+	}
+	return out
+}
+
+// ListSkills lists every Skill any supported Agent would find from root (project folders first, then the user's
+// own): the union of the directories Load reads per provider. Read-only; Feedback uses it to let the user point an
+// Agent at a Skill file.
+func ListSkills(root string) []Skill {
+	home, _ := os.UserHomeDir()
+	var dirs []string
+	if root != "" {
+		for _, d := range []string{".agents", ".claude", ".cursor", ".omp", ".pi"} {
+			dirs = append(dirs, filepath.Join(root, d, "skills"))
+		}
+	}
+	return scanSkills(append(dirs,
+		filepath.Join(home, ".agents", "skills"), filepath.Join(home, ".claude", "skills"),
+		filepath.Join(home, ".cursor", "skills"), filepath.Join(home, ".cursor", "skills-cursor"),
+		filepath.Join(codexHome(home), "skills"), filepath.Join(home, ".omp", "agent", "skills"),
+		filepath.Join(home, ".pi", "agent", "skills"), filepath.Join(home, ".gemini", "skills"),
+		filepath.Join(home, ".gemini", "antigravity-cli", "skills"))...)
 }
 
 // prompts reads <dir>/**.md as user prompt commands ("a/b.md" -> "a:b").

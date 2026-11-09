@@ -139,7 +139,7 @@ func TestFeedbackBridgeReadsAnswersAndDeliversFocusOnce(t *testing.T) {
 		t.Error("the landing was delivered twice")
 	}
 
-	if err := b.Answer(ctx, askID, map[string]feedback.Answer{"q1": {Selected: []string{"yes"}}}, nil); err != nil {
+	if err := b.Answer(ctx, askID, map[string]feedback.Answer{"q1": {Selected: []string{"yes"}}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	view, _ = b.Snapshot(ctx, threadID, "")
@@ -164,7 +164,7 @@ func TestFeedbackBridgeManagesThreadsAndSearches(t *testing.T) {
 	if n, err := b.DeleteThreads(ctx, []string{threadID}); err != nil || n != 0 {
 		t.Fatalf("a waiting thread was deleted: %d, %v", n, err)
 	}
-	if err := b.Answer(ctx, askID, map[string]feedback.Answer{"q1": {Selected: []string{"yes"}}}, nil); err != nil {
+	if err := b.Answer(ctx, askID, map[string]feedback.Answer{"q1": {Selected: []string{"yes"}}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if view, err := b.Snapshot(ctx, "", "Keep it"); err != nil || len(view.Threads) != 1 || !view.CanManage {
