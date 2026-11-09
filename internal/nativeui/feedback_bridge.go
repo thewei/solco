@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 feedback_ui.go 的 feedbackState（broker 客户端与落点）、internal/feedback 的模型、solco_git_link.go 的 openInSolcoGit、script_actions.go 的 revealInFinder
- * [OUTPUT]: FeedbackBridge（`mygo.BindAs("feedback", …)`）——Snapshot（线程列表 + 选中线程的时间线 + 一次性落点）、Answer、End、OpenProject
+ * [OUTPUT]: FeedbackBridge（`mygo.BindAs("feedback", …)`）——Snapshot（线程列表 + 选中线程的时间线 + 一次性落点 + MCPBin：随 App 的 solco-hostd 路径，供「Connect an Agent」）、Answer、End、OpenProject
  * [POS]: Feedback WebView 页（2026-11-09 决策）的唯一数据与命令口：全部读写走 broker 的回环 HTTP（线程/Ask 状态的唯一所有者在进程外），Solco 不缓存也不重算；broker 不在时返回 online=false 而不是错误；IO 在桥 goroutine 上，窗口线程只被借来读落点与发起 Solco Git 打开；日志不记问题、答案与路径
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,9 +10,11 @@ package nativeui
 import (
 	"context"
 	"errors"
+	"os"
 	"time"
 
 	"github.com/thewei/solco/internal/feedback"
+	"github.com/thewei/solco/internal/hostd"
 	"github.com/thewei/solco/internal/solcogit"
 )
 
@@ -41,6 +43,11 @@ type FeedbackView struct {
 	// CanOpenGit says Solco Git is on this machine (the thread header's
 	// "open project" menu offers it).
 	CanOpenGit bool `json:"canOpenGit"`
+	// MCPBin is the feedback MCP server's executable (this app's solco-hostd,
+	// `feedback-mcp`), the one fact the "Connect an Agent" dialog cannot know
+	// itself; "" outside an app bundle (a dev run), where the page shows the
+	// standard install path.
+	MCPBin string `json:"mcpBin,omitempty"`
 }
 
 // Snapshot reads the thread list and, for the thread the page is on, its
@@ -52,6 +59,7 @@ func (b *FeedbackBridge) Snapshot(ctx context.Context, selected string) (Feedbac
 	s.callOnWindow(func() {
 		view.Theme = s.chatBridgeTheme()
 		view.CanOpenGit = s.solcoGitReady()
+		view.MCPBin = feedbackMCPBin()
 		client = s.feedback.client
 		if f := s.feedback.focus; f.Thread != "" {
 			view.Focus = &f
@@ -67,6 +75,17 @@ func (b *FeedbackBridge) Snapshot(ctx context.Context, selected string) (Feedbac
 	snap, err := feedback.ReadSnapshot(ctx, client, selected)
 	view.Online, view.Threads, view.Waiting, view.Selected, view.Detail = snap.Online, snap.Threads, snap.Waiting, snap.Selected, snap.Detail
 	return view, err
+}
+
+// feedbackMCPBin locates the bundled solco-hostd next to the running app, the
+// binary every other Agent's MCP configuration has to name.
+func feedbackMCPBin() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	bin, _ := hostd.Locate(exe)
+	return bin
 }
 
 func (b *FeedbackBridge) call(ctx context.Context, fn func(context.Context, *feedback.Client) error) error {

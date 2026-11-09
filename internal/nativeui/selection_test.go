@@ -130,3 +130,33 @@ var (
 	_ *mygo.Window
 	_ *ui.Context
 )
+
+// A page that shares the Workspace tree without being a Workspace is left by a row click: the click selects and
+// pushes the workspace location, and the tree lights nothing while the page is up (2026-11-09: Feedback's rows did
+// nothing, Back was the only way out).
+func TestTreeHostedPagesLeaveOnRowClick(t *testing.T) {
+	for _, route := range []string{routeFeedback, routeAssistants, routeAutomations} {
+		s := NewShell()
+		s.projection = selectionFixture("w1", "t1", "p1")
+		s.adoptRuntimeSelection(s.projection)
+		s.router.Replace(route)
+		if s.treeShowsSelection() {
+			t.Errorf("%s: the tree lights a selection on a page that is not a Workspace", route)
+		}
+		s.selectProject("w2")
+		if got := s.router.Path(); got != routeWorkspace {
+			t.Errorf("%s: a project row click left the router on %q, want %q", route, got, routeWorkspace)
+		}
+		if s.selectedProjectID != "w2" {
+			t.Errorf("%s: selected project = %q, want w2", route, s.selectedProjectID)
+		}
+	}
+	s := NewShell()
+	s.router.Replace(routeHosts)
+	s.projection = selectionFixture("w1", "t1", "p1")
+	s.adoptRuntimeSelection(s.projection)
+	s.selectProject("w2")
+	if got := s.router.Path(); got != routeHosts {
+		t.Errorf("Hosts: a selection moved the router to %q; only tree-hosted pages are left by a row click", got)
+	}
+}

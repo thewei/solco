@@ -228,8 +228,17 @@ func (s *Shell) workspaceRowSelected(isSelectedProject bool) bool {
 }
 
 // treeShowsSelection is whether the Workspace tree lights its selected rows:
-// not on the Assistants page, which shares the tree but is not a Workspace.
-func (s *Shell) treeShowsSelection() bool { return s.router.Path() != routeAssistants }
+// not on a page that shares the tree but is not a Workspace (treeHostedPage).
+func (s *Shell) treeShowsSelection() bool { return !treeHostedPage(s.router.Path()) }
+
+// treeHostedPage reports whether path is a page that shares the sidebar's
+// Workspace tree without being a Workspace: Assistants (2026-11-04), Feedback
+// and Automations (2026-11-09 user report: a Workspace click on Feedback did
+// nothing and Back was the only way out). Nothing is lit in the tree there,
+// and a row click selects and leaves the page.
+func treeHostedPage(path string) bool {
+	return path == routeAssistants || path == routeFeedback || path == routeAutomations
+}
 
 // newProjectTab opens a Tab in project: the project row's hover "+" and its
 // context menu's New Tab share it.

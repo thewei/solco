@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { feedback, type Answer, type Ask, type FeedbackView, type Question, type Thread, type ThreadSummary } from "../mygo";
+import { ConnectDialog } from "./Connect";
 import "./feedback.css";
 
 /**
@@ -21,6 +22,10 @@ const GAP_MIN_MS = 10 * 60_000;
 
 const POLL_MS = 1500;
 const narrowQuery = window.matchMedia("(max-width: 700px)");
+/** The phone has no Mac path to hand out, so it never draws "Connect an Agent". */
+const isPhone = document.documentElement.dataset.host === "phone";
+
+type ProjectCount = { name: string; count: number; waiting: number };
 
 function useFeedback(selected: string) {
   const [view, setView] = useState<FeedbackView | null>(null);
@@ -119,6 +124,7 @@ export function FeedbackPage() {
   const [lens, setLens] = useState<Lens | null>(null);
   const [project, setProject] = useState("");
   const [screen, setScreen] = useState<"list" | "thread">("list");
+  const [connect, setConnect] = useState(false);
   const narrow = useNarrow();
   const { view, error, setError, pull, focus } = useFeedback(selected);
   const [flash, setFlash] = useState<{ ask: string; n: number } | null>(null);
@@ -137,7 +143,18 @@ export function FeedbackPage() {
   // The default lens follows the inbox: Needs you while something waits, else everything.
   const activeLens: Lens = lens ?? (waiting > 0 ? "needs" : "all");
   const threads = view?.threads ?? [];
-  const projects = useMemo(() => Array.from(new Set(threads.map((t) => t.project))).sort(), [threads]);
+  // Projects of the threads this lens shows, most waiting first, then by name: the filter's menu can be long.
+  const projects = useMemo(() => {
+    const byName = new Map<string, ProjectCount>();
+    for (const t of threads) {
+      if (activeLens === "needs" && t.waiting === 0) continue;
+      const p = byName.get(t.project) ?? { name: t.project, count: 0, waiting: 0 };
+      p.count++;
+      p.waiting += t.waiting;
+      byName.set(t.project, p);
+    }
+    return Array.from(byName.values()).sort((a, b) => b.waiting - a.waiting || a.name.localeCompare(b.name));
+  }, [threads, activeLens]);
   const visible = threads.filter((t) => (activeLens === "all" || t.waiting > 0) && (!project || t.project === project));
   const current = view?.selected && view.detail ? view.detail : null;
   // With nothing chosen yet, the first visible thread is the one shown.
@@ -166,24 +183,21 @@ export function FeedbackPage() {
           </button>
         </div>
       </div>
-      {projects.length > 1 && (
-        <div className="fb-chips">
-          <button className={!project ? "on" : ""} onClick={() => setProject("")}>
-            All projects
-          </button>
-          {projects.map((p) => (
-            <button key={p} className={project === p ? "on" : ""} onClick={() => setProject(p)}>
-              {p}
-            </button>
-          ))}
-        </div>
-      )}
+      {(projects.length > 1 || project) && <ProjectFilter projects={projects} value={project} onChange={setProject} />}
       <div className="fb-rows">
         {visible.length === 0 && (
           <p className="fb-quiet">{activeLens === "needs" ? "Nothing is waiting. Switch to All to read earlier threads." : "No threads yet."}</p>
         )}
         <ThreadRows threads={visible} selected={narrow ? "" : selected} onOpen={open} />
       </div>
+      {!isPhone && (
+        <div className="fb-foot">
+          <button className="fb-connect" onClick={() => setConnect(true)}>
+            <Icon name="plus" size={14} />
+            Connect an Agent
+          </button>
+        </div>
+      )}
     </section>
   );
 
@@ -217,13 +231,83 @@ export function FeedbackPage() {
         </div>
       )}
       {view.online && threads.length === 0 ? (
-        <Empty />
+        <Empty onConnect={isPhone ? undefined : () => setConnect(true)} />
       ) : narrow ? (
         screen === "thread" && current ? detail : list
       ) : (
         <div className="fb-wrap">
           {list}
           {detail}
+        </div>
+      )}
+      {connect && <ConnectDialog bin={view.mcpBin ?? ""} onClose={() => setConnect(false)} />}
+    </div>
+  );
+}
+
+/** ProjectFilter narrows the list to one project: a menu rather than chips, since the projects can be many. */
+function ProjectFilter({ projects, value, onChange }: { projects: ProjectCount[]; value: string; onChange: (p: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const root = useRef<HTMLDivElement>(null);
+  const searchable = projects.length > 8;
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent) => root.current && !root.current.contains(e.target as Node) && setOpen(false);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", down);
+    window.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      window.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  const shown = q.trim() ? projects.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase())) : projects;
+  const pick = (name: string) => {
+    onChange(name);
+    setOpen(false);
+    setQ("");
+  };
+  // A chosen project the lens no longer lists (it has nothing waiting) stays in the menu so it can be cleared.
+  const current = value ? projects.find((p) => p.name === value) : undefined;
+
+  return (
+    <div className="fb-filter" ref={root}>
+      <button className={`fb-fbtn${value ? " on" : ""}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="fb-fl">{value || "All projects"}</span>
+        {value ? <span className="fb-n">{current?.count ?? 0}</span> : <span className="fb-n">{projects.length}</span>}
+        <span className="fb-down">
+          <Icon name="chev" size={14} />
+        </span>
+      </button>
+      {open && (
+        <div className="fb-pop" role="listbox">
+          {searchable && <input className="fb-fsearch" autoFocus placeholder="Find a project" value={q} onChange={(e) => setQ(e.target.value)} />}
+          <div className="fb-plist">
+            {!q.trim() && (
+              <button role="option" aria-selected={!value} className={`fb-pitem${!value ? " on" : ""}`} onClick={() => pick("")}>
+                <span className="fb-fl">All projects</span>
+                {!value && <Icon name="check" size={14} />}
+              </button>
+            )}
+            {value && !current && !q.trim() && (
+              <button role="option" aria-selected className="fb-pitem on" onClick={() => pick(value)}>
+                <span className="fb-fl">{value}</span>
+                <Icon name="check" size={14} />
+              </button>
+            )}
+            {shown.map((p) => (
+              <button key={p.name} role="option" aria-selected={value === p.name} className={`fb-pitem${value === p.name ? " on" : ""}`} onClick={() => pick(p.name)}>
+                <span className="fb-fl">{p.name}</span>
+                {p.waiting > 0 && <span className="fb-dot" aria-label="waiting" />}
+                <span className="fb-n">{p.count}</span>
+                {value === p.name && <Icon name="check" size={14} />}
+              </button>
+            ))}
+            {shown.length === 0 && <p className="fb-quiet">No project matches.</p>}
+          </div>
         </div>
       )}
     </div>
@@ -589,10 +673,7 @@ function Offline({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-const MCP_COMMAND = 'claude mcp add solco-feedback -- "/Applications/Solco.app/Contents/Helpers/solco-hostd" feedback-mcp';
-
-function Empty() {
-  const [copied, setCopied] = useState(false);
+function Empty({ onConnect }: { onConnect?: () => void }) {
   return (
     <div className="fb-empty">
       <span className="fb-glyph big">
@@ -602,15 +683,11 @@ function Empty() {
       <p>
         Agents that call the <code>interactive_feedback</code> MCP tool show up here, one thread per project and run.
       </p>
-      <pre>{MCP_COMMAND}</pre>
-      <button
-        className="fb-ghost"
-        onClick={() => {
-          void navigator.clipboard?.writeText(MCP_COMMAND).then(() => setCopied(true));
-        }}
-      >
-        {copied ? "Copied" : "Copy command"}
-      </button>
+      {onConnect && (
+        <button className="fb-primary" onClick={onConnect}>
+          Connect an Agent
+        </button>
+      )}
     </div>
   );
 }

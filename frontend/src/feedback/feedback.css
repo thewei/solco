@@ -102,34 +102,221 @@
   font-variant-numeric: tabular-nums;
 }
 
-.fb-chips {
-  display: flex;
-  gap: 6px;
+/* The project filter: one field-like button, its menu a popover (the projects can be many). */
+.fb-filter {
+  position: relative;
   padding: 0 12px 10px;
-  overflow-x: auto;
-  flex: none;
-  scrollbar-width: none;
 }
 
-.fb-chips::-webkit-scrollbar {
-  display: none;
-}
-
-.fb-chips button {
-  flex: none;
-  padding: 2px 10px;
-  border-radius: var(--r-pill);
-  background: var(--tint2);
+.fb-fbtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 10px;
+  border-radius: var(--r-row);
+  border: 1px solid var(--hair2);
   color: var(--i2);
-  font-size: 12px;
   font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
 }
 
-.fb-chips button.on {
+.fb-fbtn:hover {
+  background: var(--tint);
+}
+
+.fb-fbtn.on {
+  border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.fb-fbtn.on .fb-n {
+  color: inherit;
+}
+
+.fb-fl {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fb-down {
+  display: grid;
+  flex: none;
+  transform: rotate(90deg);
+  color: var(--i3);
+}
+
+.fb-pop {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(100% - 6px);
+  z-index: 20;
+  padding: 4px;
+  border-radius: var(--r-card);
+  background: var(--menu);
+  border: 1px solid var(--hair2);
+  box-shadow: var(--float-shadow);
+}
+
+.fb-fsearch {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  border-radius: var(--r-row);
+  border: 1px solid var(--hair2);
+  background: none;
+  color: var(--i1);
+  font: inherit;
+  outline: 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fb-fsearch:focus {
+  border-color: var(--hair3);
+}
+
+.fb-fsearch::placeholder {
+  color: var(--i4);
+}
+
+.fb-plist {
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.fb-pitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--r-control);
+}
+
+.fb-pitem:hover {
+  background: var(--tint2);
+}
+
+.fb-pitem.on {
+  font-weight: 500;
+}
+
+.fb-pitem .ic {
+  flex: none;
+  color: var(--i2);
+}
+
+/* The foot of the list: the one way to hand the MCP tool to another Agent. */
+.fb-foot {
+  flex: none;
+  padding: 8px;
+  border-top: 1px solid var(--hair);
+}
+
+.fb-connect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--r-row);
+  color: var(--i2);
+  font-weight: 500;
+}
+
+.fb-connect:hover {
+  background: var(--tint);
+  color: var(--i1);
+}
+
+/* ---- Connect an Agent ---- */
+
+.fb-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.fb-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px 18px 16px;
+  border-radius: var(--r-sheet);
+  background: var(--menu);
+  border: 1px solid var(--hair2);
+  box-shadow: var(--float-shadow);
+}
+
+.fb-dh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fb-dt {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fb-x {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-control);
+  color: var(--i2);
+}
+
+.fb-x:hover {
+  background: var(--tint2);
+  color: var(--i1);
+}
+
+.fb-dn {
+  margin: 0;
+  color: var(--i2);
+  line-height: 1.5;
+}
+
+.fb-dn.sub {
+  color: var(--i3);
+  font-size: 12px;
+}
+
+.fb-dn code {
+  font-size: 0.9em;
+}
+
+.fb-code {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--r-row);
+  background: var(--grouped);
+  color: var(--i1);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .fb-rows {
@@ -665,22 +852,6 @@
   line-height: 1.55;
 }
 
-.fb-empty pre {
-  margin: 0;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--r-row);
-  background: var(--grouped);
-  color: var(--i2);
-  font-size: 11.5px;
-  line-height: 1.5;
-  text-align: left;
-  white-space: pre-wrap;
-  word-break: break-all;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
 /* ======================================================================
    Phone density (the Chat's own block, chat.css "Phone density"): 16/24 reading text, a 24 px bubble, 44 px targets,
    the accent send button. Keyed on <html data-host="phone"> as every phone rule of the shared page (mobile.tsx).
@@ -727,15 +898,15 @@ html[data-host="phone"] .fb-nh b {
   font-size: 14px;
 }
 html[data-host="phone"] .fb-seg button,
-html[data-host="phone"] .fb-chips button,
+html[data-host="phone"] .fb-fbtn,
+html[data-host="phone"] .fb-pitem,
 html[data-host="phone"] .fb-ghost,
 html[data-host="phone"] .fb-opt,
 html[data-host="phone"] .fb-other {
   min-height: 44px;
 }
-html[data-host="phone"] .fb-chips button {
-  padding: 0 16px;
-  font-size: 14px;
+html[data-host="phone"] .fb-fbtn {
+  padding: 0 14px;
 }
 html[data-host="phone"] .fb-head,
 html[data-host="phone"] .fb-tl {

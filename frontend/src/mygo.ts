@@ -918,6 +918,13 @@ export interface FeedbackView {
    * "open project" menu offers it).
    */
   canOpenGit: boolean;
+  /**
+   * MCPBin is the feedback MCP server's executable (this app's solco-hostd,
+   * `feedback-mcp`), the one fact the "Connect an Agent" dialog cannot know
+   * itself; "" outside an app bundle (a dev run), where the page shows the
+   * standard install path.
+   */
+  mcpBin?: string;
 }
 
 /** Goal is a long-lived objective. */
