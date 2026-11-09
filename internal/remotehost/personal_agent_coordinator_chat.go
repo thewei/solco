@@ -67,6 +67,17 @@ func (s *Server) handlePACoordinatorChat(w http.ResponseWriter, r *http.Request,
 		writeError(w, http.StatusNotFound, "personal_agent_unavailable", "")
 		return
 	}
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	olderLimit := limit
+	if olderLimit <= 0 {
+		olderLimit = history.WindowLimit
+	}
+	olderMax := chatsession.MaxAccumulated / olderLimit
 	older := 0
 	if raw := r.URL.Query().Get("older"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -74,7 +85,7 @@ func (s *Server) handlePACoordinatorChat(w http.ResponseWriter, r *http.Request,
 			writeError(w, http.StatusBadRequest, "bad_request", "older must be a non-negative integer")
 			return
 		}
-		older = min(n, coordinatorOlderMax)
+		older = min(n, olderMax)
 	}
 	ctx := r.Context()
 	co, err := c.Coordinator(ctx, id)
@@ -87,12 +98,6 @@ func (s *Server) handlePACoordinatorChat(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		writeError(w, http.StatusConflict, "no_conversation", "")
 		return
-	}
-	limit := 0
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			limit = n
-		}
 	}
 	reader, err := chatsession.Open(found.Provider, found.Path)
 	if err == nil {

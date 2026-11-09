@@ -207,6 +207,14 @@ func TestCoordinatorChatPagesOlderTurns(t *testing.T) {
 	if one <= newest {
 		t.Fatalf("older=1 gave %d turns, newest page had %d", one, newest)
 	}
+	lim15, _, _ := read("?limit=15")
+	if lim15 > 15 {
+		t.Fatalf("limit=15 gave %d turns, want <= 15", lim15)
+	}
+	lim15Older5, _, _ := read("?limit=15&older=5")
+	if lim15Older5 <= lim15 {
+		t.Fatalf("limit=15&older=5 gave %d turns, want > %d", lim15Older5, lim15)
+	}
 	all, top, _ := read("?older=99")
 	if all < one || top {
 		t.Fatalf("older=99 gave %d turns, hasOlder=%v; want the top of the transcript", all, top)
