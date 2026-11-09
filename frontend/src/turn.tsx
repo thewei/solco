@@ -717,6 +717,19 @@ function useDelayed(on: boolean, ms: number, key: unknown): boolean {
 
 // ---- markdown ----
 
+// Pinned plugin arrays and component map: keeping stable references avoids
+// recreating the unified Markdown/rehype compiler pipeline on every streaming chunk.
+const REMARK_PLUGINS = [remarkGfm];
+const REHYPE_PLUGINS = [rehypeHighlight];
+const MARKDOWN_COMPONENTS = {
+  pre: (props: React.HTMLAttributes<HTMLPreElement>) => <CodeBlock {...props} />,
+  table: ({ node: _node, ...rest }: React.HTMLAttributes<HTMLTableElement> & { node?: unknown }) => (
+    <div className="tbl">
+      <table {...rest} />
+    </div>
+  ),
+};
+
 // Markdown renders assistant narration (GFM tables/lists, fenced code with
 // highlighting). Raw HTML never passes through: react-markdown skips it.
 // caret marks the streaming tail: a small dot follows the last character.
@@ -724,16 +737,9 @@ export const Markdown = memo(function Markdown({ text, caret }: { text: string; 
   return (
     <div className={`prose${caret ? " caret" : ""}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
-        components={{
-          pre: (props) => <CodeBlock {...props} />,
-          table: ({ node: _node, ...rest }) => (
-            <div className="tbl">
-              <table {...rest} />
-            </div>
-          ),
-        }}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
       >
         {text}
       </ReactMarkdown>

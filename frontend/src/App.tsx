@@ -812,6 +812,7 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
   // The turn at the viewport's top edge before an older page lands: the page
   // that follows is realigned to it (see the layout effect after `list`).
   const anchorRef = useRef<{ key: string; index: number; offset: number; at: number } | null>(null);
+  const olderTimeout = useRef<number | null>(null);
   const loadOlder = async () => {
     if (loadingOlder) return;
     const log = logRef.current;
@@ -826,11 +827,20 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
       }
     }
     setLoadingOlder(true);
+    if (olderTimeout.current !== null) window.clearTimeout(olderTimeout.current);
+    olderTimeout.current = window.setTimeout(() => {
+      olderTimeout.current = null;
+      setLoadingOlder(false);
+    }, 4000);
     try {
       await chat.older();
       // The refreshed projection (and the anchoring effect) arrive through
       // the chat:updated event.
-    } finally {
+    } catch {
+      if (olderTimeout.current !== null) {
+        window.clearTimeout(olderTimeout.current);
+        olderTimeout.current = null;
+      }
       setLoadingOlder(false);
     }
   };
@@ -844,6 +854,16 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
   const turnCount = state?.turns.length ?? 0;
   // The transcript length the last automatic load started from: a page that added nothing is not asked for again.
   const autoOlderAt = useRef(-1);
+  useEffect(() => {
+    // When turn count updates or hasOlder changes, any pending older request is complete.
+    if (loadingOlder) {
+      if (olderTimeout.current !== null) {
+        window.clearTimeout(olderTimeout.current);
+        olderTimeout.current = null;
+      }
+      setLoadingOlder(false);
+    }
+  }, [turnCount, state?.hasOlder]);
   useEffect(() => {
     const button = olderRef.current;
     const log = logRef.current;
@@ -862,6 +882,11 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
   }, [state?.hasOlder, turnCount, loadingOlder, conversationId]);
   useEffect(() => {
     autoOlderAt.current = -1;
+    if (olderTimeout.current !== null) {
+      window.clearTimeout(olderTimeout.current);
+      olderTimeout.current = null;
+    }
+    setLoadingOlder(false);
   }, [conversationId]);
 
   // insertAtCaret splices text into the draft at the caret (attachments,
@@ -1317,7 +1342,7 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
     const anchor = anchorRef.current;
     const log = logRef.current;
     if (!anchor || !log) return;
-    if (Date.now() - anchor.at > 3000) {
+    if (Date.now() - anchor.at > 5000) {
       anchorRef.current = null;
       return;
     }

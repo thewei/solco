@@ -37,13 +37,14 @@ export function useTurnList(
   keyOf: (index: number) => string,
   margin: number,
 ): TurnList {
-  const threshold = typeof document !== "undefined" && document.documentElement.dataset.host === "phone" ? PHONE_VIRTUAL_MIN : VIRTUAL_MIN;
+  const phone = typeof document !== "undefined" && document.documentElement.dataset.host === "phone";
+  const threshold = phone ? PHONE_VIRTUAL_MIN : VIRTUAL_MIN;
   const virtual = count >= threshold;
   const list = useVirtualizer({
     count: virtual ? count : 0,
     getScrollElement: () => logRef.current,
-    estimateSize: () => 160,
-    overscan: 8,
+    estimateSize: () => (phone ? 120 : 160),
+    overscan: phone ? 3 : 8,
     scrollMargin: margin,
     getItemKey: keyOf,
   });

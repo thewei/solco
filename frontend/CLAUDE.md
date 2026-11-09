@@ -10,8 +10,8 @@ index.html / mobile.html: 两个 HTML 壳的首帧：内联 `--content` 同一�
 nozoom.ts: 双指缩放关闭（副作用导入）：gesture 事件与 Ctrl+wheel 的默认缩放被取消——页面是原生窗口里的 App UI，双指放大不原生；普通滚动不受影响
 App.tsx: 页面根：桥接状态（`chat.*` / events 订阅）、`chat:delta` 有序尾 Patch / 缺帧 snapshot 自愈、`data-theme`/`data-contrast`/`data-prose` 写入 html、sticky-bottom 跟尾、会话绑定与开关（`bindLiveAgent` 等）；输入区上方的 `.changes-pill`（「N files changed | Review」：宿主给 `state.changedFiles` 且 `canReview` 才画——手机从自己的 Git 状态读，桌面恒为 0 所以永不显示；Review 走 `reviewChanges("")`）
 mygo.ts: `mygo generate` 生成的类型化桥客户端——唯一桥 API 面，禁止手改；SC-04 包含 chat:delta 的 ChatDelta DTO
-turn.tsx: 转录行渲染器：用户气泡（提及 chips、折叠）、助手纯文本、run 折叠（thinking+工具）、工具行、changes 卡、脚注（时间/复制/重发）、`Markdown`→`CodeBlock`——fenced 块统一脸：SVG 以 `<img>` data URL 预览（Preview|Code），mermaid 经懒加载库渲染图（Diagram|Code，strict 模式，350ms 流式去抖，解析失败回落源码+一行 `mmerr` 提示，主题翻转经 MutationObserver 重绘），超 30 行折叠、复制取 `textContent`
-turnlist.ts: 转录虚拟滚动（@tanstack/react-virtual）
+turn.tsx: 转录行渲染器：用户气泡（提及 chips、折叠）、助手纯文本、run 折叠（thinking+工具）、工具行、changes 卡、脚注（时间/复制/重发）、Markdown（模块级静态插件引用与组件映射复用）→CodeBlock——fenced 块统一脸：SVG 以 `<img>` data URL 预览（Preview|Code），mermaid 经懒加载库渲染图（Diagram|Code，strict 模式，350ms 流式去抖，解析失败回落源码+一行 `mmerr` 提示，主题翻转经 MutationObserver 重绘），超 30 行折叠、复制取 `textContent`
+turnlist.ts: 转录虚拟滚动（@tanstack/react-virtual；手机 15 行/overscan 3/估计高 120，桌面 40 行/overscan 8/估计高 160）
 chat-delta.ts: 桌面/手机唯一的流式回合尾 Patch 合并器；baseSeq + conversationId 双重门控、缺帧返回 null 触发 Snapshot
 测试：`tests/chat-delta.test.ts` 只测纯 reducer，未进入 WebView 产物
 composer-surface.tsx: Chat / Assistant 冷启动 / Group 共用的 React Composer Box、Toolbar、Textarea 与扩容规则；发送与模型等状态仍由各场景 controller 拥有，不复制 Herdr runtime
