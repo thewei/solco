@@ -1463,7 +1463,7 @@ export function App({ dockAbove, offline, localCommands }: { dockAbove?: React.R
           </button>
         </div>
       ) : null}
-      {state?.outline !== false && !state?.loading && !state?.waiting ? <TocRail turns={turns} logRef={logRef} top={list.top} scrollTo={list.scrollTo} /> : null}
+      {Boolean(state?.outline) && !state?.loading && !state?.waiting ? <TocRail turns={turns} logRef={logRef} top={list.top} scrollTo={list.scrollTo} /> : null}
       <div
         className="chat-log"
         ref={logRef}
