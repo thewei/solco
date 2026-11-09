@@ -34,7 +34,7 @@ const (
 	maxAnswerText     = 32 << 10
 	minTimeout        = time.Minute
 	maxTimeout        = 24 * time.Hour
-	defaultTimeout    = time.Hour
+	defaultTimeout    = 4 * time.Hour
 	disconnectedAfter = 60 * time.Second
 	lostAfter         = 5 * time.Minute
 	attachmentKeep    = time.Hour
@@ -447,6 +447,12 @@ func (s *Store) Resolve(id string, answers map[string]Answer, atts []Attachment)
 // End closes a pending Ask without an answer.
 func (s *Store) End(id, message string) error {
 	return s.finish(id, StateEnded, message, true)
+}
+
+// Abandon records that the Agent stopped waiting (its client cancelled the call). The Ask expires at once but stays
+// answerable: the user's answer comes back to the Agent as a late answer with its next question in the thread.
+func (s *Store) Abandon(id string) error {
+	return s.finish(id, StateExpired, "Agent stopped waiting", false)
 }
 
 func (s *Store) finish(id string, st AskState, message string, userAction bool) error {

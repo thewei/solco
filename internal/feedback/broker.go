@@ -71,6 +71,9 @@ func NewHandler(b *Broker) http.Handler {
 	mux.HandleFunc("POST /v1/inbox/asks/{id}/end", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, b.Store.End(r.PathValue("id"), ""))
 	})
+	mux.HandleFunc("POST /v1/inbox/asks/{id}/abandon", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, b.Store.Abandon(r.PathValue("id")))
+	})
 	mux.HandleFunc("GET /v1/inbox/stream", b.handleStream)
 	return b.guard(mux)
 }

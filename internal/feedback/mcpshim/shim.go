@@ -30,6 +30,18 @@ const (
 	maxWaitSec    = 300
 )
 
+// instructions is the usage rule sent in initialize; clients put it in the Agent's system prompt, so the blocking
+// contract holds even when the Agent never reads a tool description.
+const instructions = `Solco Feedback is the user's question inbox. To ask the user anything, call interactive_feedback and keep that ONE call open until it returns: the user may need minutes or hours, so do not poll, do not shorten timeout_seconds, do not give up and never continue on an assumed answer (only status "answered" is an answer). Always pass description (Markdown: what you did, what you ask) and project_root. If your client cuts the call short, ask again with interactive_feedback_start and loop interactive_feedback_wait. Use recall_decisions before asking something the user may already have decided.`
+
+var closedWorld = false
+
+// askNotes: asking the user changes nothing outside Solco's own inbox.
+func askNotes(title string) *mcp.ToolAnnotations {
+	destructive := false
+	return &mcp.ToolAnnotations{Title: title, DestructiveHint: &destructive, OpenWorldHint: &closedWorld}
+}
+
 type questionArg struct {
 	ID          string   `json:"id" jsonschema:"Unique identifier for this question within the session"`
 	Text        string   `json:"text" jsonschema:"The question text shown to the user"`
@@ -43,7 +55,7 @@ type askArgs struct {
 	CallerInfo     string        `json:"caller_info" jsonschema:"Who is asking, e.g. 'Claude Code - main task' or 'Cursor Agent'"`
 	Description    string        `json:"description,omitempty" jsonschema:"Markdown context shown above the questions. Summarize what you did and what the question is about."`
 	Questions      []questionArg `json:"questions" jsonschema:"1 to 20 questions to present"`
-	TimeoutSeconds float64       `json:"timeout_seconds,omitempty" jsonschema:"Wait time in seconds. Default 3600 (1h), max 86400 (24h). Do not override unless the user asked for it."`
+	TimeoutSeconds float64       `json:"timeout_seconds,omitempty" jsonschema:"Wait time in seconds. Default 14400 (4h), max 86400 (24h). Do not override unless the user asked for it."`
 	TaskID         string        `json:"task_id,omitempty" jsonschema:"Optional. A stable id for the task; asks with the same task_id and project share one thread in Solco."`
 	ThreadID       string        `json:"thread_id,omitempty" jsonschema:"Optional. Asks with the same thread_id share one thread in Solco, across clients and time. Without it Solco groups by project, client and a 60 minute gap."`
 	ProjectRoot    string        `json:"project_root,omitempty" jsonschema:"Absolute path of the current workspace/project root. Always pass this so asks attach to the right project."`
@@ -69,28 +81,32 @@ type Server struct {
 // NewServer builds the MCP server around c.
 func NewServer(c *feedback.Client, version string) *mcp.Server {
 	s := &Server{c: c, version: version}
-	srv := mcp.NewServer(&mcp.Implementation{Name: "solco-feedback", Version: version}, nil)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "solco-feedback", Version: version}, &mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "interactive_feedback",
 		Description: `Ask the user questions through Solco and BLOCK until they answer or the timeout passes.
 
-The preferred way to ask the user anything: it creates a question, notifies the user (Solco, phone, Feishu) and waits for the answer, sending keep-alive progress every 10 seconds. The user is a person who may need minutes or hours to notice, read and answer, so keep this ONE call open until it returns: do not poll, do not shorten timeout_seconds (the default is 1 hour on purpose), do not give up, and never carry on with an assumed answer. Only status "answered" is an answer; on "timeout" ask again unless "ended_by_user" is true.
+The preferred way to ask the user anything: it creates a question, notifies the user (Solco, phone, Feishu) and waits for the answer, sending keep-alive progress every 10 seconds. The user is a person who may need minutes or hours to notice, read and answer, so keep this ONE call open until it returns: do not poll, do not shorten timeout_seconds (the default is 4 hours on purpose), do not give up, and never carry on with an assumed answer. Only status "answered" is an answer; on "timeout" ask again unless "ended_by_user" is true.
 
 Always pass "description" (what you did, what the question is about) and "project_root". Use caller_info to identify yourself. Questions from the same project and client are filed in one thread automatically; pass thread_id or task_id to group them yourself.
 
 If your client cuts the call short (a tool timeout such as Codex's default 60 s tool_timeout_sec, or a cancellation), that is not an answer: ask again with interactive_feedback_start and loop interactive_feedback_wait. If the result contains "late_answers", the user answered earlier questions after they timed out: take them into account.`,
+		Annotations: askNotes("Ask the user (blocking)"),
 	}, s.ask(true))
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "interactive_feedback_start",
 		Description: `Start a question and return IMMEDIATELY with a session_id. Use only when interactive_feedback is cut short by your client or your client has strict per-call time limits. Then loop interactive_feedback_wait with the session_id until the status is no longer "pending": the user may need hours, so never stop waiting and never assume an answer.`,
+		Annotations: askNotes("Ask the user (start)"),
 	}, s.ask(false))
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "interactive_feedback_wait",
 		Description: `Poll a question started with interactive_feedback_start. Each call waits up to wait_seconds (default and max 300; set it below your client's per-call limit, e.g. 45 for a 60 s limit) and returns "pending" if the user has not answered yet; call it again immediately. Stop when the status is "answered", "timeout", "ended" or "not_found".`,
+		Annotations: askNotes("Wait for the user's answer"),
 	}, s.wait)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "recall_decisions",
 		Description: `Look up how the user answered earlier questions in a project, so you do not ask the same thing twice. Read-only: returns question and answer text, never attachments.`,
+		Annotations: &mcp.ToolAnnotations{Title: "Recall earlier decisions", ReadOnlyHint: true, OpenWorldHint: &closedWorld},
 	}, s.recall)
 	return srv
 }
@@ -149,7 +165,7 @@ func (s *Server) create(ctx context.Context, req *mcp.CallToolRequest, a askArgs
 	if err := s.awaitBroker(ctx); err != nil {
 		return "", 0, errors.New("Solco feedback broker is not reachable")
 	}
-	timeout = time.Hour
+	timeout = 4 * time.Hour
 	if a.TimeoutSeconds > 0 {
 		timeout = time.Duration(a.TimeoutSeconds * float64(time.Second))
 	}
@@ -230,9 +246,10 @@ func (s *Server) poll(ctx context.Context, req *mcp.CallToolRequest, id string, 
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
-			// The Agent gave up on this call: the question must not stay open for the user.
+			// The Agent gave up on this call: the question stops being pending, but the user can still answer it;
+			// the answer reaches the Agent as a late answer with its next question.
 			ectx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			_ = s.c.End(ectx, id)
+			_ = s.c.Abandon(ectx, id)
 			cancel()
 			return textResult(map[string]string{"status": "error", "message": "cancelled"}, true, nil)
 		case <-time.After(pollEvery):
@@ -248,10 +265,10 @@ func (s *Server) poll(ctx context.Context, req *mcp.CallToolRequest, id string, 
 			if offlineSince.IsZero() {
 				offlineSince = time.Now()
 			} else if time.Since(offlineSince) > offlineGrace {
-				return textResult(map[string]string{"status": "error", "message": "Solco feedback broker is not reachable"}, true, nil)
+				return lostSession(id, "Solco feedback broker is not reachable")
 			}
 		default:
-			return textResult(map[string]string{"status": "error", "message": "Session disappeared"}, true, nil)
+			return lostSession(id, "Failed to read session status")
 		}
 		if req != nil && req.Session != nil && time.Since(lastProgress) >= progressEvery {
 			lastProgress = time.Now()
@@ -262,6 +279,13 @@ func (s *Server) poll(ctx context.Context, req *mcp.CallToolRequest, id string, 
 		}
 	}
 	return textResult(map[string]string{"status": "timeout", "message": "User did not respond in time"}, false, nil)
+}
+
+// lostSession is an error that keeps the Ask's id: the question may still be open, so the Agent resumes it with
+// interactive_feedback_wait instead of asking the user the same thing again.
+func lostSession(id, message string) *mcp.CallToolResult {
+	return textResult(map[string]string{"status": "error", "message": message, "session_id": id,
+		"next": "The question may still be open: call interactive_feedback_wait with this session_id instead of asking again."}, true, nil)
 }
 
 type lateOut struct {

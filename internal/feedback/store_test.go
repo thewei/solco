@@ -266,3 +266,32 @@ func TestListingAndRecall(t *testing.T) {
 	}
 	_ = b
 }
+
+func TestAbandonedAskStaysAnswerableAsLate(t *testing.T) {
+	s, _ := clockStore(t)
+	repo := mkRepo(t)
+	a, th, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: repo, Questions: q1("ship?")})
+	if got := time.Duration(a.TimeoutMs) * time.Millisecond; got != 4*time.Hour {
+		t.Fatalf("default timeout is 4 h, got %v", got)
+	}
+	if err := s.Abandon(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Abandon(a.ID); err == nil {
+		t.Fatal("a finished ask cannot be abandoned twice")
+	}
+	if err := s.Resolve(a.ID, map[string]Answer{"q1": {Selected: []string{"yes"}}}, nil); err != nil {
+		t.Fatalf("an abandoned ask is still answerable: %v", err)
+	}
+	b, _, _ := s.Create(CreateInput{CallerInfo: "Cursor Agent", ProjectRoot: repo, Questions: q1("again?")})
+	if b.ThreadID != th.ID {
+		t.Fatal("same thread expected")
+	}
+	if err := s.Abandon(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	r := s.Result(b.ID)
+	if r.Status == "ended" || len(r.LateAnswers) != 1 {
+		t.Fatalf("the earlier answer must come back as a late answer, not an end: %+v", r)
+	}
+}

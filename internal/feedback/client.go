@@ -194,6 +194,11 @@ func (c *Client) End(ctx context.Context, askID string) error {
 	return c.do(ctx, http.MethodPost, "/v1/inbox/asks/"+url.PathEscape(askID)+"/end", map[string]string{}, nil)
 }
 
+// Abandon tells the broker the Agent stopped waiting; the Ask stays answerable as a late answer.
+func (c *Client) Abandon(ctx context.Context, askID string) error {
+	return c.do(ctx, http.MethodPost, "/v1/inbox/asks/"+url.PathEscape(askID)+"/abandon", map[string]string{}, nil)
+}
+
 // Recall looks up earlier answers.
 func (c *Client) Recall(ctx context.Context, project, query string, limit int) ([]RecallItem, error) {
 	q := url.Values{"project": {project}, "q": {query}}

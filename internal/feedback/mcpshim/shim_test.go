@@ -177,3 +177,73 @@ func TestStartThenWaitAndRecall(t *testing.T) {
 		t.Fatalf("unknown id: %s", text(t, bad))
 	}
 }
+
+// Instructions reach the Agent's system prompt; annotations keep clients from asking approval for a read-only recall.
+func TestServerCarriesInstructionsAndAnnotations(t *testing.T) {
+	c, _ := setup(t)
+	sess := connect(t, c)
+	if got := sess.InitializeResult().Instructions; !strings.Contains(got, "ONE call open") || !strings.Contains(got, "project_root") {
+		t.Fatalf("instructions: %q", got)
+	}
+	res, err := sess.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Annotations == nil || tool.Annotations.OpenWorldHint == nil || *tool.Annotations.OpenWorldHint {
+			t.Errorf("%s: annotations %+v", tool.Name, tool.Annotations)
+		}
+		if tool.Name == "recall_decisions" && !tool.Annotations.ReadOnlyHint {
+			t.Error("recall_decisions is read-only")
+		}
+	}
+}
+
+// A cancelled call leaves the question answerable: it expires at once instead of being ended.
+func TestCancelledAskExpiresAndStaysAnswerable(t *testing.T) {
+	c, store := setup(t)
+	sess := connect(t, c)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = sess.CallTool(ctx, &mcp.CallToolParams{Name: "interactive_feedback", Arguments: map[string]any{
+			"caller_info": "Cursor Agent", "project_root": t.TempDir(),
+			"questions": []map[string]any{{"id": "q1", "text": "Ship?", "type": "single", "options": []string{"a"}}},
+		}})
+	}()
+	var askID string
+	for i := 0; i < 100 && askID == ""; i++ {
+		if rows := store.Threads(feedback.Filter{Waiting: true}); len(rows) == 1 {
+			th, _ := store.Thread(rows[0].ID)
+			askID = th.Asks[0].ID
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if askID == "" {
+		t.Fatal("ask never appeared")
+	}
+	cancel()
+	<-done
+	for i := 0; i < 100; i++ {
+		th, _ := store.Thread(store.Threads(feedback.Filter{})[0].ID)
+		if th.Asks[0].State == feedback.StateExpired {
+			if err := store.Resolve(askID, map[string]feedback.Answer{"q1": {Selected: []string{"a"}}}, nil); err != nil {
+				t.Fatalf("late answer refused: %v", err)
+			}
+			return
+		}
+		if th.Asks[0].State == feedback.StateEnded {
+			t.Fatal("a cancelled call must not end the question")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("ask never expired")
+}
+
+func TestLostSessionKeepsTheSessionID(t *testing.T) {
+	res := lostSession("ask_123", "Solco feedback broker is not reachable")
+	if !res.IsError || !strings.Contains(text(t, res), `"session_id": "ask_123"`) {
+		t.Fatalf("result: %s", text(t, res))
+	}
+}
