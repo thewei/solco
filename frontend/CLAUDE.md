@@ -6,7 +6,7 @@ Chat WebView 页（产品决策 2026-10-11）的唯一源码：一份嵌入式 S
 成员清单
 main.tsx: 桌面入口，createRoot 按路径挂 `App`（/chat）、懒加载的 `AssistantsPage`（/assistants）或 `FeedbackPage`（/feedback）——Files 预览自 2026-11-08 起是原生的，这里不再有它的页面（`/files-viewer` 路由、`FilesViewer`、github-markdown-css 都已删）；引入 highlight.js github 主题、`nozoom` 与 `theme.css`（`vite.config.ts`，target safari15）
 mobile.tsx: 手机入口（`vite.mobile.config.ts` + vite-plugin-singlefile），默认渲染同一个 `App`，宿主在脚本前注入 `__SOLCO_ROUTE__="feedback"` 时渲染 `FeedbackPage`（与桌面按 pathname 选页同理，页面代码本身零客户端分支），引入 `nozoom`
-index.html / mobile.html: 两个 HTML 壳的首帧：内联 `--content` 同一对色（`light-dark(#fcfcfc, #0a0a0a)`，与 `theme.css`、Go `webviewBackground`、原生 `designTokens().Content` 一对，`TestWebviewBackgroundMatchesPageTokens` 钉住）；`mobile.html` 另把 `data-theme` 与 `data-theme-pin` 固定为 dark（手机只有深色，状态未到时也不闪浅色；`App.tsx` 在状态没给 `theme` 时回落到该 pin）
+index.html / mobile.html: 两个 HTML 壳的首帧：内联 `--content` 同一对色（`light-dark(#fcfcfc, #0a0a0a)`，与 `theme.css`、Go `webviewBackground`、原生 `designTokens().Content` 一对，`TestWebviewBackgroundMatchesPageTokens` 钉住）；`mobile.html` 的 CSS 适配当前主题，由 `protocol.ts` 在首屏注入 `themeSeed` 对齐浅/深色消除闪烁
 nozoom.ts: 双指缩放关闭（副作用导入）：gesture 事件与 Ctrl+wheel 的默认缩放被取消——页面是原生窗口里的 App UI，双指放大不原生；普通滚动不受影响
 App.tsx: 页面根：桥接状态（`chat.*` / events 订阅）、`chat:delta` 有序尾 Patch / 缺帧 snapshot 自愈、`data-theme`/`data-contrast`/`data-prose` 写入 html、sticky-bottom 跟尾、会话绑定与开关（`bindLiveAgent` 等）；输入区上方的 `.changes-pill`（「N files changed | Review」：宿主给 `state.changedFiles` 且 `canReview` 才画——手机从自己的 Git 状态读，桌面恒为 0 所以永不显示；Review 走 `reviewChanges("")`）
 mygo.ts: `mygo generate` 生成的类型化桥客户端——唯一桥 API 面，禁止手改；SC-04 包含 chat:delta 的 ChatDelta DTO
@@ -28,7 +28,7 @@ icons.generated.ts / tokens.generated.css: `design/gen.mjs` 生成，禁止手�
 native.ts: Safari 式状态 pill（指针下链接 href）与选区辅助，Chat 页使用（Files 预览页 2026-11-08 退役）
 theme.css: 引入 `tokens.generated.css`（颜色角色/圆角/字体/线宽的唯一来源），自己只保留令牌表没有名字的值（`--accent-dim`、`--float-shadow`、骨架色、墨色阶 `--i1..i4`/`--hair*`、`--spring`）+ DM Sans `@font-face`（`fonts/`，拉丁子集）；`--content` 与 Go `webviewBackground` 的一致性由 `TestWebviewBackgroundMatchesPageTokens` 钉住
 fonts/: DM Sans 400/500/700 woff2（SIL OFL 1.1，附 `DM-Sans-OFL.txt`）；单文件手机构建内联为 data URL，桌面构建作资产
-chat.css: Chat 本体样式（含 `.codeb` 代码块族、`.mmprev` mermaid 画布、`.mmerr` 解析错误行）；文件末尾的「Phone density」块以 `html[data-host="phone"]` 为键（手机 16/24 阅读尺寸、44px 触控、浮层/停靠卡的 T3 外形；桌面保持 13px 密度，只共享颜色/圆角/字体），另含 `.changes-pill`、加载骨架 `.sk-rows`、手机 `.jump`（44px，让位于输入区与停靠卡）
+chat.css: Chat 本体样式（含 `.codeb` 代码块族、`.mmprev` mermaid 画布、`.mmerr` 解析错误行）；`.chat-log` 具 `-webkit-overflow-scrolling: touch` 惯性滚动与 `overscroll-behavior-y: contain`；文件末尾的「Phone density」块以 `html[data-host="phone"]` 为键（手机 16/24 阅读尺寸、44px 触控、浮层/停靠卡的 T3 外形；桌面保持 13px 密度，只共享颜色/圆角/字体），另含 `.changes-pill`、加载骨架 `.sk-rows`、手机 `.jump`（44px，让位于输入区与停靠卡）
 assistants/Progress.tsx: Worker 汇总 WorkPulse 与 `ago`（真实状态，不伪装 Agent 回复；2026-11-07 起页头不再画 facts 条，PlanCard/Milestone 与 `.as-plan`/`.as-ms`/`.as-fact-kind` 样式已删，Goal 计划只在 Advanced 的 Goals 里）
 assistants/ResultCards.tsx: 聊天上方的任务结果卡（2026-11-07，确定性，不经模型）：桥 `snapshot.results`（核心 `assistant results`，24 h 内 done/failed/review_required 的任务，最多 4 张）→ 标题 + 状态 + Open Pane（仅当窗格仍在树中）/ Review（交给 Tasks）；收件箱已在问的任务不重复画，叉掉只在本页会话内记住；经 `App` 的 `dockAbove` 画在 composer 栏最上方
 assistants/GroupChat.tsx: Group 的 @ 定向/无 @ 广播；Composer 外壳复用 composer-surface；`GroupsSheet`（2026-11-07：群不再是侧栏入口，由 Primary 的 ⋯ → Groups… 列出/新建，群页头有 ‹ 回 Primary）
