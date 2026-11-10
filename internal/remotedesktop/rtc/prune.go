@@ -20,6 +20,12 @@ const (
 	maxTURNPerKind = 1
 )
 
+// PruneICEServers keeps at most 2 distinct STUN hosts and 1 UDP + 1 TCP/TLS TURN entry.
+func PruneICEServers(in []ICEServer) []ICEServer { return pruneICEServers(in) }
+
+// IPFilter returns a per-peer filter keeping IPv4, Tailscale IPv6 ULA, and one global IPv6 address.
+func IPFilter() func(net.IP) bool { return ipFilter() }
+
 // pruneICEServers keeps at most maxSTUN STUN URLs (distinct hosts, list order — the Host puts the entries
 // that work from mainland China first) and the first TURN URL of each transport family (UDP, TCP/TLS).
 func pruneICEServers(in []ICEServer) []ICEServer {

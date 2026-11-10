@@ -53,22 +53,30 @@ func (s *Server) watchAddresses() {
 	}()
 }
 
-// checkAddress fires OnAddressLost while the configured lan/tailscale address is
+func modeAddressStale(mode Mode, configured string) bool {
+	cands, err := Candidates(mode)
+	if err != nil || len(cands) == 0 {
+		return false // nothing to follow the Mac to; the relay keeps phones served meanwhile
+	}
+	address := strings.TrimSpace(configured)
+	return !slices.ContainsFunc(cands, func(c Candidate) bool { return c.Address == address })
+}
+
+// checkAddress fires OnAddressLost while a configured lan/tailscale address is
 // no longer on the machine's interfaces and a usable one exists. Firing repeats
 // every tick until the callback heals the config — its own dedupe (the
 // recommended address is already saved) turns the repeats into no-ops.
 func (s *Server) checkAddress() {
 	cfg := s.config()
-	if cfg.Mode != ModeLAN && cfg.Mode != ModeTailscale {
+	stale := false
+	if cfg.Mode == ModeLAN || cfg.Mode == ModeTailscale {
+		stale = modeAddressStale(cfg.Mode, cfg.Address)
+	}
+	if !stale && cfg.TailscaleEnabled && cfg.Mode != ModeTailscale {
+		stale = modeAddressStale(ModeTailscale, cfg.TailscaleAddress)
+	}
+	if !stale {
 		return
-	}
-	cands, err := Candidates(cfg.Mode)
-	if err != nil || len(cands) == 0 {
-		return // nothing to follow the Mac to; the relay keeps phones served meanwhile
-	}
-	address := strings.TrimSpace(cfg.Address)
-	if slices.ContainsFunc(cands, func(c Candidate) bool { return c.Address == address }) {
-		return // healthy; an unset address never matches, so it heals too
 	}
 	s.mu.Lock()
 	cb := s.opts.OnAddressLost
@@ -80,13 +88,29 @@ func (s *Server) checkAddress() {
 	}
 }
 
-// advertised names the address the Host is serving right now — the one address
-// a phone may store for this Mac. A stopped or loopback-only listener offers
-// nothing: advertising an address nobody answers would send phones probing it.
+// advertised names the address(es) the Host is serving right now — every
+// explicit LAN / Tailscale listener bound by this Host. A stopped or
+// loopback-only listener offers nothing: advertising an address nobody answers
+// would send phones probing it.
 func (s *Server) advertised() []map[string]any {
 	s.mu.Lock()
 	host, port := s.listenHost, s.listenPort
+	addrs := append([]boundAddr(nil), s.listenAddrs...)
 	s.mu.Unlock()
+	if len(addrs) > 0 && (host == "" || addrs[0].host == host) {
+		var out []map[string]any
+		for _, a := range addrs {
+			if a.mode != ModeLAN && a.mode != ModeTailscale {
+				continue
+			}
+			n, err := strconv.Atoi(a.port)
+			if err != nil {
+				continue
+			}
+			out = append(out, map[string]any{"host": a.host, "port": n})
+		}
+		return out
+	}
 	if host == "" || port == "" {
 		return nil
 	}

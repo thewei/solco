@@ -195,6 +195,7 @@ type Server struct {
 	httpServer     *http.Server
 	listenHost     string
 	listenPort     string
+	listenAddrs    []boundAddr
 	fingerprint    string
 	conns          map[string]map[*liveConn]struct{} // deviceID → live sockets
 	terminals      map[string]int                    // deviceID → open terminal streams
@@ -270,40 +271,58 @@ func New(opts Options) (*Server, error) {
 // Devices exposes the paired-device list for Settings (List/Revoke).
 func (s *Server) Devices() *DeviceStore { return s.devices }
 
-// Start binds the configured address with TLS. Off is a no-op. It never binds
-// a wildcard address (Config.ListenAddr guarantees that). A bind that fails still
+type boundAddr struct {
+	mode Mode
+	host string
+	port string
+}
+
+type boundListener struct {
+	mode Mode
+	ln   net.Listener
+}
+
+// Start binds the configured address(es) with TLS. Off is a no-op. It never binds
+// a wildcard address (Config.ListenAddr/listenTargets guarantee that). A bind that fails still
 // brings the relay tunnel up when it is enabled (see below) and starts the
 // address watcher (watch.go), which reports the vanished address so Settings can
 // follow the Mac to its new one.
 func (s *Server) Start() error {
 	cfg := s.config()
-	addr, err := cfg.ListenAddr()
-	if err != nil && !cfg.Tailcat {
-		return err
-	}
-	if addr == "" && !cfg.Tailcat {
+	targets := cfg.listenTargets()
+	if len(targets) == 0 && !cfg.Tailcat {
 		return nil
 	}
-	var ln net.Listener
-	if addr != "" {
-		ln, err = listenReliable(addr)
-		if err != nil {
-			// The address can vanish under a running Mac (DHCP, a changed network, Wi-Fi off). The relay and the
-			// tunnel do not need it: they dial out or serve through their own transports, so a phone that was
-			// paired keeps reaching the Mac. The error still goes up when no tunnel covers it — Settings flags
-			// the stale address — and pairing stays refused (no listener, no QR) until the watcher has found
-			// the new one.
-			s.startRelay()
-			s.watchAddresses()
-			if !cfg.Tailcat {
-				return fmt.Errorf("remote host listen on %s: %w", addr, err)
+	var bound []boundListener
+	var firstErr error
+	for _, tgt := range targets {
+		if tgt.err != nil {
+			if firstErr == nil {
+				firstErr = tgt.err
 			}
-			ln = nil
+			continue
 		}
+		if tgt.addr == "" {
+			continue
+		}
+		ln, err := listenReliable(tgt.addr)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("remote host listen on %s: %w", tgt.addr, err)
+			}
+			slog.Warn("remote host listen failed", "mode", tgt.mode, "error", err)
+			continue
+		}
+		bound = append(bound, boundListener{mode: tgt.mode, ln: ln})
 	}
-	if err := s.serve(ln, cfg); err != nil {
-		if ln != nil {
-			_ = ln.Close()
+	if len(bound) == 0 && firstErr != nil && !cfg.Tailcat {
+		s.startRelay()
+		s.watchAddresses()
+		return firstErr
+	}
+	if err := s.serveListeners(bound, cfg); err != nil {
+		for _, b := range bound {
+			_ = b.ln.Close()
 		}
 		return err
 	}
@@ -361,16 +380,29 @@ func (s *Server) Reconfigure(cfg Config, relay RelayConfig) error {
 }
 
 func (s *Server) serve(ln net.Listener, cfg Config) error {
+	var bound []boundListener
+	if ln != nil {
+		bound = []boundListener{{mode: cfg.Mode, ln: ln}}
+	}
+	return s.serveListeners(bound, cfg)
+}
+
+func (s *Server) serveListeners(bound []boundListener, cfg Config) error {
 	cert, fp, err := LoadOrCreateCert(s.opts.Dir, s.opts.Now())
 	if err != nil {
 		return err
 	}
-	var host, port string
-	if ln != nil {
-		host, port, err = net.SplitHostPort(ln.Addr().String())
+	var addrs []boundAddr
+	for _, b := range bound {
+		host, port, err := net.SplitHostPort(b.ln.Addr().String())
 		if err != nil {
 			return err
 		}
+		addrs = append(addrs, boundAddr{mode: b.mode, host: host, port: port})
+	}
+	var host, port string
+	if len(addrs) > 0 {
+		host, port = addrs[0].host, addrs[0].port
 	}
 	srv := &http.Server{
 		Handler:           s.Handler(),
@@ -382,15 +414,17 @@ func (s *Server) serve(ln net.Listener, cfg Config) error {
 		s.mu.Unlock()
 		return errors.New("remote host already started")
 	}
-	s.httpServer, s.listenHost, s.listenPort, s.fingerprint = srv, host, port, fp
+	s.httpServer, s.listenHost, s.listenPort, s.listenAddrs, s.fingerprint = srv, host, port, addrs, fp
 	s.mu.Unlock()
-	if ln != nil {
+	for i, b := range bound {
+		ln := b.ln
+		info := addrs[i]
 		go func() {
 			if err := srv.ServeTLS(ln, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				slog.Warn("remote host stopped", "error", err)
+				slog.Warn("remote host stopped", "mode", info.mode, "error", err)
 			}
 		}()
-		slog.Info("remote host listening", "mode", cfg.Mode, "port", port)
+		slog.Info("remote host listening", "mode", info.mode, "port", info.port)
 	}
 	if cfg.Tailcat {
 		s.startOverlay(srv)
@@ -499,7 +533,7 @@ func (s *Server) Close() {
 	s.netDone = nil
 	srv := s.httpServer
 	s.httpServer = nil
-	s.listenHost, s.listenPort, s.fingerprint = "", "", "" // nothing to pair against once stopped
+	s.listenHost, s.listenPort, s.listenAddrs, s.fingerprint = "", "", nil, "" // nothing to pair against once stopped
 	var handles []*liveConn
 	for _, set := range s.conns {
 		for h := range set {

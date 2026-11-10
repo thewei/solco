@@ -43,8 +43,20 @@ func ConfigFrom(r settings.RemoteAccessSettings) remotehost.Config {
 	// (settings.RemoteAccessSettings.IsEnabled derives the switch from such a file). A Mode listener under a
 	// switched-off Remote Access is only the developer loopback.
 	enabled := r.IsEnabled()
+	tsEnabled := enabled && r.TailscaleEnabled
+	tsAddr := ""
+	if tsEnabled {
+		tsAddr = strings.TrimSpace(r.TailscaleAddress)
+	}
 	if !enabled && mode != remotehost.ModeLoopback {
 		mode = remotehost.ModeOff
 	}
-	return remotehost.Config{Mode: mode, Port: port, Address: r.Address, Tailcat: enabled}
+	return remotehost.Config{
+		Mode:             mode,
+		Port:             port,
+		Address:          r.Address,
+		TailscaleEnabled: tsEnabled,
+		TailscaleAddress: tsAddr,
+		Tailcat:          enabled,
+	}
 }

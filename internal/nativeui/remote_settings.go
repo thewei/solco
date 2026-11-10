@@ -45,6 +45,11 @@ var (
 	remoteModes      = []remotehost.Mode{remotehost.ModeOff, remotehost.ModeLoopback, remotehost.ModeLAN, remotehost.ModeTailscale}
 )
 
+type remoteCandCache struct {
+	list []remotehost.Candidate
+	at   time.Time
+}
+
 // remoteState is the Remote Access page's presentation state. The Server is
 // created on first need and lives until the shell closes.
 type remoteState struct {
@@ -69,14 +74,8 @@ type remoteState struct {
 	qr           [][]bool
 	pairBaseline map[string]bool // per-device QR the sheet was drawn with; a redraw only when it changed
 
-	cands     []remotehost.Candidate
-	candsMode remotehost.Mode
-	candsAt   time.Time
-
+	cands        map[remotehost.Mode]remoteCandCache
 	advancedOpen bool
-
-	tsAt  time.Time // the last Tailscale reachability probe
-	tsHas bool
 }
 
 // remoteRelayFrom, remoteP2PFrom and remoteConfigFrom map the saved choice to the Host's configs; the mapping is
@@ -175,10 +174,11 @@ func (s *Shell) syncRemoteHost() {
 	if srv == nil {
 		return
 	}
-	if remoteConfigFrom(s.settings.Remote).Mode == remotehost.ModeOff {
+	cfg := remoteConfigFrom(s.settings.Remote)
+	if !cfg.Enabled() {
 		s.remoteChatHost.Store(nil)
 		s.remote.err = ""
-		_ = srv.Reconfigure(remoteConfigFrom(s.settings.Remote), remoteRelayFrom(s.settings.Remote))
+		_ = srv.Reconfigure(cfg, remoteRelayFrom(s.settings.Remote))
 		s.releaseHostLease()
 		return
 	}
@@ -188,7 +188,7 @@ func (s *Shell) syncRemoteHost() {
 	}
 	s.remote.err = ""
 	srv.SetP2P(remoteP2PFrom(s.settings.Remote))
-	if err := srv.Reconfigure(remoteConfigFrom(s.settings.Remote), remoteRelayFrom(s.settings.Remote)); err != nil {
+	if err := srv.Reconfigure(cfg, remoteRelayFrom(s.settings.Remote)); err != nil {
 		slog.Warn("remote host reconfigure failed", "error", err)
 		s.remote.err = err.Error()
 	}
@@ -199,7 +199,7 @@ func (s *Shell) syncRemoteHost() {
 
 // startRemoteHostAtLaunch brings the Host up only when the user left it on.
 func (s *Shell) startRemoteHostAtLaunch() {
-	if remoteConfigFrom(s.settings.Remote).Mode != remotehost.ModeOff {
+	if remoteConfigFrom(s.settings.Remote).Enabled() {
 		s.syncRemoteHost()
 	}
 }
@@ -212,15 +212,30 @@ func (s *Shell) startRemoteHostAtLaunch() {
 func (s *Shell) remoteAddressLost() {
 	s.callOnWindow(func() {
 		cfg := remoteConfigFrom(s.settings.Remote)
-		if cfg.Mode != remotehost.ModeLAN && cfg.Mode != remotehost.ModeTailscale {
+		var nextPrimary, nextTS string
+		changePrimary, changeTS := false, false
+		if cfg.Mode == remotehost.ModeLAN || cfg.Mode == remotehost.ModeTailscale {
+			if rec := s.pickRemoteAddress(cfg.Mode, cfg.Address); rec != "" && rec != cfg.Address {
+				nextPrimary, changePrimary = rec, true
+			}
+		}
+		if cfg.TailscaleEnabled && cfg.Mode != remotehost.ModeTailscale {
+			if rec := s.pickRemoteAddress(remotehost.ModeTailscale, cfg.TailscaleAddress); rec != "" && rec != cfg.TailscaleAddress {
+				nextTS, changeTS = rec, true
+			}
+		}
+		if !changePrimary && !changeTS {
 			return
 		}
-		recommended := s.pickRemoteAddress(cfg.Mode, cfg.Address)
-		if recommended == "" || recommended == cfg.Address {
-			return
-		}
-		slog.Info("remote host address lost; following the network", "mode", string(cfg.Mode))
-		s.setRemote(func(r *settings.RemoteAccessSettings) { r.Address = recommended })
+		slog.Info("remote host address lost; following the network", "lan", changePrimary, "tailscale", changeTS)
+		s.setRemote(func(r *settings.RemoteAccessSettings) {
+			if changePrimary {
+				r.Address = nextPrimary
+			}
+			if changeTS {
+				r.TailscaleAddress = nextTS
+			}
+		})
 	})
 }
 
@@ -283,14 +298,19 @@ func (s *Shell) setRemote(mutate func(*settings.RemoteAccessSettings)) {
 }
 
 // remoteCandidates lists the addresses the chosen mode may bind, re-read at
-// most every few seconds.
+// most every few seconds (cached per mode so LAN + Tailscale can render together).
 func (s *Shell) remoteCandidates(mode remotehost.Mode) []remotehost.Candidate {
 	r := &s.remote
-	if mode != r.candsMode || time.Since(r.candsAt) > remoteCandidatesTTL {
-		r.cands, _ = remotehost.Candidates(mode)
-		r.candsMode, r.candsAt = mode, time.Now()
+	if r.cands == nil {
+		r.cands = map[remotehost.Mode]remoteCandCache{}
 	}
-	return r.cands
+	entry := r.cands[mode]
+	if time.Since(entry.at) > remoteCandidatesTTL {
+		list, _ := remotehost.Candidates(mode)
+		entry = remoteCandCache{list: list, at: time.Now()}
+		r.cands[mode] = entry
+	}
+	return entry.list
 }
 
 func remoteCandidateLabel(c remotehost.Candidate) string { return c.Address + " · " + c.Interface }
@@ -378,29 +398,33 @@ func remoteAddressStale(address string, cands []remotehost.Candidate) bool {
 }
 
 func (s *Shell) remoteAddressPicker(c *ui.Context, cfg remotehost.Config) {
+	s.remoteAddressPickerFor(c, cfg.Mode, cfg.Address, "Address", func(r *settings.RemoteAccessSettings, addr string) { r.Address = addr })
+}
+
+func (s *Shell) remoteAddressPickerFor(c *ui.Context, mode remotehost.Mode, current, label string, set func(*settings.RemoteAccessSettings, string)) {
 	t := c.Theme()
-	cands := s.remoteCandidates(cfg.Mode)
+	cands := s.remoteCandidates(mode)
 	if len(cands) == 0 {
 		msg := "No local-network address found."
-		if cfg.Mode == remotehost.ModeTailscale {
+		if mode == remotehost.ModeTailscale {
 			msg = "No Tailscale address found — is Tailscale running?"
 		}
 		ui.Row(c).Gap(Spacing().M).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, msg).FontSize(Typography().BodySmall).TextColor(t.TextMuted)
 			if compactButton(c, "Check Again").Clicked() {
-				s.remote.candsAt = time.Time{}
-				s.setRemote(func(r *settings.RemoteAccessSettings) { r.Address = s.pickRemoteAddress(cfg.Mode, r.Address) })
+				delete(s.remote.cands, mode)
+				s.setRemote(func(r *settings.RemoteAccessSettings) { set(r, s.pickRemoteAddress(mode, current)) })
 			}
 		})
 		return
 	}
-	if remoteAddressStale(cfg.Address, cands) {
+	if remoteAddressStale(current, cands) {
 		best := cands[0].Address
 		ui.Row(c).Gap(Spacing().M).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, cfg.Address+" is not an address phones can use any more (the network changed, or it is a VM or tunnel interface).").
+			ui.Text(c, current+" is not an address phones can use any more (the network changed, or it is a VM or tunnel interface).").
 				FontSize(Typography().BodySmall).TextColor(designTokens(t.Dark).StatusColor(ToneWarning, t.Dark)).MaxWidth(360)
 			if compactButton(c, "Use "+best).Clicked() {
-				s.setRemote(func(r *settings.RemoteAccessSettings) { r.Address = best })
+				s.setRemote(func(r *settings.RemoteAccessSettings) { set(r, best) })
 			}
 		})
 	}
@@ -408,15 +432,15 @@ func (s *Shell) remoteAddressPicker(c *ui.Context, cfg remotehost.Config) {
 	selected := ""
 	for i, cand := range cands {
 		labels[i] = remoteCandidateLabel(cand)
-		if cand.Address == cfg.Address {
+		if cand.Address == current {
 			selected = labels[i]
 		}
 	}
-	if selectField(c, &selected, labels).Label("Address").Changed() {
+	if selectField(c, &selected, labels).Label(label).Changed() {
 		for i, l := range labels {
 			if l == selected {
 				address := cands[i].Address
-				s.setRemote(func(r *settings.RemoteAccessSettings) { r.Address = address })
+				s.setRemote(func(r *settings.RemoteAccessSettings) { set(r, address) })
 			}
 		}
 	}

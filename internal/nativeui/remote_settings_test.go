@@ -549,3 +549,35 @@ func TestRemoteAccessPageSharesTheSettingsRhythm(t *testing.T) {
 		t.Fatalf("Advanced starts %.0fpt right of the group labels: it is centered, not leading", advanced.X-title.X)
 	}
 }
+
+func TestRemoteAdvancedLANAndTailscaleCoexist(t *testing.T) {
+	s := remoteShell(t)
+	s.remote.cands = map[remotehost.Mode]remoteCandCache{
+		remotehost.ModeLAN:       {list: []remotehost.Candidate{{Interface: "en0", Address: "192.168.1.20"}}, at: time.Now()},
+		remotehost.ModeTailscale: {list: []remotehost.Candidate{{Interface: "utun4", Address: "100.101.102.103"}}, at: time.Now()},
+	}
+	enableRemote(s)
+	s.setLANFallback(true)
+	s.setTailscaleFallback(true)
+
+	cfg := remoteConfigFrom(s.settings.Remote)
+	if cfg.Mode != remotehost.ModeLAN || cfg.Address != "192.168.1.20" {
+		t.Fatalf("LAN config lost when Tailscale enabled: %+v", cfg)
+	}
+	if !cfg.TailscaleEnabled || cfg.TailscaleAddress != "100.101.102.103" {
+		t.Fatalf("Tailscale config missing alongside LAN: %+v", cfg)
+	}
+
+	// Turning LAN off leaves Tailscale intact, and vice versa.
+	s.setLANFallback(false)
+	cfg = remoteConfigFrom(s.settings.Remote)
+	if cfg.Mode != remotehost.ModeOff || !cfg.TailscaleEnabled || cfg.TailscaleAddress != "100.101.102.103" {
+		t.Fatalf("turning LAN off dropped Tailscale: %+v", cfg)
+	}
+	s.setLANFallback(true)
+	s.setTailscaleFallback(false)
+	cfg = remoteConfigFrom(s.settings.Remote)
+	if cfg.Mode != remotehost.ModeLAN || cfg.Address != "192.168.1.20" || cfg.TailscaleEnabled {
+		t.Fatalf("turning Tailscale off dropped LAN: %+v", cfg)
+	}
+}

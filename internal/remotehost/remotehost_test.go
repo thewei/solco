@@ -42,6 +42,8 @@ func TestListenAddrNeverBindsEveryInterface(t *testing.T) {
 		{"tailscale v4", Config{Mode: ModeTailscale, Port: 7788, Address: "100.101.102.103"}, "100.101.102.103:7788", false},
 		{"tailscale v6", Config{Mode: ModeTailscale, Port: 7788, Address: "fd7a:115c:a1e0::1"}, "[fd7a:115c:a1e0::1]:7788", false},
 		{"tailscale lan address", Config{Mode: ModeTailscale, Port: 7788, Address: "192.168.1.20"}, "", true},
+		{"concurrent lan + invalid tailscale", Config{Mode: ModeLAN, Port: 7788, Address: "192.168.1.20", TailscaleEnabled: true, TailscaleAddress: "192.168.1.99"}, "", true},
+		{"concurrent lan + wildcard tailscale", Config{Mode: ModeLAN, Port: 7788, Address: "192.168.1.20", TailscaleEnabled: true, TailscaleAddress: "0.0.0.0"}, "", true},
 		{"port zero", Config{Mode: ModeLoopback, Port: 0}, "", true},
 		{"port too big", Config{Mode: ModeLoopback, Port: 70000}, "", true},
 		{"unknown mode", Config{Mode: "all", Port: 7788}, "", true},
@@ -243,5 +245,28 @@ func TestDeviceNameIsBounded(t *testing.T) {
 	}
 	if dev, _, _ := s.Add("   "); dev.Name != "Phone" {
 		t.Fatalf("blank name = %q, want Phone", dev.Name)
+	}
+}
+
+func TestListenTargetsConcurrentLANAndTailscale(t *testing.T) {
+	cfg := Config{
+		Mode:             ModeLAN,
+		Port:             7788,
+		Address:          "192.168.1.20",
+		TailscaleEnabled: true,
+		TailscaleAddress: "100.101.102.103",
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate = %v", err)
+	}
+	targets := cfg.listenTargets()
+	if len(targets) != 2 {
+		t.Fatalf("targets = %+v, want 2 listeners", targets)
+	}
+	if targets[0].mode != ModeLAN || targets[0].addr != "192.168.1.20:7788" || targets[0].err != nil {
+		t.Fatalf("target[0] = %+v", targets[0])
+	}
+	if targets[1].mode != ModeTailscale || targets[1].addr != "100.101.102.103:7788" || targets[1].err != nil {
+		t.Fatalf("target[1] = %+v", targets[1])
 	}
 }

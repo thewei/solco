@@ -241,3 +241,64 @@ func TestAdvertisedNamesOnlyTheServingAddress(t *testing.T) {
 		t.Fatalf("advertised = %+v, want the one serving address", got)
 	}
 }
+
+func TestAdvertisedIncludesBothLANAndTailscale(t *testing.T) {
+	srv, err := New(Options{Config: Config{Mode: ModeLAN, Port: 7788, Address: "192.168.1.10", TailscaleEnabled: true, TailscaleAddress: "100.101.102.103"}, Dir: t.TempDir(), Backend: &fakeBackend{instances: []string{"default"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	srv.mu.Lock()
+	srv.listenHost, srv.listenPort = "192.168.1.10", "7788"
+	srv.listenAddrs = []boundAddr{
+		{mode: ModeLAN, host: "192.168.1.10", port: "7788"},
+		{mode: ModeTailscale, host: "100.101.102.103", port: "7788"},
+	}
+	srv.mu.Unlock()
+
+	got := srv.advertised()
+	if len(got) != 2 || got[0]["host"] != "192.168.1.10" || got[1]["host"] != "100.101.102.103" {
+		t.Fatalf("advertised = %+v, want both LAN and Tailscale", got)
+	}
+}
+
+func TestAddressWatcherFollowsSecondaryTailscale(t *testing.T) {
+	ifaces := fakeInterfaces(t, []ifaceAddr{
+		{"en0", netip.MustParseAddr("192.168.1.10")},
+		{"utun4", netip.MustParseAddr("100.101.102.103")},
+	})
+	reporter := &lostReporter{hit: make(chan struct{}, 8)}
+	srv, err := New(Options{
+		Config: Config{
+			Mode:             ModeLAN,
+			Port:             7788,
+			Address:          "192.168.1.10",
+			TailscaleEnabled: true,
+			TailscaleAddress: "", // Tailscale just appeared on utun4
+			Tailcat:          false,
+		},
+		Dir:           t.TempDir(),
+		Backend:       &fakeBackend{instances: []string{"default"}},
+		OnAddressLost: reporter.onLost,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	srv.checkAddress()
+	waitForFire(t, reporter.hit, 1)
+
+	// Once TailscaleAddress matches utun4, watcher stays quiet.
+	srv.mu.Lock()
+	srv.opts.Config.TailscaleAddress = "100.101.102.103"
+	srv.mu.Unlock()
+	before := reporter.count()
+	srv.checkAddress()
+	time.Sleep(15 * time.Millisecond)
+	if reporter.count() != before {
+		t.Fatalf("healthy LAN+Tailscale fired %d -> %d", before, reporter.count())
+	}
+	_ = ifaces
+}

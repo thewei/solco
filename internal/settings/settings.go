@@ -140,6 +140,11 @@ type RemoteAccessSettings struct {
 	Port    int    `json:"port,omitempty"`
 	Address string `json:"address,omitempty"`
 
+	// TailscaleEnabled / TailscaleAddress let the Host also listen on this Mac's
+	// Tailscale interface concurrently alongside ModeLAN (never mutually exclusive).
+	TailscaleEnabled bool   `json:"tailscale_enabled,omitempty"`
+	TailscaleAddress string `json:"tailscale_address,omitempty"`
+
 	RelayEnabled bool   `json:"relay_enabled,omitempty"`
 	RelayURL     string `json:"relay_url,omitempty"`
 	RelayKey     string `json:"relay_key,omitempty"`
@@ -159,6 +164,9 @@ type RemoteAccessSettings struct {
 func (r RemoteAccessSettings) IsEnabled() bool {
 	if r.Enabled != nil {
 		return *r.Enabled
+	}
+	if r.TailscaleEnabled {
+		return true
 	}
 	switch strings.ToLower(strings.TrimSpace(r.Mode)) {
 	case "lan", "tailscale":

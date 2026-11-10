@@ -222,12 +222,7 @@ func (s *Shell) revokePhone(id string) {
 // remoteTailscaleOffered reports whether a Tailscale address exists on this Mac, probed at most every few seconds
 // (the Advanced row for an existing Tailscale install only shows then, or while it is the saved choice).
 func (s *Shell) remoteTailscaleOffered() bool {
-	r := &s.remote
-	if time.Since(r.tsAt) > remoteCandidatesTTL {
-		cands, _ := remotehost.Candidates(remotehost.ModeTailscale)
-		r.tsHas, r.tsAt = len(cands) > 0, time.Now()
-	}
-	return r.tsHas
+	return len(s.remoteCandidates(remotehost.ModeTailscale)) > 0
 }
 
 // remoteAdvanced is the folded rest, in the spec's order: the built-in connection's state, the optional direct
@@ -237,13 +232,20 @@ func (s *Shell) remoteAdvanced(c *ui.Context, srv *remotehost.Server, cfg remote
 	sp := Spacing()
 	tokens := designTokens(t.Dark)
 	saved, _ := remotehost.ParseMode(s.settings.Remote.Mode)
-	direct := saved == remotehost.ModeLAN || saved == remotehost.ModeTailscale
-	directCfg := cfg
-	directCfg.Mode = saved
+	lanOn := saved == remotehost.ModeLAN
+	tsOn := s.settings.Remote.TailscaleEnabled || saved == remotehost.ModeTailscale
+	tsAddr := strings.TrimSpace(s.settings.Remote.TailscaleAddress)
+	if tsAddr == "" && saved == remotehost.ModeTailscale {
+		tsAddr = strings.TrimSpace(s.settings.Remote.Address)
+	}
 	forced := false
-	if direct && cfg.Tailcat {
-		cands := s.remoteCandidates(saved)
+	if cfg.Tailcat && lanOn {
+		cands := s.remoteCandidates(remotehost.ModeLAN)
 		forced = len(cands) == 0 || cfg.Address == "" || remoteAddressStale(cfg.Address, cands)
+	}
+	if !forced && cfg.Tailcat && tsOn {
+		cands := s.remoteCandidates(remotehost.ModeTailscale)
+		forced = len(cands) == 0 || tsAddr == "" || remoteAddressStale(tsAddr, cands)
 	}
 	open := s.remote.advancedOpen || forced
 	strip := ui.ButtonBase(c.Key("remote-advanced")).FillWidth().Padding(sp.S, sp.XS).Gap(sp.S).AlignItems(ui.Center).
@@ -269,22 +271,36 @@ func (s *Shell) remoteAdvanced(c *ui.Context, srv *remotehost.Server, cfg remote
 		statusPill(c, text, tone)
 	}))
 	rows = append(rows, row("Allow Local Network Fallback", "Phones on the same Wi-Fi or Ethernet may also connect straight to this Mac.", func() {
-		if on, changed := settingSwitch(c, "Allow Local Network Fallback", saved == remotehost.ModeLAN); changed {
-			s.setDirectFallback(on, remotehost.ModeLAN)
+		if on, changed := settingSwitch(c, "Allow Local Network Fallback", lanOn); changed {
+			s.setLANFallback(on)
 		}
 	}))
-	if saved == remotehost.ModeTailscale || s.remoteTailscaleOffered() {
+	if tsOn || s.remoteTailscaleOffered() {
 		rows = append(rows, row("Existing Tailscale Address", "Also listen on this Mac's Tailscale address. Tailscale must be running.", func() {
-			if on, changed := settingSwitch(c, "Existing Tailscale Address", saved == remotehost.ModeTailscale); changed {
-				s.setDirectFallback(on, remotehost.ModeTailscale)
+			if on, changed := settingSwitch(c, "Existing Tailscale Address", tsOn); changed {
+				s.setTailscaleFallback(on)
 			}
 		}))
 	}
-	if direct {
-		rows = append(rows,
-			row("Address", "The one interface address Solco listens on.", func() { s.remoteAddressPicker(c, directCfg) }),
-			row("Port", "", func() { s.remotePortField(c, directCfg) }),
-		)
+	if lanOn {
+		rows = append(rows, row("Address", "The local-network interface address Solco listens on.", func() {
+			s.remoteAddressPickerFor(c, remotehost.ModeLAN, s.settings.Remote.Address, "Address", func(r *settings.RemoteAccessSettings, addr string) { r.Address = addr })
+		}))
+	}
+	if tsOn {
+		rows = append(rows, row("Tailscale Address", "The Tailscale interface address Solco listens on.", func() {
+			s.remoteAddressPickerFor(c, remotehost.ModeTailscale, tsAddr, "Tailscale Address", func(r *settings.RemoteAccessSettings, addr string) {
+				if curMode, _ := remotehost.ParseMode(r.Mode); curMode == remotehost.ModeTailscale {
+					r.Mode = string(remotehost.ModeOff)
+					r.Address = ""
+				}
+				r.TailscaleEnabled = true
+				r.TailscaleAddress = addr
+			})
+		}))
+	}
+	if lanOn || tsOn {
+		rows = append(rows, row("Port", "", func() { s.remotePortField(c, cfg) }))
 	}
 	relay := remoteRelayFrom(s.settings.Remote)
 	rows = append(rows, row("Alma Relay", "Your own relay (alma-relay) for when no direct path exists. Unlike the built-in connection it sees requests in plaintext.", func() {
@@ -329,16 +345,40 @@ func (s *Shell) remoteAdvanced(c *ui.Context, srv *remotehost.Server, cfg remote
 	settingsGroup(c, "", rows...).Transition(disclosureMotion)
 }
 
-// setDirectFallback turns one direct listener (local network or an existing Tailscale address) on or off. They
-// share the single Mode/Address pair, so choosing one replaces the other.
-func (s *Shell) setDirectFallback(on bool, mode remotehost.Mode) {
+// setLANFallback turns the local-network listener on or off without disturbing Tailscale.
+func (s *Shell) setLANFallback(on bool) {
 	s.setRemote(func(r *settings.RemoteAccessSettings) {
+		if cur, _ := remotehost.ParseMode(r.Mode); cur == remotehost.ModeTailscale {
+			// Migrate a legacy ModeTailscale choice before switching Mode to lan/off.
+			r.TailscaleEnabled = true
+			if strings.TrimSpace(r.TailscaleAddress) == "" {
+				r.TailscaleAddress = r.Address
+			}
+			r.Address = ""
+		}
 		if !on {
 			r.Mode = string(remotehost.ModeOff)
 			return
 		}
-		r.Mode = string(mode)
-		r.Address = s.pickRemoteAddress(mode, "")
+		r.Mode = string(remotehost.ModeLAN)
+		r.Address = s.pickRemoteAddress(remotehost.ModeLAN, r.Address)
+	})
+}
+
+// setTailscaleFallback turns the Tailscale listener on or off independently of LAN.
+func (s *Shell) setTailscaleFallback(on bool) {
+	s.setRemote(func(r *settings.RemoteAccessSettings) {
+		if cur, _ := remotehost.ParseMode(r.Mode); cur == remotehost.ModeTailscale {
+			r.Mode = string(remotehost.ModeOff)
+			if strings.TrimSpace(r.TailscaleAddress) == "" {
+				r.TailscaleAddress = r.Address
+			}
+			r.Address = ""
+		}
+		r.TailscaleEnabled = on
+		if on {
+			r.TailscaleAddress = s.pickRemoteAddress(remotehost.ModeTailscale, r.TailscaleAddress)
+		}
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/pion/webrtc/v4"
+	"github.com/thewei/solco/internal/remotedesktop/rtc"
 )
 
 /**
@@ -301,14 +302,21 @@ var errBadOffer = errors.New("bad offer")
 func (s *Server) openP2PSession(ctx context.Context, dev Device, offerSDP, bridgeAddr string) (map[string]string, error) {
 	se := webrtc.SettingEngine{}
 	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6})
-	se.SetInterfaceFilter(func(name string) bool { return !isVirtualInterface(name) })
+	se.SetInterfaceFilter(ICEInterface)
 	if s.p2p.testLoopback {
 		se.SetIncludeLoopbackCandidate(true)
+	} else {
+		se.SetIPFilter(rtc.IPFilter())
 	}
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(se))
 
+	rawICE := s.p2pICEServers(ctx)
+	rtcICE := make([]rtc.ICEServer, len(rawICE))
+	for i, sv := range rawICE {
+		rtcICE[i] = rtc.ICEServer{URLs: sv.URLs, Username: sv.Username, Credential: sv.Credential}
+	}
 	var ice []webrtc.ICEServer
-	for _, sv := range s.p2pICEServers(ctx) {
+	for _, sv := range rtc.PruneICEServers(rtcICE) {
 		ice = append(ice, webrtc.ICEServer{URLs: sv.URLs, Username: sv.Username, Credential: sv.Credential})
 	}
 	pc, err := api.NewPeerConnection(webrtc.Configuration{ICEServers: ice})
