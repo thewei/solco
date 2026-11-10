@@ -101,7 +101,11 @@ func Home() string {
 }
 
 // Client dials the bridge socket of one Vault home.
-type Client struct{ socket string }
+type Client struct {
+	socket string
+	probe  Prober // nil = the system's (probe.go)
+	cache  installCache
+}
 
 // New returns a client for home; "" uses Home().
 func New(home string) *Client {
@@ -139,10 +143,17 @@ func (c *Client) call(ctx context.Context, req request) (response, error) {
 	return resp, nil
 }
 
-// Available says Solco Vault has been set up on this Mac (its home directory exists), so the Host offers the phone
-// a Vault page at all; whether the app is running right now is a separate, live state.
+// Available says the Host offers the phone a Vault page at all: the app is installed here (even if it never ran), or
+// — when installation cannot be told — it has been set up (its home directory exists). Installed-and-absent hides
+// the page; whether the app is running right now is a separate, live state.
 func (c *Client) Available() bool {
 	if c.socket == "" {
+		return false
+	}
+	switch c.Installed() {
+	case InstallYes:
+		return true
+	case InstallNo:
 		return false
 	}
 	st, err := os.Stat(filepath.Dir(c.socket))

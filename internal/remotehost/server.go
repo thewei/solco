@@ -619,6 +619,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET "+apiPrefix+"/vault/items", s.guard(ScopeView, s.handleVaultItems))
 	mux.Handle("POST "+apiPrefix+"/vault/approvals/{id}/answer", s.guard(ScopeTerminalInput, s.handleVaultAnswer))
 	mux.Handle("POST "+apiPrefix+"/vault/reveal", s.guard(ScopeTerminalInput, s.handleVaultReveal))
+	mux.Handle("POST "+apiPrefix+"/vault/launch", s.guard(ScopeTerminalInput, s.handleVaultLaunch))
 	mux.Handle("GET "+apiPrefix+"/feedback", s.guard(ScopeView, s.handleFeedback))
 	mux.Handle("POST "+apiPrefix+"/feedback/asks/{id}/answer", s.guard(ScopeTerminalInput, s.handleFeedbackAnswer))
 	mux.Handle("POST "+apiPrefix+"/feedback/asks/{id}/end", s.guard(ScopeTerminalInput, s.handleFeedbackEnd))
@@ -927,6 +928,9 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, _ Devic
 	}
 	if s.vaultOffered() {
 		capabilities["vault"] = true
+		if _, ok := s.opts.Vault.(VaultLauncher); ok {
+			capabilities["vaultLaunch"] = true
+		}
 	}
 	if s.opts.Automations != nil {
 		if _, ok := s.opts.Automations(r.Context()); ok {

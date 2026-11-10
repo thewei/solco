@@ -15,7 +15,7 @@ import (
 
 /**
  * [INPUT]: Options.Vault（Solco Vault App 手机门的回环客户端，桌面与常驻服务各自接线）、vaultlink 的类型与错误码、server.go 的 guard/writeJSON/writeError
- * [OUTPUT]: 对外提供 VaultSource、GET /api/v3/vault（scope view：待批问题与开关状态）、GET …/vault/items（scope view：条目名与字段名）、POST …/vault/approvals/{id}/answer（scope terminal-input：允许一次或拒绝）、POST …/vault/reveal（scope terminal-input：读一个值，响应 no-store）、bootstrap 的 capabilities.vault、events 帧 `vault`（NotifyVault）
+ * [OUTPUT]: 对外提供 VaultSource、GET /api/v3/vault（scope view：待批问题与开关状态）、GET …/vault/items（scope view：条目名与字段名）、POST …/vault/approvals/{id}/answer（scope terminal-input：允许一次或拒绝）、POST …/vault/reveal（scope terminal-input：读一个值，响应 no-store）、POST …/vault/launch（scope terminal-input：只启动 Vault 应用，不解锁；404 vault_not_installed / 409 vault_already_running / 502 vault_launch_failed）、GET /vault 离线时的 `installed`、capabilities.vaultLaunch、bootstrap 的 capabilities.vault、events 帧 `vault`（NotifyVault）
  * [POS]: 手机的「Vault」页（2026-11-09 决策：手机 = 审批 + 浏览 + 显示值）：Solco Vault 是独立应用，开关（phone_access / phone_reveal）与所有状态的唯一所有者是它；Host 只转发它的回答。Vault 没开 = 200 online:false，开关没开 = 200 access:false（页面画说明而非错误）。手机永远看不到 Mac 路径、pid、cwd（Vault 不给）；笔记不出现；值只在 reveal 一个响应里，日志只记设备与操作名，从不记引用的值、命令或项目
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,6 +35,13 @@ type VaultSource interface {
 	Reveal(ctx context.Context, ref string) (string, error)
 }
 
+// VaultLauncher is the optional half of a VaultSource that can tell whether the app is installed and start it;
+// *vaultlink.Client has it. A source without it keeps the phone's Vault page exactly as it was.
+type VaultLauncher interface {
+	Installed() vaultlink.Install
+	Launch(ctx context.Context) error
+}
+
 // vaultOffered says the phone gets a Vault page: a source is wired and, when it can tell, Solco Vault is set up here.
 func (s *Server) vaultOffered() bool {
 	if s.opts.Vault == nil {
@@ -49,6 +56,7 @@ func (s *Server) vaultOffered() bool {
 // vaultView is GET /vault.
 type vaultView struct {
 	Online    bool                 `json:"online"`
+	Installed *bool                `json:"installed,omitempty"` // only while offline, only when the Host can tell
 	Access    bool                 `json:"access"`
 	State     string               `json:"state,omitempty"`
 	CanReveal bool                 `json:"canReveal,omitempty"`
@@ -73,6 +81,16 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request, dev Device)
 			view.Approvals = p.Approvals
 		}
 	case errors.Is(err, vaultlink.ErrOffline):
+		if l, ok := src.(VaultLauncher); ok {
+			switch l.Installed() {
+			case vaultlink.InstallYes:
+				t := true
+				view.Installed = &t
+			case vaultlink.InstallNo:
+				f := false
+				view.Installed = &f
+			}
+		}
 	case errors.As(err, &ve) && ve.Code == vaultlink.CodePhoneOff:
 		view.Online = true
 	default:
@@ -82,6 +100,31 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request, dev Device)
 	}
 	slog.Info("remote host vault", "device", dev.ID, "online", view.Online, "access", view.Access, "waiting", len(view.Approvals))
 	writeJSON(w, http.StatusOK, view)
+}
+
+// handleVaultLaunch starts the Vault app on the Mac (POST /vault/launch). It only opens the app: nothing is
+// unlocked and nothing is sent to it.
+func (s *Server) handleVaultLaunch(w http.ResponseWriter, r *http.Request, dev Device) {
+	l, ok := s.opts.Vault.(VaultLauncher)
+	if !ok {
+		writeError(w, http.StatusNotFound, "vault_unavailable", "")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), vaultCallTimeout)
+	defer cancel()
+	err := l.Launch(ctx)
+	switch {
+	case err == nil:
+		slog.Info("remote host vault write", "device", dev.ID, "op", "launch")
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	case errors.Is(err, vaultlink.ErrNotInstalled):
+		writeError(w, http.StatusNotFound, "vault_not_installed", "")
+	case errors.Is(err, vaultlink.ErrAlreadyRunning):
+		writeError(w, http.StatusConflict, "vault_already_running", "")
+	default:
+		slog.Warn("remote host vault launch failed", "device", dev.ID, "error", err)
+		writeError(w, http.StatusBadGateway, "vault_launch_failed", "")
+	}
 }
 
 func (s *Server) handleVaultItems(w http.ResponseWriter, r *http.Request, dev Device) {

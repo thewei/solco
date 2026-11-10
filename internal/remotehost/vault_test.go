@@ -230,3 +230,71 @@ func TestVaultIsOfferedOnlyWhereItIsSetUp(t *testing.T) {
 		t.Fatal("not advertised")
 	}
 }
+
+// launchVault is a Vault source that also knows whether the app is installed and can start it.
+type launchVault struct {
+	*fakeVault
+	install  vaultlink.Install
+	launchEr error
+	launches int
+}
+
+func (l *launchVault) Installed() vaultlink.Install { return l.install }
+func (l *launchVault) Launch(context.Context) error {
+	l.launches++
+	return l.launchEr
+}
+
+func TestVaultLaunch(t *testing.T) {
+	h := newHarness(t)
+
+	// a source that cannot launch keeps the page as it was: no bit, no route
+	h.srv.opts.Vault = sampleVault()
+	if body := string(bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil))); strings.Contains(body, "vaultLaunch") {
+		t.Fatalf("advertised without a launcher: %s", body)
+	}
+	if code, _ := h.send("POST", "/api/v3/vault/launch", h.token, ""); code != http.StatusNotFound {
+		t.Fatalf("launch without a launcher: %d", code)
+	}
+
+	lv := &launchVault{fakeVault: sampleVault(), install: vaultlink.InstallYes}
+	lv.set(vaultlink.ErrOffline)
+	h.srv.opts.Vault = lv
+	if body := string(bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil))); !strings.Contains(body, `"vaultLaunch":true`) {
+		t.Fatalf("not advertised: %s", body)
+	}
+	// installed + not running: the page learns it can offer "Open on Mac"
+	if body := string(bodyOf(t, h.get("/api/v3/vault", h.token, nil))); !strings.Contains(body, `"installed":true`) || !strings.Contains(body, `"online":false`) {
+		t.Fatalf("installed offline: %s", body)
+	}
+	lv.install = vaultlink.InstallNo
+	if body := string(bodyOf(t, h.get("/api/v3/vault", h.token, nil))); !strings.Contains(body, `"installed":false`) {
+		t.Fatalf("not installed: %s", body)
+	}
+	lv.install = vaultlink.InstallUnknown
+	if body := string(bodyOf(t, h.get("/api/v3/vault", h.token, nil))); strings.Contains(body, "installed") {
+		t.Fatalf("unknown must stay silent: %s", body)
+	}
+
+	cases := []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{vaultlink.ErrNotInstalled, http.StatusNotFound, "vault_not_installed"},
+		{vaultlink.ErrAlreadyRunning, http.StatusConflict, "vault_already_running"},
+		{context.DeadlineExceeded, http.StatusBadGateway, "vault_launch_failed"},
+	}
+	for _, c := range cases {
+		lv.launchEr = c.err
+		code, raw := h.send("POST", "/api/v3/vault/launch", h.token, "")
+		if code != c.status || !strings.Contains(string(raw), c.code) {
+			t.Fatalf("%v -> %d %s", c.err, code, raw)
+		}
+	}
+	lv.launchEr = nil
+	before := lv.launches
+	if code, body := h.send("POST", "/api/v3/vault/launch", h.token, ""); code != http.StatusOK || !strings.Contains(string(body), `"ok":true`) || lv.launches != before+1 {
+		t.Fatalf("launch: %d %s", code, body)
+	}
+}

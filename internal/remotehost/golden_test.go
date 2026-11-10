@@ -394,6 +394,22 @@ func TestGoldenAPIv3(t *testing.T) {
 	golden(t, "vault-phone-off.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
 	vf.set(vaultlink.ErrOffline)
 	golden(t, "vault-offline.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
+	// open on Mac: a source that can also tell "installed" and start the app (the real client can)
+	lv := &launchVault{fakeVault: sampleVault(), install: vaultlink.InstallYes}
+	lv.set(vaultlink.ErrOffline)
+	h.srv.opts.Vault = lv
+	golden(t, "bootstrap-vault-launch.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
+	golden(t, "vault-offline-installed.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
+	lv.install = vaultlink.InstallNo
+	golden(t, "vault-offline-not-installed.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
+	_, launched := h.send("POST", "/api/v3/vault/launch", h.token, "")
+	golden(t, "vault-launch-ack.json", launched)
+	lv.launchEr = vaultlink.ErrNotInstalled
+	_, notInstalled := h.send("POST", "/api/v3/vault/launch", h.token, "")
+	golden(t, "error-vault-not-installed.json", notInstalled)
+	lv.launchEr = vaultlink.ErrAlreadyRunning
+	_, running := h.send("POST", "/api/v3/vault/launch", h.token, "")
+	golden(t, "error-vault-already-running.json", running)
 	h.srv.opts.Vault = nil
 	golden(t, "error-vault-unavailable.json", bodyOf(t, h.get("/api/v3/vault", h.token, nil)))
 	// automations (read-only): the desktop's Automations page behind a capability that
