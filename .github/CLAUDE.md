@@ -11,3 +11,7 @@
 
 法则: CI 不启动真实 GUI · 发布流程与检查流程分离 · 签名密钥只来自 repository secret · 门禁使用仓库内 vendored 依赖
 [PROTOCOL]: 变更时更新此头部，然后检查 ../CLAUDE.md
+
+自根 CLAUDE.md 原样迁入（2026-11-11）：
+
+CI note: `.github/workflows/checks.yml` runs the Go gates (test + mygo build + bundle lint) on macOS runners; the vendored `third_party/mygo` replace keeps CI self-contained.

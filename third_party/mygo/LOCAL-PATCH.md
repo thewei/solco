@@ -168,3 +168,9 @@ plus the popover's guarded collection behavior; the OSC 7501 scanner files,
 two `Options` fields, the `events` fields and the feed/fire hooks in
 `plugins/terminal`; `serveBridgeMessage` in `protocol.go` and the fetch
 transport in `bridge.ts`/`internal/bridge/bridge.js`.
+
+## Standing rule for the replace (moved word for word from AGENTS.md and CLAUDE.md, 2026-11-11)
+
+- `go.mod` carries a temporary, user-approved `replace github.com/egoist/mygo => ./third_party/mygo` (v0.8.1 plus five vendored deltas re-applied on top: F146/F147 terminal `Options.LocalDragSelect`, multi-display tray flyout anchoring, the tray popover following the tray anchor's space (2026-11-04 fullscreen-display flicker), OSC 7501 program-status (`Options.OnProgramStatus`), and the page bridge posting through the scheme handler instead of `WKScriptMessageHandler` (2026-11-04, JavaScriptCore heap-collector crash)). Do not remove the replace or add a second framework source; bump the pin and delete `third_party/mygo` only once upstream ships all five (the former field-focus delegation, WIX-021, is upstream already). See `third_party/mygo/LOCAL-PATCH.md`. Upstream v0.5.x additions stay unadopted until a task takes them: the Flyout API backs the quick panel (tray + header Agent popover), while `ui.WebView` (official Native-UI-embeddable WebView) does not by itself unfreeze the WebView presentation freeze — that needs an explicit product decision.
+
+go.mod + go.sum + mygo.config.ts - Go toolchain (1.27.3), MyGo pin (v0.8.1 + replace ./third_party/mygo), the shared Git/Files module `github.com/thewei/solco-gitkit` (packages gitworkbench + filesview; a sibling repository, required at a tagged version, linked locally by an uncommitted `go.work`), packaging policy, signed updater feed (thewei/solco), and the chat WebView frontend (N19)

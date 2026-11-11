@@ -1,10 +1,12 @@
+@AGENTS.md
+
 # Solco — native macOS workspace for coding agents (Go / MyGo Native UI)
 
 Current implementation: Go 1.27.3 + MyGo Native UI (pinned v0.8.1, patched fork vendored under `third_party/mygo`) + official MyGo Terminal/Ghostty; Herdr remains the runtime authority. The previous Rust/GPUI implementation lives only on `rewrite/mygo`/`main`.
 
 <directory>
 frontend/ - Chat WebView 页唯一源码（桌面内嵌 dist + 手机单文件快照，见 frontend/CLAUDE.md）
-internal/ - Go application/domain packages (ompstream standalone OMP Extension Doctor and explicit installer, chatstream bounded OMP token-event overlay, hostd resident Remote Host lease/loop/launchd, feedback (Solco Feedback: the Agent question inbox — broker, thread model, stdio MCP shim; 2026-11-09), notifyhook (the user's own webhook notification channels: called when no phone can be told; 2026-11-09), nativeui presentation, solcogit (the one-way link to the Solco Git app: finds it, builds the solcogit:// link, hands it to macOS `open -a`), vaultlink (the one-way link to the Solco Vault app: a client of its phone-bridge socket, used by the Remote Host for the phone Vault page; 2026-11-09), apphook in-app IPC engine, agenthooks Hook Doctor provisioning, agentstatus OSC 7501 status arbitration, herdr adapter, agent/history/sessiontrash domains, remotedesktop (phone Remote Desktop: Service + Pion transport + session rules + Swift-helper supervisor; helper lives in the sibling `solco-remote-helper` repo), settings, secretstore AES-GCM credential file, applog, ...)
+internal/ - Go application/domain packages; each package has its own `CLAUDE.md` (member list and the invariants it keeps); the `internal/` index with the per-package notes is `internal/CLAUDE.md`
 cmd/ - solco-hostd (the resident Remote Host: a launchd user service that keeps the phone-facing Host v3 reachable while the app is closed, owning the port only through `internal/hostd`'s lease; embedded at Contents/Helpers by `scripts/embed-hostd.sh`; it also keeps the Feedback broker alive and hosts `feedback-mcp`, the stdio MCP server external Agents launch) and development harnesses (rd-devhost: real Remote Desktop stack behind a stub Herdr on its own port/data dir, for phone testing; not shipped)
 scripts/ - packaging helpers and read-only OMP Chat stream companion (omp-chat-stream.ts + Bun test; see scripts/CLAUDE.md) (embed-remote-helper.sh: build, embed and sign the Remote Desktop helper into Solco.app; publish-remote-helper.sh + remote-helper.pin: build the universal helper locally, publish it as the `remote-helper-<sha>` prerelease asset that release.yml downloads into resources/darwin → Contents/Resources)
 resources/ - MyGo packaging resources (app icon)
@@ -19,7 +21,7 @@ TODO.md, AUDIT-*.md, dev-only scripts under scripts/ and plugins/solco-automatio
 </directory>
 
 <config>
-go.mod + go.sum + mygo.config.ts - Go toolchain (1.27.3), MyGo pin (v0.8.1 + replace ./third_party/mygo), the shared Git/Files module `github.com/thewei/solco-gitkit` (packages gitworkbench + filesview; a sibling repository, required at a tagged version, linked locally by an uncommitted `go.work`), packaging policy, signed updater feed (thewei/solco), and the chat WebView frontend (N19)
+go.mod + go.sum + mygo.config.ts + go.work - Go toolchain, MyGo pin and its `replace`, the sibling `solco-gitkit` module, packaging policy, signed updater feed, the chat WebView frontend (the `replace` and the five vendored deltas: `third_party/mygo/LOCAL-PATCH.md`)
 AGENTS.md - repository engineering rules and required reading; its Product decisions section indexes the decision record
 docs/product-decisions.md - the user-approved product decisions, word for word (one `## <date> · <title>` section each; append here, index in AGENTS.md)
 README.md - developer setup, run, checks, packaging, and product scope
@@ -38,6 +40,5 @@ Implementation rule: do not hand-roll capabilities while mature owners exist. Se
 
 Private-assets rule: **code, tests and the rules an agent obeys live here; the development record (decisions, architecture, roadmap, designs, evidence, skills, device facts, keys) lives in the private `solco-docs`, linked in at the same paths.** Read through the link; write and commit there (`commit-docs.sh`), never copy it into this repository or its commit messages; every commit is authored as the user's GitHub identity. Details: `AGENTS.md` "Private assets (solco-docs)".
 
-CI note: `.github/workflows/checks.yml` runs the Go gates (test + mygo build + bundle lint) on macOS runners; the vendored `third_party/mygo` replace keeps CI self-contained.
 
 Principles: minimal · stable · navigation-first · version-exact · mature-API-first
