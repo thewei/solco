@@ -490,6 +490,23 @@
   background: var(--tint);
 }
 
+.fb-more {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-control);
+  color: var(--i2);
+}
+
+.fb-more svg {
+  transition: transform 0.15s;
+}
+
+.fb-more.open svg {
+  transform: rotate(180deg);
+}
+
 .fb-flip {
   display: grid;
   transform: scaleX(-1);

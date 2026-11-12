@@ -607,21 +607,23 @@ function ThreadView(props: {
   const [delArmed, armDelete] = useArmed();
   const lastPending = [...asks].reverse().find((a) => a.state === "pending")?.id ?? "";
 
-  // Land on the asked-for item, else on the newest end of the timeline, once per thread / landing.
+  // Open where reading starts, once per thread / landing: a thread at its very top (the Task, then the first message),
+  // a notification's Ask at the first line of that Ask. Never at the answer form — the person reads before replying;
+  // "Back to latest" is the way down.
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
     const target = flash?.ask ? el.querySelector<HTMLElement>(`[data-ask="${CSS.escape(flash.ask)}"]`) : null;
-    if (target) target.scrollIntoView({ block: "center" });
-    else {
-      // A waiting form taller than the screen opens at its top: the first question comes first, not Send.
-      const forms = el.querySelectorAll<HTMLElement>("[data-form]");
-      const form = forms[forms.length - 1];
-      if (form && form.offsetHeight > el.clientHeight) form.scrollIntoView({ block: "start" });
-      else el.scrollTop = el.scrollHeight;
-    }
+    if (target) target.scrollIntoView({ block: "start" });
+    else el.scrollTop = 0;
+    // A scroll that did not move (already at the top) fires no event: say whether the answer sits below the fold.
+    setAway(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.id, flash?.n]);
+  // The phone folds the project / branch / client chips and the times into one tap, so the timeline keeps the height.
+  const [details, setDetails] = useState(false);
+  useEffect(() => setDetails(false), [thread.id]);
+  const showMeta = !isPhone || details;
 
   // "Back to latest": a long thread that was scrolled up by more than a screen.
   const onScroll = () => {
@@ -647,6 +649,11 @@ function ThreadView(props: {
             </button>
           )}
           <div className="fb-title">{thread.title}</div>
+          {isPhone && (
+            <button className={`fb-more${details ? " open" : ""}`} aria-label="Thread details" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
+              <Icon name="down" size={14} />
+            </button>
+          )}
           {canManage && thread.waiting === 0 && (
             <button className={`fb-ghost fb-del${delArmed ? " armed" : ""}`} aria-label="Delete thread" onClick={() => (delArmed ? onDelete(thread.id) : armDelete())}>
               {delArmed ? "Delete thread?" : <Icon name="trash" size={14} />}
@@ -672,6 +679,7 @@ function ThreadView(props: {
             </div>
           )}
         </div>
+        {showMeta && (
         <div className="fb-meta">
           <span className="fb-chip">{thread.project}</span>
           {thread.branch && (
@@ -688,9 +696,12 @@ function ThreadView(props: {
           )}
           <span className="fb-chip">{asks.length === 1 ? "1 ask" : `${asks.length} asks`}</span>
         </div>
+        )}
+        {showMeta && (
         <div className="fb-when">
           Started {clock(thread.createdAt)} · Last activity {clock(thread.lastAt)}
         </div>
+        )}
       </header>
       <div className="fb-scroll" ref={scroller} onScroll={onScroll}>
         <div className="fb-tl">
