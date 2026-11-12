@@ -7,9 +7,10 @@
 //             frontend/src/icons.generated.ts      Chat page icon paths
 //             <solco-mobile>/src/theme/tokens.generated.ts, icons.generated.ts   the phone's shared roles, radii and icon registry
 //             <solco-git>/internal/nativeui/design_gen.go   the same palette and tiers for the sibling Git app (its theme.go / design_system.go are copies of Solco's)
+//             <solco-vault>/internal/kit/design_gen.go      the same palette and tiers under package kit, plus the item-type tile colours
 // [POS]: the one writer of the design language (docs/product-decisions.md, 2026-11-07 Desktop and phone design language).
 //        `node design/gen.mjs` writes; `--check` fails when a generated file has drifted (read-only, CI-safe).
-//        The phone repo is found at $SOLCO_MOBILE and the Git app at $SOLCO_GIT, else as siblings; absent, their files are skipped (and said so).
+//        The phone repo is found at $SOLCO_MOBILE, the Git app at $SOLCO_GIT and the Vault app at $SOLCO_VAULT, else as siblings; absent, their files are skipped (and said so).
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -77,7 +78,7 @@ function tier(list, role, side) {
   return row[side];
 }
 
-function goDesign() {
+function goDesign(pkg = 'nativeui') {
   const fields = roleNames.map((n) => `\t${pascal(n)} ui.Color`).join('\n');
   const body = (p) => roleNames.map((n) => `\t\t${pascal(n)}: ${goColor(p[n])},`).join('\n');
   const T = (role, side = 'pointer') => tier(tokens.type, role, side).size;
@@ -86,7 +87,7 @@ function goDesign() {
   const C = (role) => tier(tokens.control, role, 'pointer');
   return `// ${HEADER}
 
-package nativeui
+package ${pkg}
 
 import "github.com/egoist/mygo/ui"
 
@@ -130,6 +131,31 @@ const (
 \tdesignControlRow     = ${C('row')}
 \tdesignControlIcon    = ${C('icon')}
 )
+`;
+}
+
+/** The Vault kit's file: the same palette and tiers under package kit, plus the item-type tile colours. */
+function vaultDesign() {
+  const names = Object.keys(tokens.tiles.light);
+  const fields = names.map((n) => `\t${pascal(n)} ui.Color`).join('\n');
+  const body = (side) => names.map((n) => `\t\t${pascal(n)}: ${goColor(tokens.tiles[side][n])},`).join('\n');
+  return `${goDesign('kit').trimEnd()}
+
+// tilePalette is the item-type tile colours of one appearance (design/tokens.json "tiles"): a solid rounded square under a white glyph.
+type tilePalette struct {
+${fields}
+}
+
+func tileRoles(dark bool) tilePalette {
+\tif dark {
+\t\treturn tilePalette{
+${body('dark')}
+\t\t}
+\t}
+\treturn tilePalette{
+${body('light')}
+\t}
+}
 `;
 }
 
@@ -248,6 +274,7 @@ const outputs = [
 ];
 const mobile = findSibling('SOLCO_MOBILE', 'solco-mobile', 'package.json');
 const git = findSibling('SOLCO_GIT', 'solco-git', 'mygo.config.ts');
+const vaultApp = findSibling('SOLCO_VAULT', 'solco-vault', 'mygo.config.ts');
 if (mobile) {
   outputs.push([path.join(mobile, 'src/theme/tokens.generated.ts'), phoneTokens()], [path.join(mobile, 'src/theme/icons.generated.ts'), phoneIcons()]);
 } else {
@@ -257,6 +284,12 @@ if (git) {
   outputs.push([path.join(git, 'internal/nativeui/design_gen.go'), outputs[0][1]]);
 } else {
   console.warn('design/gen.mjs: solco-git not found (set SOLCO_GIT); its generated file is skipped');
+}
+
+if (vaultApp) {
+  outputs.push([path.join(vaultApp, 'internal/kit/design_gen.go'), gofmt(vaultDesign())]);
+} else {
+  console.warn('design/gen.mjs: solco-vault not found (set SOLCO_VAULT); its generated file is skipped');
 }
 
 let drift = 0;
