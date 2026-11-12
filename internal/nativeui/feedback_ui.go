@@ -238,6 +238,7 @@ func (s *Shell) refreshFeedbackThreads(ctx context.Context, client *feedback.Cli
 	s.applyOnWindow(func() {
 		before := s.feedbackWaiting()
 		s.feedback.threads = threads
+		s.islandRefresh()
 		if s.feedbackWaiting() != before {
 			s.fitQuickPanel() // the menu-bar panel's Feedback row appears / goes with the count
 			s.invalidateQuickPanel()

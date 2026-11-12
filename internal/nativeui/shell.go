@@ -922,6 +922,7 @@ func (s *Shell) AttachWindow(win *mygo.Window) {
 	// event spool for backward compatibility.
 	s.AttachHookServer()
 	s.startFeedbackWatch()
+	s.islandSync() // a saved "on" listens for the pointer from the first moment
 	// Silent background check for application updates (2s after launch)
 	time.AfterFunc(2*time.Second, func() {
 		s.checkForUpdates(false)

@@ -1,28 +1,36 @@
 package nativeui
 
 /**
- * [INPUT]: island_model.go（islandToasts）、island_darwin.go 的原生缝、Shell.routeAgentNotification（点「Open」走与系统横幅点击同一条路由）、settings.Notifications.Island、designRoles
- * [OUTPUT]: 对外提供 islandHost、Shell.islandNotify（三个通知出口各调用一次）、Shell.islandOff（设置里关掉开关）
- * [POS]: 刘海岛 P1（2026-11-12 决策，方向 C）：开关打开后，需要你的 Agent / 完成待 review / Feedback 提问 / 自动化失败从刘海长出一条提示，7 秒后收回，指针停在上面就不收；点 Open 打开 Solco 里对应处，点 ✕ 忽略。岛不拥有状态（只读通知出口给它的一条文字）、不碰 Herdr；窗口只在第一条提示到来时才建，默认关时一行代码都不跑
+ * [INPUT]: island_model.go（islandToasts）、island_roster.go（名册模型）、island_darwin.go 的原生缝、Shell.BuildStatusCenterSnapshot / feedback 线程行（名册的事实）、Shell.routeAgentNotification（点「Open」走与系统横幅点击同一条路由）、feedback.Client（行内作答）、settings.Notifications.Island、designRoles
+ * [OUTPUT]: 对外提供 islandHost、Shell.islandNotify（三个通知出口各调用一次）、Shell.islandOff（设置里关掉开关）、Shell.islandSync（开关/启动时按设置装上或撤掉指针监视）、Shell.islandRefresh（状态变了让展开的名册重画）
+ * [POS]: 刘海岛 P1+P2（2026-11-12 决策，方向 C）：开关打开后，需要你的 Agent / 完成待 review / Feedback 提问 / 自动化失败从刘海长出一条提示，7 秒后收回；指针在刘海（或提示）上停 300 ms 就展开名册（Needs you / Working / Idle，与菜单栏面板同一份快照），离开 300 ms 收回；Feedback 提问若是一个短单选就在行内点选项作答，其余行点 Open 去 Solco 里对应处（Agent 的 Allow/Deny 仍在 Chat 里答）。岛不拥有状态、不碰 Herdr；窗口只在第一次需要时才建，指针只在壳外时窗口对鼠标透明，默认关时一行代码都不跑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import (
+	"context"
+	"errors"
+	"log/slog"
 	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/thewei/solco/internal/feedback"
 )
 
 const (
-	islandShapeW  = 470 // the grown shape's width
-	islandWinW    = 500 // the window: the shape plus its flare, so the flare is never clipped
+	islandShapeW  = 470 // the grown shape's width for one alert
+	islandRosterW = 560 // …and for the roster
+	islandWinW    = 620 // the window: the widest shape plus its flare, so the flare is never clipped
+	islandWinBody = 680 // the window's height under the housing; the shape never needs more, and the rest is click-through
 	islandRowH    = 34  // the row under the housing that carries the alert
 	islandShowFor = 7 * time.Second
 	islandHoldFor = 2 * time.Second // re-check while the pointer rests on it
 	islandHideLag = 600 * time.Millisecond
+	islandRestFor = 300 * time.Millisecond // the pointer rests this long to open the roster, and stays away this long to close it
+	islandSlack   = 6                      // points around the shape that still count as on it
 )
 
 // islandHost shows one alert at a time in a window that grows out of the
@@ -32,15 +40,34 @@ type islandHost struct {
 	toasts islandToasts
 	win    *mygo.Window
 	open   bool // the shape is grown
+	roster bool // …into the roster rather than one alert
 	gen    int  // bumped on every show and close: a stale timer does nothing
 	w0, h0 float32
-	// cursor is the pointer's screen position; a seam for tests.
-	cursor func() (x, y float32)
+	notch  bool // the display has a camera housing; otherwise the top-centre edge is the hot zone
+
+	enteredAt time.Time // since when the pointer rests on the housing or the alert; zero when it does not
+	leftAt    time.Time // since when the pointer is off the open roster; zero when it is on it
+	passing   bool      // the window currently lets the mouse through
+	stopWatch func()
+	rosterH   float32 // the roster shape's height, from the last draw: the hit test reads it
+
+	// asks are the one-click Asks of waiting Feedback threads, read off the
+	// lane when the roster opens; asksAt remembers which LastAt each was read at.
+	asks   map[string]islandAsk
+	asksAt map[string]int64
+	// sent is the option the island has sent for an Ask ("" = it did not go).
+	sent map[string]string
+
+	// Seams for tests: the pointer's screen position, the clock, and how an
+	// answer is sent.
+	cursor   func() (x, y float32)
+	now      func() time.Time
+	answerFn func(a islandAsk, option string) error
 }
 
 func (s *Shell) islandHostOf() *islandHost {
 	if s.island == nil {
-		s.island = &islandHost{s: s}
+		s.island = &islandHost{s: s, asks: map[string]islandAsk{}, asksAt: map[string]int64{}, sent: map[string]string{}}
 		s.island.measure()
 	}
 	return s.island
@@ -65,26 +92,52 @@ func (s *Shell) islandOff() {
 		return
 	}
 	h := s.island
+	h.watch(false)
 	h.toasts.Clear()
-	h.open = false
+	h.open, h.roster = false, false
+	h.enteredAt, h.leftAt = time.Time{}, time.Time{}
 	h.gen++
 	if h.win != nil {
 		h.win.Hide()
 	}
 }
 
+// islandSync follows the switch: on installs the pointer watch (the roster
+// opens from hovering, so it must listen before any alert exists), off
+// removes everything. Window lane.
+func (s *Shell) islandSync() {
+	if !s.settings.Notifications.Island {
+		s.islandOff()
+		return
+	}
+	s.islandHostOf().watch(true)
+}
+
+// islandRefresh redraws an open roster after the facts under it moved (the
+// Agent directory, the Feedback thread rows). Window lane; nothing when the
+// island is shut.
+func (s *Shell) islandRefresh() {
+	if h := s.island; h != nil && h.roster && h.win != nil {
+		h.fetchAsks()
+		h.win.Invalidate()
+	}
+}
+
 // measure finds the housing of the display with the menu bar; a display
 // without one gets a housing as high as the menu bar.
 func (h *islandHost) measure() {
-	h.w0, h.h0 = 200, 32
+	h.w0, h.h0, h.notch = 200, 32, false
 	if w, hh, ok := islandNotchSize(); ok {
-		h.w0, h.h0 = float32(w), float32(hh)
+		h.w0, h.h0, h.notch = float32(w), float32(hh), true
 	} else if hh := islandMenuBarHeight(); hh > 0 {
 		h.h0 = float32(hh)
 	}
 }
 
 func (h *islandHost) push(a islandAlert) {
+	if h.roster {
+		return // the open roster shows the live state: an alert would only repeat a row
+	}
 	h.toasts.Push(a)
 	if _, showing := h.toasts.Showing(); !showing {
 		h.advance()
@@ -105,6 +158,7 @@ func (h *islandHost) advance() {
 	if win := h.ensureWindow(); win != nil {
 		win.ShowInactive()
 		h.pin()
+		h.passThrough(!h.pointerInside())
 		win.Invalidate()
 	}
 	h.arm(islandShowFor)
@@ -119,7 +173,8 @@ func (h *islandHost) finish() {
 // close shrinks the shape back into the housing and hides the window once
 // that is done.
 func (h *islandHost) close() {
-	h.open = false
+	h.open, h.roster = false, false
+	h.enteredAt, h.leftAt = time.Time{}, time.Time{}
 	h.gen++
 	if h.win == nil {
 		return
@@ -160,13 +215,231 @@ func (h *islandHost) expire(g int) {
 	h.finish()
 }
 
-// pointerInside says whether the pointer is over the grown shape (with a few
+// shapeSize is the grown shape's size now: the alert's row or the roster.
+func (h *islandHost) shapeSize() (w, hh float32) {
+	if h.roster {
+		return islandRosterW, h.rosterH
+	}
+	return islandShapeW, h.h0 + islandRowH
+}
+
+// overShape says whether the pointer is over the grown shape (with a few
 // points of slack), so a reader is never cut off.
+func (h *islandHost) overShape(x, y float32) bool {
+	if !h.open {
+		return false
+	}
+	w, hh := h.shapeSize()
+	left := h.screenCentreX() - w/2
+	return x >= left-islandSlack && x <= left+w+islandSlack && y <= hh+islandSlack
+}
+
 func (h *islandHost) pointerInside() bool {
 	x, y := h.pointer()
-	left := h.screenCentreX() - islandShapeW/2
-	const slack = 6
-	return x >= left-slack && x <= left+islandShapeW+slack && y <= h.h0+islandRowH+slack
+	return h.overShape(x, y)
+}
+
+// inHotZone says whether the pointer is on the housing, or, on a display
+// without one, at the very top of the screen near the centre.
+func (h *islandHost) inHotZone(x, y float32) bool {
+	cx := h.screenCentreX()
+	if h.notch {
+		return x >= cx-h.w0/2-islandSlack && x <= cx+h.w0/2+islandSlack && y <= h.h0
+	}
+	return x >= cx-80 && x <= cx+80 && y <= 3
+}
+
+func (h *islandHost) clock() time.Time {
+	if h.now != nil {
+		return h.now()
+	}
+	return time.Now()
+}
+
+// watch installs or removes the pointer monitor. Headless and off macOS there
+// is none.
+func (h *islandHost) watch(on bool) {
+	if !on {
+		if h.stopWatch != nil {
+			h.stopWatch()
+			h.stopWatch = nil
+		}
+		return
+	}
+	if h.stopWatch != nil || h.s.win == nil || runtime.GOOS != "darwin" {
+		return
+	}
+	stop, ok := islandWatchPointer(h.poll)
+	if !ok {
+		stop()
+		return
+	}
+	h.stopWatch = stop
+}
+
+// recheck polls again once the rest time can have passed: a resting pointer
+// sends no events to wake the watch.
+func (h *islandHost) recheck() {
+	if h.s.win == nil {
+		return
+	}
+	time.AfterFunc(islandRestFor+5*time.Millisecond, func() { mygo.RunOnMain(h.poll) })
+}
+
+// poll runs on every pointer move (and on its own rechecks): rest on the
+// housing or the alert for 300 ms opens the roster, 300 ms off the open
+// roster closes it, and the window lets the mouse through everywhere but on
+// the shape. Cheap when nothing is near.
+func (h *islandHost) poll() {
+	if !h.s.settings.Notifications.Island {
+		return
+	}
+	x, y := h.pointer()
+	now := h.clock()
+	over := h.overShape(x, y)
+	if h.roster {
+		switch {
+		case over:
+			h.leftAt = time.Time{}
+		case h.leftAt.IsZero():
+			h.leftAt = now
+			h.recheck()
+		case now.Sub(h.leftAt) >= islandRestFor:
+			h.closeRoster()
+			return
+		}
+	} else if over || h.inHotZone(x, y) {
+		switch {
+		case h.enteredAt.IsZero():
+			h.enteredAt = now
+			h.recheck()
+		case now.Sub(h.enteredAt) >= islandRestFor:
+			h.openRoster()
+			return
+		}
+	} else {
+		h.enteredAt = time.Time{}
+	}
+	h.passThrough(!over)
+}
+
+// passThrough lets the mouse go to what is under the window while the pointer
+// is not on the shape.
+func (h *islandHost) passThrough(v bool) {
+	if h.win == nil || h.passing == v {
+		return
+	}
+	h.passing = v
+	h.win.SetIgnoreMouseEvents(v)
+}
+
+// openRoster grows the shape into the roster. Alerts waiting to be shown are
+// dropped: the roster lists what they were about.
+func (h *islandHost) openRoster() {
+	h.toasts.Clear()
+	h.enteredAt, h.leftAt = time.Time{}, time.Time{}
+	h.gen++
+	h.roster, h.open = true, true
+	h.rosterH = h.rosterHeight(h.buildRoster())
+	if win := h.ensureWindow(); win != nil {
+		win.ShowInactive()
+		h.pin()
+		h.passThrough(!h.pointerInside())
+		win.Invalidate()
+	}
+	h.fetchAsks()
+}
+
+func (h *islandHost) closeRoster() {
+	h.passThrough(true)
+	h.close()
+}
+
+// buildRoster reads the same facts the menu-bar panel reads.
+func (h *islandHost) buildRoster() islandRoster {
+	return buildIslandRoster(h.s.BuildStatusCenterSnapshot(), h.s.feedback.threads, h.asks)
+}
+
+// fetchAsks reads, off the lane, the Asks of waiting threads whose rows the
+// island has not read yet, so a row can offer its options in a click.
+func (h *islandHost) fetchAsks() {
+	client := h.s.feedback.client
+	if client == nil {
+		return
+	}
+	for _, t := range h.s.feedback.threads {
+		if t.Waiting == 0 {
+			delete(h.asks, t.ID)
+			continue
+		}
+		if at, ok := h.asksAt[t.ID]; ok && at == t.LastAt {
+			continue
+		}
+		h.asksAt[t.ID] = t.LastAt
+		id := t.ID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			th, err := client.Thread(ctx, id)
+			h.s.applyOnWindow(func() {
+				if err != nil {
+					delete(h.asksAt, id) // try again at the next refresh
+					return
+				}
+				if a, ok := islandAskOf(th); ok {
+					h.asks[id] = a
+				} else {
+					delete(h.asks, id)
+				}
+				if h.win != nil {
+					h.win.Invalidate()
+				}
+			})
+		}()
+	}
+}
+
+// answer sends one option for an Ask: the row says "Sent" at once, and the
+// Ask leaves the roster when the broker's event refreshes the thread rows.
+func (h *islandHost) answer(a islandAsk, option string) {
+	if _, done := h.sent[a.Ask]; done {
+		return
+	}
+	h.sent[a.Ask] = option
+	send := h.answerFn
+	if send == nil {
+		send = h.sendAnswer
+	}
+	if h.win != nil {
+		h.win.Invalidate()
+	}
+	done := func() {
+		err := send(a, option)
+		h.s.applyOnWindow(func() {
+			if err != nil {
+				slog.Warn("island answer failed", "error", err) // the error carries no answer text
+				h.sent[a.Ask] = ""
+			}
+			if h.win != nil {
+				h.win.Invalidate()
+			}
+		})
+	}
+	if h.s.win == nil {
+		done() // headless: no lane to hop to, so tests see the result at once
+		return
+	}
+	go done()
+}
+
+func (h *islandHost) sendAnswer(a islandAsk, option string) error {
+	client := h.s.feedback.client
+	if client == nil {
+		return errors.New("feedback is not available")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return client.Answer(ctx, a.Ask, map[string]feedback.Answer{a.Question: {Selected: []string{option}}}, nil, nil)
 }
 
 func (h *islandHost) pointer() (x, y float32) {
@@ -186,7 +459,7 @@ func (h *islandHost) screenCentreX() float32 {
 	return float32(d.Bounds.X) + float32(d.Bounds.Width)/2
 }
 
-func (h *islandHost) winH() float32 { return h.h0 + islandRowH + 24 }
+func (h *islandHost) winH() float32 { return h.h0 + islandWinBody }
 
 func (h *islandHost) pin() {
 	if h.win != nil {
@@ -216,8 +489,10 @@ func (h *islandHost) ensureWindow() *mygo.Window {
 		Height:        int(h.winH()),
 		Content:       ui.View(h.view),
 	})
-	win.OnClosed(func() { h.win = nil }) // Escape and the like close a panel: the next alert builds a new one
+	win.OnClosed(func() { h.win, h.passing = nil, false }) // Escape and the like close a panel: the next show builds a new one
 	islandRaise(win.NativeHandle())
+	win.SetIgnoreMouseEvents(true) // click-through until the pointer is on the shape
+	h.passing = true
 	mygo.Screen.OnDisplaysChanged(func() {
 		h.measure()
 		if h.open {
@@ -280,9 +555,15 @@ func (h *islandHost) view(c *ui.Context) {
 
 	targetW, targetH, opened := h.w0, h.h0, float32(0)
 	spring := ui.Animation{Spring: ui.SpringOptions{Duration: motionIsland, Bounce: 0.12}}
+	var roster islandRoster
 	if h.open {
 		targetW, targetH, opened = islandShapeW, h.h0+islandRowH, 1
 		spring.Spring.Bounce = 0.24
+	}
+	if h.roster {
+		roster = h.buildRoster()
+		h.rosterH = h.rosterHeight(roster)
+		targetW, targetH = islandRosterW, h.rosterH
 	}
 	stage := ui.Box(c).Fill()
 	// A spring overshoots: never below nothing.
@@ -300,6 +581,11 @@ func (h *islandHost) view(c *ui.Context) {
 		p.FillPath(islandShape(r.X+cx, w, hh, flare, foot), black)
 	})
 	stage.Children(func() {
+		if h.roster && grown >= 0.05 {
+			body := ui.Box(c).Absolute().Top(0).Left(cx-w/2).Size(w, hh).Radius(0, 0, foot, foot).Clip()
+			body.Children(func() { h.rosterView(c, roster, max(0, grown*1.4-0.4)) })
+			return
+		}
 		alert, on := h.toasts.Showing()
 		if !on || grown < 0.05 {
 			return
@@ -346,4 +632,152 @@ func (h *islandHost) openAlert(a islandAlert) {
 	if cur, ok := h.toasts.Showing(); ok && cur.ID == a.ID {
 		h.finish()
 	}
+}
+
+// Roster geometry, in points: every height is fixed so the shape can be sized
+// before it is drawn.
+const (
+	islandGroupH = 24 // a group's header line
+	islandItemH  = 40 // one row
+	islandChipH  = 26 // the options under a row that can be answered here
+	islandMoreH  = 20 // "+N more"
+	islandEmptyH = 28 // "Nothing is waiting for you"
+	islandFootH  = 36
+	islandPadTop = 4
+)
+
+func groupHeight(rows []islandRow, more int) float32 {
+	if len(rows) == 0 {
+		return 0
+	}
+	n := float32(islandGroupH)
+	for _, r := range rows {
+		n += islandItemH
+		if r.Ask != nil {
+			n += islandChipH
+		}
+	}
+	if more > 0 {
+		n += islandMoreH
+	}
+	return n
+}
+
+// rosterHeight is the roster shape's height: the housing, the groups that
+// have rows (Needs says so when it has none), and the foot.
+func (h *islandHost) rosterHeight(r islandRoster) float32 {
+	n := h.h0 + islandPadTop + islandFootH
+	if len(r.Needs) == 0 {
+		n += islandEmptyH
+	}
+	return n + groupHeight(r.Needs, r.NeedsMore) + groupHeight(r.Working, r.WorkingMore) + groupHeight(r.Idle, r.IdleMore)
+}
+
+// rosterView lays the roster out under the housing.
+func (h *islandHost) rosterView(c *ui.Context, r islandRoster, opacity float32) {
+	roles := designRoles(true)
+	white := ui.RGB(255, 255, 255)
+	muted := white.Alpha(0.55)
+	col := ui.Column(c).Absolute().Top(h.h0 + islandPadTop).Left(0).Right(0).PaddingX(14).Opacity(opacity)
+	col.Children(func() {
+		group := func(name string, tone ui.Color, rows []islandRow, more int) {
+			if len(rows) == 0 {
+				return
+			}
+			ui.Row(c).Height(islandGroupH).AlignItems(ui.Center).Gap(6).Children(func() {
+				ui.Text(c, name).FontSize(11).Bold().TextColor(tone)
+				ui.Text(c, strconv.Itoa(len(rows)+more)).FontSize(11).TextColor(muted)
+			})
+			for _, row := range rows {
+				h.rosterRow(c, row, white, muted)
+			}
+			if more > 0 {
+				ui.Row(c).Height(islandMoreH).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "+"+strconv.Itoa(more)+" more").FontSize(11).TextColor(muted)
+				})
+			}
+		}
+		if len(r.Needs) == 0 {
+			ui.Row(c).Height(islandEmptyH).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Nothing is waiting for you").FontSize(12).TextColor(muted)
+			})
+		}
+		group("Needs you", roles.Warn, r.Needs, r.NeedsMore)
+		group("Working", roles.Accent, r.Working, r.WorkingMore)
+		group("Idle", muted, r.Idle, r.IdleMore)
+		foot := ui.Row(c).Height(islandFootH).AlignItems(ui.Center).Gap(8)
+		foot.Children(func() {
+			ui.Text(c, "Same list as the menu-bar panel").FontSize(11).TextColor(white.Alpha(0.4)).Grow(1).SingleLine()
+			solco := ui.Box(c.Key("island-solco")).Height(22).PaddingX(10).Radius(11).Center().Shrink(0).
+				Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("Open Solco").Focusable().KeepFocus()
+			if solco.Hovered() {
+				solco.Background(white.Alpha(0.14))
+			}
+			solco.Children(func() { ui.Text(c, "Open Solco").FontSize(11.5).Bold().TextColor(white) })
+			if solco.Clicked() {
+				h.later(func() {
+					h.s.activateWindow()
+					h.closeRoster()
+				})
+			}
+		})
+	})
+}
+
+// rosterRow is one Agent or Feedback line: dot, words, Open, and under it the
+// options when the Ask can be answered here.
+func (h *islandHost) rosterRow(c *ui.Context, row islandRow, white, muted ui.Color) {
+	ui.Row(c).Height(islandItemH).AlignItems(ui.Center).Gap(10).Children(func() {
+		ui.Box(c).Size(8, 8).Radius(4).Background(islandTone(row.Kind)).Shrink(0)
+		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+			ui.Text(c, row.Title).FontSize(12.5).Bold().TextColor(white).SingleLine()
+			if row.Sub != "" {
+				ui.Text(c, row.Sub).FontSize(11.5).TextColor(muted).SingleLine()
+			}
+		})
+		if row.Route != "" {
+			open := ui.Box(c.Key("island-row-open:" + row.Key)).Height(22).PaddingX(8).Radius(11).Center().Shrink(0).
+				Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("Open " + row.Title).Focusable().KeepFocus()
+			tone := muted
+			if open.Hovered() {
+				open.Background(white.Alpha(0.14))
+				tone = white
+			}
+			open.Children(func() { ui.Text(c, "Open").FontSize(11.5).TextColor(tone) })
+			if open.Clicked() {
+				route := row.Route
+				h.later(func() {
+					h.s.applyOnWindow(func() { h.s.routeAgentNotification(route) })
+					h.closeRoster()
+				})
+			}
+		}
+	})
+	if row.Ask == nil {
+		return
+	}
+	ask := *row.Ask
+	ui.Row(c).Height(islandChipH).AlignItems(ui.Center).Gap(6).Margin(0, 0, 0, 18).Children(func() {
+		if opt, done := h.sent[ask.Ask]; done {
+			switch opt {
+			case "":
+				ui.Text(c, "Not sent — use Open to answer").FontSize(11.5).TextColor(islandTone(islandAttention))
+			default:
+				ui.Text(c, "Sent · "+opt).FontSize(11.5).TextColor(muted).SingleLine()
+			}
+			return
+		}
+		for _, opt := range ask.Options {
+			chip := ui.Box(c.Key("island-opt:" + ask.Ask + ":" + opt)).Height(22).PaddingX(10).Radius(11).Center().Shrink(0).
+				Background(white.Alpha(0.12)).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(opt).Focusable().KeepFocus()
+			if chip.Hovered() {
+				chip.Background(white.Alpha(0.24))
+			}
+			chip.Children(func() { ui.Text(c, opt).FontSize(11.5).TextColor(white).SingleLine() })
+			if chip.Clicked() {
+				opt := opt
+				h.later(func() { h.answer(ask, opt) })
+			}
+		}
+	})
 }

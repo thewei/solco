@@ -89,6 +89,7 @@ func (s *Shell) AttachTray(tray *mygo.Tray) {
 // platforms where tray creation failed keep the in-window Status Center as
 // the only surface.
 func (s *Shell) updateTray() {
+	s.islandRefresh() // an open notch roster reads the same snapshot
 	if s.tray == nil {
 		return
 	}

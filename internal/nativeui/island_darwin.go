@@ -4,8 +4,8 @@ package nativeui
 
 /**
  * [INPUT]: purego/objc（AppKit：NSScreen、NSWindow），只用 Apple 文档里的具名常量
- * [OUTPUT]: 对外提供 islandNotchSize、islandMenuBarHeight、islandRaise、islandPin
- * [POS]: 刘海岛的 macOS 原生缝（2026-11-12 决策 + H1 spike）：量刘海、把非激活 Panel 抬到菜单栏之上并跨所有 Space / 全屏 App、钉在屏幕顶部中央。不含任何第三方代码；不碰 Herdr、终端或任何运行时
+ * [OUTPUT]: 对外提供 islandNotchSize、islandMenuBarHeight、islandRaise、islandPin、islandWatchPointer
+ * [POS]: 刘海岛的 macOS 原生缝（2026-11-12 决策 + H1 spike）：量刘海、把非激活 Panel 抬到菜单栏之上并跨所有 Space / 全屏 App、钉在屏幕顶部中央、监听指针移动（NSEvent 全局 + 本地监视器，AppKit 文档写法，不需要任何权限）。不含任何第三方代码；不碰 Herdr、终端或任何运行时
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -80,6 +80,7 @@ func islandRaise(handle uintptr) {
 	w := objc.ID(handle)
 	w.Send(islandSel("setStyleMask:"), uint(islandStyleMaskNonactivatingPanel|islandStyleMaskFullSizeContentView))
 	w.Send(islandSel("setLevel:"), islandMainMenuLevel+3)
+	w.Send(islandSel("setAcceptsMouseMovedEvents:"), true) // the local monitor sees the pointer over the island itself
 	w.Send(islandSel("setCollectionBehavior:"),
 		uint(islandCollectionJoinsAllSpaces|islandCollectionStationary|islandCollectionIgnoresCycle|islandCollectionFullScreenAuxiliary))
 }
@@ -94,4 +95,30 @@ func islandPin(handle uintptr, w, h float64) {
 	f := objc.Send[islandRect](screen, islandSel("frame"))
 	frame := islandRect{islandPoint{f.Origin.X + (f.Size.W-w)/2, f.Origin.Y + f.Size.H - h}, islandSize{w, h}}
 	objc.ID(handle).Send(islandSel("setFrame:display:"), frame, true)
+}
+
+// Event masks (NSEvent.h): 1 << NSEventType.
+const islandPointerMask = uint64(1 << 5) // NSEventTypeMouseMoved; a drag is not a hover
+
+// islandWatchPointer calls fn on the main thread whenever the pointer moves,
+// over this app's windows (local monitor) or any other's (global monitor), until
+// stop is called. The handler must stay cheap: it fires for every move.
+func islandWatchPointer(fn func()) (stop func(), ok bool) {
+	events := objc.ID(objc.GetClass("NSEvent"))
+	global := objc.NewBlock(func(_ objc.Block, _ objc.ID) { fn() })
+	local := objc.NewBlock(func(_ objc.Block, ev objc.ID) objc.ID { fn(); return ev })
+	g := events.Send(islandSel("addGlobalMonitorForEventsMatchingMask:handler:"), islandPointerMask, global)
+	l := events.Send(islandSel("addLocalMonitorForEventsMatchingMask:handler:"), islandPointerMask, local)
+	g.Send(islandSel("retain"))
+	l.Send(islandSel("retain"))
+	return func() {
+		for _, m := range []objc.ID{g, l} {
+			if m != 0 {
+				events.Send(islandSel("removeMonitor:"), m)
+				m.Send(islandSel("release"))
+			}
+		}
+		global.Release()
+		local.Release()
+	}, g != 0 && l != 0
 }

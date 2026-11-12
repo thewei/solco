@@ -68,12 +68,10 @@ func (s *Shell) settingsNotifications(c *ui.Context) {
 
 	if runtime.GOOS == "darwin" {
 		settingsGroup(c, "On this Mac",
-			row("Show alerts in the notch", "An Agent that needs you, finished work, a Feedback question or a failed Automation grows out of the notch for a few seconds. Off by default.", func() {
+			row("Show alerts in the notch", "An Agent that needs you, finished work, a Feedback question or a failed Automation grows out of the notch for a few seconds; rest the pointer on the notch to open the list of every Agent and Feedback question. Off by default.", func() {
 				if v, changed := settingSwitch(c, "Show alerts in the notch", s.settings.Notifications.Island); changed {
 					s.applySettings(func(cur *settings.Settings) error { cur.Notifications.Island = v; return nil })
-					if !v {
-						s.islandOff()
-					}
+					s.islandSync()
 				}
 			}),
 		)
