@@ -134,6 +134,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-09 · Sidebar bell: one waiting number, one panel
 - 2026-11-09 · Solco Vault on the phone: approve, browse, show a value (Host v3 wire)
 - 2026-11-07 · Phone Assistant window and its follow-ups (A–F)
+- 2026-11-12 · The notch island: Agent and Feedback status at the notch (optional, off by default)
 
 ## Git safety
 
