@@ -63,6 +63,12 @@ func pendingAsk(id string, qs ...feedback.Question) *feedback.Ask {
 	return &feedback.Ask{ID: id, State: feedback.StatePending, Questions: qs}
 }
 
+func pendingAskAt(id string, at int64, qs ...feedback.Question) *feedback.Ask {
+	a := pendingAsk(id, qs...)
+	a.CreatedAt = at
+	return a
+}
+
 func TestIslandAskOnlyForOneShortSingleChoice(t *testing.T) {
 	good := feedback.Question{ID: "q1", Type: "single", Options: []string{"Yes", "No"}}
 	cases := []struct {
@@ -72,7 +78,8 @@ func TestIslandAskOnlyForOneShortSingleChoice(t *testing.T) {
 	}{
 		{"one single", feedback.Thread{ID: "th", Asks: []*feedback.Ask{pendingAsk("a", good)}}, true},
 		{"answered ones are ignored", feedback.Thread{ID: "th", Asks: []*feedback.Ask{{ID: "old", State: feedback.StateAnswered}, pendingAsk("a", good)}}, true},
-		{"two pending asks", feedback.Thread{ID: "th", Asks: []*feedback.Ask{pendingAsk("a", good), pendingAsk("b", good)}}, false},
+		{"the newest of two pending asks, when it is answerable", feedback.Thread{ID: "th", Asks: []*feedback.Ask{pendingAskAt("old", 1, good, good), pendingAskAt("a", 2, good)}}, true},
+		{"the newest of two pending asks, when it is not", feedback.Thread{ID: "th", Asks: []*feedback.Ask{pendingAskAt("old", 1, good), pendingAskAt("new", 2, good, good)}}, false},
 		{"two questions", feedback.Thread{ID: "th", Asks: []*feedback.Ask{pendingAsk("a", good, good)}}, false},
 		{"multiple choice", feedback.Thread{ID: "th", Asks: []*feedback.Ask{pendingAsk("a", feedback.Question{ID: "q", Type: "multiple", Options: []string{"A", "B"}})}}, false},
 		{"too many options", feedback.Thread{ID: "th", Asks: []*feedback.Ask{pendingAsk("a", feedback.Question{ID: "q", Type: "single", Options: []string{"1", "2", "3", "4", "5"}})}}, false},

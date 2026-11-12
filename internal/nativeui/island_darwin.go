@@ -4,7 +4,7 @@ package nativeui
 
 /**
  * [INPUT]: purego/objc（AppKit：NSScreen、NSWindow），只用 Apple 文档里的具名常量
- * [OUTPUT]: 对外提供 islandNotchSize、islandMenuBarHeight、islandRaise、islandPin、islandWatchPointer
+ * [OUTPUT]: 对外提供 islandNotchSize、islandMenuBarHeight、islandRaise、islandPin、islandWatchPointer、islandScreenFrame、islandMouseLocation、islandButtonsDown
  * [POS]: 刘海岛的 macOS 原生缝（2026-11-12 决策 + H1 spike）：量刘海、把非激活 Panel 抬到菜单栏之上并跨所有 Space / 全屏 App、钉在屏幕顶部中央、监听指针移动（NSEvent 全局 + 本地监视器，AppKit 文档写法，不需要任何权限）。不含任何第三方代码；不碰 Herdr、终端或任何运行时
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -121,4 +121,28 @@ func islandWatchPointer(fn func()) (stop func(), ok bool) {
 		global.Release()
 		local.Release()
 	}, g != 0 && l != 0
+}
+
+// islandScreenFrame is the size of the display that carries the menu bar.
+func islandScreenFrame() (w, h float64, ok bool) {
+	screen := islandScreen()
+	if screen == 0 {
+		return 0, 0, false
+	}
+	f := objc.Send[islandRect](screen, islandSel("frame"))
+	return f.Size.W, f.Size.H, true
+}
+
+// islandMouseLocation is the pointer in screen points with the origin at the
+// bottom left of the menu-bar display (NSEvent.mouseLocation): one cheap call,
+// because the pointer watch asks for it on every move.
+func islandMouseLocation() (x, y float64) {
+	p := objc.Send[islandPoint](objc.ID(objc.GetClass("NSEvent")), islandSel("mouseLocation"))
+	return p.X, p.Y
+}
+
+// islandButtonsDown says whether any mouse button is held (NSEvent
+// .pressedMouseButtons): a drag past the notch is not a hover.
+func islandButtonsDown() bool {
+	return objc.Send[uint](objc.ID(objc.GetClass("NSEvent")), islandSel("pressedMouseButtons")) != 0
 }

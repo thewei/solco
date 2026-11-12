@@ -45,6 +45,9 @@ type islandHost struct {
 	gen    int  // bumped on every show and close: a stale timer does nothing
 	w0, h0 float32
 	notch  bool // the display has a camera housing; otherwise the top-centre edge is the hot zone
+	// screenW, screenH are the menu-bar display's size, kept so the pointer
+	// watch (it runs on every move) asks AppKit for nothing but the pointer.
+	screenW, screenH float32
 
 	enteredAt time.Time // since when the pointer rests on the housing or the alert; zero when it does not
 	leftAt    time.Time // since when the pointer is off the open roster; zero when it is on it
@@ -62,6 +65,7 @@ type islandHost struct {
 	// Seams for tests: the pointer's screen position, the clock, and how an
 	// answer is sent.
 	cursor   func() (x, y float32)
+	buttons  func() bool
 	now      func() time.Time
 	answerFn func(a islandAsk, option string) error
 }
@@ -144,6 +148,9 @@ func (s *Shell) islandRefresh() {
 // without one gets a housing as high as the menu bar.
 func (h *islandHost) measure() {
 	h.w0, h.h0, h.notch = 200, 32, false
+	if w, hh, ok := islandScreenFrame(); ok {
+		h.screenW, h.screenH = float32(w), float32(hh)
+	}
 	if w, hh, ok := islandNotchSize(); ok {
 		h.w0, h.h0, h.notch = float32(w), float32(hh), true
 	} else if hh := islandMenuBarHeight(); hh > 0 {
@@ -376,7 +383,7 @@ func (h *islandHost) poll() {
 			h.closeRoster()
 			return
 		}
-	} else if over || h.inHotZone(x, y) {
+	} else if (over || h.inHotZone(x, y)) && !h.held() {
 		switch {
 		case h.enteredAt.IsZero():
 			h.enteredAt = now
@@ -514,17 +521,23 @@ func (h *islandHost) pointer() (x, y float32) {
 	if h.cursor != nil {
 		return h.cursor()
 	}
-	p := mygo.Screen.CursorScreenPoint()
-	d := mygo.Screen.PrimaryDisplay()
-	return float32(p.X), float32(p.Y) - float32(d.Bounds.Y)
+	mx, my := islandMouseLocation()
+	return float32(mx), h.screenH - float32(my)
 }
 
 func (h *islandHost) screenCentreX() float32 {
 	if h.cursor != nil {
 		return 0 // tests place the pointer relative to the centre
 	}
-	d := mygo.Screen.PrimaryDisplay()
-	return float32(d.Bounds.X) + float32(d.Bounds.Width)/2
+	return h.screenW / 2
+}
+
+// held says whether a mouse button is down.
+func (h *islandHost) held() bool {
+	if h.buttons != nil {
+		return h.buttons()
+	}
+	return islandButtonsDown()
 }
 
 func (h *islandHost) winH() float32 { return h.h0 + islandWinBody }

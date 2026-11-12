@@ -416,3 +416,23 @@ func TestIslandSettingsShowItsOptionsOnlyWhileOn(t *testing.T) {
 		}
 	}
 }
+
+func TestIslandDragPastTheNotchDoesNotOpenIt(t *testing.T) {
+	h, x, y, now := islandNotched(t)
+	down := true
+	h.buttons = func() bool { return down }
+	*x, *y = 0, 10
+	h.poll()
+	*now = now.Add(400 * time.Millisecond)
+	h.poll()
+	if h.roster || !h.enteredAt.IsZero() {
+		t.Fatalf("a held button counted as a hover: roster=%v", h.roster)
+	}
+	down = false
+	h.poll()
+	*now = now.Add(300 * time.Millisecond)
+	h.poll()
+	if !h.roster {
+		t.Fatal("a released button did not let the hover count")
+	}
+}

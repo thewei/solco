@@ -122,19 +122,16 @@ func firstNonEmpty(ss ...string) string {
 	return ""
 }
 
-// islandAskOf reads the one Ask a thread waits on and says whether the island
-// can answer it in a click: exactly one pending Ask, with exactly one
-// single-choice question of two to four short options.
+// islandAskOf reads the Ask a thread waits on and says whether the island can
+// answer it in a click: the newest pending Ask (the one the row's words come
+// from), if it has exactly one single-choice question of two to four short
+// options. An older pending Ask stays for Feedback itself.
 func islandAskOf(t feedback.Thread) (islandAsk, bool) {
 	var pending *feedback.Ask
 	for _, a := range t.Asks {
-		if a.State != feedback.StatePending {
-			continue
+		if a.State == feedback.StatePending && (pending == nil || a.CreatedAt >= pending.CreatedAt) {
+			pending = a
 		}
-		if pending != nil {
-			return islandAsk{}, false
-		}
-		pending = a
 	}
 	if pending == nil || len(pending.Questions) != 1 {
 		return islandAsk{}, false
