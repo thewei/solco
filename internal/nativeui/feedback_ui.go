@@ -174,6 +174,8 @@ func (s *Shell) startFeedbackWatch() {
 					// Off the stream's reader: a notification call hops to the main thread and can
 					// wait on the system's permission prompt, which must not stall later events.
 					go showFeedbackNotification(e)
+					title, body := feedbackNotificationText(e)
+					s.islandNotify(islandAlert{ID: feedbackNotificationID(e.ThreadID, e.AskID), Kind: islandFeedback, Title: title, Body: body})
 				}
 			})
 			if ctx.Err() != nil {

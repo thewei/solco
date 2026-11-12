@@ -55,12 +55,15 @@ func (s *Shell) notifyAutomationSteps(list []automations.Automation) {
 		if s.remote.srv != nil {
 			s.remote.srv.NotifyAutomation(string(ev.Kind), ev.Name, ev.RunID)
 		}
+		title, body := automationNotificationText(ev)
+		if ev.Kind == automations.EventFailed {
+			s.islandNotify(islandAlert{ID: automationNotificationID(ev.Name), Kind: islandAutomation, Title: title, Body: body})
+		}
 		// Headless builds (unit tests) have no window and no app loop: MyGo's
 		// notification calls hop to the main thread and would block forever.
 		if s.win == nil || !mygo.NotificationsSupported() {
 			continue
 		}
-		title, body := automationNotificationText(ev)
 		if n := mygo.NewNotification(mygo.NotificationOptions{
 			ID:     automationNotificationID(ev.Name),
 			Group:  automationNotificationGroup,

@@ -48,6 +48,9 @@ type NotificationSettings struct {
 	// GraceSeconds is how long a phone that is connected gets to open a waiting Ask before the channels are
 	// called; 0 = the default (DefaultNotificationGrace).
 	GraceSeconds int `json:"grace_seconds,omitempty"`
+	// Island shows alerts (an Agent that needs you, a finished run, a Feedback question, a failed Automation)
+	// in a panel that grows out of the notch, above the menu bar. Off by default (2026-11-12 decision).
+	Island bool `json:"island,omitempty"`
 }
 
 // NotificationChannel is one webhook: only its identity and switch are kept here (URL and token: secretstore,

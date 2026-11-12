@@ -4,8 +4,8 @@ import "time"
 
 /**
  * [INPUT]: 无（纯常量）
- * [OUTPUT]: 提供动效时长四档 motionColor / motionRow / motionPanel / motionHandOver
- * [POS]: nativeui 里所有 ui.ElementTransition / Animate 的时长唯一来源（2026-11-01 收口，此前散落 120/140/150/160/170/180/190ms 七种）；侧栏滑动 panelSlideDuration 与工作区进入 260ms 是整页级长动效，不在这四档里
+ * [OUTPUT]: 提供动效时长四档 motionColor / motionRow / motionPanel / motionHandOver，外加刘海岛形状弹簧 motionIsland
+ * [POS]: nativeui 里所有 ui.ElementTransition / Animate 的时长唯一来源（2026-11-01 收口，此前散落 120/140/150/160/170/180/190ms 七种）；侧栏滑动 panelSlideDuration 与工作区进入 260ms 是整页级长动效，不在这四档里；刘海岛的形状从刘海长大/收回是一个弹簧（520ms），自成一档 motionIsland
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -21,3 +21,7 @@ const (
 	// motionHandOver is one shape giving way to the next (the status slot).
 	motionHandOver = 180 * time.Millisecond
 )
+
+// motionIsland is the notch island's shape growing out of the housing and back:
+// a spring, not a transition, so it is not one of the four above.
+const motionIsland = 520 * time.Millisecond

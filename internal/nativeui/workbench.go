@@ -210,6 +210,16 @@ func (s *Shell) notifyAgentTransition(runtimeAgent herdr.Agent, transition agent
 	if s.remote.srv != nil {
 		s.remote.srv.NotifyAgent(notification.Title, notification.Body) // the user's webhook channels, when no phone is there
 	}
+	kind := islandReview
+	if transition == agent.TransitionNeedsAttention {
+		kind = islandAttention
+	}
+	s.islandNotify(islandAlert{
+		ID:    agentNotificationID(s.activeInstance, runtimeAgent.TerminalID),
+		Kind:  kind,
+		Title: s.agentTitleFrom(runtimeAgent),
+		Body:  notification.Body,
+	})
 	// Headless builds (unit tests) have no window and no app loop: MyGo's
 	// notification calls hop to the main thread and would block forever.
 	if s.win == nil {

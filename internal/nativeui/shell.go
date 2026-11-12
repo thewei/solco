@@ -280,6 +280,9 @@ type Shell struct {
 	// trayHandle is the bound mygo.Tray itself: the quick panel flyout
 	// anchors to it (Tray option), not to a screen rectangle.
 	trayHandle *mygo.Tray
+	// island is the notch island (2026-11-12), built on the first alert while its
+	// Settings switch is on; nil until then.
+	island *islandHost
 	// dock controls the 0.9 P12 macOS Dock badge (NeedsAttention + ReviewPending).
 	dock *dockController
 	// quickPanel is the open quick-panel flyout (0.7 §17.1); nil means no

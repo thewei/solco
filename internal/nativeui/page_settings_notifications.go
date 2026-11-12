@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
@@ -64,6 +65,19 @@ func (s *Shell) settingsNotifications(c *ui.Context) {
 	t := c.Theme()
 	ui.Text(c, "When no paired phone can be told, Solco calls these URLs with the notification's words — the project and Agent, the question, a short excerpt of what the Agent said — and a solco:// link that opens the app. Nothing else of this Mac leaves it.").
 		FontSize(Typography().Caption).TextColor(t.TextMuted)
+
+	if runtime.GOOS == "darwin" {
+		settingsGroup(c, "On this Mac",
+			row("Show alerts in the notch", "An Agent that needs you, finished work, a Feedback question or a failed Automation grows out of the notch for a few seconds. Off by default.", func() {
+				if v, changed := settingSwitch(c, "Show alerts in the notch", s.settings.Notifications.Island); changed {
+					s.applySettings(func(cur *settings.Settings) error { cur.Notifications.Island = v; return nil })
+					if !v {
+						s.islandOff()
+					}
+				}
+			}),
+		)
+	}
 
 	channels := s.settings.Notifications.Channels
 	rows := make([]settingsRow, 0, len(channels))
