@@ -1138,6 +1138,20 @@
   flex: none;
 }
 
+/* The questions sit in a fieldset only so a queued answer can freeze them all at once. */
+.fb-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fb-fields:disabled {
+  opacity: 0.6;
+}
+
 .fb-instead {
   margin-top: 2px;
 }
@@ -1471,6 +1485,10 @@ html[data-host="phone"] .fb-jump {
   bottom: 22px;
   width: 44px;
   height: 44px;
+}
+/* The pinned Send bar must not hide what focus or a scroll-into-view brings to the foot of the screen. */
+html[data-host="phone"] .fb-scroll {
+  scroll-padding-bottom: 120px;
 }
 /* A waiting form pins its Send bar to the foot: the button rides above it. */
 html[data-host="phone"] .fb-jump.up {
