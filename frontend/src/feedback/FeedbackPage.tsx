@@ -607,16 +607,16 @@ function ThreadView(props: {
   const [delArmed, armDelete] = useArmed();
   const lastPending = [...asks].reverse().find((a) => a.state === "pending")?.id ?? "";
 
-  // Open where reading starts, once per thread / landing: a thread at its very top (the Task, then the first message),
-  // a notification's Ask at the first line of that Ask. Never at the answer form — the person reads before replying;
-  // "Back to latest" is the way down.
+  // Open on the newest message, at its first line (or on the notification's Ask), once per thread / landing. Never at the
+  // answer form — the person reads before replying; the history above is a scroll up, "Back to latest" the way down.
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const target = flash?.ask ? el.querySelector<HTMLElement>(`[data-ask="${CSS.escape(flash.ask)}"]`) : null;
+    const items = el.querySelectorAll<HTMLElement>("[data-ask]");
+    const target = (flash?.ask ? el.querySelector<HTMLElement>(`[data-ask="${CSS.escape(flash.ask)}"]`) : null) ?? items[items.length - 1];
     if (target) target.scrollIntoView({ block: "start" });
     else el.scrollTop = 0;
-    // A scroll that did not move (already at the top) fires no event: say whether the answer sits below the fold.
+    // A scroll that did not move fires no event: say whether the answer sits below the fold.
     setAway(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.id, flash?.n]);
