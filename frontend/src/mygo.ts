@@ -913,6 +913,18 @@ export interface FeedbackFocus {
   ask: string;
 }
 
+/** FeedbackQueued is an answer the phone holds for an unreachable Mac (ids and time only, never the answer text). */
+export interface FeedbackQueued {
+  ask: string;
+  at: number;
+}
+
+/** FeedbackUnsent is an answer the Host refused: the Ask closed or is gone. */
+export interface FeedbackUnsent {
+  ask: string;
+  reason: string;
+}
+
 /** FeedbackView is everything the page draws, one value per read. */
 export interface FeedbackView {
   theme: string;
@@ -950,6 +962,12 @@ export interface FeedbackView {
    * phone last held, read-only. Zero = live.
    */
   stale?: number;
+  /**
+   * Queued (phone only) names the Asks whose answer waits on the phone for the Mac: the page freezes those forms and
+   * offers Edit. Unsent (phone only) lists answers the Host refused since the last read, each reported once.
+   */
+  queued?: FeedbackQueued[];
+  unsent?: FeedbackUnsent[];
   /**
    * CanPick says the answer form may offer the file / Skill picker (always true on the desktop; the phone follows
    * the Host's feedbackContext capability).
@@ -1951,6 +1969,13 @@ export const feedback = {
    */
   answer(askID: string, answers: Record<string, Answer>, attachments: Attachment[], refs: ContextRef[]): Promise<void> {
     return call("feedback.Answer", askID, answers, attachments, refs);
+  },
+  /**
+   * CancelQueued takes a phone-queued answer back for editing. The desktop sends at once and queues nothing, so this is
+   * a no-op here; the phone's controller answers the same call from its own queue.
+   */
+  cancelQueued(arg0: string): Promise<void> {
+    return call("feedback.CancelQueued", arg0);
   },
   /**
    * Cleanup counts (dryRun) or removes the finished threads idle for more than olderThanDays; it returns how many

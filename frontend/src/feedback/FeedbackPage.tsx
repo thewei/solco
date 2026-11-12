@@ -1,11 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { feedback, type Answer, type Ask, type ContextRef, type FeedbackView, type Question, type Thread, type ThreadSummary } from "../mygo";
 import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
 import { QuickReplies } from "./QuickReplies";
 import { takesKeyboard } from "./focus";
-import { isOffline, loadPersisted, savePersisted, type Draft, type Drafts } from "./work";
+import { forgetClosed, isQueued, loadPersisted, savePersisted, type Draft, type Drafts } from "./work";
 import { ContextPicker, refIcon, type PickKind } from "./ContextPicker";
 import { Thumbs } from "./Thumbs";
 import { TidyDialog } from "./Tidy";
@@ -23,80 +23,22 @@ type Lens = "needs" | "all";
 
 /**
  * The answer form's work outlives polls and thread switches, and — kept in this WebView's localStorage — a page that
- * is torn down and rebuilt (a network switch on the phone, a reload): drafts, picked context and the outbox of answers
- * that could not be sent. It never leaves the WebView (`work.ts`).
+ * is torn down and rebuilt (a network switch on the phone, a reload): drafts and picked context. It never leaves the
+ * WebView (`work.ts`). An answer that could not be sent is not kept here: the phone's native layer queues it and
+ * sends it whatever page is open (the snapshot's `queued` / `unsent`).
  */
 const work = loadPersisted<ContextRef>(typeof localStorage === "undefined" ? undefined : localStorage);
 const drafts: Drafts = work.drafts;
 /** Files, folders and Skills picked for an ask's answer (names; the broker resolves the paths on send). */
 const refDrafts = work.refs;
-/** Answers pressed Send on while the Host could not be reached: frozen, sent by `useOutbox` once it answers again. */
-const outbox = work.outbox;
-const outboxListeners = new Set<() => void>();
 function saveDrafts(ask?: string) {
   if (ask) work.seen[ask] = Date.now();
   savePersisted(typeof localStorage === "undefined" ? undefined : localStorage, work);
 }
-function changeOutbox(fn: () => void, ask?: string) {
-  fn();
-  saveDrafts(ask);
-  outboxListeners.forEach((l) => l());
-}
-const outboxCount = () => Object.keys(outbox).length;
-const subscribeOutbox = (l: () => void) => {
-  outboxListeners.add(l);
-  return () => outboxListeners.delete(l);
-};
-const OUTBOX_RETRY_MS = 4000;
+/** The Asks whose answer waits on the phone for the Mac (ask id → when it was queued): their forms are frozen. */
+const QueuedContext = createContext<Record<string, number>>({});
 /** True while the page shows the saved copy because the Host cannot be reached: Send then queues instead of failing. */
 const QueueingContext = createContext(false);
-
-let flushing = false;
-/**
- * Sends the queued answers, oldest first, stopping at the first one the Host cannot be reached for (the next tick tries
- * again). A Host refusal (closed, gone) drops the queued copy and says so; the draft stays editable. Resending is safe: an
- * Ask that already took an answer refuses a second one (`feedback_final`).
- */
-async function flushOutbox(done: () => void, fail: (m: string) => void) {
-  if (flushing) return;
-  flushing = true;
-  try {
-    for (const [ask, queued] of Object.entries(outbox)) {
-      try {
-        await feedback.answer(ask, queued.answers, [], queued.refs);
-        changeOutbox(() => {
-          delete outbox[ask];
-          delete drafts[ask];
-          delete refDrafts[ask];
-        });
-        done();
-      } catch (e) {
-        if (isOffline(e)) return;
-        changeOutbox(() => delete outbox[ask], ask);
-        fail(`Queued answer not sent: ${msg(e)}`);
-      }
-    }
-  } finally {
-    flushing = false;
-  }
-}
-
-/** Retries the outbox every few seconds and when the device reports it is online again, for as long as it holds an answer. */
-function useOutbox(done: () => void, fail: (m: string) => void): number {
-  const count = useSyncExternalStore(subscribeOutbox, outboxCount);
-  useEffect(() => {
-    if (count === 0) return;
-    const run = () => void flushOutbox(done, fail);
-    run();
-    const timer = window.setInterval(run, OUTBOX_RETRY_MS);
-    window.addEventListener("online", run);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("online", run);
-    };
-  }, [count, done, fail]);
-  return count;
-}
 const GAP_MIN_MS = 10 * 60_000;
 
 const POLL_MS = 1500;
@@ -121,6 +63,9 @@ function useFeedback(selected: string, query: string) {
       .then((v) => {
         setView(v);
         setError("");
+        // Answers the Host refused since the last read (reported once by the phone), and the work of Asks that are over.
+        if (v.unsent?.length) setError(v.unsent.map((u) => `Queued answer not sent: ${msg(new Error(u.reason))}`).join("\n"));
+        if (v.detail && !v.stale && forgetClosed(work, v.detail.asks?.flatMap((a) => (a ? [a] : [])) ?? [])) saveDrafts();
         if (v.focus) setFocus({ ...v.focus, n: ++seq.current });
       })
       .catch((e) => setError(msg(e)));
@@ -295,7 +240,8 @@ export function FeedbackPage() {
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim(), 250);
   const { view, error, setError, pull, focus } = useFeedback(selected, query);
-  const queued = useOutbox(pull, setError);
+  const queued = view?.queued?.length ?? 0;
+  const queuedAt = useMemo(() => Object.fromEntries((view?.queued ?? []).map((q) => [q.ask, q.at])), [view?.queued]);
   const [tools, setTools] = useState(false);
   const [tidy, setTidy] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -484,13 +430,14 @@ export function FeedbackPage() {
   );
 
   return (
+    <QueuedContext.Provider value={queuedAt}>
     <QueueingContext.Provider value={!!view.stale}>
     <div className={`fb${narrow ? " narrow" : ""}`}>
       {view.stale ? <Stale at={view.stale} onRetry={pull} /> : !view.online && <Offline onRetry={pull} />}
       {queued > 0 && (
         <div className="fb-banner warn" role="status">
           <span>{queued === 1 ? "1 answer is queued" : `${queued} answers are queued`}; it goes out as soon as your Mac is reachable.</span>
-          <button onClick={() => void flushOutbox(pull, setError)}>Send now</button>
+          <button onClick={pull}>Send now</button>
         </div>
       )}
       {error && (
@@ -513,6 +460,7 @@ export function FeedbackPage() {
       {tidy && <TidyDialog keep={view.retentionDays ?? 0} onClose={() => setTidy(false)} onChanged={pull} onError={setError} />}
     </div>
     </QueueingContext.Provider>
+    </QueuedContext.Provider>
   );
 }
 
@@ -911,19 +859,16 @@ function AnswerForm(props: {
   const { ask, thread, online, primary, canPick, lateMode, onChanged, onError } = props;
   const [, bump] = useState(0);
   const queueing = useContext(QueueingContext);
-  useEffect(() => {
-    const off = subscribeOutbox(() => bump((n) => n + 1));
-    return () => void off();
-  }, []);
+  const queuedAt = useContext(QueuedContext);
   const [picking, setPicking] = useState<PickKind | null>(null);
   const refs = (refDrafts[ask.id] ||= []);
-  const queued = outbox[ask.id];
+  const queued = queuedAt[ask.id];
   const [sending, setSending] = useState(false);
   const draft = (drafts[ask.id] ||= {});
   const get = (q: Question): Draft => (draft[q.id] ||= { selected: [], custom: "" });
   const ready = ask.questions.every((q) => !q.required || get(q).selected.length > 0 || get(q).custom.trim() !== "");
   const set = (fn: () => void) => {
-    if (outbox[ask.id]) return; // a queued answer is frozen: "Edit" takes it back out first
+    if (queuedAt[ask.id]) return; // a queued answer is frozen: "Edit" takes it back out first
     fn();
     saveDrafts(ask.id);
     bump((n) => n + 1);
@@ -949,7 +894,7 @@ function AnswerForm(props: {
   const addRef = (r: { kind: string; name: string }) => set(() => (refDrafts[ask.id] = [...refs, { kind: r.kind, name: r.name }]));
 
   const send = useCallback(() => {
-    if (sending || !online || !ready || outbox[ask.id]) return;
+    if (sending || !online || !ready || queuedAt[ask.id]) return;
     setSending(true);
     const answers: Record<string, Draft> = {};
     for (const q of ask.questions) {
@@ -960,20 +905,20 @@ function AnswerForm(props: {
     feedback
       .answer(ask.id, answers, [], sent)
       .then(() => {
-        changeOutbox(() => {
-          delete drafts[ask.id];
-          delete refDrafts[ask.id];
-        });
+        delete drafts[ask.id];
+        delete refDrafts[ask.id];
+        saveDrafts();
         onChanged();
       })
       .catch((e) => {
-        // The Mac cannot be reached: the answer waits in the outbox (frozen, kept across a reload) instead of being lost.
-        if (isOffline(e)) changeOutbox(() => (outbox[ask.id] = { at: Date.now(), answers, refs: sent }), ask.id);
+        // The Mac cannot be reached: the phone's native layer now holds the answer and sends it when the Mac is back;
+        // the next read lists it as queued and freezes this form. The draft stays (Edit brings it back).
+        if (isQueued(e)) onChanged();
         else onError(msg(e));
       })
       .finally(() => setSending(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ask.id, sending, online, ready, onChanged, onError]);
+  }, [ask.id, sending, online, ready, queuedAt, onChanged, onError]);
 
   // Keys, for the newest waiting form only: 1-9 pick an option of the first choice question, ⌘↵ sends.
   useEffect(() => {
@@ -1153,10 +1098,10 @@ function AnswerForm(props: {
         )}
         {queued ? (
           <>
-            <button className="fb-ghost" onClick={() => changeOutbox(() => delete outbox[ask.id], ask.id)}>
+            <button className="fb-ghost" onClick={() => feedback.cancelQueued(ask.id).then(onChanged).catch((e) => onError(msg(e)))}>
               Edit
             </button>
-            <button className="fb-primary" onClick={() => void flushOutbox(onChanged, onError)}>
+            <button className="fb-primary" onClick={onChanged}>
               Send now
             </button>
           </>

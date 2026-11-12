@@ -27,6 +27,18 @@ type FeedbackBridge struct{ shell *Shell }
 // NewFeedbackBridge binds the page to the shell.
 func NewFeedbackBridge(shell *Shell) *FeedbackBridge { return &FeedbackBridge{shell: shell} }
 
+// FeedbackQueued is an answer the phone holds for an unreachable Mac (ids and time only, never the answer text).
+type FeedbackQueued struct {
+	Ask string `json:"ask"`
+	At  int64  `json:"at"`
+}
+
+// FeedbackUnsent is an answer the Host refused: the Ask closed or is gone.
+type FeedbackUnsent struct {
+	Ask    string `json:"ask"`
+	Reason string `json:"reason"`
+}
+
 // FeedbackView is everything the page draws, one value per read.
 type FeedbackView struct {
 	Theme string `json:"theme"`
@@ -54,6 +66,10 @@ type FeedbackView struct {
 	// Stale (phone only) is when this copy was saved, unix ms: the Host could not be reached and the page shows what the
 	// phone last held, read-only. Zero = live.
 	Stale int64 `json:"stale,omitempty"`
+	// Queued (phone only) names the Asks whose answer waits on the phone for the Mac: the page freezes those forms and
+	// offers Edit. Unsent (phone only) lists answers the Host refused since the last read, each reported once.
+	Queued []FeedbackQueued `json:"queued,omitempty"`
+	Unsent []FeedbackUnsent `json:"unsent,omitempty"`
 	// CanPick says the answer form may offer the file / Skill picker (always true on the desktop; the phone follows
 	// the Host's feedbackContext capability).
 	CanPick bool `json:"canPick"`
@@ -125,6 +141,10 @@ func (b *FeedbackBridge) End(ctx context.Context, askID string) error {
 		return c.End(ctx, askID)
 	})
 }
+
+// CancelQueued takes a phone-queued answer back for editing. The desktop sends at once and queues nothing, so this is
+// a no-op here; the phone's controller answers the same call from its own queue.
+func (b *FeedbackBridge) CancelQueued(_ context.Context, _ string) error { return nil }
 
 // DeleteThreads removes the named finished threads (a thread an Agent still waits on stays) and reports how many went.
 func (b *FeedbackBridge) DeleteThreads(ctx context.Context, ids []string) (int, error) {

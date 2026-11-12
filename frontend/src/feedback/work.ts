@@ -1,20 +1,18 @@
 /**
- * The answer form's work in progress — drafts, picked context and the outbox of answers that could not be sent —
- * kept in the WebView's own localStorage so a page that is torn down (a network switch on the phone, the host
- * rebuilding its WebView, a reload) comes back with it. Page-local: nothing here is sent anywhere, and an entry
- * nobody touched for `KEEP_MS` is dropped on load.
+ * The answer form's work in progress — drafts and picked context — kept in the WebView's own localStorage so a page
+ * that is torn down (a network switch on the phone, the host rebuilding its WebView, a reload) comes back with it.
+ * Page-local: nothing here is sent anywhere, and an entry nobody touched for `KEEP_MS` is dropped on load. The answers
+ * that could not be sent are not here: on the phone the app's native layer queues and sends them (the snapshot's
+ * `queued` / `unsent`), whatever page is open.
  */
 
 export type Draft = { selected: string[]; custom: string };
 export type Drafts = Record<string, Record<string, Draft>>;
 export type Ref = { kind: string; name: string };
-/** An answer the Host could not be reached for: frozen at the moment Send was pressed. */
-export type Queued<R extends Ref = Ref> = { at: number; answers: Record<string, Draft>; refs: R[] };
 
 export interface Persisted<R extends Ref = Ref> {
   drafts: Drafts;
   refs: Record<string, R[]>;
-  outbox: Record<string, Queued<R>>;
   /** askID → when the form last changed (ms): what pruning goes by. */
   seen: Record<string, number>;
 }
@@ -29,7 +27,7 @@ const isDraft = (v: unknown): v is Draft => isObj(v) && Array.isArray(v.selected
 const isRef = (v: unknown): v is Ref => isObj(v) && typeof v.kind === "string" && typeof v.name === "string";
 
 export function emptyPersisted<R extends Ref = Ref>(): Persisted<R> {
-  return { drafts: {}, refs: {}, outbox: {}, seen: {} };
+  return { drafts: {}, refs: {}, seen: {} };
 }
 
 /** Reads the saved work; anything malformed or older than KEEP_MS is left out (never throws). */
@@ -53,12 +51,6 @@ export function loadPersisted<R extends Ref = Ref>(store: Store | undefined, now
     }
     const refs = isObj(raw.refs) ? raw.refs[ask] : undefined;
     if (Array.isArray(refs)) out.refs[ask] = refs.filter(isRef) as R[];
-    const queued = isObj(raw.outbox) ? raw.outbox[ask] : undefined;
-    if (isObj(queued) && typeof queued.at === "number" && isObj(queued.answers)) {
-      const answers: Record<string, Draft> = {};
-      for (const [q, d] of Object.entries(queued.answers)) if (isDraft(d)) answers[q] = d;
-      out.outbox[ask] = { at: queued.at, answers, refs: (Array.isArray(queued.refs) ? queued.refs.filter(isRef) : []) as R[] };
-    }
   }
   return out;
 }
@@ -73,17 +65,30 @@ export function savePersisted<R extends Ref>(store: Store | undefined, p: Persis
   const refs: Record<string, R[]> = {};
   for (const [ask, list] of Object.entries(p.refs)) if (list.length > 0) refs[ask] = list;
   const seen: Record<string, number> = {};
-  for (const ask of new Set([...Object.keys(drafts), ...Object.keys(refs), ...Object.keys(p.outbox)])) seen[ask] = p.seen[ask] ?? Date.now();
+  for (const ask of new Set([...Object.keys(drafts), ...Object.keys(refs)])) seen[ask] = p.seen[ask] ?? Date.now();
   try {
-    store?.setItem(DRAFT_KEY, JSON.stringify({ drafts, refs, outbox: p.outbox, seen }));
+    store?.setItem(DRAFT_KEY, JSON.stringify({ drafts, refs, seen }));
   } catch {
     /* storage unavailable or full: the work stays in page memory */
   }
 }
 
-/** The bridge's marker for "the Host could not be reached" (the phone's controller prefixes it; the page strips it for display). */
-export const OFFLINE_MARK = "offline: ";
+/** Forgets the work of Asks that are over (answered or ended; an expired one still takes a late answer). True when anything went. */
+export function forgetClosed<R extends Ref>(p: Persisted<R>, asks: { id: string; state: string }[]): boolean {
+  let changed = false;
+  for (const a of asks) {
+    if (a.state !== "answered" && a.state !== "ended") continue;
+    if (a.id in p.drafts || a.id in p.refs || a.id in p.seen) changed = true;
+    delete p.drafts[a.id];
+    delete p.refs[a.id];
+    delete p.seen[a.id];
+  }
+  return changed;
+}
 
-export function isOffline(e: unknown): boolean {
-  return (e instanceof Error ? e.message : String(e)).startsWith(OFFLINE_MARK);
+/** The phone controller's marker for "the Mac was not reachable, the phone kept the answer" (the page freezes the form). */
+export const QUEUED_MARK = "queued: ";
+
+export function isQueued(e: unknown): boolean {
+  return (e instanceof Error ? e.message : String(e)).startsWith(QUEUED_MARK);
 }
