@@ -1055,9 +1055,8 @@
 
 .fb-jump {
   position: absolute;
-  left: 50%;
+  right: 16px;
   bottom: 18px;
-  transform: translateX(-50%);
   display: grid;
   place-items: center;
   width: 34px;
@@ -1137,6 +1136,22 @@
 
 .fb-hint.fit {
   flex: none;
+}
+
+.fb-instead {
+  margin-top: 2px;
+}
+
+.fb-prog {
+  color: var(--i2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+button.fb-prog:hover {
+  color: var(--i1);
+}
+.fb-prog.done {
+  color: var(--i3);
 }
 
 .fb-pk.cur {
@@ -1457,6 +1472,10 @@ html[data-host="phone"] .fb-jump {
   width: 44px;
   height: 44px;
 }
+/* A waiting form pins its Send bar to the foot: the button rides above it. */
+html[data-host="phone"] .fb-jump.up {
+  bottom: 124px;
+}
 html[data-host="phone"] .fb-check {
   width: 26px;
   height: 26px;
@@ -1497,6 +1516,18 @@ html[data-host="phone"] .fb-pick-list {
 html[data-host="phone"] .fb-send {
   flex-wrap: wrap;
   justify-content: flex-end;
+  /* Send stays at the foot of the screen while a tall form scrolls under it. */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 0 -14px -14px;
+  padding: 10px 14px 14px;
+  background: var(--panel);
+  border-radius: 0 0 var(--r-card) var(--r-card);
+}
+html[data-host="phone"] .fb-send .fb-prog {
+  margin-right: auto;
+  font-size: 13px;
 }
 html[data-host="phone"] .fb-send .fb-hint {
   flex: 1 0 100%;

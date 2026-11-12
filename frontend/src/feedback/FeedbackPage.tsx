@@ -22,10 +22,30 @@ type Lens = "needs" | "all";
 type Draft = { selected: string[]; custom: string };
 type Drafts = Record<string, Record<string, Draft>>;
 
-/** Drafts outlive polls and thread switches; they are page memory only and never leave the WebView. */
-const drafts: Drafts = {};
+/**
+ * Drafts outlive polls and thread switches, and — kept in this WebView's sessionStorage — a page reload or the phone
+ * rebuilding its WebView; they never leave the WebView and go with the session.
+ */
+const DRAFT_KEY = "solco.feedback.drafts";
+function loadDrafts(): { drafts: Drafts; refs: Record<string, ContextRef[]> } {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "{}");
+    return { drafts: raw?.drafts && typeof raw.drafts === "object" ? raw.drafts : {}, refs: raw?.refs && typeof raw.refs === "object" ? raw.refs : {} };
+  } catch {
+    return { drafts: {}, refs: {} };
+  }
+}
+const stored = loadDrafts();
+const drafts: Drafts = stored.drafts;
 /** Files, folders and Skills picked for an ask's answer (names; the broker resolves the paths on send). */
-const refDrafts: Record<string, ContextRef[]> = {};
+const refDrafts: Record<string, ContextRef[]> = stored.refs;
+function saveDrafts() {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ drafts, refs: refDrafts }));
+  } catch {
+    /* storage unavailable: the drafts stay in page memory */
+  }
+}
 const GAP_MIN_MS = 10 * 60_000;
 
 const POLL_MS = 1500;
@@ -585,7 +605,13 @@ function ThreadView(props: {
     if (!el) return;
     const target = flash?.ask ? el.querySelector<HTMLElement>(`[data-ask="${CSS.escape(flash.ask)}"]`) : null;
     if (target) target.scrollIntoView({ block: "center" });
-    else el.scrollTop = el.scrollHeight;
+    else {
+      // A waiting form taller than the screen opens at its top: the first question comes first, not Send.
+      const forms = el.querySelectorAll<HTMLElement>("[data-form]");
+      const form = forms[forms.length - 1];
+      if (form && form.offsetHeight > el.clientHeight) form.scrollIntoView({ block: "start" });
+      else el.scrollTop = el.scrollHeight;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.id, flash?.n]);
 
@@ -682,7 +708,7 @@ function ThreadView(props: {
         </div>
       </div>
       {away && (
-        <button className="fb-jump" aria-label="Back to latest" onClick={toLatest}>
+        <button className={`fb-jump${lastPending ? " up" : ""}`} aria-label="Back to latest" onClick={toLatest}>
           <Icon name="down" size={14} />
         </button>
       )}
@@ -832,6 +858,7 @@ function AnswerForm(props: {
   const ready = ask.questions.every((q) => !q.required || get(q).selected.length > 0 || get(q).custom.trim() !== "");
   const set = (fn: () => void) => {
     fn();
+    saveDrafts();
     bump((n) => n + 1);
   };
   const pick = (q: Question, option: string) =>
@@ -867,6 +894,7 @@ function AnswerForm(props: {
       .then(() => {
         delete drafts[ask.id];
         delete refDrafts[ask.id];
+        saveDrafts();
         onChanged();
       })
       .catch((e) => onError(msg(e)))
@@ -912,6 +940,14 @@ function AnswerForm(props: {
     return () => window.removeEventListener("resize", settle);
   }, []);
 
+  // "2/5 answered": which questions are still open; the button brings the first one (a required one first) on screen.
+  const answered = (q: Question) => get(q).selected.length > 0 || get(q).custom.trim() !== "";
+  const open = ask.questions.filter((q) => !answered(q));
+  const goOpen = () => {
+    const q = open.find((x) => x.required) ?? open[0];
+    if (q) formRef.current?.querySelector(`[data-q="${CSS.escape(q.id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+
   const hint = !online
     ? "Feedback service is offline."
     : lateMode
@@ -933,7 +969,7 @@ function AnswerForm(props: {
       {ask.questions.map((q) => {
         const d = get(q);
         return (
-          <div key={q.id}>
+          <div key={q.id} data-q={q.id}>
             <div className="fb-qt"><Markdown text={q.text} /></div>
             {q.type === "text" ? (
               <AutoTextarea
@@ -951,6 +987,7 @@ function AnswerForm(props: {
                   </button>
                 ))}
                 {q.allowCustom && (
+                  <>
                   <AutoTextarea
                     className="fb-other"
                     aria-label={`${q.text} (something else)`}
@@ -963,6 +1000,8 @@ function AnswerForm(props: {
                       })
                     }
                   />
+                  {q.type !== "multiple" && d.custom.trim() !== "" && <div className="fb-hint fit fb-instead">Sent instead of the options above</div>}
+                  </>
                 )}
               </div>
             )}
@@ -1020,6 +1059,14 @@ function AnswerForm(props: {
       )}
       <div className="fb-send">
         <span className="fb-hint">{hint}</span>
+        {ask.questions.length > 1 &&
+          (open.length > 0 ? (
+            <button className="fb-prog" onClick={goOpen}>
+              {ask.questions.length - open.length}/{ask.questions.length} answered · Next
+            </button>
+          ) : (
+            <span className="fb-prog done">All answered</span>
+          ))}
         {!lateMode && (
           <button className="fb-ghost" disabled={!online} onClick={() => feedback.end(ask.id).then(onChanged).catch((e) => onError(msg(e)))}>
             Dismiss
