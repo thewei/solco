@@ -64,6 +64,9 @@ func (s *Shell) notifyAutomationSteps(list []automations.Automation) {
 		if s.win == nil || !mygo.NotificationsSupported() {
 			continue
 		}
+		if ev.Kind == automations.EventFailed && s.islandQuiets() {
+			continue // the island has it
+		}
 		if n := mygo.NewNotification(mygo.NotificationOptions{
 			ID:     automationNotificationID(ev.Name),
 			Group:  automationNotificationGroup,

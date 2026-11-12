@@ -67,14 +67,36 @@ func (s *Shell) settingsNotifications(c *ui.Context) {
 		FontSize(Typography().Caption).TextColor(t.TextMuted)
 
 	if runtime.GOOS == "darwin" {
-		settingsGroup(c, "On this Mac",
-			row("Show alerts in the notch", "An Agent that needs you, finished work, a Feedback question or a failed Automation grows out of the notch for a few seconds; rest the pointer on the notch to open the list of every Agent and Feedback question. Off by default.", func() {
-				if v, changed := settingSwitch(c, "Show alerts in the notch", s.settings.Notifications.Island); changed {
-					s.applySettings(func(cur *settings.Settings) error { cur.Notifications.Island = v; return nil })
+		n := s.settings.Notifications
+		// islandOption is one switch under the notch island's: a field of the
+		// notification settings, applied and then followed by the island.
+		islandOption := func(label, desc string, on bool, set func(*settings.NotificationSettings, bool)) settingsRow {
+			return row(label, desc, func() {
+				if v, changed := settingSwitch(c, label, on); changed {
+					s.applySettings(func(cur *settings.Settings) error { set(&cur.Notifications, v); return nil })
 					s.islandSync()
 				}
-			}),
-		)
+			})
+		}
+		rows := []settingsRow{
+			islandOption("Show alerts in the notch", "An Agent that needs you, finished work, a Feedback question or a failed Automation grows out of the notch for a few seconds; rest the pointer on the notch to open the list of every Agent and Feedback question. Off by default.",
+				n.Island, func(cur *settings.NotificationSettings, v bool) { cur.Island = v }),
+		}
+		if n.Island {
+			rows = append(rows,
+				islandOption("Show activity beside the notch", "A small status on each side of the notch while Agents work or wait: how many work, how many wait for you. It can cover menu bar items next to the notch.",
+					n.IslandWings, func(cur *settings.NotificationSettings, v bool) { cur.IslandWings = v }))
+			if _, _, notch := islandNotchSize(); !notch {
+				rows = append(rows, islandOption("Keep it showing without a notch", "On a display without a notch the island hangs from the top edge. When off, it appears for alerts, or when the pointer rests at the top centre.",
+					n.IslandVirtual, func(cur *settings.NotificationSettings, v bool) { cur.IslandVirtual = v }))
+			}
+			rows = append(rows,
+				islandOption("Silence system banners while the island is on", "What the island shows stays out of Notification Center. Your phone and webhook channels are not affected. Off by default, so nothing is missed.",
+					n.IslandQuiet, func(cur *settings.NotificationSettings, v bool) { cur.IslandQuiet = v }),
+				islandOption("Show the island in screen sharing", "By default the island is hidden from screenshots, recordings and screen sharing, because it can show the words of a question.",
+					n.IslandVisibleInShares, func(cur *settings.NotificationSettings, v bool) { cur.IslandVisibleInShares = v }))
+		}
+		settingsGroup(c, "On this Mac", rows...)
 	}
 
 	channels := s.settings.Notifications.Channels

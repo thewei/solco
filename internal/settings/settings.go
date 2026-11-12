@@ -51,6 +51,14 @@ type NotificationSettings struct {
 	// Island shows alerts (an Agent that needs you, a finished run, a Feedback question, a failed Automation)
 	// in a panel that grows out of the notch, above the menu bar. Off by default (2026-11-12 decision).
 	Island bool `json:"island,omitempty"`
+	// The island's own options (all off by default, and only read while Island is on): a status on each side of
+	// the notch at rest; the island hanging from the top edge of a display without a notch; system banners
+	// kept quiet for what the island shows; the island visible in screen sharing and recordings (the default
+	// hides it: NSWindow.sharingType = none).
+	IslandWings           bool `json:"island_wings,omitempty"`
+	IslandVirtual         bool `json:"island_virtual,omitempty"`
+	IslandQuiet           bool `json:"island_quiet,omitempty"`
+	IslandVisibleInShares bool `json:"island_visible_in_shares,omitempty"`
 }
 
 // NotificationChannel is one webhook: only its identity and switch are kept here (URL and token: secretstore,

@@ -2,8 +2,8 @@ package nativeui
 
 /**
  * [INPUT]: island_model.go（islandToasts）、island_roster.go（名册模型）、island_darwin.go 的原生缝、Shell.BuildStatusCenterSnapshot / feedback 线程行（名册的事实）、Shell.routeAgentNotification（点「Open」走与系统横幅点击同一条路由）、feedback.Client（行内作答）、settings.Notifications.Island、designRoles
- * [OUTPUT]: 对外提供 islandHost、Shell.islandNotify（三个通知出口各调用一次）、Shell.islandOff（设置里关掉开关）、Shell.islandSync（开关/启动时按设置装上或撤掉指针监视）、Shell.islandRefresh（状态变了让展开的名册重画）
- * [POS]: 刘海岛 P1+P2（2026-11-12 决策，方向 C）：开关打开后，需要你的 Agent / 完成待 review / Feedback 提问 / 自动化失败从刘海长出一条提示，7 秒后收回；指针在刘海（或提示）上停 300 ms 就展开名册（Needs you / Working / Idle，与菜单栏面板同一份快照），离开 300 ms 收回；Feedback 提问若是一个短单选就在行内点选项作答，其余行点 Open 去 Solco 里对应处（Agent 的 Allow/Deny 仍在 Chat 里答）。岛不拥有状态、不碰 Herdr；窗口只在第一次需要时才建，指针只在壳外时窗口对鼠标透明，默认关时一行代码都不跑
+ * [OUTPUT]: 对外提供 islandHost、Shell.islandNotify（三个通知出口各调用一次）、Shell.islandOff（设置里关掉开关）、Shell.islandSync（开关/启动时按设置装上或撤掉指针监视）、Shell.islandRefresh（状态变了让展开的名册和翅膀重画）、Shell.islandQuiets（岛在场时系统横幅静默）
+ * [POS]: 刘海岛 P1–P3（2026-11-12 决策，方向 C）：开关打开后，需要你的 Agent / 完成待 review / Feedback 提问 / 自动化失败从刘海长出一条提示，7 秒后收回；指针在刘海（或提示）上停 300 ms 就展开名册（Needs you / Working / Idle，与菜单栏面板同一份快照），离开 300 ms 收回；Feedback 提问若是一个短单选就在行内点选项作答，其余行点 Open 去 Solco 里对应处（Agent 的 Allow/Deny 仍在 Chat 里答）。P3：翅膀（刘海两侧的静态状态：工作中数 / 等你的数，默认关）、无刘海屏的常驻小岛、横幅静默开关、共享/录屏时对岛隐藏（`SetContentProtection`，默认隐藏）。岛不拥有状态、不碰 Herdr；窗口只在第一次需要时才建（翅膀或常驻开着时随开关建好），指针只在壳外时窗口对鼠标透明，默认关时一行代码都不跑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -31,6 +31,7 @@ const (
 	islandHideLag = 600 * time.Millisecond
 	islandRestFor = 300 * time.Millisecond // the pointer rests this long to open the roster, and stays away this long to close it
 	islandSlack   = 6                      // points around the shape that still count as on it
+	islandWingW   = 56                     // each wing beside the notch
 )
 
 // islandHost shows one alert at a time in a window that grows out of the
@@ -110,16 +111,32 @@ func (s *Shell) islandSync() {
 		s.islandOff()
 		return
 	}
-	s.islandHostOf().watch(true)
+	h := s.islandHostOf()
+	h.watch(true)
+	h.syncRest()
+}
+
+// islandQuiets says whether the system banners for what the island shows stay
+// quiet: the island is on and working, and the user asked for it. The phone
+// and the webhook channels are never affected. Window lane.
+func (s *Shell) islandQuiets() bool {
+	n := s.settings.Notifications
+	return n.Island && n.IslandQuiet && s.island != nil && s.island.stopWatch != nil
 }
 
 // islandRefresh redraws an open roster after the facts under it moved (the
 // Agent directory, the Feedback thread rows). Window lane; nothing when the
 // island is shut.
 func (s *Shell) islandRefresh() {
-	if h := s.island; h != nil && h.roster && h.win != nil {
+	h := s.island
+	if h == nil || h.win == nil {
+		return
+	}
+	if h.roster {
 		h.fetchAsks()
 		h.win.Invalidate()
+	} else if h.restOn() {
+		h.win.Invalidate() // the wings carry the counts
 	}
 }
 
@@ -131,6 +148,54 @@ func (h *islandHost) measure() {
 		h.w0, h.h0, h.notch = float32(w), float32(hh), true
 	} else if hh := islandMenuBarHeight(); hh > 0 {
 		h.h0 = float32(hh)
+	}
+}
+
+// wingsOn says whether a status shows on each side of the notch at rest: the
+// switch is on and there is a notch to flank (or the user keeps the island
+// showing on a display without one).
+func (h *islandHost) wingsOn() bool {
+	n := h.s.settings.Notifications
+	return n.Island && n.IslandWings && (h.notch || n.IslandVirtual)
+}
+
+// restOn says whether the island is on screen at rest: wings, or a small island
+// hanging from the top edge of a display that has no notch.
+func (h *islandHost) restOn() bool {
+	n := h.s.settings.Notifications
+	return h.wingsOn() || (n.Island && n.IslandVirtual && !h.notch)
+}
+
+// restSize is the shape's size at rest.
+func (h *islandHost) restSize() (w, hh float32) {
+	switch {
+	case h.wingsOn():
+		return h.w0 + 2*islandWingW, h.h0
+	case h.restOn():
+		return h.w0, h.h0
+	case h.notch:
+		return h.w0, h.h0 // the housing itself: nothing to see
+	}
+	return h.w0, 0
+}
+
+// syncRest shows or hides the window for the rest state after a setting or
+// the display changed, and keeps the sharing protection in step.
+func (h *islandHost) syncRest() {
+	if h.win != nil {
+		h.win.SetContentProtection(!h.s.settings.Notifications.IslandVisibleInShares)
+	}
+	if h.restOn() {
+		if win := h.ensureWindow(); win != nil {
+			win.ShowInactive()
+			h.pin()
+			win.Invalidate()
+		}
+		return
+	}
+	if !h.open && h.win != nil {
+		h.win.Invalidate()
+		h.win.Hide()
 	}
 }
 
@@ -186,7 +251,7 @@ func (h *islandHost) close() {
 	}
 	time.AfterFunc(islandHideLag, func() {
 		mygo.RunOnMain(func() {
-			if h.gen == g && !h.open && h.win != nil {
+			if h.gen == g && !h.open && h.win != nil && !h.restOn() {
 				h.win.Hide()
 			}
 		})
@@ -243,6 +308,9 @@ func (h *islandHost) pointerInside() bool {
 // without one, at the very top of the screen near the centre.
 func (h *islandHost) inHotZone(x, y float32) bool {
 	cx := h.screenCentreX()
+	if w, hh := h.restSize(); h.restOn() {
+		return x >= cx-w/2-islandSlack && x <= cx+w/2+islandSlack && y <= hh
+	}
 	if h.notch {
 		return x >= cx-h.w0/2-islandSlack && x <= cx+h.w0/2+islandSlack && y <= h.h0
 	}
@@ -491,13 +559,15 @@ func (h *islandHost) ensureWindow() *mygo.Window {
 	})
 	win.OnClosed(func() { h.win, h.passing = nil, false }) // Escape and the like close a panel: the next show builds a new one
 	islandRaise(win.NativeHandle())
-	win.SetIgnoreMouseEvents(true) // click-through until the pointer is on the shape
+	win.SetContentProtection(!h.s.settings.Notifications.IslandVisibleInShares) // out of screenshots, recordings and shares unless the user said otherwise
+	win.SetIgnoreMouseEvents(true)                                              // click-through until the pointer is on the shape
 	h.passing = true
 	mygo.Screen.OnDisplaysChanged(func() {
 		h.measure()
-		if h.open {
+		if h.open || h.restOn() {
 			h.pin()
 		}
+		h.syncRest()
 	})
 	h.win = win
 	return win
@@ -553,7 +623,8 @@ func (h *islandHost) view(c *ui.Context) {
 	white := ui.RGB(255, 255, 255)
 	black := ui.RGB(0, 0, 0)
 
-	targetW, targetH, opened := h.w0, h.h0, float32(0)
+	targetW, targetH := h.restSize()
+	opened := float32(0)
 	spring := ui.Animation{Spring: ui.SpringOptions{Duration: motionIsland, Bounce: 0.12}}
 	var roster islandRoster
 	if h.open {
@@ -585,6 +656,9 @@ func (h *islandHost) view(c *ui.Context) {
 			body := ui.Box(c).Absolute().Top(0).Left(cx-w/2).Size(w, hh).Radius(0, 0, foot, foot).Clip()
 			body.Children(func() { h.rosterView(c, roster, max(0, grown*1.4-0.4)) })
 			return
+		}
+		if h.wingsOn() && grown < 0.5 {
+			h.wingsView(c, cx, w, hh, 1-grown*2)
 		}
 		alert, on := h.toasts.Showing()
 		if !on || grown < 0.05 {
@@ -780,4 +854,41 @@ func (h *islandHost) rosterRow(c *ui.Context, row islandRow, white, muted ui.Col
 			}
 		}
 	})
+}
+
+// wingsView is the rest state's two small statuses, one each side of the notch:
+// the Agents that work (an accent dot and their number) and what waits for the
+// user (the colour of the most urgent kind and the bell's own number). A quiet
+// side shows a dim dot. Static: nothing animates at rest.
+func (h *islandHost) wingsView(c *ui.Context, cx, w, hh, opacity float32) {
+	roles := designRoles(true)
+	white := ui.RGB(255, 255, 255)
+	snap := h.s.BuildStatusCenterSnapshot()
+	waiting := h.s.waitingTotal()
+	tone := islandReview
+	switch {
+	case snap.NeedsAttention > 0 || snap.Interactions > 0:
+		tone = islandAttention
+	case h.s.feedbackWaiting() > 0:
+		tone = islandFeedback
+	}
+	side := func(left float32, dot ui.Color, n int) {
+		ui.Row(c).Absolute().Top(0).Left(left).Size(islandWingW, hh).Center().Gap(5).Opacity(opacity).Children(func() {
+			ui.Box(c).Size(7, 7).Radius(3.5).Background(dot).Shrink(0)
+			if n > 0 {
+				ui.Text(c, strconv.Itoa(n)).FontSize(12).Bold().TextColor(white)
+			}
+		})
+	}
+	l := cx - w/2
+	workDot := white.Alpha(0.28)
+	if snap.Working > 0 {
+		workDot = roles.Accent
+	}
+	waitDot := white.Alpha(0.28)
+	if waiting > 0 {
+		waitDot = islandTone(tone)
+	}
+	side(l, workDot, snap.Working)
+	side(cx+w/2-islandWingW, waitDot, waiting)
 }

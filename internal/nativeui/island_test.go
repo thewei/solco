@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: island.go、Settings → Notifications 的开关、MyGo Tester
- * [OUTPUT]: 悬停 300 ms 展开 / 离开 300 ms 收回 / 经过不展开 / 提示上停留展开名册 / 关开关即停 / 名册行内作答（成功、失败）/ 名册 Open 走通知路由 / 空名册，以及：默认关（提示无处可去、不建任何东西）、开关持久化、提示上岛 / 指针停留不收 / 到时收回 / Open 走系统横幅同一条路由 / ✕ 忽略 / 关开关立刻清空 的验收
+ * [OUTPUT]: 翅膀/常驻的开关矩阵、翅膀上的计数、翅膀上悬停展开、横幅静默条件、设置页的四个选项行，以及：悬停 300 ms 展开 / 离开 300 ms 收回 / 经过不展开 / 提示上停留展开名册 / 关开关即停 / 名册行内作答（成功、失败）/ 名册 Open 走通知路由 / 空名册，以及：默认关（提示无处可去、不建任何东西）、开关持久化、提示上岛 / 指针停留不收 / 到时收回 / Open 走系统横幅同一条路由 / ✕ 忽略 / 关开关立刻清空 的验收
  * [POS]: 刘海岛 P1+P2 的无头测试：不建真窗口（s.win == nil），计时由测试直接调用 expire / poll（指针与时钟由 cursor / now 缝注入）；真窗口的层级、点击穿透、全屏之上由 spike 与沙箱实机核对
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -296,5 +296,123 @@ func TestIslandEmptyRosterSaysSo(t *testing.T) {
 	}
 	if want := h.h0 + islandPadTop + islandEmptyH + islandFootH; h.rosterH != want {
 		t.Fatalf("height = %v, want %v", h.rosterH, want)
+	}
+}
+
+func TestIslandRestStateFollowsWingsAndVirtual(t *testing.T) {
+	cases := []struct {
+		name                  string
+		notch, wings, virtual bool
+		wingsOn, restOn       bool
+	}{
+		{"notch, nothing asked", true, false, false, false, false},
+		{"notch with wings", true, true, false, true, true},
+		{"no notch, wings alone", false, true, false, false, false},
+		{"no notch, kept showing", false, false, true, false, true},
+		{"no notch, kept showing with wings", false, true, true, true, true},
+	}
+	for _, tc := range cases {
+		h, _, _, _ := islandNotched(t)
+		h.notch = tc.notch
+		h.s.settings.Notifications.IslandWings = tc.wings
+		h.s.settings.Notifications.IslandVirtual = tc.virtual
+		if h.wingsOn() != tc.wingsOn || h.restOn() != tc.restOn {
+			t.Errorf("%s: wingsOn=%v restOn=%v", tc.name, h.wingsOn(), h.restOn())
+		}
+	}
+	h, _, _, _ := islandNotched(t)
+	h.s.settings.Notifications.Island = false
+	h.s.settings.Notifications.IslandWings = true
+	if h.restOn() {
+		t.Error("the rest state shows while the island is off")
+	}
+}
+
+func TestIslandWingsCarryTheCountsAndOpenTheRosterOnHover(t *testing.T) {
+	h, x, y, now := islandNotched(t)
+	h.s.settings.Notifications.IslandWings = true
+	h.s.feedback.threads = []feedback.ThreadSummary{{ID: "th_1", Waiting: 1}, {ID: "th_2", Waiting: 1}}
+
+	if w, hh := h.restSize(); w != 200+2*islandWingW || hh != 32 {
+		t.Fatalf("rest size = %v×%v", w, hh)
+	}
+	tester := ui.NewTester(h.view, islandWinW, int(h.winH()))
+	if !tester.HasText("2") {
+		t.Fatalf("the right wing lacks the waiting number: %q", tester.Texts())
+	}
+
+	*x, *y = 100+islandWingW/2, 10 // on the right wing, outside the housing
+	h.poll()
+	*now = now.Add(300 * time.Millisecond)
+	h.poll()
+	if !h.roster {
+		t.Fatal("resting on a wing did not open the roster")
+	}
+
+	h2, x2, y2, now2 := islandNotched(t)
+	*x2, *y2 = 100+islandWingW/2, 10 // the same spot with the wings off is just menu bar
+	h2.poll()
+	*now2 = now2.Add(300 * time.Millisecond)
+	h2.poll()
+	if h2.roster {
+		t.Fatal("the area beside the notch opened the roster without wings")
+	}
+}
+
+func TestIslandQuietsBannersOnlyWhenOnWorkingAndAsked(t *testing.T) {
+	h, _, _, _ := islandNotched(t)
+	s := h.s
+	if s.islandQuiets() {
+		t.Fatal("quiet without being asked")
+	}
+	s.settings.Notifications.IslandQuiet = true
+	if s.islandQuiets() {
+		t.Fatal("banners silenced while the island has no pointer watch (it could not show them)")
+	}
+	h.stopWatch = func() {}
+	if !s.islandQuiets() {
+		t.Fatal("asked, on and watching: banners should be quiet")
+	}
+	s.settings.Notifications.Island = false
+	if s.islandQuiets() {
+		t.Fatal("banners silenced while the island is off")
+	}
+}
+
+func TestIslandSettingsShowItsOptionsOnlyWhileOn(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the notch island is macOS only")
+	}
+	s := NewShell()
+	s.loading = false
+	s.router.Replace("/settings/notifications")
+	tester := ui.NewTester(s.View, 1200, 1400)
+	for _, k := range []string{"Show activity beside the notch", "Silence system banners while the island is on", "Show the island in screen sharing"} {
+		if tester.HasText(k) {
+			t.Fatalf("%q shows while the island is off", k)
+		}
+	}
+	if err := tester.Click("Show alerts in the notch"); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"Show activity beside the notch", "Silence system banners while the island is on", "Show the island in screen sharing"} {
+		if !tester.HasText(k) {
+			t.Fatalf("%q is missing once the island is on: %q", k, tester.Texts())
+		}
+	}
+	for label, get := range map[string]func() bool{
+		"Show activity beside the notch":                func() bool { return s.settings.Notifications.IslandWings },
+		"Silence system banners while the island is on": func() bool { return s.settings.Notifications.IslandQuiet },
+		"Show the island in screen sharing":             func() bool { return s.settings.Notifications.IslandVisibleInShares },
+	} {
+		if get() {
+			t.Fatalf("%q is on by default", label)
+		}
+		if err := tester.Click(label); err != nil {
+			t.Fatal(err)
+		}
+		if !get() {
+			t.Fatalf("clicking %q did not turn it on", label)
+		}
 	}
 }

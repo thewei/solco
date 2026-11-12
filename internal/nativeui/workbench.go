@@ -225,7 +225,7 @@ func (s *Shell) notifyAgentTransition(runtimeAgent herdr.Agent, transition agent
 	if s.win == nil {
 		return
 	}
-	if !mygo.NotificationsSupported() {
+	if !mygo.NotificationsSupported() || s.islandQuiets() {
 		return
 	}
 	showAgentNotification(s.activeInstance, runtimeAgent, notification)
