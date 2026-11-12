@@ -4,6 +4,7 @@ import { feedback, type Answer, type Ask, type ContextRef, type FeedbackView, ty
 import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
 import { QuickReplies } from "./QuickReplies";
+import { takesKeyboard } from "./focus";
 import { ContextPicker, refIcon, type PickKind } from "./ContextPicker";
 import { Thumbs } from "./Thumbs";
 import { TidyDialog } from "./Tidy";
@@ -125,14 +126,29 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-/** A text area that grows with what is typed up to its CSS max-height, then scrolls inside. */
+/** The nearest ancestor that scrolls, or null. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const y = getComputedStyle(p).overflowY;
+    if ((y === "auto" || y === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
+}
+
+/**
+ * A text area that grows with what is typed up to its CSS max-height, then scrolls inside. Measuring collapses the
+ * box for a moment, which would pull the page's scroll position up with it: that position is put back.
+ */
 function AutoTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const sp = scrollParent(el);
+    const top = sp?.scrollTop ?? 0;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+    if (sp) sp.scrollTop = top;
   }, [props.value]);
   return <textarea ref={ref} {...props} />;
 }
@@ -882,14 +898,15 @@ function AnswerForm(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primary, ask.id, send]);
 
-  // A phone keyboard takes the lower half of the page a moment after the focus: bring the whole form (Send
-  // included) back above it, once the page has been resized.
+  // A phone keyboard takes the lower half of the page a moment after the focus: bring the field being typed in
+  // back above it, once the page has been resized (never the form's end: a tall form would jump past the field).
   const formRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!isPhone) return;
     const settle = () => {
       const form = formRef.current;
-      if (form && form.contains(document.activeElement)) form.scrollIntoView({ block: "end", behavior: "smooth" });
+      const field = document.activeElement;
+      if (form && field && form.contains(field) && takesKeyboard(field)) field.scrollIntoView({ block: "center", behavior: "smooth" });
     };
     window.addEventListener("resize", settle);
     return () => window.removeEventListener("resize", settle);
@@ -904,7 +921,7 @@ function AnswerForm(props: {
         : "Goes straight back to the agent.";
 
   return (
-    <div className="fb-form" data-form={ask.id} ref={formRef} onFocus={() => isPhone && window.setTimeout(() => formRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }), 350)}>
+    <div className="fb-form" data-form={ask.id} ref={formRef} onFocus={(e) => { const field = e.target; if (isPhone && takesKeyboard(field)) window.setTimeout(() => field.scrollIntoView({ block: "center", behavior: "smooth" }), 350); }}>
       <div className="fb-nh">
         <span className="fb-glyph sm">{glyphOf(thread.client)}</span>
         <span>
@@ -934,7 +951,7 @@ function AnswerForm(props: {
                   </button>
                 ))}
                 {q.allowCustom && (
-                  <input
+                  <AutoTextarea
                     className="fb-other"
                     aria-label={`${q.text} (something else)`}
                     placeholder="Something else…"

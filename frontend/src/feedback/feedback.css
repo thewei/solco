@@ -762,7 +762,9 @@
   margin-top: 8px;
 }
 
-.fb-other {
+/* "Something else…" is a text area like the free-text answer: it grows with the words, from two lines' height. */
+.fb textarea.fb-other {
+  min-height: 60px;
   margin-top: 4px;
 }
 
@@ -1427,6 +1429,9 @@ html[data-host="phone"] .fb-opt kbd {
 }
 html[data-host="phone"] .fb textarea {
   max-height: 40vh;
+}
+html[data-host="phone"] .fb textarea.fb-other {
+  min-height: 70px;
 }
 html[data-host="phone"] .fb-copy {
   opacity: 1;
