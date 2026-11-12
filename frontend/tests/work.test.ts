@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DRAFT_KEY, forgetClosed, isQueued, KEEP_MS, loadPersisted, savePersisted, QUEUED_MARK } from "../src/feedback/work";
+import { DETAILS_KEY, DRAFT_KEY, draftThreads, forgetClosed, loadDetailsOpen, saveDetailsOpen, isQueued, KEEP_MS, loadPersisted, savePersisted, QUEUED_MARK } from "../src/feedback/work";
 
 function memory(initial?: string) {
   const data = new Map<string, string>(initial === undefined ? [] : [[DRAFT_KEY, initial]]);
@@ -74,4 +74,36 @@ test("the work of answered and ended Asks is forgotten, an expired one keeps its
   expect(changed).toBe(true);
   expect(Object.keys(p.drafts).sort()).toEqual(["c", "d"]);
   expect(forgetClosed(p, [{ id: "a", state: "answered" }])).toBe(false);
+});
+
+test("the list can tell which threads hold a draft, and forgets it with the Ask", () => {
+  const store = memory();
+  const p = loadPersisted(store, 0);
+  p.drafts.a1 = { q: { selected: [], custom: "typed" } };
+  p.threads.a1 = "t1";
+  p.drafts.a2 = { q: { selected: [], custom: "" } }; // empty: not a draft
+  p.threads.a2 = "t2";
+  p.refs.a3 = [{ kind: "file", name: "x" }];
+  p.threads.a3 = "t3";
+  p.seen.a1 = p.seen.a3 = 0;
+  expect([...draftThreads(p)].sort()).toEqual(["t1", "t3"]);
+  savePersisted(store, p);
+  const back = loadPersisted(store, 10);
+  expect(back.threads).toEqual({ a1: "t1", a3: "t3" });
+  forgetClosed(back, [{ id: "a1", state: "answered" }]);
+  expect([...draftThreads(back)]).toEqual(["t3"]);
+});
+
+test("the header fold survives a reload; a broken store reads as folded", () => {
+  const data = new Map<string, string>();
+  const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+  expect(loadDetailsOpen(store)).toBe(false);
+  saveDetailsOpen(store, true);
+  expect(data.get(DETAILS_KEY)).toBe("1");
+  expect(loadDetailsOpen(store)).toBe(true);
+  saveDetailsOpen(store, false);
+  expect(loadDetailsOpen(store)).toBe(false);
+  expect(loadDetailsOpen({ getItem: () => { throw new Error("denied"); } })).toBe(false);
+  expect(() => saveDetailsOpen({ setItem: () => { throw new Error("full"); } }, true)).not.toThrow();
+  expect(loadDetailsOpen(undefined)).toBe(false);
 });

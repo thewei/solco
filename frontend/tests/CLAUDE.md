@@ -2,6 +2,7 @@
 > L2 | 父级: ../CLAUDE.md
 
 成员清单
+- `compose.test.ts`：引用块与追加、数字键目标题、长消息判定
 - `work.test.ts`：Feedback 回答表单的持久化工作区（往返、三天丢弃、坏数据不抛、queued 标记、已答 Ask 的草稿清理）；`focus.test.ts`：只有文本框会唤起键盘
 - `chat-delta.test.ts`：复用 Chat View 自身的纯 delta reducer，验证有序尾 Patch、不修改前态、缺帧/跨会话拒绝；只由 Bun 跑，不进入手机或桌面 WebView 打包
 

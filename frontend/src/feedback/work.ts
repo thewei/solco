@@ -13,6 +13,8 @@ export type Ref = { kind: string; name: string };
 export interface Persisted<R extends Ref = Ref> {
   drafts: Drafts;
   refs: Record<string, R[]>;
+  /** askID → the thread it belongs to (the list marks threads that hold a draft). */
+  threads: Record<string, string>;
   /** askID → when the form last changed (ms): what pruning goes by. */
   seen: Record<string, number>;
 }
@@ -27,7 +29,7 @@ const isDraft = (v: unknown): v is Draft => isObj(v) && Array.isArray(v.selected
 const isRef = (v: unknown): v is Ref => isObj(v) && typeof v.kind === "string" && typeof v.name === "string";
 
 export function emptyPersisted<R extends Ref = Ref>(): Persisted<R> {
-  return { drafts: {}, refs: {}, seen: {} };
+  return { drafts: {}, refs: {}, threads: {}, seen: {} };
 }
 
 /** Reads the saved work; anything malformed or older than KEEP_MS is left out (never throws). */
@@ -51,6 +53,8 @@ export function loadPersisted<R extends Ref = Ref>(store: Store | undefined, now
     }
     const refs = isObj(raw.refs) ? raw.refs[ask] : undefined;
     if (Array.isArray(refs)) out.refs[ask] = refs.filter(isRef) as R[];
+    const thread = isObj(raw.threads) ? raw.threads[ask] : undefined;
+    if (typeof thread === "string") out.threads[ask] = thread;
   }
   return out;
 }
@@ -65,9 +69,13 @@ export function savePersisted<R extends Ref>(store: Store | undefined, p: Persis
   const refs: Record<string, R[]> = {};
   for (const [ask, list] of Object.entries(p.refs)) if (list.length > 0) refs[ask] = list;
   const seen: Record<string, number> = {};
-  for (const ask of new Set([...Object.keys(drafts), ...Object.keys(refs)])) seen[ask] = p.seen[ask] ?? Date.now();
+  const threads: Record<string, string> = {};
+  for (const ask of new Set([...Object.keys(drafts), ...Object.keys(refs)])) {
+    seen[ask] = p.seen[ask] ?? Date.now();
+    if (p.threads[ask]) threads[ask] = p.threads[ask];
+  }
   try {
-    store?.setItem(DRAFT_KEY, JSON.stringify({ drafts, refs, seen }));
+    store?.setItem(DRAFT_KEY, JSON.stringify({ drafts, refs, threads, seen }));
   } catch {
     /* storage unavailable or full: the work stays in page memory */
   }
@@ -82,6 +90,7 @@ export function forgetClosed<R extends Ref>(p: Persisted<R>, asks: { id: string;
     delete p.drafts[a.id];
     delete p.refs[a.id];
     delete p.seen[a.id];
+    delete p.threads[a.id];
   }
   return changed;
 }
@@ -91,4 +100,35 @@ export const QUEUED_MARK = "queued: ";
 
 export function isQueued(e: unknown): boolean {
   return (e instanceof Error ? e.message : String(e)).startsWith(QUEUED_MARK);
+}
+
+/** The threads that hold an unsent draft or picked context (the list marks them). */
+export function draftThreads<R extends Ref>(p: Persisted<R>): Set<string> {
+  const out = new Set<string>();
+  for (const ask of new Set([...Object.keys(p.drafts), ...Object.keys(p.refs)])) {
+    const thread = p.threads[ask];
+    if (!thread) continue;
+    const typed = Object.values(p.drafts[ask] ?? {}).some((d) => d.selected.length > 0 || d.custom.trim() !== "");
+    if (typed || (p.refs[ask]?.length ?? 0) > 0) out.add(thread);
+  }
+  return out;
+}
+
+export const DETAILS_KEY = "solco.feedback.details";
+
+/** Whether the phone's thread header was left unfolded (a person's choice, kept across threads and launches). */
+export function loadDetailsOpen(store: Pick<Storage, "getItem"> | undefined): boolean {
+  try {
+    return store?.getItem(DETAILS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveDetailsOpen(store: Pick<Storage, "setItem"> | undefined, open: boolean): void {
+  try {
+    store?.setItem(DETAILS_KEY, open ? "1" : "0");
+  } catch {
+    /* storage unavailable: the choice lasts until the page reloads */
+  }
 }

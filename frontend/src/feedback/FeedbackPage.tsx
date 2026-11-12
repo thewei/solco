@@ -5,7 +5,8 @@ import { Markdown } from "../turn";
 import { ConnectDialog } from "./Connect";
 import { QuickReplies } from "./QuickReplies";
 import { takesKeyboard } from "./focus";
-import { forgetClosed, isQueued, loadPersisted, savePersisted, type Draft, type Drafts } from "./work";
+import { appendQuote, choiceFor, isLongText } from "./compose";
+import { draftThreads, forgetClosed, isQueued, loadDetailsOpen, loadPersisted, savePersisted, saveDetailsOpen, type Draft, type Drafts } from "./work";
 import { ContextPicker, refIcon, type PickKind } from "./ContextPicker";
 import { Thumbs } from "./Thumbs";
 import { TidyDialog } from "./Tidy";
@@ -375,7 +376,7 @@ export function FeedbackPage() {
                 : "No threads yet."}
           </p>
         )}
-        <ThreadRows threads={visible} selected={narrow ? "" : selected} onOpen={open} picking={picking} picked={picked} onPick={togglePick} />
+        <ThreadRows threads={visible} selected={narrow ? "" : selected} onOpen={open} picking={picking} picked={picked} onPick={togglePick} drafted={draftThreads(work)} />
       </div>
       {picking && (
         <div className="fb-foot fb-picking">
@@ -540,8 +541,10 @@ function ThreadRows(props: {
   picking: boolean;
   picked: string[];
   onPick: (id: string) => void;
+  /** Threads that hold an unsent draft. */
+  drafted: Set<string>;
 }) {
-  const { threads, selected, onOpen, picking, picked, onPick } = props;
+  const { threads, selected, onOpen, picking, picked, onPick, drafted } = props;
   let day = "";
   return (
     <>
@@ -576,6 +579,7 @@ function ThreadRows(props: {
                     {t.project}
                     {t.branch ? `, ${t.branch}` : ""}
                   </span>
+                  {drafted.has(t.id) && <span className="fb-draftmark">Draft</span>}
                   {t.waiting > 0 ? <span className="fb-dot" aria-label="waiting" /> : <span className="fb-n">{t.askCount === 1 ? "1 ask" : `${t.askCount} asks`}</span>}
                 </span>
               </span>
@@ -606,6 +610,21 @@ function ThreadView(props: {
   const [away, setAway] = useState(false);
   const [delArmed, armDelete] = useArmed();
   const lastPending = [...asks].reverse().find((a) => a.state === "pending")?.id ?? "";
+  const landed = useRef<Set<string>>(new Set());
+  const [newAsk, setNewAsk] = useState("");
+  const [replyBelow, setReplyBelow] = useState(false);
+  const [quote, setQuote] = useState<{ ask: string; text: string } | null>(null);
+  // What the pills and the jump button need to know: how far the foot is, whether the waiting form / a new question
+  // sits below the visible part. Run on scroll and after the timeline changes.
+  const measure = () => {
+    const el = scroller.current;
+    if (!el) return;
+    setAway(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
+    const bottom = el.getBoundingClientRect().bottom - 48;
+    const below = (node: Element | null) => !!node && node.getBoundingClientRect().top > bottom;
+    setReplyBelow(isPhone && !!lastPending && below(el.querySelector(`[data-form="${CSS.escape(lastPending)}"]`)));
+    setNewAsk((id) => (id && below(el.querySelector(`[data-ask="${CSS.escape(id)}"]`)) ? id : ""));
+  };
 
   // Open on the newest message, at its first line (or on the notification's Ask), once per thread / landing. Never at the
   // answer form — the person reads before replying; the history above is a scroll up, "Back to latest" the way down.
@@ -616,20 +635,48 @@ function ThreadView(props: {
     const target = (flash?.ask ? el.querySelector<HTMLElement>(`[data-ask="${CSS.escape(flash.ask)}"]`) : null) ?? items[items.length - 1];
     if (target) target.scrollIntoView({ block: "start" });
     else el.scrollTop = 0;
+    landed.current = new Set(asks.map((a) => a.id));
+    setNewAsk("");
     // A scroll that did not move fires no event: say whether the answer sits below the fold.
-    setAway(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
+    measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.id, flash?.n]);
+
+  // A question that arrives while the thread is open never moves the page: a pill says it is there instead.
+  useEffect(() => {
+    const fresh = asks.filter((a) => a.state === "pending" && !landed.current.has(a.id));
+    asks.forEach((a) => landed.current.add(a.id));
+    if (fresh.length) setNewAsk(fresh[fresh.length - 1].id);
+    const frame = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asks.length, lastPending]);
+
+  // Selecting a passage of a waiting question offers to quote it into the reply.
+  useEffect(() => {
+    const onSelection = () => {
+      const sel = document.getSelection();
+      const text = sel && !sel.isCollapsed ? sel.toString().trim() : "";
+      const node = sel?.anchorNode;
+      const host = (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>(".fb-desc, .fb-qt");
+      const ask = host?.closest<HTMLElement>("[data-form]")?.dataset.form;
+      setQuote(text && ask && scroller.current?.contains(host!) ? { ask, text } : null);
+    };
+    document.addEventListener("selectionchange", onSelection);
+    return () => document.removeEventListener("selectionchange", onSelection);
+  }, []);
   // The phone folds the project / branch / client chips and the times into one tap, so the timeline keeps the height.
-  const [details, setDetails] = useState(false);
-  useEffect(() => setDetails(false), [thread.id]);
+  const [details, setDetails] = useState(() => loadDetailsOpen(typeof localStorage === "undefined" ? undefined : localStorage));
+  const toggleDetails = () =>
+    setDetails((d) => {
+      saveDetailsOpen(typeof localStorage === "undefined" ? undefined : localStorage, !d);
+      return !d;
+    });
   const showMeta = !isPhone || details;
 
   // "Back to latest": a long thread that was scrolled up by more than a screen.
-  const onScroll = () => {
-    const el = scroller.current;
-    if (el) setAway(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
-  };
+  const onScroll = measure;
+  const goTo = (selector: string) => scroller.current?.querySelector(selector)?.scrollIntoView({ block: "start", behavior: "smooth" });
   const toLatest = () => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
 
   const openProject = (target: "git" | "finder") => {
@@ -650,7 +697,7 @@ function ThreadView(props: {
           )}
           <div className="fb-title">{thread.title}</div>
           {isPhone && (
-            <button className={`fb-more${details ? " open" : ""}`} aria-label="Thread details" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
+            <button className={`fb-more${details ? " open" : ""}`} aria-label="Thread details" aria-expanded={details} onClick={toggleDetails}>
               <Icon name="down" size={14} />
             </button>
           )}
@@ -726,7 +773,35 @@ function ThreadView(props: {
           })}
         </div>
       </div>
-      {away && (
+      {(quote || newAsk || replyBelow) && (
+        <div className={`fb-pills${lastPending ? " up" : ""}`}>
+          {quote && (
+            <button
+              className="fb-pill"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("fb-quote", { detail: quote }));
+                document.getSelection()?.removeAllRanges();
+                setQuote(null);
+              }}
+            >
+              Quote in reply
+            </button>
+          )}
+          {newAsk ? (
+            <button className="fb-pill" onClick={() => { goTo(`[data-ask="${CSS.escape(newAsk)}"]`); setNewAsk(""); }}>
+              New question <Icon name="down" size={12} />
+            </button>
+          ) : (
+            replyBelow && (
+              <button className="fb-pill" onClick={() => goTo(`[data-form="${CSS.escape(lastPending)}"]`)}>
+                Reply <Icon name="down" size={12} />
+              </button>
+            )
+          )}
+        </div>
+      )}
+      {away && !newAsk && !replyBelow && (
         <button className={`fb-jump${lastPending ? " up" : ""}`} aria-label="Back to latest" onClick={toLatest}>
           <Icon name="down" size={14} />
         </button>
@@ -735,10 +810,28 @@ function ThreadView(props: {
   );
 }
 
+/** An Agent's message text; on the phone a long one folds to a few lines until "Show more". */
+function Desc({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = isPhone && isLongText(text);
+  return (
+    <div className={`fb-descwrap${long && !open ? " clamp" : ""}`}>
+      <div className="fb-desc">
+        <Markdown text={text} />
+      </div>
+      {long && (
+        <button className="fb-link" onClick={() => setOpen((o) => !o)}>
+          {open ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** The user's original request, pinned above the conversation (the Agent sends it with the thread's first ask). */
 function TaskCard({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  const long = text.length > 420 || text.split("\n").length > 8;
+  const long = isLongText(text);
   return (
     <div className="fb-it">
       <div className={`fb-task${long && !open ? " clamp" : ""}`}>
@@ -774,7 +867,7 @@ function AskItem(props: { ask: Ask; thread: Thread; online: boolean; primary: bo
         </span>
         <CopyButton text={askText(ask)} label="Copy message" />
       </div>
-      {ask.description && <div className="fb-desc"><Markdown text={ask.description} /></div>}
+      {ask.description && <Desc text={ask.description} />}
       {ask.state !== "pending" && ask.questions.map((q) => <div className="fb-qt" key={q.id}><Markdown text={q.text} /></div>)}
     </div>
   );
@@ -875,12 +968,14 @@ function AnswerForm(props: {
   const refs = (refDrafts[ask.id] ||= []);
   const queued = queuedAt[ask.id];
   const [sending, setSending] = useState(false);
+  const touched = useRef<string | null>(null); // the question last pointed at: where a number key picks
   const draft = (drafts[ask.id] ||= {});
   const get = (q: Question): Draft => (draft[q.id] ||= { selected: [], custom: "" });
   const ready = ask.questions.every((q) => !q.required || get(q).selected.length > 0 || get(q).custom.trim() !== "");
   const set = (fn: () => void) => {
     if (queuedAt[ask.id]) return; // a queued answer is frozen: "Edit" takes it back out first
     fn();
+    work.threads[ask.id] = thread.id;
     saveDrafts(ask.id);
     bump((n) => n + 1);
   };
@@ -944,7 +1039,7 @@ function AnswerForm(props: {
       if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = Number(e.key);
       if (!(n >= 1 && n <= 9)) return;
-      const q = ask.questions.find((x) => x.type !== "text" && (x.options?.length ?? 0) >= n);
+      const q = choiceFor(ask.questions, touched.current, n);
       if (q?.options) {
         e.preventDefault();
         pick(q, q.options[n - 1]);
@@ -977,6 +1072,27 @@ function AnswerForm(props: {
     if (q) formRef.current?.querySelector(`[data-q="${CSS.escape(q.id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   };
 
+  // A passage quoted from the Agent's message (the thread's "Quote in reply" pill) is added to the reply box.
+  const quoteInto = useRef<(text: string) => void>(() => {});
+  quoteInto.current = (text) => {
+    if (!replyTo || queued) return;
+    set(() => {
+      const d = get(replyTo);
+      d.custom = appendQuote(d.custom, text);
+      if (replyTo.type !== "multiple") d.selected = [];
+    });
+    formRef.current?.querySelector(`[data-q="${CSS.escape(replyTo.id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ ask: string; text: string }>).detail;
+      if (d.ask === ask.id) quoteInto.current(d.text);
+    };
+    window.addEventListener("fb-quote", on);
+    return () => window.removeEventListener("fb-quote", on);
+  }, [ask.id]);
+
+  const hasDraft = refs.length > 0 || ask.questions.some((q) => answered(q));
   const hint = queued
     ? "Queued: it goes out as soon as your Mac is reachable."
     : !online
@@ -998,12 +1114,12 @@ function AnswerForm(props: {
         </span>
         <CopyButton text={askText(ask)} label="Copy message" />
       </div>
-      {ask.description && <div className="fb-desc"><Markdown text={ask.description} /></div>}
+      {ask.description && <Desc text={ask.description} />}
       <fieldset className="fb-fields" disabled={!!queued}>
       {ask.questions.map((q) => {
         const d = get(q);
         return (
-          <div key={q.id} data-q={q.id}>
+          <div key={q.id} data-q={q.id} onPointerDownCapture={() => (touched.current = q.id)} onFocusCapture={() => (touched.current = q.id)}>
             <div className="fb-qt"><Markdown text={q.text} /></div>
             {q.type === "text" ? (
               <AutoTextarea
@@ -1093,7 +1209,7 @@ function AnswerForm(props: {
         />
       )}
       <div className="fb-send">
-        <span className="fb-hint">{hint}</span>
+        <span className="fb-hint">{hint}{hasDraft && !queued ? " Draft saved on this device." : ""}</span>
         {ask.questions.length > 1 &&
           (open.length > 0 ? (
             <button className="fb-prog" onClick={goOpen}>
