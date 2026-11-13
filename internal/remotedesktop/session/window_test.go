@@ -21,6 +21,7 @@ type winCap struct {
 	opened    []string
 	openID    string
 	openErr   error
+	raiseErr  error
 	unsupport bool
 }
 
@@ -44,6 +45,9 @@ func (c *winCap) RaiseWindow(_ context.Context, id string) error {
 	c.mu2.Lock()
 	defer c.mu2.Unlock()
 	c.raised = append(c.raised, id)
+	if c.raiseErr != nil {
+		return c.raiseErr
+	}
 	for i := range c.windows {
 		if c.windows[i].ID == id {
 			c.windows[i].OnScreen = true
@@ -273,6 +277,27 @@ func TestOffscreenWindowIsWatchedFirstAndActivatedOnRequest(t *testing.T) {
 	}
 	r.s.OnPointer(move(2, 0.5, 0.5))
 	waitFor(t, "move after activation", func() bool { return wc.in.count("move 490.0,360.0") == 1 })
+}
+
+// A window the helper cannot reach (another Space, hidden by its app) is brought back the way a Dock
+// click does: the app is opened again and the window it shows becomes the target.
+func TestActivateFallsBackToReopeningTheApp(t *testing.T) {
+	r, wc := newWinRig(t, protocol.ModeFullControl, true)
+	wc.raiseErr = protocol.Errf(protocol.CodeWindowNotFound, "")
+	r.s.OnLinkState(LinkConnected)
+	r.s.OnControl(ctl("target.select", "kind", "window", "id", "12"))
+	waitFor(t, "window capture", func() bool { return wc.startCount() == 1 })
+	r.s.OnControl(ctl("target.activate"))
+	waitFor(t, "recaptured on the reopened window", func() bool { return wc.startCount() == 2 })
+	wc.mu2.Lock()
+	opened := append([]string(nil), wc.opened...)
+	wc.mu2.Unlock()
+	if len(opened) != 1 || opened[0] != "com.apple.mail" {
+		t.Fatalf("reopened %v", opened)
+	}
+	if r.has("error:window_not_found") || r.has("error:permission_required") {
+		t.Fatal("the phone was told about the unreachable window")
+	}
 }
 
 func TestViewOnlyWatchesAWindowButNeverOpensOrRaises(t *testing.T) {

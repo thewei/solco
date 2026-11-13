@@ -215,7 +215,7 @@ func (s *Session) activateWindow() {
 		return
 	}
 	s.mu.Lock()
-	window, id := s.win.active(), s.win.info.ID
+	window, id, bundle := s.win.active(), s.win.info.ID, s.win.info.BundleID
 	s.mu.Unlock()
 	if !window {
 		s.sendError(protocol.CodeBadRequest, "target")
@@ -228,6 +228,10 @@ func (s *Session) activateWindow() {
 	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 	defer cancel()
 	if err := api.RaiseWindow(ctx, id); err != nil {
+		if bundle != "" && unreachableByRaise(err) {
+			s.reopenInstead(bundle)
+			return
+		}
 		s.sendError(protocol.CodeOf(err), "")
 		return
 	}
@@ -253,6 +257,24 @@ func (s *Session) activateWindow() {
 		}
 	}
 	s.sendError(protocol.CodeWindowOffscreen, "")
+}
+
+// unreachableByRaise: the helper could not find the window among its app's accessible windows (it sits
+// on another Space, or the app hid it instead of closing it), which it reports as window_not_found.
+func unreachableByRaise(err error) bool {
+	return protocol.CodeOf(err) == protocol.CodeWindowNotFound
+}
+
+// reopenInstead is what clicking the app's Dock icon does: the app is opened again and shows a window
+// (the hidden one comes back, or a new one opens), and that window becomes the target.
+func (s *Session) reopenInstead(bundleID string) {
+	s.openApp(bundleID)
+	s.mu.Lock()
+	stillHidden := s.win.active() && !s.win.info.OnScreen
+	s.mu.Unlock()
+	if stillHidden {
+		s.sendError(protocol.CodeWindowOffscreen, "")
+	}
 }
 
 // onWindowGeometry keeps the pointer mapping on the picture: the window moved, or a popup came or went.
