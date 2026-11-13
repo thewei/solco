@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -371,4 +372,30 @@ func TestSwitchingBackToADisplayLeavesWindowMode(t *testing.T) {
 	}
 	r.s.OnPointer(move(1, 0.5, 0.5))
 	waitFor(t, "display mapping", func() bool { return wc.in.count("move 720.0,450.0") == 1 })
+}
+
+func TestScrollInAWindowFirstPutsThePointerOnThatWindow(t *testing.T) {
+	r, wc := newWinRig(t, protocol.ModeFullControl, true)
+	r.s.OnLinkState(LinkConnected)
+	r.s.OnControl(ctl("target.select", "kind", "window", "id", "11"))
+	waitFor(t, "window capture", func() bool { return wc.startCount() == 1 })
+
+	r.s.OnControl(ctl("pointer.scroll", "dx", 0, "dy", 40))
+	waitFor(t, "scroll", func() bool { return r.cap.in.count("scroll 0,40") == 1 })
+	got := r.cap.in.snapshot()
+	if len(got) < 2 || got[len(got)-2] != "move 350.0,500.0" {
+		t.Fatalf("input = %v, want the pointer on the window's centre (350,500) before the wheel", got)
+	}
+	// the pointer is on the window now: a second scroll adds no move
+	r.s.OnControl(ctl("pointer.scroll", "dx", 0, "dy", 40))
+	waitFor(t, "second scroll", func() bool { return r.cap.in.count("scroll 0,40") == 2 })
+	moves := 0
+	for _, l := range r.cap.in.snapshot() {
+		if strings.HasPrefix(l, "move ") {
+			moves++
+		}
+	}
+	if moves != 1 {
+		t.Fatalf("%d moves for two scrolls, want 1: %v", moves, r.cap.in.snapshot())
+	}
 }

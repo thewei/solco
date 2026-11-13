@@ -152,6 +152,12 @@ func (s *Session) handleInput(msg any) {
 		s.mu.Unlock()
 		_ = in.PointerButton(m.Button, m.Down, x, y, count)
 	case *protocol.PointerScroll:
+		// A wheel event acts where the Mac's pointer is. In window mode that must be on the window the phone is looking
+		// at: before any move (or after a fit, a switch, or the window moving away from the pointer) the pointer goes to
+		// the window's centre first, otherwise the scroll lands on whatever else sits under the old position.
+		if x, y, ok := s.scrollAnchor(); ok {
+			_ = in.PointerMove(x, y)
+		}
 		_ = in.Scroll(mapper.ScrollPoints(m.DX), mapper.ScrollPoints(m.DY))
 	case *protocol.KeyEvent:
 		s.mu.Lock()
@@ -246,6 +252,23 @@ func (s *Session) pointerTarget(seq uint64, nx, ny float64, displayID string, bu
 	if seq > s.lastSeq {
 		s.lastSeq = seq
 	}
+	s.lastX, s.lastY, s.haveLast = x, y, true
+	return x, y, true
+}
+
+// scrollAnchor says where the pointer must be put before a scroll in window mode: the centre of the chosen window,
+// when the pointer was never placed on it (or has been left outside it and its popups). ok is false when it already is.
+func (s *Session) scrollAnchor() (x, y float64, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.win.active() || len(s.win.geom.Windows) == 0 {
+		return 0, 0, false
+	}
+	if s.haveLast && mapper.InAny(s.win.geom.Windows, s.lastX, s.lastY) {
+		return 0, 0, false
+	}
+	w := s.win.geom.Windows[0] // the chosen window comes first
+	x, y = w.X+w.Width/2, w.Y+w.Height/2
 	s.lastX, s.lastY, s.haveLast = x, y, true
 	return x, y, true
 }
