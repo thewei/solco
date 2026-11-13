@@ -198,6 +198,9 @@ func (s *Session) DeviceID() string { return s.cfg.Device.ID }
 // before the answer goes out. It starts no capture.
 func (s *Session) Prepare(ctx context.Context) (protocol.SessionState, error) {
 	displays, err := s.cap.Displays(ctx)
+	if err == nil && len(displays) == 0 {
+		displays, err = s.displaysAfterWake(ctx)
+	}
 	if err != nil {
 		return protocol.SessionState{}, err
 	}

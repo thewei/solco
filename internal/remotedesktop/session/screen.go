@@ -20,8 +20,10 @@ const (
 
 // Variables so tests can run the watch at a test pace.
 var (
-	lockPollEvery  = 2 * time.Second
-	unlockRetryGap = 6 * time.Second
+	lockPollEvery   = 2 * time.Second
+	unlockRetryGap  = 6 * time.Second
+	displayWakeWait = 4 * time.Second
+	displayWakePoll = 250 * time.Millisecond
 )
 
 func (s *Session) screen() (platform.Screen, bool) {
@@ -71,6 +73,29 @@ func (s *Session) wakeScreen() {
 	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
 	defer cancel()
 	_ = scr.Wake(ctx)
+}
+
+// displaysAfterWake is Prepare's answer to a Mac whose display is asleep: it lists no display at all, which would
+// end the session before the wake that follows the link coming up. A Control session wakes the display first and
+// asks again for a few seconds (the display needs a moment to come back); anything else keeps the empty list.
+func (s *Session) displaysAfterWake(ctx context.Context) ([]protocol.DisplayInfo, error) {
+	scr, ok := s.screen()
+	if !ok || s.cfg.Mode != protocol.ModeFullControl {
+		return nil, nil
+	}
+	_ = scr.Wake(ctx)
+	deadline := time.Now().Add(displayWakeWait)
+	for {
+		displays, err := s.cap.Displays(ctx)
+		if err != nil || len(displays) > 0 || time.Now().After(deadline) {
+			return displays, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(displayWakePoll):
+		}
+	}
 }
 
 // requestUnlock is the phone's "Unlock" button.
