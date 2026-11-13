@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thewei/solco/internal/remotedesktop/platform"
 	"github.com/thewei/solco/internal/remotedesktop/protocol"
 )
 
@@ -106,16 +107,26 @@ type fitRig struct {
 
 func newFitRig(t *testing.T, mode protocol.Mode) *fitRig {
 	t.Helper()
+	return newFitRigWith(t, mode, nil)
+}
+
+// newFitRigWith is newFitRig with the capturer the session sees wrapped (a test's own capability on top of fitCap).
+func newFitRigWith(t *testing.T, mode protocol.Mode, wrap func(*fitCap) platform.Capturer) *fitRig {
+	t.Helper()
 	wc := &winCap{fakeCap: newFakeCap(), windows: []protocol.WindowInfo{
 		{ID: "11", App: "Notes", BundleID: "com.apple.Notes", Title: "Groceries", X: 100, Y: 100, Width: 500, Height: 800, OnScreen: true},
 		{ID: "12", App: "Mail", BundleID: "com.apple.mail", Title: "Inbox", X: 40, Y: 60, Width: 900, Height: 600, OnScreen: true},
 	}, openID: "11"}
 	fc := &fitCap{winCap: wc}
+	var seen platform.Capturer = fc
+	if wrap != nil {
+		seen = wrap(fc)
+	}
 	fr := &fitRig{fc: fc}
 	fr.rig = &rig{t: t, cap: wc.fakeCap, link: &fakeLink{}, end: make(chan protocol.ErrorCode, 1)}
 	fr.s = New(Config{
 		ID: "s1", Device: protocol.DeviceInfo{ID: "d1", Name: "Phone"}, Mode: mode, Tier: protocol.TierStandard, Idle: true,
-		Capturer: fc, OnEnd: func(c protocol.ErrorCode) { fr.end <- c },
+		Capturer: seen, OnEnd: func(c protocol.ErrorCode) { fr.end <- c },
 		RestoreLater: func(id string, g time.Duration) {
 			fr.mu.Lock()
 			fr.laters = append(fr.laters, later{id, g})

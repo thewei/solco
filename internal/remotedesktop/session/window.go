@@ -23,9 +23,14 @@ type windowMode struct {
 	// fitted: the window was resized to viewport (and is given back when the session lets go of it).
 	fitted   bool
 	viewport protocol.Viewport
+	// zoom: net steps of the app's own Zoom In the phone pressed (given back with the window).
+	zoom int
 }
 
 func (w windowMode) active() bool { return w.on }
+
+// dirty: the window is not as the Mac user left it (resized or zoomed), so it must be given back.
+func (w windowMode) dirty() bool { return w.fitted || w.zoom > 0 }
 
 // asDisplay is the window's size dressed as a display, so the tier's sizing rule applies unchanged: the
 // window's aspect ratio is kept and nothing is upscaled past the window's own pixels.
@@ -132,6 +137,10 @@ func (s *Session) selectWindow(id string) {
 	s.leaveWindow(id)
 	s.mu.Lock()
 	prev, prevVP := s.win.fitted && s.win.info.ID == id, s.win.viewport
+	prevZoom := 0
+	if s.win.info.ID == id {
+		prevZoom = s.win.zoom
+	}
 	s.mu.Unlock()
 	inherited := s.claimPending(id) // a window left fitted by a link that dropped: the session owns it again
 	frame := protocol.Rect{X: info.X, Y: info.Y, Width: info.Width, Height: info.Height}
@@ -144,7 +153,8 @@ func (s *Session) selectWindow(id string) {
 			s.win.viewport = prevVP
 		}
 	}
-	s.state.Fitted, s.state.Clamped = s.win.fitted, nil
+	s.win.zoom = prevZoom
+	s.state.Fitted, s.state.Clamped, s.state.Zoom = s.win.fitted, nil, prevZoom
 	s.state.Target = protocol.TargetWindow
 	s.state.Window = &protocol.WindowTarget{ID: info.ID, App: info.App, BundleID: info.BundleID, Title: info.Title, OnScreen: info.OnScreen}
 	s.setDisplayLocked(s.display, s.state.Displays)
@@ -265,10 +275,10 @@ func (s *Session) windowGone(id string, reason protocol.WindowGoneReason) {
 		s.mu.Unlock()
 		return
 	}
-	wasFitted := s.win.fitted
+	wasFitted := s.win.dirty()
 	s.win = windowMode{}
 	s.state.Target, s.state.Window = protocol.TargetNone, nil
-	s.state.Fitted, s.state.Clamped = false, nil
+	s.state.Fitted, s.state.Clamped, s.state.Zoom = false, nil, 0
 	s.sharing = false
 	s.mu.Unlock()
 	if wasFitted {

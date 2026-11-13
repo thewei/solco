@@ -118,8 +118,8 @@ func (s *Session) RestoreWindow() { s.fitOff() }
 
 // clearFitLocked forgets the fit in the session's own state (the window itself is restored separately).
 func (s *Session) clearFitLocked() {
-	s.win.fitted, s.win.viewport = false, protocol.Viewport{}
-	s.state.Fitted, s.state.Clamped = false, nil
+	s.win.fitted, s.win.viewport, s.win.zoom = false, protocol.Viewport{}, 0
+	s.state.Fitted, s.state.Clamped, s.state.Zoom = false, nil, 0
 }
 
 // restoreFitted gives window id back through the helper and tells the phone what became of it. A helper
@@ -152,7 +152,7 @@ func (s *Session) restoreFitted(id string) {
 // the window's own end). It runs before the new target is installed.
 func (s *Session) leaveWindow(next string) {
 	s.mu.Lock()
-	id, fitted := s.win.info.ID, s.win.fitted && s.win.active()
+	id, fitted := s.win.info.ID, s.win.dirty() && s.win.active()
 	if fitted && id == next {
 		s.mu.Unlock()
 		return
@@ -180,7 +180,7 @@ func (s *Session) claimPending(window string) bool {
 // the service's grace (the phone usually comes back), anything else gives it back now.
 func (s *Session) closeFit(lost bool) {
 	s.mu.Lock()
-	id, fitted := s.win.info.ID, s.win.fitted && s.win.active()
+	id, fitted := s.win.info.ID, s.win.dirty() && s.win.active()
 	s.mu.Unlock()
 	if !fitted {
 		return

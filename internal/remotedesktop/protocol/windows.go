@@ -175,6 +175,22 @@ func (m MenuInvoke) Valid() bool {
 	return true
 }
 
+// Zoom directions of window.zoom.
+const (
+	ZoomIn  = "in"
+	ZoomOut = "out"
+)
+
+// WindowZoom is window.zoom: press the shown app's own Zoom In (⌘+) or Zoom Out (⌘-) once, so its text is drawn
+// larger or smaller by the app itself. Zoom out never goes below the size the window had before the phone.
+type WindowZoom struct {
+	Type string `json:"type"`
+	Dir  string `json:"dir"`
+}
+
+// Valid is true for the two directions.
+func (z WindowZoom) Valid() bool { return z.Dir == ZoomIn || z.Dir == ZoomOut }
+
 // InfoCapabilities lists optional features of this Mac's Remote Desktop (GET /remote-desktop).
 type InfoCapabilities struct {
 	Windows bool `json:"windows,omitempty"`

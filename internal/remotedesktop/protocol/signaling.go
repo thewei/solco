@@ -73,6 +73,8 @@ type SessionState struct {
 	// it wider than asked, so the picture is scaled down on the phone.
 	Fitted  bool     `json:"fitted,omitempty"`
 	Clamped *Clamped `json:"clamped,omitempty"`
+	// Zoom: how many steps of the app's own Zoom In the phone pressed on the shown window (given back with the window).
+	Zoom int `json:"zoom,omitempty"`
 }
 
 // DeviceInfo identifies the phone to the authorizer and the session list. ID is the paired device id.
