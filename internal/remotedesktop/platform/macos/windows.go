@@ -18,6 +18,7 @@ var (
 	_ platform.WindowSupport   = (*Backend)(nil)
 	_ platform.Windows         = (*capturer)(nil)
 	_ platform.WindowFitter    = (*capturer)(nil)
+	_ platform.WindowMenu      = (*capturer)(nil)
 	_ platform.JournalRestorer = (*Backend)(nil)
 )
 
@@ -102,4 +103,29 @@ func (c *capturer) RestoreWindow(ctx context.Context, windowID string) (protocol
 func (b *Backend) RestoreJournal(ctx context.Context) error {
 	var out helperipc.RestoreResult
 	return b.oneShot(ctx, &out, "restore-journal")
+}
+
+// WindowMenu reads the menu bar of the app that owns the window; the helper bounds it (items, depth, time).
+func (c *capturer) WindowMenu(ctx context.Context, windowID string) ([]protocol.MenuItem, error) {
+	var out helperipc.MenuResult
+	if err := c.conn.Call(ctx, helperipc.OpWindowMenu, helperipc.WindowArgs{WindowID: windowID}, &out); err != nil {
+		return nil, asProtocolErr(err)
+	}
+	return menuItems(out.Items), nil
+}
+
+func (c *capturer) InvokeMenu(ctx context.Context, windowID string, path []int) error {
+	return asProtocolErr(c.conn.Call(ctx, helperipc.OpWindowMenuInvoke, helperipc.MenuInvokeArgs{WindowID: windowID, Path: path}, nil))
+}
+
+func menuItems(in []helperipc.MenuItem) []protocol.MenuItem {
+	out := make([]protocol.MenuItem, 0, len(in))
+	for _, m := range in {
+		item := protocol.MenuItem{Title: m.Title, Enabled: m.Enabled, Checked: m.Checked, Separator: m.Separator, Shortcut: m.Shortcut}
+		if len(m.Children) > 0 {
+			item.Children = menuItems(m.Children)
+		}
+		out = append(out, item)
+	}
+	return out
 }

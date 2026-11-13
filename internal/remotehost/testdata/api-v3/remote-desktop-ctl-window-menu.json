@@ -1,0 +1,44 @@
+{
+  "type": "window.menu",
+  "windowId": "4210",
+  "items": [
+    {
+      "title": "File",
+      "enabled": true,
+      "children": [
+        {
+          "title": "New Note",
+          "enabled": true,
+          "shortcut": "⌘N"
+        },
+        {
+          "title": "",
+          "enabled": false,
+          "separator": true
+        },
+        {
+          "title": "Share",
+          "enabled": true,
+          "children": [
+            {
+              "title": "Mail",
+              "enabled": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "View",
+      "enabled": true,
+      "children": [
+        {
+          "title": "Show Toolbar",
+          "enabled": true,
+          "checked": true,
+          "shortcut": "⌥⌘T"
+        }
+      ]
+    }
+  ]
+}

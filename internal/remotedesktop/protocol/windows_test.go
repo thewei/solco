@@ -16,7 +16,9 @@ func TestWindowMessagesDecodeAndMarshal(t *testing.T) {
 		`{"type":"apps.list"}`:                                       &Envelope{},
 		`{"type":"target.activate"}`:                                 &Envelope{},
 		`{"type":"window.fit","viewport":{"w":390,"h":844,"scale":3,"insets":{"top":47,"bottom":34,"left":0,"right":0}}}`: &WindowFit{},
-		`{"type":"window.fit.off"}`: &Envelope{},
+		`{"type":"window.fit.off"}`:                  &Envelope{},
+		`{"type":"window.menu.get"}`:                 &Envelope{},
+		`{"type":"window.menu.invoke","path":[1,2]}`: &MenuInvoke{},
 	} {
 		got, err := Decode([]byte(typ))
 		if err != nil {
@@ -64,5 +66,24 @@ func TestViewportSizeAndBounds(t *testing.T) {
 	b, _ = Marshal(SessionStateMsg{SessionState: SessionState{Mode: ModeFullControl, DisplayID: "1"}})
 	if strings.Contains(string(b), "fitted") || strings.Contains(string(b), "clamped") {
 		t.Fatalf("an unfitted state leaked fit fields: %s", b)
+	}
+}
+
+func TestMenuInvokeRefusesPathsThePhoneShouldNeverSend(t *testing.T) {
+	for _, raw := range []string{
+		`{"type":"window.menu.invoke","path":[]}`,
+		`{"type":"window.menu.invoke","path":[1]}`,
+		`{"type":"window.menu.invoke","path":[-1,0]}`,
+		`{"type":"window.menu.invoke","path":[0,1,2,3,4]}`,
+		`{"type":"window.menu.invoke","path":[0,1000]}`,
+		`{"type":"window.menu.invoke"}`,
+	} {
+		if _, err := Decode([]byte(raw)); CodeOf(err) != CodeBadRequest {
+			t.Errorf("%s: %v", raw, err)
+		}
+	}
+	b, err := Marshal(WindowMenu{WindowID: "1"})
+	if err != nil || string(b) != `{"type":"window.menu","windowId":"1","items":[]}` {
+		t.Fatalf("empty menu = %s %v", b, err)
 	}
 }

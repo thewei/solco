@@ -137,6 +137,44 @@ type WindowRestored struct {
 	Outcome  RestoreOutcome `json:"outcome"`
 }
 
+// MenuItem is one entry of the shown app's menu bar. Titles are the app's screen content: they reach the phone
+// and are never logged. A separator has no title; Children is a submenu.
+type MenuItem struct {
+	Title     string     `json:"title"`
+	Enabled   bool       `json:"enabled"`
+	Checked   bool       `json:"checked,omitempty"`
+	Separator bool       `json:"separator,omitempty"`
+	Shortcut  string     `json:"shortcut,omitempty"`
+	Children  []MenuItem `json:"children,omitempty"`
+}
+
+// WindowMenu answers window.menu.get: the menus of the app that owns the shown window (the Apple menu left
+// out). The index of a menu or item in these arrays is what window.menu.invoke names.
+type WindowMenu struct {
+	Type     string     `json:"type"`
+	WindowID string     `json:"windowId"`
+	Items    []MenuItem `json:"items"`
+}
+
+// MenuInvoke is window.menu.invoke: press the item at Path (an index into the menus, then into each submenu).
+type MenuInvoke struct {
+	Type string `json:"type"`
+	Path []int  `json:"path"`
+}
+
+// Valid bounds a path the phone sent: a few small indices, at least a menu and one of its items.
+func (m MenuInvoke) Valid() bool {
+	if len(m.Path) < 2 || len(m.Path) > MaxMenuDepth+1 {
+		return false
+	}
+	for _, i := range m.Path {
+		if i < 0 || i >= 1000 {
+			return false
+		}
+	}
+	return true
+}
+
 // InfoCapabilities lists optional features of this Mac's Remote Desktop (GET /remote-desktop).
 type InfoCapabilities struct {
 	Windows bool `json:"windows,omitempty"`
@@ -152,4 +190,6 @@ const (
 	MaxBundleIDLength = 256
 	MinFitPoints      = 100
 	MaxFitPoints      = 4000
+	MaxMenuDepth      = 3
+	MaxMenuBytes      = 56 << 10
 )

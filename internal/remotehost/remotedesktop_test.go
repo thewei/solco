@@ -160,6 +160,8 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 		"app-open":              `{"type":"app.open","bundleId":"com.apple.Notes"}`,
 		"window-fit":            `{"type":"window.fit","viewport":{"w":390,"h":844,"scale":3,"insets":{"top":47,"bottom":34,"left":0,"right":0}}}`,
 		"window-fit-off":        `{"type":"window.fit.off"}`,
+		"window-menu-get":       `{"type":"window.menu.get"}`,
+		"window-menu-invoke":    `{"type":"window.menu.invoke","path":[2,5]}`,
 	}
 	for name, raw := range phoneToMac {
 		if _, err := protocol.Decode([]byte(raw)); err != nil {
@@ -194,6 +196,16 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 		"window-restored":         protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreDone},
 		"window-restored-skipped": protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreSkipped},
 		"error-fit-unavailable":   protocol.ErrorMsg{Code: protocol.CodeFitUnavailable},
+		"error-menu-unavailable":  protocol.ErrorMsg{Code: protocol.CodeMenuUnavailable},
+		"error-menu-item":         protocol.ErrorMsg{Code: protocol.CodeMenuItemUnavailable},
+		"window-menu": protocol.WindowMenu{WindowID: "4210", Items: []protocol.MenuItem{
+			{Title: "File", Enabled: true, Children: []protocol.MenuItem{
+				{Title: "New Note", Enabled: true, Shortcut: "⌘N"},
+				{Separator: true},
+				{Title: "Share", Enabled: true, Children: []protocol.MenuItem{{Title: "Mail", Enabled: false}}},
+			}},
+			{Title: "View", Enabled: true, Children: []protocol.MenuItem{{Title: "Show Toolbar", Enabled: true, Checked: true, Shortcut: "⌥⌘T"}}},
+		}},
 		"windows-snapshot": protocol.WindowsSnapshot{Windows: []protocol.WindowInfo{
 			{ID: "4210", App: "Notes", BundleID: "com.apple.Notes", Title: "Shopping list", X: 100, Y: 80, Width: 500, Height: 800, OnScreen: true},
 			{ID: "4211", App: "Safari", BundleID: "com.apple.Safari", X: 0, Y: 0, Width: 1200, Height: 800, Minimized: true},

@@ -20,30 +20,32 @@ const Version = 1
 type ErrorCode string
 
 const (
-	CodeDisabled            ErrorCode = "remote_disabled"      // Remote Desktop is off on the Mac
-	CodeUnavailable         ErrorCode = "remote_unavailable"   // no backend for this OS / helper missing
-	CodeProtocolUnsupported ErrorCode = "protocol_unsupported" // phone speaks another protocol major
-	CodePermissionRequired  ErrorCode = "permission_required"  // Screen Recording / Accessibility not granted
-	CodeDenied              ErrorCode = "denied"               // the Mac user declined
-	CodeApprovalTimeout     ErrorCode = "approval_timeout"     // nobody answered the Mac's prompt in time
-	CodeBusy                ErrorCode = "busy"                 // another session is active (one at a time)
-	CodeBadRequest          ErrorCode = "bad_request"          // malformed offer / unknown field values
-	CodeBadOffer            ErrorCode = "bad_offer"            // SDP could not be accepted
-	CodeDisplayNotFound     ErrorCode = "display_not_found"    // the chosen display is gone
-	CodeCaptureFailed       ErrorCode = "capture_failed"       // ScreenCaptureKit / encoder failure
-	CodeHelperFailed        ErrorCode = "helper_failed"        // native helper died or never answered
-	CodeViewOnly            ErrorCode = "view_only"            // an input message arrived in a view-only session
-	CodeNotConnected        ErrorCode = "not_connected"        // control sent before the link was up
-	CodeSessionEnded        ErrorCode = "session_ended"        // the session is over (Mac stopped it, revoked, link lost)
-	CodeUnlockUnavailable   ErrorCode = "unlock_unavailable"   // no Mac password saved (or this Mac cannot unlock)
-	CodeUnlockFailed        ErrorCode = "unlock_failed"        // the lock screen was still up after the attempt
-	CodePrivacyUnavailable  ErrorCode = "privacy_unavailable"  // this backend cannot black the screen out
-	CodeWindowNotFound      ErrorCode = "window_not_found"     // the chosen window is gone
-	CodeWindowOffscreen     ErrorCode = "window_offscreen"     // input for a window that is not on a screen (activate it first)
-	CodeAppNotFound         ErrorCode = "app_not_found"        // no such installed application
-	CodeAppOpenFailed       ErrorCode = "app_open_failed"      // the application did not show a window in time
-	CodeWindowsUnavailable  ErrorCode = "windows_unavailable"  // this backend has no window mode
-	CodeFitUnavailable      ErrorCode = "fit_unavailable"      // the window cannot be resized (full screen, fixed size, no Accessibility)
+	CodeDisabled            ErrorCode = "remote_disabled"       // Remote Desktop is off on the Mac
+	CodeUnavailable         ErrorCode = "remote_unavailable"    // no backend for this OS / helper missing
+	CodeProtocolUnsupported ErrorCode = "protocol_unsupported"  // phone speaks another protocol major
+	CodePermissionRequired  ErrorCode = "permission_required"   // Screen Recording / Accessibility not granted
+	CodeDenied              ErrorCode = "denied"                // the Mac user declined
+	CodeApprovalTimeout     ErrorCode = "approval_timeout"      // nobody answered the Mac's prompt in time
+	CodeBusy                ErrorCode = "busy"                  // another session is active (one at a time)
+	CodeBadRequest          ErrorCode = "bad_request"           // malformed offer / unknown field values
+	CodeBadOffer            ErrorCode = "bad_offer"             // SDP could not be accepted
+	CodeDisplayNotFound     ErrorCode = "display_not_found"     // the chosen display is gone
+	CodeCaptureFailed       ErrorCode = "capture_failed"        // ScreenCaptureKit / encoder failure
+	CodeHelperFailed        ErrorCode = "helper_failed"         // native helper died or never answered
+	CodeViewOnly            ErrorCode = "view_only"             // an input message arrived in a view-only session
+	CodeNotConnected        ErrorCode = "not_connected"         // control sent before the link was up
+	CodeSessionEnded        ErrorCode = "session_ended"         // the session is over (Mac stopped it, revoked, link lost)
+	CodeUnlockUnavailable   ErrorCode = "unlock_unavailable"    // no Mac password saved (or this Mac cannot unlock)
+	CodeUnlockFailed        ErrorCode = "unlock_failed"         // the lock screen was still up after the attempt
+	CodePrivacyUnavailable  ErrorCode = "privacy_unavailable"   // this backend cannot black the screen out
+	CodeWindowNotFound      ErrorCode = "window_not_found"      // the chosen window is gone
+	CodeWindowOffscreen     ErrorCode = "window_offscreen"      // input for a window that is not on a screen (activate it first)
+	CodeAppNotFound         ErrorCode = "app_not_found"         // no such installed application
+	CodeAppOpenFailed       ErrorCode = "app_open_failed"       // the application did not show a window in time
+	CodeWindowsUnavailable  ErrorCode = "windows_unavailable"   // this backend has no window mode
+	CodeFitUnavailable      ErrorCode = "fit_unavailable"       // the window cannot be resized (full screen, fixed size, no Accessibility)
+	CodeMenuUnavailable     ErrorCode = "menu_unavailable"      // the app's menu bar cannot be read (no Accessibility, no menu bar)
+	CodeMenuItemUnavailable ErrorCode = "menu_item_unavailable" // the item is disabled, opens a submenu, or the menu changed
 	CodeInternal            ErrorCode = "internal"
 )
 

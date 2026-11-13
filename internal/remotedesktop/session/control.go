@@ -36,6 +36,8 @@ func (s *Session) handle(data []byte) {
 		go s.selectTarget(m.Kind, m.ID)
 	case *protocol.WindowFit:
 		go s.fitWindow(m.Viewport)
+	case *protocol.MenuInvoke:
+		go s.invokeMenu(m.Path)
 	case *protocol.BundleRef:
 		s.handleBundle(m)
 	case *protocol.ThumbGet:
@@ -62,6 +64,8 @@ func (s *Session) handleSimple(typ string) {
 		go s.Close(protocol.CodeSessionEnded)
 	case protocol.TypeWindowFitOff:
 		go s.fitOff()
+	case protocol.TypeMenuGet:
+		go s.sendMenu()
 	case protocol.TypeStatsRequest:
 		s.sendStats()
 	case protocol.TypeReleaseAll:

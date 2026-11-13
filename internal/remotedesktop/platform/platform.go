@@ -109,6 +109,15 @@ type WindowFitter interface {
 	RestoreWindow(ctx context.Context, windowID string) (protocol.RestoreOutcome, error)
 }
 
+// WindowMenu is the optional capability of a Capturer that can read and press the menu bar of the app that owns
+// a window (through Accessibility). Menu titles are screen content: never log them.
+type WindowMenu interface {
+	// WindowMenu lists the app's menus (the Apple menu left out).
+	WindowMenu(ctx context.Context, windowID string) ([]protocol.MenuItem, error)
+	// InvokeMenu presses the item at path (menu index, then submenu indices).
+	InvokeMenu(ctx context.Context, windowID string, path []int) error
+}
+
 // JournalRestorer is the optional capability of a Backend to give back every window a vanished session
 // left fitted (the deferred restore after a lost link, and Solco's start-up), without a session or a helper
 // process of its own.

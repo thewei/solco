@@ -34,6 +34,8 @@ const (
 	OpWindowThumb        = "window.thumb"
 	OpWindowFit          = "window.fit"
 	OpWindowRestore      = "window.restore"
+	OpWindowMenu         = "window.menu"
+	OpWindowMenuInvoke   = "window.menu.invoke"
 	OpShutdown           = "shutdown"
 )
 
@@ -43,6 +45,7 @@ const (
 	CapWindowCatalog = "window.catalog"
 	CapAppCatalog    = "app.catalog"
 	CapWindowFit     = "window.fit"
+	CapWindowMenu    = "window.menu"
 )
 
 // Event names (helper → Go).
@@ -102,6 +105,8 @@ const (
 	CodeAppNotFound               = "app_not_found"
 	CodeAppOpenFailed             = "app_open_failed"
 	CodeFitUnavailable            = "fit_unavailable"
+	CodeMenuUnavailable           = "menu_unavailable"
+	CodeMenuItemUnavailable       = "menu_item_unavailable"
 	CodeInternal                  = "internal"
 )
 
@@ -250,6 +255,28 @@ type FitResult struct {
 	WindowID string        `json:"windowId"`
 	Applied  protocol.Rect `json:"applied"`
 	Clamped  bool          `json:"clamped"`
+}
+
+// MenuItem mirrors the helper's menu entry; the tags are the helper's own.
+type MenuItem struct {
+	Title     string     `json:"title"`
+	Enabled   bool       `json:"enabled"`
+	Checked   bool       `json:"checked"`
+	Separator bool       `json:"separator"`
+	Shortcut  string     `json:"shortcut,omitempty"`
+	Children  []MenuItem `json:"children,omitempty"`
+}
+
+// MenuResult is the result of window.menu.
+type MenuResult struct {
+	WindowID string     `json:"windowId"`
+	Items    []MenuItem `json:"items"`
+}
+
+// MenuInvokeArgs is window.menu.invoke.
+type MenuInvokeArgs struct {
+	WindowID string `json:"windowId"`
+	Path     []int  `json:"path"`
 }
 
 // RestoreArgs is window.restore; no WindowID = every journaled window.

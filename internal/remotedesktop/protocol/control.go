@@ -42,6 +42,8 @@ const (
 	TypeWindowFit     = "window.fit"
 	TypeWindowFitOff  = "window.fit.off"
 	TypeAppOpen       = "app.open"
+	TypeMenuGet       = "window.menu.get"
+	TypeMenuInvoke    = "window.menu.invoke"
 
 	// Mac → phone.
 	TypeSessionState  = "session.state"
@@ -57,6 +59,7 @@ const (
 	TypeAppOpenFailed = "app.open_failed"
 	TypeWindowGone    = "window.gone"
 	TypeWindowRestore = "window.restored"
+	TypeMenu          = "window.menu"
 )
 
 // Button names for TypePointerButton.
@@ -288,6 +291,12 @@ func Marshal(msg any) ([]byte, error) {
 	case WindowRestored:
 		m.Type = TypeWindowRestore
 		return json.Marshal(m)
+	case WindowMenu:
+		m.Type = TypeMenu
+		if m.Items == nil {
+			m.Items = []MenuItem{}
+		}
+		return json.Marshal(m)
 	case StatsMsg:
 		m.Type = TypeStats
 		return json.Marshal(m)
@@ -337,7 +346,13 @@ func Decode(data []byte) (any, error) {
 		target = &TargetSelect{}
 	case TypeWindowFit:
 		target = &WindowFit{}
-	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest, TypeUnlockRequest, TypeWindowsList, TypeAppsList, TypeTargetActive, TypeWindowFitOff:
+	case TypeMenuInvoke:
+		var inv MenuInvoke
+		if err := json.Unmarshal(data, &inv); err != nil || !inv.Valid() {
+			return nil, Errf(CodeBadRequest, "malformed %s", env.Type)
+		}
+		return &inv, nil
+	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest, TypeUnlockRequest, TypeWindowsList, TypeAppsList, TypeTargetActive, TypeWindowFitOff, TypeMenuGet:
 		return &env, nil
 	default:
 		return nil, Errf(CodeBadRequest, "unknown message type")
