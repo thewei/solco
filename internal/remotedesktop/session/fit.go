@@ -60,6 +60,7 @@ func (s *Session) fitWindow(vp protocol.Viewport) {
 		return
 	}
 	s.win.info.X, s.win.info.Y, s.win.info.Width, s.win.info.Height = applied.X, applied.Y, applied.Width, applied.Height
+	s.win.scale = s.scaleAtLocked(s.win.info) // the fit may have moved the window to a taller display
 	s.win.fitted, s.win.viewport = true, vp
 	s.state.Fitted = true
 	s.state.Clamped = nil
@@ -91,6 +92,7 @@ func (s *Session) fitOff() {
 			for _, w := range list {
 				if w.ID == id && s.win.active() && s.win.info.ID == id {
 					s.win.info = w
+					s.win.scale = s.scaleAtLocked(w) // and back to the display it came from
 					break
 				}
 			}

@@ -21,6 +21,7 @@ type fitCap struct {
 	outcome  protocol.RestoreOutcome
 	restErr  error
 	orig     map[string]protocol.Rect
+	moveX    float64 // when set, the fit also moves the window to this x (another display)
 }
 
 func (c *fitCap) FitWindow(_ context.Context, id string, w, h float64) (protocol.Rect, bool, error) {
@@ -43,6 +44,9 @@ func (c *fitCap) FitWindow(_ context.Context, id string, w, h float64) (protocol
 			w, clamped = c.minW, true
 		}
 		c.windows[i].Width, c.windows[i].Height = w, h
+		if c.moveX != 0 {
+			c.windows[i].X = c.moveX
+		}
 		r := protocol.Rect{X: c.windows[i].X, Y: c.windows[i].Y, Width: w, Height: h}
 		c.fits = append(c.fits, r)
 		return r, clamped, nil
@@ -332,5 +336,19 @@ func TestAGoneWindowForgetsItsFit(t *testing.T) {
 	waitFor(t, "journal entry released", func() bool { return len(f.fc.restored()) == 1 })
 	if f.s.State().Fitted {
 		t.Fatal("a window that is gone is still shown as fitted")
+	}
+}
+
+func TestAFitThatMovesTheWindowToAnotherDisplayTakesThatDisplaysScale(t *testing.T) {
+	f := newFitRig(t, protocol.ModeFullControl)
+	f.fc.moveX = 1500 // the second display, 1x (the first is 2x)
+	f.s.OnLinkState(LinkConnected)
+	f.s.OnControl(ctl("target.select", "kind", "window", "id", "11"))
+	waitFor(t, "window capture", func() bool { return f.fc.startCount() == 1 })
+	f.s.OnControl(ctl("window.fit", "viewport", phoneViewport))
+	waitFor(t, "fitted and recaptured", func() bool { return f.s.State().Fitted && f.fc.startCount() == 2 })
+	// At 1x the window's own pixels are 390×763; a stale 2x scale would ask for the tier's 1080 high instead.
+	if cfg := f.fc.lastStart(); cfg.Height < 760 || cfg.Height > 764 {
+		t.Fatalf("capture %+v: the picture is sized for the old display's scale", cfg)
 	}
 }
