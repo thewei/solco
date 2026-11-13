@@ -149,3 +149,18 @@ func TestAHugeMenuIsCutFromTheTailToFitOneMessage(t *testing.T) {
 		t.Fatalf("head not kept: %v", err)
 	}
 }
+
+func TestACutSubmenuIsNotLeftLookingLikeALeaf(t *testing.T) {
+	deep := protocol.MenuItem{Title: "A", Enabled: true, Children: []protocol.MenuItem{{Title: "B", Enabled: true, Children: []protocol.MenuItem{{Title: "C", Enabled: true, Children: []protocol.MenuItem{{Title: "D", Enabled: true}}}}}}}
+	left := 100
+	got := limitMenu([]protocol.MenuItem{deep}, &left, 0)
+	c := got[0].Children[0].Children[0]
+	if c.Title != "C" || c.Enabled || len(c.Children) != 0 {
+		t.Fatalf("the level past the depth limit = %+v, want a disabled C", c)
+	}
+	left = 2 // A and B fit, B's children do not
+	got = limitMenu([]protocol.MenuItem{deep}, &left, 0)
+	if b := got[0].Children[0]; b.Enabled || len(b.Children) != 0 {
+		t.Fatalf("a submenu cut to nothing = %+v, want it disabled", b)
+	}
+}

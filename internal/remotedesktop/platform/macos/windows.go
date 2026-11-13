@@ -122,8 +122,13 @@ func menuItems(in []helperipc.MenuItem) []protocol.MenuItem {
 	out := make([]protocol.MenuItem, 0, len(in))
 	for _, m := range in {
 		item := protocol.MenuItem{Title: m.Title, Enabled: m.Enabled, Checked: m.Checked, Separator: m.Separator, Shortcut: m.Shortcut}
-		if len(m.Children) > 0 {
-			item.Children = menuItems(m.Children)
+		if m.Children != nil {
+			// a submenu the helper could not read (time, depth) must not look like a leaf the phone would press
+			if len(m.Children) == 0 {
+				item.Enabled = false
+			} else {
+				item.Children = menuItems(m.Children)
+			}
 		}
 		out = append(out, item)
 	}

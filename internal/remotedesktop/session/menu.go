@@ -47,9 +47,12 @@ func (s *Session) sendMenu() {
 	if now, window := s.shownWindow(); !window || now != id {
 		return
 	}
-	if b, ok := marshalMenu(id, items); ok {
-		s.send(b)
+	b, ok := marshalMenu(id, items)
+	if !ok {
+		s.sendError(protocol.CodeMenuUnavailable, "")
+		return
 	}
+	s.send(b)
 }
 
 // marshalMenu keeps one message under the channel's limit by dropping the tail of the menu bar, never
@@ -77,9 +80,9 @@ func limitMenu(items []protocol.MenuItem, left *int, depth int) []protocol.MenuI
 		*left--
 		if len(it.Children) > 0 {
 			if depth+1 >= protocol.MaxMenuDepth {
-				it.Children = nil
-			} else {
-				it.Children = limitMenu(it.Children, left, depth+1)
+				it.Children, it.Enabled = nil, false
+			} else if it.Children = limitMenu(it.Children, left, depth+1); len(it.Children) == 0 {
+				it.Children, it.Enabled = nil, false // cut to nothing: no longer a submenu the phone could open
 			}
 		}
 		out = append(out, it)
