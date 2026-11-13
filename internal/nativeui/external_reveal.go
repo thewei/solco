@@ -2,7 +2,7 @@ package nativeui
 
 /**
  * [INPUT]: 依赖 Herdr 投影存在性判定（tabByID）、selection.go 的 selectTab/selectProject、runtime.Projection、window_actions.go 的 activateWindow、surface_header.go 的 panePrefersChat
- * [OUTPUT]: 对外提供 Shell.RouteExternalURL（main.go 的 OnOpenURL 接缝）、parseRevealURL、revealTarget
+ * [OUTPUT]: 对外提供 Shell.RouteExternalURL（main.go 的 OnOpenURL 接缝；solco://feedback、solco://terminal（external_terminal.go）、solco://reveal 三种）、parseRevealURL、revealTarget
  * [POS]: 外部应用（如 My DevTools 的 prox）请求"切到某个 Herdr tab"的唯一入口：Solco 刻意不订阅 Herdr 全局 focus 事件，
  *        所以外部聚焦只能显式走 solco://reveal?session=&workspace=&tab=，由本窗口把本地选择切过去并激活原生窗口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -54,6 +54,10 @@ func (s *Shell) RouteExternalURL(raw string) {
 	s.activateWindow()
 	if focus, ok := parseFeedbackURL(raw); ok {
 		s.applyOnWindow(func() { s.openFeedback(focus) })
+		return
+	}
+	if cwd, ok := parseTerminalURL(raw); ok {
+		s.applyOnWindow(func() { s.openTerminalAt(cwd) })
 		return
 	}
 	target, ok := parseRevealURL(raw)

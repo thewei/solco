@@ -477,6 +477,11 @@ type Shell struct {
 	// pendingReveal is an external solco://reveal request waiting for its
 	// session/tab to exist (external_reveal.go).
 	pendingReveal *revealRequest
+	// pendingTerminal is a solco://terminal request waiting for a projection;
+	// createFolderWorkspace replaces Herdr's workspace.create in tests
+	// (external_terminal.go).
+	pendingTerminal       *terminalRequest
+	createFolderWorkspace func(cwd string)
 	// terminalFind owns the Terminal-surface find bar (CopySearch adapter).
 	terminalFind terminalFindState
 	// userDataDir is the production persistence root ("" in headless tests).

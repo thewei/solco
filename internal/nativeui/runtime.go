@@ -348,6 +348,7 @@ func (s *Shell) applyProjection(projection herdr.Projection, restartWatcher bool
 	// An external solco://reveal waiting for this tab/instance resumes once
 	// the projection has landed, on every exit path.
 	defer s.tryPendingReveal()
+	defer s.tryPendingTerminal()
 	slog.Debug("apply Herdr projection", "instance", s.activeInstance, "projects", len(projection.Projects), "tabs", len(projection.Tabs), "panes", len(projection.Panes), "agents", len(projection.Agents), "restart_watcher", restartWatcher)
 	s.reconcileLocalSelection(projection)
 	// A pending launch follows its new Tab the moment a projection carries
