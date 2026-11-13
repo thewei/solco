@@ -75,14 +75,14 @@ func (s *Session) windowAcceptsInput() bool {
 }
 
 // systemShortcut reports whether pressing code with the keys already held would leave the window the
-// phone is looking at (app switcher, Spotlight, Spaces).
+// phone is looking at (app switcher, Spotlight, Spaces) or end it (hide, minimize, quit, log out: ⌘H ⌘M ⌘Q ⌃⌘Q ⇧⌘Q).
 func systemShortcut(code string, held map[string]struct{}) bool {
 	_, metaL := held["MetaLeft"]
 	_, metaR := held["MetaRight"]
 	_, ctrlL := held["ControlLeft"]
 	_, ctrlR := held["ControlRight"]
 	switch code {
-	case "Tab", "Space":
+	case "Tab", "Space", "KeyH", "KeyM", "KeyQ":
 		return metaL || metaR
 	case "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown":
 		return ctrlL || ctrlR

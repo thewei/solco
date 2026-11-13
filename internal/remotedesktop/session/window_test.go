@@ -224,6 +224,34 @@ func TestSystemShortcutsDoNotLeaveTheWindow(t *testing.T) {
 	}
 }
 
+func TestShortcutsThatHideMinimizeOrQuitDoNotReachTheMac(t *testing.T) {
+	r, wc := newWinRig(t, protocol.ModeFullControl, true)
+	r.s.OnLinkState(LinkConnected)
+	r.s.OnControl(ctl("target.select", "kind", "window", "id", "11"))
+	waitFor(t, "window capture", func() bool { return wc.startCount() == 1 })
+
+	r.s.OnControl(mustJSON(map[string]any{"type": "key", "code": "MetaLeft", "down": true}))
+	for _, code := range []string{"KeyH", "KeyM", "KeyQ", "KeyC"} {
+		r.s.OnControl(mustJSON(map[string]any{"type": "key", "code": code, "down": true}))
+	}
+	r.s.OnControl(mustJSON(map[string]any{"type": "key", "code": "ControlLeft", "down": true}))
+	r.s.OnControl(mustJSON(map[string]any{"type": "key", "code": "KeyQ", "down": true}))
+	for _, code := range []string{"KeyH", "KeyM", "KeyQ"} {
+		if wc.in.count("key "+code+" true") != 0 {
+			t.Fatalf("⌘%s reached the Mac: %v", code, wc.in.snapshot())
+		}
+	}
+	if wc.in.count("key KeyC true") != 1 {
+		t.Fatalf("⌘C must still pass: %v", wc.in.snapshot())
+	}
+	// Without ⌘ the same letters are ordinary typing.
+	r.s.OnControl(mustJSON(map[string]any{"type": "key", "code": "MetaLeft", "down": false}))
+	r.s.OnControl(mustJSON(map[string]any{"type": "key", "code": "KeyQ", "down": true}))
+	if wc.in.count("key KeyQ true") != 1 {
+		t.Fatalf("a plain Q must pass: %v", wc.in.snapshot())
+	}
+}
+
 func TestOffscreenWindowIsWatchedFirstAndActivatedOnRequest(t *testing.T) {
 	r, wc := newWinRig(t, protocol.ModeFullControl, true)
 	r.s.OnLinkState(LinkConnected)
