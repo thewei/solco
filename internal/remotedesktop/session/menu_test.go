@@ -164,3 +164,66 @@ func TestACutSubmenuIsNotLeftLookingLikeALeaf(t *testing.T) {
 		t.Fatalf("a submenu cut to nothing = %+v, want it disabled", b)
 	}
 }
+
+// slowMenuCap answers a menu read only when released, counting how many reads were made.
+type slowMenuCap struct {
+	*menuCap
+	release chan struct{}
+	mu5     sync.Mutex
+	reads   int
+}
+
+func (c *slowMenuCap) WindowMenu(ctx context.Context, id string) ([]protocol.MenuItem, error) {
+	c.mu5.Lock()
+	c.reads++
+	c.mu5.Unlock()
+	<-c.release
+	return c.menuCap.WindowMenu(ctx, id)
+}
+
+func TestMenuReadsAreOnePerWindowAtATime(t *testing.T) {
+	wc := &winCap{fakeCap: newFakeCap(), windows: []protocol.WindowInfo{
+		{ID: "11", App: "Notes", BundleID: "com.apple.Notes", Title: "Groceries", X: 100, Y: 100, Width: 500, Height: 800, OnScreen: true},
+	}, openID: "11"}
+	sc := &slowMenuCap{menuCap: &menuCap{winCap: wc, items: []protocol.MenuItem{{Title: "File", Enabled: true}}}, release: make(chan struct{})}
+	r := &rig{t: t, cap: wc.fakeCap, link: &fakeLink{}, end: make(chan protocol.ErrorCode, 1)}
+	r.s = New(Config{
+		ID: "s1", Device: protocol.DeviceInfo{ID: "d1", Name: "Phone"}, Mode: protocol.ModeFullControl, Tier: protocol.TierStandard, Idle: true,
+		Capturer: sc, OnEnd: func(c protocol.ErrorCode) { r.end <- c },
+	})
+	if _, err := r.s.Prepare(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r.s.Attach(r.link)
+	t.Cleanup(func() { r.s.Close(protocol.CodeSessionEnded) })
+	r.s.OnLinkState(LinkConnected)
+	r.s.OnControl(ctl("target.select", "kind", "window", "id", "11"))
+	waitFor(t, "window capture", func() bool { return wc.startCount() == 1 })
+
+	for i := 0; i < 5; i++ {
+		r.s.OnControl(ctl("window.menu.get"))
+	}
+	waitFor(t, "first read", func() bool { sc.mu5.Lock(); defer sc.mu5.Unlock(); return sc.reads >= 1 })
+	time.Sleep(60 * time.Millisecond)
+	close(sc.release)
+	waitFor(t, "answer", func() bool { return r.has("window.menu") })
+	sc.mu5.Lock()
+	reads := sc.reads
+	sc.mu5.Unlock()
+	if reads != 1 {
+		t.Fatalf("%d reads for 5 requests while one was in flight, want 1", reads)
+	}
+	r.s.OnControl(ctl("window.menu.get")) // once it answered, a new request reads again
+	waitFor(t, "second read", func() bool { sc.mu5.Lock(); defer sc.mu5.Unlock(); return sc.reads == 2 })
+}
+
+func TestMenuErrorsNameTheirWindow(t *testing.T) {
+	r, mc := newMenuRig(t, protocol.ModeFullControl)
+	mc.listErr = protocol.Errf(protocol.CodeMenuUnavailable, "")
+	r.s.OnControl(ctl("window.menu.get"))
+	waitFor(t, "error", func() bool { return r.errorCode() == "menu_unavailable" })
+	var e protocol.ErrorMsg
+	if err := json.Unmarshal(r.lastOf("error"), &e); err != nil || e.WindowID != "11" {
+		t.Fatalf("error = %+v %v", e, err)
+	}
+}

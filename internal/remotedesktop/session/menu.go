@@ -36,11 +36,26 @@ func (s *Session) sendMenu() {
 		s.sendError(protocol.CodeBadRequest, "target")
 		return
 	}
+	// one read per window at a time: opening the sheet again while the app is still answering waits for that answer
+	s.mu.Lock()
+	if s.menuReading == id {
+		s.mu.Unlock()
+		return
+	}
+	s.menuReading = id
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		if s.menuReading == id {
+			s.menuReading = ""
+		}
+		s.mu.Unlock()
+	}()
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
 	items, err := api.WindowMenu(ctx, id)
 	if err != nil {
-		s.sendError(protocol.CodeOf(err), "")
+		s.sendErrorFor(protocol.CodeOf(err), id)
 		return
 	}
 	// the phone may have moved on while the app answered
@@ -49,7 +64,7 @@ func (s *Session) sendMenu() {
 	}
 	b, ok := marshalMenu(id, items)
 	if !ok {
-		s.sendError(protocol.CodeMenuUnavailable, "")
+		s.sendErrorFor(protocol.CodeMenuUnavailable, id)
 		return
 	}
 	s.send(b)
@@ -109,7 +124,7 @@ func (s *Session) invokeMenu(path []int) {
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
 	if err := api.InvokeMenu(ctx, id, path); err != nil {
-		s.sendError(protocol.CodeOf(err), "")
+		s.sendErrorFor(protocol.CodeOf(err), id)
 		return
 	}
 	s.log.Info("remote desktop menu item pressed")

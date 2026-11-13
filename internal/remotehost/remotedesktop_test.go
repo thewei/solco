@@ -196,8 +196,8 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 		"window-restored":         protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreDone},
 		"window-restored-skipped": protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreSkipped},
 		"error-fit-unavailable":   protocol.ErrorMsg{Code: protocol.CodeFitUnavailable},
-		"error-menu-unavailable":  protocol.ErrorMsg{Code: protocol.CodeMenuUnavailable},
-		"error-menu-item":         protocol.ErrorMsg{Code: protocol.CodeMenuItemUnavailable},
+		"error-menu-unavailable":  protocol.ErrorMsg{Code: protocol.CodeMenuUnavailable, WindowID: "4210"},
+		"error-menu-item":         protocol.ErrorMsg{Code: protocol.CodeMenuItemUnavailable, WindowID: "4210"},
 		"window-menu": protocol.WindowMenu{WindowID: "4210", Items: []protocol.MenuItem{
 			{Title: "File", Enabled: true, Children: []protocol.MenuItem{
 				{Title: "New Note", Enabled: true, Shortcut: "⌘N"},

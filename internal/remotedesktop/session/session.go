@@ -134,15 +134,16 @@ type Session struct {
 	lastRXNano     atomic.Int64
 	lastNoticeNano atomic.Int64
 
-	captureSeq atomic.Uint32
-	activeCap  atomic.Uint32
-	capMu      sync.Mutex  // serialises capture (re)starts
-	win        windowMode  // window mode (guarded by mu); zero while a display is shown
-	restarts   []time.Time // recent unplanned capture restarts (guarded by mu)
-	hideCursor bool        // the phone asked for the Mac's pointer to stay out of the video
-	unlocking  atomic.Bool // an unlock attempt is typing
-	tunedKbps  int         // the encoder's current target, as last set (guarded by mu)
-	lastTune   time.Time   // when the link estimate last retargeted the encoder (guarded by mu)
+	captureSeq  atomic.Uint32
+	activeCap   atomic.Uint32
+	capMu       sync.Mutex  // serialises capture (re)starts
+	win         windowMode  // window mode (guarded by mu); zero while a display is shown
+	menuReading string      // the window whose menu bar is being read (guarded by mu): one read per window at a time
+	restarts    []time.Time // recent unplanned capture restarts (guarded by mu)
+	hideCursor  bool        // the phone asked for the Mac's pointer to stay out of the video
+	unlocking   atomic.Bool // an unlock attempt is typing
+	tunedKbps   int         // the encoder's current target, as last set (guarded by mu)
+	lastTune    time.Time   // when the link estimate last retargeted the encoder (guarded by mu)
 
 	framesSent, framesDropped, keyframesSent, keyRequests atomic.Uint64
 	lastPTS                                               time.Duration
@@ -715,6 +716,13 @@ func (s *Session) sendState() {
 
 func (s *Session) sendError(code protocol.ErrorCode, msg string) {
 	if b, err := protocol.Marshal(protocol.ErrorMsg{Code: code, Message: msg}); err == nil {
+		s.send(b)
+	}
+}
+
+// sendErrorFor is sendError naming the window the error is about.
+func (s *Session) sendErrorFor(code protocol.ErrorCode, windowID string) {
+	if b, err := protocol.Marshal(protocol.ErrorMsg{Code: code, WindowID: windowID}); err == nil {
 		s.send(b)
 	}
 }

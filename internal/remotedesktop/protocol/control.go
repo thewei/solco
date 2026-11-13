@@ -194,6 +194,8 @@ type ErrorMsg struct {
 	Type    string    `json:"type"`
 	Code    ErrorCode `json:"code"`
 	Message string    `json:"message,omitempty"`
+	// WindowID is set on the menu errors: the window they are about (the phone may have moved on since).
+	WindowID string `json:"windowId,omitempty"`
 }
 
 type Pong struct {

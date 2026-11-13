@@ -1,4 +1,5 @@
 {
   "type": "error",
-  "code": "menu_unavailable"
+  "code": "menu_unavailable",
+  "windowId": "4210"
 }
