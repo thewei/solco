@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -98,8 +99,12 @@ func (s *Shell) remoteDesktopService() *remotedesktop.Service {
 		Log:             slog.Default(),
 	})
 	r.svc.SetSettings(remoteDesktopSettingsFrom(s.settings.RemoteDesktop))
+	// A window a crashed or killed Solco left resized to a phone's screen goes back first thing (once per process).
+	rdJournalOnce.Do(func() { go r.svc.RestoreJournal(context.Background()) })
 	return r.svc
 }
+
+var rdJournalOnce sync.Once
 
 // remoteICEServers is the Host's STUN/TURN list in the media transport's shape (none while the Host is not built).
 func (s *Shell) remoteICEServers(ctx context.Context) []rtc.ICEServer {
@@ -190,9 +195,13 @@ func (s *Shell) quickPanelRemoteDesktop(c *ui.Context) {
 	}
 	sp := Spacing()
 	t := c.Theme()
-	id := s.rdesk.sessions[0].ID
+	id, fitted := s.rdesk.sessions[0].ID, s.rdesk.sessions[0].State.Fitted
 	ui.Row(c.Key("qp-rd")).FillWidth().Padding(sp.XS, sp.M, sp.XS).Gap(sp.S).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, "Remote Desktop · "+label).FontSize(Typography().Caption).Grow(1).SingleLine().TextColor(t.TextMuted)
+		// A window fitted to the phone's screen goes back to its own size on the spot; the session goes on.
+		if fitted && compactButton(c.Key("qp-rd-restore"), "Restore Window").Clicked() {
+			s.rdesk.svc.RestoreWindow(id)
+		}
 		if compactButton(c, "Disconnect").Clicked() {
 			s.rdesk.svc.Disconnect(id)
 		}

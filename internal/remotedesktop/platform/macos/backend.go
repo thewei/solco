@@ -340,6 +340,8 @@ func translateError(pe *helperipc.ProtocolError) *protocol.Error {
 		return &protocol.Error{Code: protocol.CodeAppNotFound}
 	case helperipc.CodeAppOpenFailed:
 		return &protocol.Error{Code: protocol.CodeAppOpenFailed, Message: pe.Message}
+	case helperipc.CodeFitUnavailable:
+		return &protocol.Error{Code: protocol.CodeFitUnavailable}
 	case helperipc.CodeBadRequest, helperipc.CodeUnknownOp:
 		return &protocol.Error{Code: protocol.CodeBadRequest, Message: pe.Code}
 	case helperipc.CodeCaptureFailed, helperipc.CodeEncoderFailed, helperipc.CodeEncoderUnavailable, helperipc.CodeNotCapturing:

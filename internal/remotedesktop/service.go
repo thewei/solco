@@ -104,6 +104,7 @@ type Service struct {
 	closed   bool
 
 	approvalTimeout time.Duration
+	pending         pendingRestore
 }
 
 // NewService builds a Service. It starts nothing and costs nothing until a session opens.
@@ -289,6 +290,7 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 	sess = session.New(session.Config{
 		ID: id, Device: device, Mode: mode, Tier: tier, DisplayID: offer.DisplayID, Idle: offer.Idle, Capturer: capr, Log: s.log,
 		UnlockSecret: s.cfg.UnlockSecret, AutoUnlock: s.cfg.AutoUnlock,
+		RestoreLater: s.restoreLater, ClaimPending: s.claimPending,
 		OnEnd: func(protocol.ErrorCode) { s.ended(sess) },
 	})
 	if _, err := sess.Prepare(ctx); err != nil {
@@ -428,6 +430,7 @@ func (s *Service) Close() {
 	if act != nil {
 		act.Close(protocol.CodeSessionEnded)
 	}
+	s.settlePending()
 }
 
 func newID() string {

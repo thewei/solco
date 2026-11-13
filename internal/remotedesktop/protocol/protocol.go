@@ -43,6 +43,7 @@ const (
 	CodeAppNotFound         ErrorCode = "app_not_found"        // no such installed application
 	CodeAppOpenFailed       ErrorCode = "app_open_failed"      // the application did not show a window in time
 	CodeWindowsUnavailable  ErrorCode = "windows_unavailable"  // this backend has no window mode
+	CodeFitUnavailable      ErrorCode = "fit_unavailable"      // the window cannot be resized (full screen, fixed size, no Accessibility)
 	CodeInternal            ErrorCode = "internal"
 )
 

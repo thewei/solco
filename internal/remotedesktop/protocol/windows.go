@@ -78,6 +78,65 @@ type WindowTarget struct {
 	OnScreen bool   `json:"onScreen"`
 }
 
+// Insets are the parts of the phone's screen the video must not sit under (status bar, home indicator, notch), in points.
+type Insets struct {
+	Top    float64 `json:"top"`
+	Bottom float64 `json:"bottom"`
+	Left   float64 `json:"left"`
+	Right  float64 `json:"right"`
+}
+
+// Viewport is the phone's screen as the video sees it, in points. Scale is pixels per point.
+type Viewport struct {
+	W      float64 `json:"w"`
+	H      float64 `json:"h"`
+	Scale  float64 `json:"scale"`
+	Insets Insets  `json:"insets"`
+}
+
+// Size is what the window is fitted to: the screen without the insets.
+func (v Viewport) Size() (w, h float64) {
+	return v.W - v.Insets.Left - v.Insets.Right, v.H - v.Insets.Top - v.Insets.Bottom
+}
+
+// Valid bounds a viewport the phone sent: a real phone or tablet screen, nothing the Mac could be asked to
+// make absurd.
+func (v Viewport) Valid() bool {
+	w, h := v.Size()
+	return w >= MinFitPoints && h >= MinFitPoints && w <= MaxFitPoints && h <= MaxFitPoints && v.Scale > 0 && v.Scale <= 6
+}
+
+// WindowFit is window.fit: resize the shown window to the phone's viewport (idempotent: the same viewport
+// again changes nothing, a rotation is a new viewport).
+type WindowFit struct {
+	Type     string   `json:"type"`
+	Viewport Viewport `json:"viewport"`
+}
+
+// Clamped says the app would not shrink to the phone: its minimum width, and the factor the picture is
+// scaled by on the phone (phone width / MinW).
+type Clamped struct {
+	MinW  float64 `json:"minW"`
+	Scale float64 `json:"scale"`
+}
+
+// RestoreOutcome says what became of a fitted window when the session let it go.
+type RestoreOutcome string
+
+const (
+	RestoreDone    RestoreOutcome = "restored"
+	RestoreSkipped RestoreOutcome = "skipped" // the user moved or resized it after the fit: left as they put it
+	RestoreGone    RestoreOutcome = "gone"
+	RestoreNone    RestoreOutcome = "none" // nothing was journaled for the window
+)
+
+// WindowRestored is the Mac's report that a fitted window was given back (or was left on purpose).
+type WindowRestored struct {
+	Type     string         `json:"type"`
+	WindowID string         `json:"windowId"`
+	Outcome  RestoreOutcome `json:"outcome"`
+}
+
 // InfoCapabilities lists optional features of this Mac's Remote Desktop (GET /remote-desktop).
 type InfoCapabilities struct {
 	Windows bool `json:"windows,omitempty"`
@@ -91,4 +150,6 @@ const (
 	MaxThumbBytes     = 48 << 10
 	MaxIconBytes      = 24 << 10
 	MaxBundleIDLength = 256
+	MinFitPoints      = 100
+	MaxFitPoints      = 4000
 )

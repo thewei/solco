@@ -32,6 +32,8 @@ const (
 	OpAppOpen            = "app.open"
 	OpWindowRaise        = "window.raise"
 	OpWindowThumb        = "window.thumb"
+	OpWindowFit          = "window.fit"
+	OpWindowRestore      = "window.restore"
 	OpShutdown           = "shutdown"
 )
 
@@ -40,6 +42,7 @@ const (
 	CapWindowCapture = "capture.window"
 	CapWindowCatalog = "window.catalog"
 	CapAppCatalog    = "app.catalog"
+	CapWindowFit     = "window.fit"
 )
 
 // Event names (helper → Go).
@@ -98,6 +101,7 @@ const (
 	CodeWindowNotFound            = "window_not_found"
 	CodeAppNotFound               = "app_not_found"
 	CodeAppOpenFailed             = "app_open_failed"
+	CodeFitUnavailable            = "fit_unavailable"
 	CodeInternal                  = "internal"
 )
 
@@ -232,4 +236,34 @@ type ThumbResult struct {
 type WindowGone struct {
 	WindowID string                    `json:"windowId"`
 	Reason   protocol.WindowGoneReason `json:"reason"`
+}
+
+// FitArgs is window.fit: resize the window to this many points.
+type FitArgs struct {
+	WindowID string  `json:"windowId"`
+	Width    float64 `json:"width"`
+	Height   float64 `json:"height"`
+}
+
+// FitResult is what the app allowed (read back); Clamped = it kept the window bigger or smaller than asked.
+type FitResult struct {
+	WindowID string        `json:"windowId"`
+	Applied  protocol.Rect `json:"applied"`
+	Clamped  bool          `json:"clamped"`
+}
+
+// RestoreArgs is window.restore; no WindowID = every journaled window.
+type RestoreArgs struct {
+	WindowID string `json:"windowId,omitempty"`
+}
+
+// RestoreEntry is the outcome for one window: restored / skipped / gone / none.
+type RestoreEntry struct {
+	WindowID string `json:"windowId"`
+	Outcome  string `json:"outcome"`
+}
+
+// RestoreResult is the result of window.restore and of the one-shot `restore-journal`.
+type RestoreResult struct {
+	Results []RestoreEntry `json:"results"`
 }

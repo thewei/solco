@@ -20,6 +20,9 @@ type windowMode struct {
 	scale float64 // pixels per point of the display the window was chosen on
 	geom  protocol.WindowGeometry
 	on    bool
+	// fitted: the window was resized to viewport (and is given back when the session lets go of it).
+	fitted   bool
+	viewport protocol.Viewport
 }
 
 func (w windowMode) active() bool { return w.on }
@@ -126,10 +129,22 @@ func (s *Session) selectWindow(id string) {
 		s.sendError(protocol.CodeWindowNotFound, "")
 		return
 	}
+	s.leaveWindow(id)
+	s.mu.Lock()
+	prev, prevVP := s.win.fitted && s.win.info.ID == id, s.win.viewport
+	s.mu.Unlock()
+	inherited := s.claimPending(id) // a window left fitted by a link that dropped: the session owns it again
 	frame := protocol.Rect{X: info.X, Y: info.Y, Width: info.Width, Height: info.Height}
 	s.mu.Lock()
 	s.win = windowMode{info: info, scale: s.scaleAtLocked(info), on: true}
 	s.win.geom = protocol.WindowGeometry{Source: frame, Windows: []protocol.Rect{frame}, OnScreen: info.OnScreen}
+	if prev || inherited {
+		s.win.fitted = true
+		if prev {
+			s.win.viewport = prevVP
+		}
+	}
+	s.state.Fitted, s.state.Clamped = s.win.fitted, nil
 	s.state.Target = protocol.TargetWindow
 	s.state.Window = &protocol.WindowTarget{ID: info.ID, App: info.App, BundleID: info.BundleID, Title: info.Title, OnScreen: info.OnScreen}
 	s.setDisplayLocked(s.display, s.state.Displays)
@@ -250,10 +265,15 @@ func (s *Session) windowGone(id string, reason protocol.WindowGoneReason) {
 		s.mu.Unlock()
 		return
 	}
+	wasFitted := s.win.fitted
 	s.win = windowMode{}
 	s.state.Target, s.state.Window = protocol.TargetNone, nil
+	s.state.Fitted, s.state.Clamped = false, nil
 	s.sharing = false
 	s.mu.Unlock()
+	if wasFitted {
+		go s.restoreFitted(id) // the helper finds it gone and forgets the journal entry
+	}
 	s.activeCap.Store(0) // frames and stop events of the old generation are dropped from here on
 	s.releaseAll("window_gone")
 	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)

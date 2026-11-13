@@ -1,0 +1,14 @@
+{
+  "type": "window.fit",
+  "viewport": {
+    "w": 390,
+    "h": 844,
+    "scale": 3,
+    "insets": {
+      "top": 47,
+      "bottom": 34,
+      "left": 0,
+      "right": 0
+    }
+  }
+}

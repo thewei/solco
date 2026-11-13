@@ -71,6 +71,12 @@ type Config struct {
 	UnlockSecret func() (password string, ok bool)
 	// AutoUnlock reports whether the Mac's owner switched on unlocking by itself when the lock screen is up.
 	AutoUnlock func() bool
+	// RestoreLater hands a fitted window to the service when the session can no longer give it back itself:
+	// after grace (link lost: the phone may return) or at once (grace 0: the helper is gone). Optional.
+	RestoreLater func(windowID string, grace time.Duration)
+	// ClaimPending is called when a window or display (window "") is chosen: it cancels a deferred restore of
+	// that very window and carries out any other. It reports whether the window is still fitted. Optional.
+	ClaimPending func(window string) bool
 	// Stats supplies transport stats (RTT, path) for the stats message and Info; optional.
 	Stats func() LinkStats
 	Now   func() time.Time
@@ -113,6 +119,8 @@ type Session struct {
 	sharing   bool
 	startedAt time.Time
 	closed    bool
+	ended     bool // the phone (or the Mac) asked to end it: a closing link is then not "lost"
+	lost      bool // the link closed under a live session
 	canInput  bool // Accessibility granted (or presumed until a refusal)
 
 	// pointer ordering (see protocol/control.go)
@@ -251,7 +259,7 @@ func (s *Session) setDisplayLocked(d protocol.DisplayInfo, all []protocol.Displa
 		Mode: s.cfg.Mode, DisplayID: d.ID, Displays: all, Tier: s.cfg.Tier,
 		Width: w, Height: h, FPS: spec.FPS, Hardware: s.state.Hardware, Cursor: !s.hideCursor,
 		Blackout: s.state.Blackout, Locked: s.state.Locked, CanUnlock: s.state.CanUnlock,
-		Target: s.state.Target, Window: s.state.Window,
+		Target: s.state.Target, Window: s.state.Window, Fitted: s.state.Fitted, Clamped: s.state.Clamped,
 	}
 }
 
@@ -376,6 +384,9 @@ func (s *Session) OnLinkState(st LinkState) {
 		// Possibly transient: stop trusting input immediately, keep the session for the transport's grace.
 		s.releaseAll("link_disconnected")
 	case LinkClosed:
+		s.mu.Lock()
+		s.lost = !s.ended && !s.closed
+		s.mu.Unlock()
 		s.Close(protocol.CodeSessionEnded)
 	}
 }
@@ -429,10 +440,11 @@ func (s *Session) Close(reason protocol.ErrorCode) {
 		return
 	}
 	s.closed = true
-	link := s.link
+	link, lost := s.link, s.lost
 	s.mu.Unlock()
 
 	s.releaseAll("close")
+	s.closeFit(lost)
 	s.mu.Lock()
 	dark := s.state.Blackout
 	s.mu.Unlock()

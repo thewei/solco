@@ -100,6 +100,22 @@ type Windows interface {
 	WindowThumbnail(ctx context.Context, windowID string, maxWidth int) (string, error)
 }
 
+// WindowFitter is the optional capability of a Capturer that can resize a window to the phone's screen and
+// give it back. Restore is idempotent and never overwrites a frame the user changed after the fit.
+type WindowFitter interface {
+	// FitWindow resizes the window to w×h points and reports what the app allowed.
+	FitWindow(ctx context.Context, windowID string, w, h float64) (applied protocol.Rect, clamped bool, err error)
+	// RestoreWindow puts the window back; the outcome is restored, skipped, gone or none (nothing journaled).
+	RestoreWindow(ctx context.Context, windowID string) (protocol.RestoreOutcome, error)
+}
+
+// JournalRestorer is the optional capability of a Backend to give back every window a vanished session
+// left fitted (the deferred restore after a lost link, and Solco's start-up), without a session or a helper
+// process of its own.
+type JournalRestorer interface {
+	RestoreJournal(ctx context.Context) error
+}
+
 // WindowSupport is the optional capability of a Backend to say, without opening a helper, that its
 // Capturers implement Windows.
 type WindowSupport interface {

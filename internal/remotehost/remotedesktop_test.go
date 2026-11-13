@@ -158,6 +158,8 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 		"target-select-display": `{"type":"target.select","kind":"display","id":"1"}`,
 		"target-activate":       `{"type":"target.activate"}`,
 		"app-open":              `{"type":"app.open","bundleId":"com.apple.Notes"}`,
+		"window-fit":            `{"type":"window.fit","viewport":{"w":390,"h":844,"scale":3,"insets":{"top":47,"bottom":34,"left":0,"right":0}}}`,
+		"window-fit-off":        `{"type":"window.fit.off"}`,
 	}
 	for name, raw := range phoneToMac {
 		if _, err := protocol.Decode([]byte(raw)); err != nil {
@@ -180,9 +182,18 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 	inWindow.Window = &protocol.WindowTarget{ID: "4210", App: "Notes", BundleID: "com.apple.Notes", Title: "Shopping list", OnScreen: true}
 	idle := st
 	idle.Target = protocol.TargetNone
+	fitted := inWindow
+	fitted.Width, fitted.Height, fitted.Fitted = 552, 1080, true
+	clamped := fitted
+	clamped.Clamped = &protocol.Clamped{MinW: 520, Scale: 0.75}
 	macToPhone := map[string]any{
-		"session-state-window": protocol.SessionStateMsg{SessionState: inWindow},
-		"session-state-idle":   protocol.SessionStateMsg{SessionState: idle},
+		"session-state-window":    protocol.SessionStateMsg{SessionState: inWindow},
+		"session-state-idle":      protocol.SessionStateMsg{SessionState: idle},
+		"session-state-fitted":    protocol.SessionStateMsg{SessionState: fitted},
+		"session-state-clamped":   protocol.SessionStateMsg{SessionState: clamped},
+		"window-restored":         protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreDone},
+		"window-restored-skipped": protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreSkipped},
+		"error-fit-unavailable":   protocol.ErrorMsg{Code: protocol.CodeFitUnavailable},
 		"windows-snapshot": protocol.WindowsSnapshot{Windows: []protocol.WindowInfo{
 			{ID: "4210", App: "Notes", BundleID: "com.apple.Notes", Title: "Shopping list", X: 100, Y: 80, Width: 500, Height: 800, OnScreen: true},
 			{ID: "4211", App: "Safari", BundleID: "com.apple.Safari", X: 0, Y: 0, Width: 1200, Height: 800, Minimized: true},

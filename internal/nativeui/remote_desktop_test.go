@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/thewei/solco/internal/remotedesktop"
+	"github.com/thewei/solco/internal/remotedesktop/platform/macos"
 	"github.com/thewei/solco/internal/remotedesktop/protocol"
+	"github.com/thewei/solco/internal/remotedesktop/session"
 	"github.com/thewei/solco/internal/settings"
 )
 
@@ -107,5 +110,27 @@ func TestRemoteDesktopPhoneGivingUpClearsThePrompt(t *testing.T) {
 func TestRemoteDesktopDeviceNameFallback(t *testing.T) {
 	if got := rdDeviceName(protocol.DeviceInfo{Name: "  "}); got != "A phone" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// A window fitted to the phone's screen gets its own "Restore Window" beside Disconnect in the quick panel's
+// Remote Desktop banner; a session that shows a display or an unfitted window has none.
+func TestQuickPanelRemoteBannerOffersRestoreOnlyWhileFitted(t *testing.T) {
+	for _, tc := range []struct {
+		fitted bool
+		want   bool
+	}{{false, false}, {true, true}} {
+		shell := quickPanelShell(t)
+		shell.rdesk.svc = remotedesktop.NewService(remotedesktop.Config{Backend: macos.New(macos.Options{})})
+		shell.rdesk.sessions = []session.Info{{ID: "s1", Device: protocol.DeviceInfo{ID: "d1", Name: "Test Phone"}, Controlling: true,
+			State: protocol.SessionState{Fitted: tc.fitted}}}
+		tester := ui.NewTester(shell.QuickPanelView, QuickPanelWidth, QuickPanelHeight)
+		tester.Frame()
+		if got := tester.HasText("Restore Window"); got != tc.want {
+			t.Fatalf("fitted=%v: Restore Window shown = %v, want %v; texts=%q", tc.fitted, got, tc.want, tester.Texts())
+		}
+		if !tester.HasText("Disconnect") {
+			t.Fatalf("fitted=%v: Disconnect missing; texts=%q", tc.fitted, tester.Texts())
+		}
 	}
 }

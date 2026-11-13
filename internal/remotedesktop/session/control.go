@@ -34,6 +34,8 @@ func (s *Session) handle(data []byte) {
 		go s.selectDisplay(m.DisplayID)
 	case *protocol.TargetSelect:
 		go s.selectTarget(m.Kind, m.ID)
+	case *protocol.WindowFit:
+		go s.fitWindow(m.Viewport)
 	case *protocol.BundleRef:
 		s.handleBundle(m)
 	case *protocol.ThumbGet:
@@ -54,7 +56,12 @@ func (s *Session) handleSimple(typ string) {
 	case protocol.TypeKeyframe:
 		s.OnKeyframeRequest()
 	case protocol.TypeSessionEnd:
+		s.mu.Lock()
+		s.ended = true
+		s.mu.Unlock()
 		go s.Close(protocol.CodeSessionEnded)
+	case protocol.TypeWindowFitOff:
+		go s.fitOff()
 	case protocol.TypeStatsRequest:
 		s.sendStats()
 	case protocol.TypeReleaseAll:
@@ -286,8 +293,13 @@ func (s *Session) selectDisplay(id string) {
 		return
 	}
 	all := s.state.Displays
+	s.mu.Unlock()
+	s.leaveWindow("")
+	s.claimPending("")
+	s.mu.Lock()
 	s.win = windowMode{} // back to showing a whole display
 	s.state.Target, s.state.Window = "", nil
+	s.state.Fitted, s.state.Clamped = false, nil
 	s.setDisplayLocked(target, all)
 	s.haveLast = false
 	s.mu.Unlock()

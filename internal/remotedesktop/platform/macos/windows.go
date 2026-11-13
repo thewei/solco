@@ -15,8 +15,10 @@ func (b *Backend) WindowsSupported() bool {
 }
 
 var (
-	_ platform.WindowSupport = (*Backend)(nil)
-	_ platform.Windows       = (*capturer)(nil)
+	_ platform.WindowSupport   = (*Backend)(nil)
+	_ platform.Windows         = (*capturer)(nil)
+	_ platform.WindowFitter    = (*capturer)(nil)
+	_ platform.JournalRestorer = (*Backend)(nil)
 )
 
 // WindowsSupported: an older helper that did not announce the three window capabilities offers none
@@ -71,4 +73,33 @@ func (c *capturer) WindowThumbnail(ctx context.Context, windowID string, maxWidt
 		return "", asProtocolErr(err)
 	}
 	return out.JPEG, nil
+}
+
+// FitWindow resizes the window to w×h points; the helper journals the original frame first and reads the
+// result back, so a refusing app shows as clamped (or fit_unavailable) rather than as success.
+func (c *capturer) FitWindow(ctx context.Context, windowID string, w, h float64) (protocol.Rect, bool, error) {
+	var out helperipc.FitResult
+	if err := c.conn.Call(ctx, helperipc.OpWindowFit, helperipc.FitArgs{WindowID: windowID, Width: w, Height: h}, &out); err != nil {
+		return protocol.Rect{}, false, asProtocolErr(err)
+	}
+	return out.Applied, out.Clamped, nil
+}
+
+func (c *capturer) RestoreWindow(ctx context.Context, windowID string) (protocol.RestoreOutcome, error) {
+	var out helperipc.RestoreResult
+	if err := c.conn.Call(ctx, helperipc.OpWindowRestore, helperipc.RestoreArgs{WindowID: windowID}, &out); err != nil {
+		return "", asProtocolErr(err)
+	}
+	for _, r := range out.Results {
+		if r.WindowID == windowID {
+			return protocol.RestoreOutcome(r.Outcome), nil
+		}
+	}
+	return protocol.RestoreNone, nil
+}
+
+// RestoreJournal gives back every window the journal still lists (the helper's one-shot `restore-journal`).
+func (b *Backend) RestoreJournal(ctx context.Context) error {
+	var out helperipc.RestoreResult
+	return b.oneShot(ctx, &out, "restore-journal")
 }

@@ -39,6 +39,8 @@ const (
 	TypeThumbGet      = "window.thumb.get"
 	TypeTargetSelect  = "target.select"
 	TypeTargetActive  = "target.activate"
+	TypeWindowFit     = "window.fit"
+	TypeWindowFitOff  = "window.fit.off"
 	TypeAppOpen       = "app.open"
 
 	// Mac → phone.
@@ -54,6 +56,7 @@ const (
 	TypeAppOpening    = "app.opening"
 	TypeAppOpenFailed = "app.open_failed"
 	TypeWindowGone    = "window.gone"
+	TypeWindowRestore = "window.restored"
 )
 
 // Button names for TypePointerButton.
@@ -282,6 +285,9 @@ func Marshal(msg any) ([]byte, error) {
 	case WindowGone:
 		m.Type = TypeWindowGone
 		return json.Marshal(m)
+	case WindowRestored:
+		m.Type = TypeWindowRestore
+		return json.Marshal(m)
 	case StatsMsg:
 		m.Type = TypeStats
 		return json.Marshal(m)
@@ -329,7 +335,9 @@ func Decode(data []byte) (any, error) {
 		target = &ThumbGet{}
 	case TypeTargetSelect:
 		target = &TargetSelect{}
-	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest, TypeUnlockRequest, TypeWindowsList, TypeAppsList, TypeTargetActive:
+	case TypeWindowFit:
+		target = &WindowFit{}
+	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest, TypeUnlockRequest, TypeWindowsList, TypeAppsList, TypeTargetActive, TypeWindowFitOff:
 		return &env, nil
 	default:
 		return nil, Errf(CodeBadRequest, "unknown message type")

@@ -69,6 +69,10 @@ type SessionState struct {
 	// chosen yet or the window left). Window names the window while Target is "window".
 	Target string        `json:"target,omitempty"`
 	Window *WindowTarget `json:"window,omitempty"`
+	// Fitted: the window was resized to the phone's screen (and will be given back). Clamped: the app kept
+	// it wider than asked, so the picture is scaled down on the phone.
+	Fitted  bool     `json:"fitted,omitempty"`
+	Clamped *Clamped `json:"clamped,omitempty"`
 }
 
 // DeviceInfo identifies the phone to the authorizer and the session list. ID is the paired device id.
