@@ -81,6 +81,31 @@ type Screen interface {
 	Unlock(ctx context.Context, password string) (stillLocked bool, err error)
 }
 
+// Windows is the optional capability of a Capturer that can show one application window instead of a
+// whole display: list windows and installed apps, open an app, bring a window forward, take a still of
+// one. The session type-asserts it; a backend without it offers display mode only. A window capture is
+// started through StartCapture with CaptureConfig.WindowID set.
+type Windows interface {
+	// WindowsSupported reports whether this helper/OS can do window mode at all.
+	WindowsSupported() bool
+	ListWindows(ctx context.Context) ([]protocol.WindowInfo, error)
+	ListApps(ctx context.Context) ([]protocol.AppInfo, error)
+	// AppIcon returns the app's 64 px icon as a base64 PNG.
+	AppIcon(ctx context.Context, bundleID string) (string, error)
+	// OpenApp launches (or re-opens) the app and returns the id of the window to show.
+	OpenApp(ctx context.Context, bundleID string) (windowID string, err error)
+	// RaiseWindow brings the window (and its app) to the front, un-minimizing it.
+	RaiseWindow(ctx context.Context, windowID string) error
+	// WindowThumbnail returns a small JPEG still of the window, base64.
+	WindowThumbnail(ctx context.Context, windowID string, maxWidth int) (string, error)
+}
+
+// WindowSupport is the optional capability of a Backend to say, without opening a helper, that its
+// Capturers implement Windows.
+type WindowSupport interface {
+	WindowsSupported() bool
+}
+
 // Frame is one encoded access unit.
 type Frame struct {
 	CaptureID uint32
@@ -99,14 +124,21 @@ const (
 	EventCaptureStopped
 	// EventError: an asynchronous failure the session should surface (e.g. input refused).
 	EventError
+	// EventWindowGeometry: a window capture moved or its popups changed; Geometry is the fresh placement.
+	EventWindowGeometry
+	// EventWindowGone: the captured window left (closed, app quit, minimized, hidden); WindowID and GoneReason say which and why.
+	EventWindowGone
 )
 
 // Event is an asynchronous backend notification.
 type Event struct {
-	Kind      EventKind
-	Displays  []protocol.DisplayInfo
-	CaptureID uint32
-	Err       *protocol.Error
+	Kind       EventKind
+	Displays   []protocol.DisplayInfo
+	CaptureID  uint32
+	Err        *protocol.Error
+	Geometry   *protocol.WindowGeometry
+	WindowID   string
+	GoneReason protocol.WindowGoneReason
 }
 
 // Input injects pointer and keyboard events. Pointer positions are global points; Key takes W3C

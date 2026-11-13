@@ -1,0 +1,5 @@
+{
+  "type": "app.open_failed",
+  "bundleId": "com.apple.Maps",
+  "reason": "no_window"
+}

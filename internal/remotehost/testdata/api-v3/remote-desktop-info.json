@@ -11,5 +11,8 @@
     "smooth",
     "standard",
     "high"
-  ]
+  ],
+  "capabilities": {
+    "windows": true
+  }
 }

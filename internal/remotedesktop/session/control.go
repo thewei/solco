@@ -32,6 +32,12 @@ func (s *Session) handle(data []byte) {
 		s.handleSimple(m.Type)
 	case *protocol.DisplaySelect:
 		go s.selectDisplay(m.DisplayID)
+	case *protocol.TargetSelect:
+		go s.selectTarget(m.Kind, m.ID)
+	case *protocol.BundleRef:
+		s.handleBundle(m)
+	case *protocol.ThumbGet:
+		go s.sendThumb(m)
 	case *protocol.QualitySet:
 		go s.setTier(m.Tier)
 	case *protocol.CursorSet:
@@ -59,6 +65,12 @@ func (s *Session) handleSimple(typ string) {
 		}
 	case protocol.TypeUnlockRequest:
 		go s.requestUnlock()
+	case protocol.TypeWindowsList:
+		go s.sendWindows()
+	case protocol.TypeAppsList:
+		go s.sendApps()
+	case protocol.TypeTargetActive:
+		go s.activateWindow()
 	}
 }
 
@@ -94,13 +106,13 @@ func (s *Session) rateLimitedNotice() bool {
 }
 
 func (s *Session) handleInput(msg any) {
-	if !s.allowInput() {
+	if !s.allowInput() || !s.windowAcceptsInput() {
 		return
 	}
 	in := s.cap.Input()
 	switch m := msg.(type) {
 	case *protocol.PointerMove:
-		x, y, ok := s.pointerTarget(m.Seq, m.X, m.Y, m.DisplayID, false)
+		x, y, ok := s.pointerTarget(m.Seq, m.X, m.Y, m.DisplayID, false, false)
 		if !ok {
 			return
 		}
@@ -110,7 +122,7 @@ func (s *Session) handleInput(msg any) {
 			s.sendError(protocol.CodeBadRequest, "button")
 			return
 		}
-		x, y, ok := s.pointerTarget(m.Seq, m.X, m.Y, m.DisplayID, true)
+		x, y, ok := s.pointerTarget(m.Seq, m.X, m.Y, m.DisplayID, true, m.Down)
 		if !ok {
 			return
 		}
@@ -132,6 +144,10 @@ func (s *Session) handleInput(msg any) {
 		_ = in.Scroll(mapper.ScrollPoints(m.DX), mapper.ScrollPoints(m.DY))
 	case *protocol.KeyEvent:
 		s.mu.Lock()
+		if m.Down && s.win.active() && systemShortcut(m.Code, s.heldKeys) {
+			s.mu.Unlock()
+			return // ⌘Tab, ⌘Space and the Spaces arrows would leave the window the phone is looking at
+		}
 		if m.Down {
 			if len(s.heldKeys) >= maxHeldKeys {
 				s.mu.Unlock()
@@ -186,10 +202,11 @@ func sanitizeText(t string) string {
 // channel can reorder around a button that travelled the reliable one) and is dropped. A button
 // that is itself older than an already-applied move uses that move's position, so a drag never
 // presses at a position the pointer already left.
-func (s *Session) pointerTarget(seq uint64, nx, ny float64, displayID string, button bool) (x, y float64, ok bool) {
+func (s *Session) pointerTarget(seq uint64, nx, ny float64, displayID string, button, down bool) (x, y float64, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if displayID != "" && displayID != s.display.ID {
+	window := s.win.active()
+	if !window && displayID != "" && displayID != s.display.ID {
 		return 0, 0, false // addressed to a display the stream has since left
 	}
 	stale := seq != 0 && seq <= s.lastSeq
@@ -199,9 +216,21 @@ func (s *Session) pointerTarget(seq uint64, nx, ny float64, displayID string, bu
 	if stale && button && s.haveLast {
 		return s.lastX, s.lastY, true
 	}
-	x, y, ok = mapper.ToGlobal(s.display, nx, ny)
-	if !ok {
-		return 0, 0, false
+	if window {
+		x, y, ok = mapper.ToRect(s.win.geom.Source, nx, ny)
+		if !ok {
+			return 0, 0, false
+		}
+		// Outside the window and its popups nothing is forwarded — except while a button is held (a drag
+		// may leave the window) and the button's release, which must always arrive.
+		if !mapper.InAny(s.win.geom.Windows, x, y) && len(s.heldButtons) == 0 && !(button && !down) {
+			return 0, 0, false
+		}
+	} else {
+		x, y, ok = mapper.ToGlobal(s.display, nx, ny)
+		if !ok {
+			return 0, 0, false
+		}
 	}
 	if seq > s.lastSeq {
 		s.lastSeq = seq
@@ -257,6 +286,8 @@ func (s *Session) selectDisplay(id string) {
 		return
 	}
 	all := s.state.Displays
+	s.win = windowMode{} // back to showing a whole display
+	s.state.Target, s.state.Window = "", nil
 	s.setDisplayLocked(target, all)
 	s.haveLast = false
 	s.mu.Unlock()

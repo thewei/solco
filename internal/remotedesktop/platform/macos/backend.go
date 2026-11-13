@@ -305,6 +305,18 @@ func translateEvent(e helperipc.Event) (platform.Event, bool) {
 			ev.Err = translateError(s.Error)
 		}
 		return ev, true
+	case helperipc.EventWindowGeometry:
+		var g protocol.WindowGeometry
+		if json.Unmarshal(e.Data, &g) != nil {
+			return platform.Event{}, false
+		}
+		return platform.Event{Kind: platform.EventWindowGeometry, CaptureID: g.CaptureID, Geometry: &g}, true
+	case helperipc.EventWindowGone:
+		var g helperipc.WindowGone
+		if json.Unmarshal(e.Data, &g) != nil {
+			return platform.Event{}, false
+		}
+		return platform.Event{Kind: platform.EventWindowGone, WindowID: g.WindowID, GoneReason: g.Reason}, true
 	case helperipc.EventError:
 		var pe helperipc.ProtocolError
 		if json.Unmarshal(e.Data, &pe) != nil {
@@ -322,6 +334,12 @@ func translateError(pe *helperipc.ProtocolError) *protocol.Error {
 		return &protocol.Error{Code: protocol.CodePermissionRequired, Message: pe.Code}
 	case helperipc.CodeDisplayNotFound:
 		return &protocol.Error{Code: protocol.CodeDisplayNotFound}
+	case helperipc.CodeWindowNotFound:
+		return &protocol.Error{Code: protocol.CodeWindowNotFound}
+	case helperipc.CodeAppNotFound:
+		return &protocol.Error{Code: protocol.CodeAppNotFound}
+	case helperipc.CodeAppOpenFailed:
+		return &protocol.Error{Code: protocol.CodeAppOpenFailed, Message: pe.Message}
 	case helperipc.CodeBadRequest, helperipc.CodeUnknownOp:
 		return &protocol.Error{Code: protocol.CodeBadRequest, Message: pe.Code}
 	case helperipc.CodeCaptureFailed, helperipc.CodeEncoderFailed, helperipc.CodeEncoderUnavailable, helperipc.CodeNotCapturing:

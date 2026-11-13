@@ -58,3 +58,24 @@ func ScrollPoints(v float64) float64 {
 	}
 	return math.Max(-protocol.MaxScrollDelta, math.Min(protocol.MaxScrollDelta, v))
 }
+
+// ToRect maps normalised (nx, ny) on the picture of a window capture — whose placement in the global
+// point space is r — to a global point, with the same edge rule as ToGlobal.
+func ToRect(r protocol.Rect, nx, ny float64) (x, y float64, ok bool) {
+	if r.Width <= 0 || r.Height <= 0 || math.IsNaN(nx) || math.IsNaN(ny) {
+		return 0, 0, false
+	}
+	x = r.X + Clamp01(nx)*r.Width
+	y = r.Y + Clamp01(ny)*r.Height
+	return clampInside(x, r.X, r.Width), clampInside(y, r.Y, r.Height), true
+}
+
+// InAny reports whether the point lies inside any of the rectangles (the target window and its popups).
+func InAny(rects []protocol.Rect, x, y float64) bool {
+	for _, r := range rects {
+		if r.Contains(x, y) {
+			return true
+		}
+	}
+	return false
+}

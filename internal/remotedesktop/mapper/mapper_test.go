@@ -66,3 +66,30 @@ func TestScrollPointsBounds(t *testing.T) {
 		t.Fatal("scroll clamp wrong")
 	}
 }
+
+func TestToRectMapsOntoTheWindowPictureAndStaysInside(t *testing.T) {
+	r := protocol.Rect{X: 100, Y: 50, Width: 400, Height: 300}
+	x, y, ok := ToRect(r, 0.5, 0.5)
+	if !ok || x != 300 || y != 200 {
+		t.Fatalf("centre = %v,%v,%v", x, y, ok)
+	}
+	x, y, _ = ToRect(r, 5, -3) // a finger dragged past the picture clamps to it
+	if x != 499.5 || y != 50 {
+		t.Fatalf("clamped = %v,%v", x, y)
+	}
+	if _, _, ok := ToRect(protocol.Rect{}, 0.5, 0.5); ok {
+		t.Fatal("an empty picture maps nothing")
+	}
+}
+
+func TestInAnyFindsTheWindowOrItsPopup(t *testing.T) {
+	rects := []protocol.Rect{{X: 0, Y: 0, Width: 100, Height: 100}, {X: 90, Y: 40, Width: 60, Height: 30}}
+	for _, p := range []struct {
+		x, y float64
+		in   bool
+	}{{50, 50, true}, {120, 50, true}, {120, 80, false}, {100, 10, false}, {-1, 5, false}} {
+		if got := InAny(rects, p.x, p.y); got != p.in {
+			t.Errorf("InAny(%v,%v) = %v", p.x, p.y, got)
+		}
+	}
+}

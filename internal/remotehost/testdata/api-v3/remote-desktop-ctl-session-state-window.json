@@ -1,0 +1,45 @@
+{
+  "type": "session.state",
+  "mode": "full",
+  "displayId": "1",
+  "displays": [
+    {
+      "id": "1",
+      "name": "Built-in Retina Display",
+      "x": 0,
+      "y": 0,
+      "width": 1440,
+      "height": 900,
+      "pixelWidth": 2880,
+      "pixelHeight": 1800,
+      "scale": 2,
+      "isMain": true
+    },
+    {
+      "id": "2",
+      "name": "DELL U2723QE",
+      "x": 1440,
+      "y": -200,
+      "width": 1920,
+      "height": 1080,
+      "pixelWidth": 3840,
+      "pixelHeight": 2160,
+      "scale": 2,
+      "isMain": false
+    }
+  ],
+  "tier": "standard",
+  "width": 1728,
+  "height": 1080,
+  "fps": 30,
+  "hardware": true,
+  "cursor": true,
+  "target": "window",
+  "window": {
+    "id": "4210",
+    "app": "Notes",
+    "bundleId": "com.apple.Notes",
+    "title": "Shopping list",
+    "onScreen": true
+  }
+}

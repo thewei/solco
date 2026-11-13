@@ -188,6 +188,9 @@ func (s *Service) Info(ctx context.Context) protocol.Info {
 	default:
 		info.State = protocol.StateReady
 	}
+	if ws, ok := s.cfg.Backend.(platform.WindowSupport); ok && ws.WindowsSupported() {
+		info.Capabilities = &protocol.InfoCapabilities{Windows: true}
+	}
 	return info
 }
 
@@ -284,7 +287,7 @@ func (s *Service) Open(ctx context.Context, device protocol.DeviceInfo, offer pr
 	id := newID()
 	var sess *session.Session
 	sess = session.New(session.Config{
-		ID: id, Device: device, Mode: mode, Tier: tier, DisplayID: offer.DisplayID, Capturer: capr, Log: s.log,
+		ID: id, Device: device, Mode: mode, Tier: tier, DisplayID: offer.DisplayID, Idle: offer.Idle, Capturer: capr, Log: s.log,
 		UnlockSecret: s.cfg.UnlockSecret, AutoUnlock: s.cfg.AutoUnlock,
 		OnEnd: func(protocol.ErrorCode) { s.ended(sess) },
 	})

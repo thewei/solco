@@ -38,6 +38,11 @@ const (
 	CodeUnlockUnavailable   ErrorCode = "unlock_unavailable"   // no Mac password saved (or this Mac cannot unlock)
 	CodeUnlockFailed        ErrorCode = "unlock_failed"        // the lock screen was still up after the attempt
 	CodePrivacyUnavailable  ErrorCode = "privacy_unavailable"  // this backend cannot black the screen out
+	CodeWindowNotFound      ErrorCode = "window_not_found"     // the chosen window is gone
+	CodeWindowOffscreen     ErrorCode = "window_offscreen"     // input for a window that is not on a screen (activate it first)
+	CodeAppNotFound         ErrorCode = "app_not_found"        // no such installed application
+	CodeAppOpenFailed       ErrorCode = "app_open_failed"      // the application did not show a window in time
+	CodeWindowsUnavailable  ErrorCode = "windows_unavailable"  // this backend has no window mode
 	CodeInternal            ErrorCode = "internal"
 )
 
@@ -89,6 +94,7 @@ type DisplayInfo struct {
 type CaptureConfig struct {
 	CaptureID           uint32 `json:"captureId"`
 	DisplayID           string `json:"displayId"`
+	WindowID            string `json:"windowId,omitempty"` // set = capture this window (and its popups) instead of the display
 	Width               int    `json:"width"`
 	Height              int    `json:"height"`
 	FPS                 int    `json:"fps"`
@@ -103,6 +109,8 @@ type CaptureStarted struct {
 	Width           int    `json:"width"`
 	Height          int    `json:"height"`
 	HardwareEncoder bool   `json:"hardwareEncoder"`
+	// Window is where a window capture sits in the global point space (nil for a display).
+	Window *WindowGeometry `json:"window,omitempty"`
 }
 
 // PermissionStatus is the OS's grant state for the two capabilities Remote Desktop needs.

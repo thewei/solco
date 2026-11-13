@@ -22,6 +22,8 @@ type Info struct {
 	Permissions     PermissionStatus `json:"permissions"`
 	RequireApproval bool             `json:"requireApproval"`
 	Tiers           []Tier           `json:"tiers"`
+	// Capabilities names the optional features of this Mac; absent = none beyond the whole desktop.
+	Capabilities *InfoCapabilities `json:"capabilities,omitempty"`
 }
 
 // Offer is POST /remote-desktop/session. The phone sends a complete (non-trickle) SDP offer with a
@@ -33,6 +35,9 @@ type Offer struct {
 	Mode      Mode   `json:"mode,omitempty"`      // requested; the Mac user may downgrade
 	DisplayID string `json:"displayId,omitempty"` // default: the main display
 	Tier      Tier   `json:"tier,omitempty"`      // default: standard
+	// Idle opens the session without capturing anything: the phone picks a window or display next
+	// (target.select), so no part of the desktop is captured before it has chosen.
+	Idle bool `json:"idle,omitempty"`
 }
 
 // Answer is the reply to an accepted Offer.
@@ -60,6 +65,10 @@ type SessionState struct {
 	// ask it to type (never sent to the phone).
 	Locked    bool `json:"locked,omitempty"`
 	CanUnlock bool `json:"canUnlock,omitempty"`
+	// Target is what the video shows: "display" (absent = display), "window" or "none" (idle, nothing
+	// chosen yet or the window left). Window names the window while Target is "window".
+	Target string        `json:"target,omitempty"`
+	Window *WindowTarget `json:"window,omitempty"`
 }
 
 // DeviceInfo identifies the phone to the authorizer and the session list. ID is the paired device id.

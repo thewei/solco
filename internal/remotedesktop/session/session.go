@@ -62,7 +62,9 @@ type Config struct {
 	Mode      protocol.Mode
 	Tier      protocol.Tier
 	DisplayID string // "" = the main display
-	Capturer  platform.Capturer
+	// Idle starts the session without capturing: the phone chooses a window or display first.
+	Idle     bool
+	Capturer platform.Capturer
 	// OnEnd is called once, after teardown, with the reason.
 	OnEnd func(reason protocol.ErrorCode)
 	// UnlockSecret yields the saved Mac login password (ok=false when none is saved); it is called only to type it.
@@ -127,6 +129,7 @@ type Session struct {
 	captureSeq atomic.Uint32
 	activeCap  atomic.Uint32
 	capMu      sync.Mutex  // serialises capture (re)starts
+	win        windowMode  // window mode (guarded by mu); zero while a display is shown
 	restarts   []time.Time // recent unplanned capture restarts (guarded by mu)
 	hideCursor bool        // the phone asked for the Mac's pointer to stay out of the video
 	unlocking  atomic.Bool // an unlock attempt is typing
@@ -198,6 +201,9 @@ func (s *Session) Prepare(ctx context.Context) (protocol.SessionState, error) {
 	defer s.mu.Unlock()
 	s.state.CanUnlock = can
 	s.setDisplayLocked(d, displays)
+	if s.cfg.Idle {
+		s.state.Target = protocol.TargetNone
+	}
 	return s.state, nil
 }
 
@@ -237,21 +243,29 @@ func pickDisplay(displays []protocol.DisplayInfo, want string) (protocol.Display
 func (s *Session) setDisplayLocked(d protocol.DisplayInfo, all []protocol.DisplayInfo) {
 	spec := protocol.Specs[s.cfg.Tier]
 	w, h := spec.Size(d)
+	if s.win.active() {
+		w, h = spec.Size(s.win.asDisplay())
+	}
 	s.display = d
 	s.state = protocol.SessionState{
 		Mode: s.cfg.Mode, DisplayID: d.ID, Displays: all, Tier: s.cfg.Tier,
 		Width: w, Height: h, FPS: spec.FPS, Hardware: s.state.Hardware, Cursor: !s.hideCursor,
 		Blackout: s.state.Blackout, Locked: s.state.Locked, CanUnlock: s.state.CanUnlock,
+		Target: s.state.Target, Window: s.state.Window,
 	}
 }
 
 func (s *Session) captureConfigLocked() protocol.CaptureConfig {
 	spec := protocol.Specs[s.cfg.Tier]
-	return protocol.CaptureConfig{
+	cfg := protocol.CaptureConfig{
 		CaptureID: s.captureSeq.Add(1), DisplayID: s.display.ID,
 		Width: s.state.Width, Height: s.state.Height, FPS: spec.FPS, BitrateKbps: spec.BitrateKbps,
 		KeyframeIntervalSec: protocol.KeyframeIntervalSec, HideCursor: s.hideCursor,
 	}
+	if s.win.active() {
+		cfg.WindowID = s.win.info.ID
+	}
+	return cfg
 }
 
 // startCapture (re)starts the capture with the current display and tier.
@@ -273,6 +287,14 @@ func (s *Session) startCapture(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.state.Width, s.state.Height, s.state.Hardware = started.Width, started.Height, started.HardwareEncoder
+	if started.Window != nil && s.win.active() {
+		s.win.geom = *started.Window
+		if w := s.state.Window; w != nil {
+			next := *w // the state message is marshalled outside the lock: replace, never edit in place
+			next.OnScreen = started.Window.OnScreen
+			s.state.Window = &next
+		}
+	}
 	s.tunedKbps = cfg.BitrateKbps
 	s.sharing = true
 	s.havePTS = false
@@ -319,7 +341,7 @@ func (s *Session) recoverCapture(cause *protocol.Error) {
 	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 	defer cancel()
 	if err := s.startCapture(ctx); err != nil {
-		s.fail(err)
+		s.failCapture(err)
 		return
 	}
 	s.sendState()
@@ -336,12 +358,17 @@ func (s *Session) OnLinkState(st LinkState) {
 		if already {
 			return
 		}
-		ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
-		defer cancel()
-		if err := s.startCapture(ctx); err != nil {
-			s.log.Warn("remote desktop capture failed to start", "error", protocol.CodeOf(err))
-			s.fail(err)
-			return
+		s.mu.Lock()
+		nothingYet := s.state.Target == protocol.TargetNone || s.sharing // an idle session waits for the phone's choice
+		s.mu.Unlock()
+		if !nothingYet {
+			ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
+			defer cancel()
+			if err := s.startCapture(ctx); err != nil {
+				s.log.Warn("remote desktop capture failed to start", "error", protocol.CodeOf(err))
+				s.fail(err)
+				return
+			}
 		}
 		s.sendState()
 		go s.wakeScreen()
@@ -543,6 +570,10 @@ func (s *Session) handleEvent(ev platform.Event) {
 	switch ev.Kind {
 	case platform.EventDisplaysChanged:
 		s.onDisplaysChanged(ev.Displays)
+	case platform.EventWindowGeometry:
+		s.onWindowGeometry(ev)
+	case platform.EventWindowGone:
+		go s.windowGone(ev.WindowID, ev.GoneReason)
 	case platform.EventCaptureStopped:
 		if ev.CaptureID != s.activeCap.Load() {
 			return // the generation we replaced ourselves
@@ -588,7 +619,7 @@ func (s *Session) onDisplaysChanged(displays []protocol.DisplayInfo) {
 		ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 		defer cancel()
 		if err := s.startCapture(ctx); err != nil {
-			s.fail(err)
+			s.failCapture(err)
 			return
 		}
 	}

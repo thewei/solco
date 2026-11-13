@@ -1,0 +1,27 @@
+{
+  "type": "windows.snapshot",
+  "windows": [
+    {
+      "id": "4210",
+      "app": "Notes",
+      "bundleId": "com.apple.Notes",
+      "title": "Shopping list",
+      "x": 100,
+      "y": 80,
+      "width": 500,
+      "height": 800,
+      "onScreen": true
+    },
+    {
+      "id": "4211",
+      "app": "Safari",
+      "bundleId": "com.apple.Safari",
+      "x": 0,
+      "y": 0,
+      "width": 1200,
+      "height": 800,
+      "onScreen": false,
+      "minimized": true
+    }
+  ]
+}

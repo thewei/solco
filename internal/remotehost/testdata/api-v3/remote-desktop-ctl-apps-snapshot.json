@@ -1,0 +1,15 @@
+{
+  "type": "apps.snapshot",
+  "apps": [
+    {
+      "bundleId": "com.apple.Notes",
+      "name": "Notes",
+      "running": true
+    },
+    {
+      "bundleId": "com.apple.Maps",
+      "name": "Maps",
+      "running": false
+    }
+  ]
+}

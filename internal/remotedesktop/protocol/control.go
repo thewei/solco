@@ -33,6 +33,13 @@ const (
 	TypeSessionEnd    = "session.end"
 	TypeReleaseAll    = "input.release_all"
 	TypeStatsRequest  = "stats.request"
+	TypeWindowsList   = "windows.list"
+	TypeAppsList      = "apps.list"
+	TypeAppIconGet    = "app.icon.get"
+	TypeThumbGet      = "window.thumb.get"
+	TypeTargetSelect  = "target.select"
+	TypeTargetActive  = "target.activate"
+	TypeAppOpen       = "app.open"
 
 	// Mac → phone.
 	TypeSessionState  = "session.state"
@@ -40,6 +47,13 @@ const (
 	TypeError         = "error"
 	TypePong          = "pong"
 	TypeStats         = "stats"
+	TypeWindows       = "windows.snapshot"
+	TypeApps          = "apps.snapshot"
+	TypeAppIcon       = "app.icon"
+	TypeThumb         = "window.thumb"
+	TypeAppOpening    = "app.opening"
+	TypeAppOpenFailed = "app.open_failed"
+	TypeWindowGone    = "window.gone"
 )
 
 // Button names for TypePointerButton.
@@ -116,6 +130,26 @@ type DisplaySelect struct {
 	DisplayID string `json:"displayId"`
 }
 
+// BundleRef names an application (app.open, app.icon.get, app.opening).
+type BundleRef struct {
+	Type     string `json:"type"`
+	BundleID string `json:"bundleId"`
+}
+
+// ThumbGet asks for one still picture of a window.
+type ThumbGet struct {
+	Type     string `json:"type"`
+	WindowID string `json:"windowId"`
+	MaxWidth int    `json:"maxWidth,omitempty"`
+}
+
+// TargetSelect switches what the video shows: a display, or one window (ID is then a window id).
+type TargetSelect struct {
+	Type string `json:"type"`
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+}
+
 type QualitySet struct {
 	Type string `json:"type"`
 	Tier Tier   `json:"tier"`
@@ -166,6 +200,46 @@ type StatsMsg struct {
 	ConnectionStats
 }
 
+// WindowsSnapshot answers windows.list.
+type WindowsSnapshot struct {
+	Type    string       `json:"type"`
+	Windows []WindowInfo `json:"windows"`
+}
+
+// AppsSnapshot answers apps.list.
+type AppsSnapshot struct {
+	Type string    `json:"type"`
+	Apps []AppInfo `json:"apps"`
+}
+
+// AppIcon answers app.icon.get: a 64 px PNG, base64.
+type AppIcon struct {
+	Type     string `json:"type"`
+	BundleID string `json:"bundleId"`
+	PNG      string `json:"png"`
+}
+
+// WindowThumb answers window.thumb.get: a small JPEG, base64.
+type WindowThumb struct {
+	Type     string `json:"type"`
+	WindowID string `json:"windowId"`
+	JPEG     string `json:"jpeg"`
+}
+
+// AppOpenFailed says an app.open did not end in a window. Reason is a stable word, never app content.
+type AppOpenFailed struct {
+	Type     string `json:"type"`
+	BundleID string `json:"bundleId"`
+	Reason   string `json:"reason"`
+}
+
+// WindowGone says the window the video showed is no longer there; the session lives on with nothing captured.
+type WindowGone struct {
+	Type     string           `json:"type"`
+	WindowID string           `json:"windowId"`
+	Reason   WindowGoneReason `json:"reason"`
+}
+
 // Marshal encodes a Mac → phone message, filling its Type.
 func Marshal(msg any) ([]byte, error) {
 	switch m := msg.(type) {
@@ -180,6 +254,33 @@ func Marshal(msg any) ([]byte, error) {
 		return json.Marshal(m)
 	case Pong:
 		m.Type = TypePong
+		return json.Marshal(m)
+	case WindowsSnapshot:
+		m.Type = TypeWindows
+		if m.Windows == nil {
+			m.Windows = []WindowInfo{}
+		}
+		return json.Marshal(m)
+	case AppsSnapshot:
+		m.Type = TypeApps
+		if m.Apps == nil {
+			m.Apps = []AppInfo{}
+		}
+		return json.Marshal(m)
+	case AppIcon:
+		m.Type = TypeAppIcon
+		return json.Marshal(m)
+	case WindowThumb:
+		m.Type = TypeThumb
+		return json.Marshal(m)
+	case BundleRef:
+		m.Type = TypeAppOpening
+		return json.Marshal(m)
+	case AppOpenFailed:
+		m.Type = TypeAppOpenFailed
+		return json.Marshal(m)
+	case WindowGone:
+		m.Type = TypeWindowGone
 		return json.Marshal(m)
 	case StatsMsg:
 		m.Type = TypeStats
@@ -222,7 +323,13 @@ func Decode(data []byte) (any, error) {
 		target = &PrivacySet{}
 	case TypePing:
 		target = &Ping{}
-	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest, TypeUnlockRequest:
+	case TypeAppOpen, TypeAppIconGet:
+		target = &BundleRef{}
+	case TypeThumbGet:
+		target = &ThumbGet{}
+	case TypeTargetSelect:
+		target = &TargetSelect{}
+	case TypeClipboardGet, TypeKeyframe, TypeSessionEnd, TypeReleaseAll, TypeStatsRequest, TypeUnlockRequest, TypeWindowsList, TypeAppsList, TypeTargetActive:
 		return &env, nil
 	default:
 		return nil, Errf(CodeBadRequest, "unknown message type")

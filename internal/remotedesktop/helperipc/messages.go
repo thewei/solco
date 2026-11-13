@@ -26,7 +26,20 @@ const (
 	OpScreenState        = "screen.state"
 	OpScreenWake         = "screen.wake"
 	OpScreenUnlock       = "screen.unlock"
+	OpWindowsList        = "windows.list"
+	OpAppsList           = "apps.list"
+	OpAppIcon            = "app.icon"
+	OpAppOpen            = "app.open"
+	OpWindowRaise        = "window.raise"
+	OpWindowThumb        = "window.thumb"
 	OpShutdown           = "shutdown"
+)
+
+// Capabilities the helper announces in its Hello that window mode needs.
+const (
+	CapWindowCapture = "capture.window"
+	CapWindowCatalog = "window.catalog"
+	CapAppCatalog    = "app.catalog"
 )
 
 // Event names (helper → Go).
@@ -34,6 +47,8 @@ const (
 	EventDisplaysChanged = "displays.changed"
 	EventCaptureStopped  = "capture.stopped"
 	EventError           = "error"
+	EventWindowGeometry  = "window.geometry"
+	EventWindowGone      = "window.gone"
 )
 
 // Hello is the helper's first message; Token proves it is the process we launched.
@@ -80,6 +95,9 @@ const (
 	CodeEncoderFailed             = "encoder_failed"
 	CodeNotCapturing              = "not_capturing"
 	CodeInputFailed               = "input_failed"
+	CodeWindowNotFound            = "window_not_found"
+	CodeAppNotFound               = "app_not_found"
+	CodeAppOpenFailed             = "app_open_failed"
 	CodeInternal                  = "internal"
 )
 
@@ -165,4 +183,53 @@ type ScreenState struct {
 // UnlockArgs carries the Mac login password to the helper for one typing; it is never logged or kept.
 type UnlockArgs struct {
 	Password string `json:"password"`
+}
+
+// WindowsResult is the result of windows.list.
+type WindowsResult struct {
+	Windows []protocol.WindowInfo `json:"windows"`
+}
+
+// AppsResult is the result of apps.list.
+type AppsResult struct {
+	Apps []protocol.AppInfo `json:"apps"`
+}
+
+// BundleArgs names an application (app.icon, app.open).
+type BundleArgs struct {
+	BundleID string `json:"bundleId"`
+}
+
+// AppIconResult is the result of app.icon: a 64 px PNG, base64.
+type AppIconResult struct {
+	BundleID string `json:"bundleId"`
+	PNG      string `json:"png"`
+}
+
+// AppOpenResult is the result of app.open: the window to show.
+type AppOpenResult struct {
+	WindowID string `json:"windowId"`
+}
+
+// WindowArgs names a window (window.raise).
+type WindowArgs struct {
+	WindowID string `json:"windowId"`
+}
+
+// ThumbArgs asks for a still of one window.
+type ThumbArgs struct {
+	WindowID string `json:"windowId"`
+	MaxWidth int    `json:"maxWidth"`
+}
+
+// ThumbResult is the result of window.thumb: a JPEG, base64.
+type ThumbResult struct {
+	WindowID string `json:"windowId"`
+	JPEG     string `json:"jpeg"`
+}
+
+// WindowGone is the data of the window.gone event.
+type WindowGone struct {
+	WindowID string                    `json:"windowId"`
+	Reason   protocol.WindowGoneReason `json:"reason"`
 }

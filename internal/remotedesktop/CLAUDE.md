@@ -11,8 +11,9 @@ helperipc/: Go 端 helper Unix socket（u32 大端长度 + kind + payload，令�
 rtc/: Pion 应答方（非 trickle、H.264 baseline 42e01f、control 可靠有序 + pointer 无序 maxRetransmits 0、PLI/FIR 去抖、8 s 断线宽限；`prune.go`：候选裁剪——STUN ≤2 个不同主机、TURN 各取 UDP/TCP 一条、本机 IPv6 只取一个全局地址，Tailscale 隧道之外的 utun（代理 TUN/VPN）不收集；2026-11-03 实测裁前 host=14 srflx=52 relay=82、约 1000 个候选对，把同机 relay 保活也拖死；gather 2.5 s / 首个 srflx 后宽限 0.7 s；`Options.Trace` 只记 ICE 状态与候选对类型/计数，从不记地址）
 session/: 单个会话的行为——Prepare（选显示器、算编码尺寸、不采集）→ Attach(link) 起 frameLoop/eventLoop/tickLoop，链路 Connected 才开始采集（每次新 generation，旧代帧丢弃）；View-only 强制（`view_only` 错误每秒至多一次）；指针按 seq 去旧、按下沿用已应用移动的最后位置；按住的键/键钮上限 32，断链/关闭/切屏/权限丢失/手机请求/10 s 静默看门狗都 releaseAll；text.insert ≤4096 rune 且去控制符；剪贴板 ≤256 KiB 纯文本；每 2 s 推 stats；显示器消失回落主屏；fail() 异步（先告知手机，150 ms 后 Close）
 session/screen.go: 屏幕侧功能——`platform.Screen`（可选接口，对 Capturer 做类型断言）：防窥黑屏（privacy.set，gamma 表，采集在 gamma 之前不受影响）、锁屏状态每 2 s 轮询并随 session.state 下发（locked/canUnlock/blackout）、手机 unlock.request 与「自动解锁」（仅 Mac 主人开启；每次锁屏最多 2 次、间隔 6 s；密码只在键入瞬间经 `Config.UnlockSecret` 取，不发手机、不进日志）
+session/window.go: 应用窗口模式（P1：选、看、控一个窗口，不改窗口大小）——`platform.Windows`（可选接口）：Offer.Idle 开会话时不采集（Target=none），phone `windows.list/apps.list/app.icon.get/window.thumb.get/target.select/target.activate/app.open` 全走已授权的 control 通道；采集目标 = 窗口 + 同进程弹层（helper 把 sourceRect 放宽到视频比例，归一化指针线性映射到 `WindowGeometry.Source`，落在窗口族矩形之外的移动丢弃，按住键钮的拖拽可出界、抬起必转发）；离屏窗口（别的 Space/最小化）先只看，`window_offscreen` 拦输入，`target.activate` 才把它切过来；窗口消失 → `window.gone` 且会话保留（Target=none）；窗口模式滤掉 ⌘Tab/⌘Space/Ctrl+方向键；View Only 可看窗口，不能 `app.open`/raise/activate；标题/缩略图/应用名是屏幕内容，不进日志、不落盘；各上限见 `protocol/windows.go`
 自适应码率: rtc 内 Pion GCC（TWCC）→ session `OnBandwidth` → `protocol.AdaptBitrate`（估值 85%，夹在档位/5 与档位目标之间，变化<10% 或间隔<1 s 跳过）
-mapper/: CoordinateMapper——归一化 0…1 坐标 ↔ 显示器点坐标（多屏、Retina 缩放、letterbox）
+mapper/: CoordinateMapper——归一化 0…1 坐标 ↔ 显示器点坐标（多屏、Retina 缩放、letterbox）；`ToRect`/`InAny` 为窗口模式的矩形映射与命中
 
 不变式
 - 日志与响应不含屏幕内容、键入文本、剪贴板、SDP、令牌、配对码；错误只带稳定 code

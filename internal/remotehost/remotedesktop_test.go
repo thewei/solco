@@ -23,7 +23,7 @@ func (f *fakeRemoteDesktop) Info(context.Context) protocol.Info {
 	return protocol.Info{
 		Protocol: protocol.Version, State: protocol.StateReady, Platform: "macos",
 		Permissions:     protocol.PermissionStatus{ScreenRecording: true, Accessibility: true},
-		RequireApproval: true, Tiers: protocol.Tiers,
+		RequireApproval: true, Tiers: protocol.Tiers, Capabilities: &protocol.InfoCapabilities{Windows: true},
 	}
 }
 func (f *fakeRemoteDesktop) Open(_ context.Context, d protocol.DeviceInfo, o protocol.Offer) (protocol.Answer, error) {
@@ -45,6 +45,8 @@ func (f *fakeRemoteDesktop) DisconnectDevice(id string) {
 	f.mu.Unlock()
 }
 
+const offerIdleJSON = `{"protocol":1,"sdp":"v=0 offer","mode":"view","idle":true,"tier":"standard"}`
+
 const offerJSON = `{"protocol":1,"sdp":"v=0 offer","mode":"full","displayId":"1","tier":"standard"}`
 
 func TestRemoteDesktopGoldenAndGuards(t *testing.T) {
@@ -65,6 +67,7 @@ func TestRemoteDesktopGoldenAndGuards(t *testing.T) {
 	golden(t, "bootstrap-remote-desktop.json", bodyOf(t, h.get("/api/v3/bootstrap", h.token, nil)))
 	golden(t, "remote-desktop-info.json", bodyOf(t, h.get("/api/v3/remote-desktop", h.token, nil)))
 	golden(t, "remote-desktop-offer.json", []byte(offerJSON))
+	golden(t, "remote-desktop-offer-idle.json", []byte(offerIdleJSON))
 	resp := h.launch("/api/v3/remote-desktop/session", h.token, offerJSON)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("session = %d", resp.StatusCode)
@@ -101,6 +104,13 @@ func TestRemoteDesktopGoldenAndGuards(t *testing.T) {
 		t.Fatalf("no token = %d", got)
 	}
 
+	if h.launch("/api/v3/remote-desktop/session", h.token, offerIdleJSON).StatusCode != http.StatusOK {
+		t.Fatal("idle offer refused")
+	}
+	if !rd.offers[len(rd.offers)-1].Idle {
+		t.Fatalf("the idle flag did not reach the service: %+v", rd.offers)
+	}
+
 	// Revoke ends the desktop session too.
 	if err := h.srv.Devices().Revoke(h.devID); err != nil {
 		t.Fatal(err)
@@ -123,23 +133,31 @@ func containsStr(s, sub string) bool {
 // builders and Zod parsers are tested against these exact bytes.
 func TestRemoteDesktopControlGolden(t *testing.T) {
 	phoneToMac := map[string]string{
-		"pointer-move":   `{"type":"pointer.move","seq":7,"x":0.5,"y":0.25,"displayId":"1"}`,
-		"pointer-button": `{"type":"pointer.button","seq":8,"x":0.5,"y":0.25,"button":"left","down":true,"clickCount":2,"displayId":"1"}`,
-		"pointer-scroll": `{"type":"pointer.scroll","seq":9,"dx":0,"dy":-120}`,
-		"key":            `{"type":"key","code":"KeyC","down":true}`,
-		"text-insert":    `{"type":"text.insert","text":"你好, world"}`,
-		"clipboard-set":  `{"type":"clipboard.set","text":"copied on the phone"}`,
-		"clipboard-get":  `{"type":"clipboard.get"}`,
-		"display-select": `{"type":"display.select","displayId":"2"}`,
-		"quality-set":    `{"type":"quality.set","tier":"high"}`,
-		"cursor-set":     `{"type":"cursor.set","visible":false}`,
-		"privacy-set":    `{"type":"privacy.set","on":true}`,
-		"unlock-request": `{"type":"unlock.request"}`,
-		"keyframe":       `{"type":"keyframe.request"}`,
-		"ping":           `{"type":"ping","t":1700000000000}`,
-		"session-end":    `{"type":"session.end"}`,
-		"release-all":    `{"type":"input.release_all"}`,
-		"stats-request":  `{"type":"stats.request"}`,
+		"pointer-move":          `{"type":"pointer.move","seq":7,"x":0.5,"y":0.25,"displayId":"1"}`,
+		"pointer-button":        `{"type":"pointer.button","seq":8,"x":0.5,"y":0.25,"button":"left","down":true,"clickCount":2,"displayId":"1"}`,
+		"pointer-scroll":        `{"type":"pointer.scroll","seq":9,"dx":0,"dy":-120}`,
+		"key":                   `{"type":"key","code":"KeyC","down":true}`,
+		"text-insert":           `{"type":"text.insert","text":"你好, world"}`,
+		"clipboard-set":         `{"type":"clipboard.set","text":"copied on the phone"}`,
+		"clipboard-get":         `{"type":"clipboard.get"}`,
+		"display-select":        `{"type":"display.select","displayId":"2"}`,
+		"quality-set":           `{"type":"quality.set","tier":"high"}`,
+		"cursor-set":            `{"type":"cursor.set","visible":false}`,
+		"privacy-set":           `{"type":"privacy.set","on":true}`,
+		"unlock-request":        `{"type":"unlock.request"}`,
+		"keyframe":              `{"type":"keyframe.request"}`,
+		"ping":                  `{"type":"ping","t":1700000000000}`,
+		"session-end":           `{"type":"session.end"}`,
+		"release-all":           `{"type":"input.release_all"}`,
+		"stats-request":         `{"type":"stats.request"}`,
+		"windows-list":          `{"type":"windows.list"}`,
+		"apps-list":             `{"type":"apps.list"}`,
+		"app-icon-get":          `{"type":"app.icon.get","bundleId":"com.apple.Notes"}`,
+		"window-thumb-get":      `{"type":"window.thumb.get","windowId":"4210","maxWidth":320}`,
+		"target-select-window":  `{"type":"target.select","kind":"window","id":"4210"}`,
+		"target-select-display": `{"type":"target.select","kind":"display","id":"1"}`,
+		"target-activate":       `{"type":"target.activate"}`,
+		"app-open":              `{"type":"app.open","bundleId":"com.apple.Notes"}`,
 	}
 	for name, raw := range phoneToMac {
 		if _, err := protocol.Decode([]byte(raw)); err != nil {
@@ -157,14 +175,34 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 	}
 	locked := st
 	locked.Blackout, locked.Locked, locked.CanUnlock = true, true, true
+	inWindow := st
+	inWindow.Target = protocol.TargetWindow
+	inWindow.Window = &protocol.WindowTarget{ID: "4210", App: "Notes", BundleID: "com.apple.Notes", Title: "Shopping list", OnScreen: true}
+	idle := st
+	idle.Target = protocol.TargetNone
 	macToPhone := map[string]any{
-		"session-state":        protocol.SessionStateMsg{SessionState: st},
-		"session-state-locked": protocol.SessionStateMsg{SessionState: locked},
-		"error-unlock-failed":  protocol.ErrorMsg{Code: protocol.CodeUnlockFailed},
-		"clipboard-text":       protocol.ClipboardText{Text: "copied on the Mac"},
-		"error":                protocol.ErrorMsg{Code: protocol.CodeViewOnly},
-		"error-message":        protocol.ErrorMsg{Code: protocol.CodePermissionRequired, Message: "accessibility"},
-		"pong":                 protocol.Pong{T: 1700000000000},
+		"session-state-window": protocol.SessionStateMsg{SessionState: inWindow},
+		"session-state-idle":   protocol.SessionStateMsg{SessionState: idle},
+		"windows-snapshot": protocol.WindowsSnapshot{Windows: []protocol.WindowInfo{
+			{ID: "4210", App: "Notes", BundleID: "com.apple.Notes", Title: "Shopping list", X: 100, Y: 80, Width: 500, Height: 800, OnScreen: true},
+			{ID: "4211", App: "Safari", BundleID: "com.apple.Safari", X: 0, Y: 0, Width: 1200, Height: 800, Minimized: true},
+		}},
+		"apps-snapshot": protocol.AppsSnapshot{Apps: []protocol.AppInfo{
+			{BundleID: "com.apple.Notes", Name: "Notes", Running: true}, {BundleID: "com.apple.Maps", Name: "Maps"},
+		}},
+		"app-icon":               protocol.AppIcon{BundleID: "com.apple.Notes", PNG: "iVBORw0KGgo="},
+		"window-thumb":           protocol.WindowThumb{WindowID: "4210", JPEG: "/9j/4AAQ"},
+		"app-opening":            protocol.BundleRef{BundleID: "com.apple.Maps"},
+		"app-open-failed":        protocol.AppOpenFailed{BundleID: "com.apple.Maps", Reason: "no_window"},
+		"window-gone":            protocol.WindowGone{WindowID: "4210", Reason: protocol.GoneAppQuit},
+		"error-window-offscreen": protocol.ErrorMsg{Code: protocol.CodeWindowOffscreen},
+		"session-state":          protocol.SessionStateMsg{SessionState: st},
+		"session-state-locked":   protocol.SessionStateMsg{SessionState: locked},
+		"error-unlock-failed":    protocol.ErrorMsg{Code: protocol.CodeUnlockFailed},
+		"clipboard-text":         protocol.ClipboardText{Text: "copied on the Mac"},
+		"error":                  protocol.ErrorMsg{Code: protocol.CodeViewOnly},
+		"error-message":          protocol.ErrorMsg{Code: protocol.CodePermissionRequired, Message: "accessibility"},
+		"pong":                   protocol.Pong{T: 1700000000000},
 		"stats": protocol.StatsMsg{ConnectionStats: protocol.ConnectionStats{
 			RTTMillis: 12.5, BitrateKbps: 4200, FPS: 29.7, FramesSent: 1800, FramesDropped: 2, KeyframesSent: 15, KeyframeRequest: 1, PathType: "host", UptimeSeconds: 60,
 		}},
