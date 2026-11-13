@@ -44,7 +44,6 @@ const (
 	TypeAppOpen       = "app.open"
 	TypeMenuGet       = "window.menu.get"
 	TypeMenuInvoke    = "window.menu.invoke"
-	TypeWindowZoom    = "window.zoom"
 
 	// Mac → phone.
 	TypeSessionState  = "session.state"
@@ -349,12 +348,6 @@ func Decode(data []byte) (any, error) {
 		target = &TargetSelect{}
 	case TypeWindowFit:
 		target = &WindowFit{}
-	case TypeWindowZoom:
-		var z WindowZoom
-		if err := json.Unmarshal(data, &z); err != nil || !z.Valid() {
-			return nil, Errf(CodeBadRequest, "malformed %s", env.Type)
-		}
-		return &z, nil
 	case TypeMenuInvoke:
 		var inv MenuInvoke
 		if err := json.Unmarshal(data, &inv); err != nil || !inv.Valid() {

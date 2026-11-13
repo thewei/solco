@@ -36,7 +36,6 @@ const (
 	OpWindowRestore      = "window.restore"
 	OpWindowMenu         = "window.menu"
 	OpWindowMenuInvoke   = "window.menu.invoke"
-	OpWindowZoom         = "window.zoom"
 	OpShutdown           = "shutdown"
 )
 
@@ -278,18 +277,6 @@ type MenuResult struct {
 type MenuInvokeArgs struct {
 	WindowID string `json:"windowId"`
 	Path     []int  `json:"path"`
-}
-
-// ZoomArgs is window.zoom: press the app's Zoom In ("in") or Zoom Out ("out") once.
-type ZoomArgs struct {
-	WindowID string `json:"windowId"`
-	Dir      string `json:"dir"`
-}
-
-// ZoomResult is the net number of steps the window is now above the size it had before the phone.
-type ZoomResult struct {
-	WindowID string `json:"windowId"`
-	Steps    int    `json:"steps"`
 }
 
 // RestoreArgs is window.restore; no WindowID = every journaled window.

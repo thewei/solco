@@ -19,8 +19,6 @@ func TestWindowMessagesDecodeAndMarshal(t *testing.T) {
 		`{"type":"window.fit.off"}`:                  &Envelope{},
 		`{"type":"window.menu.get"}`:                 &Envelope{},
 		`{"type":"window.menu.invoke","path":[1,2]}`: &MenuInvoke{},
-		`{"type":"window.zoom","dir":"in"}`:          &WindowZoom{},
-		`{"type":"window.zoom","dir":"out"}`:         &WindowZoom{},
 	} {
 		got, err := Decode([]byte(typ))
 		if err != nil {
@@ -87,13 +85,5 @@ func TestMenuInvokeRefusesPathsThePhoneShouldNeverSend(t *testing.T) {
 	b, err := Marshal(WindowMenu{WindowID: "1"})
 	if err != nil || string(b) != `{"type":"window.menu","windowId":"1","items":[]}` {
 		t.Fatalf("empty menu = %s %v", b, err)
-	}
-}
-
-func TestWindowZoomRefusesADirectionThePhoneShouldNeverSend(t *testing.T) {
-	for _, raw := range []string{`{"type":"window.zoom"}`, `{"type":"window.zoom","dir":"reset"}`, `{"type":"window.zoom","dir":"IN"}`} {
-		if _, err := Decode([]byte(raw)); err == nil {
-			t.Errorf("%s was accepted", raw)
-		}
 	}
 }

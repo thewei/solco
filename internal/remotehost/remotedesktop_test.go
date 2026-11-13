@@ -162,8 +162,6 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 		"window-fit-off":        `{"type":"window.fit.off"}`,
 		"window-menu-get":       `{"type":"window.menu.get"}`,
 		"window-menu-invoke":    `{"type":"window.menu.invoke","path":[2,5]}`,
-		"window-zoom-in":        `{"type":"window.zoom","dir":"in"}`,
-		"window-zoom-out":       `{"type":"window.zoom","dir":"out"}`,
 	}
 	for name, raw := range phoneToMac {
 		if _, err := protocol.Decode([]byte(raw)); err != nil {
@@ -190,14 +188,11 @@ func TestRemoteDesktopControlGolden(t *testing.T) {
 	fitted.Width, fitted.Height, fitted.Fitted = 552, 1080, true
 	clamped := fitted
 	clamped.Clamped = &protocol.Clamped{MinW: 520, Scale: 0.75}
-	zoomed := clamped
-	zoomed.Zoom = 2
 	macToPhone := map[string]any{
 		"session-state-window":    protocol.SessionStateMsg{SessionState: inWindow},
 		"session-state-idle":      protocol.SessionStateMsg{SessionState: idle},
 		"session-state-fitted":    protocol.SessionStateMsg{SessionState: fitted},
 		"session-state-clamped":   protocol.SessionStateMsg{SessionState: clamped},
-		"session-state-zoomed":    protocol.SessionStateMsg{SessionState: zoomed},
 		"window-restored":         protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreDone},
 		"window-restored-skipped": protocol.WindowRestored{WindowID: "4210", Outcome: protocol.RestoreSkipped},
 		"error-fit-unavailable":   protocol.ErrorMsg{Code: protocol.CodeFitUnavailable},

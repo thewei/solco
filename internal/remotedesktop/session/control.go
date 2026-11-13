@@ -38,8 +38,6 @@ func (s *Session) handle(data []byte) {
 		go s.fitWindow(m.Viewport)
 	case *protocol.MenuInvoke:
 		go s.invokeMenu(m.Path)
-	case *protocol.WindowZoom:
-		go s.zoomWindow(m.Dir)
 	case *protocol.BundleRef:
 		s.handleBundle(m)
 	case *protocol.ThumbGet:
@@ -328,7 +326,7 @@ func (s *Session) selectDisplay(id string) {
 	s.mu.Lock()
 	s.win = windowMode{} // back to showing a whole display
 	s.state.Target, s.state.Window = "", nil
-	s.state.Fitted, s.state.Clamped, s.state.Zoom = false, nil, 0
+	s.state.Fitted, s.state.Clamped = false, nil
 	s.setDisplayLocked(target, all)
 	s.haveLast = false
 	s.mu.Unlock()

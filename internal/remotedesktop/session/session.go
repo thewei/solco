@@ -263,7 +263,7 @@ func (s *Session) setDisplayLocked(d protocol.DisplayInfo, all []protocol.Displa
 		Mode: s.cfg.Mode, DisplayID: d.ID, Displays: all, Tier: s.cfg.Tier,
 		Width: w, Height: h, FPS: spec.FPS, Hardware: s.state.Hardware, Cursor: !s.hideCursor,
 		Blackout: s.state.Blackout, Locked: s.state.Locked, CanUnlock: s.state.CanUnlock,
-		Target: s.state.Target, Window: s.state.Window, Fitted: s.state.Fitted, Clamped: s.state.Clamped, Zoom: s.state.Zoom,
+		Target: s.state.Target, Window: s.state.Window, Fitted: s.state.Fitted, Clamped: s.state.Clamped,
 	}
 }
 

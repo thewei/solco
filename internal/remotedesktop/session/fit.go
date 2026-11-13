@@ -118,8 +118,8 @@ func (s *Session) RestoreWindow() { s.fitOff() }
 
 // clearFitLocked forgets the fit in the session's own state (the window itself is restored separately).
 func (s *Session) clearFitLocked() {
-	s.win.fitted, s.win.viewport, s.win.zoom = false, protocol.Viewport{}, 0
-	s.state.Fitted, s.state.Clamped, s.state.Zoom = false, nil, 0
+	s.win.fitted, s.win.viewport = false, protocol.Viewport{}
+	s.state.Fitted, s.state.Clamped = false, nil
 }
 
 // restoreFitted gives window id back through the helper and tells the phone what became of it. A helper

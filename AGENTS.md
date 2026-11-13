@@ -140,6 +140,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-13 · Remote Desktop window mode: the app's own text zoom (amends the two fit tiers)
 - 2026-11-13 · Remote Desktop window mode: the lost-link grace is 20 seconds (amends the two-minute grace)
 - 2026-11-13 · Solco Git edits in place: pencil toggle, ⌘P, LSP, a terminal drawer (editor / LSP / terminal exploration)
+- 2026-11-13 · Remote Desktop window mode: the app's text zoom is retired (A−/A+ removed; retires the text zoom entry)
 
 ## Git safety
 

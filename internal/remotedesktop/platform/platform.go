@@ -118,14 +118,6 @@ type WindowMenu interface {
 	InvokeMenu(ctx context.Context, windowID string, path []int) error
 }
 
-// WindowZoomer is the optional capability of a Capturer that can press the Zoom In / Zoom Out item of the menu bar
-// of the app that owns a window. The steps are journaled with the window and undone by RestoreWindow.
-type WindowZoomer interface {
-	// ZoomWindow presses one step (protocol.ZoomIn / protocol.ZoomOut) and returns the net steps now. An app with no
-	// usable item is menu_unavailable or menu_item_unavailable.
-	ZoomWindow(ctx context.Context, windowID, dir string) (steps int, err error)
-}
-
 // JournalRestorer is the optional capability of a Backend to give back every window a vanished session
 // left fitted (the deferred restore after a lost link, and Solco's start-up), without a session or a helper
 // process of its own.

@@ -19,7 +19,6 @@ var (
 	_ platform.Windows         = (*capturer)(nil)
 	_ platform.WindowFitter    = (*capturer)(nil)
 	_ platform.WindowMenu      = (*capturer)(nil)
-	_ platform.WindowZoomer    = (*capturer)(nil)
 	_ platform.JournalRestorer = (*Backend)(nil)
 )
 
@@ -117,16 +116,6 @@ func (c *capturer) WindowMenu(ctx context.Context, windowID string) ([]protocol.
 
 func (c *capturer) InvokeMenu(ctx context.Context, windowID string, path []int) error {
 	return asProtocolErr(c.conn.Call(ctx, helperipc.OpWindowMenuInvoke, helperipc.MenuInvokeArgs{WindowID: windowID, Path: path}, nil))
-}
-
-// ZoomWindow presses the app's Zoom In or Zoom Out once; the helper finds the item by its key, journals the step
-// first and answers with the net steps.
-func (c *capturer) ZoomWindow(ctx context.Context, windowID, dir string) (int, error) {
-	var out helperipc.ZoomResult
-	if err := c.conn.Call(ctx, helperipc.OpWindowZoom, helperipc.ZoomArgs{WindowID: windowID, Dir: dir}, &out); err != nil {
-		return 0, asProtocolErr(err)
-	}
-	return out.Steps, nil
 }
 
 func menuItems(in []helperipc.MenuItem) []protocol.MenuItem {
