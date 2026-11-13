@@ -137,6 +137,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-12 · The notch island: Agent and Feedback status at the notch (optional, off by default)
 - 2026-11-12 · Solco Git on LazyGit's command layer, TanGit's graph, a three-row sidebar (TanGit review)
 - 2026-11-13 · Remote Desktop window mode
+- 2026-11-13 · Solco Git edits in place: pencil toggle, ⌘P, LSP, a terminal drawer (editor / LSP / terminal exploration)
 
 ## Git safety
 
