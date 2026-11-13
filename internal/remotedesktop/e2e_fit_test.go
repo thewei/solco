@@ -18,13 +18,13 @@ import (
 )
 
 // The P2 exit criteria on a real window: fit it to a phone, then leave every way the plan names and see the
-// window's own frame come back (or, for a lost link, after the two-minute grace). Needs a window of the app
+// window's own frame come back (or, for a lost link, after the grace). Needs a window of the app
 // named by SOLCO_RD_E2E_APP (default Notes) that can be resized, and this Mac's Screen Recording and
 // Accessibility grants for the invoking process:
 //
 //	SOLCO_RD_E2E=1 go test ./internal/remotedesktop -run TestRealWindowFit -v
 //
-// The lost-link case waits the real two minutes and only runs with SOLCO_RD_E2E_SLOW=1.
+// The lost-link case waits the real grace (20 s) and only runs with SOLCO_RD_E2E_SLOW=1.
 type fitHarness struct {
 	t       *testing.T
 	be      *macos.Backend
@@ -251,18 +251,18 @@ func TestRealWindowFitMovedByTheUserIsLeftAlone(t *testing.T) {
 
 func ftoa(f float64) string { return strconv.FormatFloat(f, 'f', 0, 64) }
 
-// A phone that vanishes keeps the window fitted for the two-minute grace, then it goes back.
+// A phone that vanishes keeps the window fitted for the grace, then it goes back.
 func TestRealWindowFitLinkLostGrace(t *testing.T) {
 	if os.Getenv("SOLCO_RD_E2E_SLOW") != "1" {
-		t.Skip("set SOLCO_RD_E2E_SLOW=1 (waits the real two minutes)")
+		t.Skip("set SOLCO_RD_E2E_SLOW=1 (waits the real grace)")
 	}
 	h := openFitted(t)
 	lostAt := time.Now()
 	_ = h.pc.Close()
-	time.Sleep(40 * time.Second)
+	time.Sleep(8 * time.Second)
 	if f, _ := h.frame(h.window.ID); sameFrame(f, h.orig) {
 		t.Fatal("the window went back inside the grace")
 	}
-	h.wantRestored(3 * time.Minute)
+	h.wantRestored(40 * time.Second)
 	t.Logf("restored %s after the link was lost", time.Since(lostAt).Round(time.Second))
 }

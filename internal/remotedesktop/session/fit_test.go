@@ -278,7 +278,7 @@ func TestALostLinkLeavesTheWindowFittedForTheGrace(t *testing.T) {
 	if got := f.fc.restored(); len(got) != 0 {
 		t.Fatalf("a lost link restored at once: %v", got)
 	}
-	if got := f.deferred(); len(got) != 1 || got[0].id != "11" || got[0].grace != FitGrace || FitGrace != 2*time.Minute {
+	if got := f.deferred(); len(got) != 1 || got[0].id != "11" || got[0].grace != FitGrace || FitGrace != 20*time.Second {
 		t.Fatalf("deferred = %+v", got)
 	}
 }

@@ -192,5 +192,7 @@ func (s *Session) closeFit(lost bool) {
 	s.restoreFitted(id)
 }
 
-// FitGrace is how long a fitted window waits after the link was lost before it is given back.
-const FitGrace = 2 * time.Minute
+// FitGrace is how long a fitted window waits after the link was lost before it is given back: long enough for
+// a phone that blinked to reconnect, short enough that a phone that left (killed, locked, offline) does not
+// leave the app small on the Mac (2026-11-13: 20 s, was two minutes).
+const FitGrace = 20 * time.Second
