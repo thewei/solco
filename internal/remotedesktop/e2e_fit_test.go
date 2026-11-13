@@ -160,7 +160,7 @@ func openFitted(t *testing.T) *fitHarness {
 	if !ok {
 		t.Fatal("the fitted window vanished")
 	}
-	t.Logf("%s window %.0f×%.0f → fitted %.0f×%.0f (clamped=%v), video %d×%d", app, h.orig.Width, h.orig.Height, got.Width, got.Height, st.Clamped != nil, st.Width, st.Height)
+	t.Logf("%s window %.0f×%.0f at %.0f,%.0f → fitted %.0f×%.0f at %.0f,%.0f (clamped=%v), video %d×%d", app, h.orig.Width, h.orig.Height, h.orig.X, h.orig.Y, got.Width, got.Height, got.X, got.Y, st.Clamped != nil, st.Width, st.Height)
 	if st.Clamped == nil && (math.Abs(got.Width-390) > 3 || math.Abs(got.Height-763) > 3) {
 		t.Fatalf("window is %.0f×%.0f, want 390×763", got.Width, got.Height)
 	}
