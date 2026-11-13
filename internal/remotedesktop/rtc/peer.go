@@ -414,7 +414,9 @@ func (p *Peer) Close() {
 		p.timer.Stop()
 	}
 	p.mu.Unlock()
-	p.tracePairs()
+	if p.pc.ConnectionState() != webrtc.PeerConnectionStateClosed { // pion's own close is still tearing the stats down: GetStats would race it
+		p.tracePairs()
+	}
 	_ = p.pc.Close()
 	p.emit(StateClosed)
 }
