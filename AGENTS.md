@@ -142,6 +142,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-13 · Solco Git edits in place: pencil toggle, ⌘P, LSP, a terminal drawer (editor / LSP / terminal exploration)
 - 2026-11-13 · Remote Desktop window mode: the app's text zoom is retired (A−/A+ removed; retires the text zoom entry)
 - 2026-11-13 · Remote Desktop: touch mode works like a phone (swipe scrolls, long press selects)
+- 2026-11-14 · Solco Git Changes and Commit: LazyGit's small gaps (ignore, compare two commits, move onto, no paused edit, no mergetool)
 
 ## Git safety
 
