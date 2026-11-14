@@ -120,6 +120,8 @@ github.com/thewei/solco-gitkit v0.1.0 h1:GmTcsfMjFS2vkl55lBXLcpOngdkjihL4PF1nGXB
 github.com/thewei/solco-gitkit v0.1.0/go.mod h1:TiNO05Lw70LAzN2zL0895JPjpjIqJ53fQTl8uEF+sng=
 github.com/thewei/solco-gitkit v0.2.0 h1:eDF0eCpJXMHxgyS8EU1ZIXrytOfqM/hEFuxPTZ88Om0=
 github.com/thewei/solco-gitkit v0.2.0/go.mod h1:TiNO05Lw70LAzN2zL0895JPjpjIqJ53fQTl8uEF+sng=
+github.com/thewei/solco-gitkit v0.3.0 h1:SYGoyX9JfPHc39p149ZO5RZcy130QwX1yIKv3qbLKYg=
+github.com/thewei/solco-gitkit v0.3.0/go.mod h1:TiNO05Lw70LAzN2zL0895JPjpjIqJ53fQTl8uEF+sng=
 github.com/u-root/u-root v0.16.0 h1:wY40O83MBVks97+Is0WlFlOPSwKQMIrWP9R1IsrExg8=
 github.com/u-root/u-root v0.16.0/go.mod h1:yL/XdSSW27PdGLgUh4MNRBy54mKM+TBLzpwiB4nwj90=
 github.com/wlynxg/anet v0.0.5 h1:J3VJGi1gvo0JwZ/P1/Yc/8p63SoW98B5dHkYDmpgvvU=

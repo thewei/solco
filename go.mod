@@ -23,7 +23,7 @@ replace github.com/egoist/mygo => ./third_party/mygo
 // version so CI needs no relative replace. On a machine with the repositories
 // side by side, an uncommitted go.work (go work init . && go work edit
 // -replace github.com/thewei/solco-gitkit=../solco-gitkit) makes the local copy
-// win. solco-gitkit is public and tagged v0.2.0 (go.sum carries it); verify a
+// win. solco-gitkit is public and tagged v0.3.0 (go.sum carries it); verify a
 // clean resolve with GOWORK=off go build ./...
 
 require (
@@ -35,7 +35,7 @@ require (
 	github.com/pion/webrtc/v4 v4.2.26
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/tailscale/tailcat v0.7.1-0.20261105151022-e00cdde6ff78
-	github.com/thewei/solco-gitkit v0.2.0
+	github.com/thewei/solco-gitkit v0.3.0
 	golang.org/x/net v0.60.0
 	tailscale.com v1.105.0-pre.0.20261013225543-fb79793d99f5
 	tuios.dev/sketch v0.4.0
