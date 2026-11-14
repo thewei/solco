@@ -146,6 +146,7 @@ The user-approved decisions behind the rules above are kept word for word in `do
 - 2026-11-14 · Solco Git Changes and Commit, second batch: fixups, discard all, stash modes, co-authors, hide untracked
 - 2026-11-14 · Solco Git UX pass: one split handle, remembered pane sizes, token cleanup
 - 2026-11-14 · Solco Git: zero statistics stay hidden, one count badge
+- 2026-11-14 · Solco Git: workspaces reorder by dragging
 
 ## Git safety
 
